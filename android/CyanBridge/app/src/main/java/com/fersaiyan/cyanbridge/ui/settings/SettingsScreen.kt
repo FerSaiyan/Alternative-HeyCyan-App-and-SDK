@@ -1,6 +1,14 @@
 package com.fersaiyan.cyanbridge.ui.settings
 
+import android.Manifest
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -25,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -38,9 +47,11 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.agent.AgentProviderType
@@ -58,7 +70,22 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsActivity
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.ai.router.CliRelayBackend
+import com.fersaiyan.cyanbridge.localagent.accessibility.LocalAgentAccessibilityService
+import com.fersaiyan.cyanbridge.localagent.daily.DailyFactsReminderScheduler
+import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
+import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
+import com.fersaiyan.cyanbridge.memoryvault.MemoryPrivacyMode
+import com.fersaiyan.cyanbridge.memoryvault.MemorySourceType
+import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultBootstrap
+import com.fersaiyan.cyanbridge.memoryvault.VaultLockStateManager
+import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
+import com.fersaiyan.cyanbridge.ui.localagent.AppBlacklistActivity
+import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
+import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
+import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
 import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
+import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as AgentRuntimePrefs
+import com.hjq.permissions.XXPermissions
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -74,6 +101,13 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
     val context = LocalContext.current
+
+    DisposableEffect(Unit) {
+        viewModel.refreshAccessibilityStatus()
+        viewModel.refreshVaultState()
+        viewModel.refreshAutoAudioDebug()
+        onDispose {}
+    }
 
     Scaffold(
         topBar = {
@@ -145,7 +179,100 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            QuickLinksSection(
+            LocalAgentSection(
+                context = context,
+                accessibilityEnabled = state.accessibilityEnabled,
+                autoCaptureEnabled = state.autoCaptureEnabled,
+                captureIntervalMin = state.captureIntervalMin,
+                dailyFactsReminderEnabled = state.dailyFactsReminderEnabled,
+                autoSaveDailyFactsEnabled = state.autoSaveDailyFactsEnabled,
+                extractUserFactCandidatesEnabled = state.extractUserFactCandidatesEnabled,
+                lastContextInjectionDebug = state.lastContextInjectionDebug,
+                onRefreshAccessibility = { viewModel.refreshAccessibilityStatus() },
+                onAutoCaptureChange = { viewModel.setAutoCaptureEnabled(it) },
+                onCaptureIntervalChange = { viewModel.setCaptureInterval(it) },
+                onDailyFactsReminderChange = { viewModel.setDailyFactsReminderEnabled(it) },
+                onAutoSaveDailyFactsChange = { viewModel.setAutoSaveDailyFacts(it) },
+                onExtractUserFactCandidatesChange = { viewModel.setExtractUserFactCandidates(it) },
+                onSaveAgentPersona = { viewModel.saveAgentPersona(it) },
+                onSaveUserFacts = { viewModel.saveUserFacts(it) },
+                onReadAgentPersona = { viewModel.readAgentPersona() },
+                onReadUserFacts = { viewModel.readUserFacts() },
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            MemoryPrivacySection(
+                context = context,
+                memoryMode = state.memoryMode,
+                syncExplicit = state.syncExplicit,
+                syncDaily = state.syncDaily,
+                syncOcr = state.syncOcr,
+                syncDerived = state.syncDerived,
+                ocrRetentionDays = state.ocrRetentionDays,
+                vaultLocked = state.vaultLocked,
+                vaultRequiresPassphrase = state.vaultRequiresPassphrase,
+                onMemoryModeChange = { viewModel.setMemoryMode(it) },
+                onSyncExplicitChange = { viewModel.setSyncExplicit(it) },
+                onSyncDailyChange = { viewModel.setSyncDaily(it) },
+                onSyncOcrChange = { viewModel.setSyncOcr(it) },
+                onSyncDerivedChange = { viewModel.setSyncDerived(it) },
+                onOcrRetentionChange = { viewModel.setOcrRetentionDays(it) },
+                onDeletePassiveCapture = { viewModel.deletePassiveCapture { } },
+                onLockVault = { viewModel.lockVault() },
+                onUnlockVault = { viewModel.unlockVault(it) },
+                onSetPassphrase = { viewModel.setVaultPassphrase(it) },
+                onClearPassphrase = { viewModel.clearVaultPassphrase() },
+                onResetVault = { viewModel.resetVault { viewModel.refreshVaultState() } },
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            TranscriptsSection(
+                transcriptStorageEnabled = state.transcriptStorageEnabled,
+                includeFullTranscriptionInExports = state.includeFullTranscriptionInExports,
+                autoAudioCaptureEnabled = state.autoAudioCaptureEnabled,
+                autoAudioDebugText = state.autoAudioDebugText,
+                onTranscriptStorageChange = { viewModel.setTranscriptStorage(it) },
+                onIncludeFullTranscriptionChange = { viewModel.setIncludeFullTranscriptionInExports(it) },
+                onAutoAudioCaptureChange = { enabled ->
+                    if (enabled) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            !XXPermissions.isGranted(context, Manifest.permission.POST_NOTIFICATIONS)
+                        ) {
+                            XXPermissions.with(context)
+                                .permission(Manifest.permission.POST_NOTIFICATIONS)
+                                .request { _, allGranted ->
+                                    if (allGranted) {
+                                        viewModel.setAutoAudioCapture(true)
+                                    }
+                                }
+                        } else {
+                            viewModel.setAutoAudioCapture(true)
+                        }
+                    } else {
+                        viewModel.setAutoAudioCapture(false)
+                    }
+                },
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            RedactionSection(
+                redactNamesEnabled = state.redactNamesEnabled,
+                onRedactNamesChange = { viewModel.setRedactNames(it) },
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DataSection(
+                context = context,
+                viewModel = viewModel,
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            AboutSection(
                 onNavigate = onNavigate,
             )
 
@@ -156,7 +283,7 @@ fun SettingsScreen(
 
 @Composable
 private fun ProSubscriptionSection(
-    context: android.content.Context,
+    context: Context,
     isSubscribed: Boolean,
     plan: String,
     expiresAt: Long,
@@ -223,7 +350,7 @@ private fun ThemeSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = if (isDarkTheme) Icons.Filled.Star else Icons.Filled.Star,
+                imageVector = Icons.Filled.Star,
                 contentDescription = null,
                 tint = CyanAccent,
                 modifier = Modifier.size(24.dp),
@@ -449,46 +576,604 @@ private fun ModelDropdown(
 }
 
 @Composable
-private fun QuickLinksSection(
-    onNavigate: (String) -> Unit,
+private fun LocalAgentSection(
+    context: Context,
+    accessibilityEnabled: Boolean,
+    autoCaptureEnabled: Boolean,
+    captureIntervalMin: Int,
+    dailyFactsReminderEnabled: Boolean,
+    autoSaveDailyFactsEnabled: Boolean,
+    extractUserFactCandidatesEnabled: Boolean,
+    lastContextInjectionDebug: String,
+    onRefreshAccessibility: () -> Unit,
+    onAutoCaptureChange: (Boolean) -> Unit,
+    onCaptureIntervalChange: (Int) -> Unit,
+    onDailyFactsReminderChange: (Boolean) -> Unit,
+    onAutoSaveDailyFactsChange: (Boolean) -> Unit,
+    onExtractUserFactCandidatesChange: (Boolean) -> Unit,
+    onSaveAgentPersona: (String) -> Unit,
+    onSaveUserFacts: (String) -> Unit,
+    onReadAgentPersona: () -> String,
+    onReadUserFacts: () -> String,
 ) {
-    SettingsCard(title = "Advanced") {
-        Column {
-            QuickLinkItem(
-                label = "Local Agent Settings",
-                subtitle = "Memory, accessibility, auto-capture",
-                onClick = { onNavigate("local_agent") },
+    var expanded by remember { mutableStateOf(false) }
+    var showPersonaDialog by remember { mutableStateOf(false) }
+    var showFactsDialog by remember { mutableStateOf(false) }
+    var showContextDebugDialog by remember { mutableStateOf(false) }
+
+    SettingsCard(
+        title = "Local Agent",
+        onExpandToggle = { expanded = !expanded },
+        expanded = expanded,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingsRow(label = "Accessibility Status", subtitle = if (accessibilityEnabled) "Enabled" else "Disabled") {
+                TextButton(onClick = {
+                    onRefreshAccessibility()
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }) {
+                    Text("Open Settings", color = CyanAccent)
+                }
+            }
+
+            HorizontalDivider()
+
+            SettingsToggleRow(
+                label = "Auto capture toggle",
+                checked = autoCaptureEnabled,
+                onCheckedChange = onAutoCaptureChange,
             )
-            QuickLinkItem(
-                label = "Privacy & Memory",
-                subtitle = "Data management, local backup",
-                onClick = { onNavigate("privacy") },
+
+            CaptureIntervalRow(
+                value = captureIntervalMin,
+                onValueChange = onCaptureIntervalChange,
             )
-            QuickLinkItem(
-                label = "Data Export / Import",
-                subtitle = "Backup and restore app data",
-                onClick = { onNavigate("data") },
+
+            SettingsRow(label = "Blacklist apps") {
+                TextButton(onClick = { context.startActivity(Intent(context, AppBlacklistActivity::class.java)) }) {
+                    Text("Open", color = CyanAccent)
+                }
+            }
+
+            SettingsRow(label = "View screen captures") {
+                TextButton(onClick = { context.startActivity(Intent(context, ScreenCapturesActivity::class.java)) }) {
+                    Text("Open", color = CyanAccent)
+                }
+            }
+
+            HorizontalDivider()
+
+            SettingsToggleRow(
+                label = "Daily facts reminder",
+                checked = dailyFactsReminderEnabled,
+                onCheckedChange = onDailyFactsReminderChange,
             )
-            QuickLinkItem(
-                label = "About",
-                subtitle = "App version and credits",
-                onClick = { onNavigate("about") },
+
+            SettingsRow(label = "Edit daily facts") {
+                TextButton(onClick = {
+                    context.startActivity(Intent(context, DailyFactsActivity::class.java).apply {
+                        putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_DRAFT)
+                    })
+                }) {
+                    Text("Open", color = CyanAccent)
+                }
+            }
+
+            SettingsRow(label = "View confirmed daily facts") {
+                TextButton(onClick = {
+                    context.startActivity(Intent(context, DailyFactsActivity::class.java).apply {
+                        putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_CONFIRMED)
+                    })
+                }) {
+                    Text("Open", color = CyanAccent)
+                }
+            }
+
+            SettingsRow(label = "View daily summary") {
+                TextButton(onClick = { context.startActivity(Intent(context, DailySummaryActivity::class.java)) }) {
+                    Text("Open", color = CyanAccent)
+                }
+            }
+
+            HorizontalDivider()
+
+            SettingsToggleRow(
+                label = "Auto-save daily facts",
+                checked = autoSaveDailyFactsEnabled,
+                onCheckedChange = onAutoSaveDailyFactsChange,
+            )
+
+            SettingsToggleRow(
+                label = "Extract user fact candidates",
+                checked = extractUserFactCandidatesEnabled,
+                onCheckedChange = onExtractUserFactCandidatesChange,
+            )
+
+            HorizontalDivider()
+
+            SettingsRow(label = "Edit agent persona") {
+                TextButton(onClick = { showPersonaDialog = true }) {
+                    Text("Edit", color = CyanAccent)
+                }
+            }
+
+            SettingsRow(label = "Edit user facts") {
+                TextButton(onClick = { showFactsDialog = true }) {
+                    Text("Edit", color = CyanAccent)
+                }
+            }
+
+            SettingsRow(label = "View context debug") {
+                TextButton(onClick = { showContextDebugDialog = true }) {
+                    Text("View", color = CyanAccent)
+                }
+            }
+        }
+    }
+
+    if (showPersonaDialog) {
+        TextEditorDialog(
+            title = "Agent personality",
+            initial = onReadAgentPersona(),
+            onDismiss = { showPersonaDialog = false },
+            onSave = { text ->
+                onSaveAgentPersona(text)
+                showPersonaDialog = false
+            },
+        )
+    }
+
+    if (showFactsDialog) {
+        TextEditorDialog(
+            title = "User facts",
+            initial = onReadUserFacts(),
+            onDismiss = { showFactsDialog = false },
+            onSave = { text ->
+                onSaveUserFacts(text)
+                showFactsDialog = false
+            },
+        )
+    }
+
+    if (showContextDebugDialog) {
+        AlertDialog(
+            onDismissRequest = { showContextDebugDialog = false },
+            title = { Text("Context Injection Debug") },
+            text = {
+                Text(
+                    if (lastContextInjectionDebug.isBlank()) "No context injection recorded yet."
+                    else lastContextInjectionDebug,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showContextDebugDialog = false }) {
+                    Text("Close")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun MemoryPrivacySection(
+    context: Context,
+    memoryMode: MemoryPrivacyMode,
+    syncExplicit: Boolean,
+    syncDaily: Boolean,
+    syncOcr: Boolean,
+    syncDerived: Boolean,
+    ocrRetentionDays: Int,
+    vaultLocked: Boolean,
+    vaultRequiresPassphrase: Boolean,
+    onMemoryModeChange: (MemoryPrivacyMode) -> Unit,
+    onSyncExplicitChange: (Boolean) -> Unit,
+    onSyncDailyChange: (Boolean) -> Unit,
+    onSyncOcrChange: (Boolean) -> Unit,
+    onSyncDerivedChange: (Boolean) -> Unit,
+    onOcrRetentionChange: (Int) -> Unit,
+    onDeletePassiveCapture: () -> Unit,
+    onLockVault: () -> Unit,
+    onUnlockVault: (String) -> Boolean,
+    onSetPassphrase: (String) -> Boolean,
+    onClearPassphrase: () -> Unit,
+    onResetVault: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showUnlockDialog by remember { mutableStateOf(false) }
+    var showPassphraseDialog by remember { mutableStateOf(false) }
+    var showResetConfirm by remember { mutableStateOf(false) }
+    var passphraseDialogMode by remember { mutableStateOf("set") }
+
+    SettingsCard(
+        title = "Memory & Privacy",
+        onExpandToggle = { expanded = !expanded },
+        expanded = expanded,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Current mode: ${memoryMode.title}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = MemoryModeManager.modeAvailabilityText(memoryMode),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            MemoryPrivacyMode.entries.forEach { mode ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onMemoryModeChange(mode) }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(
+                        selected = memoryMode == mode,
+                        onClick = { onMemoryModeChange(mode) },
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = mode.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = mode.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider()
+
+            Text(
+                text = "Sync Settings",
+                style = MaterialTheme.typography.labelMedium,
+                color = CyanAccent,
+            )
+
+            SettingsToggleRow(
+                label = "Explicit facts",
+                checked = syncExplicit,
+                onCheckedChange = onSyncExplicitChange,
+            )
+            SettingsToggleRow(
+                label = "Daily facts",
+                checked = syncDaily,
+                onCheckedChange = onSyncDailyChange,
+            )
+            SettingsToggleRow(
+                label = "Screen OCR",
+                checked = syncOcr,
+                onCheckedChange = onSyncOcrChange,
+            )
+            SettingsToggleRow(
+                label = "Derived summary",
+                checked = syncDerived,
+                onCheckedChange = onSyncDerivedChange,
+            )
+
+            HorizontalDivider()
+
+            CaptureIntervalRow(
+                value = ocrRetentionDays,
+                onValueChange = onOcrRetentionChange,
+                label = "OCR retention (days)",
+            )
+
+            SettingsRow(label = "Delete passive capture") {
+                TextButton(onClick = { showDeleteConfirm = true }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            }
+
+            HorizontalDivider()
+
+            Text(
+                text = buildString {
+                    append("Vault is ")
+                    append(if (vaultLocked) "LOCKED" else "UNLOCKED")
+                    append(".")
+                    if (vaultRequiresPassphrase) append(" Passphrase required for unlock.")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!vaultLocked) {
+                    OutlinedButton(onClick = onLockVault) { Text("Lock") }
+                } else {
+                    OutlinedButton(onClick = { showUnlockDialog = true }) { Text("Unlock") }
+                }
+                OutlinedButton(onClick = {
+                    passphraseDialogMode = "set"
+                    showPassphraseDialog = true
+                }) { Text("Set Passphrase") }
+                OutlinedButton(onClick = onClearPassphrase) { Text("Clear Passphrase") }
+            }
+
+            SettingsRow(label = "Reset vault") {
+                TextButton(onClick = { showResetConfirm = true }) {
+                    Text("Reset", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete passive OCR capture?") },
+            text = { Text("This deletes local OCR snapshots and their search index artifacts. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeletePassiveCapture()
+                    showDeleteConfirm = false
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showUnlockDialog) {
+        PassphraseDialog(
+            title = "Unlock vault",
+            onDismiss = { showUnlockDialog = false },
+            onSubmit = { passphrase ->
+                val ok = onUnlockVault(passphrase)
+                showUnlockDialog = false
+            },
+        )
+    }
+
+    if (showPassphraseDialog) {
+        PassphraseDialog(
+            title = if (passphraseDialogMode == "set") "Set vault passphrase" else "Unlock vault",
+            onDismiss = { showPassphraseDialog = false },
+            onSubmit = { passphrase ->
+                val ok = if (passphraseDialogMode == "set") {
+                    onSetPassphrase(passphrase)
+                } else {
+                    onUnlockVault(passphrase)
+                }
+                showPassphraseDialog = false
+            },
+        )
+    }
+
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text("Reset memory vault?") },
+            text = { Text("This removes encrypted memory payloads, policy metadata, sync queue state, and lock keys. Existing plain files remain. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onResetVault()
+                    showResetConfirm = false
+                }) {
+                    Text("Reset", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun TranscriptsSection(
+    transcriptStorageEnabled: Boolean,
+    includeFullTranscriptionInExports: Boolean,
+    autoAudioCaptureEnabled: Boolean,
+    autoAudioDebugText: String,
+    onTranscriptStorageChange: (Boolean) -> Unit,
+    onIncludeFullTranscriptionChange: (Boolean) -> Unit,
+    onAutoAudioCaptureChange: (Boolean) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    SettingsCard(
+        title = "Transcripts",
+        onExpandToggle = { expanded = !expanded },
+        expanded = expanded,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingsToggleRow(
+                label = "Transcript storage",
+                checked = transcriptStorageEnabled,
+                onCheckedChange = onTranscriptStorageChange,
+            )
+            SettingsToggleRow(
+                label = "Include full transcription in exports",
+                checked = includeFullTranscriptionInExports,
+                onCheckedChange = onIncludeFullTranscriptionChange,
+            )
+            HorizontalDivider()
+            SettingsToggleRow(
+                label = "Auto audio capture",
+                checked = autoAudioCaptureEnabled,
+                onCheckedChange = onAutoAudioCaptureChange,
+            )
+            Text(
+                text = autoAudioDebugText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
 
 @Composable
-private fun QuickLinkItem(
+private fun RedactionSection(
+    redactNamesEnabled: Boolean,
+    onRedactNamesChange: (Boolean) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    SettingsCard(
+        title = "Redaction",
+        onExpandToggle = { expanded = !expanded },
+        expanded = expanded,
+    ) {
+        SettingsToggleRow(
+            label = "Redact names",
+            checked = redactNamesEnabled,
+            onCheckedChange = onRedactNamesChange,
+        )
+    }
+}
+
+@Composable
+private fun DataSection(
+    context: Context,
+    viewModel: SettingsViewModel,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var showImportConfirm by remember { mutableStateOf(false) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+    var toastMessage by remember { mutableStateOf("") }
+    var showToast by remember { mutableStateOf(false) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        uri?.let {
+            val fileName = "cyanbridge_backup_${SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())}.zip"
+            viewModel.exportData(it) { msg ->
+                toastMessage = msg
+                showToast = true
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            viewModel.importData(it) { msg ->
+                toastMessage = msg
+                showToast = true
+            }
+        }
+    }
+
+    SettingsCard(
+        title = "Data",
+        onExpandToggle = { expanded = !expanded },
+        expanded = expanded,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = {
+                    val fileName = "cyanbridge_backup_${SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())}.zip"
+                    exportLauncher.launch(fileName)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Export")
+            }
+            OutlinedButton(
+                onClick = { showImportConfirm = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Import")
+            }
+            OutlinedButton(
+                onClick = { showClearConfirm = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Clear local data", color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+
+    if (showImportConfirm) {
+        AlertDialog(
+            onDismissRequest = { showImportConfirm = false },
+            title = { Text("Import local data?") },
+            text = { Text("This will overwrite current local chats, memory files, recordings, and settings from the selected backup ZIP.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showImportConfirm = false
+                    importLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
+                }) {
+                    Text("Import")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("Clear local data?") },
+            text = { Text("This will delete all chats, notes, capture sessions, and audio recordings stored on this device. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearAllData { msg ->
+                        toastMessage = msg
+                        showToast = true
+                    }
+                    showClearConfirm = false
+                }) {
+                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun AboutSection(
+    onNavigate: (String) -> Unit,
+) {
+    SettingsCard(title = "About") {
+        QuickLinkItem(
+            label = "About",
+            subtitle = "App version and credits",
+            onClick = { onNavigate("about") },
+        )
+    }
+}
+
+@Composable
+private fun SettingsRow(
     label: String,
-    subtitle: String,
-    onClick: () -> Unit,
+    subtitle: String? = null,
+    trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -497,17 +1182,160 @@ private fun QuickLinkItem(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        Icon(
-            imageVector = Icons.Filled.ArrowForward,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        trailing?.invoke()
+    }
+}
+
+@Composable
+private fun SettingsToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
         )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+        )
+    }
+}
+
+@Composable
+private fun CaptureIntervalRow(
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    label: String = "Capture interval (minutes)",
+) {
+    var textValue by remember { mutableStateOf(value.toString()) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedTextField(
+            value = textValue,
+            onValueChange = { newVal ->
+                textValue = newVal
+                newVal.toIntOrNull()?.let { onValueChange(it) }
+            },
+            modifier = Modifier.width(80.dp),
+            singleLine = true,
+            shape = RoundedCornerShape(8.dp),
+            textStyle = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun TextEditorDialog(
+    title: String,
+    initial: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                minLines = 8,
+                shape = RoundedCornerShape(8.dp),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
+private fun PassphraseDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    var passphrase by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = passphrase,
+                onValueChange = { passphrase = it },
+                label = { Text("Passphrase") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSubmit(passphrase) },
+                enabled = passphrase.isNotBlank(),
+            ) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
+private fun OutlinedButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    androidx.compose.material3.OutlinedButton(
+        onClick = onClick,
+        modifier = modifier,
+    ) {
+        content()
     }
 }
 
@@ -597,5 +1425,38 @@ private fun SelectableChip(
                 color = if (selected) CyanAccent else MaterialTheme.colorScheme.onSurface,
             )
         }
+    }
+}
+
+@Composable
+private fun QuickLinkItem(
+    label: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Icon(
+            imageVector = Icons.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
