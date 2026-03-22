@@ -14,6 +14,7 @@ object Routes {
     const val PLUGINS = "plugins"
     const val RECORDINGS = "recordings"
     const val NOTES = "notes"
+    const val NOTES_LIST = "notes_list"
     const val NOTE_DETAIL = "note_detail/{noteId}"
     const val LOCAL_MODELS = "local_models"
     const val DAILY_FACTS = "daily_facts"

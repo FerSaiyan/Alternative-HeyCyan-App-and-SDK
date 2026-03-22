@@ -7,13 +7,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Icon
@@ -42,8 +42,10 @@ import com.fersaiyan.cyanbridge.ui.onboarding.BatteryOptimizationScreen
 import com.fersaiyan.cyanbridge.ui.onboarding.WelcomeScreen
 import com.fersaiyan.cyanbridge.ui.plugins.PluginsScreen
 import com.fersaiyan.cyanbridge.ui.pro.ProScreen
+import com.fersaiyan.cyanbridge.ui.pro.ProSubscriptionSettingsScreen
 import com.fersaiyan.cyanbridge.ui.localmodels.LocalModelsScreen
-import com.fersaiyan.cyanbridge.ui.notes.NotesScreen
+import com.fersaiyan.cyanbridge.ui.notes.NoteDetailScreen
+import com.fersaiyan.cyanbridge.ui.notes.NotesListScreen
 import com.fersaiyan.cyanbridge.ui.recordings.RecordingsScreen
 
 data class BottomNavItem(
@@ -103,8 +105,8 @@ val bottomNavItems = listOf(
         unselectedIcon = Icons.Outlined.Settings,
     ),
     BottomNavItem(
-        route = Routes.PLUGINS,
-        label = "Plugins",
+        route = Routes.NOTES_LIST,
+        label = "Notes",
         selectedIcon = Icons.AutoMirrored.Filled.ArrowForward,
         unselectedIcon = Icons.AutoMirrored.Outlined.ArrowForward,
     ),
@@ -151,7 +153,7 @@ fun MainNavScreen(
                 }
             }
         },
-        ) { innerPadding ->
+    ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = startDestination,
@@ -193,12 +195,13 @@ fun MainNavScreen(
             composable(Routes.PRO) {
                 ProScreen(
                     onNavigateToSettings = {
-                        navController.navigate(Routes.SETTINGS) {
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navController.navigate(Routes.PRO_SETTINGS)
                     },
+                )
+            }
+            composable(Routes.PRO_SETTINGS) {
+                ProSubscriptionSettingsScreen(
+                    onNavigateBack = { navController.popBackStack() },
                 )
             }
             composable(Routes.WELCOME) {
@@ -221,14 +224,15 @@ fun MainNavScreen(
             composable(Routes.PLUGINS) {
                 PluginsScreen()
             }
-            composable(Routes.NOTES) {
-                NotesScreen()
+            composable(Routes.NOTES_LIST) {
+                NotesListScreen(
+                    onNavigateToNoteDetail = { noteId ->
+                        navController.navigate(Routes.noteDetail(noteId?.toString() ?: "new"))
+                    },
+                )
             }
             composable(Routes.LOCAL_MODELS) {
                 LocalModelsScreen()
-            }
-            composable(Routes.PRO_SETTINGS) {
-                PlaceholderScreen("Pro Settings", "")
             }
             composable(Routes.DAILY_FACTS) {
                 PlaceholderScreen("Daily Facts", "")
@@ -236,78 +240,18 @@ fun MainNavScreen(
             composable(Routes.DAILY_SUMMARY) {
                 PlaceholderScreen("Daily Summary", "")
             }
-            composable(Routes.CHAT_THREAD) { backStackEntry ->
-                val chatId = backStackEntry.arguments?.getString("chatId")
-                ChatScreen(threadId = chatId)
-            }
-            composable(Routes.HISTORY) {
-                HistoryScreen(
-                    onNavigateToChat = { chatId ->
-                        navController.navigate(Routes.chatThread(chatId)) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+            composable("note_detail/new") {
+                NoteDetailScreen(
+                    noteId = null,
+                    onNavigateBack = { navController.popBackStack() },
                 )
             }
-            composable(Routes.SETTINGS) {
-                com.fersaiyan.cyanbridge.ui.settings.SettingsScreen(
-                    onNavigate = { route -> navController.navigate(route) },
+            composable(Routes.NOTE_DETAIL) { backStackEntry ->
+                val noteId = backStackEntry.arguments?.getString("noteId")?.toLongOrNull()
+                NoteDetailScreen(
+                    noteId = noteId,
+                    onNavigateBack = { navController.popBackStack() },
                 )
-            }
-            composable(Routes.ABOUT) {
-                com.fersaiyan.cyanbridge.ui.settings.AboutScreen()
-            }
-            composable(Routes.PRO) {
-                ProScreen(
-                    onNavigateToSettings = {
-                        navController.navigate(Routes.SETTINGS) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                )
-            }
-            composable(Routes.WELCOME) {
-                WelcomeScreen(
-                    onStartSetup = { navController.navigate(Routes.BATTERY_OPT) },
-                )
-            }
-            composable(Routes.BATTERY_OPT) {
-                BatteryOptimizationScreen(
-                    onComplete = {
-                        navController.navigate(Routes.CHAT) {
-                            popUpTo(Routes.WELCOME) { inclusive = true }
-                        }
-                    },
-                )
-            }
-            composable(Routes.PRO_SETTINGS) {
-                PlaceholderScreen("Pro Settings", "Full migration: Phase 4")
-            }
-            composable(Routes.PLUGINS) {
-                PluginsScreen()
-            }
-            composable(Routes.RECORDINGS) {
-                RecordingsScreen()
-            }
-            composable(Routes.NOTES) {
-                NotesScreen()
-            }
-            composable(Routes.LOCAL_MODELS) {
-                LocalModelsScreen()
-            }
-            composable(Routes.DAILY_FACTS) {
-                PlaceholderScreen("Daily Facts", "Full migration: Phase 2")
-            }
-            composable(Routes.DAILY_SUMMARY) {
-                PlaceholderScreen("Daily Summary", "Full migration: Phase 2")
             }
         }
     }
