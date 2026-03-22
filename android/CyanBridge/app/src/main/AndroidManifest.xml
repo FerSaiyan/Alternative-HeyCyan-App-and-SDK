@@ -76,6 +76,11 @@
         <activity
             android:name=".ui.WelcomeActivity"
             android:exported="true">
+        </activity>
+
+        <activity
+            android:name=".ui.ComposeMainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
