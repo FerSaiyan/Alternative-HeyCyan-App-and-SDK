@@ -32,9 +32,11 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
+import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.fersaiyan.cyanbridge.ui.chat.ChatScreen
 import com.fersaiyan.cyanbridge.ui.glasses.GlassesScreen
 import com.fersaiyan.cyanbridge.ui.history.HistoryScreen
@@ -44,6 +46,12 @@ import com.fersaiyan.cyanbridge.ui.plugins.PluginsScreen
 import com.fersaiyan.cyanbridge.ui.pro.ProScreen
 import com.fersaiyan.cyanbridge.ui.pro.ProSubscriptionSettingsScreen
 import com.fersaiyan.cyanbridge.ui.localmodels.LocalModelsScreen
+import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsScreen
+import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryScreen
+import com.fersaiyan.cyanbridge.ui.localagent.AppBlacklistScreen
+import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesScreen
+import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsScreen
+import com.fersaiyan.cyanbridge.ui.localagent.SyncedMediaGalleryScreen
 import com.fersaiyan.cyanbridge.ui.notes.NoteDetailScreen
 import com.fersaiyan.cyanbridge.ui.notes.NotesListScreen
 import com.fersaiyan.cyanbridge.ui.recordings.RecordingsScreen
@@ -234,11 +242,58 @@ fun MainNavScreen(
             composable(Routes.LOCAL_MODELS) {
                 LocalModelsScreen()
             }
-            composable(Routes.DAILY_FACTS) {
-                PlaceholderScreen("Daily Facts", "")
+            composable(
+                route = Routes.DAILY_FACTS,
+                arguments = listOf(
+                    navArgument("mode") {
+                        type = NavType.StringType
+                        defaultValue = "draft"
+                    },
+                    navArgument("date") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                ),
+            ) { backStackEntry ->
+                DailyFactsScreen(
+                    mode = backStackEntry.arguments?.getString("mode") ?: "draft",
+                    date = backStackEntry.arguments?.getString("date") ?: "",
+                    onNavigateBack = { navController.popBackStack() },
+                )
             }
-            composable(Routes.DAILY_SUMMARY) {
-                PlaceholderScreen("Daily Summary", "")
+            composable(
+                route = Routes.DAILY_SUMMARY,
+                arguments = listOf(
+                    navArgument("date") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                ),
+            ) { backStackEntry ->
+                DailySummaryScreen(
+                    date = backStackEntry.arguments?.getString("date") ?: "",
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.APP_BLACKLIST) {
+                AppBlacklistScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.SCREEN_CAPTURES) {
+                ScreenCapturesScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.PENDING_ACTIONS) {
+                PendingActionsScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.SYNCED_MEDIA_GALLERY) {
+                SyncedMediaGalleryScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                )
             }
             composable("note_detail/new") {
                 NoteDetailScreen(

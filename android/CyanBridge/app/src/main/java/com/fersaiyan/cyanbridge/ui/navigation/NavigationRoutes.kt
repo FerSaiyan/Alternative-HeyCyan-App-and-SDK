@@ -17,13 +17,17 @@ object Routes {
     const val NOTES_LIST = "notes_list"
     const val NOTE_DETAIL = "note_detail/{noteId}"
     const val LOCAL_MODELS = "local_models"
-    const val DAILY_FACTS = "daily_facts"
-    const val DAILY_SUMMARY = "daily_summary"
+    const val DAILY_FACTS = "daily_facts?mode={mode}&date={date}"
+    const val DAILY_SUMMARY = "daily_summary?date={date}"
     const val APP_BLACKLIST = "app_blacklist"
     const val SCREEN_CAPTURES = "screen_captures"
     const val PENDING_ACTIONS = "pending_actions"
+    const val SYNCED_MEDIA_GALLERY = "synced_media_gallery"
     const val TRANSCRIPTION_DEBUG = "transcription_debug"
 
     fun chatThread(chatId: String) = "chat_thread/$chatId"
     fun noteDetail(noteId: String) = "note_detail/$noteId"
+    fun dailyFacts(mode: String = "draft", date: String = "") =
+        "daily_facts?mode=$mode&date=$date"
+    fun dailySummary(date: String = "") = "daily_summary?date=$date"
 }
