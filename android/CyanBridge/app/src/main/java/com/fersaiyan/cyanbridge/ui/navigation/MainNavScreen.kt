@@ -33,6 +33,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.fersaiyan.cyanbridge.ui.chat.ChatScreen
+import com.fersaiyan.cyanbridge.ui.history.HistoryScreen
 
 data class BottomNavItem(
     val route: String,
@@ -140,10 +142,24 @@ fun MainNavScreen(
             modifier = Modifier.padding(innerPadding),
         ) {
             composable(Routes.CHAT) {
-                com.fersaiyan.cyanbridge.ui.chat.ChatScreen()
+                ChatScreen()
+            }
+            composable(Routes.CHAT_THREAD) { backStackEntry ->
+                val chatId = backStackEntry.arguments?.getString("chatId")
+                ChatScreen(threadId = chatId)
             }
             composable(Routes.HISTORY) {
-                PlaceholderScreen("History Screen", "Full migration: Phase 3")
+                HistoryScreen(
+                    onNavigateToChat = { chatId ->
+                        navController.navigate(Routes.chatThread(chatId)) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
             composable(Routes.SETTINGS) {
                 com.fersaiyan.cyanbridge.ui.settings.SettingsScreen(

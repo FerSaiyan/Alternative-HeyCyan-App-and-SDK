@@ -66,6 +66,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
+    threadId: String? = null,
     viewModel: ChatViewModel = viewModel(
         factory = ChatViewModel.Factory(LocalContext.current),
     ),
@@ -76,6 +77,12 @@ fun ChatScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showModelMenu by remember { mutableStateOf(false) }
     val models = listOf("auto", "minimax/minimax-m2.5", "anthropic/claude-3.5-sonnet", "openai/gpt-4o")
+
+    LaunchedEffect(threadId) {
+        if (threadId != null) {
+            viewModel.loadByThreadId(threadId)
+        }
+    }
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {

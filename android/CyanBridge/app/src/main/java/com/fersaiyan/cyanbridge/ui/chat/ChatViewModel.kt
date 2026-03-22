@@ -45,6 +45,20 @@ class ChatViewModel(private val context: Context) : ViewModel() {
         loadOrCreateThread()
     }
 
+    fun loadByThreadId(chatId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val thread = ChatStore.getThread(chatId) ?: ChatStore.createThread()
+            val messages = ChatStore.listMessages(thread.id)
+            val model = ProSubscriptionAiPrefs.getRequestsModel(context)
+            _uiState.value = ChatScreenState(
+                currentThread = thread,
+                messages = messages,
+                currentModel = model,
+            )
+            _inputText.value = ""
+        }
+    }
+
     private fun loadOrCreateThread() {
         viewModelScope.launch(Dispatchers.IO) {
             val threads = ChatStore.listNonEmptyThreads()
