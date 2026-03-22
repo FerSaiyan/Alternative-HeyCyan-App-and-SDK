@@ -36,9 +36,12 @@ import androidx.navigation.compose.rememberNavController
 import com.fersaiyan.cyanbridge.ui.chat.ChatScreen
 import com.fersaiyan.cyanbridge.ui.history.HistoryScreen
 import com.fersaiyan.cyanbridge.ui.onboarding.BatteryOptimizationScreen
-import com.fersaiyan.cyanbridge.ui.onboarding.OnboardingViewModel
 import com.fersaiyan.cyanbridge.ui.onboarding.WelcomeScreen
+import com.fersaiyan.cyanbridge.ui.plugins.PluginsScreen
 import com.fersaiyan.cyanbridge.ui.pro.ProScreen
+import com.fersaiyan.cyanbridge.ui.localmodels.LocalModelsScreen
+import com.fersaiyan.cyanbridge.ui.notes.NotesScreen
+import com.fersaiyan.cyanbridge.ui.recordings.RecordingsScreen
 
 data class BottomNavItem(
     val route: String,
@@ -204,16 +207,16 @@ fun MainNavScreen(
                 PlaceholderScreen("Pro Settings", "Full migration: Phase 4")
             }
             composable(Routes.PLUGINS) {
-                PlaceholderScreen("Community Plugins", "Full migration: Phase 6")
+                PluginsScreen()
             }
             composable(Routes.RECORDINGS) {
-                PlaceholderScreen("Recordings", "Full migration: Phase 6")
+                RecordingsScreen()
             }
             composable(Routes.NOTES) {
-                PlaceholderScreen("Notes", "Full migration: Phase 6")
+                NotesScreen()
             }
             composable(Routes.LOCAL_MODELS) {
-                PlaceholderScreen("Local Models", "Full migration: Phase 6")
+                LocalModelsScreen()
             }
             composable(Routes.DAILY_FACTS) {
                 PlaceholderScreen("Daily Facts", "Full migration: Phase 2")
