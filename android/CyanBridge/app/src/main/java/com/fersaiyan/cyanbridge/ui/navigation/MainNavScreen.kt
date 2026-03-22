@@ -35,6 +35,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.fersaiyan.cyanbridge.ui.chat.ChatScreen
 import com.fersaiyan.cyanbridge.ui.history.HistoryScreen
+import com.fersaiyan.cyanbridge.ui.pro.ProScreen
 
 data class BottomNavItem(
     val route: String,
@@ -170,7 +171,17 @@ fun MainNavScreen(
                 com.fersaiyan.cyanbridge.ui.settings.AboutScreen()
             }
             composable(Routes.PRO) {
-                PlaceholderScreen("Pro Subscription", "Full migration: Phase 4")
+                ProScreen(
+                    onNavigateToSettings = {
+                        navController.navigate(Routes.SETTINGS) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
             composable(Routes.WELCOME) {
                 PlaceholderScreen("Welcome / Onboarding", "Full migration: Phase 5")
