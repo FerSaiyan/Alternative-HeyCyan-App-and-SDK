@@ -1,19 +1,24 @@
 # Compose / Material 3 Migration Plan
 
 **Branch:** `compose_material3_migration`
-**Status:** Phase 7 reverted — bugs found in test APK
+**Working Directory:** `/home/fertroll10/Documents/ML/HeyCyanSmartGlassesSDK/android/`
+**Repo:** CyanBridge (subdirectory `CyanBridge/`)
+**Build command:** `cd CyanBridge && ./gradlew assembleDebug`
+**Status:** Phase 8 complete — RecordingsScreen, GlassesScreen, corrected bottom nav
 **Goal:** Full feature-parity migration from XML Activities to Jetpack Compose with Material 3
 
 ---
 
 ## Known Bugs (fixed in current branch)
 
-- ✅ **Bottom NavigationBar missing** — ComposeNavHost now has bottom NavigationBar with 4 tabs (Chat, History, Settings, Pro)
+- ✅ **Bottom NavigationBar missing** — Fixed in Phase 7 (bottom nav added, but had wrong tab structure)
+- ✅ **Bottom Navigation wrong tab count** — Fixed in Phase 8 (corrected to 5 tabs: Glasses/Chats/Recordings/Settings/Plugins)
 - ✅ **Keyboard cuts off input box** — ChatScreen now has `imePadding()` + proper weight layout
+- ✅ **Phase 7 bugs on test APK** — Reverted and fixed in current branch
 
 ---
 
-## Critical Issue: Bottom Navigation Was Wrong
+## Bottom Navigation — Correct Structure (Phase 8: FIXED ✅)
 
 The Compose bottom nav was built incorrectly. Here is the **authoritative comparison**:
 
@@ -27,7 +32,7 @@ The Compose bottom nav was built incorrectly. Here is the **authoritative compar
 | 4 | **Settings** | `SettingsActivity` |
 | 5 | **Plugins** | `CommunityPluginsActivity` |
 
-### NEW (CURRENT — WRONG)
+### NEW (Phase 8 — CORRECT)
 
 | Tab | Title | Screen | Status |
 |-----|-------|--------|--------|
