@@ -140,7 +140,7 @@ fun MainNavScreen(
             modifier = Modifier.padding(innerPadding),
         ) {
             composable(Routes.CHAT) {
-                PlaceholderScreen("Chat Screen", "Full migration: Phase 2")
+                com.fersaiyan.cyanbridge.ui.chat.ChatScreen()
             }
             composable(Routes.HISTORY) {
                 PlaceholderScreen("History Screen", "Full migration: Phase 3")
