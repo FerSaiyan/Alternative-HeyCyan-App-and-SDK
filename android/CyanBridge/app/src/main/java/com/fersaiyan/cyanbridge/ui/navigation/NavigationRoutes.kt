@@ -6,6 +6,7 @@ object Routes {
     const val CHAT_THREAD = "chat_thread/{chatId}"
     const val HISTORY = "history"
     const val SETTINGS = "settings"
+    const val ABOUT = "about"
     const val PRO = "pro"
     const val PRO_SETTINGS = "pro_settings"
     const val PLUGINS = "plugins"

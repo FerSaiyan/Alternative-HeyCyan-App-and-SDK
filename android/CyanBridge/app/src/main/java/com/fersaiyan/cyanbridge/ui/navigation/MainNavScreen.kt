@@ -146,7 +146,12 @@ fun MainNavScreen(
                 PlaceholderScreen("History Screen", "Full migration: Phase 3")
             }
             composable(Routes.SETTINGS) {
-                PlaceholderScreen("Settings Screen", "Full migration: Phase 1")
+                com.fersaiyan.cyanbridge.ui.settings.SettingsScreen(
+                    onNavigate = { route -> navController.navigate(route) },
+                )
+            }
+            composable(Routes.ABOUT) {
+                com.fersaiyan.cyanbridge.ui.settings.AboutScreen()
             }
             composable(Routes.PRO) {
                 PlaceholderScreen("Pro Subscription", "Full migration: Phase 4")
