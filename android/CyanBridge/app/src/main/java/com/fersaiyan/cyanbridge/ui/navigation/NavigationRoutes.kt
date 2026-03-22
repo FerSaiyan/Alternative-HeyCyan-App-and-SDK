@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.ui.navigation
 
 object Routes {
     const val WELCOME = "welcome"
+    const val BATTERY_OPT = "battery_optimization"
     const val CHAT = "chat"
     const val CHAT_THREAD = "chat_thread/{chatId}"
     const val HISTORY = "history"

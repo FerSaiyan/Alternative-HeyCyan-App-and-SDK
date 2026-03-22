@@ -35,6 +35,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.fersaiyan.cyanbridge.ui.chat.ChatScreen
 import com.fersaiyan.cyanbridge.ui.history.HistoryScreen
+import com.fersaiyan.cyanbridge.ui.onboarding.BatteryOptimizationScreen
+import com.fersaiyan.cyanbridge.ui.onboarding.OnboardingViewModel
+import com.fersaiyan.cyanbridge.ui.onboarding.WelcomeScreen
 import com.fersaiyan.cyanbridge.ui.pro.ProScreen
 
 data class BottomNavItem(
@@ -184,7 +187,18 @@ fun MainNavScreen(
                 )
             }
             composable(Routes.WELCOME) {
-                PlaceholderScreen("Welcome / Onboarding", "Full migration: Phase 5")
+                WelcomeScreen(
+                    onStartSetup = { navController.navigate(Routes.BATTERY_OPT) },
+                )
+            }
+            composable(Routes.BATTERY_OPT) {
+                BatteryOptimizationScreen(
+                    onComplete = {
+                        navController.navigate(Routes.CHAT) {
+                            popUpTo(Routes.WELCOME) { inclusive = true }
+                        }
+                    },
+                )
             }
             composable(Routes.PRO_SETTINGS) {
                 PlaceholderScreen("Pro Settings", "Full migration: Phase 4")
