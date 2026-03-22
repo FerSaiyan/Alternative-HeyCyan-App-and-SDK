@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -68,6 +69,7 @@ import java.util.Locale
 @Composable
 fun ChatScreen(
     threadId: String? = null,
+    onNavigateToHistory: (() -> Unit)? = null,
     viewModel: ChatViewModel = viewModel(
         factory = ChatViewModel.Factory(LocalContext.current),
     ),
@@ -134,6 +136,15 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    if (onNavigateToHistory != null) {
+                        IconButton(onClick = onNavigateToHistory) {
+                            Icon(
+                                imageVector = Icons.Filled.List,
+                                contentDescription = "Chat history",
+                                tint = CyanAccent,
+                            )
+                        }
+                    }
                     IconButton(onClick = { viewModel.newChat() }) {
                         Icon(
                             imageVector = Icons.Filled.Add,

@@ -6,12 +6,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Icon
@@ -34,6 +36,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.fersaiyan.cyanbridge.ui.chat.ChatScreen
+import com.fersaiyan.cyanbridge.ui.glasses.GlassesScreen
 import com.fersaiyan.cyanbridge.ui.history.HistoryScreen
 import com.fersaiyan.cyanbridge.ui.onboarding.BatteryOptimizationScreen
 import com.fersaiyan.cyanbridge.ui.onboarding.WelcomeScreen
@@ -76,16 +79,22 @@ fun PlaceholderScreen(title: String, migrationPhase: String) {
 
 val bottomNavItems = listOf(
     BottomNavItem(
+        route = Routes.GLASSES,
+        label = "Glasses",
+        selectedIcon = Icons.Filled.Star,
+        unselectedIcon = Icons.Outlined.Star,
+    ),
+    BottomNavItem(
         route = Routes.CHAT,
-        label = "Chat",
+        label = "Chats",
         selectedIcon = Icons.Filled.Home,
         unselectedIcon = Icons.Outlined.Home,
     ),
     BottomNavItem(
-        route = Routes.HISTORY,
-        label = "History",
-        selectedIcon = Icons.Filled.List,
-        unselectedIcon = Icons.Outlined.List,
+        route = Routes.RECORDINGS,
+        label = "Recordings",
+        selectedIcon = Icons.AutoMirrored.Filled.List,
+        unselectedIcon = Icons.AutoMirrored.Outlined.List,
     ),
     BottomNavItem(
         route = Routes.SETTINGS,
@@ -94,10 +103,10 @@ val bottomNavItems = listOf(
         unselectedIcon = Icons.Outlined.Settings,
     ),
     BottomNavItem(
-        route = Routes.PRO,
-        label = "Pro",
-        selectedIcon = Icons.Filled.Star,
-        unselectedIcon = Icons.Outlined.Star,
+        route = Routes.PLUGINS,
+        label = "Plugins",
+        selectedIcon = Icons.AutoMirrored.Filled.ArrowForward,
+        unselectedIcon = Icons.AutoMirrored.Outlined.ArrowForward,
     ),
 )
 
@@ -142,14 +151,90 @@ fun MainNavScreen(
                 }
             }
         },
-    ) { innerPadding ->
+        ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = startDestination,
             modifier = Modifier.padding(innerPadding),
         ) {
+            composable(Routes.GLASSES) {
+                GlassesScreen()
+            }
             composable(Routes.CHAT) {
-                ChatScreen()
+                ChatScreen(
+                    onNavigateToHistory = {
+                        navController.navigate(Routes.HISTORY)
+                    },
+                )
+            }
+            composable(Routes.CHAT_THREAD) { backStackEntry ->
+                val chatId = backStackEntry.arguments?.getString("chatId")
+                ChatScreen(threadId = chatId)
+            }
+            composable(Routes.HISTORY) {
+                HistoryScreen(
+                    onNavigateToChat = { chatId ->
+                        navController.navigate(Routes.chatThread(chatId)) {
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
+            }
+            composable(Routes.SETTINGS) {
+                com.fersaiyan.cyanbridge.ui.settings.SettingsScreen(
+                    onNavigate = { route -> navController.navigate(route) },
+                )
+            }
+            composable(Routes.ABOUT) {
+                com.fersaiyan.cyanbridge.ui.settings.AboutScreen()
+            }
+            composable(Routes.PRO) {
+                ProScreen(
+                    onNavigateToSettings = {
+                        navController.navigate(Routes.SETTINGS) {
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
+            }
+            composable(Routes.WELCOME) {
+                WelcomeScreen(
+                    onStartSetup = { navController.navigate(Routes.BATTERY_OPT) },
+                )
+            }
+            composable(Routes.BATTERY_OPT) {
+                BatteryOptimizationScreen(
+                    onComplete = {
+                        navController.navigate(Routes.GLASSES) {
+                            popUpTo(Routes.WELCOME) { inclusive = true }
+                        }
+                    },
+                )
+            }
+            composable(Routes.RECORDINGS) {
+                RecordingsScreen()
+            }
+            composable(Routes.PLUGINS) {
+                PluginsScreen()
+            }
+            composable(Routes.NOTES) {
+                NotesScreen()
+            }
+            composable(Routes.LOCAL_MODELS) {
+                LocalModelsScreen()
+            }
+            composable(Routes.PRO_SETTINGS) {
+                PlaceholderScreen("Pro Settings", "")
+            }
+            composable(Routes.DAILY_FACTS) {
+                PlaceholderScreen("Daily Facts", "")
+            }
+            composable(Routes.DAILY_SUMMARY) {
+                PlaceholderScreen("Daily Summary", "")
             }
             composable(Routes.CHAT_THREAD) { backStackEntry ->
                 val chatId = backStackEntry.arguments?.getString("chatId")

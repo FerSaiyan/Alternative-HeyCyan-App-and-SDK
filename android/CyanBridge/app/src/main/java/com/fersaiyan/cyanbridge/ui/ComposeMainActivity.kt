@@ -29,6 +29,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.fersaiyan.cyanbridge.ui.chat.ChatScreen
+import com.fersaiyan.cyanbridge.ui.glasses.GlassesScreen
 import com.fersaiyan.cyanbridge.ui.history.HistoryScreen
 import com.fersaiyan.cyanbridge.ui.localmodels.LocalModelsScreen
 import com.fersaiyan.cyanbridge.ui.navigation.Routes
@@ -60,7 +61,7 @@ class ComposeMainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     ComposeNavHost(
-                        startDestination = if (isOnboarded) Routes.CHAT else Routes.WELCOME,
+                        startDestination = if (isOnboarded) Routes.GLASSES else Routes.WELCOME,
                         context = this,
                     )
                 }
@@ -124,7 +125,11 @@ fun ComposeNavHost(
                 startDestination = startDestination,
             ) {
                 composable(Routes.CHAT) {
-                    ChatScreen()
+                    ChatScreen(
+                        onNavigateToHistory = {
+                            navController.navigate(Routes.HISTORY)
+                        },
+                    )
                 }
                 composable(Routes.CHAT_THREAD) { backStackEntry ->
                     val chatId = backStackEntry.arguments?.getString("chatId")
