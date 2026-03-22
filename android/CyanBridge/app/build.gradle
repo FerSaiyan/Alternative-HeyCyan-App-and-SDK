@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.compose.compiler)
     id 'kotlin-kapt'
 }
 
@@ -8,6 +9,8 @@ configurations.configureEach {
     resolutionStrategy {
         force 'androidx.core:core:1.15.0'
         force 'androidx.core:core-ktx:1.15.0'
+        force 'androidx.activity:activity:1.8.0'
+        force 'androidx.activity:activity-ktx:1.8.0'
     }
 }
 
@@ -148,6 +151,18 @@ dependencies {
     testImplementation "androidx.room:room-testing:$room_version"
 
     // Chapter 4 UI gating test (androidTest)
+
+    // Compose (Phase 0 migration)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.ui)
+    implementation(libs.androidx.ui.graphics)
+    implementation(libs.androidx.ui.tooling.preview)
+    implementation(libs.androidx.material3)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.activity.compose)
+    debugImplementation(libs.androidx.ui.tooling)
+    debugImplementation(libs.androidx.ui.test.manifest)
     androidTestImplementation 'androidx.test:core-ktx:1.6.1'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:runner:1.6.1'
