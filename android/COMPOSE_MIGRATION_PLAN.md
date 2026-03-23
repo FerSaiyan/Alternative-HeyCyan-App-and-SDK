@@ -3,365 +3,178 @@
 **Branch:** `compose_material3_migration`
 **Working Directory:** `/home/fertroll10/Documents/ML/HeyCyanSmartGlassesSDK/android/`
 **Repo:** CyanBridge (subdirectory `CyanBridge/`)
-**Build command:** `cd CyanBridge && ./gradlew assembleDebug`
-**Status:** Phase 8 complete — RecordingsScreen, GlassesScreen, corrected bottom nav
+**Build command:** `cd CyanBridge && ./gradlew assembleDebug 2>&1 | tail -50`
+**Status:** Phase 13 complete — fixing bugs found in user testing
 **Goal:** Full feature-parity migration from XML Activities to Jetpack Compose with Material 3
 
 ---
 
-## Known Bugs (fixed in current branch)
+## Completed Phases
 
-- ✅ **Bottom NavigationBar missing** — Fixed in Phase 7 (bottom nav added, but had wrong tab structure)
-- ✅ **Bottom Navigation wrong tab count** — Fixed in Phase 8 (corrected to 5 tabs: Glasses/Chats/Recordings/Settings/Plugins)
-- ✅ **Keyboard cuts off input box** — ChatScreen now has `imePadding()` + proper weight layout
-- ✅ **Phase 7 bugs on test APK** — Reverted and fixed in current branch
-
----
-
-## Bottom Navigation — Correct Structure (Phase 8: FIXED ✅)
-
-The Compose bottom nav was built incorrectly. Here is the **authoritative comparison**:
-
-### OLD — Bottom Navigation (`bottom_nav_menu.xml`)
-
-| Tab | Title | Destination Activity |
-|-----|-------|---------------------|
-| 1 | **Chats** | `ChatThreadActivity` (opens most recent thread, or new chat) |
-| 2 | **Glasses** | `MainActivity` — **THE HOME SCREEN** (glasses control dashboard) |
-| 3 | **Transcriptions & Recordings** | `RecordingsListActivity` |
-| 4 | **Settings** | `SettingsActivity` |
-| 5 | **Plugins** | `CommunityPluginsActivity` |
-
-### NEW (Phase 8 — CORRECT)
-
-| Tab | Title | Screen | Status |
-|-----|-------|--------|--------|
-| 1 | Chat | ChatScreen | ✅ Done |
-| 2 | History | HistoryScreen | ✅ Done (didn't exist in old version) |
-| 3 | Settings | SettingsScreen | ⚠️ Partial |
-| 4 | Pro | ProScreen | ✅ Done |
-
-**Missing tabs:** `Glasses` (home dashboard), `Transcriptions & Recordings`, `Plugins`
+- ✅ **Phases 0–8**: Foundation, onboarding, navigation, all screen stubs, RecordingsScreen, GlassesScreen, bottom nav structure
+- ✅ **Phase 9**: Settings Completeness (Local Agent, Memory & Privacy, Transcripts, Redaction, Data)
+- ✅ **Phase 10**: ProSubscriptionSettingsScreen, NotesListScreen, NoteDetailScreen
+- ✅ **Phase 11**: PluginsScreen (full), LocalModelsScreen (full)
+- ✅ **Phase 12**: 6 secondary screens (DailyFacts, Summary, AppBlacklist, Captures, Pending, SyncedMedia)
+- ✅ **Phase 13**: Full GlassesScreen dashboard with 25+ buttons
+- ✅ **Bug fixes**: ComposeMainActivity stale NavHost, registerReceiver SecurityException on Android 14+
 
 ---
 
-## Bottom Navigation — Corrected Structure
+## Bugs Found in User Testing
 
-The bottom nav must have **5 tabs**:
+These were discovered during testing on a real device after Phases 8–13.
 
-| Tab | Title | Route | Icon (Filled/Outlined) | Destination |
-|-----|-------|-------|----------------------|-------------|
-| 1 | **Glasses** | `/glasses` | `Icons.Filled.Star` | `GlassesScreen` ← **MISSING — needs building** |
-| 2 | Chats | `/chat` or `/chat_thread/{id}` | Home | `ChatScreen` (opens thread or creates new) |
-| 3 | Recordings | `/recordings` | List | `RecordingsScreen` ← **Missing full implementation** |
-| 4 | Settings | `/settings` | Settings | `SettingsScreen` ← **Missing sections** |
-| 5 | Plugins | `/plugins` | Star | `PluginsScreen` ← **Missing full implementation** |
+### Bug 1: Battery Optimization Screen — "Disable Battery Optimization" Button Doesn't Work
+- **Expected:** Clicking "Disable Battery Optimization" opens the system dialog to confirm disabling battery optimization (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+- **Actual:** Button does nothing or crashes
+- **Root cause:** `BatteryOptimizationScreen.openDisableBatteryOptimizationFlow()` starts an `Intent` from a `@Composable` function using `context.startActivity()`. However, the `context` might not be an Activity context, or the intent action might not be resolvable on all devices. Need to verify the intent is properly resolved before starting it.
 
-> **Note:** "Glasses" is the home/landing screen. The app should launch here. "Chats" tab opens `ChatScreen` which creates/loads a thread (maps to old `ChatThreadActivity`). "History" (thread list) is accessible via a **top-bar icon inside Chat screen**, NOT as a bottom tab.
+### Bug 2: Battery Optimization "I Locked It" Button — Incorrect Behavior
+- **Expected:** After setting battery optimization to unrestricted, "I Locked It" should allow proceeding
+- **Actual:** Even after disabling optimization, the button still reports "Battery optimization still appears to be ON" and refuses to proceed
+- **Root cause:** `isBatteryOptimizationIgnored()` checks `pm.isIgnoringBatteryOptimizations(context.packageName)`. But the system might not immediately reflect the change after returning from the settings screen. Need to re-check the state in a `LaunchedEffect` or after a delay, or use `onActivityResult` pattern to detect when the user returns.
 
----
+### Bug 3: Missing Permission Popups After Onboarding
+- **Expected:** After onboarding completes, permission request popups should appear for Bluetooth, Location, Microphone, etc.
+- **Actual:** No permission popups appear
+- **Root cause:** The old `MainActivity` had permission request logic that ran after onboarding. The new `ComposeMainActivity` navigates directly to `GlassesScreen` without requesting any permissions. Need to add a permissions request step after `BatteryOptimizationScreen` completes, before navigating to the dashboard.
 
-## Screen-by-Screen Comparison
+### Bug 4: Plugins Page Missing from Bottom Navigation
+- **Expected:** Bottom nav should have 5 tabs matching the old app: Chats, Glasses, Recordings, Settings, Plugins
+- **Actual:** Current bottom nav shows: Glasses, Chats, Recordings, Settings, Notes
+- **Root cause:** Phase 10 replaced the Plugins tab with Notes in the bottom navigation. Notes was not in the original bottom nav — the Plugins page was there. Need to restore Plugins as the 5th tab.
 
-### 1. Bottom Navigation
+### Bug 5: Notes Screen Not in Original Design
+- **Expected:** Notes screen should be accessible from a secondary location, NOT from the bottom navigation
+- **Actual:** Notes has its own bottom nav tab
+- **Root cause:** Same as Bug 4. Notes should be accessible via a link in Settings or another secondary screen, not as a bottom nav tab. Keep the Notes screen implementation but remove it from the bottom navigation.
 
-| Item | Old (XML) | New (Compose) | Status |
-|------|-----------|---------------|--------|
-| Chats tab | ✅ `nav_chats` → `ChatThreadActivity` | ✅ `ChatScreen` | Needs bottom nav fix |
-| **Glasses tab** | ✅ `nav_glasses` → `MainActivity` (home dashboard) | ❌ **MISSING** — `GlassesScreen` not built | **PRIORITY** |
-| Transcriptions & Recordings tab | ✅ `nav_transcriptions_recordings` → `RecordingsListActivity` | ⚠️ `RecordingsScreen` (placeholder only) | **PRIORITY** |
-| Settings tab | ✅ `SettingsActivity` with 7 collapsible sections | ⚠️ `SettingsScreen` (partial — missing Local Agent, Memory sections) | Needs work |
-| Plugins tab | ✅ `CommunityPluginsActivity` | ⚠️ `PluginsScreen` (placeholder only) | Needs work |
-| Nav highlighting | Glasses tab always highlighted | Not implemented | Low priority |
+### Bug 6: Bottom Nav Icons Are Random
+- **Expected:** Icons should match the original design's icons
+- **Actual:** Icons are random (Star, Home, List, Settings, ArrowForward)
+- **Root cause:** The original bottom nav uses these icons:
+  | Tab | Original Icon | Material Icon |
+  |-----|--------------|---------------|
+  | Chats | `@android:drawable/ic_dialog_email` | `Icons.Filled.Home` (email/chat style) |
+  | Glasses | `@drawable/ic_nav_glasses` (custom) | `Icons.Filled.Star` (closest base match) |
+  | Recordings | `@android:drawable/ic_menu_slideshow` | `Icons.Filled.List` |
+  | Settings | `@android:drawable/ic_menu_manage` | `Icons.Filled.Settings` |
+  | Plugins | `@drawable/ic_nav_plugins` (custom) | `Icons.Filled.Add` (closest base match) |
+  
+  Need to use `ImageVector.vectorResource()` to load the custom XML vector drawables (`ic_nav_glasses.xml`, `ic_nav_plugins.xml`) for Glasses and Plugins tabs, and use better matches for Chats and Recordings.
 
----
+### Bug 7: Pro Subscription Banner Still Shown After Subscribing
+- **Expected:** After subscribing to Pro, clicking "Pro Subscription" in Settings should navigate directly to ProSubscriptionSettingsScreen, not show the subscription incentives banner
+- **Actual:** The `ProScreen` still shows the `ProSubscribe` section (incentives banner) even after subscribing
+- **Root cause:** `ProScreen` correctly shows `ProDashboard` when `state.isSubscribed` is true. But `SettingsScreen.ProSubscriptionSection` navigates via `Intent` to legacy Activities instead of using Compose routes. Also, the SettingsScreen may not be fetching the subscription state correctly.
+- **Fix needed:**
+  1. `SettingsScreen` should navigate to `Routes.PRO_SETTINGS` when subscribed (Compose route), not to `ProSubscriptionSettingsActivity`
+  2. When NOT subscribed, navigate to `Routes.PRO` (subscription screen)
+  3. The SettingsScreen should read subscription state from `ProSubscriptionServerPrefs`
 
-### 2. Glasses Tab (Home Dashboard) — `MainActivity`
+### Bug 8: Model Selection Section in Regular Settings
+- **Expected:** Model selection (Requests model, Questions model, Tasks model) should be in Pro Subscription Settings, not in regular Settings
+- **Actual:** `SettingsScreen.ModelSection` shows model dropdowns in the regular settings
+- **Root cause:** The model selection was part of `ProSubscriptionSettingsActivity` (old design). Phase 4 put it in `ProScreen`, and Phase 9 also added it to `SettingsScreen.ModelSection`. Remove `ModelSection` from `SettingsScreen` — it should only exist in `ProSubscriptionSettingsScreen` (Phase 10).
 
-**Old:** `acitivyt_main.xml` — 25+ buttons + bottom nav + status cards
-
-This is the **main home screen** and the most complex screen. It has:
-- **Status cards:** Meeting recording banner, Bluetooth connection status, device class, battery, storage, transfer progress
-- **Connection Controls:** Scan, Connect, Disconnect, Add Listener
-- **Time Sync:** Set time, Read version, Battery, Volume, Media count, BT scan
-- **Media Controls:** Camera, Video, Record (audio), Data Download
-- **AI Assistant Mode:** Gemini / ChatGPT / Tasker toggle buttons
-- **AI Hijack Settings:** Checkbox for enable/disable, Direct Assistant vs App Sharing
-- **Meeting Capture:** Start/Stop meeting, timer spinner, recording banner
-- **Local Agent Controls:** Start/Stop/Demo buttons
-- **Advanced Section:** OTA info, Pull OTA test, toggle button
-
-**Status:** ❌ **Not started** — massive screen. For MVP, build a simplified version with:
-- Connection status (Bluetooth indicator)
-- Battery level
-- Meeting recording banner
-- Quick action buttons: Camera, Record, AI Query
-- Link to full legacy Activity for the full dashboard
-
----
-
-### 3. Chat Screen
-
-| Feature | Old | New | Status |
-|---------|-----|-----|--------|
-| Message list | `item_message_sent.xml`, `item_message_received.xml` | `MessageBubble` composables | ✅ Done |
-| Input bar | `input_message` + `btn_send` | `OutlinedTextField` + send IconButton | ✅ Done |
-| Model picker | Dropdown in toolbar | `ModelPickerTitle` + `DropdownMenu` | ✅ Done |
-| Typing indicator | `thinking_indicator` with 3 dots | `TypingIndicator()` composable | ✅ Done |
-| Chat list (history) | `ChatListActivity` | `HistoryScreen` | ✅ Done |
-| Thread list item | `item_chat_thread.xml` | `ThreadItem` in HistoryScreen | ✅ Done |
-| Swipe to delete | Not in old ChatListActivity | ✅ `SwipeToDismissBox` | ✅ Done |
-| FAB new chat | `fab_new_chat` | FloatingActionButton in HistoryScreen | ✅ Done |
-| Empty state | "No conversations yet" | `EmptyHistoryPlaceholder` | ✅ Done |
-| Message bubbles | Simple TextView | Basic composables | ⚠️ Needs polish (markdown, copy, role coloring) |
-| Voice input | Not in old chat screen | ❌ Not implemented | Low priority |
-| Daily Facts cards | Not in old chat screen | ❌ Not implemented | Low priority |
-| Thread title in toolbar | `tv_toolbar_title` | ❌ Not shown | Low priority |
-| Local model badge | `tv_local_model_badge` | ❌ Not shown | Low priority |
-| Chat appearance | `btn_chat_appearance` | ❌ Not implemented | Low priority |
+### Bug 9: FAQ Section Missing from Settings
+- **Expected:** Settings should have a collapsible FAQ section with 4 Q&A items
+- **Actual:** No FAQ section exists in the new SettingsScreen
+- **Root cause:** Phase 9 did not include the FAQ section. The old `SettingsActivity` has it as a collapsible card with:
+  1. "How do I set Local Models?" → "Select Local Models in AI / Automation, then tap Configure Local Models and follow the setup steps on device."
+  2. "Do I need a subscription to use the app?" → "No. You can use Tasker or Local Models without subscribing. Pro is optional and adds premium managed features."
+  3. "How is my data handled?" → "By default data is stored locally on your phone. You can export/import your local data and clear it any time from the Data section."
+  4. "Can I review the source code?" → "Yes. The app is open source and you can manually review the full source code on GitHub."
 
 ---
 
-### 4. Recordings Screen (`RecordingsListActivity`)
+## New Phases
 
-| Feature | Old (`activity_recordings_list.xml` + `item_recording.xml`) | New (`RecordingsScreen.kt`) | Status |
-|---------|----------------------------------------------------------|-----------------------------|--------|
-| Toolbar | `toolbar` | ✅ `TopAppBar` | Done (placeholder) |
-| Recording list | `recycler_recordings` with custom items | ❌ **Placeholder only** | **PRIORITY** |
-| Recording item | `btn_play` (ImageButton), `tv_title`, `tv_meta`, `btn_transcribe`, `btn_view_transcription`, `progress_transcribe` | ❌ **Not implemented** | **PRIORITY** |
-| Synced Media button | `btn_open_synced_media` → `SyncedMediaGalleryActivity` | ❌ **Not implemented** | Medium |
-| Meeting recording banner | Included via `<include>` | ❌ **Not shown in Compose** | Medium |
-| Empty state | `empty_state` TextView | ✅ Placeholder has empty state | Done |
-| Bottom nav | ✅ Present | ✅ Present | Done |
+Each phase must **compare the behavior of the original design with the new design** and fix discrepancies. Each agent must:
+1. Read the original Activity/layout files for the specific bug
+2. Read the current Compose screen implementation
+3. Identify the exact difference
+4. Fix the Compose screen to match the original behavior
+5. Build and verify
 
----
+### Phase 14 — Onboarding Fix (Bugs 1, 2, 3)
+- [ ] **Bug 1:** Fix `BatteryOptimizationScreen.openDisableBatteryOptimizationFlow()` — verify intent resolution, use `rememberLauncherForActivityResult` instead of `context.startActivity()` for more robust handling
+- [ ] **Bug 2:** Fix `BatteryOptimizationScreen` battery optimization check — re-check state in `LaunchedEffect` when the activity resumes (use `LifecycleEventObserver` with `ON_RESUME`), or remove the check entirely and allow proceeding after clicking the button
+- [ ] **Bug 3:** Add a permission request step after onboarding — add a new screen or use `XXPermissions` to request Bluetooth/Location/Microphone permissions before navigating to the dashboard. Reference the old `WelcomeActivity` for the exact permissions requested.
+  - Must request: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `ACCESS_FINE_LOCATION`, `RECORD_AUDIO` (and optionally `POST_NOTIFICATIONS` on Android 13+)
+  - Use `XXPermissions` library (already in project) for user-friendly permission dialogs
 
-### 5. Settings Screen (`SettingsActivity`)
+**Files to modify:**
+- `ui/onboarding/BatteryOptimizationScreen.kt` — fix battery check and intent
+- `ui/navigation/MainNavScreen.kt` — add permission request after onboarding
+- Or create `ui/onboarding/PermissionsScreen.kt` — new screen between onboarding and dashboard
 
-| Feature | Old (`activity_settings.xml`) | New (`SettingsScreen.kt`) | Status |
-|---------|-------------------------------|---------------------------|--------|
-| TopAppBar | MaterialToolbar | ✅ TopAppBar | Done |
-| Meeting banner | `meeting_recording_banner` include | ❌ Not shown | Low |
-| **Pro Subscription** | `btn_configure_pro_subscription` card | ✅ `ProSubscriptionSection` | Done |
-| **Theme** | Dark/Light toggle | ✅ `ThemeSection` | Done |
-| **AI Provider** | `settings_section_ai_automation.xml` (3 radio buttons + config buttons) | ✅ `AiProviderSection` | Done |
-| **Relay URL / Backend** | In AiProviderSection | ✅ `RelayUrlSection` | Done |
-| **Model selection** | **In `ProSubscriptionSettingsActivity`, NOT here** | ✅ In `ProScreen` dashboard | Done — correct placement |
-| **Local Agent section** | `settings_section_local_agent.xml` — 9 buttons + 5 switches + 2 inputs | ❌ **MISSING** | **PRIORITY** |
-| **Memory & Privacy section** | Memory mode radio + vault controls | ❌ **MISSING** | **PRIORITY** |
-| **Transcripts section** | `settings_section_transcripts.xml` | ❌ **MISSING** | **PRIORITY** |
-| **Redaction section** | `settings_section_redaction.xml` | ❌ **MISSING** | **PRIORITY** |
-| **Data section** | Export/Import/Clear buttons | ❌ **MISSING** | **PRIORITY** |
-| Bottom nav | ✅ Present | ✅ Present | Done |
+### Phase 15 — Bottom Navigation & Icons (Bugs 4, 5, 6)
+- [ ] **Bug 4:** Restore correct 5-tab bottom nav: Chats, Glasses, Recordings, Settings, Plugins
+  - Remove `NOTES_LIST` from `bottomNavItems`
+  - Add `PLUGINS` to `bottomNavItems` (was removed in Phase 10)
+- [ ] **Bug 5:** Remove Notes from bottom nav — keep Notes accessible via navigation from Settings or a secondary link, NOT as a bottom nav tab
+- [ ] **Bug 6:** Fix bottom nav icons to match the original design:
+  - Chats: `Icons.Filled.Home` (closest to email icon) — KEEP or use `Icons.Filled.List` as closest match
+  - Glasses: Load `@drawable/ic_nav_glasses` via `ImageVector.vectorResource(R.drawable.ic_nav_glasses)` or use `Icons.Filled.Star` if vector resource doesn't work
+  - Recordings: `Icons.AutoMirrored.Filled.List` — KEEP
+  - Settings: `Icons.Filled.Settings` — KEEP
+  - Plugins: Load `@drawable/ic_nav_plugins` via `ImageVector.vectorResource(R.drawable.ic_nav_plugins)` or use `Icons.Filled.Add` if vector resource doesn't work
 
-**Missing Settings sections to add:**
+**Files to modify:**
+- `ui/navigation/MainNavScreen.kt` — fix `bottomNavItems` list, add icon loading via vectorResource
+- `ui/navigation/NavigationRoutes.kt` — ensure PLUGINS route exists (already does)
 
-#### Local Agent Section (`settings_section_local_agent.xml`)
-- `tv_local_agent_accessibility_status` — shows if accessibility service is enabled
-- `btn_open_accessibility_settings` — opens system accessibility settings
-- `btn_local_agent_blacklist_apps` → `AppBlacklistActivity`
-- `btn_local_agent_view_screen_captures` → `ScreenCapturesActivity`
-- `btn_local_agent_edit_daily_facts` → `DailyFactsActivity`
-- `btn_local_agent_view_confirmed_daily_facts`
-- `btn_local_agent_view_daily_summary` → `DailySummaryActivity`
-- `btn_local_agent_edit_persona` — edit agent persona
-- `btn_local_agent_edit_user_facts` — edit user facts
-- `btn_local_agent_view_context_debug` → `TranscriptionDebugActivity`
-- `switch_local_agent_require_confirmation`
-- `switch_local_agent_auto_capture`
-- `switch_local_agent_daily_facts_reminder`
-- `switch_local_agent_auto_save_daily_facts`
-- `switch_local_agent_extract_user_fact_candidates`
-- `edit_local_agent_max_steps` (TextInputEditText)
-- `edit_local_agent_capture_interval_min` (TextInputEditText)
+### Phase 16 — Settings & Pro Screen Fixes (Bugs 7, 8, 9)
+- [ ] **Bug 7:** Fix Pro subscription navigation in SettingsScreen:
+  - When `state.isProSubscribed == true`: navigate to `Routes.PRO_SETTINGS` (Compose ProSubscriptionSettingsScreen)
+  - When `state.isProSubscribed == false`: navigate to `Routes.PRO` (Compose ProScreen with subscription incentives)
+  - Remove the `Intent(context, ProSubscriptionActivity::class.java)` legacy navigation
+  - Read subscription state from `ProSubscriptionServerPrefs` or `ProSubscriptionVerifier`
+- [ ] **Bug 8:** Remove `ModelSection` from `SettingsScreen.kt` — model selection belongs only in `ProSubscriptionSettingsScreen`. The old design had models in `ProSubscriptionSettingsActivity`.
+- [ ] **Bug 9:** Add `FaqSection` to `SettingsScreen.kt` — collapsible card with 4 Q&A items matching the old `SettingsActivity` FAQ content exactly
 
-#### Memory & Privacy Section
-- Memory mode radio group: Private Local, Encrypted Sync, Fast Cloud, Confidential Cloud
-- `tv_memory_mode_current`, `tv_memory_mode_hint`
-- `tv_memory_vault_lock_state`
-- `btn_memory_unlock`, `btn_memory_lock`, `btn_memory_set_passphrase`, `btn_memory_clear_passphrase`, `btn_memory_reset_vault`
-- `tv_memory_sync_status`, `tv_memory_cloud_status`
-
-#### Transcripts Section (`settings_section_transcripts.xml`)
-- `switch_transcript_storage`
-- `switch_include_full_transcription`
-- `switch_auto_audio_capture`
-- Debug text for auto capture
-
-#### Redaction Section (`settings_section_redaction.xml`)
-- `switch_redact_names`
-
-#### Data Section
-- `btn_export_local_data`
-- `btn_import_local_data`
-- `btn_clear_local_data`
+**Files to modify:**
+- `ui/settings/SettingsScreen.kt` — remove `ModelSection`, add `FaqSection`, fix Pro navigation to use Compose routes
+- `ui/pro/ProSubscriptionSettingsScreen.kt` — verify it has model selection (already does from Phase 10)
 
 ---
 
-### 6. Pro Subscription
+## Reference Files for Each Phase
 
-| Feature | Old (`activity_pro_subscription_settings.xml`) | New (`ProScreen.kt` + `ProViewModel.kt`) | Status |
-|---------|-------------------------------------------------|------------------------------------------|--------|
-| Plan selection | RadioGroup (`rb_trial`, `rb_cheap`, `rb_standard`, `rb_max`) | ✅ `PLANS` list + `RadioButton` | Done |
-| Subscribe button | `btn_subscribe` | ✅ Subscribe button with web checkout | Done |
-| Free trial activation | Separate flow | ✅ `activateFreeTrial()` in ViewModel | Done |
-| Status banner | `tv_status` | ✅ `StatusBanner` composable | Done |
-| Plan details | `tv_plan_details_*` in cards | ✅ `PlanDetailsCard` | Done |
-| Quota display | `tv_quota_status` | ✅ `StatusBanner` quota text | Done |
-| Verify subscription | `btn_refresh_plan_status` | ✅ `verifySubscription()` | Done |
-| Refresh quota | `btn_refresh_quota` | ✅ `refreshQuota()` | Done |
-| **AI Model preferences** | `spinner_model_requests`, `spinner_model_questions`, `spinner_model_tasks` | ✅ `AiModelsCard` in ProScreen | Done |
-| Beta cloud signup | `btn_join_beta_cloud` | ✅ `BetaCloudCard` | Done |
-| Account info | `tv_account_email/token/subscription` | ✅ `AccountCard` | Done |
-| Change plan | `btn_change_plan` | ✅ `changePlan()` | Done |
-| Refresh account | `btn_refresh_account` | ✅ `loadAccount()` | Done |
-| Refresh models | `btn_refresh_models` | ✅ `refreshModels()` | Done |
-| Cloud sync toggle | `switch_cloud_sync` | ❌ Not in ProScreen | Low |
-| Plugin rewards | `switch_plugin_rewards` | ❌ Not in ProScreen | Low |
-| Priority support | `switch_priority_support` | ❌ Not in ProScreen | Low |
-| Early access devices | `switch_early_access_devices` | ❌ Not in ProScreen | Low |
-| Ecosystem section | Card with ecosystem options | ❌ Not in ProScreen | Low |
-| Future features | Future section card | ❌ Not in ProScreen | Low |
+### Phase 14 (Onboarding Fix)
+- Original: `ui/onboarding/BatteryOptimizationGuideActivity.kt` (if exists), `ui/WelcomeActivity.kt` (if exists)
+- Old permissions: `ui/requestAllPermission()`, `ui/requestBluetoothPermission()`, `ui/requestLocationPermission()`
+- Library: `com.hjq.permissions.XXPermissions` (already in build.gradle)
+- Current: `ui/onboarding/BatteryOptimizationScreen.kt`
+
+### Phase 15 (Navigation & Icons)
+- Original: `res/menu/bottom_nav_menu.xml` (authoritative tab structure)
+- Original: `res/drawable/ic_nav_glasses.xml`, `res/drawable/ic_nav_plugins.xml` (custom icons)
+- Current: `ui/navigation/MainNavScreen.kt`, `ui/navigation/NavigationRoutes.kt`
+
+### Phase 16 (Settings & Pro)
+- Original: `ui/SettingsActivity.kt` (lines 185-188 for FAQ, lines 116-170 for AI/AUTOMATION sections)
+- Original: `agent/ProSubscriptionSettingsActivity.kt` (model selection is here)
+- Original: `agent/ProSubscriptionActivity.kt` (subscription flow)
+- Current: `ui/settings/SettingsScreen.kt`, `ui/pro/ProScreen.kt`, `ui/pro/ProSubscriptionSettingsScreen.kt`
 
 ---
 
-### 7. Plugins Screen (`CommunityPluginsActivity`)
+## Technical Constraints
 
-| Feature | Old (`activity_community_plugins.xml`) | New (`PluginsScreen.kt`) | Status |
-|---------|--------------------------------------|-------------------------|--------|
-| Toolbar | MaterialToolbar | ✅ TopAppBar | Done (placeholder) |
-| Image automation card | `card_plugin_image_automation` with Gemini/ChatGPT toggle + enable/disable | ❌ **Not implemented** | **PRIORITY** |
-| Trending plugins | `container_trending` with `item_community_plugin_card.xml` | ❌ **Not implemented** | Medium |
-| Top voted plugins | `container_top_voted` | ❌ **Not implemented** | Medium |
-| Top downloaded | `container_top_downloaded` | ❌ **Not implemented** | Medium |
-| Period filter chips | ChipGroup with All/Weekly/Monthly | ❌ **Not implemented** | Medium |
-| Publish FAB | `fab_publish_help` | ❌ **Not implemented** | Low |
-| Reward notice | `tv_reward_notice` | ❌ **Not implemented** | Low |
-| Bottom nav | ✅ Present | ✅ Present | Done |
+- Build command: `cd CyanBridge && ./gradlew assembleDebug 2>&1 | tail -50`
+- Kotlin 2.0.0 + Compose compiler plugin
+- Compose BOM 2024.06.00, Navigation 2.7.7
+- Icons: Filled/Outlined base set only. Use `Icons.AutoMirrored.Filled.List` for List, `Icons.AutoMirrored.Filled.Send` for Send. Custom icons can be loaded via `ImageVector.vectorResource(R.drawable.xxx)`.
+- `XXPermissions` library for runtime permissions
+- Use `RECEIVER_EXPORTED`/`RECEIVER_NOT_EXPORTED` flags on Android 14+
+- All BLE SDK calls wrapped in try-catch
 
----
+## Notes
 
-### 8. Onboarding
-
-| Feature | Old | New | Status |
-|---------|-----|-----|--------|
-| Welcome screen | `activity_welcome.xml` + `WelcomeActivity` | ✅ `WelcomeScreen` | Done |
-| Battery optimization guide | `activity_battery_optimization_guide.xml` | ✅ `BatteryOptimizationScreen` | Done |
-| App lock guide | `activity_app_lock_guide.xml` → `AppLockGuideActivity` | ❌ **Removed** (was already commented out in manifest) | OK |
-
----
-
-### 9. Notes
-
-| Feature | Old | New | Status |
-|---------|-----|-----|--------|
-| Notes list | `NotesListActivity` + `item_note.xml` | ⚠️ `NotesScreen` placeholder | **PRIORITY** |
-| Note detail | `NoteDetailActivity` | ❌ **Not implemented** | **PRIORITY** |
-| Create from transcript | FAB in old NotesListActivity | ❌ Not implemented | Medium |
-| Copy/Share actions | In NoteDetailActivity | ❌ Not implemented | Medium |
-| Meeting recording banner | Not in notes screens | ❌ Not shown | Low |
-
----
-
-### 10. Local Models (`LocalModelsConfigureActivity`)
-
-| Feature | Old (`activity_local_models_configure.xml`) | New (`LocalModelsScreen.kt`) | Status |
-|---------|---------------------------------------------|------------------------------|--------|
-| All UI elements | 9+ cards, spinners, text inputs, switches | ⚠️ **Placeholder only** | **PRIORITY** |
-| Engine status card | Status + device snapshot | ❌ | **PRIORITY** |
-| Installed models spinner | + load/remove/unload | ❌ | **PRIORITY** |
-| Curated catalog | Download starter models | ❌ | Medium |
-| Generation settings | Profile, temp, topP, topK, maxTokens, etc. | ❌ | Medium |
-| Warmup probe | Benchmark results | ❌ | Medium |
-| Download progress | `progress_download` indicator | ❌ | Medium |
-
----
-
-### 11. Other Screens
-
-| Screen | Old | New | Status |
-|--------|-----|-----|--------|
-| `DailyFactsActivity` | ✅ | ❌ `LegacyScreenPlaceholder` | **PRIORITY** |
-| `DailySummaryActivity` | ✅ | ❌ `LegacyScreenPlaceholder` | **PRIORITY** |
-| `AppBlacklistActivity` | ✅ | ❌ `LegacyScreenPlaceholder` | Medium |
-| `ScreenCapturesActivity` | ✅ | ❌ `LegacyScreenPlaceholder` | Medium |
-| `PendingActionsActivity` | ✅ | ❌ `LegacyScreenPlaceholder` | Medium |
-| `SyncedMediaGalleryActivity` | ✅ | ❌ `LegacyScreenPlaceholder` | Medium |
-| `TranscriptionDebugActivity` | ✅ | ❌ `LegacyScreenPlaceholder` | Low |
-| `DeviceBindActivity` | ✅ | ❌ `LegacyScreenPlaceholder` | Low |
-
----
-
-## Remaining Phases
-
-### Phase 8 — Bottom Navigation Fix + Recordings (PRIORITY)
-- [ ] Fix bottom NavigationBar to 5-tab structure: Glasses (home), Chats, Recordings, Settings, Plugins
-- [ ] Build `GlassesScreen` placeholder (simplified dashboard — connection status, battery, quick actions)
-- [ ] Build full `RecordingsScreen` (recording list with play/transcribe, synced media link)
-- [ ] Move `HistoryScreen` out of bottom nav — accessible via top-bar icon in Chat screen
-- [ ] Set Glasses tab as the app launch destination
-
-### Phase 9 — Settings Completeness
-- [ ] Add Local Agent section to `SettingsScreen` (accessibility status, 9 buttons, 5 switches, 2 inputs)
-- [ ] Add Memory & Privacy section (mode selector, vault controls)
-- [ ] Add Transcripts section (storage, full transcription, auto capture toggles)
-- [ ] Add Redaction section (redact names switch)
-- [ ] Add Data section (export/import/clear buttons)
-
-### Phase 10 — Pro Settings & Notes
-- [ ] Build full `ProSettingsScreen` (cloud sync, ecosystem options, future features)
-- [ ] Build full `NotesScreen` + `NoteDetailScreen`
-
-### Phase 11 — Plugins & Local Models
-- [ ] Build full `PluginsScreen` (plugin cards, image automation toggle, period filters)
-- [ ] Build full `LocalModelsScreen` (model management, generation settings, warmup)
-
-### Phase 12 — Secondary Screens
-- [ ] `DailyFactsScreen`, `DailySummaryScreen`, `AppBlacklistScreen`, `ScreenCapturesScreen`, `PendingActionsScreen`, `SyncedMediaGalleryScreen`
-
-### Phase 13 — Glasses Dashboard (Full)
-- [ ] Build comprehensive `GlassesScreen` or integrate legacy `MainActivity` as a tab destination
-- [ ] Map all 25+ buttons to Compose actions
-
-### Phase 14 — Final Cleanup
-- [ ] Remove all XML layouts and old Activities replaced by Compose
-- [ ] Remove old `MainActivity` if fully replaced
-- [ ] Update migration plan with final status
-- [ ] Force push to `main`
-
----
-
-## Icon Availability Reference
-
-**Available (Filled/Outlined base set — no extended icons):**
-
-| Icon | Filled | Outlined |
-|------|--------|----------|
-| Home | ✅ `Icons.Filled.Home` | ✅ `Icons.Outlined.Home` |
-| List | ✅ `Icons.Filled.List` | ✅ `Icons.Outlined.List` |
-| Settings | ✅ `Icons.Filled.Settings` | ✅ `Icons.Outlined.Settings` |
-| Star | ✅ `Icons.Filled.Star` | ✅ `Icons.Outlined.Star` |
-| Add | ✅ `Icons.Filled.Add` | ✅ `Icons.Outlined.Add` |
-| Arrow Forward | ✅ `Icons.Filled.ArrowForward` | ✅ `Icons.Outlined.ArrowForward` |
-| Arrow Drop Down | ✅ `Icons.Filled.ArrowDropDown` | ✅ `Icons.Outlined.ArrowDropDown` |
-| Search | ✅ `Icons.Filled.Search` | ✅ `Icons.Outlined.Search` |
-| Delete | ✅ `Icons.Filled.Delete` | ✅ `Icons.Outlined.Delete` |
-| Refresh | ✅ `Icons.Filled.Refresh` | ✅ `Icons.Outlined.Refresh` |
-| Check | ✅ `Icons.Filled.Check` | ✅ `Icons.Outlined.Check` |
-| Send | ✅ `Icons.AutoMirrored.Filled.Send` | ❌ Not available |
-
-**Unavailable icons (NOT in base set — use alternatives):**
-`Chat`, `ChatBubble`, `History`, `Mic`, `Camera`, `Video`, `Cloud`, `Download`, `Upload`, `StarBorder`, `Bolt`, `Slideshow` → Use `List` or `Star`
-
----
-
-## Migration Constraints (unchanged)
-- Keep work off `main` during development
-- Build APK with Android Studio JBR (`/opt/android-studio/jbr`)
-- Use direct IP `http://177.95.92.150:48787` for relay server
-- **`force push`** to GitHub origin/main after final merge
-- `_local_termux_server/` must be gitignored
-- Kotlin **2.0.0** + Compose compiler plugin
-- `androidx.activity:activity` forced to `1.8.0`
-- Navigation `2.7.7`
-- Compose BOM `2024.06.00`
+- **Do NOT force push to main** — user will request manually
+- **Keep Notes screen implementation** — just remove from bottom nav
+- **Model selection** should ONLY appear in ProSubscriptionSettingsScreen, not in SettingsScreen
+- **After Phase 14–16 complete**, build a debug APK and ask user to test before proceeding
