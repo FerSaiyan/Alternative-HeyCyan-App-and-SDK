@@ -42,9 +42,6 @@ data class SettingsUiState(
     val aiProvider: AiProviderType = AiProviderType.CLI_RELAY,
     val relayBaseUrl: String = "",
     val relayBackend: CliRelayBackend = CliRelayBackend.GEMINI,
-    val requestsModel: String = "auto",
-    val questionsModel: String = "auto",
-    val tasksModel: String = "auto",
     val isDarkTheme: Boolean = true,
     val isLoading: Boolean = false,
     val accessibilityEnabled: Boolean = false,
@@ -89,9 +86,6 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
             val aiProvider = AiProviderPrefs.getProvider(context)
             val relayUrl = AiProviderPrefs.getRelayBaseUrl(context)
             val relayBackend = AiProviderPrefs.getRelayBackend(context)
-            val requestsModel = com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs.getRequestsModel(context)
-            val questionsModel = com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs.getQuestionsModel(context)
-            val tasksModel = com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs.getTasksModel(context)
             val isDark = context.getSharedPreferences("theme_prefs", Context.MODE_PRIVATE)
                 .getBoolean("dark_theme", true)
 
@@ -135,9 +129,6 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
                 aiProvider = aiProvider,
                 relayBaseUrl = relayUrl,
                 relayBackend = relayBackend,
-                requestsModel = requestsModel,
-                questionsModel = questionsModel,
-                tasksModel = tasksModel,
                 isDarkTheme = isDark,
                 isLoading = false,
                 accessibilityEnabled = false,
@@ -210,21 +201,6 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     fun setRelayBackend(backend: CliRelayBackend) {
         AiProviderPrefs.setRelayBackend(context, backend)
         _uiState.value = _uiState.value.copy(relayBackend = backend)
-    }
-
-    fun setRequestsModel(model: String) {
-        com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs.setRequestsModel(context, model)
-        _uiState.value = _uiState.value.copy(requestsModel = model)
-    }
-
-    fun setQuestionsModel(model: String) {
-        com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs.setQuestionsModel(context, model)
-        _uiState.value = _uiState.value.copy(questionsModel = model)
-    }
-
-    fun setTasksModel(model: String) {
-        com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs.setTasksModel(context, model)
-        _uiState.value = _uiState.value.copy(tasksModel = model)
     }
 
     fun setDarkTheme(isDark: Boolean) {

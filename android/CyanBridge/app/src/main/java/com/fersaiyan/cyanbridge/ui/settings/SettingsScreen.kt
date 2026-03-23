@@ -36,8 +36,6 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,8 +64,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.agent.AgentProviderType
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsActivity
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.ai.router.CliRelayBackend
 import com.fersaiyan.cyanbridge.localagent.accessibility.LocalAgentAccessibilityService
@@ -83,6 +79,7 @@ import com.fersaiyan.cyanbridge.ui.localagent.AppBlacklistActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
 import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
+import com.fersaiyan.cyanbridge.ui.navigation.Routes
 import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as AgentRuntimePrefs
 import com.hjq.permissions.XXPermissions
@@ -138,12 +135,11 @@ fun SettingsScreen(
                 plan = state.proPlan,
                 expiresAt = state.proExpiresAt,
                 onConfigure = { isSubscribed ->
-                    val intent = if (isSubscribed) {
-                        Intent(context, ProSubscriptionSettingsActivity::class.java)
+                    if (isSubscribed) {
+                        onNavigate(Routes.PRO_SETTINGS)
                     } else {
-                        Intent(context, ProSubscriptionActivity::class.java)
+                        onNavigate(Routes.PRO)
                     }
-                    context.startActivity(intent)
                 },
             )
 
@@ -164,17 +160,6 @@ fun SettingsScreen(
                 onProviderTypeChange = { viewModel.setProviderType(it) },
                 onRelayUrlChange = { viewModel.setRelayBaseUrl(it) },
                 onRelayBackendChange = { viewModel.setRelayBackend(it) },
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            ModelSection(
-                requestsModel = state.requestsModel,
-                questionsModel = state.questionsModel,
-                tasksModel = state.tasksModel,
-                onRequestsModelChange = { viewModel.setRequestsModel(it) },
-                onQuestionsModelChange = { viewModel.setQuestionsModel(it) },
-                onTasksModelChange = { viewModel.setTasksModel(it) },
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -275,6 +260,10 @@ fun SettingsScreen(
             AboutSection(
                 onNavigate = onNavigate,
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            FaqSection()
 
             Spacer(modifier = Modifier.height(32.dp))
         }
@@ -461,115 +450,6 @@ private fun AiProviderSection(
                     shape = RoundedCornerShape(8.dp),
                     textStyle = MaterialTheme.typography.bodySmall,
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModelSection(
-    requestsModel: String,
-    questionsModel: String,
-    tasksModel: String,
-    onRequestsModelChange: (String) -> Unit,
-    onQuestionsModelChange: (String) -> Unit,
-    onTasksModelChange: (String) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(true) }
-
-    SettingsCard(
-        title = "AI Model Selection",
-        onExpandToggle = { expanded = !expanded },
-        expanded = expanded,
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ModelDropdown(
-                label = "Requests Model",
-                value = requestsModel,
-                onValueChange = onRequestsModelChange,
-            )
-            ModelDropdown(
-                label = "Questions Model",
-                value = questionsModel,
-                onValueChange = onQuestionsModelChange,
-            )
-            ModelDropdown(
-                label = "Tasks Model",
-                value = tasksModel,
-                onValueChange = onTasksModelChange,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModelDropdown(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-) {
-    val models = listOf("auto", "gpt-5.4", "minimax/minimax-m2.5", "z-ai/glm-5", "google/gemini-3-flash-preview")
-    var expanded by remember { mutableStateOf(false) }
-
-    Column {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Box {
-            OutlinedTextField(
-                value = value,
-                onValueChange = {},
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = true },
-                readOnly = true,
-                singleLine = true,
-                trailingIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowForward,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clickable { expanded = true },
-                    )
-                },
-                shape = RoundedCornerShape(8.dp),
-                textStyle = MaterialTheme.typography.bodyMedium,
-            )
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.background(MaterialTheme.colorScheme.surface),
-            ) {
-                models.forEach { model ->
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(
-                                    text = model,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                if (model == value) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = "Selected",
-                                        tint = CyanAccent,
-                                    )
-                                }
-                            }
-                        },
-                        onClick = {
-                            onValueChange(model)
-                            expanded = false
-                        },
-                    )
-                }
             }
         }
     }
@@ -1163,6 +1043,36 @@ private fun AboutSection(
             subtitle = "App version and credits",
             onClick = { onNavigate("about") },
         )
+    }
+}
+
+@Composable
+private fun FaqSection() {
+    SettingsCard(title = "FAQ") {
+        val faqItems = listOf(
+            "How do I set Local Models?" to "Select Local Models in AI / Automation, then tap Configure Local Models and follow the setup steps on device.",
+            "Do I need a subscription to use the app?" to "No. You can use Tasker or Local Models without subscribing. Pro is optional and adds premium managed features.",
+            "How is my data handled?" to "By default data is stored locally on your phone. You can export/import your local data and clear it any time from the Data section.",
+            "Can I review the source code?" to "Yes. The app is open source and you can manually review the full source code on GitHub.",
+        )
+
+        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            faqItems.forEach { (question, answer) ->
+                Text(
+                    text = question,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = answer,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
     }
 }
 

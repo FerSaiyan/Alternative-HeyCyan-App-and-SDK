@@ -8,6 +8,8 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,7 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +35,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import com.fersaiyan.cyanbridge.ui.theme.Danger
 
@@ -43,8 +48,21 @@ fun BatteryOptimizationScreen(
     val context = LocalContext.current
     var isOptimized by remember { mutableStateOf(!isBatteryOptimizationIgnored(context)) }
 
-    LaunchedEffect(Unit) {
+    val batteryOptLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
         isOptimized = !isBatteryOptimizationIgnored(context)
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isOptimized = !isBatteryOptimizationIgnored(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Column(
@@ -86,7 +104,21 @@ fun BatteryOptimizationScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { openDisableBatteryOptimizationFlow(context) },
+            onClick = {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                    Toast.makeText(context, "Battery optimization settings are not available on this Android version.", Toast.LENGTH_SHORT).show()
+                    return@Button
+                }
+                try {
+                    batteryOptLauncher.launch(
+                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                    )
+                } catch (_: ActivityNotFoundException) {
+                    openBatteryOptimizationList(context)
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
                 containerColor = CyanAccent,
@@ -135,7 +167,7 @@ fun BatteryOptimizationScreen(
 
         Button(
             onClick = {
-                if (!isBatteryOptimizationIgnored(context)) {
+                if (isBatteryOptimizationIgnored(context)) {
                     onComplete()
                 } else {
                     Toast.makeText(
@@ -172,22 +204,6 @@ private fun isBatteryOptimizationIgnored(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
     val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
     return pm.isIgnoringBatteryOptimizations(context.packageName)
-}
-
-private fun openDisableBatteryOptimizationFlow(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-        Toast.makeText(context, "Battery optimization settings are not available on this Android version.", Toast.LENGTH_SHORT).show()
-        return
-    }
-    try {
-        context.startActivity(
-            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:${context.packageName}")
-            },
-        )
-    } catch (_: ActivityNotFoundException) {
-        openBatteryOptimizationList(context)
-    }
 }
 
 private fun openBatteryOptimizationList(context: Context) {
