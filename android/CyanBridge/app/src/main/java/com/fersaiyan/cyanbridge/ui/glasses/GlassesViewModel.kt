@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -54,21 +55,31 @@ class GlassesViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         val appCtx = application.applicationContext
-        refreshConnectionState()
-        syncRecordingState(appCtx)
+        runCatching { refreshConnectionState() }
+            .onFailure { Log.e("GlassesVM", "refreshConnectionState failed", it) }
+        runCatching { syncRecordingState(appCtx) }
+            .onFailure { Log.e("GlassesVM", "syncRecordingState failed", it) }
 
-        _uiState.value = _uiState.value.copy(
-            imageAutomationEnabled = CommunityPluginPrefs.isGeminiChatGptImageAutomationEnabled(appCtx),
-        )
+        runCatching {
+            _uiState.value = _uiState.value.copy(
+                imageAutomationEnabled = CommunityPluginPrefs.isGeminiChatGptImageAutomationEnabled(appCtx),
+            )
+        }
 
-        registerMeetingReceiver(appCtx)
-        registerBleReceiver(appCtx)
-        startConnectionPolling()
+        runCatching { registerMeetingReceiver(appCtx) }
+            .onFailure { Log.e("GlassesVM", "registerMeetingReceiver failed", it) }
+        runCatching { registerBleReceiver(appCtx) }
+            .onFailure { Log.e("GlassesVM", "registerBleReceiver failed", it) }
+        runCatching { startConnectionPolling() }
+            .onFailure { Log.e("GlassesVM", "startConnectionPolling failed", it) }
     }
 
     fun refreshConnectionState() {
-        val connected = BleOperateManager.getInstance().isConnected
-        _uiState.value = _uiState.value.copy(isConnected = connected)
+        try {
+            val connected = BleOperateManager.getInstance().isConnected
+            _uiState.value = _uiState.value.copy(isConnected = connected)
+        } catch (_: Exception) {
+        }
     }
 
     fun startAutoPair() {
@@ -217,6 +228,7 @@ class GlassesViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
+    @Suppress("DEPRECATION")
     private fun registerMeetingReceiver(context: Context) {
         if (meetingReceiver != null) return
         meetingReceiver = object : BroadcastReceiver() {
@@ -237,9 +249,15 @@ class GlassesViewModel(application: Application) : AndroidViewModel(application)
                 )
             }
         }
-        context.registerReceiver(meetingReceiver, IntentFilter(MeetingCaptureService.ACTION_STATE))
+        val filter = IntentFilter(MeetingCaptureService.ACTION_STATE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(meetingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            context.registerReceiver(meetingReceiver, filter)
+        }
     }
 
+    @Suppress("DEPRECATION")
     private fun registerBleReceiver(context: Context) {
         if (bleReceiver != null) return
         bleReceiver = object : BroadcastReceiver() {
@@ -252,13 +270,17 @@ class GlassesViewModel(application: Application) : AndroidViewModel(application)
             addAction("android.bluetooth.device.action.ACL_DISCONNECTED")
             addAction("com.fersaiyan.cyanbridge.BLE_CONNECTION_STATE")
         }
-        context.registerReceiver(bleReceiver, filter)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(bleReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            context.registerReceiver(bleReceiver, filter)
+        }
     }
 
     private fun startConnectionPolling() {
         viewModelScope.launch(Dispatchers.IO) {
             while (true) {
-                refreshConnectionState()
+                runCatching { refreshConnectionState() }
                 delay(5000)
             }
         }
