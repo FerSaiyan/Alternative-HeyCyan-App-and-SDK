@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.ui.theme
 
 import android.app.Activity
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -28,6 +27,77 @@ val TextPrimary = Color(0xFFE6EDF3)
 val TextSecondary = Color(0xFF8B949E)
 val Danger = Color(0xFFFF5252)
 val SurfaceVariant = Color(0xFF1C2128)
+
+data class ColorPreset(
+    val name: String,
+    val accent: Color,
+    val accentDark: Color,
+)
+
+val COLOR_PRESETS = listOf(
+    ColorPreset("Cyan", Color(0xFF00E5FF), Color(0xFF00B8D4)),
+    ColorPreset("Rose", Color(0xFFFFB6C1), Color(0xFFFF8FAB)),
+    ColorPreset("Mint", Color(0xFF98FB98), Color(0xFF66D9A0)),
+    ColorPreset("Lavender", Color(0xFFDDA0DD), Color(0xFFC78CC7)),
+    ColorPreset("Peach", Color(0xFFFFDAB9), Color(0xFFFFC89A)),
+    ColorPreset("Sky", Color(0xFF87CEEB), Color(0xFF6BB5D9)),
+)
+
+fun darkColorScheme(accent: Color, accentDark: Color) = darkColorScheme(
+    primary = accent,
+    onPrimary = BgDark,
+    primaryContainer = CardBackground,
+    onPrimaryContainer = accent,
+    secondary = accent,
+    onSecondary = BgDark,
+    secondaryContainer = CardBackground,
+    onSecondaryContainer = accent,
+    tertiary = accentDark,
+    onTertiary = BgDark,
+    tertiaryContainer = SurfaceVariant,
+    onTertiaryContainer = accent,
+    error = Danger,
+    onError = Color.White,
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Danger,
+    background = BgDark,
+    onBackground = TextPrimary,
+    surface = BgDark,
+    onSurface = TextPrimary,
+    surfaceVariant = SurfaceVariant,
+    onSurfaceVariant = TextSecondary,
+    outline = Color(0xFF30363D),
+    outlineVariant = Color(0xFF21262D),
+    scrim = Color.Black,
+    inverseSurface = Color(0xFFE6EDF3),
+    inverseOnSurface = BgDark,
+    inversePrimary = accentDark,
+)
+
+fun lightColorScheme(accent: Color, accentDark: Color) = lightColorScheme(
+    primary = accent,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFB2EBF2),
+    onPrimaryContainer = Color(0xFF00363D),
+    secondary = accentDark,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE0F7FA),
+    onSecondaryContainer = Color(0xFF00363D),
+    tertiary = accentDark,
+    onTertiary = Color.White,
+    background = Color.White,
+    onBackground = Color(0xFF1A1C1E),
+    surface = Color.White,
+    onSurface = Color(0xFF1A1C1E),
+    surfaceVariant = Color(0xFFE7E0EC),
+    onSurfaceVariant = Color(0xFF49454F),
+    error = Color(0xFFBA1A1A),
+    onError = Color.White,
+    outline = Color(0xFF79747E),
+    inverseSurface = Color(0xFF313033),
+    inverseOnSurface = Color(0xFFF4EFF4),
+    inversePrimary = accent,
+)
 
 private val DarkColorScheme = darkColorScheme(
     primary = CyanAccent,
@@ -195,17 +265,19 @@ val CyanBridgeTypography = androidx.compose.material3.Typography(
 
 @Composable
 fun CyanBridgeTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
+    accentIndex: Int = 0,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val preset = COLOR_PRESETS.getOrElse(accentIndex) { COLOR_PRESETS[0] }
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        darkTheme -> darkColorScheme(preset.accent, preset.accentDark)
+        else -> lightColorScheme(preset.accent, preset.accentDark)
     }
 
     val view = LocalView.current

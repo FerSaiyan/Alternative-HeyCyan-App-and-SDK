@@ -13,6 +13,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -58,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -80,6 +83,7 @@ import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
 import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
 import com.fersaiyan.cyanbridge.ui.navigation.Routes
+import com.fersaiyan.cyanbridge.ui.theme.COLOR_PRESETS
 import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as AgentRuntimePrefs
 import com.hjq.permissions.XXPermissions
@@ -148,6 +152,8 @@ fun SettingsScreen(
             ThemeSection(
                 isDarkTheme = state.isDarkTheme,
                 onToggle = { viewModel.setDarkTheme(it) },
+                accentColorIndex = state.accentColorIndex,
+                onSelectPreset = { viewModel.setAccentColorIndex(it) },
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -160,6 +166,7 @@ fun SettingsScreen(
                 onProviderTypeChange = { viewModel.setProviderType(it) },
                 onRelayUrlChange = { viewModel.setRelayBaseUrl(it) },
                 onRelayBackendChange = { viewModel.setRelayBackend(it) },
+                onNavigate = onNavigate,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -330,31 +337,76 @@ private fun ProSubscriptionSection(
 private fun ThemeSection(
     isDarkTheme: Boolean,
     onToggle: (Boolean) -> Unit,
+    accentColorIndex: Int,
+    onSelectPreset: (Int) -> Unit,
 ) {
     SettingsCard(title = "Appearance") {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Star,
-                contentDescription = null,
-                tint = CyanAccent,
-                modifier = Modifier.size(24.dp),
-            )
-            Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = null,
+                    tint = CyanAccent,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = if (isDarkTheme) "Dark Mode (On)" else "Dark Mode (Off)",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = isDarkTheme,
+                    onCheckedChange = onToggle,
+                )
+            }
+
+            HorizontalDivider()
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             Text(
-                text = if (isDarkTheme) "Dark Mode (On)" else "Dark Mode (Off)",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
+                text = "Accent Color",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Switch(
-                checked = isDarkTheme,
-                onCheckedChange = onToggle,
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                COLOR_PRESETS.forEachIndexed { index, preset ->
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(preset.accent)
+                            .border(
+                                width = if (index == accentColorIndex) 3.dp else 0.dp,
+                                color = Color.White,
+                                shape = CircleShape,
+                            )
+                            .clickable { onSelectPreset(index) },
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = COLOR_PRESETS.getOrElse(accentColorIndex) { COLOR_PRESETS[0] }.name,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
             )
+
+            Spacer(modifier = Modifier.height(4.dp))
         }
     }
 }
@@ -368,6 +420,7 @@ private fun AiProviderSection(
     onProviderTypeChange: (AgentProviderType) -> Unit,
     onRelayUrlChange: (String) -> Unit,
     onRelayBackendChange: (CliRelayBackend) -> Unit,
+    onNavigate: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -450,6 +503,12 @@ private fun AiProviderSection(
                     shape = RoundedCornerShape(8.dp),
                     textStyle = MaterialTheme.typography.bodySmall,
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                TextButton(onClick = { onNavigate(Routes.LOCAL_MODELS) }) {
+                    Text("Configure Local Models", color = CyanAccent)
+                }
             }
         }
     }
@@ -1037,7 +1096,13 @@ private fun DataSection(
 private fun AboutSection(
     onNavigate: (String) -> Unit,
 ) {
-    SettingsCard(title = "About") {
+    var expanded by remember { mutableStateOf(false) }
+
+    SettingsCard(
+        title = "About",
+        onExpandToggle = { expanded = !expanded },
+        expanded = expanded,
+    ) {
         QuickLinkItem(
             label = "About",
             subtitle = "App version and credits",
@@ -1048,7 +1113,13 @@ private fun AboutSection(
 
 @Composable
 private fun FaqSection() {
-    SettingsCard(title = "FAQ") {
+    var expanded by remember { mutableStateOf(false) }
+
+    SettingsCard(
+        title = "FAQ",
+        onExpandToggle = { expanded = !expanded },
+        expanded = expanded,
+    ) {
         val faqItems = listOf(
             "How do I set Local Models?" to "Select Local Models in AI / Automation, then tap Configure Local Models and follow the setup steps on device.",
             "Do I need a subscription to use the app?" to "No. You can use Tasker or Local Models without subscribing. Pro is optional and adds premium managed features.",

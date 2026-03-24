@@ -43,6 +43,7 @@ data class SettingsUiState(
     val relayBaseUrl: String = "",
     val relayBackend: CliRelayBackend = CliRelayBackend.GEMINI,
     val isDarkTheme: Boolean = true,
+    val accentColorIndex: Int = 0,
     val isLoading: Boolean = false,
     val accessibilityEnabled: Boolean = false,
     val autoCaptureEnabled: Boolean = false,
@@ -88,6 +89,8 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
             val relayBackend = AiProviderPrefs.getRelayBackend(context)
             val isDark = context.getSharedPreferences("theme_prefs", Context.MODE_PRIVATE)
                 .getBoolean("dark_theme", true)
+            val accentIdx = context.getSharedPreferences("theme_prefs", Context.MODE_PRIVATE)
+                .getInt("accent_color_index", 0)
 
             MemoryVaultBootstrap.ensureInitialized(context)
             val memoryMode = MemoryModeManager.getSelectedMode(context)
@@ -130,6 +133,7 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
                 relayBaseUrl = relayUrl,
                 relayBackend = relayBackend,
                 isDarkTheme = isDark,
+                accentColorIndex = accentIdx,
                 isLoading = false,
                 accessibilityEnabled = false,
                 autoCaptureEnabled = autoCaptureEnabled,
@@ -209,6 +213,14 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
             .putBoolean("dark_theme", isDark)
             .apply()
         _uiState.value = _uiState.value.copy(isDarkTheme = isDark)
+    }
+
+    fun setAccentColorIndex(index: Int) {
+        context.getSharedPreferences("theme_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putInt("accent_color_index", index)
+            .apply()
+        _uiState.value = _uiState.value.copy(accentColorIndex = index)
     }
 
     fun setAutoCaptureEnabled(enabled: Boolean) {

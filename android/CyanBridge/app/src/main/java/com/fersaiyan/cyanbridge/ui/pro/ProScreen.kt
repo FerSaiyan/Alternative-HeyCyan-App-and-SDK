@@ -192,13 +192,46 @@ private fun ProSubscribe(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Unlock the full power of your smartglasses",
+            text = "Support the project, unlock premium features, and help us expand to more smartglasses.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        PromotionalCard(
+            emoji = "💜",
+            title = "Help Fund the Project",
+            description = "Keep our project alive and growing. Your subscription directly supports ongoing development, bug fixes, and expanding support to devices like Meta Ray-Ban, Rokid, and other manufacturers.",
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        PromotionalCard(
+            emoji = "🛠️",
+            title = "Support Plugin Developers",
+            description = "Contribute to developers who share creative workflows and automation plugins for the app. Enable a thriving ecosystem of extensions.",
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        PromotionalCard(
+            emoji = "🔒",
+            title = "Encrypted Cloud Storage",
+            description = "Leverage our trusted encrypted cloud for your private memories. Sync across devices with end-to-end encryption.",
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        PromotionalCard(
+            emoji = "⚡",
+            title = "Priority Support",
+            description = "Get priority access to support channels and early access to new features and beta releases.",
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Pricing section
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -207,9 +240,11 @@ private fun ProSubscribe(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Choose your plan",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "PRICING",
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
+                    color = CyanAccent,
+                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.1f, androidx.compose.ui.unit.TextUnitType.Em),
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -230,14 +265,9 @@ private fun ProSubscribe(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = plan.label,
+                                text = "${plan.label} — ${plan.price}",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium,
-                            )
-                            Text(
-                                text = plan.price,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         if (isSelected) {
@@ -255,6 +285,7 @@ private fun ProSubscribe(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Subscribe In App button
         Button(
             onClick = { viewModel.subscribe() },
             modifier = Modifier.fillMaxWidth(),
@@ -270,30 +301,124 @@ private fun ProSubscribe(
             } else {
                 Text(
                     text = if (state.selectedPlan == "free_trial") "Activate Free Trial"
-                           else "Subscribe — ${PLANS.find { it.id == state.selectedPlan }?.price ?: ""}",
+                           else "Subscribe In App",
                     color = MaterialTheme.colorScheme.background,
                 )
             }
         }
 
-        if (state.webCheckoutEnabled && state.selectedPlan != "free_trial") {
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = { viewModel.subscribe() },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isLoading,
-            ) {
-                Text("Continue to payment")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Alternative checkout card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+            border = CardDefaults.outlinedCardBorder(),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Alternative checkout",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "Use secure website checkout and return automatically. If your account already has an active subscription, we restore it instead of charging again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = { viewModel.subscribe() },
+                    enabled = !state.isLoading,
+                ) {
+                    Text("Subscribe on Website")
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Donate card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+            border = CardDefaults.outlinedCardBorder(),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Prefer Local Models?",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "You can still support development with a one-time coffee donation. Every contribution helps us ship faster and support more smartglasses.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = { viewModel.subscribe() },
+                    enabled = !state.isLoading,
+                ) {
+                    Text("Donate $5 ☕")
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "All plans include: Priority support, cloud sync, beta features access",
-            style = MaterialTheme.typography.bodySmall,
+            text = "Not subscribed",
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun PromotionalCard(
+    emoji: String,
+    title: String,
+    description: String,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "$emoji $title",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = CyanAccent,
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
