@@ -4,177 +4,179 @@
 **Working Directory:** `/home/fertroll10/Documents/ML/HeyCyanSmartGlassesSDK/android/`
 **Repo:** CyanBridge (subdirectory `CyanBridge/`)
 **Build command:** `cd CyanBridge && ./gradlew assembleDebug 2>&1 | tail -50`
-**Status:** Phase 13 complete — fixing bugs found in user testing
+**Status:** Phases 14–16 merged — fixing bugs found in user testing round 2
 **Goal:** Full feature-parity migration from XML Activities to Jetpack Compose with Material 3
 
 ---
 
 ## Completed Phases
 
-- ✅ **Phases 0–8**: Foundation, onboarding, navigation, all screen stubs, RecordingsScreen, GlassesScreen, bottom nav structure
-- ✅ **Phase 9**: Settings Completeness (Local Agent, Memory & Privacy, Transcripts, Redaction, Data)
-- ✅ **Phase 10**: ProSubscriptionSettingsScreen, NotesListScreen, NoteDetailScreen
-- ✅ **Phase 11**: PluginsScreen (full), LocalModelsScreen (full)
-- ✅ **Phase 12**: 6 secondary screens (DailyFacts, Summary, AppBlacklist, Captures, Pending, SyncedMedia)
-- ✅ **Phase 13**: Full GlassesScreen dashboard with 25+ buttons
-- ✅ **Bug fixes**: ComposeMainActivity stale NavHost, registerReceiver SecurityException on Android 14+
+- ✅ **Phases 0–13**: Foundation, all screens, navigation, GlassesScreen dashboard
+- ✅ **Phase 14**: Battery optimization fix, permission requests after onboarding
+- ✅ **Phase 15**: Restore Plugins in bottom nav, remove Notes from nav, fix icons
+- ✅ **Phase 16**: Fix Pro navigation, remove model selection from Settings, add FAQ
 
 ---
 
-## Bugs Found in User Testing
+## Bugs Found in User Testing (Round 2)
 
-These were discovered during testing on a real device after Phases 8–13.
+### Bug 10: Pro Subscription Screen Missing Promotional Content
+- **Expected:** The original `ProSubscriptionActivity` has promotional cards with emojis and descriptions:
+  - "💜 Help Fund the Project" — supports ongoing development, expanding to more smartglasses
+  - "🛠️ Support Plugin Developers" — contribute to plugin ecosystem
+  - "🔒 Encrypted Cloud Syncing" — sync memory and transcripts across devices
+  - "📸 Smart Image Automation" — Gemini vision image analysis
+  - "🌐 Website Checkout" with Subscribe on Website button
+  - "Prefer Local Models?" — one-time $5 donate option
+  - Status text, "Back" + "Subscribe In App" buttons at bottom
+  - Plan radio group: Trial $3.99, Cheap $5.99, Standard $9.99, Max $19.99
+- **Actual:** Current `ProScreen` is a simplified plan selector with just "Choose your plan" and plan buttons. No promotional cards.
+- **Reference:** `android/CyanBridge/app/src/main/res/layout/activity_pro_subscription.xml` (full layout)
+- **File to modify:** `ui/pro/ProScreen.kt` — the `ProSubscribe` composable needs promotional cards
 
-### Bug 1: Battery Optimization Screen — "Disable Battery Optimization" Button Doesn't Work
-- **Expected:** Clicking "Disable Battery Optimization" opens the system dialog to confirm disabling battery optimization (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-- **Actual:** Button does nothing or crashes
-- **Root cause:** `BatteryOptimizationScreen.openDisableBatteryOptimizationFlow()` starts an `Intent` from a `@Composable` function using `context.startActivity()`. However, the `context` might not be an Activity context, or the intent action might not be resolvable on all devices. Need to verify the intent is properly resolved before starting it.
+### Bug 11: "Configure Local Models" Button Missing from Settings
+- **Expected:** In the original `SettingsActivity`, the AI/AUTOMATION section has a "Configure Local Models" button (`btn_configure_local_models`) that launches `LocalModelsConfigureActivity`. This is in the same section as the AI provider radio group (Tasker, Local Agent, Pro Subscription).
+- **Actual:** The current `SettingsScreen` AI/AUTOMATION section doesn't have this button. The LocalModelsScreen exists but isn't accessible from Settings.
+- **Reference:** Original `activity_settings.xml` line ~252: `"Configure Local Models"` button
+- **File to modify:** `ui/settings/SettingsScreen.kt` — add a "Configure Local Models" button in the `AiProviderSection`, and wire it to navigate to `Routes.LOCAL_MODELS`
 
-### Bug 2: Battery Optimization "I Locked It" Button — Incorrect Behavior
-- **Expected:** After setting battery optimization to unrestricted, "I Locked It" should allow proceeding
-- **Actual:** Even after disabling optimization, the button still reports "Battery optimization still appears to be ON" and refuses to proceed
-- **Root cause:** `isBatteryOptimizationIgnored()` checks `pm.isIgnoringBatteryOptimizations(context.packageName)`. But the system might not immediately reflect the change after returning from the settings screen. Need to re-check the state in a `LaunchedEffect` or after a delay, or use `onActivityResult` pattern to detect when the user returns.
+### Bug 12: Dark Mode Toggle Doesn't Work
+- **Expected:** Toggling dark mode should change the app's theme from dark to light
+- **Actual:** The `ThemeSection` in `SettingsScreen` calls `onToggle` which updates `state.isDarkTheme`, but `CyanBridgeTheme` in `CyanBridgeTheme.kt` uses `darkTheme: Boolean = isSystemInDarkTheme()` — it defaults to the system setting and ignores the user's toggle.
+- **Root cause:** `CyanBridgeTheme` needs to accept the `darkTheme` parameter from the caller. The `ComposeMainActivity` (or `MainNavScreen`) needs to pass the theme state.
+- **Files to modify:**
+  - `ui/theme/CyanBridgeTheme.kt` — accept `darkTheme` parameter properly
+  - `ui/navigation/MainNavScreen.kt` — read theme state from SharedPreferences and pass to `CyanBridgeTheme`
+  - OR `ui/ComposeMainActivity.kt` — pass theme state to `CyanBridgeTheme` wrapper
 
-### Bug 3: Missing Permission Popups After Onboarding
-- **Expected:** After onboarding completes, permission request popups should appear for Bluetooth, Location, Microphone, etc.
-- **Actual:** No permission popups appear
-- **Root cause:** The old `MainActivity` had permission request logic that ran after onboarding. The new `ComposeMainActivity` navigates directly to `GlassesScreen` without requesting any permissions. Need to add a permissions request step after `BatteryOptimizationScreen` completes, before navigating to the dashboard.
+### Bug 13: More Accent Color Presets (Pastel Colors)
+- **Expected:** User wants more color presets beyond just cyan-dark. Examples: pastel pink, pastel green, pastel purple, pastel orange, pastel blue.
+- **Actual:** Only cyan accent (`#00E5FF`) is available.
+- **Solution:** Add a color picker/preset section in the Appearance settings. Define a set of pastel `ColorScheme`s and let the user select one. Store the selection in SharedPreferences.
+- **Files to modify:**
+  - `ui/theme/CyanBridgeTheme.kt` — define preset color schemes (pastel variants)
+  - `ui/settings/SettingsScreen.kt` — add color preset selector in Appearance section
+  - `ui/navigation/MainNavScreen.kt` — read selected accent color and apply to theme
 
-### Bug 4: Plugins Page Missing from Bottom Navigation
-- **Expected:** Bottom nav should have 5 tabs matching the old app: Chats, Glasses, Recordings, Settings, Plugins
-- **Actual:** Current bottom nav shows: Glasses, Chats, Recordings, Settings, Notes
-- **Root cause:** Phase 10 replaced the Plugins tab with Notes in the bottom navigation. Notes was not in the original bottom nav — the Plugins page was there. Need to restore Plugins as the 5th tab.
+### Bug 14: FAQ and About Sections Not Collapsible
+- **Expected:** FAQ and About sections should be collapsible like the other sections (AI/AUTOMATION, Local Agent, etc.)
+- **Actual:** `FaqSection` and `AboutSection` in `SettingsScreen` use `SettingsCard(title = "FAQ")` without `expanded`/`onExpandToggle` parameters, so they're always visible.
+- **File to modify:** `ui/settings/SettingsScreen.kt` — add `expanded` state and `onExpandToggle` to both `FaqSection` and `AboutSection`
 
-### Bug 5: Notes Screen Not in Original Design
-- **Expected:** Notes screen should be accessible from a secondary location, NOT from the bottom navigation
-- **Actual:** Notes has its own bottom nav tab
-- **Root cause:** Same as Bug 4. Notes should be accessible via a link in Settings or another secondary screen, not as a bottom nav tab. Keep the Notes screen implementation but remove it from the bottom navigation.
-
-### Bug 6: Bottom Nav Icons Are Random
-- **Expected:** Icons should match the original design's icons
-- **Actual:** Icons are random (Star, Home, List, Settings, ArrowForward)
-- **Root cause:** The original bottom nav uses these icons:
-  | Tab | Original Icon | Material Icon |
-  |-----|--------------|---------------|
-  | Chats | `@android:drawable/ic_dialog_email` | `Icons.Filled.Home` (email/chat style) |
-  | Glasses | `@drawable/ic_nav_glasses` (custom) | `Icons.Filled.Star` (closest base match) |
-  | Recordings | `@android:drawable/ic_menu_slideshow` | `Icons.Filled.List` |
-  | Settings | `@android:drawable/ic_menu_manage` | `Icons.Filled.Settings` |
-  | Plugins | `@drawable/ic_nav_plugins` (custom) | `Icons.Filled.Add` (closest base match) |
-  
-  Need to use `ImageVector.vectorResource()` to load the custom XML vector drawables (`ic_nav_glasses.xml`, `ic_nav_plugins.xml`) for Glasses and Plugins tabs, and use better matches for Chats and Recordings.
-
-### Bug 7: Pro Subscription Banner Still Shown After Subscribing
-- **Expected:** After subscribing to Pro, clicking "Pro Subscription" in Settings should navigate directly to ProSubscriptionSettingsScreen, not show the subscription incentives banner
-- **Actual:** The `ProScreen` still shows the `ProSubscribe` section (incentives banner) even after subscribing
-- **Root cause:** `ProScreen` correctly shows `ProDashboard` when `state.isSubscribed` is true. But `SettingsScreen.ProSubscriptionSection` navigates via `Intent` to legacy Activities instead of using Compose routes. Also, the SettingsScreen may not be fetching the subscription state correctly.
-- **Fix needed:**
-  1. `SettingsScreen` should navigate to `Routes.PRO_SETTINGS` when subscribed (Compose route), not to `ProSubscriptionSettingsActivity`
-  2. When NOT subscribed, navigate to `Routes.PRO` (subscription screen)
-  3. The SettingsScreen should read subscription state from `ProSubscriptionServerPrefs`
-
-### Bug 8: Model Selection Section in Regular Settings
-- **Expected:** Model selection (Requests model, Questions model, Tasks model) should be in Pro Subscription Settings, not in regular Settings
-- **Actual:** `SettingsScreen.ModelSection` shows model dropdowns in the regular settings
-- **Root cause:** The model selection was part of `ProSubscriptionSettingsActivity` (old design). Phase 4 put it in `ProScreen`, and Phase 9 also added it to `SettingsScreen.ModelSection`. Remove `ModelSection` from `SettingsScreen` — it should only exist in `ProSubscriptionSettingsScreen` (Phase 10).
-
-### Bug 9: FAQ Section Missing from Settings
-- **Expected:** Settings should have a collapsible FAQ section with 4 Q&A items
-- **Actual:** No FAQ section exists in the new SettingsScreen
-- **Root cause:** Phase 9 did not include the FAQ section. The old `SettingsActivity` has it as a collapsible card with:
-  1. "How do I set Local Models?" → "Select Local Models in AI / Automation, then tap Configure Local Models and follow the setup steps on device."
-  2. "Do I need a subscription to use the app?" → "No. You can use Tasker or Local Models without subscribing. Pro is optional and adds premium managed features."
-  3. "How is my data handled?" → "By default data is stored locally on your phone. You can export/import your local data and clear it any time from the Data section."
-  4. "Can I review the source code?" → "Yes. The app is open source and you can manually review the full source code on GitHub."
+### Bug 15: Chat Input Hidden Behind Bottom Nav Bar
+- **Expected:** The chat input box should be visible above the bottom navigation bar when typing
+- **Actual:** The input box is hidden behind the navigation bar. This happens because:
+  1. `MainNavScreen`'s `Scaffold` wraps the `NavHost` with `modifier = Modifier.padding(innerPadding)` which includes the bottom bar height
+  2. The `ChatScreen`'s `Scaffold` also has its own input box at the bottom
+  3. The `ChatScreen` applies `imePadding()` on its Column, but the outer Scaffold's bottom bar padding is still applied
+  4. Result: double padding or input box obscured
+- **Fix:** Move `imePadding()` from `ChatScreen` to the outer `MainNavScreen`'s `Scaffold`, and use `Modifier.navigationBarsPadding()` + `Modifier.imeHeight()` instead of `Modifier.imePadding()`. Or simpler: remove `imePadding()` from `ChatScreen` and add it to the `NavHost` modifier in `MainNavScreen`.
+- **Files to modify:**
+  - `ui/navigation/MainNavScreen.kt` — add `Modifier.imePadding()` to `NavHost` modifier
+  - `ui/chat/ChatScreen.kt` — remove `imePadding()` from the Column modifier
 
 ---
 
 ## New Phases
 
-Each phase must **compare the behavior of the original design with the new design** and fix discrepancies. Each agent must:
-1. Read the original Activity/layout files for the specific bug
-2. Read the current Compose screen implementation
-3. Identify the exact difference
-4. Fix the Compose screen to match the original behavior
-5. Build and verify
+### Phase 17 — Pro Subscription Promotional Screen (Bug 10)
 
-### Phase 14 — Onboarding Fix (Bugs 1, 2, 3)
-- [ ] **Bug 1:** Fix `BatteryOptimizationScreen.openDisableBatteryOptimizationFlow()` — verify intent resolution, use `rememberLauncherForActivityResult` instead of `context.startActivity()` for more robust handling
-- [ ] **Bug 2:** Fix `BatteryOptimizationScreen` battery optimization check — re-check state in `LaunchedEffect` when the activity resumes (use `LifecycleEventObserver` with `ON_RESUME`), or remove the check entirely and allow proceeding after clicking the button
-- [ ] **Bug 3:** Add a permission request step after onboarding — add a new screen or use `XXPermissions` to request Bluetooth/Location/Microphone permissions before navigating to the dashboard. Reference the old `WelcomeActivity` for the exact permissions requested.
-  - Must request: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `ACCESS_FINE_LOCATION`, `RECORD_AUDIO` (and optionally `POST_NOTIFICATIONS` on Android 13+)
-  - Use `XXPermissions` library (already in project) for user-friendly permission dialogs
+Rewrite the `ProSubscribe` composable in `ProScreen.kt` to match the original promotional cards:
 
-**Files to modify:**
-- `ui/onboarding/BatteryOptimizationScreen.kt` — fix battery check and intent
-- `ui/navigation/MainNavScreen.kt` — add permission request after onboarding
-- Or create `ui/onboarding/PermissionsScreen.kt` — new screen between onboarding and dashboard
+1. **Header**: "Pro Subscription" title + subtitle "Support the project, unlock premium features, and help us expand to more smartglasses."
+2. **Card 1**: "💜 Help Fund the Project" — text about ongoing development, expanding to Meta Ray-Ban, Rokid, etc.
+3. **Card 2**: "🛠️ Support Plugin Developers" — text about plugin ecosystem
+4. **Card 3**: "🔒 Encrypted Cloud Syncing" — text about syncing memory across devices
+5. **Card 4**: "📸 Smart Image Automation" — text about Gemini vision
+6. **Card 5**: "🌐 Website Checkout" — "Subscribe on Website" button
+7. **Card 6**: "Prefer Local Models?" — "Donate $5 ☕" button
+8. **Plan radio group**: Trial $3.99/mo, Cheap $5.99/mo, Standard $9.99/mo, Max $19.99/mo
+9. **Status text**: "Not subscribed" or "Subscribed"
+10. **Bottom buttons**: "Back" + "Subscribe In App"
 
-### Phase 15 — Bottom Navigation & Icons (Bugs 4, 5, 6)
-- [ ] **Bug 4:** Restore correct 5-tab bottom nav: Chats, Glasses, Recordings, Settings, Plugins
-  - Remove `NOTES_LIST` from `bottomNavItems`
-  - Add `PLUGINS` to `bottomNavItems` (was removed in Phase 10)
-- [ ] **Bug 5:** Remove Notes from bottom nav — keep Notes accessible via navigation from Settings or a secondary link, NOT as a bottom nav tab
-- [ ] **Bug 6:** Fix bottom nav icons to match the original design:
-  - Chats: `Icons.Filled.Home` (closest to email icon) — KEEP or use `Icons.Filled.List` as closest match
-  - Glasses: Load `@drawable/ic_nav_glasses` via `ImageVector.vectorResource(R.drawable.ic_nav_glasses)` or use `Icons.Filled.Star` if vector resource doesn't work
-  - Recordings: `Icons.AutoMirrored.Filled.List` — KEEP
-  - Settings: `Icons.Filled.Settings` — KEEP
-  - Plugins: Load `@drawable/ic_nav_plugins` via `ImageVector.vectorResource(R.drawable.ic_nav_plugins)` or use `Icons.Filled.Add` if vector resource doesn't work
+Keep the existing `ProDashboard` composable for subscribed users.
 
-**Files to modify:**
-- `ui/navigation/MainNavScreen.kt` — fix `bottomNavItems` list, add icon loading via vectorResource
-- `ui/navigation/NavigationRoutes.kt` — ensure PLUGINS route exists (already does)
+**Reference:** `origin/main:android/CyanBridge/app/src/main/res/layout/activity_pro_subscription.xml`
+**File:** `ui/pro/ProScreen.kt`
 
-### Phase 16 — Settings & Pro Screen Fixes (Bugs 7, 8, 9)
-- [ ] **Bug 7:** Fix Pro subscription navigation in SettingsScreen:
-  - When `state.isProSubscribed == true`: navigate to `Routes.PRO_SETTINGS` (Compose ProSubscriptionSettingsScreen)
-  - When `state.isProSubscribed == false`: navigate to `Routes.PRO` (Compose ProScreen with subscription incentives)
-  - Remove the `Intent(context, ProSubscriptionActivity::class.java)` legacy navigation
-  - Read subscription state from `ProSubscriptionServerPrefs` or `ProSubscriptionVerifier`
-- [ ] **Bug 8:** Remove `ModelSection` from `SettingsScreen.kt` — model selection belongs only in `ProSubscriptionSettingsScreen`. The old design had models in `ProSubscriptionSettingsActivity`.
-- [ ] **Bug 9:** Add `FaqSection` to `SettingsScreen.kt` — collapsible card with 4 Q&A items matching the old `SettingsActivity` FAQ content exactly
+### Phase 18 — Settings Fixes (Bugs 11, 14)
 
-**Files to modify:**
-- `ui/settings/SettingsScreen.kt` — remove `ModelSection`, add `FaqSection`, fix Pro navigation to use Compose routes
-- `ui/pro/ProSubscriptionSettingsScreen.kt` — verify it has model selection (already does from Phase 10)
+**Bug 11 fix:**
+- Add a "Configure Local Models" button in the `AiProviderSection` of `SettingsScreen`
+- The button should call `onNavigate(Routes.LOCAL_MODELS)` to navigate to the LocalModelsScreen
+- Place it after the AI provider radio group
+
+**Bug 14 fix:**
+- Make `FaqSection` collapsible: add `var expanded by remember { mutableStateOf(false) }` and pass `expanded`/`onExpandToggle` to `SettingsCard`
+- Make `AboutSection` collapsible: same pattern
+
+**File:** `ui/settings/SettingsScreen.kt`
+
+### Phase 19 — Theme & Color Presets (Bugs 12, 13)
+
+**Bug 12 fix — Dark mode:**
+- Read `state.isDarkTheme` from SettingsViewModel state
+- Pass it to `CyanBridgeTheme(darkTheme = state.isDarkTheme)` in the theme wrapper
+- Store the preference in SharedPreferences so it persists
+- Update `ComposeMainActivity` or `MainNavScreen` to read and apply the theme
+
+**Bug 13 fix — Color presets:**
+- Define 5-6 pastel accent color options in `CyanBridgeTheme.kt`:
+  - Cyan (default): `#00E5FF`
+  - Pastel Pink: `#FFB6C1`
+  - Pastel Green: `#98FB98`
+  - Pastel Purple: `#DDA0DD`
+  - Pastel Orange: `#FFDAB9`
+  - Pastel Blue: `#87CEEB`
+- Create a function that generates a `ColorScheme` from a chosen accent color
+- Add a color preset selector in `ThemeSection` of `SettingsScreen` (horizontal row of color dots)
+- Store selected accent in SharedPreferences
+- Read it in `MainNavScreen` and apply to `CyanBridgeTheme`
+
+**Files:**
+- `ui/theme/CyanBridgeTheme.kt` — add preset colors, color scheme generator
+- `ui/settings/SettingsScreen.kt` — add color preset selector
+- `ui/navigation/MainNavScreen.kt` — read theme prefs and apply
+
+### Phase 20 — Chat Input Fix (Bug 15)
+
+- Remove `Modifier.imePadding()` from `ChatScreen`'s Column modifier
+- Add `Modifier.imePadding()` to the `NavHost` modifier in `MainNavScreen`
+- This ensures the entire nav host content moves up when the keyboard opens, and the bottom bar is pushed up too (or hidden)
+
+**Files:**
+- `ui/chat/ChatScreen.kt` — remove `.imePadding()`
+- `ui/navigation/MainNavScreen.kt` — add `.imePadding()` to NavHost modifier
 
 ---
 
-## Reference Files for Each Phase
+## Reference Files
 
-### Phase 14 (Onboarding Fix)
-- Original: `ui/onboarding/BatteryOptimizationGuideActivity.kt` (if exists), `ui/WelcomeActivity.kt` (if exists)
-- Old permissions: `ui/requestAllPermission()`, `ui/requestBluetoothPermission()`, `ui/requestLocationPermission()`
-- Library: `com.hjq.permissions.XXPermissions` (already in build.gradle)
-- Current: `ui/onboarding/BatteryOptimizationScreen.kt`
+### Phase 17 (Pro Screen)
+- Original: `origin/main:android/CyanBridge/app/src/main/res/layout/activity_pro_subscription.xml`
+- Current: `ui/pro/ProScreen.kt`
+- Original activity: `origin/main:android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/agent/ProSubscriptionActivity.kt`
 
-### Phase 15 (Navigation & Icons)
-- Original: `res/menu/bottom_nav_menu.xml` (authoritative tab structure)
-- Original: `res/drawable/ic_nav_glasses.xml`, `res/drawable/ic_nav_plugins.xml` (custom icons)
-- Current: `ui/navigation/MainNavScreen.kt`, `ui/navigation/NavigationRoutes.kt`
+### Phase 18 (Settings)
+- Original: `origin/main:android/CyanBridge/app/src/main/res/layout/activity_settings.xml` (lines ~230-260 for Configure Local Models, lines 1176-1292 for FAQ)
+- Current: `ui/settings/SettingsScreen.kt`
 
-### Phase 16 (Settings & Pro)
-- Original: `ui/SettingsActivity.kt` (lines 185-188 for FAQ, lines 116-170 for AI/AUTOMATION sections)
-- Original: `agent/ProSubscriptionSettingsActivity.kt` (model selection is here)
-- Original: `agent/ProSubscriptionActivity.kt` (subscription flow)
-- Current: `ui/settings/SettingsScreen.kt`, `ui/pro/ProScreen.kt`, `ui/pro/ProSubscriptionSettingsScreen.kt`
+### Phase 19 (Theme)
+- Current: `ui/theme/CyanBridgeTheme.kt`
+- Current: `ui/settings/SettingsScreen.kt` (Appearance section)
+- Current: `ui/navigation/MainNavScreen.kt`
+
+### Phase 20 (Chat)
+- Current: `ui/chat/ChatScreen.kt`
+- Current: `ui/navigation/MainNavScreen.kt`
 
 ---
 
 ## Technical Constraints
 
 - Build command: `cd CyanBridge && ./gradlew assembleDebug 2>&1 | tail -50`
-- Kotlin 2.0.0 + Compose compiler plugin
-- Compose BOM 2024.06.00, Navigation 2.7.7
-- Icons: Filled/Outlined base set only. Use `Icons.AutoMirrored.Filled.List` for List, `Icons.AutoMirrored.Filled.Send` for Send. Custom icons can be loaded via `ImageVector.vectorResource(R.drawable.xxx)`.
-- `XXPermissions` library for runtime permissions
+- Kotlin 2.0.0, Compose BOM 2024.06.00, Navigation 2.7.7
+- Icons: Filled/Outlined base set only. Custom drawables via `ImageVector.vectorResource()`.
 - Use `RECEIVER_EXPORTED`/`RECEIVER_NOT_EXPORTED` flags on Android 14+
 - All BLE SDK calls wrapped in try-catch
-
-## Notes
-
 - **Do NOT force push to main** — user will request manually
-- **Keep Notes screen implementation** — just remove from bottom nav
-- **Model selection** should ONLY appear in ProSubscriptionSettingsScreen, not in SettingsScreen
-- **After Phase 14–16 complete**, build a debug APK and ask user to test before proceeding
