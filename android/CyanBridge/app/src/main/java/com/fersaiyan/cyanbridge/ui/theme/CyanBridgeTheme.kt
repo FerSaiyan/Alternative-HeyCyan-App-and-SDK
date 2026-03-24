@@ -43,6 +43,17 @@ val COLOR_PRESETS = listOf(
     ColorPreset("Sky", Color(0xFF87CEEB), Color(0xFF6BB5D9)),
 )
 
+/** Blend this color toward [other] by [fraction] (0..1). */
+fun Color.mix(other: Color, fraction: Float): Color {
+    val f = fraction.coerceIn(0f, 1f)
+    return Color(
+        red = red + (other.red - red) * f,
+        green = green + (other.green - green) * f,
+        blue = blue + (other.blue - blue) * f,
+        alpha = alpha,
+    )
+}
+
 fun darkColorScheme(accent: Color, accentDark: Color) = darkColorScheme(
     primary = accent,
     onPrimary = BgDark,
@@ -77,19 +88,19 @@ fun darkColorScheme(accent: Color, accentDark: Color) = darkColorScheme(
 fun lightColorScheme(accent: Color, accentDark: Color) = lightColorScheme(
     primary = accent,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFB2EBF2),
+    primaryContainer = Color(0xFFB2EBF2).mix(accent, 0.15f),
     onPrimaryContainer = Color(0xFF00363D),
     secondary = accentDark,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE0F7FA),
+    secondaryContainer = Color(0xFFE0F7FA).mix(accent, 0.10f),
     onSecondaryContainer = Color(0xFF00363D),
     tertiary = accentDark,
     onTertiary = Color.White,
-    background = Color.White,
+    background = Color.White.mix(accent, 0.08f),
     onBackground = Color(0xFF1A1C1E),
-    surface = Color.White,
+    surface = Color.White.mix(accent, 0.06f),
     onSurface = Color(0xFF1A1C1E),
-    surfaceVariant = Color(0xFFE7E0EC),
+    surfaceVariant = Color(0xFFE7E0EC).mix(accent, 0.08f),
     onSurfaceVariant = Color(0xFF49454F),
     error = Color(0xFFBA1A1A),
     onError = Color.White,

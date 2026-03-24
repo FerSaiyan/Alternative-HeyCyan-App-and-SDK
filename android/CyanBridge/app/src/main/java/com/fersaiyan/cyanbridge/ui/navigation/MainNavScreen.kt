@@ -133,9 +133,8 @@ fun MainNavScreen(
     val currentDestination = navBackStackEntry?.destination
 
     val items = bottomNavItems()
-    val showBottomBar = currentDestination?.hierarchy?.any { dest ->
-        items.any { it.route == dest.route }
-    } == true
+    val isOnboarding = currentDestination?.route in listOf(Routes.WELCOME, Routes.BATTERY_OPT, Routes.PERMISSIONS)
+    val showBottomBar = !isOnboarding
 
     Scaffold(
         bottomBar = {

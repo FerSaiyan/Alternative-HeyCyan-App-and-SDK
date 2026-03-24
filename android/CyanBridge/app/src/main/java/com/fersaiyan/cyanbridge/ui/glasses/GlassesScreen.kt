@@ -322,7 +322,6 @@ private fun ConnectionSection(viewModel: GlassesViewModel) {
         )
         DashboardButton(
             text = "Reconnect",
-            icon = Icons.Filled.Refresh,
             modifier = Modifier.weight(1f),
             outlined = true,
             onClick = { viewModel.reconnect() },
@@ -441,7 +440,6 @@ private fun AiAssistantSection(
     ) {
         DashboardButton(
             text = "Gemini",
-            icon = Icons.Filled.Star,
             modifier = Modifier.weight(1f),
             onClick = {
                 com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs.setProvider(
@@ -457,7 +455,6 @@ private fun AiAssistantSection(
         )
         DashboardButton(
             text = "ChatGPT",
-            icon = Icons.Filled.List,
             modifier = Modifier.weight(1f),
             outlined = true,
             onClick = {
@@ -474,7 +471,6 @@ private fun AiAssistantSection(
         )
         DashboardButton(
             text = "Chosen Provider",
-            icon = Icons.Filled.Settings,
             modifier = Modifier.weight(1f),
             outlined = true,
             onClick = {
@@ -490,7 +486,6 @@ private fun AiAssistantSection(
     ) {
         DashboardButton(
             text = "Test AI Voice",
-            icon = Icons.Filled.Home,
             modifier = Modifier.weight(1f),
             outlined = true,
             onClick = {
@@ -499,7 +494,6 @@ private fun AiAssistantSection(
         )
         DashboardButton(
             text = "Test Image AI",
-            icon = Icons.Filled.List,
             modifier = Modifier.weight(1f),
             outlined = true,
             onClick = {
@@ -545,13 +539,11 @@ private fun MediaControlsSection(viewModel: GlassesViewModel) {
     ) {
         DashboardButton(
             text = "Photo",
-            icon = Icons.Filled.Home,
             modifier = Modifier.weight(1f),
             onClick = { viewModel.sendPhotoCommand() },
         )
         DashboardButton(
             text = "Video",
-            icon = Icons.Filled.Home,
             modifier = Modifier.weight(1f),
             onClick = { viewModel.sendVideoCommand() },
         )
@@ -563,13 +555,11 @@ private fun MediaControlsSection(viewModel: GlassesViewModel) {
     ) {
         DashboardButton(
             text = "Audio",
-            icon = Icons.Filled.List,
             modifier = Modifier.weight(1f),
             onClick = { viewModel.sendAudioCommand() },
         )
         DashboardButton(
             text = "Count",
-            icon = Icons.Filled.Add,
             modifier = Modifier.weight(1f),
             onClick = {
                 viewModel.requestMediaCount()
@@ -686,7 +676,6 @@ private fun LocalAgentSubSection(
         )
         DashboardButton(
             text = "Demo",
-            icon = Icons.Filled.Star,
             modifier = Modifier.weight(1f),
             onClick = onDemo,
         )
@@ -708,14 +697,12 @@ private fun DeviceInfoSubSection(viewModel: GlassesViewModel) {
     ) {
         DashboardButton(
             text = "Battery",
-            icon = Icons.Filled.Home,
             modifier = Modifier.weight(1f),
             outlined = true,
             onClick = { viewModel.requestBattery() },
         )
         DashboardButton(
             text = "Version",
-            icon = Icons.Filled.List,
             modifier = Modifier.weight(1f),
             outlined = true,
             onClick = { viewModel.requestVersion() },
@@ -728,14 +715,12 @@ private fun DeviceInfoSubSection(viewModel: GlassesViewModel) {
     ) {
         DashboardButton(
             text = "Sync Time",
-            icon = Icons.Filled.Refresh,
             modifier = Modifier.weight(1f),
             outlined = true,
             onClick = { viewModel.syncTime() },
         )
         DashboardButton(
             text = "Volume",
-            icon = Icons.Filled.Settings,
             modifier = Modifier.weight(1f),
             outlined = true,
             onClick = { viewModel.requestVolume() },
@@ -756,7 +741,6 @@ private fun DevToolsSubSection(viewModel: GlassesViewModel) {
     Spacer(modifier = Modifier.height(4.dp))
     DashboardButton(
         text = "Add Listener",
-        icon = Icons.Filled.Add,
         modifier = Modifier.fillMaxWidth(),
         outlined = true,
         onClick = {
@@ -767,7 +751,6 @@ private fun DevToolsSubSection(viewModel: GlassesViewModel) {
     Spacer(modifier = Modifier.height(4.dp))
     DashboardButton(
         text = "BT",
-        icon = Icons.Filled.Settings,
         modifier = Modifier.fillMaxWidth(),
         outlined = true,
         enabled = false,
@@ -776,7 +759,6 @@ private fun DevToolsSubSection(viewModel: GlassesViewModel) {
     Spacer(modifier = Modifier.height(4.dp))
     DashboardButton(
         text = "OTA Info",
-        icon = Icons.Filled.List,
         modifier = Modifier.fillMaxWidth(),
         outlined = true,
         enabled = false,
@@ -785,7 +767,6 @@ private fun DevToolsSubSection(viewModel: GlassesViewModel) {
     Spacer(modifier = Modifier.height(4.dp))
     DashboardButton(
         text = "Pull OTA test",
-        icon = Icons.Filled.Refresh,
         modifier = Modifier.fillMaxWidth(),
         outlined = true,
         enabled = false,
@@ -812,7 +793,7 @@ private fun SectionHeader(text: String, accent: Boolean = false) {
 @Composable
 private fun DashboardButton(
     text: String,
-    icon: ImageVector,
+    icon: ImageVector? = null,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     outlined: Boolean = false,
@@ -838,12 +819,14 @@ private fun DashboardButton(
             shape = RoundedCornerShape(8.dp),
             enabled = enabled,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-            )
-            Spacer(modifier = Modifier.width(4.dp))
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
             Text(text, style = MaterialTheme.typography.bodySmall)
         }
     } else {
@@ -857,12 +840,14 @@ private fun DashboardButton(
                 contentColor = contentColor,
             ),
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-            )
-            Spacer(modifier = Modifier.width(4.dp))
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
             Text(text, style = MaterialTheme.typography.bodySmall)
         }
     }
