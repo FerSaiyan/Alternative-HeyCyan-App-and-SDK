@@ -59,7 +59,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import com.fersaiyan.cyanbridge.ui.theme.Danger
 
 data class PlanOption(val id: String, val label: String, val price: String)
@@ -167,7 +166,7 @@ private fun ProSubscribe(
             modifier = Modifier
                 .size(80.dp)
                 .background(
-                    color = CyanAccent.copy(alpha = 0.15f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(20.dp),
                 ),
             contentAlignment = Alignment.Center,
@@ -175,7 +174,7 @@ private fun ProSubscribe(
             Icon(
                 imageVector = Icons.Filled.Star,
                 contentDescription = null,
-                tint = CyanAccent,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(48.dp),
             )
         }
@@ -186,7 +185,7 @@ private fun ProSubscribe(
             text = "CyanBridge Pro",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = CyanAccent,
+            color = MaterialTheme.colorScheme.primary,
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -243,7 +242,7 @@ private fun ProSubscribe(
                     text = "PRICING",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = CyanAccent,
+                    color = MaterialTheme.colorScheme.primary,
                     letterSpacing = androidx.compose.ui.unit.TextUnit(0.1f, androidx.compose.ui.unit.TextUnitType.Em),
                 )
 
@@ -274,7 +273,7 @@ private fun ProSubscribe(
                             Icon(
                                 imageVector = Icons.Filled.Check,
                                 contentDescription = null,
-                                tint = CyanAccent,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp),
                             )
                         }
@@ -290,7 +289,7 @@ private fun ProSubscribe(
             onClick = { viewModel.subscribe() },
             modifier = Modifier.fillMaxWidth(),
             enabled = !state.isLoading,
-            colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
         ) {
             if (state.isLoading) {
                 CircularProgressIndicator(
@@ -408,7 +407,7 @@ private fun PromotionalCard(
                 text = "$emoji $title",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = CyanAccent,
+                color = MaterialTheme.colorScheme.primary,
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -484,7 +483,7 @@ private fun StatusBanner(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = CyanAccent.copy(alpha = 0.1f),
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
         ),
     ) {
         Row(
@@ -498,7 +497,7 @@ private fun StatusBanner(
                     Icon(
                         imageVector = Icons.Filled.Star,
                         contentDescription = null,
-                        tint = CyanAccent,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -506,7 +505,7 @@ private fun StatusBanner(
                         text = "Pro Active",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = CyanAccent,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
                 if (plan != null) {
@@ -541,7 +540,7 @@ private fun StatusBanner(
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Verify subscription",
-                            tint = CyanAccent,
+                            tint = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
@@ -681,7 +680,7 @@ private fun ModelDropdown(
                                 Icon(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription = null,
-                                    tint = CyanAccent,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(16.dp),
                                 )
                             }
@@ -710,7 +709,7 @@ private fun BetaCloudCard(
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodySmall,
-                color = CyanAccent,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -718,7 +717,7 @@ private fun BetaCloudCard(
             onClick = onJoin,
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
-            colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
         ) {
             if (isLoading) {
                 CircularProgressIndicator(

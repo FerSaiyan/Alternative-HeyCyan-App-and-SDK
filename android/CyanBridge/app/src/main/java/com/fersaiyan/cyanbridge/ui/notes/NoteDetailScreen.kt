@@ -37,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,7 +104,7 @@ fun NoteDetailScreen(
             if (state.isEditing) {
                 FloatingActionButton(
                     onClick = { viewModel.saveNote() },
-                    containerColor = CyanAccent,
+                    containerColor = MaterialTheme.colorScheme.primary,
                 ) {
                     if (state.isSaving) {
                         CircularProgressIndicator(
@@ -124,7 +123,7 @@ fun NoteDetailScreen(
             } else {
                 FloatingActionButton(
                     onClick = { viewModel.startEditing() },
-                    containerColor = CyanAccent,
+                    containerColor = MaterialTheme.colorScheme.primary,
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Add,
@@ -144,7 +143,7 @@ fun NoteDetailScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator(color = CyanAccent)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else {
             Column(
@@ -179,7 +178,7 @@ fun NoteDetailScreen(
                     Button(
                         onClick = { viewModel.startEditing() },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     ) {
                         Text("Edit Note", color = MaterialTheme.colorScheme.background)
                     }

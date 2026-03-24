@@ -23,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 
 @Composable
 fun WelcomeScreen(
@@ -44,7 +43,7 @@ fun WelcomeScreen(
                 modifier = Modifier
                     .size(120.dp)
                     .background(
-                        color = CyanAccent.copy(alpha = 0.15f),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(28.dp),
                     ),
                 contentAlignment = Alignment.Center,
@@ -52,7 +51,7 @@ fun WelcomeScreen(
                 Icon(
                     imageVector = Icons.Filled.Star,
                     contentDescription = null,
-                    tint = CyanAccent,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(72.dp),
                 )
             }
@@ -63,7 +62,7 @@ fun WelcomeScreen(
                 text = "Welcome to CyanBridge",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = CyanAccent,
+                color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
             )
 
@@ -82,7 +81,7 @@ fun WelcomeScreen(
                 onClick = onStartSetup,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = CyanAccent,
+                    containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.background,
                 ),
             ) {

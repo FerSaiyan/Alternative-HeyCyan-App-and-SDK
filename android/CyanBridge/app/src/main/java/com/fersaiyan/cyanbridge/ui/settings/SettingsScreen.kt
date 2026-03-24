@@ -84,7 +84,6 @@ import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
 import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
 import com.fersaiyan.cyanbridge.ui.navigation.Routes
 import com.fersaiyan.cyanbridge.ui.theme.COLOR_PRESETS
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as AgentRuntimePrefs
 import com.hjq.permissions.XXPermissions
 import java.text.SimpleDateFormat
@@ -297,7 +296,7 @@ private fun ProSubscriptionSection(
                 Icon(
                     imageVector = Icons.Filled.Star,
                     contentDescription = null,
-                    tint = if (isSubscribed) CyanAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (isSubscribed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp),
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -313,7 +312,7 @@ private fun ProSubscriptionSection(
                         Text(
                             text = "Plan: ${plan.replaceFirstChar { it.uppercase() }} $expiryText",
                             style = MaterialTheme.typography.bodySmall,
-                            color = CyanAccent,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     } else {
                         Text(
@@ -351,7 +350,7 @@ private fun ThemeSection(
                 Icon(
                     imageVector = Icons.Filled.Star,
                     contentDescription = null,
-                    tint = CyanAccent,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp),
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -466,6 +465,12 @@ private fun AiProviderSection(
                 }
             }
 
+            Spacer(modifier = Modifier.height(8.dp))
+
+            TextButton(onClick = { onNavigate(Routes.LOCAL_MODELS) }) {
+                Text("Configure Local Models", color = MaterialTheme.colorScheme.primary)
+            }
+
             if (providerType == AgentProviderType.PRO_SUBSCRIPTION) {
                 Spacer(modifier = Modifier.height(8.dp))
                 HorizontalDivider()
@@ -503,12 +508,6 @@ private fun AiProviderSection(
                     shape = RoundedCornerShape(8.dp),
                     textStyle = MaterialTheme.typography.bodySmall,
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                TextButton(onClick = { onNavigate(Routes.LOCAL_MODELS) }) {
-                    Text("Configure Local Models", color = CyanAccent)
-                }
             }
         }
     }
@@ -551,7 +550,7 @@ private fun LocalAgentSection(
                     onRefreshAccessibility()
                     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }) {
-                    Text("Open Settings", color = CyanAccent)
+                    Text("Open Settings", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -570,13 +569,13 @@ private fun LocalAgentSection(
 
             SettingsRow(label = "Blacklist apps") {
                 TextButton(onClick = { context.startActivity(Intent(context, AppBlacklistActivity::class.java)) }) {
-                    Text("Open", color = CyanAccent)
+                    Text("Open", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
             SettingsRow(label = "View screen captures") {
                 TextButton(onClick = { context.startActivity(Intent(context, ScreenCapturesActivity::class.java)) }) {
-                    Text("Open", color = CyanAccent)
+                    Text("Open", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -594,7 +593,7 @@ private fun LocalAgentSection(
                         putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_DRAFT)
                     })
                 }) {
-                    Text("Open", color = CyanAccent)
+                    Text("Open", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -604,13 +603,13 @@ private fun LocalAgentSection(
                         putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_CONFIRMED)
                     })
                 }) {
-                    Text("Open", color = CyanAccent)
+                    Text("Open", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
             SettingsRow(label = "View daily summary") {
                 TextButton(onClick = { context.startActivity(Intent(context, DailySummaryActivity::class.java)) }) {
-                    Text("Open", color = CyanAccent)
+                    Text("Open", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -632,19 +631,19 @@ private fun LocalAgentSection(
 
             SettingsRow(label = "Edit agent persona") {
                 TextButton(onClick = { showPersonaDialog = true }) {
-                    Text("Edit", color = CyanAccent)
+                    Text("Edit", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
             SettingsRow(label = "Edit user facts") {
                 TextButton(onClick = { showFactsDialog = true }) {
-                    Text("Edit", color = CyanAccent)
+                    Text("Edit", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
             SettingsRow(label = "View context debug") {
                 TextButton(onClick = { showContextDebugDialog = true }) {
-                    Text("View", color = CyanAccent)
+                    Text("View", color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -776,7 +775,7 @@ private fun MemoryPrivacySection(
             Text(
                 text = "Sync Settings",
                 style = MaterialTheme.typography.labelMedium,
-                color = CyanAccent,
+                color = MaterialTheme.colorScheme.primary,
             )
 
             SettingsToggleRow(
@@ -1348,14 +1347,14 @@ private fun SettingsCard(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = CyanAccent,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                 )
                 if (onExpandToggle != null) {
                     Icon(
                         imageVector = if (expanded) Icons.Filled.Check else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = if (expanded) "Collapse" else "Expand",
-                        tint = CyanAccent,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -1384,7 +1383,7 @@ private fun SelectableChip(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .background(
-                if (selected) CyanAccent.copy(alpha = 0.15f)
+                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                 else MaterialTheme.colorScheme.surface,
             )
             .clickable(onClick = onClick)
@@ -1395,7 +1394,7 @@ private fun SelectableChip(
                 Icon(
                     imageVector = Icons.Filled.Check,
                     contentDescription = null,
-                    tint = CyanAccent,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(modifier = Modifier.width(4.dp))
@@ -1403,7 +1402,7 @@ private fun SelectableChip(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (selected) CyanAccent else MaterialTheme.colorScheme.onSurface,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             )
         }
     }

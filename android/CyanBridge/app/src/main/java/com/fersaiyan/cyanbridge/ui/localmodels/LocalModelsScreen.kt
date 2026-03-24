@@ -65,7 +65,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.ui.theme.CardBackground
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import com.fersaiyan.cyanbridge.ui.theme.TextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -202,7 +201,7 @@ fun LocalModelsScreen(viewModel: LocalModelsViewModel = viewModel()) {
             ) {
                 Button(
                     onClick = { viewModel.saveSettings() },
-                    colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 ) {
                     Icon(Icons.Filled.Check, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
@@ -225,7 +224,7 @@ fun LocalModelsScreen(viewModel: LocalModelsViewModel = viewModel()) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
-                    color = CyanAccent,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -302,7 +301,7 @@ private fun InstalledModelsSection(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { viewModel.downloadStarter() },
-                        colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
@@ -327,8 +326,8 @@ private fun InstalledModelsSection(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CyanAccent,
-                            cursorColor = CyanAccent,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            cursorColor = MaterialTheme.colorScheme.primary,
                         ),
                     )
                     ExposedDropdownMenu(
@@ -400,7 +399,7 @@ private fun CatalogSection(
                     .clickable { viewModel.toggleCatalogExpanded() },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Star, contentDescription = null, tint = CyanAccent, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Curated Catalog",
@@ -470,7 +469,7 @@ private fun CatalogEntryCard(
             Button(
                 onClick = onDownload,
                 enabled = catalogUi.canDownload && !isDownloading,
-                colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             ) {
                 Text(btnText)
             }
@@ -500,7 +499,7 @@ private fun GenerationSettingsSection(
                     .clickable { viewModel.toggleSettingsExpanded() },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Settings, contentDescription = null, tint = CyanAccent, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Generation Settings",
@@ -567,7 +566,7 @@ private fun GenerationSettingsSection(
                         label = { Text("System Prompt") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CyanAccent, cursorColor = CyanAccent),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, cursorColor = MaterialTheme.colorScheme.primary),
                     )
 
                     DropdownSelector(
@@ -590,7 +589,7 @@ private fun GenerationSettingsSection(
                         Switch(
                             checked = state.experimentalJson,
                             onCheckedChange = { viewModel.toggleExperimentalJson() },
-                            colors = SwitchDefaults.colors(checkedThumbColor = CyanAccent, checkedTrackColor = CyanAccent.copy(alpha = 0.3f)),
+                            colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                         )
                     }
                 }
@@ -608,7 +607,7 @@ private fun SettingsField(label: String, value: String, keyboardType: KeyboardTy
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CyanAccent, cursorColor = CyanAccent),
+        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, cursorColor = MaterialTheme.colorScheme.primary),
     )
 }
 
@@ -631,7 +630,7 @@ private fun DropdownSelector(
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CyanAccent, cursorColor = CyanAccent),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, cursorColor = MaterialTheme.colorScheme.primary),
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEachIndexed { index, option ->
@@ -669,7 +668,7 @@ private fun HfTokenSection(state: LocalModelsUiState, viewModel: LocalModelsView
                 label = { Text("HF Token") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CyanAccent, cursorColor = CyanAccent),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, cursorColor = MaterialTheme.colorScheme.primary),
             )
         }
     }
@@ -698,7 +697,7 @@ private fun WarmupSection(state: LocalModelsUiState, viewModel: LocalModelsViewM
                 Button(
                     onClick = { viewModel.runWarmup() },
                     enabled = state.selectedModelId != null,
-                    colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 ) {
                     Text("Run")
                 }

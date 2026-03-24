@@ -54,7 +54,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.chat.ChatThread
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import com.fersaiyan.cyanbridge.ui.theme.Danger
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -96,7 +95,7 @@ fun HistoryScreen(
                     val newThread = com.fersaiyan.cyanbridge.chat.ChatStore.createThread()
                     onNavigateToChat(newThread.id)
                 },
-                containerColor = CyanAccent,
+                containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.background,
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "New chat")
@@ -223,7 +222,7 @@ private fun ThreadItem(
                     modifier = Modifier
                         .size(40.dp)
                         .background(
-                            color = CyanAccent.copy(alpha = 0.15f),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                             shape = RoundedCornerShape(8.dp),
                         ),
                     contentAlignment = Alignment.Center,
@@ -231,7 +230,7 @@ private fun ThreadItem(
                     Icon(
                         imageVector = Icons.Filled.List,
                         contentDescription = null,
-                        tint = CyanAccent,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp),
                     )
                 }

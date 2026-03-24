@@ -24,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import com.fersaiyan.cyanbridge.ui.theme.Danger
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.XXPermissions
@@ -71,7 +70,7 @@ fun PermissionRequestScreen(
             text = "Permissions Needed",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = CyanAccent,
+            color = MaterialTheme.colorScheme.primary,
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -112,7 +111,7 @@ fun PermissionRequestScreen(
             },
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = CyanAccent,
+                containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.background,
             ),
         ) {

@@ -22,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,7 +47,7 @@ fun NotesScreen() {
                 Icon(
                     imageVector = Icons.Filled.Star,
                     contentDescription = null,
-                    tint = CyanAccent,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(64.dp),
                 )
                 Spacer(modifier = Modifier.height(16.dp))

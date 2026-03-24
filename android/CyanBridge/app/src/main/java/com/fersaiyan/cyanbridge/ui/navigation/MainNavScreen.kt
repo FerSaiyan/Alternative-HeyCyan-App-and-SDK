@@ -170,7 +170,7 @@ fun MainNavScreen(
         NavHost(
             navController = navController,
             startDestination = startDestination,
-            modifier = Modifier.padding(top = innerPadding.calculateTopPadding()),
+            modifier = Modifier.padding(innerPadding),
         ) {
             composable(Routes.GLASSES) {
                 GlassesScreen()

@@ -57,7 +57,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -182,7 +181,7 @@ fun ProSubscriptionSettingsScreen(
             Button(
                 onClick = { viewModel.saveSettings() },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             ) {
                 Text("Save Settings", color = MaterialTheme.colorScheme.background)
             }
@@ -347,14 +346,14 @@ private fun BetaFeaturesSection(
             Text(
                 text = status,
                 style = MaterialTheme.typography.bodySmall,
-                color = CyanAccent,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
         Button(
             onClick = onJoin,
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
         ) {
             Text("Sign up for beta", color = MaterialTheme.colorScheme.background)
         }
@@ -467,7 +466,7 @@ private fun ModelDropdown(
                                 Icon(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription = null,
-                                    tint = CyanAccent,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(16.dp),
                                 )
                             }
@@ -634,7 +633,7 @@ private fun SimpleDropdown(
                             Icon(
                                 imageVector = Icons.Filled.Check,
                                 contentDescription = null,
-                                tint = CyanAccent,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp),
                             )
                         }

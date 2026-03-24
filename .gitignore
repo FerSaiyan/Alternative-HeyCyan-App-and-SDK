@@ -55,3 +55,6 @@ tools/
 
 # Local experiments (do not commit)
 android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ui/AutoPairManager.kt
+
+# NinjaConceptsManagerApp has its own repo
+android/NinjaConceptsManagerApp/

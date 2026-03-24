@@ -65,7 +65,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import com.fersaiyan.cyanbridge.ui.theme.Danger
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,7 +85,7 @@ fun GlassesScreen(viewModel: GlassesViewModel = viewModel()) {
                         Icon(
                             imageVector = Icons.Filled.Star,
                             contentDescription = null,
-                            tint = CyanAccent,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(28.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -199,7 +198,7 @@ private fun StatusCard(state: GlassesUiState) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "GLASSES STATUS",
-                color = CyanAccent,
+                color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (1.2).sp,
@@ -216,14 +215,14 @@ private fun StatusCard(state: GlassesUiState) {
                                 .size(12.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (state.isConnected) CyanAccent
+                                    if (state.isConnected) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                                 ),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (state.isConnected) "Connected" else "Disconnected",
-                            color = if (state.isConnected) CyanAccent
+                            color = if (state.isConnected) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 18.sp,
                         )
@@ -389,12 +388,12 @@ private fun MeetingCaptureSection(
         TextButton(onClick = { timerDropdownOpen = !timerDropdownOpen }) {
             Text(
                 text = timerOptions[selectedTimer],
-                color = CyanAccent,
+                color = MaterialTheme.colorScheme.primary,
             )
             Icon(
                 imageVector = Icons.Filled.ArrowDropDown,
                 contentDescription = null,
-                tint = CyanAccent,
+                tint = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -407,7 +406,7 @@ private fun MeetingCaptureSection(
                 }) {
                     Text(
                         text = option,
-                        color = if (index == selectedTimer) CyanAccent
+                        color = if (index == selectedTimer) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -522,8 +521,8 @@ private fun AiAssistantSection(
             checked = state.imageAutomationEnabled,
             onCheckedChange = { viewModel.setImageAutomationEnabled(it) },
             colors = SwitchDefaults.colors(
-                checkedThumbColor = CyanAccent,
-                checkedTrackColor = CyanAccent.copy(alpha = 0.3f),
+                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
             ),
         )
     }
@@ -803,7 +802,7 @@ private fun DevToolsSubSection(viewModel: GlassesViewModel) {
 private fun SectionHeader(text: String, accent: Boolean = false) {
     Text(
         text = text,
-        color = if (accent) CyanAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+        color = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodySmall,
         fontWeight = if (accent) FontWeight.Bold else FontWeight.Normal,
         letterSpacing = (1.2).sp,
@@ -823,13 +822,13 @@ private fun DashboardButton(
     val contentColor = when {
         !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
         dangerColor -> Danger
-        outlined -> CyanAccent
+        outlined -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.background
     }
     val containerColor = when {
         !enabled -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         outlined -> MaterialTheme.colorScheme.surfaceVariant
-        else -> CyanAccent
+        else -> MaterialTheme.colorScheme.primary
     }
 
     if (outlined) {

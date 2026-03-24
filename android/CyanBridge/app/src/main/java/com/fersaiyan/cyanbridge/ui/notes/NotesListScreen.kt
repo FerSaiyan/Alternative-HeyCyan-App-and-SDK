@@ -49,7 +49,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.data.local.entity.Note
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -84,7 +83,7 @@ fun NotesListScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { onNavigateToNoteDetail(null) },
-                containerColor = CyanAccent,
+                containerColor = MaterialTheme.colorScheme.primary,
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,
@@ -103,7 +102,7 @@ fun NotesListScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator(color = CyanAccent)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else if (state.notes.isEmpty()) {
             EmptyNotesState(modifier = Modifier.padding(padding))
@@ -246,7 +245,7 @@ private fun EmptyNotesState(modifier: Modifier = Modifier) {
             Icon(
                 imageVector = Icons.Filled.Star,
                 contentDescription = null,
-                tint = CyanAccent,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(64.dp),
             )
             Spacer(modifier = Modifier.height(16.dp))

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -60,7 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.chat.ChatMessage
 import com.fersaiyan.cyanbridge.chat.ChatRole
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -125,7 +125,7 @@ fun ChatScreen(
                                             Icon(
                                                 Icons.Filled.Star,
                                                 contentDescription = null,
-                                                tint = CyanAccent,
+                                                tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(16.dp),
                                             )
                                         }
@@ -141,7 +141,7 @@ fun ChatScreen(
                             Icon(
                                 imageVector = Icons.Filled.List,
                                 contentDescription = "Chat history",
-                                tint = CyanAccent,
+                                tint = MaterialTheme.colorScheme.primary,
                             )
                         }
                     }
@@ -149,7 +149,7 @@ fun ChatScreen(
                         Icon(
                             imageVector = Icons.Filled.Add,
                             contentDescription = "New chat",
-                            tint = CyanAccent,
+                            tint = MaterialTheme.colorScheme.primary,
                         )
                     }
                 },
@@ -172,8 +172,7 @@ fun ChatScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .imePadding(),
+                .padding(padding),
         ) {
             if (state.messages.isEmpty() && !state.isLoading) {
                 EmptyChatPlaceholder()
@@ -200,6 +199,8 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.background)
+                    .navigationBarsPadding()
+                    .imePadding()
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -221,7 +222,7 @@ fun ChatScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send",
-                        tint = if (inputText.isNotBlank() && !state.isLoading) CyanAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (inputText.isNotBlank() && !state.isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -241,7 +242,7 @@ private fun ModelPickerTitle(
         Icon(
             imageVector = Icons.Filled.Star,
             contentDescription = null,
-            tint = CyanAccent,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(20.dp),
         )
         Spacer(modifier = Modifier.width(8.dp))
@@ -253,7 +254,7 @@ private fun ModelPickerTitle(
         Icon(
             imageVector = Icons.Filled.ArrowDropDown,
             contentDescription = "Select model",
-            tint = CyanAccent,
+            tint = MaterialTheme.colorScheme.primary,
         )
     }
 }
@@ -262,12 +263,12 @@ private fun ModelPickerTitle(
 private fun MessageBubble(message: ChatMessage) {
     val isUser = message.role == ChatRole.USER
     val bubbleColor = if (isUser) {
-        CyanAccent.copy(alpha = 0.15f)
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
     } else {
         MaterialTheme.colorScheme.surfaceVariant
     }
     val textColor = if (isUser) {
-        CyanAccent
+        MaterialTheme.colorScheme.primary
     } else {
         MaterialTheme.colorScheme.onSurface
     }
@@ -326,7 +327,7 @@ private fun TypingIndicator() {
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(CyanAccent.copy(alpha = 0.5f + i * 0.15f)),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f + i * 0.15f)),
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -351,7 +352,7 @@ private fun EmptyChatPlaceholder() {
                 text = "CyanBridge",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = CyanAccent,
+                color = MaterialTheme.colorScheme.primary,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(

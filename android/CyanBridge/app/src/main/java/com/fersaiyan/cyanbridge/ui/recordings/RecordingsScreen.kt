@@ -56,7 +56,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.data.local.entity.CaptureSession
 import com.fersaiyan.cyanbridge.ui.MyApplication
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -109,7 +108,7 @@ fun RecordingsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.List,
                             contentDescription = "Open synced media",
-                            tint = CyanAccent,
+                            tint = MaterialTheme.colorScheme.primary,
                         )
                     }
                 },
@@ -221,7 +220,7 @@ private fun RecordingItem(
                         .size(44.dp)
                         .clip(CircleShape)
                         .background(
-                            if (item.isPlaying) CyanAccent.copy(alpha = 0.2f)
+                            if (item.isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                             else MaterialTheme.colorScheme.surface
                         )
                         .clickable(onClick = onPlay),
@@ -230,7 +229,7 @@ private fun RecordingItem(
                     Icon(
                         imageVector = Icons.Filled.PlayArrow,
                         contentDescription = if (item.isPlaying) "Stop" else "Play",
-                        tint = CyanAccent,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp),
                     )
                 }
@@ -279,7 +278,7 @@ private fun RecordingItem(
                         Text(
                             text = "Transcribing...",
                             style = MaterialTheme.typography.bodySmall,
-                            color = CyanAccent,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 } else {
@@ -287,7 +286,7 @@ private fun RecordingItem(
                         onClick = onTranscribe,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = CyanAccent,
+                            containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.background,
                         ),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),

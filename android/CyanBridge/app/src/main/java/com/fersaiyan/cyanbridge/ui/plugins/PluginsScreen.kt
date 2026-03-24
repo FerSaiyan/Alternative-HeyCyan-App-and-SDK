@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.ui.theme.CardBackground
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 import com.fersaiyan.cyanbridge.ui.theme.TextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -71,7 +70,7 @@ fun PluginsScreen(viewModel: PluginsViewModel = viewModel()) {
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { viewModel.showPublishHelp() },
-                containerColor = CyanAccent,
+                containerColor = MaterialTheme.colorScheme.primary,
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Send,
@@ -122,7 +121,7 @@ fun PluginsScreen(viewModel: PluginsViewModel = viewModel()) {
 
             CollapsibleSection(
                 title = "Trending",
-                icon = { Icon(Icons.Filled.Star, contentDescription = null, tint = CyanAccent) },
+                icon = { Icon(Icons.Filled.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             ) {
                 viewModel.trendingPlugins(window).forEachIndexed { index, plugin ->
                     PluginCard(plugin = plugin, index = index, window = window)
@@ -131,7 +130,7 @@ fun PluginsScreen(viewModel: PluginsViewModel = viewModel()) {
 
             CollapsibleSection(
                 title = "Top Voted",
-                icon = { Icon(Icons.Filled.Check, contentDescription = null, tint = CyanAccent) },
+                icon = { Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             ) {
                 viewModel.topVotedPlugins(window).forEachIndexed { index, plugin ->
                     PluginCard(plugin = plugin, index = index, window = window)
@@ -140,7 +139,7 @@ fun PluginsScreen(viewModel: PluginsViewModel = viewModel()) {
 
             CollapsibleSection(
                 title = "Top Downloaded",
-                icon = { Icon(Icons.Filled.ArrowForward, contentDescription = null, tint = CyanAccent) },
+                icon = { Icon(Icons.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             ) {
                 viewModel.topDownloadedPlugins(window).forEachIndexed { index, plugin ->
                     PluginCard(plugin = plugin, index = index, window = window)
@@ -169,7 +168,7 @@ private fun PeriodFilter(selected: TimeWindow, onSelect: (TimeWindow) -> Unit) {
                         TimeWindow.WEEKLY -> "Weekly"
                         TimeWindow.MONTHLY -> "Monthly"
                     },
-                    color = if (isSelected) CyanAccent else TextSecondary,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else TextSecondary,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                 )
             }
@@ -209,8 +208,8 @@ private fun ImageAutomationCard(enabled: Boolean, onToggle: () -> Unit) {
                 checked = enabled,
                 onCheckedChange = { onToggle() },
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = CyanAccent,
-                    checkedTrackColor = CyanAccent.copy(alpha = 0.3f),
+                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
                 ),
             )
         }
@@ -280,7 +279,7 @@ private fun PluginCard(plugin: PluginCardData, index: Int, window: TimeWindow) {
                 Text(
                     text = plugin.badge,
                     style = MaterialTheme.typography.labelSmall,
-                    color = CyanAccent,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .padding(start = 8.dp),
                 )
@@ -314,7 +313,7 @@ private fun PluginCard(plugin: PluginCardData, index: Int, window: TimeWindow) {
                 Text(
                     text = "${PluginsViewModel.windowLabel(window)} trend ${plugin.trend(window)}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = CyanAccent,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }

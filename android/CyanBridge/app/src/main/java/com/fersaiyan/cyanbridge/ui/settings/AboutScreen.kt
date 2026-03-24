@@ -25,7 +25,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.BuildConfig
-import com.fersaiyan.cyanbridge.ui.theme.CyanAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +64,7 @@ fun AboutScreen() {
             Icon(
                 imageVector = Icons.Filled.Star,
                 contentDescription = null,
-                tint = CyanAccent,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(64.dp),
             )
 
@@ -75,7 +74,7 @@ fun AboutScreen() {
                 text = "CyanBridge",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = CyanAccent,
+                color = MaterialTheme.colorScheme.primary,
             )
 
             Text(
