@@ -198,8 +198,9 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.background)
-                    .imePadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(bottom = 60.dp)
+                    .imePadding(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 OutlinedTextField(
