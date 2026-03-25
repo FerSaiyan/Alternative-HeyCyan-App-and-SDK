@@ -26,7 +26,11 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenuItem
@@ -144,6 +148,20 @@ fun ProScreen(
                 state = state,
                 viewModel = viewModel,
                 modifier = Modifier.padding(padding),
+            )
+        }
+
+        if (state.showEmailDialog) {
+            EmailInputDialog(
+                onConfirm = { email ->
+                    viewModel.hideEmailDialog()
+                    viewModel.subscribeWithEmail(state.selectedPlan, email)
+                },
+                onSkip = {
+                    viewModel.hideEmailDialog()
+                    viewModel.subscribeWithEmail(state.selectedPlan, "")
+                },
+                onDismiss = { viewModel.hideEmailDialog() },
             )
         }
     }
@@ -419,6 +437,53 @@ private fun PromotionalCard(
             )
         }
     }
+}
+
+@Composable
+private fun EmailInputDialog(
+    onConfirm: (String) -> Unit,
+    onSkip: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var email by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Account email") },
+        text = {
+            Column {
+                Text(
+                    text = "Use the same email as your previous purchase to restore subscription without being charged again.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email") },
+                    placeholder = { Text("you@example.com") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(email) }) {
+                Text("Continue")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onSkip) {
+                    Text("Skip")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        },
+    )
 }
 
 @Composable

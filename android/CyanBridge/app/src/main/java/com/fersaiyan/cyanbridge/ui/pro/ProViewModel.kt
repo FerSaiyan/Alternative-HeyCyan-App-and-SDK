@@ -60,6 +60,7 @@ data class ProScreenState(
     val requestsModel: String = "auto",
     val questionsModel: String = "auto",
     val tasksModel: String = "auto",
+    val showEmailDialog: Boolean = false,
 )
 
 class ProViewModel(
@@ -226,10 +227,14 @@ class ProViewModel(
         }
         val storedEmail = ProSubscriptionServerPrefs.getAccountEmail(context)
         if (storedEmail.isBlank()) {
-            _uiState.value = _uiState.value.copy(error = "Email required for paid plans. Add email in backend settings.")
+            _uiState.value = _uiState.value.copy(showEmailDialog = true)
             return
         }
         launchWebCheckout(plan, storedEmail)
+    }
+
+    fun hideEmailDialog() {
+        _uiState.value = _uiState.value.copy(showEmailDialog = false)
     }
 
     fun subscribeWithEmail(plan: String, email: String) {

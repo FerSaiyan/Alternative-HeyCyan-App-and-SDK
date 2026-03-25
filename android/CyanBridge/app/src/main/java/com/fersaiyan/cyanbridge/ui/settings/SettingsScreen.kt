@@ -60,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -78,10 +79,6 @@ import com.fersaiyan.cyanbridge.memoryvault.MemorySourceType
 import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultBootstrap
 import com.fersaiyan.cyanbridge.memoryvault.VaultLockStateManager
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
-import com.fersaiyan.cyanbridge.ui.localagent.AppBlacklistActivity
-import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
-import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
-import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
 import com.fersaiyan.cyanbridge.ui.navigation.Routes
 import com.fersaiyan.cyanbridge.ui.theme.COLOR_PRESETS
 import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as AgentRuntimePrefs
@@ -179,6 +176,7 @@ fun SettingsScreen(
                 autoSaveDailyFactsEnabled = state.autoSaveDailyFactsEnabled,
                 extractUserFactCandidatesEnabled = state.extractUserFactCandidatesEnabled,
                 lastContextInjectionDebug = state.lastContextInjectionDebug,
+                onNavigate = onNavigate,
                 onRefreshAccessibility = { viewModel.refreshAccessibilityStatus() },
                 onAutoCaptureChange = { viewModel.setAutoCaptureEnabled(it) },
                 onCaptureIntervalChange = { viewModel.setCaptureInterval(it) },
@@ -196,6 +194,7 @@ fun SettingsScreen(
             MemoryPrivacySection(
                 context = context,
                 memoryMode = state.memoryMode,
+                isProSubscribed = state.isProSubscribed,
                 syncExplicit = state.syncExplicit,
                 syncDaily = state.syncDaily,
                 syncOcr = state.syncOcr,
@@ -339,7 +338,13 @@ private fun ThemeSection(
     accentColorIndex: Int,
     onSelectPreset: (Int) -> Unit,
 ) {
-    SettingsCard(title = "Appearance") {
+    var expanded by remember { mutableStateOf(false) }
+
+    SettingsCard(
+        title = "Appearance",
+        onExpandToggle = { expanded = !expanded },
+        expanded = expanded,
+    ) {
         Column {
             Row(
                 modifier = Modifier
@@ -445,21 +450,12 @@ private fun AiProviderSection(
                     Column {
                         Text(
                             text = when (type) {
-                                AgentProviderType.PRO_SUBSCRIPTION -> "Pro Subscription (Relay)"
-                                AgentProviderType.LOCAL_AGENT -> "Local Agent (On-Device)"
-                                AgentProviderType.TASKER -> "Tasker (Automation)"
+                                AgentProviderType.PRO_SUBSCRIPTION -> "Pro Subscription"
+                                AgentProviderType.LOCAL_AGENT -> "Local Models"
+                                AgentProviderType.TASKER -> "Tasker"
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = when (type) {
-                                AgentProviderType.PRO_SUBSCRIPTION -> "Uses: CLI Relay → ${aiProvider.label}"
-                                AgentProviderType.LOCAL_AGENT -> "Uses: Local Models"
-                                AgentProviderType.TASKER -> "Uses: Tasker integration"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -523,6 +519,7 @@ private fun LocalAgentSection(
     autoSaveDailyFactsEnabled: Boolean,
     extractUserFactCandidatesEnabled: Boolean,
     lastContextInjectionDebug: String,
+    onNavigate: (String) -> Unit,
     onRefreshAccessibility: () -> Unit,
     onAutoCaptureChange: (Boolean) -> Unit,
     onCaptureIntervalChange: (Int) -> Unit,
@@ -568,13 +565,13 @@ private fun LocalAgentSection(
             )
 
             SettingsRow(label = "Blacklist apps") {
-                TextButton(onClick = { context.startActivity(Intent(context, AppBlacklistActivity::class.java)) }) {
+                TextButton(onClick = { onNavigate(Routes.APP_BLACKLIST) }) {
                     Text("Open", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
             SettingsRow(label = "View screen captures") {
-                TextButton(onClick = { context.startActivity(Intent(context, ScreenCapturesActivity::class.java)) }) {
+                TextButton(onClick = { onNavigate(Routes.SCREEN_CAPTURES) }) {
                     Text("Open", color = MaterialTheme.colorScheme.primary)
                 }
             }
@@ -589,9 +586,7 @@ private fun LocalAgentSection(
 
             SettingsRow(label = "Edit daily facts") {
                 TextButton(onClick = {
-                    context.startActivity(Intent(context, DailyFactsActivity::class.java).apply {
-                        putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_DRAFT)
-                    })
+                    onNavigate(Routes.dailyFacts("draft"))
                 }) {
                     Text("Open", color = MaterialTheme.colorScheme.primary)
                 }
@@ -599,16 +594,14 @@ private fun LocalAgentSection(
 
             SettingsRow(label = "View confirmed daily facts") {
                 TextButton(onClick = {
-                    context.startActivity(Intent(context, DailyFactsActivity::class.java).apply {
-                        putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_CONFIRMED)
-                    })
+                    onNavigate(Routes.dailyFacts("confirmed"))
                 }) {
                     Text("Open", color = MaterialTheme.colorScheme.primary)
                 }
             }
 
             SettingsRow(label = "View daily summary") {
-                TextButton(onClick = { context.startActivity(Intent(context, DailySummaryActivity::class.java)) }) {
+                TextButton(onClick = { onNavigate(Routes.dailySummary()) }) {
                     Text("Open", color = MaterialTheme.colorScheme.primary)
                 }
             }
@@ -696,6 +689,7 @@ private fun LocalAgentSection(
 private fun MemoryPrivacySection(
     context: Context,
     memoryMode: MemoryPrivacyMode,
+    isProSubscribed: Boolean,
     syncExplicit: Boolean,
     syncDaily: Boolean,
     syncOcr: Boolean,
@@ -743,16 +737,20 @@ private fun MemoryPrivacySection(
             Spacer(modifier = Modifier.height(4.dp))
 
             MemoryPrivacyMode.entries.forEach { mode ->
+                val requiresPro = mode != MemoryPrivacyMode.PRIVATE_LOCAL
+                val isGreyedOut = requiresPro && !isProSubscribed
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onMemoryModeChange(mode) }
-                        .padding(vertical = 4.dp),
+                        .clickable(enabled = !isGreyedOut) { onMemoryModeChange(mode) }
+                        .padding(vertical = 4.dp)
+                        .alpha(if (isGreyedOut) 0.4f else 1f),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     RadioButton(
                         selected = memoryMode == mode,
-                        onClick = { onMemoryModeChange(mode) },
+                        enabled = !isGreyedOut,
+                        onClick = { if (!isGreyedOut) onMemoryModeChange(mode) },
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
@@ -762,12 +760,21 @@ private fun MemoryPrivacySection(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text = mode.description,
+                            text = if (isGreyedOut) "Requires Pro subscription (external servers)" else mode.description,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (isGreyedOut) Color(0xFFFF8F8F) else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
+            }
+
+            if (!isProSubscribed) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Encrypted Sync, Fast Cloud Memory, and Confidential Cloud Beta require a Pro subscription as they use external servers.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             HorizontalDivider()
