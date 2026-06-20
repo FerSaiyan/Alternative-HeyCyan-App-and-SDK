@@ -77,6 +77,7 @@ import com.fersaiyan.cyanbridge.ui.requestLocationPermission
 import com.fersaiyan.cyanbridge.ui.requestNearbyWifiDevicesPermission
 import com.fersaiyan.cyanbridge.ui.setOnClickListener
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
+import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
@@ -256,6 +257,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var downloadWifiP2pCallback: WifiP2pManagerSingleton.WifiP2pCallback? = null
     private var downloadCancelledByUser = false
     private var lastDownloadBleIpAtMs: Long = 0L
+    private var downloadInitialPhaseTimeoutJob: Job? = null
+    private var downloadInitialPhaseCompleted = false
+    private var downloadSupportDialogShown = false
+    private var downloadStartedAtMs: Long = 0L
 
     // Guard against concurrent/duplicate image queries
     private val imageQueryInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -276,6 +281,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var transferDoneOpus = 0
     private var batteryPollJob: Job? = null
     private val batteryPollIntervalMs = 60_000L
+    private val downloadInitialPhaseTimeoutMs = 45_000L
     private var pendingBatteryToast = false
     private var batteryCallbackRegistered = false
 
@@ -2612,10 +2618,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         downloadInProgress = false
         downloadResolvedHttpIp = null
         lastDownloadBleIpAtMs = 0L
+        resetDownloadSupportState()
 
         resetTransferUiState()
         setTransferUiVisible(true)
         setTransferDetail("Starting sync...")
+        startDownloadInitialPhaseWatchdog()
 
         if (!downloadNotifyListenerRegistered) {
             try {
@@ -2776,6 +2784,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun setTransferPlan(jpg: Int, mp4: Int, opus: Int) {
+        finishDownloadInitialPhase("media list resolved")
         transferTotalJpg = jpg
         transferTotalMp4 = mp4
         transferTotalOpus = opus
@@ -2814,6 +2823,68 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun setTransferDetail(text: String) {
         binding.tvTransferDetail.text = text
+    }
+
+    private fun startDownloadInitialPhaseWatchdog() {
+        downloadInitialPhaseTimeoutJob?.cancel()
+        downloadInitialPhaseTimeoutJob = CoroutineScope(Dispatchers.Main).launch {
+            delay(downloadInitialPhaseTimeoutMs)
+            val sessionStillStuck = !downloadInitialPhaseCompleted &&
+                !downloadCancelledByUser &&
+                !downloadInProgress &&
+                binding.cardTransferProgress.visibility == View.VISIBLE
+
+            if (!sessionStillStuck) return@launch
+
+            val waitedSeconds = ((System.currentTimeMillis() - downloadStartedAtMs) / 1000L).coerceAtLeast(1L)
+            Log.w("DataDownload", "Initial P2P sync phase timed out after ${waitedSeconds}s")
+            setTransferDetail("Sync is taking longer than expected")
+            maybeShowP2pSyncLogHelp(
+                reason = "CyanBridge got stuck before media transfer started. The sync button was pressed ${waitedSeconds}s ago and the transfer counters never advanced.",
+            )
+        }
+    }
+
+    private fun finishDownloadInitialPhase(reason: String) {
+        if (downloadInitialPhaseCompleted) return
+        downloadInitialPhaseCompleted = true
+        downloadInitialPhaseTimeoutJob?.cancel()
+        downloadInitialPhaseTimeoutJob = null
+        Log.i("DataDownload", "Initial sync phase completed: $reason")
+    }
+
+    private fun resetDownloadSupportState() {
+        downloadInitialPhaseTimeoutJob?.cancel()
+        downloadInitialPhaseTimeoutJob = null
+        downloadInitialPhaseCompleted = false
+        downloadSupportDialogShown = false
+        downloadStartedAtMs = System.currentTimeMillis()
+    }
+
+    private fun maybeShowP2pSyncLogHelp(
+        reason: String,
+        title: String = "P2P sync is stuck",
+        dismissButtonLabel: String = "Later",
+    ) {
+        if (downloadSupportDialogShown || isFinishing || isDestroyed) return
+        downloadSupportDialogShown = true
+        DebugLogSupport.showSupportOptionsDialog(
+            activity = this,
+            title = title,
+            issueType = "P2P/WiFi sync issue",
+            description = reason,
+            extraInfo = linkedMapOf(
+                "transfer_detail" to binding.tvTransferDetail.text.toString(),
+                "transfer_counts" to binding.tvTransferCounts.text.toString(),
+                "download_ble_ip" to (downloadBleIp ?: ""),
+                "download_wifi_ip" to (downloadWifiIp ?: ""),
+                "download_http_ip" to (downloadResolvedHttpIp ?: ""),
+                "download_p2p_connected" to downloadP2pConnected.toString(),
+                "download_in_progress" to downloadInProgress.toString(),
+                "download_phone_is_group_owner" to downloadPhoneIsGroupOwner.toString(),
+            ),
+            dismissButtonLabel = dismissButtonLabel,
+        )
     }
     
     private fun getDeviceIpFromBLE(): String? {
@@ -3693,6 +3764,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun teardownDownloadP2pSession(sendExitTransfer: Boolean, hideTransferUi: Boolean) {
         downloadAttemptJob?.cancel()
         downloadAttemptJob = null
+        downloadInitialPhaseTimeoutJob?.cancel()
+        downloadInitialPhaseTimeoutJob = null
         unbindProcessFromNetwork()
 
         if (hideTransferUi) {
@@ -3759,7 +3832,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun cancelDataDownloadAttempt(reason: String, showToast: Boolean) {
         Log.i("DataDownload", reason)
+        maybeShowP2pSyncLogHelp(
+            reason = "The user stopped the P2P sync before media transfer completed. Sharing logs can help diagnose why the sync needed to be cancelled.",
+            title = "Sync stopped",
+            dismissButtonLabel = "Close",
+        )
         downloadCancelledByUser = true
+        finishDownloadInitialPhase("cancelled by user")
         setTransferDetail("Stopping sync...")
         teardownDownloadP2pSession(
             sendExitTransfer = true,
@@ -3771,12 +3850,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun showDownloadSuccess(message: String) {
+        finishDownloadInitialPhase("download completed")
         cleanupP2pAfterDownload()
         Log.i("DataDownload", "SUCCESS: $message")
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
     
     private fun showDownloadError(message: String, cleanup: Boolean = true) {
+        if (!downloadInitialPhaseCompleted) {
+            maybeShowP2pSyncLogHelp(
+                reason = "CyanBridge failed during the initial P2P sync steps before any media transfer progress was shown. Error: $message",
+            )
+        }
+        finishDownloadInitialPhase("error: $message")
         if (cleanup) {
             cleanupP2pAfterDownload()
         }

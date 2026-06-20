@@ -196,26 +196,45 @@ class ProSubscriptionActivity : AppCompatActivity() {
 
         thread {
             try {
-                val token = ProSubscriptionServerPrefs.getApiToken(this)
+                var token = ProSubscriptionServerPrefs.getApiToken(this)
+                if (token.isBlank()) {
+                    token = ProSubscriptionRelayClient.fetchAccountInfo(this)
+                        .getOrThrow()
+                        .apiToken
+                        .trim()
+                }
+                check(token.isNotBlank()) { "Server account token unavailable" }
+
                 val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 10000
                 conn.readTimeout = 15000
                 conn.setRequestProperty("Content-Type", "application/json")
-                if (token.isNotBlank()) {
-                    conn.setRequestProperty("Authorization", "Bearer $token")
-                }
+                conn.setRequestProperty("Authorization", "Bearer $token")
                 val body = "{}"
                 conn.doOutput = true
                 conn.outputStream.write(body.toByteArray())
 
                 val code = conn.responseCode
-                val responseBody = conn.inputStream.bufferedReader().readText()
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val responseBody = (stream ?: conn.inputStream).bufferedReader().use { it.readText() }
                 conn.disconnect()
+
+                if (code !in 200..299) {
+                    val message = runCatching {
+                        org.json.JSONObject(responseBody).optString("error")
+                    }.getOrDefault("").ifBlank {
+                        runCatching {
+                            org.json.JSONObject(responseBody).optString("message")
+                        }.getOrDefault("")
+                    }.ifBlank {
+                        "HTTP $code"
+                    }
+                    throw IllegalStateException(message)
+                }
 
                 val json = org.json.JSONObject(responseBody)
                 val ok = json.optBoolean("ok", false)
-                val alreadyActive = json.optBoolean("already_active", false)
                 val message = json.optString("message", "Unknown response")
                 val expiresAtMs = json.optLong("expires_at_ms", 0L)
                 val plan = json.optString("plan", "free_trial")

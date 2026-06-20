@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.localmodels.engine
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,11 +33,16 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
 
     override suspend fun loadModel(modelPath: String, config: EngineLoadConfig): EngineLoadResult {
         return withContext(Dispatchers.IO) {
+            Log.i(
+                TAG,
+                "loadModel path=$modelPath backend=${config.computeBackend} cpuThreads=${config.cpuThreads} context=${config.contextSize} gpuLayers=${config.gpuLayers}",
+            )
             if (
                 this@LlamaCppLocalInferenceEngine.modelPath == modelPath &&
                 contextId != null &&
                 activeLoadConfig == config
             ) {
+                Log.i(TAG, "Reusing existing llama.cpp context for $modelPath")
                 return@withContext activeLoadResult ?: EngineLoadResult(
                     activeBackend = config.computeBackend,
                     activeGpuLayers = if (config.computeBackend == LocalComputeBackend.GPU_EXPERIMENTAL) {
@@ -51,6 +57,7 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
 
             val engine = llama ?: createLlamaAndroid().also { llama = it }
             val runtimeApi = detectRuntimeApi(engine)
+            Log.i(TAG, "Detected llama runtime API: $runtimeApi")
             val file = File(modelPath)
             require(file.exists()) { "Model file does not exist" }
             val modelUri = Uri.fromFile(file).toString()
@@ -80,12 +87,14 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
                 val failures = mutableListOf<String>()
 
                 for (candidateLayers in attempts) {
+                    Log.i(TAG, "Trying llama GPU init with n_gpu_layers=$candidateLayers")
                     runCatching {
                         initializeContext(engine, runtimeApi, createInitParams(candidateLayers))
                     }.onSuccess { init ->
                         selectedGpuLayers = candidateLayers
                         selectedResult = init
                     }.onFailure { err ->
+                        Log.w(TAG, "llama GPU init failed for n_gpu_layers=$candidateLayers: ${compactError(err)}", err)
                         failures += "n_gpu_layers=$candidateLayers -> ${compactError(err)}"
                     }
                     if (selectedResult != null) break
@@ -116,6 +125,10 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
             val newContextId = (result["contextId"] as? Number)?.toInt()
                 ?: throw IllegalStateException("llama.cpp context id missing")
             setupLegacyEventCollector(engine, runtimeApi, newContextId)
+            Log.i(
+                TAG,
+                "llama.cpp model ready path=$modelPath contextId=$newContextId backend=${loadResult.activeBackend} fallback=${loadResult.fallbackReason}",
+            )
 
             this@LlamaCppLocalInferenceEngine.contextId = newContextId
             this@LlamaCppLocalInferenceEngine.modelPath = modelPath
@@ -127,6 +140,7 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
 
     override suspend fun unloadModel() {
         withContext(Dispatchers.IO) {
+            Log.i(TAG, "Unloading llama.cpp model ${modelPath.orEmpty()} ctx=${contextId ?: -1}")
             val engine = llama
             val ctx = contextId
             if (ctx != null) {
@@ -145,6 +159,10 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
     }
 
     override suspend fun generate(config: GenerationConfig, onToken: (String) -> Unit): GenerationResult {
+        Log.i(
+            TAG,
+            "generate promptChars=${config.prompt.length} maxTokens=${config.maxTokens} temperature=${config.temperature}",
+        )
         val engine = llama ?: throw IllegalStateException("Inference engine is not initialized")
         val ctx = contextId ?: throw IllegalStateException("No model loaded")
 
@@ -177,6 +195,9 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
             withContext(Dispatchers.IO) {
                 engine.launchCompletion(ctx, params)
             } ?: emptyMap()
+        } catch (t: Throwable) {
+            Log.e(TAG, "llama.cpp generation failed", t)
+            throw t
         } finally {
             synchronized(tokenCallbackLock) {
                 tokenCollector = null
@@ -201,6 +222,7 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
         withContext(Dispatchers.IO) {
             val engine = llama ?: return@withContext
             val ctx = contextId ?: return@withContext
+            Log.i(TAG, "Cancelling llama.cpp generation ctx=$ctx")
             runCatching { engine.stopCompletion(ctx) }
         }
     }
@@ -235,6 +257,7 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
         runtimeApi: LlamaRuntimeApi,
         params: Map<String, Any>,
     ): Map<String, Any> {
+        Log.i(TAG, "Initializing llama context runtime=$runtimeApi params=${params.keys}")
         val modelFd = params["model_fd"] as? Int
         val result: Any? = try {
             runCatching {
@@ -431,6 +454,7 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
     }
 
     private companion object {
+        const val TAG = "LlamaCppLocalEngine"
         const val JSON_OBJECT_GRAMMAR = "root ::= object\\nobject ::= \"{\" ws pair (ws \",\" ws pair)* ws \"}\"\\npair ::= string ws \":\" ws value\\nvalue ::= string | number | object | array | \"true\" | \"false\" | \"null\"\\narray ::= \"[\" ws (value (ws \",\" ws value)*)? ws \"]\"\\nstring ::= \"\\\"\" chars \"\\\"\"\\nchars ::= ([^\\\"\\\\]|\\\\[\\\"\\\\/bfnrt]|\\\\u[0-9a-fA-F]{4})*\\nnumber ::= -?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?\\nws ::= [ \\t\\n\\r]*"
     }
 }

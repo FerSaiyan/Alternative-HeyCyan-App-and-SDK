@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.localmodels.session
 
 import android.content.Context
+import android.util.Log
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.engine.EngineLoadConfig
@@ -96,6 +97,10 @@ object LocalChatSessionManager {
         settings: LocalGenerationSettings,
     ): LocalModelLoadDetails {
         return mutex.withLock {
+            Log.i(
+                TAG,
+                "ensureModelLoaded model=${model.displayName} runtime=${settings.modelRuntime} backend=${settings.computeBackend} context=${settings.contextSize} gpuLayers=${settings.gpuLayers}",
+            )
             val file = File(model.absolutePath)
             if (!file.exists()) {
                 LocalModelStorageRepository.removeInstalled(context, model.id)
@@ -176,9 +181,14 @@ object LocalChatSessionManager {
                     config = loadConfig,
                 )
             }.onFailure {
+                Log.e(TAG, "Failed to load local model ${model.displayName}", it)
                 state = LocalSessionState.Error(it.message ?: "Failed to load local model")
                 throw it
             }.onSuccess { loadResult ->
+                Log.i(
+                    TAG,
+                    "Local model loaded model=${model.displayName} activeBackend=${loadResult.activeBackend} fallback=${loadResult.fallbackReason}",
+                )
                 activeBackend = loadResult.activeBackend
                 activeGpuLayers = loadResult.activeGpuLayers
                 gpuFallbackMessage = loadResult.fallbackReason
@@ -239,6 +249,11 @@ object LocalChatSessionManager {
         val reqId = UUID.randomUUID().toString()
         val llm: LocalInferenceEngine
         val modelId: String
+
+        Log.i(
+            TAG,
+            "generateInternal requestId=$reqId priority=$requestPriority promptChars=${prompt.length} images=${imagePaths.size} hasAudio=${!audioPath.isNullOrBlank()} maxTokensOverride=${maxTokensOverride ?: -1}",
+        )
 
         if (requestPriority == LocalModelRequestPriority.HIGH) {
             mutex.withLock {
@@ -343,6 +358,7 @@ object LocalChatSessionManager {
                             it
                         },
                         onFailure = { err ->
+                            Log.e(TAG, "Local generation failed requestId=$reqId", err)
                             lastGenerationCappedByMaxTokens = false
                             state = LocalSessionState.Error(err.message ?: "Local generation failed")
                             throw err
@@ -383,11 +399,13 @@ object LocalChatSessionManager {
 
     suspend fun cancelActiveGeneration() {
         val llm = mutex.withLock { engine } ?: return
+        Log.i(TAG, "Cancelling active local generation")
         runCatching { llm.cancelGeneration() }
     }
 
     suspend fun unload() {
         mutex.withLock {
+            Log.i(TAG, "Unloading local chat session modelId=${loadedModelId.orEmpty()}")
             runCatching { engine?.unloadModel() }
             loadedModelId = null
             loadedModelPath = null
@@ -503,4 +521,6 @@ object LocalChatSessionManager {
         if (normalized.isBlank()) return false
         return normalized.contains("qwen3.5") || normalized.contains("qwen35")
     }
+
+    private const val TAG = "LocalChatSession"
 }

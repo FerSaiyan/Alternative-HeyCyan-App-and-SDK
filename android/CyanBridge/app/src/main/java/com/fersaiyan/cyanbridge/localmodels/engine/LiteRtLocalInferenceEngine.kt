@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.localmodels.engine
 
 import android.content.Context
+import android.util.Log
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.google.ai.edge.litertlm.Backend
@@ -32,12 +33,17 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     private var activeLoadResult: EngineLoadResult? = null
 
     override suspend fun loadModel(modelPath: String, config: EngineLoadConfig): EngineLoadResult {
+        Log.i(
+            TAG,
+            "loadModel path=$modelPath backend=${config.computeBackend} cpuThreads=${config.cpuThreads} context=${config.contextSize} gpuLayers=${config.gpuLayers}",
+        )
         val current = mutex.withLock {
             if (
                 this.modelPath == modelPath &&
                 engine != null &&
                 activeLoadConfig == config
             ) {
+                Log.i(TAG, "Reusing existing LiteRT engine for $modelPath")
                 return@withLock activeLoadResult ?: EngineLoadResult(
                     activeBackend = config.computeBackend,
                     activeGpuLayers = 0,
@@ -61,6 +67,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                         activeGpuLayers = config.gpuLayers.coerceAtLeast(0),
                     )
                 }.recoverCatching { gpuMediaErr ->
+                    Log.w(TAG, "LiteRT GPU media backend failed: ${compactError(gpuMediaErr)}", gpuMediaErr)
                     createInitializedEngine(
                         modelPath = modelPath,
                         backend = Backend.GPU(),
@@ -73,6 +80,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                         fallbackReason = "LiteRT GPU audio/vision backend mismatch (${compactError(gpuMediaErr)}). Continuing on GPU text backend.",
                     )
                 }.recoverCatching { gpuErr ->
+                    Log.w(TAG, "LiteRT GPU backend unavailable, falling back to CPU: ${compactError(gpuErr)}", gpuErr)
                     createInitializedEngine(
                         modelPath = modelPath,
                         backend = Backend.CPU(config.cpuThreads),
@@ -107,6 +115,10 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             this.modelPath = modelPath
             this.activeLoadConfig = config
             this.activeLoadResult = loadOutcome.second
+            Log.i(
+                TAG,
+                "LiteRT model ready path=$modelPath activeBackend=${loadOutcome.second.activeBackend} fallback=${loadOutcome.second.fallbackReason}",
+            )
             loadOutcome.second
         }
     }
@@ -118,6 +130,10 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         audioBackend: Backend?,
         maxNumTokens: Int,
     ): Engine {
+        Log.i(
+            TAG,
+            "Initializing LiteRT engine backend=${backend.javaClass.simpleName} vision=${visionBackend?.javaClass?.simpleName ?: "none"} audio=${audioBackend?.javaClass?.simpleName ?: "none"} maxTokens=$maxNumTokens",
+        )
         val config = EngineConfig(
             modelPath = modelPath,
             backend = backend,
@@ -131,6 +147,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
 
     override suspend fun unloadModel() {
         mutex.withLock {
+            Log.i(TAG, "Unloading LiteRT model ${modelPath.orEmpty()}")
             closeConversationLocked()
             closeEngineLocked()
             modelPath = null
@@ -140,6 +157,10 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     }
 
     override suspend fun generate(config: GenerationConfig, onToken: (String) -> Unit): GenerationResult {
+        Log.i(
+            TAG,
+            "generate promptChars=${config.prompt.length} images=${config.imagePaths.size} hasAudio=${!config.audioPath.isNullOrBlank()} maxTokens=${config.maxTokens}",
+        )
         val llm = mutex.withLock {
             engine ?: throw IllegalStateException("LiteRT engine is not initialized")
         }
@@ -179,6 +200,9 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 text = text,
                 tokenCount = tokenizeEstimate(text),
             )
+        } catch (t: Throwable) {
+            Log.e(TAG, "LiteRT generation failed", t)
+            throw t
         } finally {
             mutex.withLock {
                 if (activeConversation === conversation) {
@@ -191,6 +215,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     override suspend fun cancelGeneration() {
         val conv = mutex.withLock { activeConversation } ?: return
         withContext(Dispatchers.IO) {
+            Log.i(TAG, "Cancelling active LiteRT generation")
             runCatching { conv.cancelProcess() }
         }
     }
@@ -351,5 +376,9 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     private fun tokenizeEstimate(text: String): Int {
         val words = text.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.size
         return (words * 1.5).toInt().coerceAtLeast(1)
+    }
+
+    private companion object {
+        const val TAG = "LiteRtLocalEngine"
     }
 }

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.media.MediaPlayer
 import android.os.Bundle
+import android.util.Log
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -33,6 +34,7 @@ import com.fersaiyan.cyanbridge.ui.CommunityPluginsActivity
 import com.fersaiyan.cyanbridge.ui.MeetingRecordingBannerController
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.SettingsActivity
+import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.fersaiyan.cyanbridge.chat.ChatStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -429,6 +431,19 @@ class RecordingsListActivity : AppCompatActivity() {
                     }
 
                     is TranscriptionResult.Failure -> {
+                        Log.e("RecordingsListActivity", "Transcription failed: ${result.message}")
+                        if (engine == EngineChoice.GEMMA || DebugLogSupport.isLocalRuntimeIssue(result.message)) {
+                            DebugLogSupport.showSupportOptionsDialog(
+                                activity = this@RecordingsListActivity,
+                                title = "Local runtime issue",
+                                issueType = "Local runtime issue",
+                                description = "Transcription failed while using a local runtime. Sending logs can help diagnose LiteRT or GPU issues.",
+                                extraInfo = linkedMapOf(
+                                    "screen" to "recordings",
+                                    "transcription_engine" to engine.name,
+                                ),
+                            )
+                        }
                         Toast.makeText(
                             this@RecordingsListActivity,
                             "Transcription failed: ${result.message}",
@@ -437,6 +452,19 @@ class RecordingsListActivity : AppCompatActivity() {
                     }
                 }
             } catch (t: Throwable) {
+                Log.e("RecordingsListActivity", "Transcription threw an exception", t)
+                if (engine == EngineChoice.GEMMA || DebugLogSupport.isLocalRuntimeIssue(t.message, t)) {
+                    DebugLogSupport.showSupportOptionsDialog(
+                        activity = this@RecordingsListActivity,
+                        title = "Local runtime issue",
+                        issueType = "Local runtime issue",
+                        description = "Transcription crashed while using a local runtime. Sending logs can help diagnose LiteRT or GPU issues.",
+                        extraInfo = linkedMapOf(
+                            "screen" to "recordings",
+                            "transcription_engine" to engine.name,
+                        ),
+                    )
+                }
                 Toast.makeText(this@RecordingsListActivity, "Transcription failed: ${t.message}", Toast.LENGTH_LONG).show()
             } finally {
                 runCatching { progressUi.dialog.dismiss() }
