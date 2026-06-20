@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.agent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.util.Log
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.ImageView
@@ -34,6 +35,7 @@ import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepositor
 import com.fersaiyan.cyanbridge.localmodels.storage.InstalledLocalModel
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelFileUtils
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
+import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
@@ -843,7 +845,25 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                         if (err is CancellationException) {
                             tvWarmupResult.text = "Warm-up cancelled"
                         } else {
+                            Log.e("LocalModelsConfigureActivity", "Warm-up failed", err)
                             tvWarmupResult.text = "Warm-up failed: ${err.message ?: "unknown error"}"
+                            val shouldOfferLogs =
+                                selectedModelRuntimeFromUi() == LocalModelRuntime.LITERT ||
+                                    selectedComputeBackendFromUi() == LocalComputeBackend.GPU_EXPERIMENTAL ||
+                                    DebugLogSupport.isLocalRuntimeIssue(err.message, err)
+                            if (shouldOfferLogs) {
+                                DebugLogSupport.showSupportOptionsDialog(
+                                    activity = this@LocalModelsConfigureActivity,
+                                    title = "Local runtime issue",
+                                    issueType = "Local runtime issue",
+                                    description = "The local model warm-up failed. This can help diagnose LiteRT, Vulkan, or GPU initialization issues.",
+                                    extraInfo = linkedMapOf(
+                                        "screen" to "local_models_configure",
+                                        "selected_runtime" to selectedModelRuntimeFromUi().name,
+                                        "selected_backend" to selectedComputeBackendFromUi().name,
+                                    ),
+                                )
+                            }
                         }
                     },
                 )

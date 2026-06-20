@@ -5,6 +5,7 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.os.Build
+import android.util.Log
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelRequestPriority
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
@@ -30,9 +31,11 @@ class GemmaLiteRtTranscriptionProvider(
     override val name: String = "gemma_litert"
 
     override suspend fun transcribe(audioFile: File, mimeType: String, language: String?): String {
+        Log.i(TAG, "transcribe file=${audioFile.absolutePath} size=${audioFile.length()} mimeType=$mimeType")
         requireGemmaLiteRtSelected()
 
         val prepared = ensureLiteRtCompatibleAudio(audioFile)
+        Log.i(TAG, "preparedAudio=${prepared.absolutePath} size=${prepared.length()}")
 
         return try {
             val raw = localModelsProvider.streamChat(
@@ -48,10 +51,14 @@ class GemmaLiteRtTranscriptionProvider(
                 requestPriority = LocalModelRequestPriority.HIGH,
             ).trim()
             if (isLocalGenerationFallbackResponse(raw)) {
+                Log.w(TAG, "Gemma local transcription returned fallback response")
                 ""
             } else {
                 raw.sanitizeTranscript()
             }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Gemma LiteRT transcription failed", t)
+            throw t
         } finally {
             if (prepared.absolutePath != audioFile.absolutePath) {
                 runCatching { prepared.delete() }
@@ -93,6 +100,7 @@ class GemmaLiteRtTranscriptionProvider(
     }
 
     private fun transcodeToWavMono(input: File): File {
+        Log.i(TAG, "Transcoding ${input.absolutePath} to LiteRT-compatible WAV")
         val extractor = MediaExtractor()
         extractor.setDataSource(input.absolutePath)
 
@@ -212,6 +220,7 @@ class GemmaLiteRtTranscriptionProvider(
             channels = 1,
             bitsPerSample = 16,
         )
+        Log.i(TAG, "Created WAV file ${wavFile.absolutePath} size=${wavFile.length()}")
         return wavFile
     }
 
@@ -334,5 +343,6 @@ class GemmaLiteRtTranscriptionProvider(
 
     companion object {
         private val SUPPORTED_AUDIO_EXTENSIONS = setOf("wav", "mp3", "flac")
+        private const val TAG = "GemmaLiteRtTranscribe"
     }
 }

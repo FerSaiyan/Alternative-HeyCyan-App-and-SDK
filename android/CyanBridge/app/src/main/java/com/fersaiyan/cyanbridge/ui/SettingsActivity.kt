@@ -55,6 +55,7 @@ import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
 import com.fersaiyan.cyanbridge.privacy.LocalDataClearer
 import com.fersaiyan.cyanbridge.privacy.LocalDataBackupManager
 import com.fersaiyan.cyanbridge.privacy.PrivacyPrefs
+import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.fersaiyan.cyanbridge.ui.localagent.AppBlacklistActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
@@ -402,9 +403,9 @@ Rules:
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val logs = collectLogcat()
-                val deviceInfo = buildDeviceInfo()
-                val result = sendLogsToServer(
+                val logs = DebugLogSupport.collectLogcat()
+                val deviceInfo = DebugLogSupport.buildDeviceInfo(this@SettingsActivity)
+                val result = DebugLogSupport.sendLogsToServer(
                     context = this@SettingsActivity,
                     issueType = issueType,
                     description = description,
@@ -437,74 +438,6 @@ Rules:
                 }
             }
         }
-    }
-
-    private fun collectLogcat(): String {
-        return try {
-            val process = Runtime.getRuntime().exec(
-                "logcat -d -t 500 " +
-                    "-s AIHijack:* DataDownload:* DeviceNotify:* WifiP2pManagerSingleton:* " +
-                    "WifiP2pBroadcastReceiver:* BleIpBridge:* CliRelayRouter:* " +
-                    "LocalAgent:* ChatThreadActivity:* MainActivity:*"
-            )
-            process.inputStream.bufferedReader().use { it.readText() }.take(50000)
-        } catch (e: Exception) {
-            "Failed to collect logcat: ${e.message}"
-        }
-    }
-
-    private fun buildDeviceInfo(): String {
-        return buildString {
-            append("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n")
-            append("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})\n")
-            append("App: ${packageManager.getPackageInfo(packageName, 0).versionName}\n")
-            append("Provider: ${AutomationPrefs.getProviderType(this@SettingsActivity)}\n")
-            append("Relay: ${AiProviderPrefs.getRelayBaseUrl(this@SettingsActivity)}\n")
-        }
-    }
-
-    private suspend fun sendLogsToServer(
-        context: android.content.Context,
-        issueType: String,
-        description: String,
-        logs: String,
-        deviceInfo: String
-    ): Result<String> = runCatching {
-        val baseUrl = AiProviderPrefs.getRelayBaseUrl(context).trimEnd('/')
-        val url = java.net.URL("$baseUrl/logs/submit")
-        val token = com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs.getApiToken(context)
-
-        val payload = org.json.JSONObject()
-            .put("issue_type", issueType)
-            .put("description", description)
-            .put("logs", logs)
-            .put("device_info", deviceInfo)
-            .put("app_version", context.packageManager.getPackageInfo(context.packageName, 0).versionName)
-
-        val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = 15000
-            readTimeout = 30000
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            if (token.isNotBlank()) {
-                setRequestProperty("Authorization", "Bearer $token")
-            }
-        }
-
-        java.io.OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload.toString()) }
-        val code = conn.responseCode
-        val body = if (code in 200..299) {
-            java.io.BufferedReader(java.io.InputStreamReader(conn.inputStream)).use { it.readText() }
-        } else {
-            java.io.BufferedReader(java.io.InputStreamReader(conn.errorStream ?: conn.inputStream)).use { it.readText() }
-        }
-        conn.disconnect()
-
-        if (code !in 200..299) {
-            throw IllegalStateException("HTTP $code: ${body.take(200)}")
-        }
-        org.json.JSONObject(body).optString("log_id", "submitted")
     }
 
     private fun refreshProSubscriptionBanner() {

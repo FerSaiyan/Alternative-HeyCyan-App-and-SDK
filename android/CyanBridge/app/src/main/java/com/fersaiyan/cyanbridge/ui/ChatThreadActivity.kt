@@ -8,6 +8,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.webkit.MimeTypeMap
 import androidx.core.content.ContextCompat
@@ -55,6 +56,7 @@ import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.ui.chat.ChatAppearancePrefs
 import com.fersaiyan.cyanbridge.ui.chat.ChatMessageAdapter
 import com.fersaiyan.cyanbridge.ui.chat.ThinkingIndicatorController
+import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1206,6 +1208,20 @@ class ChatThreadActivity : AppCompatActivity() {
                     android.widget.Toast.LENGTH_SHORT,
                 ).show()
             } catch (t: Throwable) {
+                Log.e("ChatThreadActivity", "Assistant generation failed", t)
+                if (useLocalStreaming && DebugLogSupport.isLocalRuntimeIssue(t.message, t)) {
+                    DebugLogSupport.showSupportOptionsDialog(
+                        activity = this@ChatThreadActivity,
+                        title = "Local runtime issue",
+                        issueType = "Local runtime issue",
+                        description = "CyanBridge hit a local model runtime error while generating this reply.",
+                        extraInfo = linkedMapOf(
+                            "screen" to "chat_thread",
+                            "image_attachments" to imagePaths.size.toString(),
+                            "has_audio_attachment" to (!audioPath.isNullOrBlank()).toString(),
+                        ),
+                    )
+                }
                 showRelayDownToastIfNeeded(t.message)
                 android.widget.Toast.makeText(
                     this@ChatThreadActivity,
