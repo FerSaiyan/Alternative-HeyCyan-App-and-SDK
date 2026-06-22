@@ -222,6 +222,14 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         handler.removeCallbacks(discoveryTimeOut)
     }
 
+    fun restartPeerDiscovery() {
+        Log.d(TAG, "restartPeerDiscovery: stopping current discovery and reinitializing")
+        handler.removeCallbacks(discoveryTimeOut)
+        handler.removeCallbacks(connectTimeOut)
+        initP2P()
+        startPeerDiscovery()
+    }
+
     fun setConnect(connected: Boolean) {
         connectionState.setConnected(connected)
     }

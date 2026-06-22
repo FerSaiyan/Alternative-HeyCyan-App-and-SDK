@@ -261,6 +261,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var downloadInitialPhaseCompleted = false
     private var downloadSupportDialogShown = false
     private var downloadStartedAtMs: Long = 0L
+    private var noMatchPeerCount = 0
+    private var downloadP2pRestartCount = 0
+    private val maxP2pRestarts = 3
+    private val seenP2pPeers = mutableSetOf<String>()
 
     // Guard against concurrent/duplicate image queries
     private val imageQueryInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -2538,34 +2542,75 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun isLikelyGlassesPeer(device: WifiP2pDevice, bleMacNoColon: String?): Boolean {
+    private fun likelyGlassesPeerStrength(device: WifiP2pDevice, bleMacNoColon: String?): Int {
         val name = (device.deviceName ?: "").uppercase(Locale.US)
-        if (name.isBlank()) return false
+        if (name.isBlank()) return -1
 
         if (!bleMacNoColon.isNullOrBlank() && name.contains(bleMacNoColon)) {
-            return true
+            return 100
         }
 
-        if (name.startsWith("AIM") || name.contains("AIMB-") || name.contains("GLASS")) {
-            return true
+        if (
+            name.contains("HEYCYAN") ||
+            name.contains("CYAN") ||
+            name.startsWith("O_") ||
+            name.startsWith("Q_")
+        ) {
+            return 80
         }
 
-        // Many glasses broadcast names include a trailing 12-hex device token.
-        return Regex("[A-F0-9]{12}").containsMatchIn(name)
+        // Known glasses model prefixes/brands from glasses_models.txt
+        val glassesPrefixes = arrayOf(
+            "AIM", "CR-", "SG", "GL-", "ST-AG", "BW-AG", "ABG-", "RG-",
+            "ZIC-GLA", "QK-SG", "TF-GL", "HY-G", "NLB", "DM-", "ES-",
+            "GS", "BV", "XC", "CG", "WL-", "ID-", "AZBV", "PW-", "GV3",
+            "AX01", "ER0S", "VEU", "FIRELENS", "VIBELENS", "AIWR", "ROLBATCH",
+            "DPVR", "VIZO", "SMARTVIEW", "KSIX", "VISO", "MD02", "WAGA",
+            "BROOKLYN", "KATLOS", "FASTRACK", "HUGUR", "NILOX", "VEYRA",
+            "AHENOD", "BOMANLON", "TRUSMI", "FABRIKA", "MICROWEAR",
+            "WANDERTH", "PANGBOLIN", "SEEVA", "ASTR", "LENYES", "BLISBOND",
+            "MEEEGOU", "NEOSEE", "SOBAST"
+        )
+
+        if (glassesPrefixes.any { name.startsWith(it) || name.contains(it) }) {
+            return 70
+        }
+
+        if (name.contains("AIMB-") || name.contains("GLASS")) {
+            return 70
+        }
+
+        // Weak fallback only when nothing else looks like the glasses.
+        if (Regex("[A-F0-9]{12}").containsMatchIn(name)) {
+            return 30
+        }
+
+        return -1
     }
 
     private fun selectBestLikelyGlassesPeer(peers: Collection<WifiP2pDevice>): WifiP2pDevice? {
         if (peers.isEmpty()) return null
 
         val bleMacNoColon = currentBleMacNoColonUpper()
-        val byBleMac = peers.firstOrNull { p ->
-            val p2pName = (p.deviceName ?: "").uppercase(Locale.US)
-            !bleMacNoColon.isNullOrBlank() && p2pName.contains(bleMacNoColon)
-        }
-        if (byBleMac != null) return byBleMac
+        val scored = peers
+            .map { peer -> peer to likelyGlassesPeerStrength(peer, bleMacNoColon) }
+            .filter { (_, score) -> score >= 0 }
+        if (scored.isEmpty()) return null
 
-        val likely = peers.filter { isLikelyGlassesPeer(it, bleMacNoColon) }
-        return likely.firstOrNull()
+        val bestScore = scored.maxOf { it.second }
+        val bestPeers = scored.filter { it.second == bestScore }.map { it.first }
+
+        // Do not guess among multiple weak hex-only matches; keep waiting for a stronger signal.
+        if (bestScore <= 30 && bestPeers.size > 1) {
+            Log.i(
+                "DataDownload",
+                "Ambiguous weak glasses peer candidates; waiting for a stronger match: ${bestPeers.map { "${it.deviceName}/${it.deviceAddress}" }}"
+            )
+            return null
+        }
+
+        return bestPeers.firstOrNull { it.status == WifiP2pDevice.AVAILABLE }
+            ?: bestPeers.firstOrNull()
     }
 
     private fun startDataDownload() {
@@ -2665,14 +2710,48 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                 val target = selectBestLikelyGlassesPeer(peers)
                 if (target == null) {
+                    noMatchPeerCount++
+                    val pairedName = try { DeviceManager.getInstance().deviceName } catch (_: Exception) { "?" }
+                    val pairedMac = try { DeviceManager.getInstance().deviceAddress } catch (_: Exception) { "?" }
+                    peers.forEach { seenP2pPeers.add("${it.deviceName}/${it.deviceAddress}") }
                     Log.i(
                         "DataDownload",
-                        "No likely glasses peer yet; ignoring discovered peers: ${peers.map { "${it.deviceName}/${it.deviceAddress}" }}"
+                        "No likely glasses peer yet (x$noMatchPeerCount); paired=$pairedName/$pairedMac; ignoring discovered peers: ${peers.map { "${it.deviceName}/${it.deviceAddress}" }}"
                     )
                     setTransferDetail("Waiting for glasses P2P peer...")
+
+                    // Restart discovery + re-send BLE transfer command after 2 consecutive
+                    // no-match batches — the glasses may have missed the initial command.
+                    if (noMatchPeerCount >= 2) {
+                        noMatchPeerCount = 0
+                        downloadP2pRestartCount++
+                        Log.i("DataDownload", "P2P restart attempt $downloadP2pRestartCount/$maxP2pRestarts")
+                        setTransferDetail("Retrying P2P discovery ($downloadP2pRestartCount/$maxP2pRestarts)...")
+
+                        if (downloadP2pRestartCount >= maxP2pRestarts) {
+                            Log.w("DataDownload", "P2P sync failed after $maxP2pRestarts restart attempts")
+                            finishDownloadInitialPhase("retries exhausted")
+                            showP2pPeerConflictDialog(
+                                seenPeers = seenP2pPeers.toList(),
+                                pairedDevice = "$pairedName/$pairedMac",
+                            )
+                            return
+                        }
+
+                        downloadWifiP2pManager?.restartPeerDiscovery()
+                        LargeDataHandler.getInstance().glassesControl(
+                            byteArrayOf(0x02, 0x01, 0x04)
+                        ) { _, resp ->
+                            Log.i(
+                                "DataDownload",
+                                "glassesControl[0x02,0x01,0x04] retry -> dataType=${resp.dataType}, error=${resp.errorCode}"
+                            )
+                        }
+                    }
                     return
                 }
 
+                noMatchPeerCount = 0
                 Log.i(
                     "DataDownload",
                     "Connecting to peer: ${target.deviceName} / ${target.deviceAddress}"
@@ -2859,6 +2938,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         downloadInitialPhaseCompleted = false
         downloadSupportDialogShown = false
         downloadStartedAtMs = System.currentTimeMillis()
+        noMatchPeerCount = 0
+        downloadP2pRestartCount = 0
+        seenP2pPeers.clear()
     }
 
     private fun maybeShowP2pSyncLogHelp(
@@ -2887,6 +2969,55 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
     }
     
+    private fun showP2pPeerConflictDialog(
+        seenPeers: List<String>,
+        pairedDevice: String,
+    ) {
+        if (downloadSupportDialogShown || isFinishing || isDestroyed) return
+        downloadSupportDialogShown = true
+
+        val reason = buildString {
+            appendLine("CyanBridge found other Wi‑Fi Direct devices but could not find the glasses ($pairedDevice) among them.")
+            appendLine()
+            appendLine("To fix this, please turn OFF the following devices or move away from them, then tap Try Again:")
+            appendLine()
+            for (peer in seenPeers) {
+                appendLine("  • $peer")
+            }
+            appendLine()
+            appendLine("If the problem persists, send the logs to the CyanBridge server.")
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("P2P sync failed")
+            .setMessage(reason)
+            .setNegativeButton("Later", null)
+            .setNeutralButton("Send to server") { _, _ ->
+                DebugLogSupport.showSupportOptionsDialog(
+                    activity = this,
+                    title = "P2P sync failed",
+                    issueType = "P2P/WiFi sync issue",
+                    description = "P2P sync could not find glasses after $maxP2pRestarts attempts. Bluetooth is connected but glasses did not appear as a Wi‑Fi Direct peer. Seen P2P peers: ${seenPeers.joinToString(", ")}",
+                    extraInfo = linkedMapOf(
+                        "transfer_detail" to binding.tvTransferDetail.text.toString(),
+                        "transfer_counts" to binding.tvTransferCounts.text.toString(),
+                        "download_ble_ip" to (downloadBleIp ?: ""),
+                        "download_wifi_ip" to (downloadWifiIp ?: ""),
+                        "download_http_ip" to (downloadResolvedHttpIp ?: ""),
+                        "download_p2p_connected" to downloadP2pConnected.toString(),
+                        "download_in_progress" to downloadInProgress.toString(),
+                        "download_phone_is_group_owner" to downloadPhoneIsGroupOwner.toString(),
+                        "seen_p2p_peers" to seenPeers.joinToString(", "),
+                    ),
+                )
+            }
+            .setPositiveButton("Try Again") { _, _ ->
+                downloadSupportDialogShown = false
+                startDataDownload()
+            }
+            .show()
+    }
+
     private fun getDeviceIpFromBLE(): String? {
         // Prefer IP detected from BLE notifications, fall back to the
         // known sample IP if we have not seen one yet.
@@ -4399,7 +4530,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun maybeResetP2pAfterError255(source: String) {
         val now = System.currentTimeMillis()
-        val haveDeviceIp = !downloadBleIp.isNullOrBlank() || !bleIpBridge.ip.value.isNullOrBlank()
 
         // Only attempt P2P resets when we're actually in (or attempting) a download session.
         // Otherwise these resets can interfere with normal camera/recording usage.
@@ -4409,10 +4539,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        // On some devices (notably Samsung), sending the reset command while we are actively
-        // trying to talk to the glasses can drop the P2P link and kill the HTTP session.
-        if (downloadInProgress || (downloadAttemptJob?.isActive == true && haveDeviceIp)) {
-            Log.i("DataDownload", "Suppressing resetDeviceP2p on error=255 (source=$source) during active download/resolve")
+        // Once the media list has been resolved, suppress resets because they can kill an
+        // otherwise healthy HTTP transfer on some devices. During the initial unresolved phase,
+        // the vendor app recovers by resetting P2P and continuing to wait for the glasses peer.
+        if (downloadInProgress || downloadInitialPhaseCompleted || !downloadResolvedHttpIp.isNullOrBlank()) {
+            Log.i("DataDownload", "Suppressing resetDeviceP2p on error=255 (source=$source) after HTTP/media resolution")
             return
         }
 
