@@ -265,6 +265,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var downloadP2pRestartCount = 0
     private val maxP2pRestarts = 3
     private val seenP2pPeers = mutableSetOf<String>()
+    private var lastPeerSetHash: Int = 0
 
     // Guard against concurrent/duplicate image queries
     private val imageQueryInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -2702,6 +2703,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 Log.i("DataDownload", "Found ${peers.size} P2P devices")
                 if (peers.isEmpty()) return
 
+                // Debounce: Android often broadcasts PEERS_CHANGED multiple times
+                // for the same peer list. Only process when the set actually changes.
+                val currentHash = peers.map { it.deviceAddress }.toSet().hashCode()
+                if (currentHash == lastPeerSetHash) return
+                lastPeerSetHash = currentHash
+
                 // Guard against redundant connection attempts (official app uses isP2PConnecting).
                 if (downloadWifiP2pManager?.isConnecting() == true || downloadWifiP2pManager?.isConnected() == true) {
                     Log.i("DataDownload", "Already connecting/connected, skipping peer re-evaluation")
@@ -2739,14 +2746,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         }
 
                         downloadWifiP2pManager?.restartPeerDiscovery()
-                        LargeDataHandler.getInstance().glassesControl(
-                            byteArrayOf(0x02, 0x01, 0x04)
-                        ) { _, resp ->
-                            Log.i(
-                                "DataDownload",
-                                "glassesControl[0x02,0x01,0x04] retry -> dataType=${resp.dataType}, error=${resp.errorCode}"
-                            )
-                        }
+                        sendTransferModeCommandWithRetry(attempt = 1, maxAttempts = 2, delayMs = 1500L)
                     }
                     return
                 }
@@ -2833,13 +2833,40 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         // Ask the glasses (over BLE) to bring up WiFi/P2P and report their IP,
         // mirroring the official app's importAlbum() flow.
+        sendTransferModeCommandWithRetry()
+    }
+
+    /**
+     * Send the transfer-mode command [0x02,0x01,0x04] with retry on error=-1.
+     * Many logs show the glasses refusing the first attempt. A reset command
+     * [0x02,0x01,0x0F] is sent before each retry to clear stale state.
+     */
+    private fun sendTransferModeCommandWithRetry(
+        attempt: Int = 1,
+        maxAttempts: Int = 3,
+        delayMs: Long = 2000L,
+    ) {
         LargeDataHandler.getInstance().glassesControl(
             byteArrayOf(0x02, 0x01, 0x04)
         ) { _, resp ->
             Log.i(
                 "DataDownload",
-                "glassesControl[0x02,0x01,0x04] -> dataType=${resp.dataType}, error=${resp.errorCode}"
+                "glassesControl[0x02,0x01,0x04] (attempt $attempt/$maxAttempts) -> dataType=${resp.dataType}, error=${resp.errorCode}"
             )
+            if (resp.errorCode == -1 && attempt < maxAttempts) {
+                Log.w("DataDownload", "Transfer mode command refused (error=-1); retrying after ${delayMs}ms")
+                CoroutineScope(Dispatchers.IO).launch {
+                    delay(delayMs)
+                    // Reset glasses P2P state before retrying
+                    LargeDataHandler.getInstance().glassesControl(
+                        byteArrayOf(0x02, 0x01, 0x0F)
+                    ) { _, resetResp ->
+                        Log.d("DataDownload", "Pre-retry reset [0x02,0x01,0x0F] -> error=${resetResp.errorCode}")
+                    }
+                    delay(500)
+                    sendTransferModeCommandWithRetry(attempt + 1, maxAttempts, delayMs)
+                }
+            }
         }
     }
 
@@ -2941,6 +2968,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         noMatchPeerCount = 0
         downloadP2pRestartCount = 0
         seenP2pPeers.clear()
+        lastPeerSetHash = 0
     }
 
     private fun maybeShowP2pSyncLogHelp(
@@ -2979,7 +3007,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val reason = buildString {
             appendLine("CyanBridge found other Wi‑Fi Direct devices but could not find the glasses ($pairedDevice) among them.")
             appendLine()
-            appendLine("To fix this, please turn OFF the following devices or move away from them, then tap Try Again:")
+            appendLine("IMPORTANT: If the official HeyCyan app is installed, force-stop it now (Settings → Apps → HeyCyan → Force Stop). It may be holding the P2P connection and preventing CyanBridge from discovering the glasses.")
+            appendLine()
+            appendLine("Also try turning OFF the following devices or moving away from them, then tap Try Again:")
             appendLine()
             for (peer in seenPeers) {
                 appendLine("  • $peer")
@@ -4100,6 +4130,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return ok
     }
 
+    /**
+     * Probe media.config with retry. The glasses' HTTP server may not be
+     * immediately ready after P2P connects — it can take a few seconds
+     * for the firmware to start serving.
+     */
+    private suspend fun mediaConfigOkWithRetry(
+        ip: String,
+        timeoutMs: Int = 2000,
+        maxRetries: Int = 3,
+        delayMs: Long = 2000L,
+    ): Boolean {
+        for (attempt in 1..maxRetries) {
+            if (mediaConfigOk(ip, timeoutMs, logFailures = (attempt == maxRetries))) {
+                return true
+            }
+            if (attempt < maxRetries) {
+                Log.i("DataDownload", "media.config probe attempt $attempt/$maxRetries failed for $ip, retrying in ${delayMs}ms")
+                delay(delayMs)
+            }
+        }
+        return false
+    }
+
     private suspend fun discoverGlassesIpByScan(prefix: String = "192.168.49."): String? {
         // Fast scan for an HTTP server on port 80 in the P2P subnet.
         // Concurrency is limited to avoid overwhelming the device/network stack.
@@ -4259,8 +4312,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         // The phone typically has nothing on port 80.
                         continue
                     }
-                    val shouldLog = candidate == downloadBleIp
-                    if (mediaConfigOk(candidate, 2000, logFailures = shouldLog)) {
+                    val isBleCandidate = candidate == downloadBleIp
+                    // Use retry logic for the BLE-reported IP — the glasses' HTTP
+                    // server may need a few seconds to start after P2P connects.
+                    val ok = if (isBleCandidate) {
+                        mediaConfigOkWithRetry(candidate, timeoutMs = 2000, maxRetries = 3, delayMs = 2000L)
+                    } else {
+                        mediaConfigOk(candidate, 2000, logFailures = false)
+                    }
+                    if (ok) {
                         downloadResolvedHttpIp = candidate
                         downloadInProgress = true
                         Log.i("DataDownload", "Resolved glasses HTTP IP via candidate list: $candidate")
@@ -4296,8 +4356,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
 
             withContext(Dispatchers.Main) {
+                val hint = " If the official HeyCyan app is installed, force-stop it (Settings → Apps → HeyCyan → Force Stop) and try again."
                 showDownloadError(
-                    "Could not resolve glasses HTTP IP (bleIp=$downloadBleIp, groupOwnerIp=$downloadWifiIp, p2p=$downloadP2pConnected)",
+                    "Could not resolve glasses HTTP IP (bleIp=$downloadBleIp, groupOwnerIp=$downloadWifiIp, p2p=$downloadP2pConnected).$hint",
                     cleanup = true
                 )
             }

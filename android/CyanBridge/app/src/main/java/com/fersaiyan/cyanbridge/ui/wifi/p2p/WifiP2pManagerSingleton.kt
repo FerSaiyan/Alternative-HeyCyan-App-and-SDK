@@ -227,7 +227,10 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         handler.removeCallbacks(discoveryTimeOut)
         handler.removeCallbacks(connectTimeOut)
         initP2P()
-        startPeerDiscovery()
+        // Stabilization delay: give the P2P stack time to settle after reset
+        // before starting discovery. Prevents "Connect request failed: 2" when
+        // the glasses peer appears immediately after restart.
+        handler.postDelayed({ startPeerDiscovery() }, 1500L)
     }
 
     fun setConnect(connected: Boolean) {
