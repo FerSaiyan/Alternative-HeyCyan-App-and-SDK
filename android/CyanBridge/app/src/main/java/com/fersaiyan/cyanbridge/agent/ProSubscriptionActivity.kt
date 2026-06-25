@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
+import android.util.Patterns
 import android.view.View
 import android.widget.EditText
 import android.widget.RadioButton
@@ -13,6 +14,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.android.billingclient.api.BillingClient
+import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import com.google.android.material.button.MaterialButton
 import com.fersaiyan.cyanbridge.BuildConfig
@@ -36,7 +38,9 @@ class ProSubscriptionActivity : AppCompatActivity() {
     private lateinit var btnSubscribeWeb: MaterialButton
     private lateinit var cardUnsubscribe: View
     private lateinit var btnUnsubscribe: MaterialButton
+    private lateinit var btnSubscribe: MaterialButton
     private var billing: PlayBillingManager? = null
+    private var playProducts: Map<String, ProductDetails> = emptyMap()
     private var lastBillingError: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,7 +58,7 @@ class ProSubscriptionActivity : AppCompatActivity() {
         cardUnsubscribe = findViewById(R.id.card_unsubscribe)
         btnUnsubscribe = findViewById(R.id.btn_unsubscribe)
 
-        val btnSubscribe: MaterialButton = findViewById(R.id.btn_subscribe)
+        btnSubscribe = findViewById(R.id.btn_subscribe)
         val btnCancel: MaterialButton = findViewById(R.id.btn_cancel)
         val btnDonate: MaterialButton = findViewById(R.id.btn_donate)
 
@@ -86,33 +90,7 @@ class ProSubscriptionActivity : AppCompatActivity() {
         }
 
         btnSubscribe.setOnClickListener {
-            val selectedPlan = selectedPlan()
-            if (selectedPlan == "free_trial") {
-                activateFreeTrial()
-                return@setOnClickListener
-            }
-            if (SubscriptionCheckoutPolicy.isWebCheckoutEnabled(this)) {
-                Toast.makeText(
-                    this,
-                    "Opening web checkout...",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                launchWebCheckout(selectedPlan)
-            } else {
-                val detail = buildString {
-                    append("Web checkout is not configured. Contact support.")
-                    if (lastBillingError.isNotBlank()) {
-                        append(" (billing: ")
-                        append(lastBillingError)
-                        append(")")
-                    }
-                }
-                Toast.makeText(
-                    this,
-                    detail,
-                    Toast.LENGTH_LONG,
-                ).show()
-            }
+            startSubscriptionFlow(selectedPlan())
         }
 
         btnSubscribeWeb.setOnClickListener {
@@ -168,6 +146,18 @@ class ProSubscriptionActivity : AppCompatActivity() {
 
         billing?.start {
             refreshPurchaseStatusFromStore()
+            refreshPlayProducts()
+        }
+    }
+
+    private fun refreshPlayProducts() {
+        val productIds = PlaySubscriptionCatalog.allProductIds()
+        if (productIds.isEmpty()) return
+
+        billing?.querySubscriptionProducts(productIds) { details ->
+            runOnUiThread {
+                playProducts = details
+            }
         }
     }
 
@@ -289,30 +279,107 @@ class ProSubscriptionActivity : AppCompatActivity() {
     private fun promptForCheckoutEmail(plan: String) {
         val input = EditText(this).apply {
             hint = "you@example.com"
-            inputType = InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setText(ProSubscriptionServerPrefs.getAccountEmail(this@ProSubscriptionActivity))
         }
 
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Account email")
-            .setMessage("Use the same email as your previous purchase to restore subscription without being charged again.")
+            .setMessage("Use the same email as your previous purchase so we can restore an active subscription instead of charging again.")
             .setView(input)
-            .setPositiveButton("Continue") { _, _ ->
-                val email = input.text?.toString()?.trim().orEmpty()
-                if (email.isNotBlank()) {
-                    ProSubscriptionServerPrefs.setAccountEmail(this, email)
+            .setPositiveButton("Continue", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val rawEmail = input.text?.toString().orEmpty()
+                val email = ProSubscriptionServerPrefs.normalizeAccountEmail(rawEmail)
+                if (!ProSubscriptionServerPrefs.isUsableAccountEmail(email) || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    input.error = "Enter a valid email address"
+                    return@setOnClickListener
                 }
+                ProSubscriptionServerPrefs.setAccountEmail(this, email)
+                dialog.dismiss()
                 launchWebCheckoutWithEmail(plan, email)
             }
-            .setNegativeButton("Skip") { _, _ ->
-                launchWebCheckoutWithEmail(plan, "")
+        }
+
+        dialog.show()
+    }
+
+    private fun startSubscriptionFlow(plan: String) {
+        if (plan == "free_trial") {
+            activateFreeTrial()
+            return
+        }
+
+        val playProduct = playProductForPlan(plan)
+        if (playProduct != null) {
+            billing?.launchSubscriptionPurchase(this, playProduct)
+            return
+        }
+
+        if (SubscriptionCheckoutPolicy.isWebCheckoutEnabled(this)) {
+            val fallbackMessage = if (plan == "cheap") {
+                "Cheap plan is available on the website checkout only."
+            } else {
+                "Google Play checkout is unavailable for this plan. Opening website checkout..."
             }
-            .show()
+            Toast.makeText(this, fallbackMessage, Toast.LENGTH_SHORT).show()
+            launchWebCheckout(plan)
+            return
+        }
+
+        val detail = buildString {
+            append("No checkout is available for this plan right now.")
+            if (lastBillingError.isNotBlank()) {
+                append(" (billing: ")
+                append(lastBillingError)
+                append(")")
+            }
+        }
+        Toast.makeText(this, detail, Toast.LENGTH_LONG).show()
+    }
+
+    private fun playProductForPlan(plan: String): ProductDetails? {
+        val productId = PlaySubscriptionCatalog.productIdForPlan(plan)
+        if (productId.isBlank()) return null
+        return playProducts[productId]
+    }
+
+    private fun openPlaySubscriptionManagement() {
+        val productId = PlaySubscriptionCatalog.productIdForPlan(ProSubscriptionPrefs.getPlan(this))
+
+        val uri = Uri.parse("https://play.google.com/store/account/subscriptions").buildUpon().apply {
+            appendQueryParameter("package", packageName)
+            if (productId.isNotBlank()) {
+                appendQueryParameter("sku", productId)
+            }
+        }.build()
+
+        runCatching {
+            val intent = Intent(Intent.ACTION_VIEW, uri)
+            if (intent.resolveActivityInfo(packageManager, 0) == null) {
+                Toast.makeText(this, "No app found to manage the Google Play subscription.", Toast.LENGTH_SHORT).show()
+                return
+            }
+            startActivity(intent)
+        }.onFailure {
+            Toast.makeText(this, "Unable to open Google Play subscription management: ${it.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun launchWebCheckoutWithEmail(plan: String, emailHint: String) {
         val baseUrl = SubscriptionCheckoutPolicy.resolveWebCheckoutUrl(this)
         if (baseUrl.isBlank()) {
             Toast.makeText(this, "Web checkout is not configured yet.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val parsedBase = runCatching { Uri.parse(baseUrl) }.getOrNull()
+        if (parsedBase == null || !parsedBase.isAbsolute || parsedBase.scheme.isNullOrBlank()) {
+            Toast.makeText(this, "Invalid checkout URL: $baseUrl", Toast.LENGTH_LONG).show()
             return
         }
 
@@ -340,10 +407,16 @@ class ProSubscriptionActivity : AppCompatActivity() {
             }
             .build()
 
+        val intent = Intent(Intent.ACTION_VIEW, target)
+        if (intent.resolveActivityInfo(packageManager, 0) == null) {
+            Toast.makeText(this, "No browser found to open checkout.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, target))
+            startActivity(intent)
         }.onFailure {
-            Toast.makeText(this, "Unable to open website checkout", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Unable to open website checkout: ${it.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -372,13 +445,18 @@ class ProSubscriptionActivity : AppCompatActivity() {
     private fun handlePurchases(purchases: List<Purchase>) {
         val active = purchases.firstOrNull { p ->
             p.purchaseState == Purchase.PurchaseState.PURCHASED &&
-                p.products.any { it == BuildConfig.PRO_MONTHLY_SKU || it == BuildConfig.PRO_YEARLY_SKU }
+                p.products.any { PlaySubscriptionCatalog.planForProductId(it).isNotBlank() }
         }
 
         if (active != null) {
             billing?.acknowledgeIfNeeded(active)
-            val plan = if (active.products.contains(BuildConfig.PRO_YEARLY_SKU)) "max" else "standard"
-            applyLocalSubscription(plan, active.purchaseToken, source = "play_billing")
+            val plan = active.products
+                .firstNotNullOfOrNull { productId ->
+                    PlaySubscriptionCatalog.planForProductId(productId).ifBlank { null }
+                }
+            if (plan != null) {
+                applyLocalSubscription(plan, active.purchaseToken, source = "play_billing")
+            }
 
             // Optional server verification path (if endpoint is configured).
             thread {
@@ -503,6 +581,10 @@ class ProSubscriptionActivity : AppCompatActivity() {
     }
 
     private fun showUnsubscribeConfirmation() {
+        if (ProSubscriptionPrefs.getProvider(this) == "play_billing") {
+            openPlaySubscriptionManagement()
+            return
+        }
         AlertDialog.Builder(this)
             .setTitle("Cancel Subscription?")
             .setMessage("Are you sure you want to cancel your subscription? You'll keep access until the end of your current billing period.")
@@ -515,16 +597,32 @@ class ProSubscriptionActivity : AppCompatActivity() {
 
     private fun performUnsubscribe() {
         Toast.makeText(this, "Opening subscription management...", Toast.LENGTH_SHORT).show()
-        try {
-            val apiToken = ProSubscriptionServerPrefs.getApiToken(this).trim()
-            val manageUrl = if (apiToken.isNotBlank()) {
-                "https://carelens-wine.vercel.app/web-subscribe/cancel?api_token=$apiToken"
-            } else {
-                "https://carelens-wine.vercel.app/web-subscribe/cancel"
+        thread {
+            val apiToken = runCatching {
+                ProSubscriptionServerPrefs.getApiToken(this).trim().ifBlank {
+                    ProSubscriptionRelayClient.fetchAccountInfo(this).getOrThrow().apiToken.trim()
+                }
+            }.getOrDefault("")
+
+            val relayBase = AiProviderPrefs.getRelayBaseUrl(this).trim().trimEnd('/')
+            val manageUrl = Uri.parse("$relayBase/web-subscribe/cancel").buildUpon().apply {
+                if (apiToken.isNotBlank()) {
+                    appendQueryParameter("api_token", apiToken)
+                }
+            }.build().toString()
+
+            runOnUiThread {
+                runCatching {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(manageUrl))
+                    if (intent.resolveActivityInfo(packageManager, 0) == null) {
+                        Toast.makeText(this, "No browser found to manage the subscription.", Toast.LENGTH_SHORT).show()
+                        return@runCatching
+                    }
+                    startActivity(intent)
+                }.onFailure {
+                    Toast.makeText(this, "Unable to open subscription management: ${it.message}", Toast.LENGTH_LONG).show()
+                }
             }
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(manageUrl)))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Unable to open subscription management", Toast.LENGTH_SHORT).show()
         }
     }
 

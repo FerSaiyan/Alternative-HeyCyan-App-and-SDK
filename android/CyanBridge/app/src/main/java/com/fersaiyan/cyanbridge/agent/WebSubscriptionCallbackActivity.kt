@@ -9,7 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
  * Handles browser return for web checkout and maps callback params to local entitlement state.
  * Expected query params (all optional, backend-defined):
  * - status: success|cancel|error
- * - plan: monthly|yearly
+ * - plan: free_trial|cheap|standard|max
  * - token: entitlement/session token
  * - expires_at_ms: epoch millis
  * - message: short user-facing message
@@ -20,6 +20,24 @@ class WebSubscriptionCallbackActivity : AppCompatActivity() {
         val success: Boolean,
         val message: String,
     )
+
+    private fun normalizePlan(rawPlan: String): String {
+        return when (rawPlan.trim().lowercase()) {
+            "free_trial", "trial", "free" -> "free_trial"
+            "cheap", "budget", "low" -> "cheap"
+            "max", "premium", "yearly" -> "max"
+            "standard", "monthly" -> "standard"
+            else -> "standard"
+        }
+    }
+
+    private fun fallbackExpiryMs(plan: String, now: Long): Long {
+        return when (plan) {
+            "max" -> now + 365L * 24L * 60L * 60L * 1000L
+            "free_trial" -> now + 30L * 24L * 60L * 60L * 1000L
+            else -> now + 31L * 24L * 60L * 60L * 1000L
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,7 +63,7 @@ class WebSubscriptionCallbackActivity : AppCompatActivity() {
         if (data == null) return CallbackResult(success = false, message = "Subscription callback missing data")
 
         val status = data.getQueryParameter("status")?.trim()?.lowercase().orEmpty()
-        val plan = data.getQueryParameter("plan")?.trim()?.lowercase().orEmpty().ifBlank { "monthly" }
+        val plan = normalizePlan(data.getQueryParameter("plan").orEmpty())
         val token = data.getQueryParameter("token")?.trim().orEmpty()
         val apiToken = data.getQueryParameter("api_token")?.trim().orEmpty()
         val email = data.getQueryParameter("email")?.trim().orEmpty()
@@ -61,16 +79,12 @@ class WebSubscriptionCallbackActivity : AppCompatActivity() {
 
         if (status == "success") {
             val now = System.currentTimeMillis()
-            val fallback = if (plan == "yearly") {
-                now + 365L * 24L * 60L * 60L * 1000L
-            } else {
-                now + 31L * 24L * 60L * 60L * 1000L
-            }
+            val fallback = fallbackExpiryMs(plan, now)
             val finalExpiry = expiresAtMs ?: fallback
             val isActive = finalExpiry <= 0L || finalExpiry > now
 
             ProSubscriptionPrefs.setSubscribed(this, isActive)
-            ProSubscriptionPrefs.setPlan(this, if (plan == "yearly") "yearly" else "monthly")
+            ProSubscriptionPrefs.setPlan(this, plan)
             ProSubscriptionPrefs.setPurchaseToken(this, token)
             ProSubscriptionPrefs.setProvider(this, if (isActive) "web_checkout" else "web_checkout_expired")
             ProSubscriptionPrefs.setExpiresAt(this, finalExpiry)

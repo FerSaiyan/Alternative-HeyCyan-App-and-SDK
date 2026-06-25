@@ -1,6 +1,8 @@
 package com.fersaiyan.cyanbridge.agent
 
 import android.content.Context
+import android.util.Patterns
+import java.util.Locale
 
 object ProSubscriptionServerPrefs {
     private const val PREFS_NAME = "pro_subscription_server_prefs"
@@ -31,12 +33,28 @@ object ProSubscriptionServerPrefs {
     }
 
     fun getAccountEmail(context: Context): String =
-        prefs(context).getString(KEY_ACCOUNT_EMAIL, "").orEmpty().trim()
+        sanitizeAccountEmail(prefs(context).getString(KEY_ACCOUNT_EMAIL, ""))
 
     fun setAccountEmail(context: Context, email: String?) {
-        val value = email?.trim().orEmpty()
+        val value = sanitizeAccountEmail(email)
         prefs(context).edit().apply {
             if (value.isBlank()) remove(KEY_ACCOUNT_EMAIL) else putString(KEY_ACCOUNT_EMAIL, value)
         }.apply()
+    }
+
+    fun normalizeAccountEmail(email: String?): String =
+        email?.trim()?.lowercase(Locale.US).orEmpty()
+
+    fun isUsableAccountEmail(email: String?): Boolean {
+        val normalized = normalizeAccountEmail(email)
+        if (normalized.isBlank()) return false
+        if (normalized.startsWith("relay_")) return false
+        if (normalized.endsWith("@cyanbridge.placeholder")) return false
+        return Patterns.EMAIL_ADDRESS.matcher(normalized).matches()
+    }
+
+    private fun sanitizeAccountEmail(email: String?): String {
+        val normalized = normalizeAccountEmail(email)
+        return if (isUsableAccountEmail(normalized)) normalized else ""
     }
 }

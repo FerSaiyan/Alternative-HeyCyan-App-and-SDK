@@ -405,7 +405,7 @@ If the cloud OTA API continues to return “No upgraded version” for a long ti
   - Then compare **state machines** (when they retry, when they reset, when they treat an error as fatal).
 - Always capture and reason from **logcat** before changing code; use the tag set above and keep logs alongside any code changes you make for traceability.
 
-## CyanBridge Vercel Relay Server (carelens-wine.vercel.app)
+## CyanBridge Vercel Relay Server (cyanbridge.vercel.app)
 
 The CyanBridge app uses a **Vercel-hosted Next.js server** instead of the Termux phone server for:
 - Subscription management (Asaas recurring credit card)
@@ -414,14 +414,15 @@ The CyanBridge app uses a **Vercel-hosted Next.js server** instead of the Termux
 
 ### Server URL
 
-`https://carelens-wine.vercel.app` — hardcoded in `AiProviderPrefs.kt` as `DEFAULT_PUBLIC_RELAY_URL`.
+`https://cyanbridge.vercel.app` — hardcoded in `AiProviderPrefs.kt` as `DEFAULT_PUBLIC_RELAY_URL`.
 
 ### Endpoints the app calls
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/web-subscribe` | GET | Checkout flow — renders HTML page with Asaas hosted checkout link |
-| `/web-subscribe/success` | GET | Callback after payment — updates user status |
+| `/web-subscribe` | GET | Checkout flow — renders a CyanBridge-hosted control page plus the Asaas card link |
+| `/web-subscribe/status` | GET | Polls Asaas subscription state before app callback |
+| `/web-subscribe/success` | GET | Callback after payment confirmation — updates user status |
 | `/web-subscribe/cancel` | GET/POST | Subscription cancellation page |
 | `/pro/verify` | POST | Subscription verification — checks Asaas API |
 | `/chat` | POST | AI chat proxy — forwards to OpenRouter |
@@ -449,10 +450,10 @@ The CyanBridge app uses a **Vercel-hosted Next.js server** instead of the Termux
 2. Server fetches live USD→BRL exchange rate
 3. Creates Asaas customer with `foreignCustomer: true` (no CPF/CNPJ required)
 4. Creates Asaas subscription with `billingType: "CREDIT_CARD"`, `cycle: "MONTHLY"`
-5. If subscription returns `invoiceUrl`, renders HTML page with link to Asaas checkout
-6. Otherwise creates a single payment for the first charge to get `invoiceUrl`
-7. User clicks "Pay with Credit Card" → enters card on Asaas hosted checkout
-8. After payment → Asaas webhook fires → user marked active in Vercel KV
+5. Server resolves the subscription's hosted checkout `invoiceUrl` from the first Asaas charge.
+6. App loads a CyanBridge-controlled page that opens the Asaas card form in a separate secure page.
+7. That page polls `/web-subscribe/status` and only returns to the app after Asaas reports the recurring subscription as active.
+8. Asaas webhooks still sync renewals/cancellations into Vercel KV.
 9. App calls `POST /pro/verify` → checks subscription status
 
 ### Cancel flow
@@ -469,7 +470,7 @@ The CyanBridge app uses a **Vercel-hosted Next.js server** instead of the Termux
 - API key stored in Vercel env vars
 - All chat/voice/image queries proxied through `/chat`, `/voice-query`, `/image-query`
 
-### Key source files (Carelens_website)
+### Key source files (`Carelens_website/` path)
 
 - `lib/relay-kv.ts` — RelayUser KV storage layer
 - `lib/asaas.ts` — Asaas API client (foreigner customer support)
@@ -479,3 +480,68 @@ The CyanBridge app uses a **Vercel-hosted Next.js server** instead of the Termux
 - `app/api/pro/verify/route.ts` — Subscription verification
 - `app/api/chat/route.ts` — AI chat proxy (OpenRouter)
 - `app/api/webhooks/asaas/route.ts` — Webhook handler
+
+## Agent guardrails / lessons learned
+
+### Untracked UI files can break Android builds
+
+If a previous task left local Compose / Material 3 UI files in the working tree, Gradle may still pick them up even if they are **not committed to the current branch**.
+
+Typical symptoms:
+
+- `kaptDebugKotlin` fails
+- `NonExistentClass cannot be converted to Annotation`
+- failing stubs under:
+  - `app/build/tmp/kapt3/stubs/debug/.../VersionUpdateDialogKt.java`
+  - `app/build/tmp/kapt3/stubs/debug/.../FeatureOnboardingScreenKt.java`
+  - `app/build/tmp/kapt3/stubs/debug/.../PatchEditorScreenKt.java`
+  - `app/build/tmp/kapt3/stubs/debug/.../PatchListScreenKt.java`
+  - `app/build/tmp/kapt3/stubs/debug/.../PublishPluginScreenKt.java`
+  - `app/build/tmp/kapt3/stubs/debug/.../SimulatedGlassesPreviewKt.java`
+
+Before changing protocol code or blaming Compose migration branches, check for untracked local folders first.
+
+### What to check first
+
+```bash
+git status --short
+```
+
+Look for untracked directories such as:
+
+- `android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ui/components/`
+- `android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ui/glasses/`
+- `android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ui/onboarding/`
+- `android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ui/plugins/`
+
+If they are marked with `??` and are not part of the current branch, treat them as suspect.
+
+### Current branch strategy for Material 3
+
+Material 3 / Compose migration work is intentionally kept on separate branches:
+
+- `compose_material3_migration`
+- `memomind-adapter`
+
+`main` should stay on the current production UI approach unless the migration is deliberately merged.
+
+### Safe backup location
+
+To avoid losing that progress, back up the local Compose UI files to this directory before cleaning the working tree:
+
+```text
+/home/fertroll10/Documents/ML/HeyCyanSmartGlassesSDK/backups/compose_material3_port/
+```
+
+That directory preserves the local UI work that was removed from the active `main` working tree.
+
+### Recovery workflow
+
+When the Material 3 migration becomes the active priority again:
+
+1. Restore from the safe backup first, or check out the dedicated branch:
+   ```bash
+   git checkout compose_material3_migration
+   ```
+2. Resolve the Compose / KAPT dependency setup intentionally on the migration branch.
+3. Do not re-introduce those files into `main` unless the full UI migration is being merged.

@@ -29,11 +29,8 @@ object AiProviderPrefs {
     private const val KEY_PROVIDER = "provider"
     private const val KEY_RELAY_BASE_URL = "relay_base_url"
     private const val KEY_RELAY_BACKEND = "relay_backend"
-    private const val OLD_DEFAULT_RELAY_URL = "http://100.64.0.1:8787"
-    private const val OLD_TRYCLOUDFLARE_RELAY_URL = "https://ten-nature-optimize-inventory.trycloudflare.com"
-    private const val OLD_PUBLIC_IP_RELAY_URL = "http://177.95.92.150:48787"
-    private const val OLD_TAILSCALE_FUNNEL_RELAY_URL = "https://akiosmachine.tailf6097b.ts.net"
-    private const val DEFAULT_PUBLIC_RELAY_URL = "https://carelens-wine.vercel.app"
+    private const val LEGACY_PUBLIC_RELAY_URL = "https://carelens-wine.vercel.app"
+    private const val DEFAULT_PUBLIC_RELAY_URL = "https://cyanbridge.vercel.app"
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -51,10 +48,7 @@ object AiProviderPrefs {
             .let { current ->
                 when {
                     current.isBlank() -> DEFAULT_PUBLIC_RELAY_URL
-                    current == OLD_DEFAULT_RELAY_URL -> DEFAULT_PUBLIC_RELAY_URL
-                    current == OLD_TRYCLOUDFLARE_RELAY_URL -> DEFAULT_PUBLIC_RELAY_URL
-                    current == OLD_PUBLIC_IP_RELAY_URL -> DEFAULT_PUBLIC_RELAY_URL
-                    current == OLD_TAILSCALE_FUNNEL_RELAY_URL -> DEFAULT_PUBLIC_RELAY_URL
+                    current == LEGACY_PUBLIC_RELAY_URL -> DEFAULT_PUBLIC_RELAY_URL
                     else -> current
                 }
             }

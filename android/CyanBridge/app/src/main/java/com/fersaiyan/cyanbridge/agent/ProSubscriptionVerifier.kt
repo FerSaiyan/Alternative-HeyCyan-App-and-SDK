@@ -47,6 +47,10 @@ object ProSubscriptionVerifier {
         strictForTesting: Boolean = shouldStrictVerify(context),
     ): Result {
         val base = localStatus(context)
+        if (ProSubscriptionPrefs.getProvider(context) == "play_billing") {
+            ProSubscriptionPrefs.setLastVerifiedAt(context, System.currentTimeMillis())
+            return base.copy(message = "Using local Play Billing status")
+        }
 
         val url = resolveVerifyUrl(context)
         val token = ProSubscriptionPrefs.getPurchaseToken(context).trim()

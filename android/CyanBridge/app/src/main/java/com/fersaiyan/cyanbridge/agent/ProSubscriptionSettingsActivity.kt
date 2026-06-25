@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
+import android.util.Patterns
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.EditText
@@ -69,6 +70,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
         val btnRefreshPlanStatus: MaterialButton = findViewById(R.id.btn_refresh_plan_status)
         val btnRefreshAccount: MaterialButton = findViewById(R.id.btn_refresh_account)
         val btnChangePlan: MaterialButton = findViewById(R.id.btn_change_plan)
+        val btnManageSubscription: MaterialButton = findViewById(R.id.btn_manage_subscription)
         val btnRefreshQuota: MaterialButton = findViewById(R.id.btn_refresh_quota)
         val btnRefreshModels: MaterialButton = findViewById(R.id.btn_refresh_models)
         val btnJoinBetaCloud: MaterialButton = findViewById(R.id.btn_join_beta_cloud)
@@ -240,6 +242,8 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
 
         fun refreshPlanDetails() {
             val local = ProSubscriptionVerifier.localStatus(this)
+            val planName = local.plan.ifBlank { "none" }
+            val provider = ProSubscriptionPrefs.getProvider(this)
             val expiresAt = local.expiresAtMs
             val expiresText = if (expiresAt > 0L) {
                 java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(expiresAt))
@@ -255,9 +259,15 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
             }
 
             tvPlanStatus.text = if (local.active) "Status: Active" else "Status: Inactive"
-            tvPlanPlan.text = "Plan: ${local.plan.ifBlank { "none" }}"
+            tvPlanPlan.text = "Plan: $planName"
             tvPlanExpires.text = "Expires: $expiresText"
             tvPlanVerified.text = "Last verified: $verifiedText"
+            btnChangePlan.text = if (provider == "play_billing") "Change in Google Play" else "Change Plan"
+            btnManageSubscription.text = when {
+                provider == "play_billing" -> "Manage in Google Play"
+                planName == "free_trial" -> "End free trial"
+                else -> "Cancel subscription"
+            }
         }
 
         fun setButtonBusy(button: MaterialButton, busy: Boolean, busyLabel: String, normalLabel: String) {
@@ -425,6 +435,10 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
             showChangePlanDialog()
         }
 
+        btnManageSubscription.setOnClickListener {
+            openSubscriptionManagement(btnManageSubscription)
+        }
+
         btnRefreshModels.setOnClickListener {
             refreshModels()
         }
@@ -476,6 +490,11 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
     }
 
     private fun showChangePlanDialog() {
+        if (ProSubscriptionPrefs.getProvider(this) == "play_billing") {
+            openPlaySubscriptionManagement(null)
+            return
+        }
+
         val plans = arrayOf("cheap", "standard", "max")
         val labels = arrayOf("Cheap — \$1/month", "Standard — \$5/month", "Max — \$20/month")
         var selected = 0
@@ -505,24 +524,68 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
     private fun promptForCheckoutEmail(plan: String) {
         val input = EditText(this).apply {
             hint = "you@example.com"
-            inputType = InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setText(ProSubscriptionServerPrefs.getAccountEmail(this@ProSubscriptionSettingsActivity))
         }
 
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Account email")
-            .setMessage("Use the same email as your previous purchase to restore subscription without being charged again.")
+            .setMessage("Use the same email as your previous purchase so we can restore an active subscription instead of charging again.")
             .setView(input)
-            .setPositiveButton("Continue") { _, _ ->
-                val email = input.text?.toString()?.trim().orEmpty()
-                if (email.isNotBlank()) {
-                    ProSubscriptionServerPrefs.setAccountEmail(this, email)
+            .setPositiveButton("Continue", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val rawEmail = input.text?.toString().orEmpty()
+                val email = ProSubscriptionServerPrefs.normalizeAccountEmail(rawEmail)
+                if (!ProSubscriptionServerPrefs.isUsableAccountEmail(email) || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    input.error = "Enter a valid email address"
+                    return@setOnClickListener
                 }
+                ProSubscriptionServerPrefs.setAccountEmail(this, email)
+                dialog.dismiss()
                 launchWebCheckoutWithEmail(plan, email)
             }
-            .setNegativeButton("Skip") { _, _ ->
-                launchWebCheckoutWithEmail(plan, "")
+        }
+
+        dialog.show()
+    }
+
+    private fun openPlaySubscriptionManagement(button: MaterialButton?) {
+        val normalLabel = button?.text?.toString().orEmpty()
+        if (button != null) {
+            button.isEnabled = false
+            button.alpha = 0.6f
+            button.text = "Opening..."
+        }
+
+        val productId = PlaySubscriptionCatalog.productIdForPlan(ProSubscriptionPrefs.getPlan(this))
+        val manageUrl = Uri.parse("https://play.google.com/store/account/subscriptions").buildUpon().apply {
+            appendQueryParameter("package", packageName)
+            if (productId.isNotBlank()) {
+                appendQueryParameter("sku", productId)
             }
-            .show()
+        }.build().toString()
+
+        runSafeOnUiThread {
+            if (button != null) {
+                button.isEnabled = true
+                button.alpha = 1f
+                button.text = normalLabel
+            }
+            runCatching {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(manageUrl))
+                if (intent.resolveActivityInfo(packageManager, 0) == null) {
+                    Toast.makeText(this, "No app found to manage the Google Play subscription.", Toast.LENGTH_SHORT).show()
+                    return@runCatching
+                }
+                startActivity(intent)
+            }.onFailure {
+                Toast.makeText(this, "Unable to open Google Play subscription management: ${it.message}", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun launchWebCheckoutWithEmail(plan: String, emailHint: String) {
@@ -546,6 +609,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
 
         val target = Uri.parse(baseUrl).buildUpon()
             .appendQueryParameter("plan", plan)
+            .appendQueryParameter("change_plan", "1")
             .appendQueryParameter("platform", "android")
             .appendQueryParameter("package_name", packageName)
             .appendQueryParameter("return_url", callback.toString())
@@ -573,6 +637,49 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
             startActivity(intent)
         } catch (e: Throwable) {
             Toast.makeText(this, "Unable to open checkout: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openSubscriptionManagement(button: MaterialButton) {
+        if (ProSubscriptionPrefs.getProvider(this) == "play_billing") {
+            openPlaySubscriptionManagement(button)
+            return
+        }
+        val normalLabel = button.text.toString()
+        button.isEnabled = false
+        button.alpha = 0.6f
+        button.text = "Opening..."
+        thread {
+            val apiToken = runCatching {
+                ProSubscriptionServerPrefs.getApiToken(this).trim().ifBlank {
+                    ProSubscriptionRelayClient.fetchAccountInfo(this).getOrThrow().apiToken.trim()
+                }
+            }.getOrDefault("")
+
+            val relayBase = com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs.getRelayBaseUrl(this)
+                .trim()
+                .trimEnd('/')
+            val manageUrl = Uri.parse("$relayBase/web-subscribe/cancel").buildUpon().apply {
+                if (apiToken.isNotBlank()) {
+                    appendQueryParameter("api_token", apiToken)
+                }
+            }.build().toString()
+
+            runSafeOnUiThread {
+                button.isEnabled = true
+                button.alpha = 1f
+                button.text = normalLabel
+                runCatching {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(manageUrl))
+                    if (intent.resolveActivityInfo(packageManager, 0) == null) {
+                        Toast.makeText(this, "No browser found to manage the subscription.", Toast.LENGTH_SHORT).show()
+                        return@runCatching
+                    }
+                    startActivity(intent)
+                }.onFailure {
+                    Toast.makeText(this, "Unable to open subscription management: ${it.message}", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 }
