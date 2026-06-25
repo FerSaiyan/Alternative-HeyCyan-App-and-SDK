@@ -516,7 +516,12 @@ class ProSubscriptionActivity : AppCompatActivity() {
     private fun performUnsubscribe() {
         Toast.makeText(this, "Opening subscription management...", Toast.LENGTH_SHORT).show()
         try {
-            val manageUrl = "https://billing.stripe.com/p/login/test_manage_link"
+            val apiToken = ProSubscriptionServerPrefs.getApiToken(this).trim()
+            val manageUrl = if (apiToken.isNotBlank()) {
+                "https://carelens-wine.vercel.app/web-subscribe/cancel?api_token=$apiToken"
+            } else {
+                "https://carelens-wine.vercel.app/web-subscribe/cancel"
+            }
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(manageUrl)))
         } catch (e: Exception) {
             Toast.makeText(this, "Unable to open subscription management", Toast.LENGTH_SHORT).show()
