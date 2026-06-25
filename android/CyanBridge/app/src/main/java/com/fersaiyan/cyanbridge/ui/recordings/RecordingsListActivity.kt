@@ -23,10 +23,14 @@ import com.fersaiyan.cyanbridge.ai.transcription.RetryingTranscriptionProvider
 import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionProgress
 import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionResult
 import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionService
+import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
 import com.fersaiyan.cyanbridge.ai.transcription.moonshine.MoonshineModelManager
 import com.fersaiyan.cyanbridge.ai.transcription.moonshine.MoonshineTranscriptionProvider
 import com.fersaiyan.cyanbridge.data.local.entity.CaptureSession
 import com.fersaiyan.cyanbridge.databinding.ActivityRecordingsListBinding
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
+import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.localagent.userfacts.TranscriptCandidateFactsAppender
 import com.fersaiyan.cyanbridge.privacy.PrivacyPrefs
 import com.fersaiyan.cyanbridge.ui.ChatThreadActivity
@@ -298,6 +302,11 @@ class RecordingsListActivity : AppCompatActivity() {
             return
         }
 
+        if (engine == EngineChoice.GEMMA && !isGemmaLiteRtReady()) {
+            showGemmaRequiresLiteRtDialog()
+            return
+        }
+
         transcribingId = session.id
         adapter.setTranscribing(session.id)
 
@@ -432,6 +441,9 @@ class RecordingsListActivity : AppCompatActivity() {
 
                     is TranscriptionResult.Failure -> {
                         Log.e("RecordingsListActivity", "Transcription failed: ${result.message}")
+                        if (isGemmaLiteRtRequirementIssue(result.message)) {
+                            showGemmaRequiresLiteRtDialog()
+                        }
                         if (engine == EngineChoice.GEMMA || DebugLogSupport.isLocalRuntimeIssue(result.message)) {
                             DebugLogSupport.showSupportOptionsDialog(
                                 activity = this@RecordingsListActivity,
@@ -453,6 +465,9 @@ class RecordingsListActivity : AppCompatActivity() {
                 }
             } catch (t: Throwable) {
                 Log.e("RecordingsListActivity", "Transcription threw an exception", t)
+                if (isGemmaLiteRtRequirementIssue(t.message)) {
+                    showGemmaRequiresLiteRtDialog()
+                }
                 if (engine == EngineChoice.GEMMA || DebugLogSupport.isLocalRuntimeIssue(t.message, t)) {
                     DebugLogSupport.showSupportOptionsDialog(
                         activity = this@RecordingsListActivity,
@@ -542,6 +557,33 @@ class RecordingsListActivity : AppCompatActivity() {
 
         dlg.show()
         return ProgressUi(dlg, progress, tv)
+    }
+
+    private fun isGemmaLiteRtReady(): Boolean {
+        val selectedModel = runCatching {
+            LocalModelStorageRepository.resolveSelectedModel(applicationContext)
+        }.getOrNull() ?: return false
+        val settings = runCatching {
+            LocalModelSettingsRepository.getForModel(applicationContext, selectedModel.id)
+        }.getOrNull() ?: return false
+        return settings.modelRuntime == LocalModelRuntime.LITERT
+    }
+
+    private fun isGemmaLiteRtRequirementIssue(message: String?): Boolean {
+        val normalized = message?.trim()?.lowercase().orEmpty()
+        if (normalized.isBlank()) return false
+        return normalized.contains("gemma transcription requires local runtime = litert")
+    }
+
+    private fun showGemmaRequiresLiteRtDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Gemma Requires LiteRT")
+            .setMessage("Gemma transcription only works with Local Runtime set to LiteRT. Open Local Models settings and switch the selected model runtime to LiteRT.")
+            .setNegativeButton("Close", null)
+            .setPositiveButton("Open model settings") { _, _ ->
+                startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
+            }
+            .show()
     }
 
     private fun stopPlayback() {

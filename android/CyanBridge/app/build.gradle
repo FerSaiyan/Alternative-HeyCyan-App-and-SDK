@@ -26,8 +26,8 @@ android {
         applicationId = "com.fersaiyan.cyanbridge"
         minSdk = 24
         targetSdk = 35
-        versionCode = 4
-        versionName = "2.0.1"
+        versionCode = 5
+        versionName = "2.0.2"
 
         // Chapter 6: optional transcription API key (do not commit secrets).
         def openAiKey = project.findProperty("OPENAI_API_KEY") ?: ""

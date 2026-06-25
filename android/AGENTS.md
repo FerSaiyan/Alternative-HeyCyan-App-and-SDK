@@ -404,3 +404,78 @@ If the cloud OTA API continues to return “No upgraded version” for a long ti
   - First compare **method sequences and payloads** (what SDK calls, in what order).
   - Then compare **state machines** (when they retry, when they reset, when they treat an error as fatal).
 - Always capture and reason from **logcat** before changing code; use the tag set above and keep logs alongside any code changes you make for traceability.
+
+## CyanBridge Vercel Relay Server (carelens-wine.vercel.app)
+
+The CyanBridge app uses a **Vercel-hosted Next.js server** instead of the Termux phone server for:
+- Subscription management (Asaas recurring credit card)
+- AI model proxying (OpenRouter)
+- User authentication and quota tracking
+
+### Server URL
+
+`https://carelens-wine.vercel.app` — hardcoded in `AiProviderPrefs.kt` as `DEFAULT_PUBLIC_RELAY_URL`.
+
+### Endpoints the app calls
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/web-subscribe` | GET | Checkout flow — renders HTML page with Asaas hosted checkout link |
+| `/web-subscribe/success` | GET | Callback after payment — updates user status |
+| `/web-subscribe/cancel` | GET/POST | Subscription cancellation page |
+| `/pro/verify` | POST | Subscription verification — checks Asaas API |
+| `/chat` | POST | AI chat proxy — forwards to OpenRouter |
+| `/voice-query` | POST | AI voice proxy |
+| `/image-query` | POST | AI image proxy (multimodal) |
+| `/models` | GET | Lists available models from OpenRouter |
+| `/quota` | GET/POST | Quota info by plan |
+| `/pro/quota` | GET/POST | Same, for `/pro/quota` path |
+| `/auth/register` | POST | User registration |
+| `/auth/me` | GET | User info by Bearer token |
+| `/transcribe` | POST | Audio transcription proxy |
+
+### Subscription plans (USD)
+
+| Plan | Price/mo |
+|---|---|
+| `free_trial` | $0 (30 days) |
+| `cheap` | $1 |
+| `standard` | $5 |
+| `max` | $20 |
+
+### Payment flow (Asaas recurring credit card)
+
+1. App opens `GET /web-subscribe?plan=standard&return_url=...&api_token=...`
+2. Server fetches live USD→BRL exchange rate
+3. Creates Asaas customer with `foreignCustomer: true` (no CPF/CNPJ required)
+4. Creates Asaas subscription with `billingType: "CREDIT_CARD"`, `cycle: "MONTHLY"`
+5. If subscription returns `invoiceUrl`, renders HTML page with link to Asaas checkout
+6. Otherwise creates a single payment for the first charge to get `invoiceUrl`
+7. User clicks "Pay with Credit Card" → enters card on Asaas hosted checkout
+8. After payment → Asaas webhook fires → user marked active in Vercel KV
+9. App calls `POST /pro/verify` → checks subscription status
+
+### Cancel flow
+
+1. App opens `GET /web-subscribe/cancel?api_token=...`
+2. Server shows confirmation page
+3. User clicks "Yes, Cancel" → POST to same endpoint
+4. Server calls Asaas `DELETE /subscriptions/{id}`
+5. Updates user status to inactive in Vercel KV
+
+### OpenRouter integration
+
+- Default model: `deepseek/deepseek-v4-flash`
+- API key stored in Vercel env vars
+- All chat/voice/image queries proxied through `/chat`, `/voice-query`, `/image-query`
+
+### Key source files (Carelens_website)
+
+- `lib/relay-kv.ts` — RelayUser KV storage layer
+- `lib/asaas.ts` — Asaas API client (foreigner customer support)
+- `lib/exchange-rate.ts` — USD→BRL rate fetching
+- `app/api/web-subscribe/route.ts` — Checkout flow
+- `app/api/web-subscribe/cancel/route.ts` — Cancel flow
+- `app/api/pro/verify/route.ts` — Subscription verification
+- `app/api/chat/route.ts` — AI chat proxy (OpenRouter)
+- `app/api/webhooks/asaas/route.ts` — Webhook handler
