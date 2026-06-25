@@ -1,0 +1,11 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1920" height="1080" fill="#1e293b"/>
+  <g opacity="0.15">
+    <circle cx="400" cy="300" r="200" fill="#3b82f6" opacity="0.3"/>
+    <circle cx="1500" cy="750" r="300" fill="#0d9488" opacity="0.25"/>
+    <circle cx="960" cy="200" r="150" fill="#8b5cf6" opacity="0.2"/>
+  </g>
+  <g opacity="0.08">
+    <path d="M0 800 Q480 700 960 750 Q1440 800 1920 720 V1080 H0 V800Z" fill="#e2e8f0"/>
+  </g>
+</svg>

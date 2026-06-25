@@ -1,0 +1,843 @@
+:root {
+  /* ========================================
+     RADIUS TOKENS
+     Consistent radii across the system
+     ======================================== */
+  --radius-pill: 9999px;
+  --radius-xl: 1.5rem;      /* 24px - cards, modals */
+  --radius-2xl: 2rem;       /* 32px - hero cards */
+  --radius-md: 1rem;        /* 16px - small elements */
+  --radius-sm: 0.75rem;     /* 12px - inputs, buttons */
+
+  /* ========================================
+     BRAND COLOR TOKENS
+     Primary brand colors (blue = primary, cyan = accent)
+     ======================================== */
+   --brand: #1E3A8A;         /* Deep blue */
+   --brand-dark: #0F172A;    /* Near-black for text */
+   --brand-light: #06B6D4;   /* Cyan accent */
+
+  /* ========================================
+     GREEN ACCENT TOKENS
+     Secondary accent for health-tech feel
+     ======================================== */
+   --green-accent: #10B981;
+   --green-accent-dark: #059669;
+   --green-accent-light: #6EE7B7;
+   --green-pale: #F8FAFC;
+
+  /* ========================================
+     SKY GRADIENT TOKENS
+     Hero/pale section backgrounds
+     ======================================== */
+   --sky-50: #F0F9FF;
+   --sky-100: #E0F2FE;
+   --sky-200: #BAE6FD;
+   --sky-300: #7DD3FC;
+   --sky-pale: #F8FAFC;
+
+  /* ========================================
+     DEEP NAVY TEXT
+     Premium editorial headings
+     ======================================== */
+   --navy-900: #0F172A;
+   --navy-800: #1E3A8A;
+   --navy-700: #1E293B;
+   --navy-600: #1E3A8A;
+
+  /* ========================================
+     MUTED SLATE
+     Secondary text and borders
+     ======================================== */
+   --slate-600: #475569;
+   --slate-500: #64748B;
+   --slate-400: #94A3B8;
+   --slate-300: #CBD5E1;
+
+  /* ========================================
+     GLASS BLUR TOKENS
+     Restrained, selective blur levels
+     ======================================== */
+  --blur-sm: 8px;       /* Minimal overlay */
+  --blur-md: 12px;     /* Standard card */
+  --blur-lg: 18px;     /* Hero/focus elements */
+  --blur-xl: 24px;     /* Large decorative */
+
+  /* ========================================
+     GLASS OPACITY TOKENS
+     Selective, restrained glass surfaces
+     ======================================== */
+  --glass-surface: rgba(255, 255, 255, 0.52);
+  --glass-surface-raised: rgba(255, 255, 255, 0.62);
+  --glass-surface-hero: rgba(255, 255, 255, 0.72);
+  --glass-surface-minimal: rgba(255, 255, 255, 0.38);
+
+  /* ========================================
+     BORDER OPACITY TOKENS
+     Subtle, consistent borders
+     ======================================== */
+  --border-subtle: rgba(200, 214, 228, 0.28);
+  --border-default: rgba(200, 214, 228, 0.42);
+  --border-emphasis: rgba(200, 214, 228, 0.58);
+
+  /* ========================================
+     TEXT COLOR TOKENS
+     Editorial hierarchy
+     ======================================== */
+  --text-primary: var(--navy-900);
+  --text-secondary: var(--navy-800);
+  --text-body: var(--navy-700);
+  --text-muted: var(--slate-500);
+  --text-soft: var(--slate-400);
+
+  /* ========================================
+     SHADOW TOKENS
+     Layered, refined shadows
+     ======================================== */
+  --shadow-subtle: 0 1px 3px rgba(10, 20, 34, 0.04);
+  --shadow-card: 0 2px 8px rgba(10, 20, 34, 0.06), 0 1px 2px rgba(10, 20, 34, 0.04);
+  --shadow-card-hover: 0 6px 20px rgba(10, 20, 34, 0.10), 0 2px 6px rgba(10, 20, 34, 0.05);
+  --shadow-hero: 0 8px 32px rgba(10, 20, 34, 0.12), 0 2px 8px rgba(10, 20, 34, 0.06);
+   --shadow-cta: 0 4px 16px rgba(30, 58, 138, 0.20);
+
+  /* ========================================
+     BACKGROUND GRADIENT TOKENS
+     Sky-pale base with subtle warmth
+     ======================================== */
+   --bg-base: #F8FAFC;
+   --bg-gradient-start: #F8FAFC;
+   --bg-gradient-mid: rgba(248, 250, 252, 0.92);
+   --bg-gradient-end: #E0F2FE;
+
+  /* Decorative blob opacities — very subtle for premium feel */
+   --blob-blue-primary: rgba(30, 58, 138, 0.10);
+   --blob-blue-light: rgba(37, 99, 235, 0.07);
+   --blob-cyan-primary: rgba(6, 182, 212, 0.08);
+   --blob-cyan-light: rgba(14, 165, 233, 0.05);
+   --blob-emerald-accent: rgba(16, 185, 129, 0.06);
+
+  /* ========================================
+     SKY SECTION BACKGROUNDS
+     Editorial section variants
+     ======================================== */
+  --bg-sky-pale: linear-gradient(180deg, var(--sky-pale) 0%, var(--bg-base) 100%);
+  --bg-sky-light: linear-gradient(180deg, var(--sky-50) 0%, var(--bg-base) 100%);
+  --bg-white: #ffffff;
+  --bg-white-translucent: rgba(255, 255, 255, 0.82);
+
+  /* ========================================
+     SUBTLE GRID OVERLAYS
+     Editorial pattern textures
+     ======================================== */
+  --grid-subtle: 
+    linear-gradient(rgba(100, 116, 139, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 116, 139, 0.04) 1px, transparent 1px);
+  --grid-dots: radial-gradient(circle, rgba(100, 116, 139, 0.08) 1px, transparent 1px);
+
+  /* ========================================
+     IMAGE OVERLAY GRADIENTS
+     For hero/banner images
+     ======================================== */
+  --overlay-dark: linear-gradient(180deg, rgba(10, 20, 34, 0) 0%, rgba(10, 20, 34, 0.72) 100%);
+  --overlay-subtle: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.85) 100%);
+   --overlay-blue: linear-gradient(145deg, rgba(30, 58, 138, 0.08) 0%, rgba(30, 58, 138, 0.22) 100%);
+
+  /* ========================================
+     CTA COLOR TOKENS
+     Primary + white/black pill variants
+     ======================================== */
+   /* Blue primary CTA */
+   --cta-primary-bg: linear-gradient(145deg, #1E3A8A, #0F172A);
+   --cta-primary-hover: linear-gradient(145deg, #2563EB, #1E3A8A);
+   --cta-text-primary: #ffffff;
+
+   /* White pill CTA */
+   --cta-white-bg: rgba(255, 255, 255, 0.92);
+   --cta-white-bg-hover: #ffffff;
+   --cta-white-border: rgba(15, 23, 42, 0.10);
+   --cta-white-border-hover: rgba(15, 23, 42, 0.18);
+   --cta-text-white: #0F172A;
+
+   /* Black/dark pill CTA */
+   --cta-black-bg: #0F172A;
+   --cta-black-bg-hover: #1E3A8A;
+  --cta-text-black: #ffffff;
+
+  /* Secondary transparent */
+  --cta-secondary-bg: rgba(255, 255, 255, 0.72);
+  --cta-secondary-hover: rgba(255, 255, 255, 0.88);
+  --cta-text-secondary: var(--navy-800);
+
+  /* ========================================
+     SPACING TOKENS
+     Editorial section spacing scale
+     ======================================== */
+  --space-xs: 0.5rem;    /* 8px */
+  --space-sm: 0.75rem;   /* 12px */
+  --space-md: 1rem;      /* 16px */
+  --space-lg: 1.5rem;    /* 24px */
+  --space-xl: 2rem;      /* 32px */
+  --space-2xl: 3rem;     /* 48px */
+  --space-3xl: 4rem;     /* 64px */
+  --space-section: clamp(3.5rem, 8vw, 6.5rem);   /* Editorial section gap — compact premium rhythm */
+  --space-section-lg: clamp(5rem, 11vw, 8.5rem); /* Major band gap — less perceived page length */
+  --space-section-tight: clamp(2rem, 5vw, 3rem);  /* Compact sections */
+
+  /* ========================================
+     TYPOGRAPHY TOKENS
+     Editorial hierarchy: hero strongest, varied heading rhythm
+     ======================================== */
+  /* Mono sizes */
+  --font-mono-size-sm: 0.68rem;
+  --font-mono-size-xs: 0.64rem;
+
+  /* Font weights */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* Line heights */
+  --leading-tight: 1.15;
+  --leading-snug: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  /* Heading sizes - editorial scale */
+  --text-hero: clamp(2.5rem, 6vw, 4rem);
+  --text-h1: clamp(2rem, 4.5vw, 3rem);
+  --text-h2: clamp(1.5rem, 3.5vw, 2.25rem);
+  --text-h3: clamp(1.25rem, 2.5vw, 1.75rem);
+  --text-h4: 1.125rem;
+  --text-body-lg: 1.125rem;
+  --text-body: 1rem;
+  --text-body-sm: 0.875rem;
+  --text-caption: 0.8125rem;
+
+  /* Letter spacing */
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.025em;
+  --tracking-wider: 0.05em;
+
+  /* Text colors */
+  --text-heading-base: var(--navy-900);
+  --text-body-base: var(--navy-700);
+}
+
+/* ========================================
+    GLASSMORPHISM CLASSES
+    Selective and restrained usage
+    ======================================== */
+
+/* Hero glass - prominent but restrained */
+.glass-hero {
+  background: var(--glass-surface-hero);
+  border: 1px solid var(--border-emphasis);
+  backdrop-filter: blur(var(--blur-lg));
+  -webkit-backdrop-filter: blur(var(--blur-lg));
+  box-shadow: var(--shadow-hero);
+  border-radius: var(--radius-2xl);
+}
+
+/* Content card - subtler, readable */
+.glass-card {
+  background: var(--glass-surface);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(var(--blur-md));
+  -webkit-backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-xl);
+}
+
+/* Hoverable card - interactive state */
+.glass-card-hover {
+  background: var(--glass-surface-raised);
+  border: 1px solid var(--border-default);
+  backdrop-filter: blur(var(--blur-md));
+  -webkit-backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--shadow-card-hover);
+  transition: all 200ms ease;
+  border-radius: var(--radius-xl);
+}
+
+/* Minimal card - legal/FAQ, low hierarchy */
+.glass-minimal {
+  background: var(--glass-surface-minimal);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
+  box-shadow: var(--shadow-subtle);
+  border-radius: var(--radius-md);
+}
+
+/* Subtle overlay - for floating elements only */
+.glass-overlay {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
+  border-radius: var(--radius-md);
+}
+
+/* ========================================
+   BACKGROUND SYSTEM
+   Layered gradient with softened blobs
+   ======================================== */
+body {
+  background: var(--bg-base);
+  background-image:
+    radial-gradient(circle at 15% 18%, var(--blob-cyan-light), transparent 42%),
+    radial-gradient(circle at 84% 8%, var(--blob-blue-primary), transparent 32%),
+    linear-gradient(160deg, var(--bg-gradient-start), var(--bg-gradient-mid) 45%, var(--bg-gradient-end));
+}
+
+/* ========================================
+    AMBIENT BLOBS
+    Subtle, reduced for premium feel
+    ======================================== */
+.carelens-ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.carelens-ambient::before,
+.carelens-ambient::after {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(0);
+  opacity: 0.10;
+  animation: carelens-float 11s ease-in-out infinite;
+}
+
+.carelens-ambient::before {
+  width: 20rem;
+  height: 20rem;
+  top: 10%;
+  right: -6rem;
+  background: radial-gradient(circle at 30% 30%, var(--blob-blue-primary), transparent 70%);
+}
+
+.carelens-ambient::after {
+  width: 24rem;
+  height: 24rem;
+  bottom: -6rem;
+  left: -6rem;
+  animation-delay: 1.5s;
+  background: radial-gradient(circle at 70% 70%, var(--blob-cyan-light), transparent 70%);
+}
+
+/* ========================================
+    UI COMPONENT CLASSES
+    ======================================== */
+
+/* Pill eyebrow label */
+.pill-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.38);
+  padding: 0.35rem 0.85rem;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: var(--font-mono-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-soft);
+}
+
+/* ========================================
+    CTA BUTTON VARIANTS
+    Teal, white, black pill options
+    ======================================== */
+
+/* Primary CTA - teal gradient */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--cta-primary-bg);
+  padding: 0.72rem 1.5rem;
+  font-size: 0.92rem;
+  font-weight: var(--font-semibold);
+  color: var(--cta-text-primary);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+  box-shadow: var(--shadow-cta);
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(15, 96, 120, 0.28);
+}
+
+.btn-primary:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Secondary CTA - transparent/white */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--cta-white-border);
+  background: var(--cta-secondary-bg);
+  padding: 0.72rem 1.5rem;
+  font-size: 0.92rem;
+  font-weight: var(--font-semibold);
+  color: var(--cta-text-secondary);
+  transition: transform 220ms ease, background 220ms ease, border-color 220ms ease;
+}
+
+.btn-secondary:hover {
+  transform: translateY(-1px);
+  background: var(--cta-secondary-hover);
+  border-color: var(--cta-white-border-hover);
+}
+
+.btn-secondary:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* White pill CTA */
+.btn-white {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--cta-white-border);
+  background: var(--cta-white-bg);
+  padding: 0.72rem 1.5rem;
+  font-size: 0.92rem;
+  font-weight: var(--font-semibold);
+  color: var(--cta-text-white);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+  box-shadow: var(--shadow-subtle);
+}
+
+.btn-white:hover {
+  transform: translateY(-1px);
+  background: var(--cta-white-bg-hover);
+  border-color: var(--cta-white-border-hover);
+  box-shadow: var(--shadow-card);
+}
+
+.btn-white:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Black/dark pill CTA */
+.btn-black {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--cta-black-bg);
+  padding: 0.72rem 1.5rem;
+  font-size: 0.92rem;
+  font-weight: var(--font-semibold);
+  color: var(--cta-text-black);
+  transition: transform 220ms ease, background 220ms ease;
+}
+
+.btn-black:hover {
+  transform: translateY(-1px);
+  background: var(--cta-black-bg-hover);
+}
+
+.btn-black:focus-visible {
+  outline: 2px solid var(--brand-light);
+  outline-offset: 2px;
+}
+
+/* ========================================
+    TYPOGRAPHY CLASSES
+    Editorial hierarchy: hero strongest, varied heading rhythm
+    ======================================== */
+
+/* Text colors */
+.text-primary {
+  color: var(--text-primary);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-soft {
+  color: var(--text-soft);
+}
+
+/* Heading sizes - hero strongest */
+.text-hero {
+  font-size: var(--text-hero);
+  line-height: var(--leading-tight);
+  font-weight: var(--font-bold);
+  color: var(--text-heading-base);
+  letter-spacing: var(--tracking-tight);
+}
+
+.text-h1 {
+  font-size: var(--text-h1);
+  line-height: var(--leading-tight);
+  font-weight: var(--font-bold);
+  color: var(--text-heading-base);
+  letter-spacing: var(--tracking-tight);
+}
+
+.text-h2 {
+  font-size: var(--text-h2);
+  line-height: var(--leading-snug);
+  font-weight: var(--font-semibold);
+  color: var(--text-heading-base);
+  letter-spacing: var(--tracking-tight);
+}
+
+.text-h3 {
+  font-size: var(--text-h3);
+  line-height: var(--leading-snug);
+  font-weight: var(--font-semibold);
+  color: var(--text-heading-base);
+}
+
+.text-h4 {
+  font-size: var(--text-h4);
+  line-height: var(--leading-snug);
+  font-weight: var(--font-medium);
+  color: var(--text-secondary);
+}
+
+/* Body text */
+.text-body-lg {
+  font-size: var(--text-body-lg);
+  line-height: var(--leading-relaxed);
+  color: var(--text-body-base);
+}
+
+.text-body {
+  font-size: var(--text-body);
+  line-height: var(--leading-relaxed);
+  color: var(--text-body-base);
+}
+
+.text-body-sm {
+  font-size: var(--text-body-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+
+.text-caption {
+  font-size: var(--text-caption);
+  line-height: var(--leading-normal);
+  color: var(--text-soft);
+  letter-spacing: var(--tracking-wide);
+}
+
+/* Mono text */
+.text-mono {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: var(--font-mono-size-sm);
+  letter-spacing: var(--tracking-wide);
+}
+
+/* Eyebrow/metadata */
+.text-eyebrow {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: var(--font-mono-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-soft);
+}
+
+/* Link accent (teal) */
+.link-accent {
+  color: var(--brand);
+  text-decoration: none;
+  transition: color 180ms ease;
+}
+
+.link-accent:hover {
+  color: var(--brand-dark);
+  text-decoration: underline;
+}
+
+/* ========================================
+    UTILITY CLASSES
+    ======================================== */
+.container-width {
+  max-width: 1120px;
+  margin-inline: auto;
+  padding-inline: clamp(16px, 4vw, 32px);
+  box-sizing: border-box;
+}
+
+/* ========================================
+    SPACING UTILITIES
+    ======================================== */
+
+/* Section spacing */
+.section {
+  padding-block: var(--space-section);
+}
+
+.section-tight {
+  padding-block: var(--space-section-tight);
+}
+
+.section-lg {
+  padding-block: clamp(4rem, 10vw, 6rem);
+}
+
+/* Gap utilities */
+.gap-xs { gap: var(--space-xs); }
+.gap-sm { gap: var(--space-sm); }
+.gap-md { gap: var(--space-md); }
+.gap-lg { gap: var(--space-lg); }
+.gap-xl { gap: var(--space-xl); }
+.gap-2xl { gap: var(--space-2xl); }
+
+/* Padding utilities */
+.p-xs { padding: var(--space-xs); }
+.p-sm { padding: var(--space-sm); }
+.p-md { padding: var(--space-md); }
+.p-lg { padding: var(--space-lg); }
+.p-xl { padding: var(--space-xl); }
+
+.px-md { padding-inline: var(--space-md); }
+.px-lg { padding-inline: var(--space-lg); }
+
+.py-sm { padding-block: var(--space-sm); }
+.py-md { padding-block: var(--space-md); }
+.py-lg { padding-block: var(--space-lg); }
+
+/* Margin utilities */
+.my-xs { margin-block: var(--space-xs); }
+.my-sm { margin-block: var(--space-sm); }
+.my-md { margin-block: var(--space-md); }
+.my-lg { margin-block: var(--space-lg); }
+
+/* ========================================
+    BACKGROUND UTILITIES
+    ======================================== */
+
+/* Sky pale section */
+.bg-sky-pale {
+  background: var(--bg-sky-pale);
+}
+
+.bg-sky-light {
+  background: var(--bg-sky-light);
+}
+
+.bg-white {
+  background: var(--bg-white);
+}
+
+/* Subtle grid overlay */
+.grid-subtle {
+  background-image: var(--grid-subtle);
+  background-size: 32px 32px;
+}
+
+/* Dots pattern */
+.grid-dots {
+  background-image: var(--grid-dots);
+  background-size: 24px 24px;
+}
+
+/* ========================================
+    RADIUS UTILITIES
+    ======================================== */
+.rounded-card {
+  border-radius: var(--radius-xl);
+}
+
+.rounded-card-xl {
+  border-radius: var(--radius-2xl);
+}
+
+.rounded-pill {
+  border-radius: var(--radius-pill);
+}
+
+.rounded-sm {
+  border-radius: var(--radius-sm);
+}
+
+.rounded-md {
+  border-radius: var(--radius-md);
+}
+
+/* ========================================
+    SHADOW UTILITIES
+    ======================================== */
+.shadow-subtle {
+  box-shadow: var(--shadow-subtle);
+}
+
+.shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+.shadow-card-hover {
+  box-shadow: var(--shadow-card-hover);
+}
+
+.shadow-hero {
+  box-shadow: var(--shadow-hero);
+}
+
+/* ========================================
+    IMAGE OVERLAY UTILITIES
+    ======================================== */
+
+/* Image with dark overlay for text readability */
+.img-overlay-dark {
+  position: relative;
+}
+
+.img-overlay-dark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--overlay-dark);
+  pointer-events: none;
+}
+
+/* Image with white fade overlay */
+.img-overlay-subtle {
+  position: relative;
+}
+
+.img-overlay-subtle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--overlay-subtle);
+  pointer-events: none;
+}
+
+/* ========================================
+    FLEX/LAYOUT UTILITIES
+    ======================================== */
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+/* ========================================
+    WIDTH UTILITIES
+    ======================================== */
+.w-full {
+  width: 100%;
+}
+
+.max-w-prose {
+  max-width: 65ch;
+}
+
+.max-w-screen-md {
+  max-width: 768px;
+}
+
+/* ========================================
+    POSITION UTILITIES
+    ======================================== */
+.relative {
+  position: relative;
+}
+
+.absolute {
+  position: absolute;
+}
+
+.fixed {
+  position: fixed;
+}
+
+/* ========================================
+   MOBILE DEGRADATION
+   Graceful fallback without backdrop-filter
+   ======================================== */
+@media (max-width: 640px) {
+  .glass-hero,
+  .glass-card,
+  .glass-card-hover,
+  .glass-minimal {
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(255, 255, 255, 0.68);
+    box-shadow: var(--shadow-card);
+  }
+
+  .carelens-ambient::before,
+  .carelens-ambient::after {
+    opacity: 0.10;
+  }
+
+  .carelens-ambient::before {
+    width: 14rem;
+    height: 14rem;
+  }
+
+  .carelens-ambient::after {
+    width: 16rem;
+    height: 16rem;
+  }
+}
+
+/* ========================================
+   REDUCED MOTION
+   ======================================== */
+@media (prefers-reduced-motion: reduce) {
+  .carelens-ambient::before,
+  .carelens-ambient::after {
+    animation: none;
+  }
+}
+
+/* ========================================
+   ANIMATIONS
+   ======================================== */
+@keyframes carelens-float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-14px);
+  }
+}

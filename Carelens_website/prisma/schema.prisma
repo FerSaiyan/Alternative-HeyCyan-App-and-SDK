@@ -1,0 +1,306 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String?  @unique
+  authProvider AuthProvider @default(MAGIC_LINK)
+  passwordHash String?
+  googleSub String? @unique
+  role      Role     @default(ELDERLY)
+  fullName  String?
+  dateOfBirth DateTime?
+  stripeCustomerId String? @unique
+  stripeDefaultPaymentMethodId String?
+  sex       Sex?
+  // Legacy health fields (used in onboarding flow)
+  heightCm          Int?
+  weightKg          Float?
+  healthCondition   String?
+  // Elderly care profile fields
+  visionLevel         String?
+  hearingLevel        String?
+  mobilityLevel       String?
+  techComfortLevel    String?
+  livingSituation     String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyName         String?
+  emergencyPhone        String?
+  medications         String?
+  allergies           String?
+  glassesColor        String?
+  dailyRoutine        String?
+  primaryConcern      String?
+  // Onboarding (keep for potential use)
+  onboardingMedicalHistoryAnswer String?
+  onboardingGoalAnswer String?
+  onboardingShareHistoryAnswer String?
+  onboardingCompletedAt DateTime?
+  createdAt DateTime @default(now())
+
+  subscriptions         Subscription[]
+  glassesOrders         GlassesOrder[]
+  magicLinks            AuthMagicLink[]
+  familyProfile         FamilyProfile?
+  affiliateCoupons      AffiliateCoupon[]
+  affiliatePurchases    AffiliatePurchase[]
+  affiliateWithdrawals  AffiliateWithdrawal[]
+}
+
+model FamilyProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  displayName String?
+  relationship String?
+  bio         String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthMagicLink {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model GlassesOrder {
+  id           String              @id @default(cuid())
+  userId       String
+  color        String?
+  status       GlassesOrderStatus  @default(ORDERED)
+  trackingCode String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation("SubscriptionGlassesOrder")
+
+  @@index([status, updatedAt])
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String
+  stripeCustomerId     String?
+  stripeSubscriptionId String?            @unique
+  status               SubscriptionStatus @default(DRAFT)
+  monthlyPriceBrl      Int                @default(1700)
+  glassesOrderId       String? @unique
+  createdAt            DateTime           @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  glassesOrder GlassesOrder? @relation("SubscriptionGlassesOrder", fields: [glassesOrderId], references: [id])
+
+  @@index([userId])
+}
+
+model StripeWebhookEvent {
+  id         String   @id @default(cuid())
+  eventId    String   @unique
+  eventType  String
+  receivedAt DateTime @default(now())
+}
+
+model AsaasPayment {
+  id                  String   @id @default(cuid())
+  userId              String
+  asaasPaymentId      String?  @unique
+  asaasCustomerId     String
+  valueBrl            Float
+  billingType         String   @default("PIX")
+  purchaseType        String
+  status              AsaasPaymentStatus @default(PENDING)
+  installmentCount    Int?
+  installmentValue    Float?
+  asaasSubscriptionId String?
+  bankSlipUrl         String?
+  identificationField String?
+  invoiceUrl          String?
+  couponCode          String?
+  externalReference   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([externalReference])
+  @@index([asaasSubscriptionId])
+}
+
+model AsaasSubscription {
+  id                  String   @id @default(cuid())
+  userId              String
+  asaasSubscriptionId String   @unique
+  asaasCustomerId     String
+  valueBrl            Float
+  billingType         String   @default("PIX")
+  status              String   @default("ACTIVE")
+  cycle               String   @default("MONTHLY")
+  nextDueDate         String?
+  couponCode          String?
+  externalReference   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId])
+  @@index([asaasSubscriptionId])
+  @@index([externalReference])
+}
+
+model AsaasWebhookEvent {
+  id             String   @id @default(cuid())
+  asaasEventId   String   @unique
+  eventType      String
+  paymentId      String?
+  paymentStatus  String?
+  subscriptionId String?
+  rawPayload     String
+  receivedAt     DateTime @default(now())
+}
+
+model AffiliateCoupon {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  ownerId       String
+  discountType  DiscountType
+  discountValue Float
+  isActive      Boolean      @default(true)
+  usageCount    Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  owner     User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  purchases AffiliatePurchase[]
+
+  @@index([ownerId])
+}
+
+model AffiliatePurchase {
+  id              String                  @id @default(cuid())
+  couponId        String
+  buyerId         String
+  paymentId       String?
+  paymentProvider String
+  purchaseValue   Float
+  revenueAmount   Float
+  status          AffiliatePurchaseStatus @default(PENDING)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  coupon AffiliateCoupon @relation(fields: [couponId], references: [id])
+  buyer  User            @relation(fields: [buyerId], references: [id])
+
+  @@index([couponId])
+  @@index([buyerId])
+  @@index([status])
+}
+
+model AffiliateWithdrawal {
+  id          String           @id @default(cuid())
+  ownerId     String
+  amountBrl   Float
+  status      WithdrawalStatus @default(PENDING)
+  requestedAt DateTime         @default(now())
+  processedAt DateTime?
+  notes       String?
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([status])
+}
+
+enum Role {
+  ELDERLY
+  FAMILY
+  PHARMACY
+  ADMIN
+}
+
+enum AuthProvider {
+  PASSWORD
+  GOOGLE
+  MAGIC_LINK
+}
+
+enum Sex {
+  MALE
+  FEMALE
+  PREFER_NOT_SAY
+}
+
+enum SubscriptionStatus {
+  DRAFT
+  ACTIVE
+  CANCELED
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum GlassesOrderStatus {
+  ORDERED
+  SHIPPED
+  DELIVERED
+}
+
+enum AsaasPaymentStatus {
+  PENDING
+  RECEIVED
+  CONFIRMED
+  OVERDUE
+  REFUNDED
+  RECEIVED_IN_CASH
+  PARTIAL
+  CANCELED
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum AffiliatePurchaseStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+}
+
+model RelayUser {
+  id                  String   @id @default(cuid())
+  apiToken            String   @unique
+  email               String?
+  plan                String   @default("free_trial")
+  subscriptionStatus  String   @default("inactive")
+  expiresAtMs         BigInt   @default(0)
+  asaasCustomerId     String?
+  asaasSubscriptionId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([apiToken])
+  @@index([asaasSubscriptionId])
+}

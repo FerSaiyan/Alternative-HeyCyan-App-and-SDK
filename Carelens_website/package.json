@@ -1,0 +1,50 @@
+{
+  "name": "cyanbridge-website",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 5000 -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "prisma:generate": "prisma generate",
+    "db:push": "sh -c 'DATABASE_URL=${DATABASE_URL:-file:./dev.db} prisma db push'",
+    "seed:roles": "sh -c 'DATABASE_URL=${DATABASE_URL:-file:./dev.db} node scripts/seed-roles.mjs'",
+    "seed:doctor": "sh -c 'DATABASE_URL=${DATABASE_URL:-file:./dev.db} npx tsx prisma/seed-doctor.ts'",
+    "create:admin": "tsx prisma/create-admin.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.ts",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed-doctor.ts"
+  },
+  "dependencies": {
+    "@gsap/react": "^2.1.2",
+    "@prisma/client": "^6.7.0",
+    "@stripe/react-stripe-js": "^6.2.0",
+    "@stripe/stripe-js": "^9.2.0",
+    "@vercel/kv": "^3.0.0",
+    "gsap": "^3.15.0",
+    "html2canvas": "^1.4.1",
+    "lenis": "^1.3.23",
+    "next": "16.2.4",
+    "nodemailer": "^8.0.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "stripe": "^22.0.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/nodemailer": "^8.0.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "prisma": "^6.7.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
