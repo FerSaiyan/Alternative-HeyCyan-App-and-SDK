@@ -175,7 +175,21 @@ class ProSubscriptionActivity : AppCompatActivity() {
         cardWebCheckout.visibility = if (enabled) View.VISIBLE else View.GONE
     }
 
-    private fun activateFreeTrial() {
+    private fun activateFreeTrial(emailHint: String = "") {
+        val finalEmail = ProSubscriptionServerPrefs.normalizeAccountEmail(
+            emailHint.ifBlank { ProSubscriptionServerPrefs.getAccountEmail(this) },
+        )
+        if (!ProSubscriptionServerPrefs.isUsableAccountEmail(finalEmail) || !Patterns.EMAIL_ADDRESS.matcher(finalEmail).matches()) {
+            promptForAccountEmail(
+                title = "Account email",
+                message = "Use a valid email so your free trial can be restored later on another device.",
+            ) { confirmedEmail ->
+                activateFreeTrial(confirmedEmail)
+            }
+            return
+        }
+
+        ProSubscriptionServerPrefs.setAccountEmail(this, finalEmail)
         val baseUrl = AiProviderPrefs.getRelayBaseUrl(this).trimEnd('/')
         if (baseUrl.isBlank()) {
             Toast.makeText(this, "Server not configured.", Toast.LENGTH_SHORT).show()
@@ -201,7 +215,9 @@ class ProSubscriptionActivity : AppCompatActivity() {
                 conn.readTimeout = 15000
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("Authorization", "Bearer $token")
-                val body = "{}"
+                val body = org.json.JSONObject()
+                    .put("email", finalEmail)
+                    .toString()
                 conn.doOutput = true
                 conn.outputStream.write(body.toByteArray())
 
@@ -277,6 +293,19 @@ class ProSubscriptionActivity : AppCompatActivity() {
     }
 
     private fun promptForCheckoutEmail(plan: String) {
+        promptForAccountEmail(
+            title = "Account email",
+            message = "Use the same email as your previous purchase so we can restore an active subscription instead of charging again.",
+        ) { email ->
+            launchWebCheckoutWithEmail(plan, email)
+        }
+    }
+
+    private fun promptForAccountEmail(
+        title: String,
+        message: String,
+        onConfirmed: (String) -> Unit,
+    ) {
         val input = EditText(this).apply {
             hint = "you@example.com"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
@@ -284,8 +313,8 @@ class ProSubscriptionActivity : AppCompatActivity() {
         }
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Account email")
-            .setMessage("Use the same email as your previous purchase so we can restore an active subscription instead of charging again.")
+            .setTitle(title)
+            .setMessage(message)
             .setView(input)
             .setPositiveButton("Continue", null)
             .setNegativeButton("Cancel", null)
@@ -301,7 +330,7 @@ class ProSubscriptionActivity : AppCompatActivity() {
                 }
                 ProSubscriptionServerPrefs.setAccountEmail(this, email)
                 dialog.dismiss()
-                launchWebCheckoutWithEmail(plan, email)
+                onConfirmed(email)
             }
         }
 
