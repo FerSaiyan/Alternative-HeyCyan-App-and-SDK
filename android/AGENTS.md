@@ -151,6 +151,62 @@ adb logcat -s DataDownload DeviceNotify WifiP2pManagerSingleton WifiP2pBroadcast
   JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug
   ```
 
+## Building Signed Releases
+
+### Keystore
+
+- **File**: `/home/fertroll10/AndroidStudioProjects/AkiosKeystore.jks`
+- **Alias**: `key0`
+- **Password**: `123456` (both store and key)
+- **Config**: `android/CyanBridge/keystore.properties` (already configured, gitignored)
+
+The `keystore.properties` file is read by `app/build.gradle` and configures the `release` signing config automatically. If it's missing, the release build will produce an unsigned APK.
+
+### Signed APK (for direct install / GitHub releases)
+
+```bash
+cd android/CyanBridge-p2p-sync-and-more-logs/android/CyanBridge
+JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleRelease
+```
+
+Output: `app/build/outputs/apk/release/app-release.apk`
+
+### Signed AAB (for Google Play)
+
+```bash
+cd android/CyanBridge-p2p-sync-and-more-logs/android/CyanBridge
+JAVA_HOME=/opt/android-studio/jbr ./gradlew bundleRelease
+```
+
+Output: `app/build/outputs/bundle/release/app-release.aab`
+
+### Uploading to GitHub releases
+
+```bash
+# Replace APK on existing release (keeps other assets)
+gh release upload v2.0.1 app/build/outputs/apk/release/app-release.apk --clobber
+
+# Upload AAB alongside
+gh release upload v2.0.1 app/build/outputs/bundle/release/app-release.aab --clobber
+```
+
+### If keystore.properties is missing
+
+Create `android/CyanBridge/keystore.properties` with:
+
+```properties
+storeFile=/home/fertroll10/AndroidStudioProjects/AkiosKeystore.jks
+storePassword=123456
+keyAlias=key0
+keyPassword=123456
+```
+
+### Troubleshooting
+
+- **`SDK location not found`**: Create `heycyan-core/local.properties` with `sdk.dir=/home/fertroll10/Android/Sdk`
+- **`Keystore was tampered with`**: Wrong password. Use `123456`.
+- **Unsigned APK**: `keystore.properties` is missing or `storeFile` path is wrong.
+
 ## Logcat conventions
 
 When investigating or reproducing behavior, prefer the following tags:
@@ -396,6 +452,125 @@ If the cloud OTA API continues to return “No upgraded version” for a long ti
      - With the battery disconnected and ESD precautions in place, verify via `lsusb` whether holding certain buttons or shorting documented pads at power‑on exposes a new USB device (indicating a ROM loader or download mode).
      - If such a mode exists, consult chip‑family documentation and community tooling for **read‑only** flash inspection first (before attempting any writes).
    - This is invasive work; it should be treated as a last resort and documented carefully if attempted. Do **not** assume that methods used on other JL/Allwinner boards are safe here without verification.
+
+## Recovering user logs from Vercel KV
+
+CyanBridge uploads debug logs to Vercel KV (Upstash Redis). This is how to retrieve them.
+
+### Step 1: Install Vercel CLI and link project
+
+```bash
+npx vercel link --project carelens --yes
+npx vercel env pull .env.local
+```
+
+This creates `.env.local` with KV credentials. The project is `fernandosaiyan10-8163s-projects/carelens`.
+
+### Step 2: Read KV credentials from `.env.local`
+
+The file will contain:
+```
+KV_REST_API_URL=https://set-firefly-144186.upstash.io
+KV_REST_API_TOKEN=gQAAAAAAAjM6AAIgcD...
+KV_REST_API_READ_ONLY_TOKEN=ggAAAAAAAjM6AAIgcD...
+```
+
+You need `KV_REST_API_URL` and `KV_REST_API_TOKEN` (the read-write token, not read-only).
+
+### Step 3: Scan for log keys
+
+Logs are stored as `cyanbridge:logs:data:<filename>` (the actual log text) and `cyanbridge:logs:meta:<filename>` (JSON metadata).
+
+To list all keys, use the Upstash REST API with cursor-based SCAN:
+
+```bash
+KV_TOKEN="<KV_REST_API_TOKEN>"
+KV_URL="<KV_REST_API_URL>"
+
+# First scan
+curl -s -H "Authorization: Bearer $KV_TOKEN" "$KV_URL/scan/0"
+
+# Continue with the cursor from the previous response
+curl -s -H "Authorization: Bearer $KV_TOKEN" "$KV_URL/scan/<cursor>"
+```
+
+The response format is `{"result": ["<next_cursor>", ["key1", "key2", ...]]}`. When `next_cursor` is `"0"`, you've reached the end.
+
+Filter for `cyanbridge:logs:data:` keys to find log files.
+
+### Step 4: Fetch a specific log
+
+```bash
+# Fetch the log content
+curl -s -H "Authorization: Bearer $KV_TOKEN" \
+  "$KV_URL/get/cyanbridge:logs:data:<filename>" | python3 -c "import sys,json; print(json.load(sys.stdin)['result'])"
+
+# Fetch the metadata (device info, issue type, description)
+curl -s -H "Authorization: Bearer $KV_TOKEN" \
+  "$KV_URL/get/cyanbridge:logs:meta:<filename>" | python3 -c "import sys,json; print(json.load(sys.stdin)['result'])"
+```
+
+### Step 5: Search for specific patterns across all logs
+
+```bash
+# Example: find logs that mention a specific glasses model
+for key in $(curl -s -H "Authorization: Bearer $KV_TOKEN" "$KV_URL/scan/0" | python3 -c "
+import sys,json
+cursor,keys = json.load(sys.stdin)['result']
+while True:
+    for k in keys:
+        if 'cyanbridge:logs:data:' in k: print(k)
+    if cursor == '0': break
+    cursor,keys = json.load(sys.stdin.stdin.read())['result']
+"); do
+    echo "=== $key ==="
+    curl -s -H "Authorization: Bearer $KV_TOKEN" "$KV_URL/get/$key" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)['result']
+[print(l) for l in d.split('\n') if 'BV100' in l or 'connecting to peer' in l.lower()]
+"
+done
+```
+
+A simpler approach — scan all keys first, then fetch each one:
+
+```bash
+# Scan all keys and save to file
+cursor="0"
+while true; do
+    result=$(curl -s -H "Authorization: Bearer $KV_TOKEN" "$KV_URL/scan/$cursor")
+    echo "$result" | python3 -c "import sys,json; c,k=json.load(sys.stdin)['result']; [print(x) for x in k]" >> /tmp/kv_all_keys.txt
+    cursor=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin)['result'][0])")
+    [ "$cursor" = "0" ] && break
+done
+
+# Fetch a specific log by name
+LOG_NAME="log_20260622_195847_003e276b.txt"
+curl -s -H "Authorization: Bearer $KV_TOKEN" \
+  "$KV_URL/get/cyanbridge:logs:data:$LOG_NAME" | python3 -c "import sys,json; print(json.load(sys.stdin)['result'])" \
+  > "$LOG_NAME"
+```
+
+### Log naming convention
+
+Log filenames follow the pattern: `log_YYYYMMDD_HHMMSS_<8-char-hex>.txt`
+
+The timestamp is in UTC. The hex suffix is a random identifier.
+
+User-submitted logs from the app's "Report Issue" feature also include device info and a user description in the metadata.
+
+### Common gotchas
+
+- The `KV_REST_API_READ_ONLY_TOKEN` cannot be used for SCAN operations — use the read-write `KV_REST_API_TOKEN`.
+- SCAN returns a cursor that must be passed to the next call. `"0"` means done.
+- Log content is stored as a plain string (the full report text), not as structured JSON.
+- The `.env.local` file is gitignored. You must run `vercel env pull` each time you link the project.
+- The OIDC token in `.env.local` expires after ~12 hours. Re-run `vercel env pull` if you get auth errors.
+
+### P2P sync analysis
+
+A detailed analysis of P2P sync failures across all user logs is at:
+`android/P2P_SYNC_ANALYSIS_20260624.md`
 
 ## General guidance for future Codex agents
 
