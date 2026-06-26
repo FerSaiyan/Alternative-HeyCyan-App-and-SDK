@@ -44,6 +44,7 @@ export async function POST(request: Request) {
         ...user,
         subscriptionStatus: isActive ? "active" : "inactive",
         expiresAtMs,
+        billingDay: isActive ? (user.billingDay ?? new Date().getUTCDate()) : user.billingDay,
         updatedAt: new Date().toISOString(),
       });
 

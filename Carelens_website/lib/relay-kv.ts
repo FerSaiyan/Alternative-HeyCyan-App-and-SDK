@@ -65,6 +65,7 @@ export interface RelayUser {
   expiresAtMs: number;
   asaasCustomerId: string | null;
   asaasSubscriptionId: string | null;
+  billingDay?: number | null;
   quotaPeriodKey?: string | null;
   quotaUsedReferenceTokens?: number;
   quotaSpentUsd?: number;
@@ -211,6 +212,7 @@ export async function ensureRelayUser(apiToken?: string, email?: string): Promis
     expiresAtMs: 0,
     asaasCustomerId: null,
     asaasSubscriptionId: null,
+    billingDay: null,
     quotaPeriodKey: null,
     quotaUsedReferenceTokens: 0,
     quotaSpentUsd: 0,

@@ -279,6 +279,12 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
             button.text = if (busy) busyLabel else normalLabel
         }
 
+        fun formatResetTime(resetAtMs: Long): String {
+            if (resetAtMs <= 0L) return "-"
+            return java.text.SimpleDateFormat("MMM d, HH:mm 'UTC'", java.util.Locale.US)
+                .format(java.util.Date(resetAtMs))
+        }
+
         fun refreshQuota() {
             val model = selectedModel(spinnerModelRequests)
             tvQuotaStatus.text = "Quota: loading for model '$model'..."
@@ -290,8 +296,12 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                     setButtonBusy(btnRefreshQuota, false, "Refreshing...", "Refresh quota")
                     result.onSuccess { quota ->
                         val limitText = if (quota.limit > 0) quota.limit.toString() else "unknown"
+                        val displayModel = quota.model.removeSuffix("/free").ifBlank { quota.model }
+                        val resetText = if (quota.resetAtMs > 0L) {
+                            " · resets ${formatResetTime(quota.resetAtMs)}"
+                        } else ""
                         tvQuotaStatus.text =
-                            "Quota (${quota.model}): ${quota.remaining} left · used ${quota.used}/$limitText"
+                            "Quota ($displayModel): ${quota.remaining} left · used ${quota.used}/$limitText$resetText"
                     }.onFailure {
                         val hint = ProSubscriptionRelayClient.relayUnavailableHint(it)
                         tvQuotaStatus.text = if (hint != null) {

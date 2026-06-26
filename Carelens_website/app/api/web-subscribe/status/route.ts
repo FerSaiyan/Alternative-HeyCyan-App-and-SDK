@@ -60,6 +60,7 @@ export async function GET(request: Request) {
       subscriptionStatus: active ? "active" : state,
       expiresAtMs,
       asaasSubscriptionId: subscription.id,
+      billingDay: active ? (user.billingDay ?? new Date().getUTCDate()) : user.billingDay,
       updatedAt: new Date().toISOString(),
     });
 

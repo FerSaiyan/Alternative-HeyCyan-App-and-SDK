@@ -491,6 +491,7 @@ export async function GET(request: Request) {
       plan: "free_trial",
       subscriptionStatus: "active",
       expiresAtMs,
+      billingDay: user.billingDay ?? new Date().getUTCDate(),
       updatedAt: new Date().toISOString(),
     });
     const trialUrl = appendQueryParams(returnUrl, {

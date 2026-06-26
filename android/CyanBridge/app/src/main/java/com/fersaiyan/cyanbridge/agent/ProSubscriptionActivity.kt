@@ -600,6 +600,20 @@ class ProSubscriptionActivity : AppCompatActivity() {
             ?.getOrNull(1)
     }
 
+    private fun showDonationIntroDialog(pending: PendingDonationPrefs.PendingDonation) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.donation_intro_dialog_title)
+            .setMessage(getString(R.string.donation_intro_dialog_message))
+            .setPositiveButton(R.string.donation_intro_open_button) { _, _ ->
+                PendingDonationPrefs.setAwaitingReturn(this, true)
+                openExternalUrl(pending.invoiceUrl)
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                PendingDonationPrefs.clear(this)
+            }
+            .show()
+    }
+
     private fun showLegacyCheckoutIntroDialog(session: PendingLegacyCheckoutPrefs.PendingCheckout) {
         AlertDialog.Builder(this)
             .setTitle(R.string.legacy_checkout_dialog_title)
@@ -959,9 +973,8 @@ class ProSubscriptionActivity : AppCompatActivity() {
                     email = email,
                 )
                 PendingDonationPrefs.save(this, pending)
-                PendingDonationPrefs.setAwaitingReturn(this, true)
                 runOnUiThread {
-                    openExternalUrl(invoiceUrl)
+                    showDonationIntroDialog(pending)
                 }
             } catch (error: Throwable) {
                 runOnUiThread {

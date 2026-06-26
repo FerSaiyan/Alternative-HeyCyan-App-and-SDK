@@ -164,18 +164,47 @@ const REFERENCE_MODEL_ID = "deepseek/deepseek-v4-flash";
 const REFERENCE_MODEL = CURATED_MODEL_MAP.get(REFERENCE_MODEL_ID)!;
 const REFERENCE_TOKEN_COST_USD = averageTextTokenPrice(REFERENCE_MODEL.fallbackPricing);
 
-function currentQuotaPeriodKey(now = new Date()): string {
-  const year = now.getUTCFullYear();
-  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 }
 
-function nextQuotaResetMs(now = new Date()): number {
-  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0);
+function billingPeriodKey(year: number, month: number, day: number): string {
+  return `bill_${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function currentQuotaPeriodKey(now = new Date(), billingDay = 1): string {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const day = now.getUTCDate();
+  const capped = Math.min(billingDay, daysInMonth(year, month));
+
+  if (day >= capped) return billingPeriodKey(year, month, capped);
+
+  const prevMonth = month === 0 ? 11 : month - 1;
+  const prevYear = month === 0 ? year - 1 : year;
+  const prevCapped = Math.min(billingDay, daysInMonth(prevYear, prevMonth));
+  return billingPeriodKey(prevYear, prevMonth, prevCapped);
+}
+
+function nextQuotaResetMs(now = new Date(), billingDay = 1): number {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const day = now.getUTCDate();
+  const capped = Math.min(billingDay, daysInMonth(year, month));
+
+  if (day >= capped) {
+    const nextMonth = month === 11 ? 0 : month + 1;
+    const nextYear = month === 11 ? year + 1 : year;
+    const nextCapped = Math.min(billingDay, daysInMonth(nextYear, nextMonth));
+    return Date.UTC(nextYear, nextMonth, nextCapped, 0, 0, 0, 0);
+  }
+
+  return Date.UTC(year, month, capped, 0, 0, 0, 0);
 }
 
 function normalizedQuotaState(user: RelayUser | null, now = new Date()) {
-  const periodKey = currentQuotaPeriodKey(now);
+  const billingDay = user?.billingDay ?? 1;
+  const periodKey = currentQuotaPeriodKey(now, billingDay);
   const used = user?.quotaPeriodKey === periodKey ? Math.max(0, Math.floor(user?.quotaUsedReferenceTokens ?? 0)) : 0;
   const spentUsd = user?.quotaPeriodKey === periodKey ? Math.max(0, Number(user?.quotaSpentUsd ?? 0)) : 0;
   return { periodKey, used, spentUsd };
@@ -311,11 +340,12 @@ export async function buildRelayQuotaSnapshot(user: RelayUser | null, requestedM
   const limit = PLAN_MONTHLY_LIMITS[plan] ?? PLAN_MONTHLY_LIMITS.standard;
   const { used, spentUsd } = normalizedQuotaState(user);
   const model = await resolveModelMetadata(requestedModel);
+  const billingDay = user?.billingDay ?? 1;
   return {
     used,
     limit,
     remaining: Math.max(0, limit - used),
-    resetAtMs: nextQuotaResetMs(),
+    resetAtMs: nextQuotaResetMs(new Date(), billingDay),
     model: model.id,
     plan,
     priceMonthlyUsd: RELAY_PLANS[plan]?.priceUsd ?? 5,

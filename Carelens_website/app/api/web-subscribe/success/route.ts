@@ -93,6 +93,7 @@ export async function GET(request: Request) {
     subscriptionStatus: subStatus,
     expiresAtMs,
     asaasSubscriptionId: asaasSubId || user.asaasSubscriptionId,
+    billingDay: subStatus === "active" ? (user.billingDay ?? new Date().getUTCDate()) : user.billingDay,
     updatedAt: new Date().toISOString(),
   });
 

@@ -53,6 +53,7 @@ export async function POST(request: Request) {
     plan: "free_trial",
     subscriptionStatus: "active",
     expiresAtMs,
+    billingDay: user.billingDay ?? new Date().getUTCDate(),
     updatedAt: new Date().toISOString(),
   });
 

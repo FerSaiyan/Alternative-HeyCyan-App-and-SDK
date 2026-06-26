@@ -100,4 +100,7 @@
     <string name="legacy_checkout_return_message">If you completed the secure Asaas card form in the browser, tap I Completed Payment and CyanBridge will verify your subscription now.</string>
     <string name="legacy_checkout_confirm_button">I Completed Payment</string>
     <string name="legacy_checkout_reopen_button">Open Card Form Again</string>
+    <string name="donation_intro_dialog_title">CyanBridge Asaas Support Note</string>
+    <string name="donation_intro_dialog_message">Hi, thanks for considering a donation to CyanBridge! I work on this project besides my PhD studies, and your support means a lot. I haven\'t been able to set up Stripe yet because of their special requirements for Brazilian businesses, so for now I\'m using a payment processor called Asaas. The checkout page is in Portuguese, so please use Google Translate if needed. I\'m actively looking for a better alternative. Thanks again for your support!</string>
+    <string name="donation_intro_open_button">Open Asaas Card Form</string>
 </resources>

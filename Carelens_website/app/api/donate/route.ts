@@ -195,14 +195,14 @@ export async function GET(request: Request) {
       invoiceUrl = payments.find((p) => p.invoiceUrl)?.invoiceUrl;
     }
 
-    const successUrl = appendQueryParams(new URL("/donate/status", request.url).toString(), {
+    const successUrl = appendQueryParams(new URL("/api/donate/status", request.url).toString(), {
       subscription_id: subscription.id,
       return_url: returnUrl,
       api_token: user.apiToken,
       amount: String(amount),
     });
 
-    const statusUrl = appendQueryParams(new URL("/donate/status", request.url).toString(), {
+    const statusUrl = appendQueryParams(new URL("/api/donate/status", request.url).toString(), {
       subscription_id: subscription.id,
       api_token: user.apiToken,
       amount: String(amount),
@@ -316,13 +316,13 @@ export async function POST(request: Request) {
       invoiceUrl = payments.find((p) => p.invoiceUrl)?.invoiceUrl;
     }
 
-    const statusUrl = appendQueryParams(new URL("/donate/status", request.url).toString(), {
+    const statusUrl = appendQueryParams(new URL("/api/donate/status", request.url).toString(), {
       subscription_id: subscription.id,
       api_token: user.apiToken,
       amount: String(amount),
     });
 
-    const successUrl = appendQueryParams(new URL("/donate/status", request.url).toString(), {
+    const successUrl = appendQueryParams(new URL("/api/donate/status", request.url).toString(), {
       subscription_id: subscription.id,
       return_url: returnUrl,
       api_token: user.apiToken,
