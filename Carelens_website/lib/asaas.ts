@@ -168,6 +168,8 @@ export interface AsaasPixQrCode {
   expirationDate: string;
 }
 
+export type AsaasHostedSubscriptionState = "active" | "pending" | "inactive";
+
 export interface AsaasSubscription {
   object: "subscription";
   id: string;
@@ -194,9 +196,9 @@ export interface AsaasCreditCard {
 export interface AsaasCreditCardHolderInfo {
   name: string;
   email: string;
-  cpfCnpj: string;
-  postalCode: string;
-  addressNumber: string;
+  cpfCnpj?: string;
+  postalCode?: string;
+  addressNumber?: string;
   phone?: string;
   mobilePhone?: string;
 }
@@ -532,6 +534,38 @@ export async function listPaymentsBySubscription(
   }>(`/payments?subscription=${encodeURIComponent(subscriptionId)}&limit=${limit}`);
 
   return data.data;
+}
+
+function isConfirmedPaymentStatus(status: string | null | undefined): boolean {
+  const normalized = (status ?? "").trim().toUpperCase();
+  return normalized === "RECEIVED" || normalized === "CONFIRMED" || normalized === "RECEIVED_IN_CASH";
+}
+
+function isPendingPaymentStatus(status: string | null | undefined): boolean {
+  const normalized = (status ?? "").trim().toUpperCase();
+  return normalized === "PENDING" || normalized === "PARTIAL";
+}
+
+/**
+ * For the hosted subscription checkout flow, the Asaas subscription can be ACTIVE
+ * before the first credit-card payment is actually confirmed. We therefore derive
+ * the usable app entitlement state from the linked payment statuses instead.
+ */
+export async function getHostedSubscriptionState(
+  subscriptionId: string,
+): Promise<{ state: AsaasHostedSubscriptionState; paymentStatus: string | null }> {
+  const payments = await listPaymentsBySubscription(subscriptionId, 20);
+  const latestStatus = payments[0]?.status ?? null;
+
+  if (payments.some((payment) => isConfirmedPaymentStatus(payment.status))) {
+    return { state: "active", paymentStatus: latestStatus };
+  }
+
+  if (payments.some((payment) => isPendingPaymentStatus(payment.status))) {
+    return { state: "pending", paymentStatus: latestStatus };
+  }
+
+  return { state: "inactive", paymentStatus: latestStatus };
 }
 
 /**

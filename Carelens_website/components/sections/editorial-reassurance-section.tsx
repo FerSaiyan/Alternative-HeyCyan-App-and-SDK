@@ -1,36 +1,29 @@
-/**
- * EditorialReassuranceSection - Trust cards for CareLens
- *
- * Section 6 of 8:
- * - 4 trust-value cards
- * - Highlights key benefits of CareLens
- */
 import { GlassCard } from "@/components/ui/glass-card";
 import { SectionHeading } from "@/components/ui/section-heading";
 
 const trustCards = [
   {
-    title: "Desenvolvido para idosos",
+    title: "Software only",
     description:
-      "Interface pensada para a terceira idade: comandos de voz, botões grandes e experiência simplificada. Seu familiar não precisa lidar com tecnologia complexa.",
-    icon: "👴",
+      "CyanBridge sells AI software subscriptions on this domain. Supported smart-glasses hardware is not sold on this website.",
+    icon: "💻",
   },
   {
-    title: "IA que aprende",
+    title: "Built for smart-glasses workflows",
     description:
-      "A inteligência artificial se adapta à rotina de cada idoso. Com o tempo, ela reconhece padrões, antecipa necessidades e oferece um cuidado cada vez mais personalizado.",
+      "Use one managed subscription to route compatible smart-glasses requests to chat, voice, and image AI models.",
     icon: "🧠",
   },
   {
-    title: "Família conectada",
+    title: "Transparent quotas",
     description:
-      "Monitoramento em tempo real para tranquilidade da família. Receba notificações sobre atividade, lembretes e alertas diretamente no seu celular.",
-    icon: "👨‍👩‍👧‍👦",
+      "Each plan includes clear monthly token allowances so billing stays predictable as usage grows.",
+    icon: "📊",
   },
   {
-    title: "Suporte dedicado",
+    title: "No medical claims",
     description:
-      "Equipe de suporte especializada em tecnologia assistiva. Ajudamos na configuração inicial, no uso diário e na resolução de qualquer dúvida.",
+      "CyanBridge is not a medical service and should not be used to make healthcare or other high-stakes personal decisions.",
     icon: "💬",
   },
 ];
@@ -40,9 +33,9 @@ export function EditorialReassuranceSection() {
     <section id="confianca" className="relative py-section scroll-mt-20 sm:scroll-mt-24">
       <div className="container-width">
         <SectionHeading
-          eyebrow="POR QUE ESCOLHER A CARELENS"
-          title="Tecnologia que cuida de quem você ama"
-          subtitle="Transparência, segurança e carinho em cada detalhe."
+          eyebrow="WHY CYANBRIDGE"
+          title="A clearer way to sell AI access for smart glasses"
+          subtitle="Software subscription messaging that is transparent, specific, and easier for payment review teams to understand."
           className="mb-10"
         />
 

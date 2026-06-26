@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSubscription } from "@/lib/asaas";
+import { deleteSubscription, getHostedSubscriptionState, getSubscription } from "@/lib/asaas";
 import { normalizePlan, planExpiryMs, isValidPlan, getRelayUserByToken, saveRelayUser } from "@/lib/relay-kv";
 import { logInfo, logError } from "@/lib/logger";
 
@@ -16,6 +16,7 @@ export async function GET(request: Request) {
   const subscriptionId = searchParams.get("subscription_id") ?? "";
   const returnUrl = searchParams.get("return_url") ?? "";
   const apiToken = searchParams.get("api_token") ?? "";
+  const replaceSubscriptionId = (searchParams.get("replace_subscription_id") ?? "").trim();
   let plan = normalizePlan(searchParams.get("plan") ?? "standard");
   if (!isValidPlan(plan)) plan = "standard";
 
@@ -36,14 +37,8 @@ export async function GET(request: Request) {
     try {
       const sub = await getSubscription(asaasSubId);
       asaasSubId = sub.id;
-
-      if (sub.status === "ACTIVE") {
-        subStatus = "active";
-      } else if (sub.status === "INACTIVE") {
-        subStatus = "pending";
-      } else {
-        subStatus = "inactive";
-      }
+      const paymentSummary = await getHostedSubscriptionState(asaasSubId);
+      subStatus = paymentSummary.state;
 
       logInfo("relay_subscription_verified", "Subscription verified with Asaas", {
         relayUserId: user.id,
@@ -64,6 +59,32 @@ export async function GET(request: Request) {
   const expiresAtMs = subStatus === "active"
     ? Number(user.expiresAtMs) || planExpiryMs(plan)
     : 0;
+
+  let cancelledPreviousSubscription = false;
+  let replaceCancellationFailed = false;
+  if (
+    subStatus === "active" &&
+    replaceSubscriptionId &&
+    replaceSubscriptionId !== asaasSubId
+  ) {
+    try {
+      await deleteSubscription(replaceSubscriptionId);
+      cancelledPreviousSubscription = true;
+      logInfo("relay_subscription_replaced", "Cancelled previous Asaas subscription after successful plan change", {
+        relayUserId: user.id,
+        previousAsaasSubscriptionId: replaceSubscriptionId,
+        newAsaasSubscriptionId: asaasSubId,
+      });
+    } catch (error) {
+      replaceCancellationFailed = true;
+      logError("relay_subscription_replace_cancel_failed", "Failed to cancel previous Asaas subscription after plan change", {
+        relayUserId: user.id,
+        previousAsaasSubscriptionId: replaceSubscriptionId,
+        newAsaasSubscriptionId: asaasSubId,
+        error: String(error),
+      });
+    }
+  }
 
   // Update user subscription status via KV
   await saveRelayUser({
@@ -96,7 +117,11 @@ export async function GET(request: Request) {
     api_token: user.apiToken,
     email: user.email ?? "",
     message: subStatus === "active"
-      ? "Subscription activated"
+      ? cancelledPreviousSubscription
+        ? "Subscription activated and previous recurring plan cancelled"
+        : replaceCancellationFailed
+          ? "Subscription activated, but the previous recurring plan could not be auto-cancelled. Contact support."
+        : "Subscription activated"
       : subStatus === "inactive"
         ? "Subscription is not active"
         : "Payment pending",

@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
+import { enforceRelayQuota, extractOpenRouterUsage, OPENROUTER_DEFAULT_MODEL, recordRelayQuotaUsage, resolveOpenRouterModelId } from "@/lib/openrouter";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
 const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
-const OPENROUTER_DEFAULT_MODEL = process.env.OPENROUTER_DEFAULT_MODEL ?? "deepseek/deepseek-v4-flash";
 
 function resolveModel(model: string): string {
   const clean = model?.trim();
   if (!clean || clean === "auto") return OPENROUTER_DEFAULT_MODEL;
-  return clean;
+  return resolveOpenRouterModelId(clean);
 }
 
 async function openrouterChat(
   messages: Array<{ role: string; content: string | unknown }>,
   model: string,
-): Promise<{ text: string; model: string }> {
+): Promise<{ text: string; model: string; raw: Record<string, unknown> }> {
   const resolvedModel = resolveModel(model);
 
   const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
@@ -39,12 +39,13 @@ async function openrouterChat(
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
     model?: string;
+    usage?: Record<string, unknown>;
   };
 
   const text = data.choices?.[0]?.message?.content?.trim() ?? "";
   if (!text) throw new Error("openrouter_empty_content");
 
-  return { text, model: data.model ?? resolvedModel };
+  return { text, model: data.model ?? resolvedModel, raw: data as Record<string, unknown> };
 }
 
 export async function POST(request: Request) {
@@ -74,8 +75,12 @@ export async function POST(request: Request) {
   }
 
   try {
+    const quotaCheck = await enforceRelayQuota(request, model);
+    if (!quotaCheck.allowed) return quotaCheck.response;
+
     const result = await openrouterChat(messages, model);
-    return NextResponse.json({ reply: result.text, model: result.model });
+    const quota = await recordRelayQuotaUsage(quotaCheck.user, result.model, extractOpenRouterUsage(result.raw));
+    return NextResponse.json({ reply: result.text, model: result.model, quota });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "chat_failed";
     return NextResponse.json({ error: msg }, { status: 502 });

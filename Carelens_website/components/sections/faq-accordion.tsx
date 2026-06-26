@@ -1,15 +1,5 @@
 "use client";
 
-/**
- * FAQAccordion - Keyboard accessible FAQ accordion component
- *
- * Section 9 of 10:
- * - 6 Q/A pairs in Portuguese with medical compliance
- * - Minimal numbered rows style [01]-[06]
- * - Plus/minus toggle indicators
- * - Proper ARIA attributes for accessibility
- * - Expand/collapse animation with GSAP polish
- */
 import { useState, useRef, useEffect } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
@@ -26,74 +16,65 @@ export interface FAQItem {
 const faqItems: FAQItem[] = [
   {
     id: "faq-o-que-e",
-    question: "O que é a CareLens?",
+    question: "What is CyanBridge?",
     answer:
-      "A CareLens é uma plataforma de tecnologia assistiva que usa IA para apoiar idosos no dia a dia, através dos óculos HeyCyan.",
+      "CyanBridge is a software subscription that routes supported smart-glasses requests to chat, voice, and image AI models.",
   },
   {
     id: "faq-como-funcionam-os-oculos",
-    question: "Como funcionam os óculos?",
+    question: "Do you sell the smart glasses on this site?",
     answer:
-      "Os óculos têm câmera HD, microfone e alto-falante. A IA processa o que vê e ouve para ajudar com lembretes, alertas e companhia.",
+      "No. This website sells software access only. CyanBridge works with supported smart-glasses workflows, but hardware is not sold through this checkout domain.",
   },
   {
     id: "faq-quem-pode-usar",
-    question: "Quem pode usar?",
+    question: "What do paid plans include?",
     answer:
-      "Qualquer pessoa idosa. O familiar configura a IA durante o onboarding com informações de saúde e rotina.",
+      "Paid plans include managed access to AI models, monthly quotas, billing support, and the CyanBridge relay used by the companion app.",
   },
   {
     id: "faq-qual-o-custo",
-    question: "Qual o custo?",
+    question: "How much does it cost?",
     answer:
-      "Os óculos custam R$ 250,00 e a assinatura mensal de IA é R$ 50,00. Garantia de 30 dias.",
+      "CyanBridge offers monthly software plans starting at $1, with higher tiers at $5 and $20 depending on your quota needs.",
   },
   {
     id: "faq-cancelar-assinatura",
-    question: "Posso cancelar a assinatura?",
+    question: "Can I cancel my subscription?",
     answer:
-      "Sim, após 3 meses do primeiro pagamento. Os óculos continuam funcionando como dispositivo básico.",
+      "Yes. You can cancel your software subscription from your account or by contacting support. Access continues until the end of the current billing period.",
   },
   {
     id: "faq-monitoramento-familiar",
-    question: "Como funciona o monitoramento familiar?",
+    question: "Is CyanBridge a medical or high-stakes decision system?",
     answer:
-      "O familiar tem acesso a um painel com atividade, lembretes, interações da IA e alertas em tempo real.",
+      "No. CyanBridge is not a medical service and should not be used to make healthcare, diagnosis, treatment, employment, credit, housing, or other high-stakes personal decisions.",
   },
 ];
 
 function FAQItemComponent({ item, index, isOpen, onToggle }: { item: FAQItem; index: number; isOpen: boolean; onToggle: () => void }) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const contentInnerRef = useRef<HTMLParagraphElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const numberLabel = String(index + 1).padStart(2, "0");
 
-  // GSAP expand/collapse animation using grid-template-rows for dynamic height
   useGSAP(
     () => {
       if (!contentRef.current) return;
 
-      // Get reduced motion preference
       const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (prefersReducedMotion) {
-        // No animation, just toggle display state
         contentRef.current.style.gridTemplateRows = isOpen ? "1fr" : "0fr";
         contentRef.current.style.opacity = isOpen ? "1" : "0";
         return;
       }
 
-      // Animate using grid-template-rows (no fixed max-height needed)
-      const animateTo = isOpen ? "1fr" : "0fr";
-      const opacityTo = isOpen ? "1" : "0";
-      
       gsap.to(contentRef.current, {
-        gridTemplateRows: animateTo,
-        opacity: opacityTo,
+        gridTemplateRows: isOpen ? "1fr" : "0fr",
+        opacity: isOpen ? "1" : "0",
         duration: 0.35,
         ease: "power2.out",
       });
 
-      // Animate the rotate icon
       const chevron = buttonRef.current?.querySelector(".faq-chevron") as HTMLElement | null;
       if (chevron) {
         gsap.to(chevron, {
@@ -106,7 +87,6 @@ function FAQItemComponent({ item, index, isOpen, onToggle }: { item: FAQItem; in
     { scope: contentRef, dependencies: [isOpen] },
   );
 
-  // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -123,9 +103,8 @@ function FAQItemComponent({ item, index, isOpen, onToggle }: { item: FAQItem; in
         aria-expanded={isOpen}
         aria-controls={`faq-answer-${item.id}`}
         id={`faq-question-${item.id}`}
-        className="faq-question flex w-full items-start gap-4 py-4 text-left focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2 rounded-lg"
+        className="faq-question flex w-full items-start gap-4 rounded-lg py-4 text-left focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2"
       >
-        {/* Minimal numbered badge [01]-[06] */}
         <span
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#95b6a5]/24 text-xs font-mono font-medium text-[#1f5b66]/82"
           aria-hidden="true"
@@ -134,7 +113,7 @@ function FAQItemComponent({ item, index, isOpen, onToggle }: { item: FAQItem; in
         </span>
         <span className="flex-1 text-base font-semibold text-[#24393f]">{item.question}</span>
         <span
-          className="faq-chevron flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#95b6a5]/24 text-[#1f5b66] text-base font-semibold leading-none"
+          className="faq-chevron flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#95b6a5]/24 text-base font-semibold leading-none text-[#1f5b66]"
           aria-hidden="true"
         >
           {isOpen ? "−" : "+"}
@@ -152,7 +131,7 @@ function FAQItemComponent({ item, index, isOpen, onToggle }: { item: FAQItem; in
           opacity: isOpen ? 1 : 0,
         }}
       >
-        <div ref={contentInnerRef} className="overflow-hidden pb-4 pl-12 text-sm leading-relaxed text-[#1f5b66]/88">
+        <div className="overflow-hidden pb-4 pl-12 text-sm leading-relaxed text-[#1f5b66]/88">
           {item.answer}
         </div>
       </div>
@@ -167,7 +146,6 @@ export function FAQAccordion() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
   const [isReducedMotion, setIsReducedMotion] = useState(false);
 
-  // Detect reduced motion preference
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const onChange = () => setIsReducedMotion(mediaQuery.matches);
@@ -176,13 +154,11 @@ export function FAQAccordion() {
     return () => mediaQuery.removeEventListener("change", onChange);
   }, []);
 
-  // Scroll-triggered section reveal
   useGSAP(
     () => {
       if (isReducedMotion) return;
 
       const ctx = gsap.context(() => {
-        // Header reveal
         gsap.fromTo(
           headerRef.current,
           { opacity: 0, y: 32 },
@@ -199,7 +175,6 @@ export function FAQAccordion() {
           },
         );
 
-        // Accordion items stagger reveal
         gsap.fromTo(
           accordionRef.current?.querySelectorAll(".faq-question") || [],
           { opacity: 0, y: 20 },
@@ -227,7 +202,6 @@ export function FAQAccordion() {
     setOpenIndex(openIndex === index ? null : index);
   };
 
-  // Close on escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape" && openIndex !== null) {
@@ -276,13 +250,13 @@ export function FAQAccordion() {
   }, []);
 
   return (
-    <section id="faq" ref={sectionRef} className="space-y-6 scroll-mt-20 sm:scroll-mt-24" aria-label="Perguntas frequentes">
+    <section id="faq" ref={sectionRef} className="space-y-6 scroll-mt-20 sm:scroll-mt-24" aria-label="Frequently asked questions">
       <div ref={headerRef} className="space-y-1">
         <h2 className="text-2xl font-semibold tracking-tight text-[#24393f] sm:text-3xl">
-          Perguntas frequentes
+          Frequently asked questions
         </h2>
         <p className="text-base text-[#1f5b66]/88">
-          Tire suas dúvidas sobre a CareLens, os óculos e a assinatura de IA.
+          Questions about the software, smart-glasses support, and billing.
         </p>
       </div>
       <div ref={accordionRef} className="rounded-xl border border-[#cdbe98]/45 bg-white/60 p-4 shadow-card backdrop-blur-sm sm:p-5">

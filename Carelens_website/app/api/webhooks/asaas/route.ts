@@ -28,8 +28,8 @@ const EVENT_STATUS_MAP: Record<string, string> = {
 
 /* Subscription events map to their statuses */
 const SUBSCRIPTION_STATUS_MAP: Record<string, string> = {
-  SUBSCRIPTION_CREATED: "ACTIVE",
-  SUBSCRIPTION_UPDATED: "ACTIVE",
+  SUBSCRIPTION_CREATED: "PENDING",
+  SUBSCRIPTION_UPDATED: "PENDING",
   SUBSCRIPTION_ACTIVATED: "ACTIVE",
   SUBSCRIPTION_SUSPENDED: "INACTIVE",
   SUBSCRIPTION_CANCELED: "CANCELED",
@@ -160,13 +160,13 @@ async function processSubscriptionEvent(
         eventType,
       });
 
-      // Also update linked payment records
-      await prisma.asaasPayment.updateMany({
-        where: { asaasSubscriptionId: subscriptionId },
-        data: {
-          status: nextStatus === "ACTIVE" ? "CONFIRMED" : "CANCELED",
-        },
-      });
+      // Terminal subscription states should also inactivate linked payment records.
+      if (nextStatus === "CANCELED" || nextStatus === "EXPIRED") {
+        await prisma.asaasPayment.updateMany({
+          where: { asaasSubscriptionId: subscriptionId },
+          data: { status: "CANCELED" },
+        });
+      }
     } else {
       logInfo("asaas_webhook_orphan_subscription", "Webhook for unknown subscription", {
         subscriptionId,
@@ -180,16 +180,16 @@ async function processSubscriptionEvent(
       const relayUser = await findRelayUserByAsaasSubscription(subscriptionId);
 
       if (relayUser) {
-        const isActive = SUBSCRIPTION_STATUS_MAP[eventType] === "ACTIVE";
-        const nextRelayStatus = isActive ? "active" : "inactive";
-        const expiresAtMs = isActive
-          ? Date.now() + 31 * 24 * 60 * 60 * 1000
-          : 0;
+        const nextSubStatus = SUBSCRIPTION_STATUS_MAP[eventType];
+        const isInactiveTerminal = nextSubStatus === "INACTIVE" || nextSubStatus === "CANCELED" || nextSubStatus === "EXPIRED";
+        if (!isInactiveTerminal) {
+          return;
+        }
 
         await saveRelayUser({
           ...relayUser,
-          subscriptionStatus: nextRelayStatus,
-          expiresAtMs,
+          subscriptionStatus: "inactive",
+          expiresAtMs: 0,
           updatedAt: new Date().toISOString(),
         });
 
@@ -197,7 +197,7 @@ async function processSubscriptionEvent(
           relayUserId: relayUser.id,
           asaasSubscriptionId: subscriptionId,
           eventType,
-          newStatus: nextRelayStatus,
+          newStatus: "inactive",
         });
       }
     } catch (relayErr) {
@@ -325,12 +325,13 @@ export async function POST(request: Request) {
       // Duplicate event — already processed, ack 200
       return NextResponse.json({ ok: true, message: "Duplicate event ignored (idempotency)" });
     }
-    logError("asaas_webhook_persistence_failed", "Failed to persist webhook event", {
+    logError("asaas_webhook_persistence_failed", "Failed to persist webhook event (non-fatal)", {
       eventId,
       eventType,
       error: String(error),
     });
-    throw error;
+    // Non-fatal: continue processing so KV sync still runs.
+    // On Vercel (no SQLite), this is expected — persist failure is tolerated.
   }
 
   logWebhookEvent({

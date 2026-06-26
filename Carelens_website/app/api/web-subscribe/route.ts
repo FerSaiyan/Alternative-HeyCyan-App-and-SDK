@@ -12,11 +12,9 @@ import {
   isAsaasConfigured,
   createCustomer,
   createSubscription,
-  getSubscription,
   listPaymentsBySubscription,
   tokenizeCreditCard,
   updateCustomer,
-  updateSubscription,
 } from "@/lib/asaas";
 import { usdToBrl, getUsdToBrlRate } from "@/lib/exchange-rate";
 import { logInfo, logError } from "@/lib/logger";
@@ -88,22 +86,12 @@ function getClientIp(request: Request): string {
 type DirectCheckoutState = {
   holderName: string;
   email: string;
-  cpfCnpj: string;
-  postalCode: string;
-  addressNumber: string;
-  phone: string;
-  mobilePhone: string;
 };
 
 function emptyDirectState(email: string): DirectCheckoutState {
   return {
     holderName: "",
     email,
-    cpfCnpj: "",
-    postalCode: "",
-    addressNumber: "",
-    phone: "",
-    mobilePhone: "",
   };
 }
 
@@ -112,15 +100,14 @@ function legacyCheckoutHtml(params: {
   planLabel: string;
   priceUsd: number;
   priceBrl: number;
-  cancelUrl: string;
   statusUrl: string;
   successUrl: string;
 }): string {
   const planLabel = escapeHtml(params.planLabel);
   const invoiceUrl = escapeHtml(params.invoiceUrl);
-  const cancelUrl = escapeHtml(params.cancelUrl);
   const statusUrlJson = JSON.stringify(params.statusUrl);
   const successUrlJson = JSON.stringify(params.successUrl);
+  const supportNote = escapeHtml("Hi, thanks for your interest in the Pro Sub. I work on this project besides my PhD studies and your comments and support motivate me. I havent been able to setup Stripe yet because of their special requirements for Brazilian businesses, so for now i am using a payment processor called Asaas and the checkout page is sadly in portuguese, so please use Google Translate. I know this is a bummer and i am actively looking for a better alternative. Thanks again for your support!");
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -136,6 +123,7 @@ h1{font-size:24px;margin-bottom:8px;color:#fff}.subtitle{color:#888;font-size:14
 .plan-price{font-size:14px;color:#aaa;margin-top:4px}.btn{display:block;width:100%;padding:16px;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;text-decoration:none;margin-bottom:12px;transition:opacity 0.2s}
 .btn-primary{background:#4fc3f7;color:#000}.btn-secondary{background:transparent;color:#888;border:1px solid #333}.btn-disabled{opacity:0.6;pointer-events:none}
 .status-box{display:none;background:#101827;border:1px solid #23314f;border-radius:12px;padding:14px;margin-bottom:18px;text-align:left}.status-box strong{display:block;color:#fff;margin-bottom:6px}.status-box p{font-size:13px;color:#b5c0d0;line-height:1.5}
+.note{background:#101827;border:1px solid #2d3748;border-radius:12px;padding:14px;margin-bottom:18px;text-align:left;color:#d1d5db;font-size:13px;line-height:1.55}
 </style>
 </head>
 <body>
@@ -143,10 +131,10 @@ h1{font-size:24px;margin-bottom:8px;color:#fff}.subtitle{color:#888;font-size:14
 <h1>CyanBridge Pro</h1>
 <p class="subtitle">Legacy Asaas hosted checkout</p>
 <div class="plan-box"><div class="plan-name">${planLabel}</div><div class="plan-price">$${params.priceUsd}/mo &middot; R$ ${params.priceBrl.toFixed(2)}/mo</div></div>
+<div class="note">${supportNote}</div>
 <div id="status-box" class="status-box"><strong id="status-title">Waiting for payment confirmation</strong><p id="status-message">After finishing the card form in Asaas, return here and tap the confirmation button below.</p></div>
 <a id="open-checkout" class="btn btn-primary" href="${invoiceUrl}" target="_blank" rel="noopener noreferrer">Open Legacy Asaas Card Form</a>
 <button id="check-status" class="btn btn-secondary" type="button">I Completed Payment</button>
-<a class="btn btn-secondary" href="${cancelUrl}">Cancel</a>
 </div>
 <script>
 const statusUrl = ${statusUrlJson};
@@ -195,6 +183,7 @@ function englishCheckoutHtml(params: {
   email: string;
   legacyCheckoutUrl: string;
   changePlanRequested: boolean;
+  replaceSubscriptionId?: string;
   errorMessage?: string;
   values?: DirectCheckoutState;
 }): string {
@@ -244,14 +233,10 @@ label{display:block;font-size:13px;color:#bfd4ea;margin-bottom:6px}.field{width:
       <input type="hidden" name="return_url" value="${escapeHtml(params.returnUrl)}">
       <input type="hidden" name="plan" value="${escapeHtml(params.plan)}">
       <input type="hidden" name="change_plan" value="${params.changePlanRequested ? "1" : "0"}">
+      <input type="hidden" name="replace_subscription_id" value="${escapeHtml(params.replaceSubscriptionId ?? "")}">
       <div class="grid">
-        <div class="full"><label for="holder_name">Cardholder full name</label><input id="holder_name" class="field" name="holder_name" value="${escapeHtml(values.holderName)}" placeholder="Jane Smith" autocomplete="cc-name" required></div>
-        <div><label for="email">Account email</label><input id="email" class="field" type="email" name="email" value="${escapeHtml(values.email)}" placeholder="you@example.com" autocomplete="email" required></div>
-        <div><label for="cpf_cnpj">Tax ID / CPF</label><input id="cpf_cnpj" class="field" name="cpf_cnpj" value="${escapeHtml(values.cpfCnpj)}" placeholder="12345678909" inputmode="numeric" required></div>
-        <div><label for="postal_code">Postal code</label><input id="postal_code" class="field" name="postal_code" value="${escapeHtml(values.postalCode)}" placeholder="89000000" inputmode="numeric" required></div>
-        <div><label for="address_number">Address number</label><input id="address_number" class="field" name="address_number" value="${escapeHtml(values.addressNumber)}" placeholder="100" required></div>
-        <div><label for="phone">Phone</label><input id="phone" class="field" name="phone" value="${escapeHtml(values.phone)}" placeholder="5511999998888" inputmode="tel"></div>
-        <div><label for="mobile_phone">Mobile phone</label><input id="mobile_phone" class="field" name="mobile_phone" value="${escapeHtml(values.mobilePhone)}" placeholder="5511999998888" inputmode="tel"></div>
+        <div class="full"><label for="holder_name">Name on card</label><input id="holder_name" class="field" name="holder_name" value="${escapeHtml(values.holderName)}" placeholder="Jane Smith" autocomplete="cc-name" required></div>
+        <div class="full"><label for="email">Email</label><input id="email" class="field" type="email" name="email" value="${escapeHtml(values.email)}" placeholder="you@example.com" autocomplete="email" required></div>
         <div class="full"><label for="card_number">Card number</label><input id="card_number" class="field" name="card_number" placeholder="4111 1111 1111 1111" autocomplete="cc-number" inputmode="numeric" required></div>
         <div class="row-3 full">
           <div><label for="expiry_month">Expiry month</label><input id="expiry_month" class="field" name="expiry_month" placeholder="03" autocomplete="cc-exp-month" inputmode="numeric" required></div>
@@ -283,7 +268,6 @@ label{display:block;font-size:13px;color:#bfd4ea;margin-bottom:6px}.field{width:
 async function ensureAsaasCustomerForCheckout(user: RelayUser, params: {
   name: string;
   email: string;
-  cpfCnpj: string;
 }): Promise<{ user: RelayUser; customerId: string }> {
   let currentUser = user;
   let asaasCustomerId = user.asaasCustomerId;
@@ -294,7 +278,6 @@ async function ensureAsaasCustomerForCheckout(user: RelayUser, params: {
         customerId: asaasCustomerId,
         name: params.name,
         email: params.email,
-        cpfCnpj: params.cpfCnpj || undefined,
         externalReference: user.id,
       });
     } catch {
@@ -306,8 +289,7 @@ async function ensureAsaasCustomerForCheckout(user: RelayUser, params: {
     const customer = await createCustomer({
       name: params.name,
       email: params.email,
-      cpfCnpj: params.cpfCnpj || undefined,
-      foreignCustomer: !params.cpfCnpj,
+      foreignCustomer: true,
       externalReference: user.id,
     });
     asaasCustomerId = customer.id;
@@ -328,6 +310,8 @@ async function renderLegacyHostedCheckout(request: Request, params: {
   plan: string;
   returnUrl: string;
   customerEmail: string;
+  native: boolean;
+  replaceSubscriptionId?: string;
 }): Promise<NextResponse> {
   const planInfo = RELAY_PLANS[params.plan];
   const priceUsd = planInfo?.priceUsd ?? 5;
@@ -338,7 +322,6 @@ async function renderLegacyHostedCheckout(request: Request, params: {
   const { user, customerId } = await ensureAsaasCustomerForCheckout(params.user, {
     name: customerName,
     email: params.customerEmail,
-    cpfCnpj: "",
   });
 
   const nextDueDateStr = new Date().toISOString().slice(0, 10);
@@ -381,6 +364,7 @@ async function renderLegacyHostedCheckout(request: Request, params: {
     return_url: params.returnUrl,
     api_token: user.apiToken,
     plan: params.plan,
+    replace_subscription_id: params.replaceSubscriptionId ?? "",
   });
 
   const statusUrl = appendQueryParams(new URL("/web-subscribe/status", request.url).toString(), {
@@ -389,21 +373,32 @@ async function renderLegacyHostedCheckout(request: Request, params: {
     plan: params.plan,
   });
 
-  const cancelUrl = appendQueryParams(params.returnUrl, {
-    status: "cancel",
-    plan: params.plan,
-    api_token: user.apiToken,
-    email: user.email ?? "",
-    message: "Checkout canceled before payment was confirmed.",
-  });
-
   if (invoiceUrl) {
+    if (params.native) {
+      return NextResponse.json(
+        {
+          ok: true,
+          mode: "legacy_hosted_checkout",
+          invoice_url: invoiceUrl,
+          status_url: statusUrl,
+          success_url: successUrl,
+          subscription_id: subscription.id,
+          plan: params.plan,
+          plan_label: planInfo?.label ?? params.plan,
+          price_usd: priceUsd,
+          price_brl: priceBrl,
+          api_token: user.apiToken,
+          email: user.email ?? "",
+        },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
     const html = legacyCheckoutHtml({
       invoiceUrl,
       planLabel: planInfo?.label ?? params.plan,
       priceUsd,
       priceBrl,
-      cancelUrl,
       statusUrl,
       successUrl,
     });
@@ -427,11 +422,6 @@ function parseFormState(formData: FormData): DirectCheckoutState {
   return {
     holderName: String(formData.get("holder_name") ?? "").trim(),
     email: String(formData.get("email") ?? "").trim().toLowerCase(),
-    cpfCnpj: normalizeDigits(String(formData.get("cpf_cnpj") ?? "")),
-    postalCode: normalizeDigits(String(formData.get("postal_code") ?? "")),
-    addressNumber: String(formData.get("address_number") ?? "").trim(),
-    phone: normalizeDigits(String(formData.get("phone") ?? "")),
-    mobilePhone: normalizeDigits(String(formData.get("mobile_phone") ?? "")),
   };
 }
 
@@ -443,9 +433,6 @@ function validateDirectCheckoutInput(state: DirectCheckoutState, card: {
 }): string | null {
   if (!state.holderName) return "Cardholder name is required.";
   if (!isRealCustomerEmail(state.email)) return "A valid email address is required.";
-  if (!state.cpfCnpj) return "Tax ID / CPF is required by the payment processor for direct card validation.";
-  if (!state.postalCode) return "Postal code is required.";
-  if (!state.addressNumber) return "Address number is required.";
   if (card.number.length < 12) return "Enter a valid card number.";
   if (card.expiryMonth.length !== 2) return "Enter a valid expiry month.";
   if (card.expiryYear.length !== 4) return "Enter a valid expiry year.";
@@ -463,6 +450,8 @@ export async function GET(request: Request) {
   const tokenHint = (searchParams.get("api_token") ?? "").trim();
   const changePlanRequested = searchParams.get("change_plan") === "1";
   const legacyCheckoutRequested = searchParams.get("legacy_checkout") === "1";
+  const nativeLegacyRequested = searchParams.get("native_legacy") === "1";
+  let replaceSubscriptionId = (searchParams.get("replace_subscription_id") ?? "").trim();
 
   const user = await ensureRelayUser(tokenHint || undefined, email || undefined);
   const customerEmail = (user.email ?? "").trim().toLowerCase();
@@ -476,7 +465,7 @@ export async function GET(request: Request) {
       plan,
       price_usd: RELAY_PLANS[plan]?.priceUsd ?? 5,
       required_query: ["return_url"],
-      optional_query: ["plan", "package_name", "api_token", "email", "change_plan", "legacy_checkout"],
+      optional_query: ["plan", "package_name", "api_token", "email", "change_plan", "legacy_checkout", "native_legacy"],
       mode: "english_direct_card",
     });
   }
@@ -542,64 +531,35 @@ export async function GET(request: Request) {
   }
 
   if (alreadyActive && changePlanRequested && user.asaasSubscriptionId) {
-    try {
-      if (normalizePlan(user.plan) === plan) {
-        const unchangedUrl = appendQueryParams(returnUrl, {
-          status: "success",
-          plan,
-          token: user.asaasSubscriptionId,
-          expires_at_ms: String(Number(user.expiresAtMs)),
-          api_token: user.apiToken,
-          email: user.email ?? "",
-          message: `Your ${planInfo?.label ?? plan} plan is already active.`,
-        });
-        return NextResponse.redirect(unchangedUrl, 303);
-      }
-
-      const priceBrl = await usdToBrl(priceUsd);
-      const currentSubscription = await getSubscription(user.asaasSubscriptionId);
-      await updateSubscription({
-        subscriptionId: user.asaasSubscriptionId,
-        billingType: "CREDIT_CARD",
-        value: priceBrl,
-        nextDueDate: currentSubscription.nextDueDate,
-        cycle: currentSubscription.cycle,
-        description: `CyanBridge Pro - ${planInfo?.label ?? plan} ($${priceUsd}/mo)`,
-        externalReference: user.id,
-      });
-
-      await saveRelayUser({
-        ...user,
-        plan,
-        updatedAt: new Date().toISOString(),
-      });
-
-      const updatedUrl = appendQueryParams(returnUrl, {
+    if (normalizePlan(user.plan) === plan) {
+      const unchangedUrl = appendQueryParams(returnUrl, {
         status: "success",
         plan,
         token: user.asaasSubscriptionId,
         expires_at_ms: String(Number(user.expiresAtMs)),
         api_token: user.apiToken,
         email: user.email ?? "",
-        message: `Plan updated to ${planInfo?.label ?? plan}. The new recurring price applies on your next renewal.`,
+        message: `Your ${planInfo?.label ?? plan} plan is already active.`,
       });
-      return NextResponse.redirect(updatedUrl, 303);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      const errUrl = appendQueryParams(returnUrl, {
-        status: "error",
-        plan,
-        api_token: user.apiToken,
-        email: user.email ?? "",
-        message: `Unable to change plan: ${message}`,
-      });
-      return NextResponse.redirect(errUrl, 303);
+      return NextResponse.redirect(unchangedUrl, 303);
     }
+
+    // Asaas only documents in-place subscription edits for BOLETO/PIX. For
+    // CREDIT_CARD subscriptions we replace the subscription after the new one
+    // is successfully paid, then cancel the old recurring schedule.
+    replaceSubscriptionId = user.asaasSubscriptionId;
   }
 
   if (legacyCheckoutRequested) {
     try {
-      return await renderLegacyHostedCheckout(request, { user, plan, returnUrl, customerEmail });
+      return await renderLegacyHostedCheckout(request, {
+        user,
+        plan,
+        returnUrl,
+        customerEmail,
+        native: nativeLegacyRequested,
+        replaceSubscriptionId,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       const errUrl = appendQueryParams(returnUrl, {
@@ -621,6 +581,7 @@ export async function GET(request: Request) {
     api_token: user.apiToken,
     email: customerEmail,
     change_plan: changePlanRequested ? "1" : "0",
+    replace_subscription_id: replaceSubscriptionId,
     legacy_checkout: "1",
   });
 
@@ -643,6 +604,7 @@ export async function GET(request: Request) {
     email: customerEmail,
     legacyCheckoutUrl,
     changePlanRequested,
+    replaceSubscriptionId,
   });
   return new NextResponse(html, {
     status: 200,
@@ -662,6 +624,7 @@ export async function POST(request: Request) {
   const returnUrl = String(formData.get("return_url") ?? "").trim();
   const apiToken = String(formData.get("api_token") ?? "").trim();
   const changePlanRequested = String(formData.get("change_plan") ?? "0") === "1";
+  const replaceSubscriptionId = String(formData.get("replace_subscription_id") ?? "").trim();
   const state = parseFormState(formData);
 
   const card = {
@@ -682,6 +645,7 @@ export async function POST(request: Request) {
       api_token: apiToken,
       email: state.email,
       change_plan: changePlanRequested ? "1" : "0",
+      replace_subscription_id: replaceSubscriptionId,
       legacy_checkout: "1",
     });
     const html = englishCheckoutHtml({
@@ -694,6 +658,7 @@ export async function POST(request: Request) {
       email: state.email,
       legacyCheckoutUrl,
       changePlanRequested,
+      replaceSubscriptionId,
       errorMessage: message,
       values: state,
     });
@@ -715,7 +680,6 @@ export async function POST(request: Request) {
     const { user: ensuredUser, customerId } = await ensureAsaasCustomerForCheckout(user, {
       name: state.holderName,
       email: state.email,
-      cpfCnpj: state.cpfCnpj,
     });
 
     const remoteIp = getClientIp(request);
@@ -731,11 +695,6 @@ export async function POST(request: Request) {
       creditCardHolderInfo: {
         name: state.holderName,
         email: state.email,
-        cpfCnpj: state.cpfCnpj,
-        postalCode: state.postalCode,
-        addressNumber: state.addressNumber,
-        phone: state.phone || undefined,
-        mobilePhone: state.mobilePhone || undefined,
       },
       remoteIp,
     });
@@ -777,6 +736,7 @@ export async function POST(request: Request) {
       return_url: returnUrl,
       api_token: ensuredUser.apiToken,
       plan,
+      replace_subscription_id: replaceSubscriptionId,
     });
     return NextResponse.redirect(successUrl, 303);
   } catch (error) {

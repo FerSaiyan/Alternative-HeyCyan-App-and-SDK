@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
+import { enforceRelayQuota, extractOpenRouterUsage, OPENROUTER_DEFAULT_MODEL, recordRelayQuotaUsage, resolveOpenRouterModelId } from "@/lib/openrouter";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
 const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
-const OPENROUTER_DEFAULT_MODEL = process.env.OPENROUTER_DEFAULT_MODEL ?? "deepseek/deepseek-v4-flash";
 
 function resolveModel(model: string): string {
   const clean = model?.trim();
   if (!clean || clean === "auto") return OPENROUTER_DEFAULT_MODEL;
-  return clean;
+  return resolveOpenRouterModelId(clean);
 }
 
 export async function POST(request: Request) {
@@ -32,6 +32,9 @@ export async function POST(request: Request) {
   const resolvedModel = resolveModel(model);
 
   try {
+    const quotaCheck = await enforceRelayQuota(request, resolvedModel);
+    if (!quotaCheck.allowed) return quotaCheck.response;
+
     const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
@@ -55,12 +58,15 @@ export async function POST(request: Request) {
     const data = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
       model?: string;
+      usage?: Record<string, unknown>;
     };
 
     const text = data.choices?.[0]?.message?.content?.trim() ?? "";
     if (!text) throw new Error("openrouter_empty_content");
 
-    return NextResponse.json({ reply: text, model: data.model ?? resolvedModel });
+    const finalModel = data.model ?? resolvedModel;
+    const quota = await recordRelayQuotaUsage(quotaCheck.user, finalModel, extractOpenRouterUsage(data));
+    return NextResponse.json({ reply: text, model: finalModel, quota });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "voice_query_failed";
     return NextResponse.json({ error: msg }, { status: 502 });

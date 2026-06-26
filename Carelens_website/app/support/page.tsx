@@ -11,29 +11,30 @@ export default function SupportPage() {
       <main className="container-width pt-8 sm:pt-12">
         <section className="mx-auto grid max-w-4xl gap-5 lg:grid-cols-[1fr,1fr]">
           <GlassCard className="glass-card-strong p-6 sm:p-7">
-            <p className="pill-eyebrow">Suporte CareLens</p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Precisa de ajuda agora?</h1>
+            <p className="pill-eyebrow">CyanBridge Support</p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Need help right now?</h1>
             <p className="mt-3 text-sm leading-relaxed text-muted">
-              Fale com a gente sobre compra, assinatura, suporte técnico dos óculos e reembolso.
+              Contact us about software subscriptions, billing, companion app
+              access, and refunds.
             </p>
             <div className="mt-6 space-y-2 text-sm text-slate-800">
-              <p>- WhatsApp: +55 11 99999-0000</p>
-              <p>- E-mail: contato@carelens.com.br</p>
-              <p>- Horário: segunda a sexta, 8h às 18h</p>
+              <p>- Email: contato@fersaiyan.com</p>
+              <p>- Hours: Monday to Friday, 8am to 6pm</p>
+              <p>- Scope: software subscriptions only; hardware is not sold on this site</p>
             </div>
           </GlassCard>
 
           <GlassCard className="p-6 sm:p-7">
-            <h2 className="text-lg font-semibold text-slate-900">Atalhos rápidos</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Quick links</h2>
             <div className="mt-4 grid gap-3">
               <Link href="/account" className="btn-secondary text-center">
-                Meu painel
+                My account
               </Link>
-              <Link href="/refund" className="btn-secondary text-center">
-                Política de reembolso
+              <Link href="/refund-policy" className="btn-secondary text-center">
+                Refund policy
               </Link>
               <Link href="/support" className="btn-secondary text-center">
-                Falar com suporte
+                Contact support
               </Link>
             </div>
           </GlassCard>

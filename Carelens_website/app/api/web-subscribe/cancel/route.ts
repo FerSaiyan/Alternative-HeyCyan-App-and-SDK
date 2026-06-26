@@ -89,13 +89,36 @@ export async function GET(request: Request) {
     try {
       const sub = await getSubscription(user.asaasSubscriptionId);
       if (sub.status === "CANCELED" || sub.status === "EXPIRED") {
+        await saveRelayUser({
+          ...user,
+          asaasSubscriptionId: null,
+          subscriptionStatus: "inactive",
+          expiresAtMs: 0,
+          updatedAt: new Date().toISOString(),
+        });
         return new NextResponse(
           cancelPageHtml("success", "Your subscription has already been cancelled. You will have access until the end of your current billing period.", apiToken),
           { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
         );
       }
-    } catch {
-      // continue to show cancel form
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("Asaas API 404")) {
+        // continue to show cancel form on transient verification errors
+      } else {
+        // If the subscription no longer exists on Asaas, treat it as cancelled.
+        await saveRelayUser({
+          ...user,
+          asaasSubscriptionId: null,
+          subscriptionStatus: "inactive",
+          expiresAtMs: 0,
+          updatedAt: new Date().toISOString(),
+        });
+        return new NextResponse(
+          cancelPageHtml("success", "Your subscription is no longer active on Asaas. No new recurring charges will be created.", apiToken),
+          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
+        );
+      }
     }
   }
 
@@ -168,9 +191,11 @@ export async function POST(request: Request) {
     const { deleteSubscription } = await import("@/lib/asaas");
     await deleteSubscription(user.asaasSubscriptionId);
 
-    // Update local user status
+    // Delete stops future recurring charges in Asaas. Preserve already-paid access
+    // until expiry, but remove the live Asaas subscription id so renewals stay off.
     await saveRelayUser({
       ...user,
+      asaasSubscriptionId: null,
       subscriptionStatus: "inactive",
       expiresAtMs: 0,
       updatedAt: new Date().toISOString(),

@@ -22,14 +22,14 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "CareLens AI - Tecnologia Assistiva para Envelhecimento Seguro",
+  title: "CyanBridge - AI Software for Smart Glasses",
   description:
-    "CareLens AI - Tecnologia assistiva inteligente para um envelhecimento mais seguro.",
+    "CyanBridge is a software subscription for connecting supported smart glasses to chat, voice, and image AI models.",
   openGraph: {
-    title: "CareLens AI - Tecnologia Assistiva para Envelhecimento Seguro",
+    title: "CyanBridge - AI Software for Smart Glasses",
     description:
-      "CareLens AI - Tecnologia assistiva inteligente para um envelhecimento mais seguro.",
-    siteName: "CareLens",
+      "CyanBridge is a software subscription for connecting supported smart glasses to chat, voice, and image AI models.",
+    siteName: "CyanBridge",
     type: "website",
   },
   icons: {

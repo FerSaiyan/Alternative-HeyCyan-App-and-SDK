@@ -93,4 +93,11 @@
     <string name="synced_media_open_failed">Unable to open this media item.</string>
     <string name="synced_media_video_badge">VIDEO</string>
     <string name="auto_audio_speech_extend">Extend loop when speech detected (avoid cutting conversations)</string>
+    <string name="legacy_checkout_dialog_title">CyanBridge Pro Support Note</string>
+    <string name="legacy_checkout_dialog_message">Hi, thanks for your interest in the Pro Sub. I work on this project besides my PhD studies and your comments and support motivate me. I havent been able to setup Stripe yet because of their special requirements for Brazilian businesses, so for now i am using a payment processor called Asaas and the checkout page is sadly in portuguese, so please use Google Translate. I know this is a bummer and i am actively looking for a better alternative. Thanks again for your support!</string>
+    <string name="legacy_checkout_open_button">Open Asaas Card Form</string>
+    <string name="legacy_checkout_return_title">Did you finish the Asaas form?</string>
+    <string name="legacy_checkout_return_message">If you completed the secure Asaas card form in the browser, tap I Completed Payment and CyanBridge will verify your subscription now.</string>
+    <string name="legacy_checkout_confirm_button">I Completed Payment</string>
+    <string name="legacy_checkout_reopen_button">Open Card Form Again</string>
 </resources>

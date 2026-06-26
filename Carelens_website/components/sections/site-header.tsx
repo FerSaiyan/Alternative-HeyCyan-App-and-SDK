@@ -45,7 +45,7 @@ export function SiteHeader() {
             onToggle={(e) => setIsMobileMenuOpen((e.target as HTMLDetailsElement).open)}
           >
             <summary
-              aria-label="Abrir menu"
+              aria-label="Open menu"
               aria-haspopup="menu"
               className="flex h-8 min-w-[32px] cursor-pointer items-center justify-center rounded-full border border-[#cdbe98]/60 bg-white/80 px-2.5 hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-1"
             >
@@ -67,7 +67,7 @@ export function SiteHeader() {
               <nav
                 role="menu"
                 className="flex flex-col gap-1 text-sm text-[#24393f]"
-                aria-label="Menu mobile"
+                aria-label="Mobile menu"
               >
                 <Link
                   href="/#servicos"
@@ -75,7 +75,7 @@ export function SiteHeader() {
                   className="rounded-lg px-3 py-2.5 hover:bg-[#95b6a5]/22 focus:outline-none focus:ring-2 focus:ring-brand/50"
                   role="menuitem"
                 >
-                  Produto
+                  Product
                 </Link>
                 <Link
                   href="/#caminho"
@@ -83,7 +83,7 @@ export function SiteHeader() {
                   className="rounded-lg px-3 py-2.5 hover:bg-[#95b6a5]/22 focus:outline-none focus:ring-2 focus:ring-brand/50"
                   role="menuitem"
                 >
-                  Recursos
+                  Features
                 </Link>
                 <Link
                   href="/#precos"
@@ -91,7 +91,7 @@ export function SiteHeader() {
                   className="rounded-lg px-3 py-2.5 hover:bg-[#95b6a5]/22 focus:outline-none focus:ring-2 focus:ring-brand/50"
                   role="menuitem"
                 >
-                  Modelo
+                  Pricing
                 </Link>
                 <Link
                   href="/#confianca"
@@ -99,7 +99,7 @@ export function SiteHeader() {
                   className="rounded-lg px-3 py-2.5 hover:bg-[#95b6a5]/22 focus:outline-none focus:ring-2 focus:ring-brand/50"
                   role="menuitem"
                 >
-                  Público
+                  Use Cases
                 </Link>
                 <Link
                   href="/#faq"
@@ -115,7 +115,7 @@ export function SiteHeader() {
                   className="rounded-lg px-3 py-2.5 hover:bg-[#95b6a5]/22 focus:outline-none focus:ring-2 focus:ring-brand/50"
                   role="menuitem"
                 >
-                  Contato
+                  Contact
                 </Link>
                 <hr className="my-1 border-white/70" />
                 <Link
@@ -124,7 +124,7 @@ export function SiteHeader() {
                   className="rounded-lg px-3 py-2.5 hover:bg-[#95b6a5]/22 focus:outline-none focus:ring-2 focus:ring-brand/50"
                   role="menuitem"
                 >
-                  Suporte
+                  Support
                 </Link>
               </nav>
             </div>
@@ -134,9 +134,9 @@ export function SiteHeader() {
           <Link
             href="/"
             className="hidden md:flex md:items-center"
-            aria-label="CareLens AI - Página inicial"
+            aria-label="CyanBridge home"
           >
-            <span className="text-xl font-bold tracking-tight text-[#24393f]">CareLens AI</span>
+            <span className="text-xl font-bold tracking-tight text-[#24393f]">CyanBridge</span>
           </Link>
         </div>
 
@@ -146,17 +146,17 @@ export function SiteHeader() {
           <Link
             href="/"
             className="md:hidden flex items-center"
-            aria-label="CareLens AI"
+            aria-label="CyanBridge"
           >
-            <span className="text-lg font-bold tracking-tight text-[#24393f]">CareLens AI</span>
+            <span className="text-lg font-bold tracking-tight text-[#24393f]">CyanBridge</span>
           </Link>
 
           {/* Desktop CTA */}
           <Link
-            href="#contato"
+            href="/pricing"
             className="btn-primary px-4 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-1 rounded-full hidden md:inline-flex"
           >
-            Começar Agora
+            View Pricing
           </Link>
         </div>
       </div>

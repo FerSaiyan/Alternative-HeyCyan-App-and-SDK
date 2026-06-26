@@ -1,14 +1,5 @@
 import Link from "next/link";
 
-/**
- * SiteFooter - CareLens AI footer
- *
- * - Brand logo "CareLens AI"
- * - Required disclaimer
- * - Navigation links: Termos, Privacidade, Suporte
- * - Contact email: contato@carelens.com.br
- * - Copyright "CareLens AI © {year}"
- */
 export function SiteFooter() {
   const year = new Date().getFullYear();
 
@@ -18,38 +9,47 @@ export function SiteFooter() {
         <div className="grid gap-6 sm:grid-cols-[1fr,auto]">
           <div className="space-y-4">
             {/* Logo */}
-            <span className="text-xl font-bold tracking-tight text-[#24393f]">CareLens AI</span>
+            <span className="text-xl font-bold tracking-tight text-[#24393f]">CyanBridge</span>
 
-            {/* Required disclaimer */}
+            {/* Description */}
             <p className="text-sm leading-relaxed text-[#1f5b66]/88">
-              A CareLens é uma plataforma de tecnologia assistiva que utiliza inteligência artificial para apoiar idosos no dia a dia. Os óculos HeyCyan são dispositivos de assistência e não substituem acompanhamento médico profissional. Em caso de emergência, ligue para 190 (SAMU) ou procure o pronto-socorro mais próximo.
+              CyanBridge is a software subscription for connecting supported
+              smart glasses to chat, voice, and image AI models through a
+              managed relay service. This website sells software access only,
+              not hardware or medical services.
             </p>
 
             {/* Navigation links - pill style */}
-            <nav className="flex flex-wrap gap-x-3 gap-y-2" aria-label="Navegação do rodapé">
+            <nav className="flex flex-wrap gap-x-3 gap-y-2" aria-label="Footer navigation">
               <Link
-                href="/termos"
+                href="/pricing"
                 className="rounded-full px-3 py-1.5 text-xs font-medium text-[#1f5b66]/80 transition-colors hover:bg-[#95b6a5]/22 hover:text-brand focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2"
               >
-                Termos
+                Pricing
               </Link>
               <Link
-                href="/privacidade"
+                href="/terms"
                 className="rounded-full px-3 py-1.5 text-xs font-medium text-[#1f5b66]/80 transition-colors hover:bg-[#95b6a5]/22 hover:text-brand focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2"
               >
-                Privacidade
+                Terms of Use
               </Link>
               <Link
-                href="/privacidade/dados"
+                href="/privacy"
                 className="rounded-full px-3 py-1.5 text-xs font-medium text-[#1f5b66]/80 transition-colors hover:bg-[#95b6a5]/22 hover:text-brand focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2"
               >
-                Retenção de Dados
+                Privacy Policy
+              </Link>
+              <Link
+                href="/refund-policy"
+                className="rounded-full px-3 py-1.5 text-xs font-medium text-[#1f5b66]/80 transition-colors hover:bg-[#95b6a5]/22 hover:text-brand focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2"
+              >
+                Refund Policy
               </Link>
               <Link
                 href="/support"
                 className="rounded-full px-3 py-1.5 text-xs font-medium text-[#1f5b66]/80 transition-colors hover:bg-[#95b6a5]/22 hover:text-brand focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2"
               >
-                Suporte
+                Support
               </Link>
             </nav>
           </div>
@@ -59,17 +59,17 @@ export function SiteFooter() {
         <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-[#cdbe98]/45 pt-5">
           <div className="text-xs text-[#1f5b66]/80">
             <a
-              href="mailto:contato@carelens.com.br"
+              href="mailto:contato@fersaiyan.com"
               className="rounded text-[#1f5b66]/80 transition-colors hover:text-brand focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2"
             >
-              contato@carelens.com.br
+              contato@fersaiyan.com
             </a>
           </div>
         </div>
 
         {/* Copyright */}
         <div className="mt-5 text-xs text-[#1f5b66]/64">
-          CareLens AI &copy; {year}. Todos os direitos reservados.
+          CyanBridge &copy; {year}. All rights reserved.
         </div>
       </div>
     </footer>

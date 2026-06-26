@@ -132,11 +132,14 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
         spinnerSupportChannel.setSelection(prefs.getInt("support_channel_idx", 0).coerceIn(0, supportItems.lastIndex))
 
         val modelIdToLabel = linkedMapOf(
-            "auto" to "auto",
-            "gpt-5.4" to "gpt-5.4",
-            "minimax/minimax-m2.5" to "minimax/minimax-m2.5",
-            "z-ai/glm-5" to "z-ai/glm-5",
-            "google/gemini-3-flash-preview" to "google/gemini-3-flash-preview",
+            "openrouter/free" to "Cheap models router (1x)",
+            "deepseek/deepseek-v4-flash" to "DeepSeek V4 Flash (2x)",
+            "minimax/minimax-m3" to "MiniMax M3 (5x)",
+            "openai/gpt-5.4" to "GPT 5.4 (30x)",
+            "openai/gpt-5.4-nano" to "GPT 5.4 Nano (6x)",
+            "deepseek/deepseek-v4-pro" to "DeepSeek V4 Pro (5x)",
+            "xiaomi/mimo-v2.5-pro" to "MiMo V2.5 Pro (5x)",
+            "google/gemini-3-flash-preview" to "Gemini 3 Flash Preview (13x)",
         )
 
         val modelLabels = mutableListOf<String>()
@@ -366,7 +369,6 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                         val currentTasks = selectedModel(spinnerModelTasks)
 
                         val merged = linkedMapOf<String, String>()
-                        merged["auto"] = "auto"
                         models.forEach { option ->
                             val id = option.id.trim()
                             if (id.isBlank()) return@forEach
@@ -375,9 +377,6 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                                 merged[id] = label
                             }
                         }
-                        if (!merged.containsKey(currentRequests)) merged[currentRequests] = currentRequests
-                        if (!merged.containsKey(currentQuestions)) merged[currentQuestions] = currentQuestions
-                        if (!merged.containsKey(currentTasks)) merged[currentTasks] = currentTasks
 
                         modelIdToLabel.clear()
                         modelIdToLabel.putAll(merged)
@@ -513,12 +512,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
     }
 
     private fun launchWebCheckoutForPlan(plan: String) {
-        val storedEmail = ProSubscriptionServerPrefs.getAccountEmail(this)
-        if (storedEmail.isBlank()) {
-            promptForCheckoutEmail(plan)
-            return
-        }
-        launchWebCheckoutWithEmail(plan, storedEmail)
+        promptForCheckoutEmail(plan)
     }
 
     private fun promptForCheckoutEmail(plan: String) {
@@ -546,7 +540,13 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                 }
                 ProSubscriptionServerPrefs.setAccountEmail(this, email)
                 dialog.dismiss()
-                launchWebCheckoutWithEmail(plan, email)
+                startActivity(Intent(this, ProSubscriptionActivity::class.java).apply {
+                    putExtra(ProSubscriptionActivity.EXTRA_INITIAL_PLAN, plan)
+                    putExtra(ProSubscriptionActivity.EXTRA_AUTO_START_WEB_CHECKOUT, true)
+                    putExtra(ProSubscriptionActivity.EXTRA_AUTO_WEB_CHECKOUT_CHANGE_PLAN, true)
+                    putExtra(ProSubscriptionActivity.EXTRA_AUTO_WEB_CHECKOUT_EMAIL, email)
+                })
+                finish()
             }
         }
 
@@ -585,58 +585,6 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
             }.onFailure {
                 Toast.makeText(this, "Unable to open Google Play subscription management: ${it.message}", Toast.LENGTH_LONG).show()
             }
-        }
-    }
-
-    private fun launchWebCheckoutWithEmail(plan: String, emailHint: String) {
-        val baseUrl = SubscriptionCheckoutPolicy.resolveWebCheckoutUrl(this)
-        if (baseUrl.isBlank()) {
-            Toast.makeText(this, "Web checkout is not configured yet. Check server URL.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        val parsedBase = runCatching { Uri.parse(baseUrl) }.getOrNull()
-        if (parsedBase == null || !parsedBase.isAbsolute || parsedBase.scheme.isNullOrBlank()) {
-            Toast.makeText(this, "Invalid checkout URL: $baseUrl", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        val callback = Uri.Builder()
-            .scheme("fersaiyan")
-            .authority("pro-sub")
-            .appendPath("callback")
-            .build()
-
-        val target = Uri.parse(baseUrl).buildUpon()
-            .appendQueryParameter("plan", plan)
-            .appendQueryParameter("change_plan", "1")
-            .appendQueryParameter("platform", "android")
-            .appendQueryParameter("package_name", packageName)
-            .appendQueryParameter("return_url", callback.toString())
-            .apply {
-                val apiToken = ProSubscriptionServerPrefs.getApiToken(this@ProSubscriptionSettingsActivity)
-                if (apiToken.isNotBlank()) {
-                    appendQueryParameter("api_token", apiToken)
-                }
-                val accountEmail = ProSubscriptionServerPrefs.getAccountEmail(this@ProSubscriptionSettingsActivity)
-                val finalEmail = emailHint.ifBlank { accountEmail }
-                if (finalEmail.isNotBlank()) {
-                    appendQueryParameter("email", finalEmail)
-                }
-            }
-            .build()
-
-        val intent = Intent(Intent.ACTION_VIEW, target)
-        if (intent.resolveActivityInfo(packageManager, 0) == null) {
-            Toast.makeText(this, "No browser found to open checkout.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        Toast.makeText(this, "Opening web checkout...", Toast.LENGTH_SHORT).show()
-        try {
-            startActivity(intent)
-        } catch (e: Throwable) {
-            Toast.makeText(this, "Unable to open checkout: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { extractBearerToken, getRelayUserByToken, normalizePlan, saveRelayUser } from "@/lib/relay-kv";
-import { isAsaasConfigured, getSubscription } from "@/lib/asaas";
+import { getHostedSubscriptionState, isAsaasConfigured, getSubscription } from "@/lib/asaas";
 import { logInfo } from "@/lib/logger";
 
 function isSubscriptionActive(subStatus: string, expiresAtMs: number): boolean {
@@ -34,8 +34,9 @@ export async function POST(request: Request) {
   if (user.asaasSubscriptionId && isAsaasConfigured()) {
     try {
       const sub = await getSubscription(user.asaasSubscriptionId);
+      const paymentSummary = await getHostedSubscriptionState(user.asaasSubscriptionId);
 
-      const isActive = sub.status === "ACTIVE";
+      const isActive = paymentSummary.state === "active";
       const expiresAtMs = isActive ? Number(user.expiresAtMs) || Date.now() + 31 * 24 * 60 * 60 * 1000 : 0;
 
       // Update local status via KV
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
         relayUserId: user.id,
         asaasSubscriptionId: user.asaasSubscriptionId,
         asaasStatus: sub.status,
+        paymentStatus: paymentSummary.paymentStatus,
         active: isActive,
       });
 

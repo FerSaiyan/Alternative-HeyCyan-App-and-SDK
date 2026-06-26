@@ -98,7 +98,7 @@ function ConfirmPaymentForm({ successUrl }: { successUrl: string }) {
 
     if (stripeError) {
       setError({
-        message: stripeError.message ?? "Falha ao confirmar pagamento.",
+        message: stripeError.message ?? "Payment confirmation failed.",
         retryable:
           stripeError.type === "card_error" || stripeError.type === "invalid_request_error",
       });
@@ -112,7 +112,7 @@ function ConfirmPaymentForm({ successUrl }: { successUrl: string }) {
     }
 
     setError({
-      message: "Pagamento em processamento. Aguarde alguns instantes.",
+      message: "Payment is still processing. Please wait a moment.",
       retryable: false,
     });
     setIsSubmitting(false);
@@ -140,12 +140,12 @@ function ConfirmPaymentForm({ successUrl }: { successUrl: string }) {
                 disabled={!stripe || !elements || isSubmitting}
                 className="btn-primary text-xs disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSubmitting ? "Processando..." : "Tentar novamente"}
+                {isSubmitting ? "Processing..." : "Try again"}
               </button>
             )}
           </div>
           <a href="/support" className="mt-2 block text-xs text-rose-600 underline">
-            Precisa de ajuda? Fale com nosso suporte
+            Need help? Contact support
           </a>
         </div>
       ) : null}
@@ -156,7 +156,7 @@ function ConfirmPaymentForm({ successUrl }: { successUrl: string }) {
         disabled={!stripe || !elements || isSubmitting}
         className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isSubmitting ? "Processando..." : "Confirmar pagamento"}
+        {isSubmitting ? "Processing..." : "Confirm payment"}
       </button>
     </div>
   );
@@ -169,9 +169,9 @@ function ConfirmPaymentForm({ successUrl }: { successUrl: string }) {
 type PaymentMethod = "PIX" | "BOLETO" | "CREDIT_CARD";
 
 const PAYMENT_METHODS: Array<{ value: PaymentMethod; label: string; description: string }> = [
-  { value: "PIX", label: "PIX", description: "Pagamento instantâneo, QR Code ou copia e cola" },
-  { value: "BOLETO", label: "Boleto Bancário", description: "Pagamento via boleto, vencimento em 2 dias" },
-  { value: "CREDIT_CARD", label: "Cartão de Crédito", description: "Pagamento com cartão via fatura Asaas" },
+  { value: "PIX", label: "PIX", description: "Instant payment with QR code or copy/paste code" },
+  { value: "BOLETO", label: "Bank slip", description: "Boleto payment due within 2 days" },
+  { value: "CREDIT_CARD", label: "Credit card", description: "Card payment through Asaas checkout" },
 ];
 
 function AsaasMethodSelector({
@@ -184,7 +184,7 @@ function AsaasMethodSelector({
   return (
     <div className="space-y-2">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-        Forma de pagamento
+        Payment method
       </p>
       <div className="grid gap-2 sm:grid-cols-3">
         {PAYMENT_METHODS.map((method) => (
@@ -239,19 +239,19 @@ function AsaasPixDisplay({
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
         <p className="text-xs uppercase tracking-[0.14em] text-emerald-700">
-          Pagamento via PIX
+          PIX payment
         </p>
         <p className="mt-1 text-xl font-semibold text-emerald-900">
           {data.amountLabel ?? "Valor"}
         </p>
         {data.dueDate && (
           <p className="mt-1 text-xs text-emerald-600">
-            Vencimento: {new Date(data.dueDate + "T23:59:59").toLocaleDateString("pt-BR")}
+            Due date: {new Date(data.dueDate + "T23:59:59").toLocaleDateString("en-US")}
           </p>
         )}
         {purchaseType === "subscription" ? (
           <p className="mt-2 text-xs text-emerald-700">
-            Pagamento à vista referente ao tratamento semestral completo.
+            Payment for the current software subscription cycle.
           </p>
         ) : null}
       </div>
@@ -263,7 +263,7 @@ function AsaasPixDisplay({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`data:image/png;base64,${data.pixEncodedImage}`}
-              alt="QR Code PIX"
+              alt="PIX QR code"
               className="h-48 w-48"
             />
           </div>
@@ -274,7 +274,7 @@ function AsaasPixDisplay({
       {data.pixCopyPaste ? (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-slate-600">
-            Código PIX (copia e cola):
+            PIX code (copy and paste):
           </p>
           <div className="flex gap-2">
             <input
@@ -288,7 +288,7 @@ function AsaasPixDisplay({
               onClick={handleCopyPix}
               className="btn-secondary shrink-0 text-xs"
             >
-              Copiar
+              Copy
             </button>
           </div>
         </div>
@@ -302,7 +302,7 @@ function AsaasPixDisplay({
           rel="noopener noreferrer"
           className="block text-center text-xs text-brand-strong underline"
         >
-          Ver fatura
+          View invoice
         </a>
       ) : null}
 
@@ -313,11 +313,11 @@ function AsaasPixDisplay({
           onClick={handleConfirm}
           className="btn-primary w-full"
         >
-          Já realizei o pagamento
+          I already paid
         </button>
       ) : (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-          Não foi possível carregar instruções de pagamento agora. Volte e tente gerar o PIX novamente.
+          Payment instructions could not be loaded right now. Go back and try generating the PIX again.
         </p>
       )}
 
@@ -326,7 +326,7 @@ function AsaasPixDisplay({
         onClick={onBack}
         className="block w-full text-center text-xs text-slate-500 underline"
       >
-        Voltar
+        Back
       </button>
     </div>
   );
@@ -364,19 +364,19 @@ function AsaasBoletoDisplay({
     <div className="space-y-4">
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
         <p className="text-xs uppercase tracking-[0.14em] text-amber-700">
-          Boleto Bancário
+          Bank slip
         </p>
         <p className="mt-1 text-xl font-semibold text-amber-900">
           {data.amountLabel ?? "Valor"}
         </p>
         {data.dueDate && (
           <p className="mt-1 text-xs text-amber-600">
-            Vencimento: {new Date(data.dueDate + "T23:59:59").toLocaleDateString("pt-BR")}
+            Due date: {new Date(data.dueDate + "T23:59:59").toLocaleDateString("en-US")}
           </p>
         )}
         {purchaseType === "subscription" ? (
           <p className="mt-2 text-xs text-amber-700">
-            Pagamento à vista referente ao tratamento semestral completo.
+            Payment for the current software subscription cycle.
           </p>
         ) : null}
       </div>
@@ -389,16 +389,16 @@ function AsaasBoletoDisplay({
           rel="noopener noreferrer"
           className="btn-primary block w-full text-center"
         >
-          Visualizar Boleto
+          View bank slip
         </a>
       ) : null}
 
       {/* Identification field (linha digitável) */}
       {data.identificationField ? (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-slate-600">
-            Linha Digitável:
-          </p>
+            <p className="text-xs font-semibold text-slate-600">
+            Payment line:
+            </p>
           <div className="flex gap-2">
             <input
               ref={boletoInputRef}
@@ -411,7 +411,7 @@ function AsaasBoletoDisplay({
               onClick={handleCopyIdentField}
               className="btn-secondary shrink-0 text-xs"
             >
-              Copiar
+              Copy
             </button>
           </div>
         </div>
@@ -424,7 +424,7 @@ function AsaasBoletoDisplay({
           rel="noopener noreferrer"
           className="block text-center text-xs text-brand-strong underline"
         >
-          Ver fatura
+          View invoice
         </a>
       ) : null}
 
@@ -435,11 +435,11 @@ function AsaasBoletoDisplay({
           onClick={handleConfirm}
           className="btn-primary w-full"
         >
-          Já realizei o pagamento
+          I already paid
         </button>
       ) : (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-          Não foi possível gerar o boleto agora. Tente novamente.
+          The bank slip could not be generated right now. Please try again.
         </p>
       )}
 
@@ -448,7 +448,7 @@ function AsaasBoletoDisplay({
         onClick={onBack}
         className="block w-full text-center text-xs text-slate-500 underline"
       >
-        Voltar
+        Back
       </button>
     </div>
   );
@@ -478,7 +478,7 @@ function AsaasCreditCardDisplay({
     <div className="space-y-4">
       <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
         <p className="text-xs uppercase tracking-[0.14em] text-blue-700">
-          Cartão de Crédito
+          Credit card
         </p>
         <p className="mt-1 text-xl font-semibold text-blue-900">
           {data.amountLabel ?? "Valor"}
@@ -491,10 +491,10 @@ function AsaasCreditCardDisplay({
       </div>
 
       <div className="rounded-xl border border-white/65 bg-white/70 p-4 text-sm text-slate-700">
-        <p className="font-semibold text-slate-900">Pagamento seguro via Asaas</p>
+        <p className="font-semibold text-slate-900">Secure payment through Asaas</p>
         <p className="mt-1 text-xs text-slate-500">
-          Você será redirecionado para o ambiente seguro do Asaas para inserir os dados do seu
-          cartão de crédito. Nenhum dado de cartão é armazenado por nós.
+          You will be redirected to Asaas&apos;s secure checkout to enter your card
+          details. We do not store full card data.
         </p>
       </div>
 
@@ -506,7 +506,7 @@ function AsaasCreditCardDisplay({
           rel="noopener noreferrer"
           className="btn-primary block w-full text-center"
         >
-          Pagar com Cartão de Crédito
+          Pay with credit card
         </a>
       ) : null}
 
@@ -518,12 +518,12 @@ function AsaasCreditCardDisplay({
             onClick={handleConfirm}
             className="btn-secondary w-full"
           >
-            Já finalizei o pagamento
+            I already completed payment
           </button>
         </div>
       ) : (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-          Não foi possível gerar a fatura para cartão de crédito agora.
+          The credit-card invoice could not be generated right now.
         </p>
       )}
 
@@ -534,7 +534,7 @@ function AsaasCreditCardDisplay({
           rel="noopener noreferrer"
           className="block text-center text-xs text-brand-strong underline"
         >
-          Abrir fatura Asaas
+          Open Asaas invoice
         </a>
       ) : null}
 
@@ -543,7 +543,7 @@ function AsaasCreditCardDisplay({
         onClick={onBack}
         className="block w-full text-center text-xs text-slate-500 underline"
       >
-        Voltar
+        Back
       </button>
     </div>
   );
@@ -566,7 +566,7 @@ function AsaasPaymentFlow(props: PaymentStepProps) {
   async function generatePayment() {
     if (!hasValidCpfCnpj) {
       setError({
-        message: "Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido para gerar o pagamento.",
+        message: "Enter a valid CPF (11 digits) or CNPJ (14 digits) to generate payment.",
         retryable: true,
       });
       return;
@@ -597,7 +597,7 @@ function AsaasPaymentFlow(props: PaymentStepProps) {
 
       if (!payload.ok) {
         setError({
-          message: payload.message ?? "Não foi possível gerar o pagamento. Tente novamente.",
+          message: payload.message ?? "Payment could not be generated. Please try again.",
           retryable: true,
         });
         setIsLoading(false);
@@ -607,7 +607,7 @@ function AsaasPaymentFlow(props: PaymentStepProps) {
       setAsaasData(payload);
     } catch {
       setError({
-        message: "Erro de conexão. Verifique sua internet e tente novamente.",
+        message: "Connection error. Check your internet and try again.",
         retryable: true,
       });
     } finally {
@@ -670,14 +670,14 @@ function AsaasPaymentFlow(props: PaymentStepProps) {
       {paymentMethod === "CREDIT_CARD" && (
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-            Parcelamento
+            Installments
           </p>
           <select
             value={installmentCount}
             onChange={(e) => setInstallmentCount(Number(e.target.value))}
             className="w-full rounded-lg border border-white/65 bg-white/70 px-3 py-2 text-sm text-slate-800"
           >
-            <option value={1}>À vista</option>
+            <option value={1}>One-time payment</option>
             <option value={2}>2x</option>
             <option value={3}>3x</option>
             <option value={4}>4x</option>
@@ -689,13 +689,13 @@ function AsaasPaymentFlow(props: PaymentStepProps) {
 
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-          CPF ou CNPJ do pagador
+          Payer CPF or CNPJ
         </p>
         <input
           type="text"
           inputMode="numeric"
           autoComplete="off"
-          placeholder="Digite CPF ou CNPJ"
+          placeholder="Enter CPF or CNPJ"
           value={cpfCnpjInput}
           onChange={(e) => {
             setCpfCnpjInput(e.target.value);
@@ -704,17 +704,17 @@ function AsaasPaymentFlow(props: PaymentStepProps) {
           className="w-full rounded-lg border border-white/65 bg-white/70 px-3 py-2 text-sm text-slate-800"
         />
         <p className="text-[11px] text-slate-500">
-          Obrigatório para PIX, boleto e cartão no Asaas.
+          Required for PIX, bank slip, and card payments in Asaas.
         </p>
       </div>
 
       <div className="rounded-xl border border-white/65 bg-white/60 p-3 text-sm text-slate-700">
-        <p className="text-xs uppercase tracking-[0.14em] text-slate-600">Resumo</p>
+        <p className="text-xs uppercase tracking-[0.14em] text-slate-600">Summary</p>
         <p className="mt-1 font-semibold text-slate-900">
-          {props.purchaseType === "one_time" ? "Compra direta" : "Plano semestral"}
+          {props.purchaseType === "one_time" ? "One-time software access" : "Software subscription"}
         </p>
         <p className="text-xs text-slate-500">
-          Pagamento via {PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod}
+          Payment via {PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod}
         </p>
       </div>
 
@@ -729,12 +729,12 @@ function AsaasPaymentFlow(props: PaymentStepProps) {
                 disabled={isLoading}
                 className="btn-primary text-xs"
               >
-                {isLoading ? "Tentando novamente..." : "Tentar novamente"}
+                {isLoading ? "Trying again..." : "Try again"}
               </button>
             </div>
           )}
           <a href="/support" className="mt-2 block text-xs text-rose-600 underline">
-            Precisa de ajuda? Fale com nosso suporte
+            Need help? Contact support
           </a>
         </div>
       ) : (
@@ -745,8 +745,8 @@ function AsaasPaymentFlow(props: PaymentStepProps) {
           className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isLoading
-            ? "Preparando checkout..."
-            : `Pagar com ${PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod}`}
+            ? "Preparing checkout..."
+            : `Pay with ${PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod}`}
         </button>
       )}
     </div>
@@ -764,7 +764,7 @@ export function PaymentStep(props: PaymentStepProps) {
   const router = useRouter();
 
   const summaryLabel = useMemo(() => {
-    return props.purchaseType === "one_time" ? "Compra direta" : "Plano semestral";
+    return props.purchaseType === "one_time" ? "One-time software access" : "Software subscription";
   }, [props.purchaseType]);
 
   /* ---------- Stripe: create intent ---------- */
@@ -784,7 +784,7 @@ export function PaymentStep(props: PaymentStepProps) {
 
       if (!payload.ok) {
         setError({
-          message: payload.message ?? "Não foi possível iniciar o pagamento. Tente novamente.",
+          message: payload.message ?? "Payment could not be started. Please try again.",
           retryable: true,
         });
         setIsLoading(false);
@@ -799,7 +799,7 @@ export function PaymentStep(props: PaymentStepProps) {
       setIntent(payload);
     } catch {
       setError({
-        message: "Erro de conexão. Verifique sua internet e tente novamente.",
+        message: "Connection error. Check your internet and try again.",
         retryable: true,
       });
     } finally {
@@ -817,19 +817,19 @@ export function PaymentStep(props: PaymentStepProps) {
   // Stripe not configured
   if (!stripePromise) {
     return (
-      <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-        Configure `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` para habilitar pagamento com cartão e carteiras digitais.
-      </div>
-    );
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          Configure `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` to enable card and digital-wallet payments.
+        </div>
+      );
   }
 
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-white/65 bg-white/60 p-3 text-sm text-slate-700">
-        <p className="text-xs uppercase tracking-[0.14em] text-slate-600">Resumo</p>
+        <p className="text-xs uppercase tracking-[0.14em] text-slate-600">Summary</p>
         <p className="mt-1 font-semibold text-slate-900">{summaryLabel}</p>
         <p className="text-xs text-slate-600">
-          {intent?.amountLabel ?? "Valor calculado com cupom no próximo passo"}
+          {intent?.amountLabel ?? "Amount will be calculated with coupon in the next step"}
         </p>
       </div>
 
@@ -839,17 +839,17 @@ export function PaymentStep(props: PaymentStepProps) {
           {error.retryable && (
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" onClick={startStripePayment} disabled={isLoading} className="btn-primary text-xs">
-                {isLoading ? "Tentando novamente..." : "Tentar novamente"}
+                {isLoading ? "Trying again..." : "Try again"}
               </button>
             </div>
           )}
           <a href="/support" className="mt-2 block text-xs text-rose-600 underline">
-            Precisa de ajuda? Fale com nosso suporte
+            Need help? Contact support
           </a>
         </div>
       ) : !intent ? (
         <button type="button" onClick={startStripePayment} disabled={isLoading} className="btn-primary w-full">
-          {isLoading ? "Preparando checkout..." : "Ir para pagamento"}
+          {isLoading ? "Preparing checkout..." : "Continue to payment"}
         </button>
       ) : null}
 

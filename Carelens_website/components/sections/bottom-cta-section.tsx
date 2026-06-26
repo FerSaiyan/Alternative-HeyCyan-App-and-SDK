@@ -1,16 +1,6 @@
-/**
- * BottomCtaSection - Cinematic image-led full-width CTA
- *
- * Section 8 of 8:
- * - Full-width image panel with real asset-based look
- * - Image-led design with gradient overlay for text readability
- * - Strong headline and CTA
- * - Compliance line included
- */
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useRef, useState, useEffect } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
@@ -23,7 +13,6 @@ export function BottomCtaSection() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [isReducedMotion, setIsReducedMotion] = useState(false);
 
-  // Detect reduced motion preference
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const onChange = () => setIsReducedMotion(mediaQuery.matches);
@@ -32,13 +21,11 @@ export function BottomCtaSection() {
     return () => mediaQuery.removeEventListener("change", onChange);
   }, []);
 
-  // GSAP scroll-trigger reveal
   useGSAP(
     () => {
       if (isReducedMotion) return;
 
       const ctx = gsap.context(() => {
-        // Content reveal with stagger
         gsap.fromTo(
           contentRef.current?.children || [],
           { opacity: 0, y: 28 },
@@ -64,55 +51,40 @@ export function BottomCtaSection() {
 
   return (
     <section id="cta-final" ref={sectionRef} className="relative py-section scroll-mt-20 sm:scroll-mt-24">
-      {/* Cinematic image-led background panel */}
-      <div className="absolute inset-0" aria-hidden="true">
-        <Image
-          src="/assets/website-package-1/Hero image.png"
-          alt=""
-          fill
-          className="object-cover scale-105"
-          aria-hidden="true"
-        />
-      </div>
-
-      {/* Layered gradient overlay for dramatic cinematic feel */}
       <div
-        className="absolute inset-0 bg-gradient-to-b from-slate-900/70 via-slate-900/50 to-slate-900/80"
+        className="absolute inset-0 bg-gradient-to-b from-[#18343b] via-[#1f5b66] to-[#24393f]"
         aria-hidden="true"
       />
-
-      {/* Cinematic top light bleed */}
       <div
-        className="absolute inset-0 bg-gradient-to-b from-white/8 via-transparent to-transparent"
+        className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-transparent"
         aria-hidden="true"
       />
-
-      {/* Vignette effect */}
       <div
         className="absolute inset-0"
         style={{
-          background: "radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.25) 100%)"
+          background:
+            "radial-gradient(circle at 20% 20%, rgba(149,182,165,0.18) 0%, transparent 30%), radial-gradient(circle at 80% 70%, rgba(205,190,152,0.12) 0%, transparent 28%)",
         }}
         aria-hidden="true"
       />
 
-      {/* Content */}
-      <div ref={contentRef} className="container-width relative z-10 text-center py-20 sm:py-28 lg:py-32 px-4">
-        <p className="cta-eyebrow pill-eyebrow bg-white/10 border-white/20 text-white mx-auto w-fit mb-8">
-          Pronto para começar
+      <div ref={contentRef} className="container-width relative z-10 px-4 py-20 text-center sm:py-28 lg:py-32">
+        <p className="cta-eyebrow pill-eyebrow mx-auto mb-8 w-fit border-white/20 bg-white/10 text-white">
+          Ready to start
         </p>
-        <h2 className="cta-headline text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl max-w-3xl mx-auto leading-tight">
-          Pronto para cuidar de quem você ama?
+        <h2 className="cta-headline mx-auto max-w-3xl text-3xl font-semibold leading-tight tracking-tight text-white sm:text-4xl lg:text-5xl">
+          Ready to activate AI on your smart glasses?
         </h2>
         <p className="cta-subtitle mx-auto mt-4 max-w-xl text-center text-lg leading-relaxed text-white/85">
-          Comece agora com os óculos CareLens e tenha a tranquilidade de saber que seu familiar está sendo assistido.
+          Pick a software plan, connect your workflow, and start routing
+          smart-glasses requests through CyanBridge.
         </p>
         <div className="cta-button-wrapper mt-10">
           <Link
-            href="#contato"
+            href="/pricing"
             className="btn-primary cta-button px-10 py-4 text-base focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-slate-900"
           >
-            Começar Agora
+            View Pricing
           </Link>
         </div>
       </div>

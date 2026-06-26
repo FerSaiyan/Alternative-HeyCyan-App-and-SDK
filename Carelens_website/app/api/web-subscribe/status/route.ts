@@ -1,22 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSubscription, isAsaasConfigured } from "@/lib/asaas";
+import { getHostedSubscriptionState, getSubscription, isAsaasConfigured } from "@/lib/asaas";
 import { getRelayUserByToken, normalizePlan, planExpiryMs, saveRelayUser } from "@/lib/relay-kv";
-
-type CheckoutState = "active" | "pending" | "inactive";
-
-function mapAsaasStatus(status: string | null | undefined): CheckoutState {
-  switch ((status ?? "").trim().toUpperCase()) {
-    case "ACTIVE":
-      return "active";
-    case "INACTIVE":
-      return "pending";
-    case "CANCELED":
-    case "EXPIRED":
-      return "inactive";
-    default:
-      return "pending";
-  }
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -65,7 +49,8 @@ export async function GET(request: Request) {
 
   try {
     const subscription = await getSubscription(subscriptionId);
-    const state = mapAsaasStatus(subscription.status);
+    const paymentSummary = await getHostedSubscriptionState(subscription.id);
+    const state = paymentSummary.state;
     const active = state === "active";
     const expiresAtMs = active ? Number(user.expiresAtMs) || planExpiryMs(plan) : 0;
 
@@ -86,6 +71,7 @@ export async function GET(request: Request) {
         plan,
         expires_at_ms: expiresAtMs,
         asaas_status: subscription.status,
+        payment_status: paymentSummary.paymentStatus,
         message: active
           ? "Subscription confirmed."
           : state === "pending"
