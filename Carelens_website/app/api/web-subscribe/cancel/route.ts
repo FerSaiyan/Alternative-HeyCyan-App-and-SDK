@@ -187,27 +187,46 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Delete the subscription on Asaas
-    const { deleteSubscription } = await import("@/lib/asaas");
+    // Fetch subscription to get the current billing period end before cancelling
+    const { deleteSubscription, getSubscription } = await import("@/lib/asaas");
+    let expiresAtMs = 0;
+    try {
+      const sub = await getSubscription(user.asaasSubscriptionId);
+      if (sub.nextDueDate) {
+        const parsed = Date.parse(sub.nextDueDate);
+        if (!isNaN(parsed)) {
+          // nextDueDate is the *next* charge date. Access until end of current period
+          // = one millisecond before nextDueDate.
+          expiresAtMs = parsed - 1;
+        }
+      }
+    } catch {
+      // If we can't fetch the sub, default to no remaining access.
+    }
+
+    // Delete stops future recurring charges in Asaas.
     await deleteSubscription(user.asaasSubscriptionId);
 
-    // Delete stops future recurring charges in Asaas. Preserve already-paid access
-    // until expiry, but remove the live Asaas subscription id so renewals stay off.
     await saveRelayUser({
       ...user,
       asaasSubscriptionId: null,
       subscriptionStatus: "inactive",
-      expiresAtMs: 0,
+      expiresAtMs,
       updatedAt: new Date().toISOString(),
     });
 
     logInfo("relay_subscription_cancelled", "Subscription cancelled by user", {
       relayUserId: user.id,
       asaasSubscriptionId: user.asaasSubscriptionId,
+      preservedAccessUntilMs: expiresAtMs,
     });
 
+    const expiryMessage = expiresAtMs > 0
+      ? `You will have access until ${new Date(expiresAtMs).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}.`
+      : "Your access has ended with this billing period.";
+
     return new NextResponse(
-      cancelPageHtml("success", "Your subscription has been cancelled. You will have access until the end of your current billing period. You can re-subscribe anytime from the app.", apiToken),
+      cancelPageHtml("success", `Your subscription has been cancelled. ${expiryMessage} You can re-subscribe anytime from the app.`, apiToken),
       { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   } catch (error) {

@@ -412,7 +412,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="Donate via Stripe"
+                        android:text="Donate via Asaas"
                         android:textColor="@color/cyan_accent" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

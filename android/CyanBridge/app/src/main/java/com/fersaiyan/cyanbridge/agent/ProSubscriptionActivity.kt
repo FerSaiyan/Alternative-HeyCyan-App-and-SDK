@@ -87,7 +87,7 @@ class ProSubscriptionActivity : AppCompatActivity() {
         }
 
         btnDonate.setOnClickListener {
-            showStripeDonationDialog()
+            showAsaasDonationDialog()
         }
 
         btnUnsubscribe.setOnClickListener {
@@ -121,6 +121,7 @@ class ProSubscriptionActivity : AppCompatActivity() {
         updateStatusDisplay()
         refreshPurchaseStatusFromStore()
         maybePromptPendingLegacyCheckout()
+        maybePromptPendingDonation()
 
         if (ProSubscriptionPrefs.isSubscribed(this)) {
             thread {
@@ -847,36 +848,196 @@ class ProSubscriptionActivity : AppCompatActivity() {
         cardUnsubscribe.visibility = if (status.active) View.VISIBLE else View.GONE
     }
 
-    private fun showStripeDonationDialog() {
-        val amounts = arrayOf("$2", "$5", "$10", "$20")
+    private fun showAsaasDonationDialog() {
+        val amounts = arrayOf("$3", "$5", "$10")
         AlertDialog.Builder(this)
             .setTitle("Select Donation Amount")
             .setItems(amounts) { _, which ->
-                val amount = amounts[which]
-                openStripeDonation(amount)
+                val amountClean = amounts[which].removePrefix("$")
+                promptForDonationEmail(amountClean)
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun openStripeDonation(amount: String) {
-        try {
-            // Stripe payment link - user needs to configure their own Stripe account
-            // Format: https://buy.stripe.com/your_payment_link_id
-            // Replace this with your actual Stripe payment link after creating it in Stripe dashboard
-            val stripePaymentLink = "https://buy.stripe.com/test_donation_link"
-            val amountCents = when (amount) {
-                "$2" -> "200"
-                "$5" -> "500"
-                "$10" -> "1000"
-                "$20" -> "2000"
-                else -> "500"
+    private fun promptForDonationEmail(amount: String) {
+        val input = EditText(this).apply {
+            hint = "you@example.com"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setText(ProSubscriptionServerPrefs.getAccountEmail(this@ProSubscriptionActivity))
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Donate \$$amount via Asaas")
+            .setMessage("Enter your email to receive the receipt. We use Asaas (secure Brazilian processor) for one-time credit card payments.")
+            .setView(input)
+            .setPositiveButton("Continue", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val rawEmail = input.text?.toString().orEmpty()
+                val email = ProSubscriptionServerPrefs.normalizeAccountEmail(rawEmail)
+                if (!ProSubscriptionServerPrefs.isUsableAccountEmail(email) || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    input.error = "Enter a valid email address"
+                    return@setOnClickListener
+                }
+                ProSubscriptionServerPrefs.setAccountEmail(this, email)
+                dialog.dismiss()
+                startAsaasDonation(amount, email)
             }
-            val stripeUrl = "$stripePaymentLink?amount=$amountCents"
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(stripeUrl)))
-            Toast.makeText(this, "Opening Stripe donation...", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            Toast.makeText(this, "Unable to open donation page. Stripe payment link not configured.", Toast.LENGTH_LONG).show()
+        }
+
+        dialog.show()
+    }
+
+    private fun startAsaasDonation(amount: String, email: String) {
+        val baseUrl = AiProviderPrefs.getRelayBaseUrl(this).trimEnd('/')
+        if (baseUrl.isBlank()) {
+            Toast.makeText(this, "Server not configured.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val callback = Uri.Builder()
+            .scheme("fersaiyan")
+            .authority("pro-sub")
+            .appendPath("callback")
+            .build()
+
+        Toast.makeText(this, "Preparing donation checkout...", Toast.LENGTH_SHORT).show()
+        thread {
+            try {
+                var apiToken = ProSubscriptionServerPrefs.getApiToken(this)
+                if (apiToken.isBlank()) {
+                    apiToken = ProSubscriptionRelayClient.fetchAccountInfo(this)
+                        .getOrThrow()
+                        .apiToken
+                        .trim()
+                }
+
+                val conn = URL("$baseUrl/api/donate").openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 15000
+                conn.readTimeout = 20000
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Accept", "application/json")
+                conn.doOutput = true
+                val requestBody = JSONObject()
+                    .put("email", email)
+                    .put("amount", amount.toIntOrNull() ?: 5)
+                    .put("return_url", callback.toString())
+                    .put("api_token", apiToken)
+                    .toString()
+                conn.outputStream.write(requestBody.toByteArray())
+
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                conn.disconnect()
+
+                if (code !in 200..299) {
+                    val msg = runCatching { JSONObject(body).optString("message") }.getOrDefault("HTTP $code")
+                    throw IllegalStateException(msg)
+                }
+
+                val json = JSONObject(body)
+                val invoiceUrl = json.optString("invoice_url").trim()
+                val statusUrl = json.optString("status_url").trim()
+                val subscriptionId = json.optString("subscription_id").trim()
+
+                if (invoiceUrl.isBlank() || statusUrl.isBlank()) {
+                    throw IllegalStateException("Donation setup did not return checkout links.")
+                }
+
+                val pending = PendingDonationPrefs.PendingDonation(
+                    invoiceUrl = invoiceUrl,
+                    statusUrl = statusUrl,
+                    subscriptionId = subscriptionId,
+                    amount = amount,
+                    apiToken = apiToken,
+                    email = email,
+                )
+                PendingDonationPrefs.save(this, pending)
+                PendingDonationPrefs.setAwaitingReturn(this, true)
+                runOnUiThread {
+                    openExternalUrl(invoiceUrl)
+                }
+            } catch (error: Throwable) {
+                runOnUiThread {
+                    Toast.makeText(this, "Donation setup failed: ${error.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun maybePromptPendingDonation() {
+        if (!PendingDonationPrefs.isAwaitingReturn(this)) return
+        val pending = PendingDonationPrefs.get(this) ?: run {
+            PendingDonationPrefs.clear(this)
+            return
+        }
+
+        PendingDonationPrefs.setAwaitingReturn(this, false)
+        AlertDialog.Builder(this)
+            .setTitle("Donation Return")
+            .setMessage("Did you complete the donation of \$${pending.amount} in the Asaas card form?")
+            .setPositiveButton("Yes, Check Status") { _, _ ->
+                verifyPendingDonation(pending)
+            }
+            .setNeutralButton("Open Card Form Again") { _, _ ->
+                PendingDonationPrefs.setAwaitingReturn(this, true)
+                openExternalUrl(pending.invoiceUrl)
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                PendingDonationPrefs.clear(this)
+            }
+            .show()
+    }
+
+    private fun verifyPendingDonation(pending: PendingDonationPrefs.PendingDonation) {
+        Toast.makeText(this, "Checking donation confirmation...", Toast.LENGTH_SHORT).show()
+        thread {
+            try {
+                val conn = URL(pending.statusUrl).openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.connectTimeout = 15000
+                conn.readTimeout = 20000
+                conn.setRequestProperty("Accept", "application/json")
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty().ifBlank { "{}" }
+                val json = JSONObject(body)
+
+                if (code !in 200..299) {
+                    throw IllegalStateException(json.optString("message", "Unable to verify donation yet."))
+                }
+
+                val confirmed = json.optBoolean("confirmed", false)
+                val message = json.optString("message", if (confirmed) "Donation confirmed. Thank you!" else "Donation pending.")
+
+                if (confirmed) {
+                    PendingDonationPrefs.clear(this)
+                    runOnUiThread {
+                        AlertDialog.Builder(this)
+                            .setTitle("Thank You!")
+                            .setMessage("Your donation of \$${pending.amount} has been confirmed. Thank you for supporting CyanBridge!")
+                            .setPositiveButton("Great!", null)
+                            .show()
+                    }
+                    return@thread
+                }
+
+                PendingDonationPrefs.setAwaitingReturn(this, true)
+                runOnUiThread {
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                }
+            } catch (error: Throwable) {
+                PendingDonationPrefs.setAwaitingReturn(this, true)
+                runOnUiThread {
+                    Toast.makeText(this, "Unable to verify donation: ${error.message}", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
