@@ -48,6 +48,7 @@ com.glasssutdio.wear/
 HeyCyanOfficialApp/
 eyevue-jadx/
 android/eyevue-jadx/
+android/TuneBudsOfficialApp/
 Android_SDK_Development_Guide_CN.pdf
 
 # Node.js
@@ -60,6 +61,7 @@ Carelens_website/
 # Local side projects and analysis notes
 android/EvenRealitiesApp/
 android/XGIMIGlassesApp/
+presentation/
 BINARY_ANALYSIS*.md
 android/P2P_SYNC_ANALYSIS*.md
 
