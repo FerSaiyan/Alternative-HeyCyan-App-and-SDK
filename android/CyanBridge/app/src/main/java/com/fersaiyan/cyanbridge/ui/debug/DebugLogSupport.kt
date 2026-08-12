@@ -12,6 +12,7 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
+import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +37,7 @@ object DebugLogSupport {
     private const val MAX_LOGCAT_CHARS = 120_000
     private val LOG_TAGS = listOf(
         "AIHijack",
+        "ImageQuestionAudio",
         "DataDownload",
         "DeviceNotify",
         "WifiP2pManagerSingleton",
@@ -50,6 +52,9 @@ object DebugLogSupport {
         "LocalAgent",
         "MainActivity",
         "MetaRaybanManager",
+        "MeizuMyvu",
+        "MeizuMyvuService",
+        "myvu",
         "VisualDiaryService",
         "WalkingAidService",
         "CommunityPluginsActivity",
@@ -180,6 +185,13 @@ object DebugLogSupport {
                 append("Meta Ray-Ban profile: selected\n")
                 append("Meta DAT diagnostics:\n")
                 append(MetaRaybanManager.getInstance(context).diagnosticsSnapshot())
+                append("\n")
+            }
+
+            if (DeviceProfileStore.isMeizuMyvuSelected(context)) {
+                append("Meizu MYVU profile: selected\n")
+                append("MYVU diagnostics:\n")
+                append(MeizuMyvuManager.getInstance(context).diagnosticsSnapshot())
                 append("\n")
             }
 
