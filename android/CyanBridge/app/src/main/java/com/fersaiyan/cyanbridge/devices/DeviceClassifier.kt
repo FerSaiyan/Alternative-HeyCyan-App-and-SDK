@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.devices
 import android.os.ParcelUuid
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueProtocol
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import java.util.UUID
 
 /**
  * Chapter 3 heuristics:
@@ -11,9 +12,14 @@ import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
  */
 object DeviceClassifier {
 
+    private val TUNEBUDS_BLE_SERVICE_UUID: UUID =
+        UUID.fromString("0000fdb3-0000-1000-8000-00805f9b34fb")
+    private val TUNEBUDS_COMPANY_IDS = setOf(0x475A, 0x455A, 0x535A, 0x4D5A)
+
     fun guessDeviceClass(
         advertisedName: String?,
-        serviceUuids: List<ParcelUuid> = emptyList()
+        serviceUuids: List<ParcelUuid> = emptyList(),
+        manufacturerCompanyIds: Set<Int> = emptySet(),
     ): DeviceClass {
         val name = advertisedName?.trim().orEmpty()
         val lower = name.lowercase()
@@ -24,10 +30,20 @@ object DeviceClassifier {
             return DeviceClass.EYEVUE
         }
 
+        if (manufacturerCompanyIds.any(TUNEBUDS_COMPANY_IDS::contains) ||
+            serviceUuids.any { it.uuid == TUNEBUDS_BLE_SERVICE_UUID }
+        ) {
+            return DeviceClass.TUNEBUDS
+        }
+
         if (name.isEmpty()) return DeviceClass.UNKNOWN
 
         if (lower.contains("eyevue")) {
             return DeviceClass.EYEVUE
+        }
+
+        if (lower.contains("xk one") || lower.contains("tunebuds") || lower.contains("ab mate")) {
+            return DeviceClass.TUNEBUDS
         }
 
         // HeyCyan-class heuristics (already used elsewhere in the app).

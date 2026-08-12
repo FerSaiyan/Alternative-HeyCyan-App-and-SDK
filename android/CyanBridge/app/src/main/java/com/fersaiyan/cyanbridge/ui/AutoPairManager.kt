@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
@@ -81,6 +82,13 @@ object AutoPairManager {
                         continue
                     }
                 }
+                if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.TUNEBUDS) {
+                    if (TuneBudsManager.getInstance(appContext).isConnected()) {
+                        backoffMs = 5_000L
+                        delay(20_000L)
+                        continue
+                    }
+                }
                 if (connected) {
                     backoffMs = 5_000L
                     delay(20_000L)
@@ -118,6 +126,14 @@ object AutoPairManager {
                 return
             }
             EyevueManager.getInstance(context).connect(mac)
+            return
+        }
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.TUNEBUDS) {
+            if (suppressAutoReconnect) {
+                Log.d(TAG, "Skipping TuneBuds reconnect ($reason): suppressed")
+                return
+            }
+            TuneBudsManager.getInstance(context).connect(mac)
             return
         }
         if (DeviceProfileStore.isMetaSelected(context) || DeviceProfileStore.isMeizuMyvuSelected(context)) {
@@ -241,6 +257,14 @@ object AutoPairManager {
             return false
         }
 
+        val profile = DeviceProfileStore.loadLastSelected(context)
+        if (profile?.selectedClass == DeviceClass.TUNEBUDS) {
+            val address = profile.macAddress.takeIf { it.isNotBlank() } ?: return false
+            Log.i(TAG, "Auto-pair ($reason): TuneBuds RFCOMM $address")
+            TuneBudsManager.getInstance(context).connect(address, profile.advertisedName)
+            return true
+        }
+
         val mac = getTargetMac(context)
         if (mac.isNullOrBlank()) {
             Log.d(TAG, "Skipping auto-pair ($reason): no saved/bonded glasses MAC")
@@ -277,6 +301,10 @@ object AutoPairManager {
 
         if (DeviceProfileStore.selectedClass(context) == DeviceClass.EYEVUE) {
             EyevueManager.getInstance(context).connect(mac)
+            return true
+        }
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.TUNEBUDS) {
+            TuneBudsManager.getInstance(context).connect(mac)
             return true
         }
 

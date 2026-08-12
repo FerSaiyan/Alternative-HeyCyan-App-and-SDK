@@ -367,7 +367,25 @@ private class IosAppController {
                             BleConnectionState.DISCONNECTING -> "Disconnecting"
                         },
                         showHeyCyanControls = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass != DeviceClass.META_RAYBAN,
+                            selectedDeviceClass == DeviceClass.HEY_CYAN,
+                        showCaptureSettings = connectionState == BleConnectionState.CONNECTED &&
+                            selectedDeviceClass == DeviceClass.HEY_CYAN,
+                        showAiWakeWordRouting = connectionState == BleConnectionState.CONNECTED &&
+                            selectedDeviceClass == DeviceClass.HEY_CYAN,
+                        showAdvancedControls = connectionState == BleConnectionState.CONNECTED &&
+                            selectedDeviceClass == DeviceClass.HEY_CYAN,
+                        showAdvancedLocalAgent = connectionState == BleConnectionState.CONNECTED &&
+                            selectedDeviceClass == DeviceClass.HEY_CYAN,
+                        showAdvancedDeviceInfo = connectionState == BleConnectionState.CONNECTED &&
+                            selectedDeviceClass == DeviceClass.HEY_CYAN,
+                        showAdvancedDeviceVolume = connectionState == BleConnectionState.CONNECTED &&
+                            selectedDeviceClass == DeviceClass.HEY_CYAN,
+                        showAdvancedImageQuality = connectionState == BleConnectionState.CONNECTED &&
+                            selectedDeviceClass == DeviceClass.HEY_CYAN,
+                        showAdvancedDeveloperTools = connectionState == BleConnectionState.CONNECTED &&
+                            selectedDeviceClass == DeviceClass.HEY_CYAN,
+                        showAdvancedOta = connectionState == BleConnectionState.CONNECTED &&
+                            selectedDeviceClass == DeviceClass.HEY_CYAN,
                         showMetaRaybanControls = connectionState == BleConnectionState.CONNECTED &&
                             selectedDeviceClass == DeviceClass.META_RAYBAN,
                     )
@@ -638,9 +656,19 @@ private class IosAppController {
     }
 
     private fun updateConnectionCapabilities() {
+        val showHeyCyan = isBleConnected && selectedDeviceClass == DeviceClass.HEY_CYAN
         updateState { state ->
             state.copy(
-                showHeyCyanControls = isBleConnected && selectedDeviceClass != DeviceClass.META_RAYBAN,
+                showHeyCyanControls = showHeyCyan,
+                showCaptureSettings = showHeyCyan,
+                showAiWakeWordRouting = showHeyCyan,
+                showAdvancedControls = showHeyCyan,
+                showAdvancedLocalAgent = showHeyCyan,
+                showAdvancedDeviceInfo = showHeyCyan,
+                showAdvancedDeviceVolume = showHeyCyan,
+                showAdvancedImageQuality = showHeyCyan,
+                showAdvancedDeveloperTools = showHeyCyan,
+                showAdvancedOta = showHeyCyan,
                 showMetaRaybanControls = isBleConnected && selectedDeviceClass == DeviceClass.META_RAYBAN,
             )
         }

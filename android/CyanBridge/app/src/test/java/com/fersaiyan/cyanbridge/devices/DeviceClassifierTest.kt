@@ -32,6 +32,16 @@ class DeviceClassifierTest {
     }
 
     @Test
+    fun tuneBuds_detectedByNameOrManufacturer() {
+        assertEquals(DeviceClass.TUNEBUDS, DeviceClassifier.guessDeviceClass("xk one Pro"))
+        assertEquals(DeviceClass.TUNEBUDS, DeviceClassifier.guessDeviceClass("TuneBuds Glasses"))
+        assertEquals(
+            DeviceClass.TUNEBUDS,
+            DeviceClassifier.guessDeviceClass(null, manufacturerCompanyIds = setOf(0x475A)),
+        )
+    }
+
+    @Test
     fun genericAudio_detectedByName() {
         assertEquals(DeviceClass.GENERIC_AUDIO, DeviceClassifier.guessDeviceClass("AirPods Pro"))
         assertEquals(DeviceClass.GENERIC_AUDIO, DeviceClassifier.guessDeviceClass("BT Headset"))

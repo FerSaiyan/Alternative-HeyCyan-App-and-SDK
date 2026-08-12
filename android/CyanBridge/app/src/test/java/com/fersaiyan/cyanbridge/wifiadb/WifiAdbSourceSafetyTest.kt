@@ -60,7 +60,9 @@ class WifiAdbSourceSafetyTest {
         assertFalse(releaseSource.contains("Socket("))
 
         val mainSource = File("src/main/java/com/fersaiyan/cyanbridge/MainActivity.kt").readText()
-        assertTrue(mainSource.contains("wifiAdbDebug = WifiAdbDebugUiState(isAvailable = BuildConfig.DEBUG)"))
-        assertTrue(mainSource.contains("if (BuildConfig.DEBUG) startWifiAdbDebug()"))
+        assertTrue(mainSource.contains("wifiAdbDebug = WifiAdbDebugUiState(isAvailable = false)"))
+        assertTrue(mainSource.contains("if (BuildConfig.DEBUG && isHeyCyanSelected()) startWifiAdbDebug()"))
+        assertTrue(mainSource.contains("isAvailable = BuildConfig.DEBUG && isHeyCyanSelected() && runtime.isAvailable"))
+        assertFalse(mainSource.contains("isAvailable = BuildConfig.DEBUG && showBattery"))
     }
 }

@@ -100,6 +100,11 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaSync
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaType
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueWifiTransport
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
+import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLocalHotspot
+import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaSync
+import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaType
+import com.fersaiyan.cyanbridge.devices.tunebuds.isSupportedForTuneBudsDashboard
 import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
 import com.fersaiyan.cyanbridge.ai.transcription.DefaultTranscriptionService
 import com.fersaiyan.cyanbridge.ai.transcription.Mp4AudioChunker
@@ -126,6 +131,7 @@ import com.fersaiyan.cyanbridge.ui.requestWifiP2pPermission
 import com.fersaiyan.cyanbridge.ui.setOnClickListener
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
+import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
@@ -367,7 +373,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             "TTS enqueue id=$id ready=$ttsReady stream=$streamType textLength=${text.length} result=$result",
         )
         if (result != TextToSpeech.SUCCESS) {
-            AudioSessionCoordinator.markIdle()
+            // No progress callback is delivered when enqueueing fails (including when the
+            // engine is not initialized). Complete the caller now instead of leaking its
+            // callback or leaving SCO/foreground work waiting forever.
+            ttsDoneCallbacks.remove(id)?.invoke()
         }
     }
     companion object {
@@ -392,8 +401,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val ONE_SHOT_BLE_COMMAND_TIMEOUT_MS = 6_000L
         private const val IMAGE_THUMBNAIL_TRANSFER_TIMEOUT_MS = 20_000L
         private const val VOICE_CUE_ROUTE_SETTLE_MS = 500L
+        private const val VOICE_BLUETOOTH_ROUTE_TIMEOUT_MS = 3_000L
         private const val VOICE_CUE_BLUETOOTH_TAIL_MS = 50L
         private const val VOICE_CUE_CALLBACK_TIMEOUT_MS = 3_000L
+        private const val VOICE_RECOGNITION_RETRY_DELAY_MS = 250L
         private const val IMAGE_QUESTION_CUE_BLUETOOTH_TAIL_MS = 50L
         private const val IMAGE_QUESTION_INITIAL_LISTENING_TIMEOUT_MS = 3_300L
         private val DEFAULT_VIDEO_DURATION_OPTIONS_SECONDS = listOf(15, 30, 60, 180, 540, 720)
@@ -418,7 +429,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var binding: AcitivytMainBinding
     private var dashboardState by mutableStateOf(
         GlassesDashboardUiState(
-            wifiAdbDebug = WifiAdbDebugUiState(isAvailable = BuildConfig.DEBUG),
+            wifiAdbDebug = WifiAdbDebugUiState(isAvailable = false),
         ),
     )
     private var showDownloadFlowPicker by mutableStateOf(false)
@@ -431,6 +442,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var eyevueMediaJob: Job? = null
     private var eyevueMediaTransport: EyevueWifiTransport? = null
     private var eyevueMediaCancelled = false
+    private var tuneBudsMediaJob: Job? = null
+    private var tuneBudsMediaHotspot: TuneBudsLocalHotspot? = null
+    private var tuneBudsMediaCancelled = false
     private var wifiAdbDebugSessionLease: GlassesSessionLease? = null
     private val otaManager by lazy { OtaManager(this) }
     private var otaPreparationJob: Job? = null
@@ -500,6 +514,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     // Guard against concurrent/duplicate image queries
     private val imageQueryInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val voiceQueryInProgress = AtomicReference<Any?>(null)
+    private val activeVoiceRecognizer = AtomicReference<SpeechRecognizer?>(null)
+    private data class VoiceAudioRouteOwner(
+        val queryToken: Any,
+        val audioManager: android.media.AudioManager,
+    )
+    private val activeVoiceAudioRoute = AtomicReference<VoiceAudioRouteOwner?>(null)
     private val imageThumbnailRequestInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
     private val imageCaptureAwaitingNotification = java.util.concurrent.atomic.AtomicBoolean(false)
     private val metaPhotoCaptureInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -558,6 +579,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var eyevueUiJob: Job? = null
     private var eyevueWakeWordJob: Job? = null
     private val eyevueAiPhotoInProgress = AtomicBoolean(false)
+    private var tuneBudsManager: TuneBudsManager? = null
+    private var tuneBudsUiJob: Job? = null
+    private val tuneBudsAiPhotoInProgress = AtomicBoolean(false)
 
     private val metaAndroidPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -644,14 +668,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
                 localSpeechSessionManager.speechQueueController.onUtteranceStart(utteranceId)
-                if (utteranceId?.startsWith("image_question_cue_") == true) {
+                if (utteranceId?.startsWith("image_question_cue_") == true ||
+                    utteranceId?.startsWith("voice_listening_") == true
+                ) {
                     Log.i("ImageQuestionAudio", "TTS cue started id=$utteranceId")
                 }
             }
 
             override fun onDone(utteranceId: String?) {
                 localSpeechSessionManager.speechQueueController.onUtteranceDone(utteranceId)
-                if (utteranceId?.startsWith("image_question_cue_") == true) {
+                if (utteranceId?.startsWith("image_question_cue_") == true ||
+                    utteranceId?.startsWith("voice_listening_") == true
+                ) {
                     Log.i("ImageQuestionAudio", "TTS cue completed id=$utteranceId")
                 }
                 utteranceId?.let { ttsDoneCallbacks.remove(it)?.invoke() }
@@ -673,7 +701,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         // Ensure we always listen for HeyCyan reports. Meta notifications come from DAT,
         // so do not register the vendor listener for a selected Meta profile.
-        if (!isMetaRaybanSelected() && !isEyevueSelected()) {
+        if (!isMetaRaybanSelected() && !isEyevueSelected() && !isTuneBudsSelected()) {
             LargeDataHandler.getInstance().addOutDeviceListener(100, deviceNotifyListener)
         }
 
@@ -738,6 +766,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onDestroy() {
         cancelLocalStreamingSpeech("activity destroyed")
+        val voiceQueryWasActive = voiceQueryInProgress.getAndSet(null) != null
+        activeVoiceRecognizer.getAndSet(null)?.let { recognizer ->
+            runCatching { recognizer.destroy() }
+        }
+        activeVoiceAudioRoute.getAndSet(null)?.audioManager?.let { audioManager ->
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    audioManager.clearCommunicationDevice()
+                }
+                audioManager.isBluetoothScoOn = false
+                audioManager.stopBluetoothSco()
+                audioManager.mode = android.media.AudioManager.MODE_NORMAL
+            }
+        }
+        if (voiceQueryWasActive) finishAiQuestionForegroundWork()
         if (BuildConfig.DEBUG) wifiAdbDebugController.release()
         livePreviewDialog?.dismiss()
         livePreviewDialog = null
@@ -747,6 +790,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             eyevueMediaCancelled = true
             eyevueMediaTransport?.disconnect()
             eyevueMediaJob?.cancel()
+        }
+        if (tuneBudsMediaJob?.isActive == true) {
+            tuneBudsMediaCancelled = true
+            tuneBudsMediaHotspot?.stop()
+            tuneBudsMediaJob?.cancel()
         }
         otaPreparationJob?.cancel()
         otaPreparationJob = null
@@ -1043,6 +1091,46 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     manager.wakeWordEvents.collect {
                         if (isEyevueSelected() && isAiHijackEnabled) {
                             handleAiWakeWordActivation("eyevue")
+                        }
+                    }
+                }
+            }
+        }
+
+    private fun getOrCreateTuneBudsManager(): TuneBudsManager =
+        tuneBudsManager ?: TuneBudsManager.getInstance(this).also { manager ->
+            tuneBudsManager = manager
+            if (tuneBudsUiJob == null) {
+                tuneBudsUiJob = lifecycleScope.launch {
+                    manager.state.collect { tuneBuds ->
+                        if (!isTuneBudsSelected()) return@collect
+                        val storage = tuneBuds.storage?.let {
+                            "${it.usedMiB} MiB used / ${it.freeMiB} MiB free"
+                        } ?: "--"
+                        val counts = tuneBuds.mediaCounts
+                        val deviceInfo = listOfNotNull(
+                            tuneBuds.model?.let { "Model: $it" },
+                            tuneBuds.firmwareVersion?.let { "Firmware: $it" },
+                            tuneBuds.coprocessorVersion?.let { "Coprocessor: $it" },
+                            counts?.let { "Media: ${it.images} photos / ${it.videos} videos / ${it.audio} audio" },
+                        ).joinToString("  ").ifBlank { null }
+                        binding.statusText.text = tuneBuds.connectionLabel
+                        binding.storageText.text = storage
+                        updateBatteryText(tuneBuds.batteryPercent)
+                        updateDashboardState { state ->
+                            state.copy(
+                                connectionLabel = tuneBuds.connectionLabel,
+                                batteryPercent = tuneBuds.batteryPercent,
+                                storageLabel = storage,
+                                deviceInfoLabel = deviceInfo,
+                                isVideoRecording = tuneBuds.isVideoRecording,
+                                isAudioRecording = tuneBuds.isAudioRecording,
+                                transfer = state.transfer.copy(
+                                    countsLabel = counts?.let {
+                                        "Photos: ${it.images}  Videos: ${it.videos}  Audio: ${it.audio}"
+                                    } ?: state.transfer.countsLabel,
+                                ),
+                            )
                         }
                     }
                 }
@@ -1371,10 +1459,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun handleDashboardAction(action: GlassesDashboardAction) {
         if (isDashboardActionBlockedByExclusiveSession(action)) return
+        if (isTuneBudsSelected() && !action.isSupportedForTuneBudsDashboard()) {
+            Log.i("Dashboard", "Ignoring unsupported TuneBuds dashboard action: $action")
+            return
+        }
         when (action) {
             is GlassesDashboardAction.Navigate -> navigateToDestination(action.destination)
             GlassesDashboardAction.Scan -> {
                 if (isEyevueSelected()) {
+                    startKtxActivity<DeviceBindActivity>()
+                } else if (isTuneBudsSelected()) {
                     startKtxActivity<DeviceBindActivity>()
                 } else if (isMeizuMyvuSelected()) {
                     startKtxActivity<DeviceBindActivity>()
@@ -1389,6 +1483,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     DeviceProfileStore.loadLastSelected(this)?.let { profile ->
                         getOrCreateEyevueManager().connect(profile.macAddress, profile.advertisedName)
                     } ?: startKtxActivity<DeviceBindActivity>()
+                } else if (isTuneBudsSelected()) {
+                    DeviceProfileStore.loadLastSelected(this)?.let { profile ->
+                        getOrCreateTuneBudsManager().connect(profile.macAddress, profile.advertisedName)
+                    } ?: startKtxActivity<DeviceBindActivity>()
                 } else if (isMeizuMyvuSelected()) {
                     DeviceProfileStore.loadLastSelected(this)?.macAddress?.let {
                         getOrCreateMeizuMyvuManager().connect(it, this)
@@ -1402,6 +1500,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             GlassesDashboardAction.Disconnect -> {
                 if (isEyevueSelected()) {
                     getOrCreateEyevueManager().disconnect()
+                } else if (isTuneBudsSelected()) {
+                    AutoPairManager.setAutoReconnectSuppressed(true, reason = "user_disconnect_button")
+                    getOrCreateTuneBudsManager().disconnect()
                 } else if (isMeizuMyvuSelected()) {
                     getOrCreateMeizuMyvuManager().disconnect()
                 } else if (isMetaRaybanSelected()) {
@@ -1434,6 +1535,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
             is GlassesDashboardAction.SelectImageThumbnailQuality -> {
+                if (!isHeyCyanOrEyevueSelected()) return
                 val quality = ImageQuestionPreferences.setThumbnailQuality(this, action.sdkValue)
                 pendingImageThumbnailQuality = quality
                 updateDashboardState { state ->
@@ -1450,35 +1552,48 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
             GlassesDashboardAction.CapturePhoto -> if (isEyevueSelected()) {
                 getOrCreateEyevueManager().takePhoto()
+            } else if (isTuneBudsSelected()) {
+                getOrCreateTuneBudsManager().takePhoto()
             } else {
                 binding.btnCamera.performClick()
             }
             GlassesDashboardAction.ToggleVideo -> if (isEyevueSelected()) {
                 getOrCreateEyevueManager().toggleVideo()
+            } else if (isTuneBudsSelected()) {
+                getOrCreateTuneBudsManager().toggleVideo()
             } else {
                 binding.btnVideo.performClick()
             }
             GlassesDashboardAction.StartAudioRecording -> if (isEyevueSelected()) {
                 getOrCreateEyevueManager().toggleAudio()
+            } else if (isTuneBudsSelected()) {
+                getOrCreateTuneBudsManager().toggleAudio()
             } else {
                 binding.btnRecord.performClick()
             }
             GlassesDashboardAction.RequestMediaCount -> if (isEyevueSelected()) {
                 getOrCreateEyevueManager().requestMediaCount()
+            } else if (isTuneBudsSelected()) {
+                getOrCreateTuneBudsManager().requestMediaCount()
             } else {
                 binding.btnMediaCount.performClick()
             }
             GlassesDashboardAction.StartSync -> if (isEyevueSelected()) {
                 startEyevueMediaSync()
+            } else if (isTuneBudsSelected()) {
+                startTuneBudsMediaSync()
             } else {
                 binding.btnDataDownload.performClick()
             }
             GlassesDashboardAction.StopSync -> if (isEyevueSelected()) {
                 stopEyevueMediaSync()
+            } else if (isTuneBudsSelected()) {
+                stopTuneBudsMediaSync()
             } else {
                 binding.btnTransferStop.performClick()
             }
             GlassesDashboardAction.ToggleAdvanced -> {
+                if (!dashboardState.showAdvancedControls) return
                 binding.btnToggleAdvanced.performClick()
                 updateDashboardState { state ->
                     state.copy(advancedExpanded = !state.advancedExpanded)
@@ -1489,16 +1604,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             GlassesDashboardAction.RunAgentDemo -> binding.btnAgentDemo.performClick()
             GlassesDashboardAction.RequestBattery -> if (isEyevueSelected()) {
                 getOrCreateEyevueManager().requestBattery()
+            } else if (isTuneBudsSelected()) {
+                getOrCreateTuneBudsManager().requestBattery()
             } else {
                 binding.btnBattery.performClick()
             }
             GlassesDashboardAction.RequestVersion -> if (isEyevueSelected()) {
                 getOrCreateEyevueManager().requestDeviceInfo()
+            } else if (isTuneBudsSelected()) {
+                getOrCreateTuneBudsManager().requestVersion()
             } else {
                 binding.btnVersion.performClick()
             }
             GlassesDashboardAction.SyncTime -> if (isEyevueSelected()) {
                 getOrCreateEyevueManager().syncTime()
+            } else if (isTuneBudsSelected()) {
+                getOrCreateTuneBudsManager().syncTime()
             } else {
                 binding.btnSetTime.performClick()
             }
@@ -1547,7 +1668,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
             GlassesDashboardAction.StartLivePreview -> if (isEyevueSelected()) {
                 startEyevueLivePreview()
-            } else {
+            } else if (isHeyCyanSelected()) {
                 startLivePreview()
             }
             GlassesDashboardAction.StopLivePreview -> {
@@ -1561,10 +1682,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
             GlassesDashboardAction.RequestStartWifiAdbDebug -> {
-                if (BuildConfig.DEBUG) startWifiAdbDebug()
+                if (BuildConfig.DEBUG && isHeyCyanSelected()) startWifiAdbDebug()
             }
             GlassesDashboardAction.StopWifiAdbDebug -> {
-                if (BuildConfig.DEBUG) wifiAdbDebugController.stop()
+                if (BuildConfig.DEBUG && isHeyCyanSelected()) wifiAdbDebugController.stop()
             }
             GlassesDashboardAction.MetaRegister -> binding.btnMetaRegister.performClick()
             GlassesDashboardAction.MetaUnregister -> binding.btnMetaUnregister.performClick()
@@ -1597,16 +1718,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
             is GlassesDashboardAction.SetVideoRecordingDuration -> if (isEyevueSelected()) {
                 getOrCreateEyevueManager().setRecordingDuration(action.seconds)
-            } else {
+            } else if (isHeyCyanSelected()) {
                 setHeyCyanRecordingDuration(isAudio = false, seconds = action.seconds)
             }
             is GlassesDashboardAction.SetAudioRecordingDuration -> if (isEyevueSelected()) {
                 getOrCreateEyevueManager().setRecordingDuration(action.seconds)
-            } else {
+            } else if (isHeyCyanSelected()) {
                 setHeyCyanRecordingDuration(isAudio = true, seconds = action.seconds)
             }
             is GlassesDashboardAction.SetWearingDetection -> if (isEyevueSelected()) {
                 getOrCreateEyevueManager().setWearingDetection(action.enabled)
+            } else if (isTuneBudsSelected()) {
+                Log.i("Dashboard", "TuneBuds wearing detection is not exposed until hardware capability is confirmed")
             } else {
                 Log.i("Dashboard", "SetWearingDetection (no-op in temp branch)")
             }
@@ -3264,7 +3387,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
                 dashboardState = dashboardState.copy(
                     livePreview = com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState(
-                        isAvailable = BuildConfig.DEBUG && !isEyevueSelected(),
+                        isAvailable = BuildConfig.DEBUG && !isEyevueSelected() && !isTuneBudsSelected(),
                         stateLabel = lp.stateLabel,
                         detail = lp.detail,
                         isScanning = lp.isScanning,
@@ -3297,7 +3420,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun startWifiAdbDebug() {
-        if (rejectHeyCyanOnlyFeature("Wi-Fi ADB debug")) return
+        if (!isHeyCyanSelected()) return
         if (!BuildConfig.DEBUG || wifiAdbDebugController.isActive) return
         if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
             ensureGlassesTransportPermissions("Wi-Fi ADB debug") {
@@ -3329,7 +3452,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             wifiAdbDebugController.state.collect { runtime ->
                 dashboardState = dashboardState.copy(
                     wifiAdbDebug = WifiAdbDebugUiState(
-                        isAvailable = BuildConfig.DEBUG && runtime.isAvailable,
+                        isAvailable = BuildConfig.DEBUG && isHeyCyanSelected() && runtime.isAvailable,
                         stateLabel = runtime.stateLabel,
                         detail = runtime.detail,
                         glassesIp = runtime.glassesIp,
@@ -3591,6 +3714,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun imageQueryUnsupportedReasonForCurrentSelection(): String? {
         if (currentAssistantRoute() != GlassesAssistantRoute.LOCAL) return null
+        if (RemoteOpenAiPrefs.isActive(this)) return null
 
         val selected = LocalModelStorageRepository.resolveSelectedModel(this)
             ?: return "No local model selected. Install/select Gemma 4 LiteRT first."
@@ -3939,6 +4063,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun validateSelectedGemmaForChosenProvider(imageRequested: Boolean): String? {
+        if (RemoteOpenAiPrefs.isActive(this)) return null
+
         val selected = LocalModelStorageRepository.resolveSelectedModel(this)
             ?: return "No local model selected. Install/select Gemma 4 LiteRT in Settings."
         val settings = LocalModelSettingsRepository.getForModel(this, selected.id)
@@ -4185,6 +4311,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             captureEyevueImageForQuestion(sourceTag, offerSpokenQuestion)
             return
         }
+        if (isTuneBudsSelected()) {
+            captureTuneBudsImageForQuestion(sourceTag, offerSpokenQuestion)
+            return
+        }
 
         if (isGlassesCommandBlocked("AI image capture")) {
             clearPendingVoiceImageQuestion(sourceTag)
@@ -4362,6 +4492,53 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             } finally {
                 eyevueAiPhotoInProgress.set(false)
+            }
+        }
+    }
+
+    private fun captureTuneBudsImageForQuestion(sourceTag: String, offerSpokenQuestion: Boolean) {
+        val manager = getOrCreateTuneBudsManager()
+        if (!manager.isConnected()) {
+            clearPendingVoiceImageQuestion(sourceTag)
+            Toast.makeText(this, "Connect TuneBuds glasses first.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!tuneBudsAiPhotoInProgress.compareAndSet(false, true)) {
+            Log.i("AIHijack", "[$sourceTag] TuneBuds AI photo capture already in progress")
+            return
+        }
+
+        prepareAiQuestionForLockScreen()
+        beginAiQuestionForegroundWork("Capturing image from TuneBuds glasses")
+        pendingImageQuestionOfferSpokenQuestion = false
+        startParallelAudioQuestionIfEligible(offerSpokenQuestion)
+        val startedAt = System.currentTimeMillis()
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val imageBytes = manager.capturePhotoForAi()
+                    ?: throw IOException("TuneBuds photo transfer timed out")
+                val imageFile = File(cacheDir, "TuneBuds_AI_${System.currentTimeMillis()}.jpg")
+                imageFile.writeBytes(imageBytes)
+                withContext(Dispatchers.Main) {
+                    onImageReadyForQuestion(
+                        imagePath = imageFile.absolutePath,
+                        source = ImageQuestionSource.HIGH_QUALITY,
+                        transferDurationMs = System.currentTimeMillis() - startedAt,
+                    )
+                }
+            } catch (error: Exception) {
+                Log.e("AIHijack", "[$sourceTag] TuneBuds AI photo failed", error)
+                withContext(Dispatchers.Main) {
+                    clearPendingVoiceImageQuestion(sourceTag)
+                    finishAiQuestionForegroundWork()
+                    Toast.makeText(
+                        this@MainActivity,
+                        error.message ?: "TuneBuds photo capture failed",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } finally {
+                tuneBudsAiPhotoInProgress.set(false)
             }
         }
     }
@@ -4810,9 +4987,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     }
                 }
 
-                startBluetoothMicRoute(audioManager)
-
                 lifecycleScope.launch {
+                    val routeReady = startBluetoothMicRouteAndAwait(audioManager)
+                    Log.i(
+                        "ImageQuestionAudio",
+                        "Image-question Bluetooth route ready=$routeReady route=${audioRouteSummary(audioManager)}",
+                    )
                     playImageQuestionTone(android.media.ToneGenerator.TONE_PROP_BEEP)
                     speakImageQuestionCue()
                     if (finished || !cont.isActive) return@launch
@@ -4871,7 +5051,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
 
                 cont.invokeOnCancellation {
-                    finish(null)
+                    // lifecycleScope is already cancelled when the Activity is destroyed, so
+                    // finish() cannot rely on launching its asynchronous cleanup in that case.
+                    finished = true
+                    timeoutJob?.cancel()
+                    timeoutJob = null
+                    cleanup()
                 }
             }
         }
@@ -4898,6 +5083,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val utteranceId = "image_question_cue_${System.nanoTime()}"
             fun complete(reason: String) {
                 if (completed.compareAndSet(false, true)) {
+                    ttsDoneCallbacks.remove(utteranceId)
                     Log.i("ImageQuestionAudio", "Image-question cue complete reason=$reason id=$utteranceId")
                     // Keep only enough separation to avoid clipping the route transition. The
                     // reclaimed tail time is added to the initial listening window.
@@ -4913,12 +5099,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val questionSettings = ImageQuestionPreferences.get(this)
             val cue = ImageQuestionDefaults.questionCueForLanguage(questionSettings.appLanguageTag)
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-            tts?.setAudioAttributes(
-                android.media.AudioAttributes.Builder()
-                    .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build(),
-            )
+            configureTtsForVoiceCommunication("image-question cue")
             Log.i(
                 "ImageQuestionAudio",
                 "Queueing image-question cue='$cue' language=${questionSettings.appLanguageTag} " +
@@ -4941,6 +5122,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 ttsDoneCallbacks.remove(utteranceId)
             }
         }
+    }
+
+    private fun configureTtsForVoiceCommunication(reason: String) {
+        val result = tts?.setAudioAttributes(
+            android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build(),
+        )
+        Log.i("ImageQuestionAudio", "Configured TTS voice-communication audio reason=$reason result=$result")
     }
 
     private fun startBluetoothMicRoute(audioManager: android.media.AudioManager) {
@@ -4972,6 +5163,65 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private suspend fun startBluetoothMicRouteAndAwait(
+        audioManager: android.media.AudioManager,
+        timeoutMs: Long = VOICE_BLUETOOTH_ROUTE_TIMEOUT_MS,
+    ): Boolean {
+        val connected = CompletableDeferred<Boolean>()
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != android.media.AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED) return
+                val state = intent.getIntExtra(android.media.AudioManager.EXTRA_SCO_AUDIO_STATE, -1)
+                Log.i("ImageQuestionAudio", "Bluetooth SCO state=$state route=${audioRouteSummary(audioManager)}")
+                when (state) {
+                    android.media.AudioManager.SCO_AUDIO_STATE_CONNECTED -> connected.complete(true)
+                    android.media.AudioManager.SCO_AUDIO_STATE_ERROR -> connected.complete(false)
+                }
+            }
+        }
+        var receiverRegistered = false
+
+        return try {
+            ContextCompat.registerReceiver(
+                this,
+                receiver,
+                IntentFilter(android.media.AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            receiverRegistered = true
+            startBluetoothMicRoute(audioManager)
+
+            val ready: Boolean = if (isBluetoothCommunicationDeviceSelected(audioManager)) {
+                true
+            } else {
+                withTimeoutOrNull<Boolean>(timeoutMs) {
+                    while (!isBluetoothCommunicationDeviceSelected(audioManager) && !connected.isCompleted) {
+                        delay(100L)
+                    }
+                    isBluetoothCommunicationDeviceSelected(audioManager) || connected.await()
+                } ?: false
+            }
+            if (ready) delay(VOICE_CUE_ROUTE_SETTLE_MS)
+            ready
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w("ImageQuestionAudio", "Could not confirm Bluetooth communication route", error)
+            false
+        } finally {
+            if (receiverRegistered) runCatching { unregisterReceiver(receiver) }
+        }
+    }
+
+    private fun isBluetoothCommunicationDeviceSelected(audioManager: android.media.AudioManager): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        return when (audioManager.communicationDevice?.type) {
+            android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            android.media.AudioDeviceInfo.TYPE_BLE_HEADSET -> true
+            else -> false
+        }
+    }
+
     private fun audioRouteSummary(audioManager: android.media.AudioManager): String {
         val communicationDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             audioManager.communicationDevice?.let { "${it.type}:${it.productName}" } ?: "none"
@@ -4989,6 +5239,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         chosenProviderType: AgentProviderType? = null,
     ) {
         if (isGlassesCommandBlocked("voice-query command")) return
+        if (isImageQuestionWorkActive()) {
+            Log.i("AIHijack", "Ignoring voice query while an image question is active")
+            Toast.makeText(this, "An image question is already active", Toast.LENGTH_SHORT).show()
+            return
+        }
         cancelLocalStreamingSpeech("new voice query")
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             XXPermissions.with(this)
@@ -5021,6 +5276,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
         prepareAiQuestionForLockScreen()
+        val voiceQueryToken = Any()
+        if (!voiceQueryInProgress.compareAndSet(null, voiceQueryToken)) {
+            Log.i("AIHijack", "Ignoring duplicate voice query while another query is active")
+            Toast.makeText(this, "A voice question is already active", Toast.LENGTH_SHORT).show()
+            return
+        }
         beginAiQuestionForegroundWork("Listening for glasses voice question")
         // Wake up screen if locked
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -5034,8 +5295,25 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         stopGlassesAiAudio("voice-query command")
 
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        val recognizer = try {
+            SpeechRecognizer.createSpeechRecognizer(this)
+        } catch (error: Exception) {
+            Log.e("AIHijack", "Could not create voice recognizer", error)
+            if (voiceQueryInProgress.compareAndSet(voiceQueryToken, null)) {
+                finishAiQuestionForegroundWork()
+            }
+            Toast.makeText(this, "Speech recognition is unavailable", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val audioRouteOwner = VoiceAudioRouteOwner(voiceQueryToken, audioManager)
+        activeVoiceAudioRoute.set(audioRouteOwner)
+        activeVoiceRecognizer.set(recognizer)
 
         fun stopSco() {
+            // A delayed callback from an older query must not clear the route selected by a
+            // newer query. AudioManager is a process singleton, so the per-query owner object
+            // is what makes this check race-safe.
+            if (!activeVoiceAudioRoute.compareAndSet(audioRouteOwner, null)) return
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     audioManager.clearCommunicationDevice()
@@ -5046,39 +5324,92 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        startBluetoothMicRoute(audioManager)
+        fun finishVoiceQueryWork() {
+            if (voiceQueryInProgress.compareAndSet(voiceQueryToken, null)) {
+                finishAiQuestionForegroundWork()
+            }
+        }
 
         Toast.makeText(this, "Listening for voice query…", Toast.LENGTH_SHORT).show()
 
-        val recognizer = SpeechRecognizer.createSpeechRecognizer(this)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, recognitionLanguageTag())
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, recognitionLanguageTag())
         }
+        var recognitionAttempts = 0
 
         recognizer.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
                 Log.i("ImageQuestionAudio", "Voice-query recognizer ready after listening cue")
             }
 
-            override fun onBeginningOfSpeech() {}
+            override fun onBeginningOfSpeech() {
+                Log.i("ImageQuestionAudio", "Voice-query speech detected attempt=$recognitionAttempts")
+            }
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
 
             override fun onError(error: Int) {
+                val isTransientNoSpeech = error == SpeechRecognizer.ERROR_NO_MATCH ||
+                    error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                if (isTransientNoSpeech && recognitionAttempts == 1) {
+                    recognitionAttempts += 1
+                    Log.w(
+                        "AIHijack",
+                        "Voice query recognition returned transient error code=$error; " +
+                            "retrying attempt=$recognitionAttempts route=${audioRouteSummary(audioManager)}",
+                    )
+                    Toast.makeText(this@MainActivity, "I didn't catch that. Listening again…", Toast.LENGTH_SHORT).show()
+                    lifecycleScope.launch {
+                        var retryStarted = false
+                        try {
+                            playImageQuestionTone(android.media.ToneGenerator.TONE_PROP_BEEP)
+                            delay(VOICE_RECOGNITION_RETRY_DELAY_MS)
+                            if (isFinishing || isDestroyed) return@launch
+                            val routeReady = startBluetoothMicRouteAndAwait(audioManager)
+                            Log.i(
+                                "ImageQuestionAudio",
+                                "Restarting voice recognizer attempt=$recognitionAttempts routeReady=$routeReady",
+                            )
+                            runCatching { recognizer.startListening(intent) }
+                                .onSuccess { retryStarted = true }
+                                .onFailure { retryError ->
+                                    Log.e("AIHijack", "Voice query recognition retry could not start", retryError)
+                                }
+                        } finally {
+                            // lifecycleScope can be cancelled while the retry cue/delay is active.
+                            // Do not leave the recognizer, SCO route, or foreground work alive when
+                            // no second listening session was actually started.
+                            if (!retryStarted) {
+                                recognizer.destroy()
+                                activeVoiceRecognizer.compareAndSet(recognizer, null)
+                                stopSco()
+                                finishVoiceQueryWork()
+                            }
+                        }
+                    }
+                    return
+                }
                 val message = if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                     "Microphone permission is required for voice questions"
+                } else if (isTransientNoSpeech) {
+                    "I couldn't hear a voice question. Please try again."
                 } else {
                     "Voice query failed: $error"
                 }
-                Log.w("AIHijack", "Voice query recognition failed with error code=$error")
+                Log.w(
+                    "AIHijack",
+                    "Voice query recognition failed with error code=$error " +
+                        "attempt=$recognitionAttempts route=${audioRouteSummary(audioManager)}",
+                )
                 Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
                 recognizer.destroy()
+                activeVoiceRecognizer.compareAndSet(recognizer, null)
                 stopSco()
-                finishAiQuestionForegroundWork()
+                finishVoiceQueryWork()
             }
 
             override fun onResults(results: Bundle?) {
@@ -5087,143 +5418,223 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                 if (prompt.isBlank()) {
                     recognizer.destroy()
+                    activeVoiceRecognizer.compareAndSet(recognizer, null)
                     stopSco()
-                    finishAiQuestionForegroundWork()
+                    finishVoiceQueryWork()
                     return
                 }
 
                 Toast.makeText(this@MainActivity, "Asking: $prompt", Toast.LENGTH_SHORT).show()
 
-                CoroutineScope(Dispatchers.IO).launch {
-                    val selectedProvider = chosenProviderType
-                        ?: AutomationPrefs.getProviderType(this@MainActivity)
-                    val routingProvider = if (memoryAwareChosenProvider) {
-                        selectedProvider
-                    } else {
-                        // This legacy branch is retained only for direct callers outside the
-                        // two-mode Glasses dashboard.
-                        AgentProviderType.TASKER
-                    }
-                    val routing = assistantRequestRouter.route(
-                        context = this@MainActivity,
-                        request = AssistantRequest(
-                            text = prompt,
-                            source = AssistantRequestSource.GLASSES_VOICE,
-                        ),
-                        providerType = routingProvider,
-                    )
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        val selectedProvider = chosenProviderType
+                            ?: AutomationPrefs.getProviderType(this@MainActivity)
+                        val routingProvider = if (memoryAwareChosenProvider) {
+                            selectedProvider
+                        } else {
+                            // This legacy branch is retained only for direct callers outside the
+                            // two-mode Glasses dashboard.
+                            AgentProviderType.TASKER
+                        }
+                        val routing = assistantRequestRouter.route(
+                            context = this@MainActivity,
+                            request = AssistantRequest(
+                                text = prompt,
+                                source = AssistantRequestSource.GLASSES_VOICE,
+                            ),
+                            providerType = routingProvider,
+                        )
 
-                    when (routing.intent) {
-                        AssistantIntent.ANSWER_QUESTION -> {
-                            val reply = if (memoryAwareChosenProvider) {
-                                runMemoryAwareChosenProviderQuery(
-                                    userPrompt = prompt,
-                                    providerType = selectedProvider,
-                                )
-                            } else {
-                                val modelOverride = if (selectedProvider == AgentProviderType.PRO_SUBSCRIPTION) {
-                                    ProSubscriptionAiPrefs.getQuestionsModel(this@MainActivity)
+                        when (routing.intent) {
+                            AssistantIntent.ANSWER_QUESTION -> {
+                                val reply = if (memoryAwareChosenProvider) {
+                                    runMemoryAwareChosenProviderQuery(
+                                        userPrompt = prompt,
+                                        providerType = selectedProvider,
+                                    )
                                 } else {
-                                    null
+                                    val modelOverride = if (selectedProvider == AgentProviderType.PRO_SUBSCRIPTION) {
+                                        ProSubscriptionAiPrefs.getQuestionsModel(this@MainActivity)
+                                    } else {
+                                        null
+                                    }
+
+                                    CliRelayClient.voiceQuery(
+                                        context = this@MainActivity,
+                                        prompt = prompt,
+                                        modelOverride = modelOverride,
+                                    ).getOrElse { "Relay unavailable: ${it.message ?: "unknown error"}" }
                                 }
 
-                                CliRelayClient.voiceQuery(
-                                    context = this@MainActivity,
-                                    prompt = prompt,
-                                    modelOverride = modelOverride,
-                                ).getOrElse { "Relay unavailable: ${it.message ?: "unknown error"}" }
-                            }
-
-                            runOnUiThread {
-                                speakVision(reply) {
-                                    stopSco()
-                                    finishAiQuestionForegroundWork()
+                                runOnUiThread {
+                                    speakVision(reply) {
+                                        stopSco()
+                                        finishVoiceQueryWork()
+                                    }
                                 }
                             }
+
+                            AssistantIntent.ANALYZE_IMAGE -> runOnUiThread {
+                                stopSco()
+                                val unsupportedReason = imageQueryUnsupportedReasonForCurrentSelection()
+                                if (unsupportedReason != null) {
+                                    finishVoiceQueryWork()
+                                    speak(unsupportedReason)
+                                    return@runOnUiThread
+                                }
+                                // The image flow now owns the shared foreground service. Release
+                                // only this voice-query guard without stopping that service.
+                                voiceQueryInProgress.compareAndSet(voiceQueryToken, null)
+                                pendingVoiceImageQuestion = routing.normalizedGoal ?: prompt
+                                speak("Okay. I'll check what you see.")
+                                handleGlassesImageButtonPressed(
+                                    triggerCapture = true,
+                                    sourceTag = "voice_request",
+                                )
+                            }
+
+                            AssistantIntent.EXECUTE_UI_TASK -> runOnUiThread {
+                                stopSco()
+                                if (!AutomationPrefs.isLocalAgentAutomationEnabled(this@MainActivity)) {
+                                    finishVoiceQueryWork()
+                                    speak("Enable Local Agent phone control in CyanBridge settings first.")
+                                    return@runOnUiThread
+                                }
+                                if (isDeviceLockedForAutomation()) {
+                                    finishVoiceQueryWork()
+                                    speak("Unlock your phone before I control it.")
+                                    return@runOnUiThread
+                                }
+                                if (!LocalAgentAccessibilityBridge.isConnected()) {
+                                    finishVoiceQueryWork()
+                                    speak("Please enable CyanBridge accessibility control first.")
+                                    return@runOnUiThread
+                                }
+
+                                val goal = routing.normalizedGoal ?: prompt
+                                val result = LocalAgentController.start(this@MainActivity, goal)
+                                if (result.ok) {
+                                    speak("Okay. I'll do that.")
+                                } else {
+                                    speak("I couldn't start phone control.")
+                                }
+                                finishVoiceQueryWork()
+                            }
+
+                            AssistantIntent.CLARIFY -> runOnUiThread {
+                                stopSco()
+                                finishVoiceQueryWork()
+                                speak(
+                                    AssistantSpeechPolicy.clarification(routing.clarification)
+                                )
+                            }
                         }
-
-                        AssistantIntent.ANALYZE_IMAGE -> runOnUiThread {
+                    } catch (cancelled: CancellationException) {
+                        activeVoiceRecognizer.compareAndSet(recognizer, null)
+                        stopSco()
+                        finishVoiceQueryWork()
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.e("AIHijack", "Voice query processing failed", error)
+                        runOnUiThread {
                             stopSco()
-                            val unsupportedReason = imageQueryUnsupportedReasonForCurrentSelection()
-                            if (unsupportedReason != null) {
-                                speak(unsupportedReason)
-                                return@runOnUiThread
-                            }
-                            pendingVoiceImageQuestion = routing.normalizedGoal ?: prompt
-                            speak("Okay. I'll check what you see.")
-                            handleGlassesImageButtonPressed(
-                                triggerCapture = true,
-                                sourceTag = "voice_request",
-                            )
-                        }
-
-                        AssistantIntent.EXECUTE_UI_TASK -> runOnUiThread {
-                            stopSco()
-                            if (!AutomationPrefs.isLocalAgentAutomationEnabled(this@MainActivity)) {
-                                speak("Enable Local Agent phone control in CyanBridge settings first.")
-                                return@runOnUiThread
-                            }
-                            if (isDeviceLockedForAutomation()) {
-                                speak("Unlock your phone before I control it.")
-                                return@runOnUiThread
-                            }
-                            if (!LocalAgentAccessibilityBridge.isConnected()) {
-                                speak("Please enable CyanBridge accessibility control first.")
-                                return@runOnUiThread
-                            }
-
-                            val goal = routing.normalizedGoal ?: prompt
-                            val result = LocalAgentController.start(this@MainActivity, goal)
-                            if (result.ok) {
-                                speak("Okay. I'll do that.")
-                            } else {
-                                speak("I couldn't start phone control.")
-                            }
-                        }
-
-                        AssistantIntent.CLARIFY -> runOnUiThread {
-                            stopSco()
-                            speak(
-                                AssistantSpeechPolicy.clarification(routing.clarification)
-                            )
+                            finishVoiceQueryWork()
+                            speak("I couldn't process that voice question. Please try again.")
                         }
                     }
                 }
 
                 recognizer.destroy()
+                activeVoiceRecognizer.compareAndSet(recognizer, null)
             }
 
             override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
 
+        val cueUtteranceId = "voice_listening_${System.nanoTime()}"
         val listeningStarted = AtomicBoolean(false)
+        val setupAborted = AtomicBoolean(false)
+        fun abortVoiceRecognitionSetup(reason: String, error: Throwable? = null) {
+            if (!setupAborted.compareAndSet(false, true)) return
+            Log.e("AIHijack", "Voice recognizer setup aborted: $reason", error)
+            ttsDoneCallbacks.remove(cueUtteranceId)
+            recognizer.destroy()
+            activeVoiceRecognizer.compareAndSet(recognizer, null)
+            stopSco()
+            finishVoiceQueryWork()
+        }
         fun startListeningAfterCue(reason: String) {
-            if (!listeningStarted.compareAndSet(false, true)) return
-            lifecycleScope.launch {
-                // Keep only a minimal route-transition gap so speech immediately after the cue
-                // is not clipped.
-                delay(VOICE_CUE_BLUETOOTH_TAIL_MS)
-                Log.i("ImageQuestionAudio", "Starting voice recognizer after listening cue reason=$reason")
-                recognizer.startListening(intent)
+            if (setupAborted.get() || !listeningStarted.compareAndSet(false, true)) return
+            if (setupAborted.get()) return
+            val startJob = lifecycleScope.launch {
+                var started = false
+                try {
+                    // Keep only a minimal route-transition gap so speech immediately after the cue
+                    // is not clipped.
+                    delay(VOICE_CUE_BLUETOOTH_TAIL_MS)
+                    Log.i("ImageQuestionAudio", "Starting voice recognizer after listening cue reason=$reason")
+                    recognitionAttempts = 1
+                    recognizer.startListening(intent)
+                    started = true
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    abortVoiceRecognitionSetup("startListening failed", error)
+                } finally {
+                    if (!started) abortVoiceRecognitionSetup("cancelled before startListening completed")
+                }
+            }
+            // A lifecycleScope launch can already be cancelled before its block is entered.
+            startJob.invokeOnCompletion { cause ->
+                if (cause is CancellationException) {
+                    abortVoiceRecognitionSetup("cancelled before recognizer startup ran")
+                }
             }
         }
-        val cueUtteranceId = "voice_listening_${System.nanoTime()}"
-        lifecycleScope.launch {
-            // The Bluetooth communication route was just selected; give it a brief moment before
-            // emitting the listening cue so the first syllable is not lost on the glasses.
-            delay(VOICE_CUE_ROUTE_SETTLE_MS)
-            val languageTag = recognitionLanguageTag()
-            speak(
-                text = ImageQuestionDefaults.listeningCueForLanguage(languageTag),
-                languageTag = languageTag,
-                utteranceId = cueUtteranceId,
-                onDone = { startListeningAfterCue("tts callback") },
-            )
-            // Do not leave Test Voice unresponsive if a TTS engine never reports completion.
-            delay(VOICE_CUE_CALLBACK_TIMEOUT_MS)
-            startListeningAfterCue("tts callback timeout")
+        val cueJob = lifecycleScope.launch {
+            try {
+                val routeReady = startBluetoothMicRouteAndAwait(audioManager)
+                Log.i(
+                    "ImageQuestionAudio",
+                    "Voice-query Bluetooth route ready=$routeReady route=${audioRouteSummary(audioManager)}",
+                )
+                configureTtsForVoiceCommunication("voice-query listening cue")
+                val languageTag = recognitionLanguageTag()
+                speak(
+                    text = ImageQuestionDefaults.listeningCueForLanguage(languageTag),
+                    languageTag = languageTag,
+                    utteranceId = cueUtteranceId,
+                    onDone = { startListeningAfterCue("tts callback") },
+                    streamType = android.media.AudioManager.STREAM_VOICE_CALL,
+                )
+                // Do not leave Test Voice unresponsive if a TTS engine never reports completion.
+                delay(VOICE_CUE_CALLBACK_TIMEOUT_MS)
+                ttsDoneCallbacks.remove(cueUtteranceId)
+                startListeningAfterCue("tts callback timeout")
+            } finally {
+                if (!listeningStarted.get()) {
+                    ttsDoneCallbacks.remove(cueUtteranceId)
+                    abortVoiceRecognitionSetup("cancelled before listening was scheduled")
+                }
+            }
         }
+        cueJob.invokeOnCompletion { cause ->
+            if (cause is CancellationException && !listeningStarted.get()) {
+                abortVoiceRecognitionSetup("cancelled before voice cue setup ran")
+            }
+        }
+    }
+
+    private fun isImageQuestionWorkActive(): Boolean {
+        return imageQueryInProgress.get() ||
+            imageCaptureAwaitingNotification.get() ||
+            imageThumbnailRequestInProgress.get() ||
+            metaPhotoCaptureInProgress.get() ||
+            eyevueAiPhotoInProgress.get() ||
+            highQualityImageRequest != null ||
+            activeParallelAudioQuestionJob?.isActive == true
     }
 
     private fun triggerAssistantVoiceQuery() {
@@ -5551,6 +5962,24 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun updateConnectionStatus(connected: Boolean) {
+        if (isTuneBudsSelected()) {
+            val tuneBuds = getOrCreateTuneBudsManager().state.value
+            val storage = tuneBuds.storage?.let {
+                "${it.usedMiB} MiB used / ${it.freeMiB} MiB free"
+            } ?: "--"
+            binding.statusText.text = tuneBuds.connectionLabel
+            binding.storageText.text = storage
+            updateBatteryText(tuneBuds.batteryPercent)
+            updateDashboardState { state ->
+                state.copy(
+                    connectionLabel = tuneBuds.connectionLabel,
+                    batteryPercent = tuneBuds.batteryPercent,
+                    storageLabel = storage,
+                )
+            }
+            updateDeviceClassText()
+            return
+        }
         if (isEyevueSelected()) {
             val eyevue = getOrCreateEyevueManager().state.value
             val status = eyevue.connectionLabel
@@ -5734,6 +6163,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun isEyevueSelected(): Boolean =
         DeviceProfileStore.selectedClass(this) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.EYEVUE
 
+    private fun isTuneBudsSelected(): Boolean =
+        DeviceProfileStore.selectedClass(this) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.TUNEBUDS
+
+    private fun isHeyCyanSelected(): Boolean =
+        DeviceProfileStore.selectedClass(this) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.HEY_CYAN
+
     private fun isHeyCyanOrEyevueSelected(): Boolean =
         DeviceProfileStore.selectedClass(this) in setOf(
             com.fersaiyan.cyanbridge.shared.devices.DeviceClass.HEY_CYAN,
@@ -5759,17 +6194,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         applyGlassesManagerGating(profile)
     }
 
-    /**
-     * Chapter 4: Capability gating for the Glasses Manager screen.
-     *
-     * - HEY_CYAN: show extra controls + battery/storage placeholders.
-     * - META_RAYBAN: show Meta-specific controls (stream, photo, display, registration).
-     * - Other classes: show meeting capture only (plus basic connection UI).
-     */
+    /** Applies device-profile capabilities to both the legacy controls and shared dashboard. */
     private fun applyGlassesManagerGating(profile: DeviceProfile?) {
         val model = GlassesManagerGating.uiModel(profile)
 
-        // Expanded controls panel (HeyCyan-only in MVP baseline)
+        // The hidden legacy panel remains HeyCyan-specific; Compose uses granular flags below.
         binding.layoutHeycyanExtras.visibility =
             if (model.isVisible(GlassesManagerGating.Action.HEY_CYAN_EXTRAS)) android.view.View.VISIBLE else android.view.View.GONE
 
@@ -5789,6 +6218,23 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             state.copy(
                 showHeyCyanControls = model.isVisible(GlassesManagerGating.Action.HEY_CYAN_EXTRAS),
                 showEyevueControls = model.isVisible(GlassesManagerGating.Action.EYEVUE_CONTROLS),
+                showTuneBudsControls = model.isVisible(GlassesManagerGating.Action.TUNEBUDS_CONTROLS),
+                showCaptureSettings = model.isVisible(GlassesManagerGating.Action.CAPTURE_SETTINGS),
+                showMediaSync = true,
+                showAiWakeWordRouting = model.isVisible(GlassesManagerGating.Action.AI_WAKE_WORD_ROUTING),
+                showAdvancedControls = model.isVisible(GlassesManagerGating.Action.ADVANCED_CONTROLS),
+                showAdvancedLocalAgent = model.isVisible(GlassesManagerGating.Action.ADVANCED_LOCAL_AGENT),
+                showAdvancedDeviceInfo = model.isVisible(GlassesManagerGating.Action.ADVANCED_DEVICE_INFO),
+                showAdvancedDeviceVolume = model.isVisible(GlassesManagerGating.Action.ADVANCED_DEVICE_VOLUME),
+                showAdvancedImageQuality = model.isVisible(GlassesManagerGating.Action.ADVANCED_IMAGE_QUALITY),
+                showAdvancedDeveloperTools = model.isVisible(GlassesManagerGating.Action.ADVANCED_DEVELOPER_TOOLS),
+                showAdvancedOta = model.isVisible(GlassesManagerGating.Action.ADVANCED_OTA),
+                deviceInfoLabel = state.deviceInfoLabel.takeIf {
+                    model.isVisible(GlassesManagerGating.Action.TUNEBUDS_CONTROLS)
+                },
+                firmwarePatchRequest = state.firmwarePatchRequest.takeIf {
+                    model.isVisible(GlassesManagerGating.Action.ADVANCED_OTA)
+                },
                 aiWakeWordRoute = AiWakeWordPreferences.route(this),
                 showMetaRaybanControls = model.isVisible(GlassesManagerGating.Action.META_RAYBAN_CONTROLS),
                 showMeizuMyvuControls = model.isVisible(GlassesManagerGating.Action.MEIZU_MYVU_CONTROLS),
@@ -5796,18 +6242,24 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 showStorage = showStorage,
                 storageLabel = if (showStorage) state.storageLabel else "--",
                 wifiAdbDebug = state.wifiAdbDebug.copy(
-                    isAvailable = BuildConfig.DEBUG && showBattery,
+                    isAvailable = BuildConfig.DEBUG &&
+                        model.isVisible(GlassesManagerGating.Action.WIFI_ADB_DEBUG),
                 ),
             )
         }
 
         // Only poll battery for profiles that claim to support it.
-        if (showBattery && !isEyevueSelected()) {
+        if (showBattery &&
+            DeviceProfileStore.selectedClass(this) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.HEY_CYAN
+        ) {
             startBatteryPolling()
         } else {
             stopBatteryPolling()
             updateBatteryText(null)
             if (isEyevueSelected()) getOrCreateEyevueManager().requestBattery()
+            if (isTuneBudsSelected()) {
+                getOrCreateTuneBudsManager().takeIf { it.isConnected() }?.requestBattery()
+            }
         }
 
         if (!showStorage) {
@@ -5830,6 +6282,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         if (model.isVisible(GlassesManagerGating.Action.EYEVUE_CONTROLS)) {
             getOrCreateEyevueLivePreviewManager()
+        }
+
+        if (model.isVisible(GlassesManagerGating.Action.TUNEBUDS_CONTROLS)) {
+            getOrCreateTuneBudsManager().takeIf { it.isConnected() }?.refreshStatus()
         }
     }
 
@@ -6698,6 +7154,117 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         eyevueMediaTransport?.disconnect()
         getOrCreateEyevueManager().finishTransfer()
         eyevueMediaJob?.cancel()
+        setTransferUiVisible(false)
+        releaseExclusiveGlassesSession(mediaSessionLease)
+        mediaSessionLease = null
+    }
+
+    private fun startTuneBudsMediaSync() {
+        if (tuneBudsMediaJob?.isActive == true) return
+        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
+            ensureGlassesTransportPermissions("TuneBuds media sync") {
+                startTuneBudsMediaSync()
+            }
+            return
+        }
+
+        val manager = getOrCreateTuneBudsManager()
+        if (!manager.isConnected()) {
+            Toast.makeText(this, "Connect TuneBuds glasses first.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (GlassesSessionCoordinator.currentSession() != null) {
+            Toast.makeText(this, "Another glasses session is already active.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val lease = acquireExclusiveGlassesSession(GlassesSession.MEDIA_SYNC) ?: return
+        mediaSessionLease = lease
+        tuneBudsMediaCancelled = false
+        resetTransferUiState()
+        setTransferUiVisible(true)
+        setTransferFlowLabel(GlassesSyncFlow.CUSTOM)
+        setTransferDetail("Starting TuneBuds media sync...")
+
+        val hotspot = TuneBudsLocalHotspot(this)
+        tuneBudsMediaHotspot = hotspot
+        val temporaryDirectory = File(cacheDir, "tunebuds_media_${System.currentTimeMillis()}")
+        tuneBudsMediaJob = lifecycleScope.launch(Dispatchers.IO) {
+            var result: Result<Int>? = null
+            try {
+                val sync = TuneBudsMediaSync(manager, hotspot, temporaryDirectory)
+                result = sync.sync(
+                    onState = { syncState ->
+                        withContext(Dispatchers.Main) {
+                            if (tuneBudsMediaCancelled) return@withContext
+                            if (syncState.total > 0) {
+                                transferTotalJpg = syncState.total
+                                transferTotalMp4 = 0
+                                transferTotalOpus = 0
+                                transferDoneJpg = syncState.completed
+                                transferDoneMp4 = 0
+                                transferDoneOpus = 0
+                            }
+                            renderTransferProgress()
+                            setTransferDetail(
+                                syncState.lastError?.let { "${syncState.detail}: $it" }
+                                    ?: syncState.detail,
+                            )
+                        }
+                    },
+                    onProgress = { item, downloaded, total ->
+                        if (total > 0L) {
+                            withContext(Dispatchers.Main) {
+                                if (!tuneBudsMediaCancelled) {
+                                    setTransferDetail(
+                                        "Downloading ${item.fileName}: ${downloaded / 1024} / ${total / 1024} KB",
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    onFile = { item, file ->
+                        importVendorMediaFile(
+                            file,
+                            VendorMediaItem(
+                                fileName = item.fileName,
+                                type = when (item.type) {
+                                    TuneBudsMediaType.PHOTO -> VendorMediaType.PHOTO
+                                    TuneBudsMediaType.VIDEO -> VendorMediaType.VIDEO
+                                    TuneBudsMediaType.AUDIO -> VendorMediaType.AUDIO
+                                },
+                            ),
+                        )
+                    },
+                )
+            } finally {
+                withContext(Dispatchers.Main) {
+                    val completed = result?.getOrNull()
+                    val cancelled = tuneBudsMediaCancelled
+                    tuneBudsMediaJob = null
+                    tuneBudsMediaHotspot = null
+                    setTransferUiVisible(false)
+                    releaseExclusiveGlassesSession(lease)
+                    mediaSessionLease = null
+                    if (!cancelled) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            completed?.let { "TuneBuds sync complete: $it files" }
+                                ?: "TuneBuds media sync failed. Check the transfer details and retry.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun stopTuneBudsMediaSync() {
+        if (tuneBudsMediaJob?.isActive != true) return
+        tuneBudsMediaCancelled = true
+        tuneBudsMediaHotspot?.stop()
+        getOrCreateTuneBudsManager().finishTransfer()
+        tuneBudsMediaJob?.cancel()
         setTransferUiVisible(false)
         releaseExclusiveGlassesSession(mediaSessionLease)
         mediaSessionLease = null

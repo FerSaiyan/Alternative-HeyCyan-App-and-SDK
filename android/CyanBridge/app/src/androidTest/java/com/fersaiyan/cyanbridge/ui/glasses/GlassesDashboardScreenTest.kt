@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -69,6 +70,7 @@ class GlassesDashboardScreenTest {
                 GlassesDashboardScreen(
                     state = GlassesDashboardUiState(
                         showHeyCyanControls = true,
+                        showAiWakeWordRouting = true,
                         aiWakeWordRoute = AiWakeWordRoute.VOICE_QUESTION,
                     ),
                     onAction = { action = it },
@@ -97,6 +99,7 @@ class GlassesDashboardScreenTest {
                 GlassesDashboardScreen(
                     state = GlassesDashboardUiState(
                         showEyevueControls = true,
+                        showAiWakeWordRouting = true,
                         aiWakeWordRoute = AiWakeWordRoute.VOICE_QUESTION,
                     ),
                     onAction = { action = it },
@@ -119,7 +122,10 @@ class GlassesDashboardScreenTest {
         composeRule.setContent {
             CyanBridgeTheme {
                 GlassesDashboardScreen(
-                    state = GlassesDashboardUiState(showHeyCyanControls = true),
+                    state = GlassesDashboardUiState(
+                        showHeyCyanControls = true,
+                        showAdvancedControls = true,
+                    ),
                     onAction = {},
                 )
             }
@@ -134,6 +140,37 @@ class GlassesDashboardScreenTest {
         composeRule.onNodeWithText("Test image AI description").assertIsDisplayed()
         composeRule.onNodeWithText("Show advanced controls").assertIsDisplayed()
         composeRule.onAllNodesWithText("Meeting capture").assertCountEquals(0)
+    }
+
+    @Test
+    fun tuneBudsAdvancedShowsOnlyValidatedSharedSections() {
+        composeRule.setContent {
+            CyanBridgeTheme {
+                GlassesDashboardScreen(
+                    state = GlassesDashboardUiState(
+                        showTuneBudsControls = true,
+                        showAdvancedControls = true,
+                        showAdvancedLocalAgent = true,
+                        showAdvancedDeviceInfo = true,
+                        advancedExpanded = true,
+                        deviceInfoLabel = "Model: E1749  Firmware: 0.1.0.6  Coprocessor: 1.0.1.1.4",
+                    ),
+                    onAction = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("advanced_controls_toggle").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("advanced_local_agent").assertCountEquals(1)
+        composeRule.onAllNodesWithTag("advanced_device_info").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Model: E1749  Firmware: 0.1.0.6  Coprocessor: 1.0.1.1.4")
+            .assertCountEquals(1)
+        composeRule.onAllNodesWithTag("glasses_recording_settings").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("ai_wake_word_route_controls").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("advanced_image_quality").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("advanced_developer_tools").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("advanced_ota").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Volume").assertCountEquals(0)
     }
 
     @Test
@@ -248,6 +285,8 @@ class GlassesDashboardScreenTest {
                 GlassesDashboardScreen(
                     state = GlassesDashboardUiState(
                         showHeyCyanControls = true,
+                        showAdvancedControls = true,
+                        showAdvancedOta = true,
                         advancedExpanded = true,
                     ),
                     onAction = { action = it },
@@ -277,6 +316,7 @@ class GlassesDashboardScreenTest {
             CyanBridgeTheme {
                 GlassesDashboardScreen(
                     state = GlassesDashboardUiState(
+                        showAdvancedOta = true,
                         firmwarePatchRequest = FirmwarePatchRequestUiState(
                             source = OtaFirmwareSource.STEALTH_CATALOG,
                             target = com.fersaiyan.cyanbridge.shared.glasses.OtaTargetSelection.V821_WIFI,
@@ -315,6 +355,7 @@ class GlassesDashboardScreenTest {
             CyanBridgeTheme {
                 GlassesDashboardScreen(
                     state = GlassesDashboardUiState(
+                        showAdvancedOta = true,
                         firmwarePatchRequest = FirmwarePatchRequestUiState(
                             source = OtaFirmwareSource.DEBUG_CATALOG,
                             target = com.fersaiyan.cyanbridge.shared.glasses.OtaTargetSelection.JIELI_BLE,

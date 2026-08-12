@@ -62,6 +62,9 @@ object DeviceProfileStore {
     fun isEyevueSelected(context: Context): Boolean =
         selectedClass(context) == DeviceClass.EYEVUE
 
+    fun isTuneBudsSelected(context: Context): Boolean =
+        selectedClass(context) == DeviceClass.TUNEBUDS
+
     fun getUserOverrideForMac(context: Context, mac: String): DeviceClass? {
         val key = overrideKey(mac)
         val raw = prefs(context).getString(key, null) ?: return null

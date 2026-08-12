@@ -30,9 +30,11 @@ class GlassesDashboardScreenTest {
         val state = GlassesDashboardUiState(
             connectionLabel = "Connected: CyanBridge V2",
             deviceClassLabel = "HeyCyan Smart Glasses",
+            deviceInfoLabel = "Firmware: 0.1.0.6",
         )
         assertEquals("Connected: CyanBridge V2", state.connectionLabel)
         assertEquals("HeyCyan Smart Glasses", state.deviceClassLabel)
+        assertEquals("Firmware: 0.1.0.6", state.deviceInfoLabel)
     }
 
     @Test

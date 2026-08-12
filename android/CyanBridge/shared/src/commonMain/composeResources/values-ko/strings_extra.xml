@@ -166,6 +166,7 @@
     <string name="sync_flow_title">동기화 흐름 선택</string>
     <string name="device_class_heycyan">HeyCyan</string>
     <string name="device_class_eye_vue">Eyevue</string>
+    <string name="device_class_tunebuds">TuneBuds / AB Mate</string>
     <string name="device_class_meta_rayban">Meta Ray-Ban</string>
     <string name="device_class_meizu_myvu">Meizu MYVU / Star Air</string>
     <string name="device_class_generic_audio">이어버드 / 오디오 전용 안경</string>
@@ -411,7 +412,7 @@
     <string name="dashboard_recording_active">녹음 활성</string>
     <string name="dashboard_glasses_status">안경 상태</string>
     <string name="dashboard_class">분류: %1$s</string>
-    <string name="dashboard_battery">배터리: %1$d%%</string>
+    <string name="dashboard_battery">배터리: %1$d%</string>
     <string name="dashboard_battery_unknown">배터리: --%</string>
     <string name="dashboard_storage">저장공간: %1$s</string>
     <string name="dashboard_sync_progress">동기화 진행률</string>

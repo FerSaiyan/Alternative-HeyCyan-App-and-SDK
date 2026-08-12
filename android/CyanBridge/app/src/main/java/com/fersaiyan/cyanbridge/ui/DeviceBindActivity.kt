@@ -22,6 +22,8 @@ import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
+import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsProtocol
 import com.fersaiyan.cyanbridge.devices.ScannedDevice
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
@@ -139,7 +141,7 @@ class DeviceBindActivity : BaseActivity() {
         DeviceProfileStore.saveLastSelected(
             this,
             DeviceProfile(
-                macAddress = device.macAddress,
+                macAddress = device.connectionAddress,
                 advertisedName = device.advertisedName,
                 detectedClass = device.detectedClass,
                 selectedClass = selectedDeviceClass,
@@ -184,6 +186,17 @@ class DeviceBindActivity : BaseActivity() {
             return
         }
 
+        if (selectedDeviceClass == DeviceClass.TUNEBUDS) {
+            TuneBudsManager.getInstance(this).connect(device.connectionAddress, device.advertisedName)
+            Toast.makeText(
+                this,
+                "Connecting to TuneBuds over Classic Bluetooth.",
+                Toast.LENGTH_LONG,
+            ).show()
+            finish()
+            return
+        }
+
         BleOperateManager.getInstance().connectDirectly(device.macAddress)
     }
 
@@ -192,6 +205,8 @@ class DeviceBindActivity : BaseActivity() {
         name: String?,
         rssi: Int,
         scanRecord: ScanRecord? = null,
+        manufacturerCompanyIds: Set<Int> = emptySet(),
+        connectionAddress: String? = null,
     ) {
         val sanitizedName = name?.trim()?.takeIf { it.isNotEmpty() }
         val existingIndex = deviceList.indexOfFirst { it.macAddress.equals(mac, ignoreCase = true) }
@@ -200,17 +215,28 @@ class DeviceBindActivity : BaseActivity() {
             val previousName = existing.advertisedName
             val previousClass = existing.detectedClass
             existing.rssi = rssi
+            connectionAddress?.let { existing.connectionAddress = it }
             if (existing.advertisedName.isNullOrBlank() && sanitizedName != null) {
                 existing.advertisedName = sanitizedName
             }
             scanRecord?.serviceUuids?.takeIf { it.isNotEmpty() }?.let { existing.serviceUuids = it }
-            existing.setDetectedClass(DeviceClassifier.guessDeviceClass(existing.advertisedName, existing.serviceUuids))
+            existing.setDetectedClass(
+                DeviceClassifier.guessDeviceClass(
+                    existing.advertisedName,
+                    existing.serviceUuids,
+                    manufacturerCompanyIds,
+                ),
+            )
             publishDevices(
                 force = previousName != existing.advertisedName || previousClass != existing.detectedClass,
             )
             return
         }
-        val detectedClass = DeviceClassifier.guessDeviceClass(sanitizedName, scanRecord?.serviceUuids.orEmpty())
+        val detectedClass = DeviceClassifier.guessDeviceClass(
+            sanitizedName,
+            scanRecord?.serviceUuids.orEmpty(),
+            manufacturerCompanyIds,
+        )
         if (sanitizedName == null && detectedClass == DeviceClass.UNKNOWN) return
 
         val newDevice = ScannedDevice(
@@ -219,7 +245,8 @@ class DeviceBindActivity : BaseActivity() {
             rssi = rssi,
             serviceUuids = scanRecord?.serviceUuids.orEmpty(),
         )
-        DeviceProfileStore.getUserOverrideForMac(this, mac)?.let { override ->
+        connectionAddress?.let { newDevice.connectionAddress = it }
+        DeviceProfileStore.getUserOverrideForMac(this, newDevice.connectionAddress)?.let { override ->
             if (override != newDevice.detectedClass) newDevice.userSelectedClass = override
         }
         scanSize++
@@ -305,7 +332,27 @@ class DeviceBindActivity : BaseActivity() {
             val address = bluetoothDevice.address
             val name = runCatching { scanRecord?.deviceName ?: bluetoothDevice.name }.getOrNull()
             val rssi = deviceList.firstOrNull { it.macAddress.equals(address, true) }?.rssi ?: 0
-            upsertDevice(address, name, rssi, scanRecord)
+            val manufacturerData = scanRecord?.manufacturerSpecificData
+            val companyIds = buildSet {
+                if (manufacturerData != null) {
+                    for (index in 0 until manufacturerData.size()) add(manufacturerData.keyAt(index))
+                }
+            }
+            val tuneBudsData = companyIds.firstOrNull { it in TUNEBUDS_COMPANY_IDS }
+                ?.let { companyId -> scanRecord?.getManufacturerSpecificData(companyId) }
+            val classicAddress = tuneBudsData?.let { data ->
+                runCatching { TuneBudsProtocol.deriveClassicAddress(data) }
+                    .onFailure { Log.w(TAG, "Could not derive TuneBuds Classic Bluetooth address", it) }
+                    .getOrNull()
+            }
+            upsertDevice(
+                address,
+                name,
+                rssi,
+                scanRecord,
+                manufacturerCompanyIds = companyIds,
+                connectionAddress = classicAddress,
+            )
         }
 
         override fun onBatchScanResults(results: MutableList<ScanResult>?) = Unit
@@ -323,5 +370,6 @@ class DeviceBindActivity : BaseActivity() {
     private companion object {
         const val REQUEST_ENABLE_BLUETOOTH = 300
         const val DEVICE_LIST_PUBLISH_INTERVAL_MS = 1_000L
+        val TUNEBUDS_COMPANY_IDS = setOf(0x475A, 0x455A, 0x535A, 0x4D5A)
     }
 }

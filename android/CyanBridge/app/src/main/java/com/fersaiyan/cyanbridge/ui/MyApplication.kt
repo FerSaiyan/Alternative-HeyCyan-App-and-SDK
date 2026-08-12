@@ -78,6 +78,7 @@ class MyApplication : Application(){
         // Auto audio capture (glasses recording loop)
         if (AutoAudioCapturePrefs.isEnabled(this) &&
             !DeviceProfileStore.isEyevueSelected(this) &&
+            !DeviceProfileStore.isTuneBudsSelected(this) &&
             !AutoAudioCaptureService.isRunning()
         ) {
             AutoAudioCaptureService.start(this)

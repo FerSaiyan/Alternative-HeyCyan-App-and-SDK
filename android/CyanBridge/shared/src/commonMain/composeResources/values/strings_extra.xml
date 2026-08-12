@@ -166,6 +166,7 @@
     <string name="sync_flow_title">Choose sync flow</string>
     <string name="device_class_heycyan">HeyCyan</string>
     <string name="device_class_eye_vue">Eyevue</string>
+    <string name="device_class_tunebuds">TuneBuds / AB Mate</string>
     <string name="device_class_meta_rayban">Meta Ray-Ban</string>
     <string name="device_class_meizu_myvu">Meizu MYVU / Star Air</string>
     <string name="device_class_generic_audio">Earbuds / Audio-only glasses</string>
@@ -416,7 +417,7 @@
     <string name="dashboard_recording_active">Recording active</string>
     <string name="dashboard_glasses_status">Glasses status</string>
     <string name="dashboard_class">Class: %1$s</string>
-    <string name="dashboard_battery">Battery: %1$d%%</string>
+    <string name="dashboard_battery">Battery: %1$d%</string>
     <string name="dashboard_battery_unknown">Battery: --%</string>
     <string name="dashboard_storage">Storage: %1$s</string>
     <string name="dashboard_sync_progress">Sync progress</string>

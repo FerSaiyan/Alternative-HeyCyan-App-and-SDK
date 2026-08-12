@@ -82,7 +82,7 @@ fun GlassesDashboardScreen(
     var showOtaFirmwareSourcePicker by remember { mutableStateOf(false) }
     var otaFirmwareRiskAcknowledged by remember { mutableStateOf(false) }
 
-    if (showWifiAdbConfirmation) {
+    if (showWifiAdbConfirmation && state.wifiAdbDebug.isAvailable) {
         AlertDialog(
             onDismissRequest = {
                 showWifiAdbConfirmation = false
@@ -126,7 +126,7 @@ fun GlassesDashboardScreen(
         )
     }
 
-    if (showOtaFirmwareSourcePicker) {
+    if (showOtaFirmwareSourcePicker && state.showAdvancedOta) {
         OtaFirmwareSourcePickerDialog(
             riskAcknowledged = otaFirmwareRiskAcknowledged,
             onRiskAcknowledgedChange = { otaFirmwareRiskAcknowledged = it },
@@ -142,7 +142,7 @@ fun GlassesDashboardScreen(
         )
     }
 
-    state.firmwarePatchRequest?.let { request ->
+    state.firmwarePatchRequest?.takeIf { state.showAdvancedOta }?.let { request ->
         FirmwarePatchRequestDialog(
             request = request,
             onDismissRequest = {
@@ -208,7 +208,7 @@ fun GlassesDashboardScreen(
                     onAction = onAction,
                 )
             }
-            if (state.showHeyCyanControls || state.showEyevueControls) {
+            if (state.showHeyCyanControls || state.showEyevueControls || state.showTuneBudsControls) {
                 item { CoreGlassesControls(state, onAction) }
             }
             if (state.showMetaRaybanControls) {
@@ -228,11 +228,13 @@ fun GlassesDashboardScreen(
                     )
                 }
             }
-            if (state.showHeyCyanControls || state.showEyevueControls) {
+            if (state.showAdvancedControls) {
                 item {
                     TextButton(
                         onClick = { onAction(GlassesDashboardAction.ToggleAdvanced) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("advanced_controls_toggle"),
                     ) {
                          Text(
                              if (state.advancedExpanded) {
@@ -541,29 +543,41 @@ private fun CoreGlassesControls(
     ) {
         GlassesAssistantControls(state, onAction)
         Spacer(Modifier.height(8.dp))
-        RecordingSettingsControls(state, onAction)
-        Spacer(Modifier.height(8.dp))
+        if (state.showCaptureSettings) {
+            RecordingSettingsControls(state, onAction)
+            Spacer(Modifier.height(8.dp))
+        }
          SectionTitle(stringResource(Res.string.dashboard_media_controls))
         ActionRow(
              primaryLabel = stringResource(Res.string.dashboard_photo),
             onPrimary = { onAction(GlassesDashboardAction.CapturePhoto) },
-             secondaryLabel = stringResource(Res.string.dashboard_video),
+             secondaryLabel = if (state.showTuneBudsControls && state.isVideoRecording) {
+                 stringResource(Res.string.dashboard_stop)
+             } else {
+                 stringResource(Res.string.dashboard_video)
+             },
             onSecondary = { onAction(GlassesDashboardAction.ToggleVideo) },
         )
         ActionRow(
-             primaryLabel = stringResource(Res.string.dashboard_audio),
+             primaryLabel = if (state.showTuneBudsControls && state.isAudioRecording) {
+                 stringResource(Res.string.dashboard_stop)
+             } else {
+                 stringResource(Res.string.dashboard_audio)
+             },
             onPrimary = { onAction(GlassesDashboardAction.StartAudioRecording) },
              secondaryLabel = stringResource(Res.string.dashboard_count),
             onSecondary = { onAction(GlassesDashboardAction.RequestMediaCount) },
         )
-        ActionButton(
-             label = stringResource(Res.string.dashboard_sync_wifi),
-            onClick = { onAction(GlassesDashboardAction.StartSync) },
-            style = ActionButtonStyle.Primary,
-            modifier = Modifier.fillMaxWidth(),
+        if (state.showMediaSync) {
+            ActionButton(
+                label = stringResource(Res.string.dashboard_sync_wifi),
+                onClick = { onAction(GlassesDashboardAction.StartSync) },
+                style = ActionButtonStyle.Primary,
+                modifier = Modifier.fillMaxWidth(),
             )
-            if (state.livePreview.isAvailable) {
-                Spacer(Modifier.height(8.dp))
+        }
+        if (state.livePreview.isAvailable) {
+            Spacer(Modifier.height(8.dp))
              SectionTitle(
                  if (state.showEyevueControls) {
                      stringResource(Res.string.dashboard_eye_vue_live_preview)
@@ -760,7 +774,7 @@ private fun GlassesAssistantControls(
             onSecondary = { onAction(GlassesDashboardAction.TestImageQuestion) },
             secondaryEnabled = state.imageQueryEnabled,
         )
-        if (state.showHeyCyanControls || state.showEyevueControls) {
+        if (state.showAiWakeWordRouting) {
             AiWakeWordRouteControls(state, onAction)
         }
         OutlinedButton(
@@ -1090,119 +1104,154 @@ private fun AdvancedControls(
     onRequestOtaFirmware: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionTitle(stringResource(Res.string.dashboard_local_agent))
-        Text(stringResource(Res.string.dashboard_status, state.agentStatus), style = MaterialTheme.typography.bodyMedium)
-        Text(
-            text = stringResource(Res.string.dashboard_last_error, state.agentLastError),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        ThreeActionRow(
-            firstLabel = stringResource(Res.string.action_start),
-            onFirst = { onAction(GlassesDashboardAction.StartAgent) },
-            firstStyle = ActionButtonStyle.Primary,
-            secondLabel = stringResource(Res.string.action_stop),
-            onSecond = { onAction(GlassesDashboardAction.StopAgent) },
-            secondStyle = ActionButtonStyle.Destructive,
-            thirdLabel = stringResource(Res.string.dashboard_demo),
-            onThird = { onAction(GlassesDashboardAction.RunAgentDemo) },
-        )
-        HorizontalDivider()
-        SectionTitle(stringResource(Res.string.dashboard_device_info))
-        ActionRow(
-            primaryLabel = stringResource(Res.string.dashboard_battery_action),
-            onPrimary = { onAction(GlassesDashboardAction.RequestBattery) },
-            secondaryLabel = stringResource(Res.string.dashboard_version),
-            onSecondary = { onAction(GlassesDashboardAction.RequestVersion) },
-        )
-        ActionRow(
-            primaryLabel = stringResource(Res.string.dashboard_sync_time),
-            onPrimary = { onAction(GlassesDashboardAction.SyncTime) },
-            secondaryLabel = stringResource(Res.string.dashboard_volume),
-            onSecondary = { onAction(GlassesDashboardAction.RequestVolume) },
-        )
-        HorizontalDivider()
-        SectionTitle(stringResource(Res.string.dashboard_image_quality))
-        val thumbnailQualityLabel = stringResource(
-            when (state.imageThumbnailQualitySdkValue) {
-                0 -> Res.string.dashboard_quality_instant
-                1 -> Res.string.dashboard_quality_quick
-                2 -> Res.string.dashboard_quality_smooth
-                3 -> Res.string.dashboard_quality_fine
-                4 -> Res.string.dashboard_quality_clearer
-                else -> Res.string.dashboard_quality_detailed
-            },
-        )
-        Text(
-            text = stringResource(Res.string.dashboard_thumbnail_quality, thumbnailQualityLabel),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        listOf(
-            stringResource(Res.string.dashboard_quality_instant),
-            stringResource(Res.string.dashboard_quality_quick),
-            stringResource(Res.string.dashboard_quality_smooth),
-            stringResource(Res.string.dashboard_quality_fine),
-            stringResource(Res.string.dashboard_quality_clearer),
-            stringResource(Res.string.dashboard_quality_detailed),
-        )
-            .chunked(3)
-            .forEachIndexed { rowIndex, labels ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    labels.forEachIndexed { columnIndex, label ->
-                        val sdkValue = rowIndex * 3 + columnIndex
-                        FilterChip(
-                            selected = state.imageThumbnailQualitySdkValue == sdkValue,
-                            onClick = {
-                                onAction(GlassesDashboardAction.SelectImageThumbnailQuality(sdkValue))
-                            },
-                            label = { Text(label) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("ai_image_thumbnail_quality_$sdkValue"),
-                        )
-                    }
+        if (state.showAdvancedLocalAgent) {
+            Column(modifier = Modifier.testTag("advanced_local_agent")) {
+                SectionTitle(stringResource(Res.string.dashboard_local_agent))
+                Text(stringResource(Res.string.dashboard_status, state.agentStatus), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = stringResource(Res.string.dashboard_last_error, state.agentLastError),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ThreeActionRow(
+                    firstLabel = stringResource(Res.string.action_start),
+                    onFirst = { onAction(GlassesDashboardAction.StartAgent) },
+                    firstStyle = ActionButtonStyle.Primary,
+                    secondLabel = stringResource(Res.string.action_stop),
+                    onSecond = { onAction(GlassesDashboardAction.StopAgent) },
+                    secondStyle = ActionButtonStyle.Destructive,
+                    thirdLabel = stringResource(Res.string.dashboard_demo),
+                    onThird = { onAction(GlassesDashboardAction.RunAgentDemo) },
+                )
+            }
+        }
+        if (state.showAdvancedDeviceInfo) {
+            HorizontalDivider()
+            Column(modifier = Modifier.testTag("advanced_device_info")) {
+                SectionTitle(stringResource(Res.string.dashboard_device_info))
+                state.deviceInfoLabel?.let { info ->
+                    Text(
+                        text = info,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ActionRow(
+                    primaryLabel = stringResource(Res.string.dashboard_battery_action),
+                    onPrimary = { onAction(GlassesDashboardAction.RequestBattery) },
+                    secondaryLabel = stringResource(Res.string.dashboard_version),
+                    onSecondary = { onAction(GlassesDashboardAction.RequestVersion) },
+                )
+                if (state.showAdvancedDeviceVolume) {
+                    ActionRow(
+                        primaryLabel = stringResource(Res.string.dashboard_sync_time),
+                        onPrimary = { onAction(GlassesDashboardAction.SyncTime) },
+                        secondaryLabel = stringResource(Res.string.dashboard_volume),
+                        onSecondary = { onAction(GlassesDashboardAction.RequestVolume) },
+                    )
+                } else {
+                    ActionButton(
+                        label = stringResource(Res.string.dashboard_sync_time),
+                        onClick = { onAction(GlassesDashboardAction.SyncTime) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
-        HorizontalDivider()
-        SectionTitle(stringResource(Res.string.dashboard_developer_tools))
-        TextButton(
-            onClick = { onAction(GlassesDashboardAction.AddDeviceListener) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(Res.string.dashboard_register_listener)) }
-        TextButton(
-            onClick = { onAction(GlassesDashboardAction.StartClassicBluetoothScan) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(Res.string.dashboard_classic_scan)) }
-        TextButton(
-            onClick = { onAction(GlassesDashboardAction.DumpOtaInfo) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(Res.string.dashboard_dump_ota)) }
-        TextButton(
-            onClick = { onAction(GlassesDashboardAction.TestPullOta) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(Res.string.dashboard_test_pull_ota)) }
-        HorizontalDivider()
-        SectionTitle(stringResource(Res.string.dashboard_ota_update))
-        Text(
-            text = stringResource(Res.string.dashboard_ota_description),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OtaProgressSection(state.ota)
-        ActionRow(
-            primaryLabel = stringResource(Res.string.dashboard_choose_ota_files),
-            onPrimary = onRequestOtaFirmware,
-            primaryStyle = ActionButtonStyle.Primary,
-            secondaryLabel = stringResource(Res.string.action_cancel),
-            onSecondary = { onAction(GlassesDashboardAction.CancelOta) },
-            secondaryStyle = ActionButtonStyle.Destructive,
-            primaryEnabled = state.ota.canStart,
-            secondaryEnabled = state.ota.canCancel,
-        )
+        }
+        if (state.showAdvancedImageQuality) {
+            HorizontalDivider()
+            Column(modifier = Modifier.testTag("advanced_image_quality")) {
+                SectionTitle(stringResource(Res.string.dashboard_image_quality))
+                val thumbnailQualityLabel = stringResource(
+                    when (state.imageThumbnailQualitySdkValue) {
+                        0 -> Res.string.dashboard_quality_instant
+                        1 -> Res.string.dashboard_quality_quick
+                        2 -> Res.string.dashboard_quality_smooth
+                        3 -> Res.string.dashboard_quality_fine
+                        4 -> Res.string.dashboard_quality_clearer
+                        else -> Res.string.dashboard_quality_detailed
+                    },
+                )
+                Text(
+                    text = stringResource(Res.string.dashboard_thumbnail_quality, thumbnailQualityLabel),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                listOf(
+                    stringResource(Res.string.dashboard_quality_instant),
+                    stringResource(Res.string.dashboard_quality_quick),
+                    stringResource(Res.string.dashboard_quality_smooth),
+                    stringResource(Res.string.dashboard_quality_fine),
+                    stringResource(Res.string.dashboard_quality_clearer),
+                    stringResource(Res.string.dashboard_quality_detailed),
+                )
+                    .chunked(3)
+                    .forEachIndexed { rowIndex, labels ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            labels.forEachIndexed { columnIndex, label ->
+                                val sdkValue = rowIndex * 3 + columnIndex
+                                FilterChip(
+                                    selected = state.imageThumbnailQualitySdkValue == sdkValue,
+                                    onClick = {
+                                        onAction(GlassesDashboardAction.SelectImageThumbnailQuality(sdkValue))
+                                    },
+                                    label = { Text(label) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("ai_image_thumbnail_quality_$sdkValue"),
+                                )
+                            }
+                        }
+                    }
+            }
+        }
+        if (state.showAdvancedDeveloperTools) {
+            HorizontalDivider()
+            Column(modifier = Modifier.testTag("advanced_developer_tools")) {
+                SectionTitle(stringResource(Res.string.dashboard_developer_tools))
+                TextButton(
+                    onClick = { onAction(GlassesDashboardAction.AddDeviceListener) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(Res.string.dashboard_register_listener)) }
+                TextButton(
+                    onClick = { onAction(GlassesDashboardAction.StartClassicBluetoothScan) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(Res.string.dashboard_classic_scan)) }
+                TextButton(
+                    onClick = { onAction(GlassesDashboardAction.DumpOtaInfo) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(Res.string.dashboard_dump_ota)) }
+                TextButton(
+                    onClick = { onAction(GlassesDashboardAction.TestPullOta) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(Res.string.dashboard_test_pull_ota)) }
+            }
+        }
+        if (state.showAdvancedOta) {
+            HorizontalDivider()
+            Column(modifier = Modifier.testTag("advanced_ota")) {
+                SectionTitle(stringResource(Res.string.dashboard_ota_update))
+                Text(
+                    text = stringResource(Res.string.dashboard_ota_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OtaProgressSection(state.ota)
+                ActionRow(
+                    primaryLabel = stringResource(Res.string.dashboard_choose_ota_files),
+                    onPrimary = onRequestOtaFirmware,
+                    primaryStyle = ActionButtonStyle.Primary,
+                    secondaryLabel = stringResource(Res.string.action_cancel),
+                    onSecondary = { onAction(GlassesDashboardAction.CancelOta) },
+                    secondaryStyle = ActionButtonStyle.Destructive,
+                    primaryEnabled = state.ota.canStart,
+                    secondaryEnabled = state.ota.canCancel,
+                )
+            }
+        }
     }
 }
 
