@@ -19,6 +19,7 @@ import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsReviewThreadStore
+import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.shared.chat.ChatAppearanceMenuAction
@@ -138,6 +139,7 @@ class ChatListActivity : AppCompatActivity() {
             AgentProviderType.TASKER -> AiProviderPrefs.getProvider(this) == AiProviderType.LOCAL_MODELS
         }
         if (!localSelected) return false
+        if (RemoteOpenAiPrefs.isActive(this)) return false
         return LocalModelStorageRepository.resolveSelectedModel(this) == null
     }
 

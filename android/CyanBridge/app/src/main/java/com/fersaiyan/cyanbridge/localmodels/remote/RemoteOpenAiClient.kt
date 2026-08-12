@@ -9,6 +9,7 @@ import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 import java.util.Base64
 import java.util.Locale
@@ -56,7 +57,7 @@ object RemoteOpenAiClient {
             audioPath = audioPath,
         )
 
-        val url = buildUrl(baseUrl)
+        val url = buildChatCompletionsUrl(baseUrl)
         Log.i(TAG, "chatCompletion -> $url model=$model")
 
         return postJson(url, apiKey, payload)
@@ -103,7 +104,7 @@ object RemoteOpenAiClient {
             audioPath = audioPath,
         )
 
-        val url = buildUrl(baseUrl)
+        val url = buildChatCompletionsUrl(baseUrl)
         Log.i(TAG, "chatCompletionStreaming -> $url model=$model")
 
         return postJsonStreaming(url, apiKey, payload, onToken)
@@ -117,8 +118,8 @@ object RemoteOpenAiClient {
         val baseUrl = RemoteOpenAiPrefs.getBaseUrl(context)
         if (baseUrl.isBlank()) return "No base URL configured"
 
-        val modelsUrl = baseUrl.trimEnd('/').replace("/v1$", "") + "/v1/models"
         return try {
+            val modelsUrl = buildModelsUrl(baseUrl)
             val conn = (URL(modelsUrl).openConnection() as HttpURLConnection)
             conn.requestMethod = "GET"
             conn.connectTimeout = CONNECT_TIMEOUT_MS
@@ -157,13 +158,40 @@ object RemoteOpenAiClient {
         }
     }
 
-    private fun buildUrl(baseUrl: String): String {
-        val clean = baseUrl.trimEnd('/')
-        return if (clean.endsWith("/chat/completions")) {
-            clean
-        } else {
-            "$clean/chat/completions"
+    internal fun buildChatCompletionsUrl(baseUrl: String): String {
+        val (clean, path) = normalizeBaseUrl(baseUrl)
+        return when {
+            clean.endsWith("/chat/completions") -> clean
+            clean.endsWith("/v1") -> "$clean/chat/completions"
+            path.isBlank() || path == "/" -> "$clean/v1/chat/completions"
+            else -> "$clean/chat/completions"
         }
+    }
+
+    internal fun buildModelsUrl(baseUrl: String): String {
+        val (normalized, _) = normalizeBaseUrl(baseUrl)
+        val clean = normalized.removeSuffix("/chat/completions")
+        val path = URI(clean).path.orEmpty()
+        return when {
+            clean.endsWith("/v1") -> "$clean/models"
+            path.isBlank() || path == "/" -> "$clean/v1/models"
+            else -> "$clean/models"
+        }
+    }
+
+    private fun normalizeBaseUrl(baseUrl: String): Pair<String, String> {
+        val clean = baseUrl.trim().trimEnd('/')
+        val uri = runCatching { URI(clean) }.getOrElse {
+            throw IllegalArgumentException("Remote server base URL is invalid", it)
+        }
+        require(uri.scheme.equals("http", ignoreCase = true) || uri.scheme.equals("https", ignoreCase = true)) {
+            "Remote server base URL must use http:// or https://"
+        }
+        require(!uri.host.isNullOrBlank()) { "Remote server base URL must include a host" }
+        require(uri.rawQuery == null && uri.rawFragment == null) {
+            "Remote server base URL must not include a query string or fragment"
+        }
+        return clean to uri.path.orEmpty()
     }
 
     /**

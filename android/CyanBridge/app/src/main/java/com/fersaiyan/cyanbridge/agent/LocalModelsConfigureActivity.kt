@@ -1677,7 +1677,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
         editRemoteBaseUrl.setText(RemoteOpenAiPrefs.getBaseUrl(this))
         editRemoteModel.setText(RemoteOpenAiPrefs.getModel(this))
         editRemoteApiKey.setText(RemoteOpenAiPrefs.getApiKey(this))
-        tvRemoteStatus.text = if (RemoteOpenAiPrefs.isEnabled(this) && RemoteOpenAiPrefs.isConfigured(this)) {
+        tvRemoteStatus.text = if (RemoteOpenAiPrefs.isActive(this)) {
             "Active: ${RemoteOpenAiPrefs.getModel(this)} @ ${RemoteOpenAiPrefs.getBaseUrl(this)}"
         } else {
             ""
@@ -1757,7 +1757,12 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
             result.fold(
                 onSuccess = { status ->
                     tvRemoteStatus.text = "Connection: $status"
-                    Toast.makeText(this@LocalModelsConfigureActivity, "Server reachable", Toast.LENGTH_SHORT).show()
+                    val message = if (status.startsWith("OK")) {
+                        "Server reachable"
+                    } else {
+                        "Connection failed: $status"
+                    }
+                    Toast.makeText(this@LocalModelsConfigureActivity, message, Toast.LENGTH_LONG).show()
                 },
                 onFailure = { err ->
                     tvRemoteStatus.text = "Connection failed: ${err.message}"

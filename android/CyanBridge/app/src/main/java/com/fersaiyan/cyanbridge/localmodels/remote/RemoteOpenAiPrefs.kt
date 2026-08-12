@@ -90,6 +90,15 @@ object RemoteOpenAiPrefs {
         return getBaseUrl(context).isNotBlank() && getModel(context).isNotBlank()
     }
 
+    /** Whether requests through Local Models should currently use the remote server. */
+    fun isActive(context: Context): Boolean {
+        return isRemoteOpenAiActive(
+            enabled = isEnabled(context),
+            baseUrl = getBaseUrl(context),
+            model = getModel(context),
+        )
+    }
+
     /** Whether the Studio Bridge (approval notifications) is enabled. */
     fun isBridgeEnabled(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_BRIDGE_ENABLED, false)
@@ -113,7 +122,7 @@ object RemoteOpenAiPrefs {
         if (uri.scheme.equals("https", ignoreCase = true)) return true
         if (!uri.scheme.equals("http", ignoreCase = true)) return false
         val host = uri.host?.lowercase().orEmpty()
-        if (host == "localhost" || host.endsWith(".local")) return true
+        if (host == "localhost" || host.endsWith(".local") || host.endsWith(".ts.net")) return true
         val parts = host.split('.').mapNotNull { it.toIntOrNull() }
         if (parts.size != 4 || parts.any { it !in 0..255 }) return false
         return parts[0] == 10 ||
@@ -122,4 +131,8 @@ object RemoteOpenAiPrefs {
             (parts[0] == 172 && parts[1] in 16..31) ||
             (parts[0] == 100 && parts[1] in 64..127)
     }
+}
+
+internal fun isRemoteOpenAiActive(enabled: Boolean, baseUrl: String, model: String): Boolean {
+    return enabled && baseUrl.isNotBlank() && model.isNotBlank()
 }

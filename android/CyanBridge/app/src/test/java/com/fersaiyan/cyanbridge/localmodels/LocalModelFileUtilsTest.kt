@@ -25,6 +25,45 @@ class LocalModelFileUtilsTest {
     }
 
     @Test
+    fun prism_q1_gguf_is_rejected_before_native_loading() {
+        val tmp = File.createTempFile("bonsai", ".gguf")
+        val key = "general.file_type".toByteArray(Charsets.US_ASCII)
+        tmp.outputStream().use { output ->
+            output.write(byteArrayOf('G'.code.toByte(), 'G'.code.toByte(), 'U'.code.toByte(), 'F'.code.toByte()))
+            output.write(ByteArray(20))
+            output.write(byteArrayOf(key.size.toByte(), 0, 0, 0, 0, 0, 0, 0))
+            output.write(key)
+            output.write(byteArrayOf(4, 0, 0, 0))
+            output.write(byteArrayOf(40, 0, 0, 0))
+        }
+
+        val error = LocalModelFileUtils.llamaCppCompatibilityError(tmp)
+        assertTrue(error?.contains("Bonsai") == true)
+        assertTrue(error?.contains("Q1_0") == true)
+        tmp.delete()
+    }
+
+    @Test
+    fun prism_q2_is_rejected_while_conventional_q4_is_allowed() {
+        assertTrue(compatibilityErrorForFileType(41)?.contains("Q2_0") == true)
+        assertEquals(null, compatibilityErrorForFileType(15))
+    }
+
+    private fun compatibilityErrorForFileType(fileType: Int): String? {
+        val tmp = File.createTempFile("model", ".gguf")
+        val key = "general.file_type".toByteArray(Charsets.US_ASCII)
+        tmp.outputStream().use { output ->
+            output.write(byteArrayOf('G'.code.toByte(), 'G'.code.toByte(), 'U'.code.toByte(), 'F'.code.toByte()))
+            output.write(ByteArray(20))
+            output.write(byteArrayOf(key.size.toByte(), 0, 0, 0, 0, 0, 0, 0))
+            output.write(key)
+            output.write(byteArrayOf(4, 0, 0, 0))
+            output.write(byteArrayOf(fileType.toByte(), 0, 0, 0))
+        }
+        return LocalModelFileUtils.llamaCppCompatibilityError(tmp).also { tmp.delete() }
+    }
+
+    @Test
     fun sha256_is_stable() {
         val tmp = File.createTempFile("local-model", ".gguf")
         tmp.writeText("abc")

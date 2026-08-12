@@ -64,7 +64,7 @@ class LocalModelsProvider {
     ): String {
         return withContext(Dispatchers.IO) {
             // Check if remote OpenAI server is enabled.
-            if (RemoteOpenAiPrefs.isEnabled(context) && RemoteOpenAiPrefs.isConfigured(context)) {
+            if (RemoteOpenAiPrefs.isActive(context)) {
                 return@withContext streamChatRemote(
                     context = context,
                     messages = messages,

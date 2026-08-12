@@ -53,6 +53,7 @@ import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemorySearch
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelRequestPriority
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
+import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalGenerationSettings
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
@@ -431,6 +432,7 @@ class ChatThreadActivity : AppCompatActivity() {
     }
 
     private fun chatAppearanceModelOptionLabel(): String = when {
+        isRemoteOpenAiBackendActive() -> "Configure remote model"
         isLocalModelsProviderSelected() -> "Change local model"
         isRelayProviderSelected() -> "Change relay AI model"
         else -> "Change AI model"
@@ -477,6 +479,7 @@ class ChatThreadActivity : AppCompatActivity() {
 
     private fun showModelPickerForProvider() {
         when {
+            isRemoteOpenAiBackendActive() -> startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
             isLocalModelsProviderSelected() -> showLocalModelPicker()
             isRelayProviderSelected() -> showRelayModelPicker()
             else -> android.widget.Toast.makeText(this, "Current provider does not support model selection", android.widget.Toast.LENGTH_SHORT).show()
@@ -599,6 +602,10 @@ class ChatThreadActivity : AppCompatActivity() {
         }
     }
 
+    private fun isRemoteOpenAiBackendActive(): Boolean {
+        return isLocalModelsProviderSelected() && RemoteOpenAiPrefs.isActive(this)
+    }
+
     private fun isRelayProviderSelected(): Boolean {
         return when (AutomationPrefs.getProviderType(this)) {
             AgentProviderType.PRO_SUBSCRIPTION -> true
@@ -609,6 +616,10 @@ class ChatThreadActivity : AppCompatActivity() {
 
     private fun refreshModelBadge(status: String) {
         modelBadge = when {
+            isRemoteOpenAiBackendActive() -> {
+                "Remote model: ${RemoteOpenAiPrefs.getModel(this)} ($status)"
+            }
+
             isLocalModelsProviderSelected() -> {
                 val selected = LocalModelStorageRepository.resolveSelectedModel(this)
                 if (selected == null) {
@@ -684,11 +695,13 @@ class ChatThreadActivity : AppCompatActivity() {
 
     private fun hasLocalModelAvailable(): Boolean {
         if (!isLocalModelsProviderSelected()) return true
+        if (isRemoteOpenAiBackendActive()) return true
         return LocalModelStorageRepository.resolveSelectedModel(this) != null
     }
 
     private fun supportsCurrentLocalRuntimeMedia(): Boolean {
         if (!isLocalModelsProviderSelected()) return false
+        if (isRemoteOpenAiBackendActive()) return true
         val selected = LocalModelStorageRepository.resolveSelectedModel(this) ?: return false
         val settings = LocalModelSettingsRepository.getForModel(this, selected.id)
         return settings.modelRuntime == LocalModelRuntime.LITERT

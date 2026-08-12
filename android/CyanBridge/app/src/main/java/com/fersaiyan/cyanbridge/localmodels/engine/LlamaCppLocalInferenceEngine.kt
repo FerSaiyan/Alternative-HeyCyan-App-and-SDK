@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.nehuatl.llamacpp.LlamaAndroid
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
+import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelFileUtils
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
@@ -53,13 +54,17 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
                 )
             }
 
+            val file = File(modelPath)
+            require(file.exists()) { "Model file does not exist" }
+            LocalModelFileUtils.llamaCppCompatibilityError(file)?.let { reason ->
+                throw IllegalStateException(reason)
+            }
+
             unloadModel()
 
             val engine = llama ?: createLlamaAndroid().also { llama = it }
             val runtimeApi = detectRuntimeApi(engine)
             Log.i(TAG, "Detected llama runtime API: $runtimeApi")
-            val file = File(modelPath)
-            require(file.exists()) { "Model file does not exist" }
             val modelUri = Uri.fromFile(file).toString()
 
             val createInitParams: (Int) -> Map<String, Any> = { gpuLayers ->

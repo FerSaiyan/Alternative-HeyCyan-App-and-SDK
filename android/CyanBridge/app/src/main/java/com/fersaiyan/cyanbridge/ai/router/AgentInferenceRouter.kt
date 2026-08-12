@@ -214,7 +214,7 @@ object AgentInferenceRouter {
     }
 
     private fun isRemoteLocalModelsPlanner(context: Context): Boolean =
-        RemoteOpenAiPrefs.isEnabled(context) && RemoteOpenAiPrefs.isConfigured(context)
+        RemoteOpenAiPrefs.isActive(context)
 
     private suspend fun completeUsingAiProviderPrefs(
         context: Context,
