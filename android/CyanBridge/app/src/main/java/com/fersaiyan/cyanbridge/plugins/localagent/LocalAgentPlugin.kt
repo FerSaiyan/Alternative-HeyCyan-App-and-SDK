@@ -38,8 +38,8 @@ object LocalAgentPlugin {
         }
     }
 
-    fun start(context: Context, goal: String? = null): LocalAgentController.CommandResult {
-        val trimmedGoal = goal?.trim().orEmpty()
+    fun start(context: Context, goal: String): LocalAgentController.CommandResult {
+        val trimmedGoal = goal.trim()
         if (trimmedGoal.isBlank()) {
             return LocalAgentController.CommandResult(
                 ok = false,

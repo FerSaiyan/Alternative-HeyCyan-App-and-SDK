@@ -15,6 +15,17 @@ class LocalAgentPrefsTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Test
+    fun `new installs default glasses questions to local models`() {
+        context.getSharedPreferences("local_agent_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+        assertEquals(GlassesAssistantMode.CUSTOM_AI_PROVIDER, LocalAgentPrefs.getGlassesAssistantMode(context))
+        assertEquals(
+            com.fersaiyan.cyanbridge.shared.settings.AgentProviderType.LOCAL_AGENT,
+            LocalAgentPrefs.getProviderType(context),
+        )
+    }
+
+    @Test
     fun `glasses assistant mode persists every supported selection`() {
         GlassesAssistantMode.entries.forEach { mode ->
             LocalAgentPrefs.setGlassesAssistantMode(context, mode)

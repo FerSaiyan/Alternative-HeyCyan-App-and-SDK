@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import com.fersaiyan.cyanbridge.ui.ensureNotificationPermission
 import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
@@ -19,6 +20,8 @@ import com.fersaiyan.cyanbridge.ui.requestAccessibilityServicePermission
  * - If the service is not present in this build, calls fail gracefully.
  */
 object LocalAgentController {
+
+    private const val TAG = "LocalAgentController"
 
     data class CommandResult(
         val ok: Boolean,
@@ -72,6 +75,14 @@ object LocalAgentController {
                 ok = false,
                 userMessage = "Enable Accessibility access before starting the Local Agent.",
                 error = "missing_accessibility_service",
+            )
+        }
+        if (!LocalAgentAccessibilityBridge.isConnected()) {
+            Log.w(TAG, "Start rejected: accessibility is enabled in settings but the service is not connected")
+            return CommandResult(
+                ok = false,
+                userMessage = "CyanBridge Accessibility is enabled but not connected. Turn it off and on, then retry.",
+                error = "accessibility_not_connected",
             )
         }
 
@@ -167,8 +178,10 @@ object LocalAgentController {
             } else {
                 context.startService(explicitIntent)
             }
+            Log.i(TAG, "Command sent: ${action.substringAfterLast('.')}")
             CommandResult(ok = true, userMessage = "Command sent: ${action.substringAfterLast('.')}" )
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to send command: ${action.substringAfterLast('.')}", e)
             CommandResult(
                 ok = false,
                 userMessage = "Failed to send agent command.",

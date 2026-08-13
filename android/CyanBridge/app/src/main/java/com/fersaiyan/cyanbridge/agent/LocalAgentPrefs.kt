@@ -30,7 +30,7 @@ object LocalAgentPrefs {
             "API_MODELS" -> AgentProviderType.PRO_SUBSCRIPTION
             AgentProviderType.PRO_SUBSCRIPTION.name -> AgentProviderType.PRO_SUBSCRIPTION
             AgentProviderType.TASKER.name -> AgentProviderType.TASKER
-            null, "" -> AgentProviderType.TASKER
+            null, "" -> AgentProviderType.LOCAL_AGENT
             else -> AgentProviderType.TASKER
         }
     }
@@ -55,9 +55,10 @@ object LocalAgentPrefs {
             GlassesAssistantMode.PHONE_ASSISTANT.name,
             "GEMINI",
             "CHAT_GPT",
-            "PHONE_DEFAULT",
+            "PHONE_DEFAULT" -> GlassesAssistantMode.PHONE_ASSISTANT
+
             null,
-            "" -> GlassesAssistantMode.PHONE_ASSISTANT
+            "" -> GlassesAssistantMode.CUSTOM_AI_PROVIDER
 
             else -> GlassesAssistantMode.PHONE_ASSISTANT
         }
