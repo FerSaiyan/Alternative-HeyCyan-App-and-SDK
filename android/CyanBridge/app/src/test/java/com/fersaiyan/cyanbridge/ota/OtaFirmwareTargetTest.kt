@@ -116,4 +116,34 @@ class OtaFirmwareTargetTest {
             ),
         )
     }
+
+    @Test
+    fun `free trial firmware gate names the required paid plans`() {
+        val copy = firmwareSubscriptionGateCopy("free_trial")
+
+        assertEquals("Patched LED OTA: Standard or Max Required", copy.title)
+        assertTrue(copy.message.contains("Patched LED OTA firmware"))
+        assertTrue(copy.message.contains("paid Standard or Max subscription"))
+        assertTrue(copy.message.contains("current plan is Free Trial"))
+        assertEquals("View Standard & Max", copy.actionLabel)
+    }
+
+    @Test
+    fun `cheap firmware gate explicitly says cheap does not qualify`() {
+        val copy = firmwareSubscriptionGateCopy("cheap")
+
+        assertTrue(copy.message.contains("current plan is Cheap"))
+        assertTrue(copy.message.contains("paid Cheap plan does not include this firmware"))
+        assertTrue(copy.message.contains("Upgrade to Standard or Max"))
+    }
+
+    @Test
+    fun `qualifying plan gate suggests subscription refresh instead of another upgrade`() {
+        val copy = firmwareSubscriptionGateCopy("standard")
+
+        assertTrue(copy.message.contains("server reports your current plan as Standard"))
+        assertTrue(copy.message.contains("Review or refresh your subscription"))
+        assertFalse(copy.message.contains("Upgrade to"))
+        assertEquals("Manage subscription", copy.actionLabel)
+    }
 }
