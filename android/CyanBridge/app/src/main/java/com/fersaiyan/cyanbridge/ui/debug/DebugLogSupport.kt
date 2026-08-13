@@ -2,7 +2,12 @@ package com.fersaiyan.cyanbridge.ui.debug
 
 import android.content.Context
 import android.content.Intent
+import android.text.InputFilter
+import android.text.InputType
 import android.util.Log
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -13,8 +18,16 @@ import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.localagent.LocalAgentAccessibilityBridge
+import com.fersaiyan.cyanbridge.localagent.LocalAgentDeviceState
+import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
+import com.fersaiyan.cyanbridge.localagent.LocalAgentService
+import com.fersaiyan.cyanbridge.localagent.LocalAgentTaskHistory
+import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
+import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
+import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -32,10 +45,11 @@ import java.util.Locale
 
 object DebugLogSupport {
     const val SUPPORT_EMAIL = "fernandosaiyan10@gmail.com"
+    const val MAX_CONTACT_EMAIL_LENGTH = 320
 
     private const val TAG = "DebugLogSupport"
     private const val MAX_LOGCAT_CHARS = 120_000
-    private val LOG_TAGS = listOf(
+    internal val LOG_TAGS = listOf(
         "AIHijack",
         "ImageQuestionAudio",
         "DataDownload",
@@ -50,8 +64,16 @@ object DebugLogSupport {
         "DebugLogSupport",
         "CliRelayRouter",
         "LocalAgent",
+        "LocalAgentAccSvc",
+        "LocalAgentBridge",
+        "LocalAgentController",
+        "LocalAgentRecovery",
+        "LocalAgentService",
+        "LocalAgentSteps",
         "MainActivity",
         "MetaRaybanManager",
+        "DAT:CORE:RegistrationManager",
+        "DAT:CORE:BluetoothDeviceDetection",
         "MeizuMyvu",
         "MeizuMyvuService",
         "myvu",
@@ -63,6 +85,7 @@ object DebugLogSupport {
         "LocalModelsConfigureActivity",
         "RecordingsListActivity",
         "LocalModelsProvider",
+        "RemoteOpenAiClient",
         "LocalChatSession",
         "LiteRtLocalEngine",
         "LlamaCppLocalEngine",
@@ -106,28 +129,64 @@ object DebugLogSupport {
             append("\n\nEmail logs to:\n")
             append(SUPPORT_EMAIL)
         }
+        val contactEmailInput = EditText(activity).apply {
+            hint = "Contact email (optional)"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            filters = arrayOf(InputFilter.LengthFilter(MAX_CONTACT_EMAIL_LENGTH))
+            setText(ProSubscriptionServerPrefs.getAccountEmail(activity))
+            contentDescription = "Contact email for log follow-up"
+        }
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            val padding = (24 * resources.displayMetrics.density).toInt()
+            setPadding(padding, 0, padding, 0)
+            addView(contactEmailInput)
+            addView(TextView(activity).apply {
+                text = "Optional. This lets CyanBridge support reply to you about these logs."
+            })
+        }
 
-        AlertDialog.Builder(activity)
+        val dialog = AlertDialog.Builder(activity)
             .setTitle(title)
             .setMessage(message)
+            .setView(content)
             .setNegativeButton(dismissButtonLabel, null)
-            .setNeutralButton("Email logs") { _, _ ->
+            .setNeutralButton("Email logs", null)
+            .setPositiveButton("Send to server", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                val contactEmail = contactEmailInput.text?.toString().orEmpty().trim()
+                if (!isValidOptionalContactEmail(contactEmail)) {
+                    contactEmailInput.error = "Enter a valid email or leave this blank"
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
                 exportLogsForEmail(
                     activity = activity,
                     issueType = issueType,
                     description = description,
                     extraInfo = extraInfo,
+                    contactEmail = contactEmail,
                 )
             }
-            .setPositiveButton("Send to server") { _, _ ->
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val contactEmail = contactEmailInput.text?.toString().orEmpty().trim()
+                if (!isValidOptionalContactEmail(contactEmail)) {
+                    contactEmailInput.error = "Enter a valid email or leave this blank"
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
                 uploadLogsToServer(
                     activity = activity,
                     issueType = issueType,
                     description = description,
                     extraInfo = extraInfo,
+                    contactEmail = contactEmail,
                 )
             }
-            .show()
+        }
+        dialog.show()
     }
 
     fun isLocalRuntimeIssue(message: String?, throwable: Throwable? = null): Boolean {
@@ -180,6 +239,13 @@ object DebugLogSupport {
             append("App: ${context.packageManager.getPackageInfo(context.packageName, 0).versionName}\n")
             append("Provider: ${AutomationPrefs.getProviderType(context)}\n")
             append("Relay: ${AiProviderPrefs.getRelayBaseUrl(context)}\n")
+            val remoteModelActive = RemoteOpenAiPrefs.isActive(context)
+            append("Local-model backend: ${if (remoteModelActive) "Remote OpenAI-compatible" else "On-device"}\n")
+            if (remoteModelActive) {
+                append("Remote model: ${RemoteOpenAiPrefs.getModel(context)}\n")
+                append("Remote base URL: ${RemoteOpenAiPrefs.getBaseUrl(context)}\n")
+            }
+            appendAutomationDiagnostics(context)
 
             if (DeviceProfileStore.isMetaSelected(context)) {
                 append("Meta Ray-Ban profile: selected\n")
@@ -199,7 +265,8 @@ object DebugLogSupport {
                 LocalModelStorageRepository.resolveSelectedModel(context)
             }.getOrNull()
             if (selectedModel != null) {
-                append("Local model: ${selectedModel.displayName}\n")
+                val localModelLabel = if (remoteModelActive) "Installed local model (inactive)" else "Local model"
+                append("$localModelLabel: ${selectedModel.displayName}\n")
                 append("Local model path: ${selectedModel.absolutePath}\n")
                 val settings = runCatching {
                     LocalModelSettingsRepository.getForModel(context, selectedModel.id)
@@ -223,6 +290,44 @@ object DebugLogSupport {
         }
     }
 
+    internal fun buildAutomationDiagnostics(context: Context): String = buildString {
+        appendAutomationDiagnostics(context)
+    }
+
+    private fun StringBuilder.appendAutomationDiagnostics(context: Context) {
+        val accessibilityEnabled = hasAccessibilityServicePermission(context)
+        val accessibilityConnected = LocalAgentAccessibilityBridge.isConnected()
+        val deviceAvailability = LocalAgentDeviceState.availability(context)
+        val lastTask = LocalAgentTaskHistory.recent(context, limit = 1).firstOrNull()
+
+        appendLine("Automation diagnostics:")
+        appendLine("- Feature enabled: ${AutomationPrefs.isLocalAgentAutomationEnabled(context)}")
+        appendLine("- Accessibility enabled in Android settings: $accessibilityEnabled")
+        appendLine("- Accessibility service connected: $accessibilityConnected")
+        appendLine(
+            "- Accessibility state: " + when {
+                accessibilityEnabled && accessibilityConnected -> "ready"
+                accessibilityEnabled -> "enabled_but_not_connected"
+                else -> "disabled"
+            },
+        )
+        appendLine("- Local Agent service running: ${LocalAgentService.isRunning()}")
+        appendLine("- Notification permission: ${hasNotificationPermission(context)}")
+        appendLine("- Device state: ${deviceAvailability.name} (${deviceAvailability.statusText})")
+        appendLine("- Runtime status: ${RuntimePrefs.getStatus(context)}")
+        appendLine("- Last error: ${RuntimePrefs.getLastError(context)}")
+        appendLine("- Action confirmation required: ${RuntimePrefs.isRequireActionConfirmationEnabled(context)}")
+        appendLine("- Shizuku fallback enabled: ${RuntimePrefs.isShizukuFallbackEnabled(context)}")
+        if (lastTask == null) {
+            appendLine("- Last task: none recorded")
+        } else {
+            appendLine(
+                "- Last task: status=${lastTask.status}, steps=${lastTask.stepCount}, " +
+                    "created_at_ms=${lastTask.createdAtMs}",
+            )
+        }
+    }
+
     suspend fun sendLogsToServer(
         context: Context,
         issueType: String,
@@ -237,6 +342,10 @@ object DebugLogSupport {
             ?: AiProviderPrefs.getRelayBaseUrl(context).trimEnd('/')
         val url = URL("$baseUrl/logs/submit")
         val token = ProSubscriptionServerPrefs.getApiToken(context)
+        val normalizedContactEmail = contactEmail?.trim()?.takeIf { it.isNotEmpty() }
+        if (normalizedContactEmail != null && !isValidContactEmail(normalizedContactEmail)) {
+            throw IllegalArgumentException("Enter a valid contact email")
+        }
 
         val payload = org.json.JSONObject()
             .put("issue_type", issueType)
@@ -245,7 +354,7 @@ object DebugLogSupport {
             .put("device_info", deviceInfo)
             .put("app_version", context.packageManager.getPackageInfo(context.packageName, 0).versionName)
             .apply {
-                contactEmail?.trim()?.takeIf { it.isNotEmpty() }?.let { put("contact_email", it) }
+                normalizedContactEmail?.let { put("contact_email", it) }
                 requestMetadata?.trim()?.takeIf { it.isNotEmpty() }?.let { put("request_metadata", it) }
             }
 
@@ -359,6 +468,7 @@ object DebugLogSupport {
         issueType: String,
         description: String,
         extraInfo: Map<String, String>,
+        contactEmail: String,
     ) {
         Toast.makeText(activity, "Collecting logs...", Toast.LENGTH_SHORT).show()
         CoroutineScope(Dispatchers.Main).launch {
@@ -376,6 +486,7 @@ object DebugLogSupport {
                         description = description,
                         logs = report.logs,
                         deviceInfo = report.deviceInfo,
+                        contactEmail = contactEmail.ifBlank { null },
                     ).getOrThrow()
                     report to serverResult
                 }
@@ -403,6 +514,7 @@ object DebugLogSupport {
         issueType: String,
         description: String,
         extraInfo: Map<String, String>,
+        contactEmail: String,
     ) {
         Toast.makeText(activity, "Preparing log file...", Toast.LENGTH_SHORT).show()
         CoroutineScope(Dispatchers.Main).launch {
@@ -418,7 +530,7 @@ object DebugLogSupport {
             }
 
             result.onSuccess { report ->
-                val intent = buildEmailIntent(activity, issueType, description, report.file)
+                val intent = buildEmailIntent(activity, issueType, description, contactEmail, report.file)
                 try {
                     activity.startActivity(Intent.createChooser(intent, "Send debug logs"))
                     Toast.makeText(
@@ -449,6 +561,7 @@ object DebugLogSupport {
         context: Context,
         issueType: String,
         description: String,
+        contactEmail: String,
         file: File,
     ): Intent {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -463,6 +576,7 @@ object DebugLogSupport {
                     appendLine()
                     appendLine("Issue type: $issueType")
                     appendLine("Description: ${description.trim()}")
+                    if (contactEmail.isNotBlank()) appendLine("Contact email: $contactEmail")
                 }.trim(),
             )
             putExtra(Intent.EXTRA_STREAM, uri)
@@ -508,6 +622,10 @@ object DebugLogSupport {
         return file
     }
 
+    fun isValidOptionalContactEmail(value: String): Boolean =
+        value.isBlank() || isValidContactEmail(value.trim())
+
     private fun isValidContactEmail(value: String): Boolean =
-        value.matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))
+        value.length <= MAX_CONTACT_EMAIL_LENGTH &&
+            value.matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))
 }

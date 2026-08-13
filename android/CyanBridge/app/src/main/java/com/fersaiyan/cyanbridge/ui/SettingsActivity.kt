@@ -5,7 +5,11 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
+import android.text.InputFilter
+import android.text.InputType
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,6 +26,7 @@ import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionVerifier
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
@@ -499,22 +504,53 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             "Other/General",
         )
         var selectedType = issueTypes.first()
-        val input = EditText(this).apply {
+        val descriptionInput = EditText(this).apply {
             hint = "Describe what happened (optional)"
             minLines = 3
         }
-        AlertDialog.Builder(this)
+        val contactEmailInput = EditText(this).apply {
+            hint = "Contact email (optional)"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            filters = arrayOf(InputFilter.LengthFilter(DebugLogSupport.MAX_CONTACT_EMAIL_LENGTH))
+            setText(ProSubscriptionServerPrefs.getAccountEmail(this@SettingsActivity))
+            contentDescription = "Contact email for log follow-up"
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val padding = (24 * resources.displayMetrics.density).toInt()
+            setPadding(padding, 0, padding, 0)
+            addView(descriptionInput)
+            addView(contactEmailInput)
+            addView(TextView(this@SettingsActivity).apply {
+                text = "Optional. This lets CyanBridge support reply to you about these logs."
+            })
+        }
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Send Debug Logs")
             .setSingleChoiceItems(issueTypes, 0) { _, which -> selectedType = issueTypes[which] }
-            .setView(input)
+            .setView(content)
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Send") { _, _ ->
-                submitDebugLogs(selectedType, input.text?.toString()?.trim()?.take(2_000) ?: "No description")
+            .setPositiveButton("Send", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val contactEmail = contactEmailInput.text?.toString().orEmpty().trim()
+                if (!DebugLogSupport.isValidOptionalContactEmail(contactEmail)) {
+                    contactEmailInput.error = "Enter a valid email or leave this blank"
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                submitDebugLogs(
+                    issueType = selectedType,
+                    description = descriptionInput.text?.toString()?.trim()?.take(2_000).orEmpty(),
+                    contactEmail = contactEmail,
+                )
             }
-            .show()
+        }
+        dialog.show()
     }
 
-    private fun submitDebugLogs(issueType: String, description: String) {
+    private fun submitDebugLogs(issueType: String, description: String, contactEmail: String) {
         Toast.makeText(this, "Collecting logs...", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
@@ -524,6 +560,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
                     description = description,
                     logs = DebugLogSupport.collectLogcat(),
                     deviceInfo = DebugLogSupport.buildDeviceInfo(this@SettingsActivity),
+                    contactEmail = contactEmail.ifBlank { null },
                 )
             }.onSuccess { result ->
                 withContext(Dispatchers.Main) {
