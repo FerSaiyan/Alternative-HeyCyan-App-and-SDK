@@ -11,6 +11,7 @@
     <string name="action_connect">Connect</string>
     <string name="device_bind_title">Connect glasses</string>
     <string name="device_bind_scan">Scan for devices</string>
+    <string name="device_bind_pair_meta">Pair Meta Glasses</string>
     <string name="device_bind_scanning">Scanning...</string>
     <string name="device_bind_looking">Looking for named Bluetooth devices...</string>
     <string name="device_bind_empty">No devices found. Start a scan to pair your glasses.</string>

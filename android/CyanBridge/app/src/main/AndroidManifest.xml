@@ -81,10 +81,10 @@
         <!-- Meta Wearables Device Access Toolkit (DAT) SDK Configuration -->
         <meta-data
             android:name="com.meta.wearable.mwdat.APPLICATION_ID"
-            android:value="1057183300587462" />
+            android:value="${mwdat_application_id}" />
         <meta-data
             android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
-            android:value="AR|1057183300587462|77e92a3d9f02778279c80f220a2d81a2" />
+            android:value="${mwdat_client_token}" />
         <meta-data
             android:name="com.meta.wearable.mwdat.DAM_ENABLED"
             android:value="true" />
@@ -102,7 +102,12 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/app_name" />
+        <activity
+            android:name=".ui.MetaPairingActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:label="@string/meta_pairing_title">
             <!-- Callback scheme for Meta AI app to return to CyanBridge after registration -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

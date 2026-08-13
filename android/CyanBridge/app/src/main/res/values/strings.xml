@@ -91,6 +91,7 @@
     <string name="onboarding_get_started">Get started</string>
     <string name="meta_diagnostics_title">Meta Ray-Ban diagnostics</string>
     <string name="meta_diagnostics_description">CyanBridge will collect the recent Meta DAT state, errors, device details, and filtered logcat entries so the issue can be investigated.</string>
+    <string name="meta_pairing_title">Pair Meta glasses</string>
 
     <!-- Onboarding: Audio Capture -->
     <string name="onboarding_audio_capture_title">Continuous Audio Recording</string>

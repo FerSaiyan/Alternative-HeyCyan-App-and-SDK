@@ -39,6 +39,11 @@ android {
         versionCode = 14
         versionName = "2.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders = [
+                mwdat_application_id: "1057183300587462",
+                mwdat_client_token: "AR|1057183300587462|77e92a3d9f02778279c80f220a2d81a2",
+        ]
+        buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "false"
 
         // Chapter 6: optional transcription API key (do not commit secrets).
         def openAiKey = project.findProperty("OPENAI_API_KEY") ?: ""
@@ -95,6 +100,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Local APKs use Meta AI Developer Mode rather than production release-channel attestation.
+            manifestPlaceholders = [
+                    mwdat_application_id: "0",
+                    mwdat_client_token: "0",
+            ]
+            buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "true"
+        }
         release {
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.release

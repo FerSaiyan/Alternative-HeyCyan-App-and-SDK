@@ -66,6 +66,7 @@ class DeviceBindActivity : BaseActivity() {
                     connectingDevice = connectingDevice?.toShared(),
                     selectedClass = selectedDeviceClass,
                     onScan = ::startScan,
+                    onPairMetaGlasses = ::openMetaPairing,
                     onSelectDevice = { sharedDevice ->
                         val device = deviceList.firstOrNull {
                             it.macAddress.equals(sharedDevice.macAddress, ignoreCase = true)
@@ -96,6 +97,23 @@ class DeviceBindActivity : BaseActivity() {
 
     // BaseActivity invokes this after Compose installs its host view; no ViewBinding remains.
     override fun setupViews() = Unit
+
+    private fun openMetaPairing() {
+        handler.removeCallbacks(scanTimeout)
+        BleScannerHelper.getInstance().stopScan(this)
+        isScanning = false
+        DeviceProfileStore.saveLastSelected(
+            this,
+            DeviceProfile(
+                macAddress = META_DAT_PROFILE_ID,
+                advertisedName = "Meta glasses",
+                detectedClass = DeviceClass.META_RAYBAN,
+                selectedClass = DeviceClass.META_RAYBAN,
+                userOverridden = false,
+            ),
+        )
+        startActivity(Intent(this, MetaPairingActivity::class.java))
+    }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun onMessageEvent(messageEvent: BluetoothEvent) {
@@ -260,7 +278,9 @@ class DeviceBindActivity : BaseActivity() {
         val now = System.currentTimeMillis()
         if (!force && now - lastDeviceListPublishAtMs < DEVICE_LIST_PUBLISH_INTERVAL_MS) return
         lastDeviceListPublishAtMs = now
-        scannedDevices = deviceList.toList()
+        scannedDevices = deviceList
+            .filter { it.effectiveSelectedClass() != DeviceClass.META_RAYBAN }
+            .toList()
     }
 
     override fun onDestroy() {
@@ -369,6 +389,7 @@ class DeviceBindActivity : BaseActivity() {
 
     private companion object {
         const val REQUEST_ENABLE_BLUETOOTH = 300
+        const val META_DAT_PROFILE_ID = "META_DAT"
         const val DEVICE_LIST_PUBLISH_INTERVAL_MS = 1_000L
         val TUNEBUDS_COMPANY_IDS = setOf(0x475A, 0x455A, 0x535A, 0x4D5A)
     }
