@@ -1,8 +1,11 @@
 package com.fersaiyan.cyanbridge.devices.metarayban
 
 import android.app.Activity
+import android.Manifest
+import android.bluetooth.BluetoothManager
 import android.content.ContentValues
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -10,6 +13,8 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionLease
@@ -69,6 +74,8 @@ class MetaRaybanManager private constructor(context: Context) {
     companion object {
         private const val TAG = "MetaRaybanManager"
         private const val MAX_DIAGNOSTIC_EVENTS = 80
+        private const val META_DAT_SERVICE_UUID = "8b0d2687-42a4-44cb-9436-fba3b9b96de2"
+        private val META_AI_PACKAGES = listOf("com.facebook.stella", "com.facebook.stella_debug")
 
         @Volatile
         private var instance: MetaRaybanManager? = null
@@ -182,6 +189,11 @@ class MetaRaybanManager private constructor(context: Context) {
                 updateDevices(identifiers.map { it.toString() }.toSet())
             }
         }
+        recordInfo(
+            "observers",
+            "Attached DAT observers; registration=${Wearables.registrationState.value}, " +
+                "devices=${Wearables.devices.value.size}",
+        )
     }
 
     private fun updateDevices(identifiers: Set<String>) {
@@ -842,11 +854,19 @@ class MetaRaybanManager private constructor(context: Context) {
         reportFailure(operation, message)
 
     fun diagnosticsSnapshot(): String {
+        val readiness = datReadiness()
         val events = synchronized(diagnosticsLock) {
             diagnosticEvents.joinToString(separator = "\n")
         }
         return buildString {
             appendLine("initialized=${_isInitialized.value}")
+            appendLine("sdkDeveloperMode=${runCatching { Wearables.isDevMode }.getOrDefault(false)}")
+            appendLine("developerConfiguration=${readiness.developerConfiguration}")
+            appendLine("metaAiInstalled=${readiness.metaAiInstalled}")
+            appendLine("bluetoothPermissionGranted=${readiness.bluetoothPermissionGranted}")
+            appendLine("bluetoothEnabled=${readiness.bluetoothEnabled}")
+            appendLine("bondedDeviceCount=${readiness.bondedDeviceCount ?: "(unavailable)"}")
+            appendLine("bondedMetaDeviceCount=${readiness.bondedMetaDeviceCount ?: "(unavailable)"}")
             appendLine("registration=${_registrationState.value}")
             appendLine("availableDeviceCount=${_availableDeviceCount.value}")
             appendLine("selectedDeviceId=${selectedDeviceId ?: "(none)"}")
@@ -860,9 +880,47 @@ class MetaRaybanManager private constructor(context: Context) {
             appendLine("stream=${_streamState.value}")
             appendLine("displayActive=${_isDisplayActive.value}")
             appendLine("lastError=${_lastError.value ?: "(none)"}")
+            appendLine("setupGuidance=${registrationGuidance(readiness) ?: "(none)"}")
             appendLine("recentEvents:")
             append(events.ifBlank { "(none)" })
         }
+    }
+
+    fun registrationGuidance(): String? = registrationGuidance(datReadiness())
+
+    private fun registrationGuidance(readiness: MetaDatReadiness): String? = metaDatSetupGuidance(
+        registrationState = _registrationState.value,
+        availableDeviceCount = _availableDeviceCount.value,
+        readiness = readiness,
+    )
+
+    private fun datReadiness(): MetaDatReadiness {
+        val bluetoothPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
+        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
+        val bondedDevices = if (bluetoothPermissionGranted) {
+            runCatching { adapter?.bondedDevices }.getOrNull()
+        } else {
+            null
+        }
+        val bondedMetaDevices = bondedDevices?.count { device ->
+            runCatching {
+                device.uuids?.any { parcelUuid ->
+                    parcelUuid.uuid.toString().equals(META_DAT_SERVICE_UUID, ignoreCase = true)
+                } == true
+            }.getOrDefault(false)
+        }
+        return MetaDatReadiness(
+            metaAiInstalled = META_AI_PACKAGES.any { packageName ->
+                runCatching { context.packageManager.getPackageInfo(packageName, 0) }.isSuccess
+            },
+            bluetoothPermissionGranted = bluetoothPermissionGranted,
+            bluetoothEnabled = runCatching { adapter?.isEnabled == true }.getOrDefault(false),
+            bondedDeviceCount = bondedDevices?.size,
+            bondedMetaDeviceCount = bondedMetaDevices,
+            developerConfiguration = BuildConfig.META_DAT_DEVELOPER_CONFIGURATION,
+        )
     }
 
     private fun reportFailure(operation: String, message: String, throwable: Throwable? = null): String {

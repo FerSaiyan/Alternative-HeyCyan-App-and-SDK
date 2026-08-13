@@ -916,6 +916,14 @@ private fun MetaRaybanControls(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        state.setupGuidance?.takeIf { it.isNotBlank() }?.let { guidance ->
+            Text(
+                text = guidance,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.testTag("meta_rayban_setup_guidance"),
+            )
+        }
         state.lastError?.takeIf { it.isNotBlank() }?.let { error ->
             Card(
                 modifier = Modifier
@@ -950,14 +958,10 @@ private fun MetaRaybanControls(
                 Text(stringResource(Res.string.meta_rayban_send_diagnostics))
             }
         }
-        MetaControlRow(
-            status = stringResource(Res.string.meta_rayban_registration_status, state.registrationLabel),
-            startLabel = stringResource(Res.string.meta_rayban_register),
-            onStart = { onAction(GlassesDashboardAction.MetaRegister) },
-            startEnabled = state.canRegister,
-            stopLabel = stringResource(Res.string.meta_rayban_unregister),
-            onStop = { onAction(GlassesDashboardAction.MetaUnregister) },
-            stopEnabled = state.canUnregister,
+        Text(
+            text = stringResource(Res.string.meta_rayban_registration_status, state.registrationLabel),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.testTag("meta_rayban_registration_status"),
         )
         MetaControlRow(
             status = stringResource(Res.string.meta_rayban_session_status, state.sessionLabel),

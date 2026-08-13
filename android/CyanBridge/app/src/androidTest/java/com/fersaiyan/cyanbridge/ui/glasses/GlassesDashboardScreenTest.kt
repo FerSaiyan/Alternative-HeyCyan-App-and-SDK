@@ -191,6 +191,9 @@ class GlassesDashboardScreenTest {
 
         composeRule.onNodeWithTag("glasses_assistant_controls").assertIsDisplayed()
         composeRule.onNodeWithText("Test voice").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Register").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Unregister").assertCountEquals(0)
+        composeRule.onNodeWithTag("meta_rayban_registration_status").assertIsDisplayed()
         composeRule.onAllNodesWithText("Video").assertCountEquals(0)
         composeRule.onAllNodesWithText("Sync data (P2P)").assertCountEquals(0)
     }
@@ -213,6 +216,28 @@ class GlassesDashboardScreenTest {
         composeRule.onNodeWithTag("meta_rayban_last_error").assertIsDisplayed()
         composeRule.onNodeWithText("Send Meta diagnostics").performClick()
         composeRule.runOnIdle { assertEquals(GlassesDashboardAction.MetaSendDiagnostics, action) }
+    }
+
+    @Test
+    fun metaUnavailableShowsActionableSetupGuidance() {
+        composeRule.setContent {
+            CyanBridgeTheme {
+                GlassesDashboardScreen(
+                    state = GlassesDashboardUiState(
+                        showMetaRaybanControls = true,
+                        metaRayban = MetaRaybanUiState(
+                            registrationLabel = "UNAVAILABLE",
+                            setupGuidance = "Pair supported glasses in Meta AI first.",
+                            canRegister = true,
+                        ),
+                    ),
+                    onAction = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("meta_rayban_setup_guidance").assertIsDisplayed()
+        composeRule.onNodeWithText("Pair supported glasses in Meta AI first.").assertIsDisplayed()
     }
 
     @Test

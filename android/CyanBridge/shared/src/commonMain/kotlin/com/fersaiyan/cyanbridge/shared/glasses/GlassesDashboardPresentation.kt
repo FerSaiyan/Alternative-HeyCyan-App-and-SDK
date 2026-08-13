@@ -113,6 +113,7 @@ data class MetaRaybanUiState(
     val streamLabel: String = "Stopped",
     val selectedDeviceName: String? = null,
     val availableDeviceCount: Int = 0,
+    val setupGuidance: String? = null,
     val lastError: String? = null,
     val displayCapable: Boolean = false,
     val displayActive: Boolean = false,

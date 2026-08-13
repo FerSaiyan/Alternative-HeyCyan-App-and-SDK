@@ -6654,6 +6654,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         XXPermissions.startPermissionActivity(this@MainActivity, permissions)
                     }
                 }
+                    setupGuidance = manager.registrationGuidance(),
             })
     }
 
