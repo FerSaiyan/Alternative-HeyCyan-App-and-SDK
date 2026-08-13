@@ -26,6 +26,7 @@ import com.fersaiyan.cyanbridge.audio.MeetingCaptureService
 import com.fersaiyan.cyanbridge.media.GlassesMediaPrefs
 import com.fersaiyan.cyanbridge.media.SyncedMediaFolder
 import com.fersaiyan.cyanbridge.media.VendorAlbumDownloader
+import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
 import com.fersaiyan.cyanbridge.ota.FirmwareClient
 import com.fersaiyan.cyanbridge.ota.InstalledFirmwareVersions
 import com.fersaiyan.cyanbridge.ota.FirmwareResult
@@ -35,6 +36,7 @@ import com.fersaiyan.cyanbridge.ota.OtaState
 import com.fersaiyan.cyanbridge.ota.OtaTarget
 import com.fersaiyan.cyanbridge.ota.expectedFirmwareExtension
 import com.fersaiyan.cyanbridge.ota.firmwareRelayBaseUrl
+import com.fersaiyan.cyanbridge.ota.firmwareSubscriptionGateCopy
 import com.fersaiyan.cyanbridge.ota.isExpectedFirmwareFilename
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionLease
@@ -65,9 +67,9 @@ import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyListene
 import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyRsp
 import com.fersaiyan.cyanbridge.databinding.AcitivytMainBinding
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
+import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
 import com.fersaiyan.cyanbridge.ui.ChatListActivity
 import com.fersaiyan.cyanbridge.ui.ChatThreadActivity
-import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import com.fersaiyan.cyanbridge.ui.CommunityPluginsActivity
 import com.fersaiyan.cyanbridge.ui.SettingsActivity
@@ -201,7 +203,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
+import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
+import com.fersaiyan.cyanbridge.ai.router.AssistantSetupDestination
+import com.fersaiyan.cyanbridge.ai.router.AssistantTestKind
+import com.fersaiyan.cyanbridge.ai.router.AssistantTestReadiness
 import com.fersaiyan.cyanbridge.ai.router.AssistantIntent
 import com.fersaiyan.cyanbridge.ai.router.AssistantRequest
 import com.fersaiyan.cyanbridge.ai.router.AssistantRequestRouter
@@ -382,6 +389,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
     companion object {
         const val EXTRA_TASKER_COMMAND = "tasker_command"
+        const val EXTRA_START_META_IMAGE_QUESTION = "start_meta_image_question"
         private const val TAG = "MainActivity"
         private var loggedLargeDataHandlerMethods = false
         private const val AI_MODE_PHONE_ASSISTANT = "PhoneAssistant"
@@ -389,7 +397,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val AI_MODE_CUSTOM_AI_PROVIDER = "CustomAiProvider"
         private const val QUERY_MAX_AGENT_PERSONA_CHARS = 1200
         private const val QUERY_MAX_USER_FACTS_CHARS = 1400
-        const val EXTRA_START_META_IMAGE_QUESTION = "start_meta_image_question"
         private const val QUERY_MAX_CONFIRMED_FACTS_CHARS = 1800
         private const val QUERY_MAX_DAILY_SUMMARY_CHARS = 2200
         private const val QUERY_MAX_TOTAL_CONTEXT_CHARS = 6500
@@ -401,6 +408,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val P2P_GROUP_REMOVAL_MAX_ATTEMPTS = 3
         private const val PULL_OTA_TEST_LEASE_MS = 10_000L
         private const val ONE_SHOT_BLE_COMMAND_TIMEOUT_MS = 6_000L
+        private const val TRANSFER_MODE_COMMAND_TIMEOUT_MS = 10_000L
         private const val IMAGE_THUMBNAIL_TRANSFER_TIMEOUT_MS = 20_000L
         private const val VOICE_CUE_ROUTE_SETTLE_MS = 500L
         private const val VOICE_BLUETOOTH_ROUTE_TIMEOUT_MS = 3_000L
@@ -479,7 +487,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var downloadFlowMode = GlassesSyncFlow.CUSTOM
     private var downloadBleIp: String? = null
     private var downloadWifiIp: String? = null
-    private var downloadPhoneIsGroupOwner: Boolean = true
+    private var downloadPhoneIsGroupOwner: Boolean? = null
     private var downloadInProgress = false
     private var downloadAttemptJob: Job? = null
     private var downloadSessionJob: Job? = null
@@ -513,6 +521,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val officialFlowRetryLimit = 1
     private var officialDisconnectRecoveryJob: Job? = null
     private var officialMediaErrorCount = 0
+    private var transferModeCommandAttempt = 0
+    private var transferModeCommandSentAtMs = 0L
+    private var transferModeCommandCallbackLatencyMs: Long? = null
+    private var transferModeCommandCallbackReceived = false
+    private var transferModeCommandEvidenceReceived = false
+    private var transferModeCommandTimeoutJob: Job? = null
+    private var selectedDownloadNetworkSummary = "none"
+    private var officialFlowRetryRequired = false
 
     // Guard against concurrent/duplicate image queries
     private val imageQueryInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -710,6 +726,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // Lazily register the import/download notify listener the first time we need it.
         handleMetaRegistrationIntent(intent)
         handleTaskerCommand(intent)
+        maybeStartMetaImageQuestion(intent)
 
         BatteryOptimizationGuideActivity.launchIfNeeded(this)
     }
@@ -1016,6 +1033,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             updateMetaRaybanUiState()
         }
         handleTaskerCommand(intent)
+        maybeStartMetaImageQuestion(intent)
     }
 
     private fun handleMetaRegistrationIntent(callbackIntent: Intent): Boolean {
@@ -1024,24 +1042,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return manager.handleRegistrationCallback(callbackIntent)
     }
 
-    private fun getOrCreateMetaRaybanManager(): com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager {
-        return metaRaybanManager
-            ?: com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
-                .getInstance(this)
-                .also { manager ->
-                    metaRaybanManager = manager
-                    observeMetaRaybanState(manager)
-                }
-    }
-
-    private fun observeMetaRaybanState(
-        manager: com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager,
-    ) {
-        if (metaRaybanUiJob != null) return
-        metaRaybanUiJob = lifecycleScope.launch {
-            merge(
-                manager.registrationState.map { Unit },
-                manager.deviceSessionState.map { Unit },
     private fun maybeStartMetaImageQuestion(sourceIntent: Intent) {
         if (!sourceIntent.getBooleanExtra(EXTRA_START_META_IMAGE_QUESTION, false)) return
         sourceIntent.removeExtra(EXTRA_START_META_IMAGE_QUESTION)
@@ -1097,6 +1097,24 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return false
     }
 
+    private fun getOrCreateMetaRaybanManager(): com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager {
+        return metaRaybanManager
+            ?: com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
+                .getInstance(this)
+                .also { manager ->
+                    metaRaybanManager = manager
+                    observeMetaRaybanState(manager)
+                }
+    }
+
+    private fun observeMetaRaybanState(
+        manager: com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager,
+    ) {
+        if (metaRaybanUiJob != null) return
+        metaRaybanUiJob = lifecycleScope.launch {
+            merge(
+                manager.registrationState.map { Unit },
+                manager.deviceSessionState.map { Unit },
                 manager.streamState.map { Unit },
                 manager.isDisplayActive.map { Unit },
                 manager.selectedDeviceIsDisplayCapable.map { Unit },
@@ -1530,7 +1548,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 } else if (isMeizuMyvuSelected()) {
                     startKtxActivity<DeviceBindActivity>()
                 } else if (isMetaRaybanSelected()) {
-                    startActivity(Intent(this, MetaPairingActivity::class.java))
+                    startKtxActivity<DeviceBindActivity>()
                 } else {
                     binding.btnScan.performClick()
                 }
@@ -1549,7 +1567,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         getOrCreateMeizuMyvuManager().connect(it, this)
                     } ?: startKtxActivity<DeviceBindActivity>()
                 } else if (isMetaRaybanSelected()) {
-                    startKtxActivity<DeviceBindActivity>()
+                    startActivity(Intent(this, MetaPairingActivity::class.java))
                 } else {
                     binding.btnConnect.performClick()
                 }
@@ -1830,8 +1848,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 description = "Run private phone automation with approval controls for risky actions.",
                 isEnabled = LocalAgentPlugin.isEnabled(this),
                 buttons = listOf(
-                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Start agent"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop agent"),
+                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Enable automation"),
+                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Disable automation"),
                 ),
             )
             NativePluginIds.MEETING_SPARK_NOTES -> NativePluginShortcutUiState(
@@ -1971,7 +1989,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 else -> {
                     CommunityPluginPrefs.setNativePluginEnabled(this, pluginId, true)
                     when (pluginId) {
-                        NativePluginIds.LOCAL_AGENT -> LocalAgentPlugin.start(this)
+                        NativePluginIds.LOCAL_AGENT -> {
+                            LocalAgentPlugin.setEnabled(this, true)
+                            if (!hasAccessibilityServicePermission(this)) {
+                                requestAccessibilityServicePermission(this, "Local Agent automation")
+                            } else {
+                                Toast.makeText(this, "Local Agent automation enabled", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                         NativePluginIds.MEETING_SPARK_NOTES -> {
                             MeetingSparkNotesPreferences.setEnabled(this, true)
                             MeetingSparkNotesService.start(this)
@@ -2213,25 +2238,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
 
                 binding.btnTestHijackVoice -> {
-                    triggerAssistantVoiceQuery()
+                    startVoiceQuestionFromUi()
                 }
 
                 binding.btnTestHijackImage -> {
-                    val unsupportedReason = imageQueryUnsupportedReasonForCurrentSelection()
-                    if (unsupportedReason != null) {
-                        Toast.makeText(
-                            this@MainActivity,
-                            unsupportedReason,
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                        return@setOnClickListener
-                    }
-
-                    if (maybeShowGeminiChatGptImageRequirementsWarning()) {
-                        return@setOnClickListener
-                    }
-
-                    triggerCliRelayImageCaptureAndQuery()
+                    startImageQuestionFromUi()
                 }
 
                 binding.btnModeGemini -> {
@@ -3100,10 +3111,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
 
                 is FirmwareResult.SubscriptionRequired -> {
+                    val copy = firmwareSubscriptionGateCopy(result.currentPlan)
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle("Firmware Access Required")
-                        .setMessage(result.message)
-                        .setPositiveButton("OK", null)
+                        .setTitle(copy.title)
+                        .setMessage(copy.message)
+                        .setNegativeButton("Not now", null)
+                        .setPositiveButton(copy.actionLabel) { _, _ ->
+                            startActivity(
+                                Intent(this@MainActivity, ProSubscriptionActivity::class.java).apply {
+                                    putExtra(ProSubscriptionActivity.EXTRA_INITIAL_PLAN, "standard")
+                                    putExtra(ProSubscriptionActivity.EXTRA_CHANGE_PLAN, true)
+                                },
+                            )
+                        }
                         .show()
                 }
 
@@ -3829,21 +3849,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun refreshAiQueryButtonsState() {
-        val unsupportedReason = imageQueryUnsupportedReasonForCurrentSelection()
-            ?: externalImageAutomationUnsupportedReason()
-        val imageSupported = unsupportedReason == null
-        binding.btnTestHijackImage.isEnabled = imageSupported
-        binding.btnTestHijackImage.alpha = if (imageSupported) 1f else 0.45f
-
-        if (!imageSupported) {
-            binding.btnTestHijackImage.text = "Image query unavailable"
-        } else {
-            binding.btnTestHijackImage.text = "Test Image AI description"
-        }
+        binding.btnTestHijackImage.isEnabled = true
+        binding.btnTestHijackImage.alpha = 1f
+        binding.btnTestHijackImage.text = "Test Image AI description"
         updateDashboardState { state ->
             state.copy(
-                imageQueryEnabled = imageSupported,
-                imageQueryLabel = if (imageSupported) "Test image AI description" else "Image query unavailable",
+                imageQueryEnabled = true,
+                imageQueryLabel = "Test image AI description",
             )
         }
     }
@@ -6642,6 +6654,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     streamLabel = streamState.name,
                     selectedDeviceName = manager.selectedDeviceName.value,
                     availableDeviceCount = manager.availableDeviceCount.value,
+                    setupGuidance = manager.registrationGuidance(),
                     lastError = manager.lastError.value,
                     displayCapable = displayCapable,
                     displayActive = isDisplayActive,
@@ -6711,7 +6724,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         XXPermissions.startPermissionActivity(this@MainActivity, permissions)
                     }
                 }
-                    setupGuidance = manager.registrationGuidance(),
             })
     }
 
@@ -7045,22 +7057,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun selectOfficialLikelyGlassesPeer(peers: Collection<WifiP2pDevice>): WifiP2pDevice? {
         if (peers.isEmpty()) return null
 
-        val expectedName = try {
-            DeviceManager.getInstance().deviceName?.uppercase(Locale.US)?.takeIf { it.isNotBlank() }
+        val pairedName = try {
+            DeviceManager.getInstance().deviceName
         } catch (_: Exception) {
             null
         }
-        val bleMacNoColon = currentBleMacNoColonUpper()
+        val pairedAddress = try {
+            DeviceManager.getInstance().deviceAddress
+        } catch (_: Exception) {
+            null
+        }
 
         fun matches(peer: WifiP2pDevice): Boolean {
-            val name = peer.deviceName?.uppercase(Locale.US) ?: return false
-            if (!expectedName.isNullOrBlank() && name == expectedName) return true
-            if (!bleMacNoColon.isNullOrBlank() && name.endsWith(bleMacNoColon)) return true
-            return false
+            return HeyCyanP2pPolicy.matchesOfficialPeer(peer.deviceName, pairedName, pairedAddress)
         }
 
         return peers.firstOrNull { matches(it) && it.status == WifiP2pDevice.AVAILABLE }
             ?: peers.firstOrNull(::matches)
+    }
+
+    private fun expectedOfficialP2pName(): String {
+        return try {
+            HeyCyanP2pPolicy.officialWifiDirectName(
+                DeviceManager.getInstance().deviceName,
+                DeviceManager.getInstance().deviceAddress,
+            ).orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     private fun showDownloadFlowPicker() {
@@ -7432,6 +7456,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         downloadP2pConnected = false
         downloadBleIp = null
         downloadWifiIp = null
+        downloadPhoneIsGroupOwner = null
         downloadInProgress = false
         downloadResolvedHttpIp = null
         lastDownloadBleIpAtMs = 0L
@@ -7692,12 +7717,52 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Log.i("DataDownload", "Skipping transfer-mode command for inactive session=$sessionId")
             return
         }
+        transferModeCommandTimeoutJob?.cancel()
+        transferModeCommandAttempt = attempt
+        transferModeCommandSentAtMs = System.currentTimeMillis()
+        transferModeCommandCallbackReceived = false
+        transferModeCommandEvidenceReceived = false
+        Log.i(
+            "DataDownload",
+            "Sending glassesControl[0x02,0x01,0x04] (attempt $attempt/$maxAttempts); " +
+                "official callback watchdog=${TRANSFER_MODE_COMMAND_TIMEOUT_MS}ms",
+        )
+        transferModeCommandTimeoutJob = launchDownloadSession { watchdogSessionId ->
+            delay(TRANSFER_MODE_COMMAND_TIMEOUT_MS)
+            if (watchdogSessionId != sessionId || !isDownloadControlActive(sessionId)) return@launchDownloadSession
+            if (!HeyCyanP2pPolicy.transferCommandTimedOut(
+                    transferModeCommandCallbackReceived,
+                    transferModeCommandEvidenceReceived,
+                )
+            ) return@launchDownloadSession
+
+            Log.w(
+                "DataDownload",
+                "Transfer mode command did not return within ${TRANSFER_MODE_COMMAND_TIMEOUT_MS}ms " +
+                    "and no P2P/BLE-IP evidence arrived (attempt $attempt/$maxAttempts)",
+            )
+            withContext(Dispatchers.Main) {
+                setTransferDetail("Glasses did not acknowledge transfer mode")
+                if (downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN) {
+                    stopOfficialFlowForRetry(
+                        "The glasses did not acknowledge transfer mode within 10 seconds.",
+                        resetDeviceP2p = false,
+                    )
+                }
+            }
+        }
         LargeDataHandler.getInstance().glassesControl(
             byteArrayOf(0x02, 0x01, 0x04)
         ) { _, resp ->
+            transferModeCommandCallbackReceived = true
+            transferModeCommandTimeoutJob?.cancel()
+            transferModeCommandTimeoutJob = null
+            val callbackLatencyMs = System.currentTimeMillis() - transferModeCommandSentAtMs
+            transferModeCommandCallbackLatencyMs = callbackLatencyMs
             Log.i(
                 "DataDownload",
-                "glassesControl[0x02,0x01,0x04] (attempt $attempt/$maxAttempts) -> dataType=${resp.dataType}, error=${resp.errorCode}"
+                "glassesControl[0x02,0x01,0x04] (attempt $attempt/$maxAttempts) -> " +
+                    "dataType=${resp.dataType}, error=${resp.errorCode}, latency=${callbackLatencyMs}ms"
             )
             if (!isDownloadControlActive(sessionId)) {
                 Log.i("DataDownload", "Ignoring transfer-mode response for inactive session=$sessionId")
@@ -7743,7 +7808,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             "Pre-retry reset [0x02,0x01,0x0F] -> error=${response.errorCode}",
                         )
                         if (continuation.isActive) {
-                            continuation.resume(response.errorCode == 0) {}
+                            // The vendor parser leaves work type 0x0F at its default errorCode=1.
+                            // HeyCyan ignores these response fields; callback arrival is completion.
+                            continuation.resume(
+                                HeyCyanP2pPolicy.resetCallbackAllowsRetry(
+                                    callbackReceived = true,
+                                    parsedErrorCode = response.errorCode,
+                                ),
+                            ) {}
                         }
                     }
                 } catch (e: Exception) {
@@ -8034,6 +8106,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         downloadP2pRestartCount = 0
         seenP2pPeers.clear()
         lastPeerSetHash = 0
+        transferModeCommandTimeoutJob?.cancel()
+        transferModeCommandTimeoutJob = null
+        transferModeCommandAttempt = 0
+        transferModeCommandSentAtMs = 0L
+        transferModeCommandCallbackLatencyMs = null
+        transferModeCommandCallbackReceived = false
+        transferModeCommandEvidenceReceived = false
+        selectedDownloadNetworkSummary = "none"
+        officialFlowRetryRequired = false
     }
 
     private fun resetOfficialFlowState() {
@@ -8083,7 +8164,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 "download_http_ip" to (downloadResolvedHttpIp ?: ""),
                 "download_p2p_connected" to downloadP2pConnected.toString(),
                 "download_in_progress" to downloadInProgress.toString(),
-                "download_phone_is_group_owner" to downloadPhoneIsGroupOwner.toString(),
+                "download_phone_is_group_owner" to (downloadPhoneIsGroupOwner?.toString() ?: "unknown"),
+                "transfer_mode_command_attempt" to transferModeCommandAttempt.toString(),
+                "transfer_mode_callback_received" to transferModeCommandCallbackReceived.toString(),
+                "transfer_mode_callback_latency_ms" to (transferModeCommandCallbackLatencyMs?.toString() ?: ""),
+                "transfer_mode_evidence_received" to transferModeCommandEvidenceReceived.toString(),
+                "expected_official_p2p_name" to expectedOfficialP2pName(),
+                "selected_download_network" to selectedDownloadNetworkSummary,
+                "seen_p2p_peers" to seenP2pPeers.joinToString(", "),
+                "active_glasses_session" to (GlassesSessionCoordinator.currentSession()?.name ?: "none"),
+                "ota_active" to otaManager.isActive.toString(),
             ),
             dismissButtonLabel = dismissButtonLabel,
         )
@@ -8135,8 +8225,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         "download_http_ip" to (downloadResolvedHttpIp ?: ""),
                         "download_p2p_connected" to downloadP2pConnected.toString(),
                         "download_in_progress" to downloadInProgress.toString(),
-                        "download_phone_is_group_owner" to downloadPhoneIsGroupOwner.toString(),
+                        "download_phone_is_group_owner" to (downloadPhoneIsGroupOwner?.toString() ?: "unknown"),
+                        "transfer_mode_command_attempt" to transferModeCommandAttempt.toString(),
+                        "transfer_mode_callback_received" to transferModeCommandCallbackReceived.toString(),
+                        "transfer_mode_callback_latency_ms" to (transferModeCommandCallbackLatencyMs?.toString() ?: ""),
+                        "transfer_mode_evidence_received" to transferModeCommandEvidenceReceived.toString(),
+                        "expected_official_p2p_name" to expectedOfficialP2pName(),
+                        "selected_download_network" to selectedDownloadNetworkSummary,
                         "seen_p2p_peers" to seenPeers.joinToString(", "),
+                        "active_glasses_session" to (GlassesSessionCoordinator.currentSession()?.name ?: "none"),
+                        "ota_active" to otaManager.isActive.toString(),
                     ),
                 )
             }
@@ -9557,6 +9655,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         downloadAttemptJob?.cancel()
         downloadAttemptJob = null
         cancelDownloadSession()
+        transferModeCommandTimeoutJob?.cancel()
+        transferModeCommandTimeoutJob = null
         downloadInitialPhaseTimeoutJob?.cancel()
         downloadInitialPhaseTimeoutJob = null
         officialDisconnectRecoveryJob?.cancel()
@@ -9604,6 +9704,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         downloadAttemptJob?.cancel()
         downloadAttemptJob = null
         cancelDownloadSession()
+        transferModeCommandTimeoutJob?.cancel()
+        transferModeCommandTimeoutJob = null
         downloadInitialPhaseTimeoutJob?.cancel()
         downloadInitialPhaseTimeoutJob = null
         unbindProcessFromNetwork()
@@ -9813,7 +9915,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         // If the phone is not the group owner, then we shouldn't block the group owner IP (.1)
         // because it belongs to the glasses.
-        if (!downloadPhoneIsGroupOwner) return false
+        if (downloadPhoneIsGroupOwner != true) return false
 
         // Typical Wi‑Fi Direct GO address when phone is GO.
         return ip == "192.168.49.1"
@@ -9855,7 +9957,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         downloadBleIp?.let { set.add(it) }
         bleIpBridge.ip.value?.let { set.add(it) }
 
-        if (!downloadPhoneIsGroupOwner && downloadWifiIp != null) {
+        if (downloadPhoneIsGroupOwner == false && downloadWifiIp != null) {
             set.add(downloadWifiIp!!)
         } else {
             downloadWifiIp?.let { set.add(it) }
@@ -9942,7 +10044,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             for (host in 1..254) {
                 val ip = "$prefix$host"
-                if (downloadPhoneIsGroupOwner && ip == "192.168.49.1") continue
+                if (downloadPhoneIsGroupOwner == true && ip == "192.168.49.1") continue
                 launch(Dispatchers.IO) {
                     sem.withPermit {
                         if (found.isCompleted) return@withPermit
@@ -10009,6 +10111,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         lastDownloadBleIpAtMs = now
         Log.i("DataDownload", "BLE reported device WiFi IP: $ip")
+        markTransferModeEvidence("BLE 0x08 IP")
         downloadBleIp = ip
         if (downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN) {
             officialBleCallbackSuccess = true
@@ -10026,6 +10129,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun onDownloadP2pConnected(info: WifiP2pInfo) {
+        if (info.groupFormed) markTransferModeEvidence("P2P group formed")
         downloadP2pConnected = info.groupFormed
         downloadWifiIp = info.groupOwnerAddress?.hostAddress
         downloadPhoneIsGroupOwner = info.isGroupOwner
@@ -10039,6 +10143,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 "Official flow P2P readiness satisfied: systemSuccess=$officialSystemSuccess, phoneIsGroupOwner=${info.isGroupOwner}"
             )
             downloadP2pNetwork = null
+            selectedDownloadNetworkSummary = "plain system routing (HeyCyan parity)"
             Log.i("DataDownload", "Official flow: skipping explicit P2P network binding to mirror vendor app")
         } else {
             downloadP2pNetwork = findLikelyP2pNetwork()
@@ -10049,6 +10154,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             "onDownloadP2pConnected: flow=${downloadFlowMode.label}, p2pConnected=$downloadP2pConnected, isGroupOwner=${info.isGroupOwner}, groupOwnerIp=$downloadWifiIp"
         )
         maybeStartHttpDownload("P2P")
+    }
+
+    private fun markTransferModeEvidence(source: String) {
+        if (transferModeCommandEvidenceReceived) return
+        transferModeCommandEvidenceReceived = true
+        transferModeCommandTimeoutJob?.cancel()
+        transferModeCommandTimeoutJob = null
+        Log.i("DataDownload", "Transfer mode independently confirmed by $source")
     }
 
     private fun maybeStartHttpDownload(source: String) {
@@ -10091,7 +10204,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        val targetIp = if (!downloadPhoneIsGroupOwner && !downloadWifiIp.isNullOrBlank()) {
+        val targetIp = if (downloadPhoneIsGroupOwner == false && !downloadWifiIp.isNullOrBlank()) {
             downloadWifiIp!!
         } else {
             bleIp
@@ -10371,9 +10484,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 ipv4Prefix24(downloadWifiIp)
             ).distinct()
 
-            var p2pCandidate: Network? = null
-            var fallbackWifi: Network? = null
-
             for (n in cm.allNetworks) {
                 val caps = cm.getNetworkCapabilities(n) ?: continue
                 if (!caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)) continue
@@ -10383,30 +10493,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val ifName = lp?.interfaceName ?: ""
                 val addrs = lp?.linkAddresses?.mapNotNull { it.address.hostAddress } ?: emptyList()
 
-                val matchesHint = prefixHints.any { p -> addrs.any { it.startsWith(p) } }
-                val looksLikeP2p = ifName.contains("p2p", ignoreCase = true) ||
-                    ifName.contains("wfd", ignoreCase = true) ||
-                    addrs.any { it.startsWith("192.168.49.") } ||
-                    matchesHint
-
-                if (looksLikeP2p) {
-                    Log.i("DataDownload", "Selected P2P/WFD network candidate: if=$ifName addrs=$addrs (matchesHint=$matchesHint)")
-                    p2pCandidate = n
-                    // Strong match -> return early.
-                    if (ifName.contains("p2p", ignoreCase = true) || ifName.contains("wfd", ignoreCase = true) || matchesHint) {
-                        return n
-                    }
-                }
-
-                // Keep a Wi‑Fi fallback so VPN doesn't steal routing if we fail to detect P2P.
-                if (fallbackWifi == null) {
-                    Log.i("DataDownload", "Keeping Wi‑Fi fallback network: if=$ifName addrs=$addrs")
-                    fallbackWifi = n
+                if (HeyCyanP2pPolicy.isVerifiedP2pNetwork(ifName, addrs, prefixHints)) {
+                    selectedDownloadNetworkSummary = "if=$ifName addrs=$addrs"
+                    Log.i("DataDownload", "Selected verified P2P/WFD network: $selectedDownloadNetworkSummary")
+                    return n
                 }
             }
 
-            p2pCandidate ?: fallbackWifi
+            selectedDownloadNetworkSummary = "none (ordinary Wi-Fi fallback rejected)"
+            Log.i("DataDownload", "No verified P2P/WFD Network exposed; leaving process routing unchanged")
+            null
         } catch (e: Exception) {
+            selectedDownloadNetworkSummary = "lookup failed: ${e.message.orEmpty()}"
             Log.w("DataDownload", "Failed to locate P2P network: ${e.message}")
             null
         }
@@ -10481,8 +10579,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 return
             }
             lastP2pResetAtMs = now
-            Log.i("DataDownload", "HeyCyan flow resetting device P2P after error=255 (source=$source)")
-            WifiP2pManagerSingleton.getInstance(this).resetDeviceP2p()
+            stopOfficialFlowForRetry(
+                "The glasses reported Wi-Fi Direct error 255.",
+                resetDeviceP2p = true,
+            )
             return
         }
 
@@ -10515,6 +10615,28 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         lastP2pResetAtMs = now
         WifiP2pManagerSingleton.getInstance(this).resetDeviceP2p()
+    }
+
+    private fun stopOfficialFlowForRetry(message: String, resetDeviceP2p: Boolean) {
+        if (downloadFlowMode != GlassesSyncFlow.OFFICIAL_HEYCYAN || downloadCancelledByUser) return
+        if (officialFlowRetryRequired) return
+        officialFlowRetryRequired = true
+        Log.w("DataDownload", "HeyCyan flow stopped for manual retry: $message")
+        if (!downloadInitialPhaseCompleted) {
+            maybeShowP2pSyncLogHelp(
+                reason = "HeyCyan-compatible sync stopped before media transfer. Error: $message",
+            )
+        }
+        finishDownloadInitialPhase("official flow retry required: $message")
+        setTransferDetail("$message Retry sync.")
+        if (resetDeviceP2p) {
+            WifiP2pManagerSingleton.getInstance(this).resetDeviceP2p()
+        }
+        teardownDownloadP2pSession(
+            sendExitTransfer = false,
+            hideTransferUi = true,
+        )
+        Toast.makeText(this, "$message Please retry sync.", Toast.LENGTH_LONG).show()
     }
 
     inner class MyDeviceNotifyListener : GlassesDeviceNotifyListener() {
