@@ -67,6 +67,7 @@ import com.fersaiyan.cyanbridge.databinding.AcitivytMainBinding
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
 import com.fersaiyan.cyanbridge.ui.ChatListActivity
 import com.fersaiyan.cyanbridge.ui.ChatThreadActivity
+import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import com.fersaiyan.cyanbridge.ui.CommunityPluginsActivity
 import com.fersaiyan.cyanbridge.ui.SettingsActivity
@@ -388,6 +389,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val AI_MODE_CUSTOM_AI_PROVIDER = "CustomAiProvider"
         private const val QUERY_MAX_AGENT_PERSONA_CHARS = 1200
         private const val QUERY_MAX_USER_FACTS_CHARS = 1400
+        const val EXTRA_START_META_IMAGE_QUESTION = "start_meta_image_question"
         private const val QUERY_MAX_CONFIRMED_FACTS_CHARS = 1800
         private const val QUERY_MAX_DAILY_SUMMARY_CHARS = 2200
         private const val QUERY_MAX_TOTAL_CONTEXT_CHARS = 6500
@@ -1040,6 +1042,61 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             merge(
                 manager.registrationState.map { Unit },
                 manager.deviceSessionState.map { Unit },
+    private fun maybeStartMetaImageQuestion(sourceIntent: Intent) {
+        if (!sourceIntent.getBooleanExtra(EXTRA_START_META_IMAGE_QUESTION, false)) return
+        sourceIntent.removeExtra(EXTRA_START_META_IMAGE_QUESTION)
+        binding.root.post(::startImageQuestionFromUi)
+    }
+
+    private fun startImageQuestionFromUi() {
+        if (showAssistantSetupIfNeeded(AssistantTestKind.IMAGE)) return
+        if (maybeShowGeminiChatGptImageRequirementsWarning()) return
+        triggerCliRelayImageCaptureAndQuery()
+    }
+
+    private fun startVoiceQuestionFromUi() {
+        if (showAssistantSetupIfNeeded(AssistantTestKind.VOICE)) return
+        triggerAssistantVoiceQuery()
+    }
+
+    private fun showAssistantSetupIfNeeded(kind: AssistantTestKind): Boolean {
+        val issue = AssistantTestReadiness.blockingIssue(this, currentAssistantRoute(), kind)
+        if (issue != null) {
+            AlertDialog.Builder(this)
+                .setTitle(issue.title)
+                .setMessage(issue.message)
+                .setNegativeButton("Not now", null)
+                .setPositiveButton(issue.actionLabel) { _, _ ->
+                    val destination = when (issue.destination) {
+                        AssistantSetupDestination.LOCAL_MODELS -> LocalModelsConfigureActivity::class.java
+                        AssistantSetupDestination.PRO_SUBSCRIPTION -> ProSubscriptionActivity::class.java
+                    }
+                    startActivity(Intent(this, destination))
+                }
+                .show()
+            return true
+        }
+        if (currentAssistantRoute() == GlassesAssistantRoute.TASKER_EXTERNAL_UI) {
+            val capability = ExternalAssistantAutomationInspector.inspect(this)
+            val reason = when (kind) {
+                AssistantTestKind.VOICE -> ExternalAssistantAutomationPolicy.voiceBlockingReason(capability)
+                AssistantTestKind.IMAGE -> ExternalAssistantAutomationPolicy.imageBlockingReason(capability)
+            }
+            if (reason != null) {
+                AlertDialog.Builder(this)
+                    .setTitle("Tasker setup required")
+                    .setMessage(reason)
+                    .setNegativeButton("Not now", null)
+                    .setPositiveButton("Open setup") { _, _ ->
+                        startActivity(Intent(this, ExternalAssistantAutomationSetupActivity::class.java))
+                    }
+                    .show()
+                return true
+            }
+        }
+        return false
+    }
+
                 manager.streamState.map { Unit },
                 manager.isDisplayActive.map { Unit },
                 manager.selectedDeviceIsDisplayCapable.map { Unit },
@@ -1473,7 +1530,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 } else if (isMeizuMyvuSelected()) {
                     startKtxActivity<DeviceBindActivity>()
                 } else if (isMetaRaybanSelected()) {
-                    ensureMetaDatReady { updateConnectionStatus(false) }
+                    startActivity(Intent(this, MetaPairingActivity::class.java))
                 } else {
                     binding.btnScan.performClick()
                 }
@@ -1492,7 +1549,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         getOrCreateMeizuMyvuManager().connect(it, this)
                     } ?: startKtxActivity<DeviceBindActivity>()
                 } else if (isMetaRaybanSelected()) {
-                    ensureMetaDatReady { updateConnectionStatus(false) }
+                    startKtxActivity<DeviceBindActivity>()
                 } else {
                     binding.btnConnect.performClick()
                 }
