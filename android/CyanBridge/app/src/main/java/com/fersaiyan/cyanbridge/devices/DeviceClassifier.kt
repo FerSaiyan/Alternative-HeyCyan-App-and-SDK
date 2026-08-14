@@ -14,6 +14,10 @@ object DeviceClassifier {
 
     private val TUNEBUDS_BLE_SERVICE_UUID: UUID =
         UUID.fromString("0000fdb3-0000-1000-8000-00805f9b34fb")
+    private val MYVU_ADVERTISED_SERVICE_UUID: UUID =
+        UUID.fromString("00000bd3-0000-1000-8000-00805f9b34fb")
+    private val MYVU_GATT_SERVICE_UUID: UUID =
+        UUID.fromString("00000bd1-0000-1000-8000-00805f9b34fb")
     private val TUNEBUDS_COMPANY_IDS = setOf(0x475A, 0x455A, 0x535A, 0x4D5A)
 
     fun guessDeviceClass(
@@ -34,6 +38,10 @@ object DeviceClassifier {
             serviceUuids.any { it.uuid == TUNEBUDS_BLE_SERVICE_UUID }
         ) {
             return DeviceClass.TUNEBUDS
+        }
+
+        if (serviceUuids.any { it.uuid == MYVU_ADVERTISED_SERVICE_UUID || it.uuid == MYVU_GATT_SERVICE_UUID }) {
+            return DeviceClass.MEIZU_MYVU
         }
 
         if (name.isEmpty()) return DeviceClass.UNKNOWN
@@ -81,12 +89,6 @@ object DeviceClassifier {
             lower.contains("buds")
         ) {
             return DeviceClass.GENERIC_AUDIO
-        }
-
-        // Service UUID heuristics placeholder (extend when known).
-        // Keeping this in place satisfies the Chapter 3 architecture requirement.
-        if (serviceUuids.isNotEmpty()) {
-            // TODO: Add known UUID-based detection when available.
         }
 
         return DeviceClass.UNKNOWN

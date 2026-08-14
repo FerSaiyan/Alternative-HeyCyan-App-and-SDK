@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -183,13 +184,7 @@ class DeviceBindActivity : BaseActivity() {
         if (selectedDeviceClass == DeviceClass.MEIZU_MYVU) {
             // MYVU owns a BLE ECDH session and an RFCOMM relay. The HeyCyan SDK
             // connector cannot establish either transport.
-            MeizuMyvuManager.getInstance(this).connect(device.macAddress, this)
-            Toast.makeText(
-                this,
-                "Connecting to Meizu MYVU. Keep the official MYVU app disconnected.",
-                Toast.LENGTH_LONG,
-            ).show()
-            finish()
+            connectMeizuMyvu(device)
             return
         }
 
@@ -216,6 +211,40 @@ class DeviceBindActivity : BaseActivity() {
         }
 
         BleOperateManager.getInstance().connectDirectly(device.macAddress)
+    }
+
+    private fun connectMeizuMyvu(device: ScannedDevice) {
+        val bonded = runCatching {
+            BluetoothAdapter.getDefaultAdapter()
+                ?.getRemoteDevice(device.macAddress)
+                ?.bondState == BluetoothDevice.BOND_BONDED
+        }.getOrDefault(false)
+        if (!bonded) {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Pair MYVU in Android first")
+                .setMessage(
+                    "The upstream MYVU client expects a Classic Bluetooth bond before opening its RFCOMM relay. " +
+                        "Pair the glasses in Android Bluetooth settings, then force-stop the official MYVU app because the glasses accept only one app connection at a time.",
+                )
+                .setNegativeButton("Cancel", null)
+                .setNeutralButton("Bluetooth settings") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                }
+                .setPositiveButton("Connect anyway") { _, _ -> startMeizuMyvuConnection(device.macAddress) }
+                .show()
+            return
+        }
+        startMeizuMyvuConnection(device.macAddress)
+    }
+
+    private fun startMeizuMyvuConnection(address: String) {
+        MeizuMyvuManager.getInstance(this).connect(address, this, userInitiated = true)
+        Toast.makeText(
+            this,
+            "Connecting to Meizu MYVU. Force-stop the official MYVU app while using CyanBridge.",
+            Toast.LENGTH_LONG,
+        ).show()
+        finish()
     }
 
     private fun upsertDevice(

@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -46,6 +47,17 @@ class DebugLogSupportTest {
         assertTrue(DebugLogSupport.LOG_TAGS.contains("LocalAgentService"))
         assertTrue(DebugLogSupport.LOG_TAGS.contains("LocalAgentSteps"))
         assertTrue(DebugLogSupport.LOG_TAGS.contains("RemoteOpenAiClient"))
+        assertTrue(DebugLogSupport.LOG_TAGS.contains("MeizuMyvu"))
+        assertTrue(DebugLogSupport.LOG_TAGS.contains("MeizuMyvuService"))
+        assertTrue(DebugLogSupport.LOG_TAGS.contains("myvu"))
+    }
+
+    @Test
+    fun `empty filtered logcat becomes a deliverable diagnostic message`() {
+        assertEquals(
+            "No matching Android logcat entries were available. See Device Info and Extra Info for structured diagnostics.",
+            DebugLogSupport.normalizeCollectedLogs("  \n"),
+        )
     }
 
     @Test

@@ -449,7 +449,7 @@
     <string name="dashboard_meizu_title">Meizu MYVU / Star Air</string>
     <string name="dashboard_protocol">协议：%1$s</string>
     <string name="dashboard_device">设备：%1$s</string>
-    <string name="dashboard_meizu_description">MYVU 使用自己的 BLE 密钥交换和 RFCOMM 中继。连接时请保持官方 MYVU 应用断开。</string>
+    <string name="dashboard_meizu_description">MYVU 使用自己的 BLE 密钥交换和 RFCOMM 中继。请先在 Android 蓝牙设置中完成配对，然后在使用 CyanBridge 时强制停止官方 MYVU 应用。</string>
     <string name="dashboard_connect">连接</string>
     <string name="dashboard_test_notification">测试通知</string>
     <string name="dashboard_show_text">显示文本</string>

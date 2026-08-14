@@ -74,22 +74,23 @@ object AutoPairManager {
                     continue
                 }
 
+                val selectedClass = DeviceProfileStore.selectedClass(appContext)
                 val connected = BleOperateManager.getInstance().isConnected
-                if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.EYEVUE) {
+                if (selectedClass == DeviceClass.EYEVUE) {
                     if (EyevueManager.getInstance(appContext).isConnected()) {
                         backoffMs = 5_000L
                         delay(20_000L)
                         continue
                     }
                 }
-                if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.TUNEBUDS) {
+                if (selectedClass == DeviceClass.TUNEBUDS) {
                     if (TuneBudsManager.getInstance(appContext).isConnected()) {
                         backoffMs = 5_000L
                         delay(20_000L)
                         continue
                     }
                 }
-                if (connected) {
+                if (connected && selectedClass != DeviceClass.MEIZU_MYVU) {
                     backoffMs = 5_000L
                     delay(20_000L)
                     continue
@@ -195,12 +196,6 @@ object AutoPairManager {
             Log.d(TAG, "Skipping vendor reconnect for selected Meta Ray-Ban")
             return null
         }
-        if (profile?.selectedClass == DeviceClass.MEIZU_MYVU) {
-            profile.macAddress.takeIf { it.isNotBlank() }?.let {
-                MeizuMyvuManager.getInstance(context).connect(it)
-            }
-            return null
-        }
         val profileMac = profile
             ?.macAddress
             ?.trim()
@@ -258,6 +253,18 @@ object AutoPairManager {
         }
 
         val profile = DeviceProfileStore.loadLastSelected(context)
+        if (profile?.selectedClass == DeviceClass.MEIZU_MYVU) {
+            val address = profile.macAddress.takeIf { it.isNotBlank() } ?: return false
+            val manager = MeizuMyvuManager.getInstance(context)
+            if (manager.isReady()) return true
+            if (!manager.shouldRequestConnection()) {
+                Log.d(TAG, "Auto-pair ($reason): MYVU transport or upstream retry already active")
+                return true
+            }
+            Log.i(TAG, "Auto-pair ($reason): starting MYVU foreground connection")
+            manager.connect(address)
+            return true
+        }
         if (profile?.selectedClass == DeviceClass.TUNEBUDS) {
             val address = profile.macAddress.takeIf { it.isNotBlank() } ?: return false
             Log.i(TAG, "Auto-pair ($reason): TuneBuds RFCOMM $address")

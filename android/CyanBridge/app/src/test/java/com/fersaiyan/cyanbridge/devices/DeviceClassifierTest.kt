@@ -1,9 +1,15 @@
 package com.fersaiyan.cyanbridge.devices
 
+import android.os.ParcelUuid
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class DeviceClassifierTest {
 
     @Test
@@ -24,6 +30,19 @@ class DeviceClassifierTest {
     fun meizuMyvu_detectedByName() {
         assertEquals(DeviceClass.MEIZU_MYVU, DeviceClassifier.guessDeviceClass("MYVU Star Air"))
         assertEquals(DeviceClass.MEIZU_MYVU, DeviceClassifier.guessDeviceClass("myvu_xga010c"))
+    }
+
+    @Test
+    fun meizuMyvu_detectedByAdvertisedOrGattServiceWithoutName() {
+        listOf(
+            "00000bd3-0000-1000-8000-00805f9b34fb",
+            "00000bd1-0000-1000-8000-00805f9b34fb",
+        ).forEach { uuid ->
+            assertEquals(
+                DeviceClass.MEIZU_MYVU,
+                DeviceClassifier.guessDeviceClass(null, listOf(ParcelUuid.fromString(uuid))),
+            )
+        }
     }
 
     @Test

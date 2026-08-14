@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.devices.meizumyvu
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.fersaiyan.cyanbridge.bridge.core.BridgeError
 import com.fersaiyan.cyanbridge.bridge.core.DeviceInfo
@@ -20,6 +21,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+data class MeizuMyvuFailure(
+    val stage: String,
+    val reason: String,
+)
+
 /**
  * CyanBridge facade around the hardware-verified MYVU StarryNet client.
  *
@@ -34,6 +40,7 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
         private const val ADAPTER_ID = "meizu_myvu"
         private const val MAX_PROMPTER_TEXT = 8_000
         private const val MAX_TITLE_LENGTH = 80
+        private const val RELAY_FAILURE_PROMPT_DELAY_MS = 90_000L
         private val MAC_ADDRESS_REGEX = Regex("(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}")
 
         @Volatile private var instance: MeizuMyvuManager? = null
@@ -49,21 +56,45 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
     private val adapter = MyvuDisplayAdapter(this)
     private val _state = MutableStateFlow(MeizuMyvuUiState())
     val state: StateFlow<MeizuMyvuUiState> = _state.asStateFlow()
+    private val _failurePrompt = MutableStateFlow<MeizuMyvuFailure?>(null)
+    val failurePrompt: StateFlow<MeizuMyvuFailure?> = _failurePrompt.asStateFlow()
     private val connectionRequestLock = Any()
-    private var autoSearchFallbackPending = false
+    @Volatile
+    private var failureReportedForCycle = false
+    @Volatile
+    private var lastFailureElapsedMs = 0L
+    @Volatile
+    private var relayUnavailableSinceMs = 0L
+    private val relayFailureTimeout = Runnable {
+        if (connection.state() != ConnectionState.READY || connection.isAppRelayReady) return@Runnable
+        reportFailureOnce(
+            MeizuMyvuFailure(
+                stage = "APP_RELAY",
+                reason = "BLE connected, but the RFCOMM app relay did not become ready within 90 seconds. " +
+                    "Force-stop the official MYVU app and toggle Bluetooth off and on if the relay remains stuck.",
+            ),
+        )
+    }
 
     init {
         GlassesBridge.registerAdapter(adapter)
     }
 
-    fun connect(macAddress: String, requestContext: Context = appContext) {
-        // Start immediately while the caller is foregrounded. The service then
-        // adopts the same singleton transport and keeps it alive off-screen.
-        connectTransport(macAddress)
-        MeizuMyvuConnectionService.start(requestContext, macAddress)
+    fun connect(
+        macAddress: String,
+        requestContext: Context = appContext,
+        userInitiated: Boolean = false,
+    ) {
+        if (userInitiated) {
+            failureReportedForCycle = false
+            _failurePrompt.value = null
+            cancelRelayFailureTimeout()
+        }
+        Log.i(TAG, "Requesting MYVU connection through foreground service")
+        MeizuMyvuConnectionService.start(requestContext, macAddress, forceRestart = userInitiated)
     }
 
-    internal fun connectTransport(macAddress: String) {
+    internal fun connectTransport(macAddress: String, forceRestart: Boolean = false) {
         val address = macAddress.trim()
         if (address.isBlank()) {
             _state.value = _state.value.copy(lastError = "No MYVU Bluetooth address was selected")
@@ -71,13 +102,16 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
         }
         synchronized(connectionRequestLock) {
             val currentState = connection.state()
-            if (currentState != ConnectionState.IDLE && currentState != ConnectionState.FAILED) {
+            if (forceRestart && currentState != ConnectionState.IDLE) {
+                Log.i(TAG, "Restarting the upstream MYVU connection at the user's request")
+                connection.stop()
+            } else if (!shouldRequestConnection()) {
                 Log.d(TAG, "MYVU connect ignored: already $currentState")
                 return
             }
             GlassesBridge.setActiveAdapter(ADAPTER_ID)
-            autoSearchFallbackPending = true
             _state.value = _state.value.copy(lastError = null, selectedAddress = address)
+            Log.i(TAG, "Starting upstream MYVU connection from state=$currentState")
             connection.start(address)
         }
     }
@@ -89,7 +123,9 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
 
     internal fun stopTransport() {
         synchronized(connectionRequestLock) {
-            autoSearchFallbackPending = false
+            failureReportedForCycle = false
+            _failurePrompt.value = null
+            cancelRelayFailureTimeout()
             connection.stop()
         }
         _state.value = _state.value.copy(connectionLabel = "Disconnected", lastError = null)
@@ -97,8 +133,13 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
 
     fun diagnosticsSnapshot(): String = buildString {
         appendLine("State: ${connection.state()}")
+        appendLine("App relay ready: ${_state.value.relayReady}")
         appendLine("Selected address: ${redactMacAddresses(_state.value.selectedAddress ?: "none")}")
         appendLine("SPP UUID: ${connection.sppUuid() ?: "not received"}")
+        _failurePrompt.value?.let { failure ->
+            appendLine("Failure stage: ${failure.stage}")
+            appendLine("Failure reason: ${failure.reason}")
+        }
         appendLine("Transport history:")
         LogBus.history().takeLast(150).forEach { line ->
             val safeLine = when {
@@ -116,7 +157,21 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
         "XX:XX:XX:XX:${parts[4]}:${parts[5]}"
     }
 
-    fun isReady(): Boolean = connection.state() == ConnectionState.READY
+    fun isReady(): Boolean = MeizuMyvuConnectionPolicy.isFeatureReady(
+        connection.state(),
+        _state.value.relayReady,
+    )
+
+    fun shouldRequestConnection(nowElapsedMs: Long = SystemClock.elapsedRealtime()): Boolean =
+        MeizuMyvuConnectionPolicy.shouldRequestConnection(
+            state = connection.state(),
+            lastFailureElapsedMs = lastFailureElapsedMs,
+            nowElapsedMs = nowElapsedMs,
+        )
+
+    fun consumeFailurePrompt() {
+        _failurePrompt.value = null
+    }
 
     fun sendTestNotification() {
         if (!requireReady("send a notification")) return
@@ -153,22 +208,25 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
 
     override fun onStateChanged(connectionState: ConnectionState) {
         val info = connection.glassesInfo()
+        val previousState = _state.value.protocolState
         val failureReason = if (connectionState == ConnectionState.FAILED) {
             LogBus.history().asReversed()
                 .firstOrNull { it.contains("!!") }
                 ?.substringAfter("!!")
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
+                ?.let(::redactMacAddresses)
         } else {
             null
         }
+        val relayReady = connectionState == ConnectionState.READY && connection.isAppRelayReady
         val label = when (connectionState) {
             ConnectionState.IDLE -> "Disconnected"
             ConnectionState.CONNECTING -> "Connecting to MYVU over BLE"
             ConnectionState.BONDING -> "Preparing MYVU Bluetooth bond"
             ConnectionState.PAIRING -> "Exchanging MYVU encryption keys"
             ConnectionState.SESSION -> "Starting MYVU display session"
-            ConnectionState.READY -> "MYVU connected"
+            ConnectionState.READY -> if (relayReady) "MYVU connected" else "BLE connected - starting MYVU app relay"
             ConnectionState.FAILED -> "MYVU connection failed"
         }
         _state.value = MeizuMyvuUiState(
@@ -178,22 +236,69 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
             deviceName = info?.name?.takeIf { it.isNotBlank() },
             batteryPercent = info?.battery,
             lastError = if (connectionState == ConnectionState.FAILED) failureReason ?: label else null,
+            relayReady = relayReady,
         )
         adapter.updateBridgeState(_state.value)
+        Log.i(
+            TAG,
+            "MYVU state $previousState -> ${connectionState.name}" +
+                if (failureReason != null) ": $failureReason" else "",
+        )
         if (connectionState == ConnectionState.READY) {
-            synchronized(connectionRequestLock) {
-                autoSearchFallbackPending = false
-            }
-            GlassesBridge.setActiveAdapter(ADAPTER_ID)
+            if (relayReady) updateRelayReadiness(true) else scheduleRelayFailureTimeout()
         } else if (connectionState == ConnectionState.FAILED) {
-            synchronized(connectionRequestLock) {
-                if (autoSearchFallbackPending) {
-                    autoSearchFallbackPending = false
-                    Log.w(TAG, "Direct MYVU connection failed; retrying with upstream auto-search: ${failureReason ?: "unknown reason"}")
-                    connection.startAutoSearch()
-                }
-            }
+            lastFailureElapsedMs = SystemClock.elapsedRealtime()
+            cancelRelayFailureTimeout()
+            val failure = MeizuMyvuFailure(
+                stage = previousState,
+                reason = failureReason ?: "The MYVU connection ended without a detailed protocol error.",
+            )
+            Log.w(TAG, "MYVU connection failed at ${failure.stage}: ${failure.reason}")
+            reportFailureOnce(failure)
+        } else {
+            cancelRelayFailureTimeout()
         }
+    }
+
+    override fun onRelayStateChanged(ready: Boolean) {
+        updateRelayReadiness(ready)
+    }
+
+    private fun updateRelayReadiness(ready: Boolean) {
+        if (connection.state() != ConnectionState.READY) return
+        val current = _state.value
+        val label = if (ready) "MYVU connected" else "BLE connected - reconnecting MYVU app relay"
+        if (current.relayReady != ready || current.connectionLabel != label) {
+            _state.value = current.copy(connectionLabel = label, relayReady = ready)
+            adapter.updateBridgeState(_state.value)
+            Log.i(TAG, "MYVU app relay ready=$ready")
+        }
+        if (ready) {
+            cancelRelayFailureTimeout()
+            failureReportedForCycle = false
+            _failurePrompt.value = null
+            GlassesBridge.setActiveAdapter(ADAPTER_ID)
+        } else {
+            scheduleRelayFailureTimeout()
+        }
+    }
+
+    private fun scheduleRelayFailureTimeout() {
+        if (relayUnavailableSinceMs != 0L) return
+        relayUnavailableSinceMs = SystemClock.elapsedRealtime()
+        connection.connHandler().removeCallbacks(relayFailureTimeout)
+        connection.connHandler().postDelayed(relayFailureTimeout, RELAY_FAILURE_PROMPT_DELAY_MS)
+    }
+
+    private fun cancelRelayFailureTimeout() {
+        relayUnavailableSinceMs = 0L
+        connection.connHandler().removeCallbacks(relayFailureTimeout)
+    }
+
+    private fun reportFailureOnce(failure: MeizuMyvuFailure) {
+        if (failureReportedForCycle) return
+        failureReportedForCycle = true
+        _failurePrompt.value = failure
     }
 
     private class MyvuDisplayAdapter(private val manager: MeizuMyvuManager) : GlassesDeviceAdapter {
@@ -266,7 +371,11 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
 
         fun updateBridgeState(ui: MeizuMyvuUiState) {
             _bridgeState.value = when (ui.protocolState) {
-                ConnectionState.READY.name -> GlassesBridgeState.Connected
+                ConnectionState.READY.name -> if (ui.relayReady) {
+                    GlassesBridgeState.Connected
+                } else {
+                    GlassesBridgeState.Connecting
+                }
                 ConnectionState.FAILED.name -> GlassesBridgeState.Error(ui.lastError ?: "MYVU connection failed")
                 ConnectionState.IDLE.name -> GlassesBridgeState.Disconnected
                 else -> GlassesBridgeState.Connecting
@@ -281,6 +390,7 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
         val deviceName: String? = null,
         val batteryPercent: Int? = null,
         val lastError: String? = null,
+        val relayReady: Boolean = false,
     )
 
 }

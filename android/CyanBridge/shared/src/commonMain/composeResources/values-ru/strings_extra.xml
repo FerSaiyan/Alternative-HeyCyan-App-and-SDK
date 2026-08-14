@@ -449,7 +449,7 @@
     <string name="dashboard_meizu_title">Meizu MYVU / Star Air</string>
     <string name="dashboard_protocol">Протокол: %1$s</string>
     <string name="dashboard_device">Устройство: %1$s</string>
-    <string name="dashboard_meizu_description">MYVU использует собственный обмен ключами BLE и ретранслятор RFCOMM. Отключите официальное приложение MYVU на время подключения.</string>
+    <string name="dashboard_meizu_description">MYVU использует собственный обмен ключами BLE и ретранслятор RFCOMM. Сначала выполните сопряжение в настройках Bluetooth Android, затем принудительно остановите официальное приложение MYVU на время использования CyanBridge.</string>
     <string name="dashboard_connect">Подключить</string>
     <string name="dashboard_test_notification">Проверить уведомление</string>
     <string name="dashboard_show_text">Показать текст</string>

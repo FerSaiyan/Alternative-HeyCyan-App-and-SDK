@@ -463,7 +463,7 @@
     <string name="dashboard_meizu_title">Meizu MYVU / Star Air</string>
     <string name="dashboard_protocol">Protokoll: %1$s</string>
     <string name="dashboard_device">Gerät: %1$s</string>
-    <string name="dashboard_meizu_description">MYVU verwendet eigenen BLE-Schlüsselaustausch und ein RFCOMM-Relay. Trennen Sie die offizielle MYVU-App während der Verbindung.</string>
+    <string name="dashboard_meizu_description">MYVU verwendet eigenen BLE-Schlüsselaustausch und ein RFCOMM-Relay. Koppeln Sie es zuerst in den Android-Bluetooth-Einstellungen und erzwingen Sie dann das Beenden der offiziellen MYVU-App, solange Sie CyanBridge verwenden.</string>
     <string name="dashboard_connect">Verbinden</string>
     <string name="dashboard_test_notification">Benachrichtigung testen</string>
     <string name="dashboard_show_text">Text anzeigen</string>

@@ -220,14 +220,20 @@ object DebugLogSupport {
     }
 
     fun collectLogcat(): String {
-        return try {
+        val collected = try {
             val filter = LOG_TAGS.joinToString(" ") { "$it:*" }
             val process = Runtime.getRuntime().exec("logcat -d -t 1200 -s $filter")
             process.inputStream.bufferedReader().use { it.readText() }.take(MAX_LOGCAT_CHARS)
         } catch (e: Exception) {
             "Failed to collect logcat: ${e.message}"
         }
+        return normalizeCollectedLogs(collected)
     }
+
+    internal fun normalizeCollectedLogs(logs: String): String =
+        logs.trim().ifEmpty {
+            "No matching Android logcat entries were available. See Device Info and Extra Info for structured diagnostics."
+        }
 
     fun buildDeviceInfo(
         context: Context,

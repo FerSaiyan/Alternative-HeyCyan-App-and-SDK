@@ -24,8 +24,13 @@ class MeizuMyvuConnectionService : Service() {
             Log.w(TAG, "Starting MYVU connection service without notification permission")
         }
         startConnectedDeviceForeground()
-        intent?.getStringExtra(EXTRA_MAC)?.let { address ->
-            MeizuMyvuManager.getInstance(this).connectTransport(address)
+        val address = intent?.getStringExtra(EXTRA_MAC)
+        val forceRestart = intent?.getBooleanExtra(EXTRA_FORCE_RESTART, false) == true
+        if (address.isNullOrBlank()) {
+            Log.w(TAG, "Ignoring MYVU service start without a Bluetooth address")
+        } else {
+            Log.i(TAG, "Foreground service starting MYVU transport (startId=$startId)")
+            MeizuMyvuManager.getInstance(this).connectTransport(address, forceRestart)
         }
         return START_REDELIVER_INTENT
     }
@@ -33,6 +38,7 @@ class MeizuMyvuConnectionService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        Log.i(TAG, "MYVU foreground service stopping")
         MeizuMyvuManager.getInstance(this).stopTransport()
         super.onDestroy()
     }
@@ -73,23 +79,28 @@ class MeizuMyvuConnectionService : Service() {
         private const val TAG = "MeizuMyvuService"
         private const val ACTION_CONNECT = "com.fersaiyan.cyanbridge.meizu.CONNECT"
         private const val EXTRA_MAC = "mac"
+        private const val EXTRA_FORCE_RESTART = "force_restart"
         private const val CHANNEL_ID = "myvu_connection"
         private const val NOTIFICATION_ID = 7101
 
         fun intent(context: Context): Intent = Intent(context, MeizuMyvuConnectionService::class.java)
 
-        fun start(context: Context, macAddress: String) {
+        fun start(context: Context, macAddress: String, forceRestart: Boolean = false) {
             if (!hasNotificationPermission(context) && context is FragmentActivity) {
                 ensureNotificationPermission(context, "MYVU connection") { }
             }
-            val serviceIntent = intent(context).setAction(ACTION_CONNECT).putExtra(EXTRA_MAC, macAddress)
+            val serviceIntent = intent(context)
+                .setAction(ACTION_CONNECT)
+                .putExtra(EXTRA_MAC, macAddress)
+                .putExtra(EXTRA_FORCE_RESTART, forceRestart)
             runCatching {
                 ContextCompat.startForegroundService(context, serviceIntent)
             }.onFailure { error ->
                 // Android can reject a foreground-service start from a background
                 // receiver. The active app process can still establish the link.
                 Log.w(TAG, "Foreground connection service was blocked", error)
-                MeizuMyvuManager.getInstance(context).connectTransport(macAddress)
+                Log.i(TAG, "Falling back to an in-process MYVU transport start")
+                MeizuMyvuManager.getInstance(context).connectTransport(macAddress, forceRestart)
             }
         }
     }

@@ -103,6 +103,7 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaSync
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaType
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueWifiTransport
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLocalHotspot
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaSync
@@ -593,6 +594,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var pendingMetaCameraAction: (() -> Unit)? = null
     private var meizuMyvuManager: MeizuMyvuManager? = null
     private var meizuMyvuUiJob: Job? = null
+    private var meizuMyvuFailureJob: Job? = null
+    private var pendingMeizuMyvuFailure: MeizuMyvuFailure? = null
     private var eyevueManager: EyevueManager? = null
     private var eyevueUiJob: Job? = null
     private var eyevueWakeWordJob: Job? = null
@@ -873,6 +876,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onResume() {
         super.onResume()
+        if (isMeizuMyvuSelected()) getOrCreateMeizuMyvuManager()
+        showPendingMeizuMyvuFailureIfNeeded()
         handleExternalImageAutomationStatus()
         if (
             com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs.isBridgeConfigured(this) &&
@@ -1133,13 +1138,56 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             meizuMyvuManager = manager
             if (meizuMyvuUiJob == null) {
                 meizuMyvuUiJob = lifecycleScope.launch {
-                    manager.state.collect {
+                    manager.state.collect { state ->
+                        if (state.relayReady) {
+                            pendingMeizuMyvuFailure = null
+                        }
                         updateMeizuMyvuUiState()
                         if (isMeizuMyvuSelected()) updateConnectionStatus(false)
                     }
                 }
             }
+            if (meizuMyvuFailureJob == null) {
+                meizuMyvuFailureJob = lifecycleScope.launch {
+                    manager.failurePrompt.collect { failure ->
+                        if (failure == null) return@collect
+                        pendingMeizuMyvuFailure = failure
+                        showPendingMeizuMyvuFailureIfNeeded()
+                    }
+                }
+            }
         }
+
+    private fun showPendingMeizuMyvuFailureIfNeeded() {
+        val failure = pendingMeizuMyvuFailure ?: meizuMyvuManager?.failurePrompt?.value ?: return
+        if (!isMeizuMyvuSelected()) {
+            pendingMeizuMyvuFailure = null
+            meizuMyvuManager?.consumeFailurePrompt()
+            return
+        }
+        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
+
+        val manager = getOrCreateMeizuMyvuManager()
+        pendingMeizuMyvuFailure = null
+        manager.consumeFailurePrompt()
+        DebugLogSupport.showSupportOptionsDialog(
+            activity = this,
+            title = "MYVU connection failed",
+            issueType = "Meizu MYVU connection failure",
+            description = buildString {
+                appendLine("CyanBridge could not finish the MYVU connection during ${failure.stage}.")
+                appendLine()
+                appendLine("Reason: ${failure.reason}")
+                appendLine()
+                append("Force-stop the official MYVU app, confirm the glasses are paired in Android Bluetooth settings, and toggle Bluetooth off and on if RFCOMM remains stuck. You can send the redacted diagnostics below to CyanBridge support.")
+            },
+            extraInfo = linkedMapOf(
+                "myvu_failure_stage" to failure.stage,
+                "myvu_failure_reason" to failure.reason,
+            ),
+            dismissButtonLabel = "Later",
+        )
+    }
 
     private fun getOrCreateEyevueManager(): EyevueManager =
         eyevueManager ?: EyevueManager.getInstance(this).also { manager ->
@@ -1564,7 +1612,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     } ?: startKtxActivity<DeviceBindActivity>()
                 } else if (isMeizuMyvuSelected()) {
                     DeviceProfileStore.loadLastSelected(this)?.macAddress?.let {
-                        getOrCreateMeizuMyvuManager().connect(it, this)
+                        getOrCreateMeizuMyvuManager().connect(it, this, userInitiated = true)
                     } ?: startKtxActivity<DeviceBindActivity>()
                 } else if (isMetaRaybanSelected()) {
                     startActivity(Intent(this, MetaPairingActivity::class.java))
@@ -1775,7 +1823,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             GlassesDashboardAction.MetaSendDiagnostics -> showMetaDiagnostics()
             GlassesDashboardAction.MeizuConnect -> {
                 DeviceProfileStore.loadLastSelected(this)?.macAddress?.let {
-                    getOrCreateMeizuMyvuManager().connect(it, this)
+                    getOrCreateMeizuMyvuManager().connect(it, this, userInitiated = true)
                 } ?: Toast.makeText(this, "Select MYVU glasses from Scan first", Toast.LENGTH_LONG).show()
             }
             GlassesDashboardAction.MeizuDisconnect -> getOrCreateMeizuMyvuManager().disconnect()
@@ -6678,7 +6726,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun updateMeizuMyvuUiState() {
         val manager = meizuMyvuManager ?: return
         val myvu = manager.state.value
-        val connected = myvu.protocolState == com.myvu.client.service.ConnectionState.READY.name
+        val connected = myvu.relayReady
         updateDashboardState { state ->
             state.copy(
                 connectionLabel = myvu.connectionLabel,
