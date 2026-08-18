@@ -17,9 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
-import com.fersaiyan.cyanbridge.media.autocapture.AutoLoopVisualNoteGenerator
+import com.fersaiyan.cyanbridge.devices.DeviceCapabilityHelper
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import com.fersaiyan.cyanbridge.ui.ensureNotificationPermission
@@ -35,11 +33,12 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.fersaiyan.cyanbridge.devices.DeviceCapabilityHelper
-
 /**
- * Periodic visual-diary host. HeyCyan uses its existing thumbnail path; Meta
- * uses the shared DAT one-shot camera path before entering the same Gemma pipeline.
+ * Visual Diary lifecycle/scheduler host.
+ *
+ * The service owns enable/disable state, foreground lifecycle and interval scheduling.
+ * One-shot smart-glasses capture and vision-pipeline handoff live in
+ * [VisualDiaryCaptureCoordinator], entirely inside CyanBridge rather than Tasker.
  */
 class VisualDiaryService : Service() {
 
@@ -85,27 +84,23 @@ class VisualDiaryService : Service() {
         }
 
         loopJob = scope.launch {
-            if (DeviceProfileStore.isMetaSelected(this@VisualDiaryService)) {
-                val manager = MetaRaybanManager.getInstance(this@VisualDiaryService)
-                if (!manager.isInitialized.value) manager.initialize()
-                if (!manager.awaitCameraReady()) {
-                    val detail = manager.lastError.value
-                        ?: "Register and connect a Meta camera before using Visual Diary"
-                    Log.e(
-                        TAG,
-                        "Meta Visual Diary cannot start: $detail\n${manager.diagnosticsSnapshot()}",
-                    )
-                    VisualDiaryPreferences.setLastError(
-                        this@VisualDiaryService,
-                        "Meta camera unavailable: $detail",
-                    )
-                    stopLoop()
-                    return@launch
-                }
+            val ready = runCatching {
+                VisualDiaryCaptureCoordinator.prepare(this@VisualDiaryService)
+            }.getOrElse {
+                VisualDiaryCaptureCoordinator.Result(
+                    success = false,
+                    detail = "prepare_exception:${it.javaClass.simpleName}:${it.message.orEmpty()}",
+                )
             }
-            VisualDiaryPreferences.clearLastError(this@VisualDiaryService)
+            if (!ready.success) {
+                Log.e(TAG, "Visual Diary cannot start: ${ready.detail}")
+                updateNotification("Visual Diary unavailable: ${ready.detail.take(120)}")
+                stopLoop()
+                return@launch
+            }
+
             while (isActive && VisualDiaryPreferences.isEnabled(this@VisualDiaryService)) {
-                captureNow()
+                captureNowInternal()
                 val delayMs = VisualDiaryPreferences.getIntervalMinutes(this@VisualDiaryService)
                     .toLong()
                     .coerceAtLeast(1L) * 60_000L
@@ -121,53 +116,35 @@ class VisualDiaryService : Service() {
             return
         }
         scope.launch {
-            captureNow()
+            captureNowInternal()
             delay(CAPTURE_KEEP_ALIVE_MS)
             if (!RUNNING.get()) stopSelf()
         }
     }
 
-    private suspend fun captureNow() {
+    private suspend fun captureNowInternal() {
         val index = captureIndex.incrementAndGet()
         updateNotification("Capturing scene note #$index")
 
-        if (DeviceProfileStore.isMetaSelected(this)) {
-            val manager = MetaRaybanManager.getInstance(this)
-            if (!manager.isInitialized.value) manager.initialize()
-            val file = runCatching {
-                val photo = manager.capturePhotoOnce()
-                manager.savePhotoForProcessing(photo, "META_VISUAL_NOTE_$index")
-            }.onFailure {
-                val detail = manager.lastError.value ?: it.message ?: "camera unavailable"
-                Log.e(TAG, "Meta DAT photo capture failed: $detail\n${manager.diagnosticsSnapshot()}", it)
-                VisualDiaryPreferences.setLastError(this, "Meta capture failed: $detail")
-                updateNotification("Meta capture failed: ${detail.take(120)}")
-            }
-                .getOrNull()
-            if (file == null) {
-                if (manager.lastError.value.isNullOrBlank()) {
-                    VisualDiaryPreferences.setLastError(this, "Meta camera unavailable")
-                    updateNotification("Meta camera unavailable")
-                }
-                return
-            }
-
-            AutoLoopVisualNoteGenerator.enqueueCapturedPhoto(
+        val result = runCatching {
+            VisualDiaryCaptureCoordinator.captureOnce(
                 context = this,
-                loopIndex = index,
-                image = file,
-                promptOverride = VisualDiaryPreferences.getCustomPrompt(this),
+                captureIndex = index,
             )
-            VisualDiaryPreferences.clearLastError(this)
-            return
+        }.getOrElse {
+            VisualDiaryCaptureCoordinator.Result(
+                success = false,
+                detail = "capture_exception:${it.javaClass.simpleName}:${it.message.orEmpty()}",
+            )
         }
 
-        AutoLoopVisualNoteGenerator.enqueueStandalone(
-            context = this,
-            loopIndex = index,
-            promptOverride = VisualDiaryPreferences.getCustomPrompt(this),
-        )
-        VisualDiaryPreferences.clearLastError(this)
+        if (result.success) {
+            Log.i(TAG, "Visual Diary capture queued: ${result.detail}")
+            updateNotification("Visual Diary scene #$index queued")
+        } else {
+            Log.w(TAG, "Visual Diary capture failed: ${result.detail}")
+            updateNotification("Visual Diary capture failed: ${result.detail.take(120)}")
+        }
     }
 
     private fun stopLoop(clearPreference: Boolean = true) {
