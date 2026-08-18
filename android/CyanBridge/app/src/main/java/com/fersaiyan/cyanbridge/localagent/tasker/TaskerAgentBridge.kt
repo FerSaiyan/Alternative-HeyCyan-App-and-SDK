@@ -15,9 +15,9 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Small request/response bridge for Tasker. CyanBridge owns planning and policy;
- * Tasker only observes the UI and executes the requested action, then reports the
- * result. All transport failures are surfaced back to the caller for debugging.
+ * Small request/response bridge for Tasker. CyanBridge owns planning and product policy;
+ * Tasker observes Android UI or executes requested Android-side effects and reports the
+ * concrete result. All transport failures are surfaced back to the caller for debugging.
  */
 object TaskerAgentBridge {
     data class Response(
@@ -43,6 +43,16 @@ object TaskerAgentBridge {
             timeoutMs = timeoutMs,
         )
 
+    suspend fun requestAutoDiaryObservation(
+        context: Context,
+        timeoutMs: Long = 8_000L,
+    ): Response = request(
+        context = context,
+        action = TaskerAgentContract.ACTION_AUTO_DIARY_OBSERVE,
+        payload = "{\"contract_version\":${TaskerAgentContract.VERSION},\"source\":\"auto_diary\"}",
+        timeoutMs = timeoutMs,
+    )
+
     suspend fun executeAction(
         context: Context,
         actionPayload: String,
@@ -53,6 +63,18 @@ object TaskerAgentBridge {
         payload = actionPayload,
         timeoutMs = timeoutMs,
     )
+
+    fun isTaskerInstalled(context: Context): Boolean = packageInstalled(context, TASKER_PACKAGE)
+
+    fun isAutoInputInstalled(context: Context): Boolean = packageInstalled(context, AUTOINPUT_PACKAGE)
+
+    fun isTaskerUiObserverAvailable(context: Context): Boolean =
+        isTaskerInstalled(context) && isAutoInputInstalled(context)
+
+    private fun packageInstalled(context: Context, packageName: String): Boolean = runCatching {
+        @Suppress("DEPRECATION")
+        context.packageManager.getPackageInfo(packageName, 0)
+    }.isSuccess
 
     private suspend fun request(
         context: Context,
@@ -67,7 +89,7 @@ object TaskerAgentBridge {
         pending[requestId] = Pending(callbackToken, deferred)
 
         val intent = Intent(action).apply {
-            setPackage("net.dinglisch.android.taskerm")
+            setPackage(TASKER_PACKAGE)
             putExtra(TaskerAgentContract.EXTRA_VERSION, TaskerAgentContract.VERSION)
             putExtra(TaskerAgentContract.EXTRA_REQUEST_ID, requestId)
             putExtra(TaskerAgentContract.EXTRA_CALLBACK_TOKEN, callbackToken)
@@ -155,4 +177,7 @@ object TaskerAgentBridge {
         SecureRandom().nextBytes(bytes)
         return bytes.joinToString("") { "%02x".format(it) }
     }
+
+    private const val TASKER_PACKAGE = "net.dinglisch.android.taskerm"
+    private const val AUTOINPUT_PACKAGE = "com.joaomgcd.autoinput"
 }
