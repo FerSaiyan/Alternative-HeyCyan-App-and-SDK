@@ -9,15 +9,16 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Versioned IPC contract between CyanBridge (brain) and a user-owned Tasker workflow
- * (screen observer/executor). Tasker does not classify or cancel actions; it reports
- * execution results back to CyanBridge so policy and debugging remain centralized here.
+ * Versioned IPC contract between CyanBridge and user-owned Tasker workflows.
+ * CyanBridge owns planning, product policy, feature state and storage; Tasker observes
+ * Android UI or executes requested Android-side effects and reports concrete results.
  */
 object TaskerAgentContract {
     const val VERSION = 1
 
     const val ACTION_OBSERVE = "com.fersaiyan.cyanbridge.TASKER_AGENT_OBSERVE"
     const val ACTION_EXECUTE = "com.fersaiyan.cyanbridge.TASKER_AGENT_EXECUTE"
+    const val ACTION_AUTO_DIARY_OBSERVE = "com.fersaiyan.cyanbridge.TASKER_AUTO_DIARY_OBSERVE"
     const val ACTION_RESPONSE = "com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE"
 
     const val EXTRA_VERSION = "contract_version"
