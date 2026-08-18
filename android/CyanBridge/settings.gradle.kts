@@ -30,8 +30,9 @@ dependencyResolutionManagement {
             localProps.load(localPropsFile.inputStream())
         }
         val githubToken = System.getenv("META_GITHUB_TOKEN")
-            ?: System.getenv("GITHUB_TOKEN")
-            ?: localProps.getProperty("github_token")
+            ?.takeIf { it.isNotBlank() }
+            ?: System.getenv("GITHUB_TOKEN")?.takeIf { it.isNotBlank() }
+            ?: localProps.getProperty("github_token")?.takeIf { it.isNotBlank() }
         if (!githubToken.isNullOrBlank()) {
             maven {
                 url = uri("https://maven.pkg.github.com/facebook/meta-wearables-dat-android")
