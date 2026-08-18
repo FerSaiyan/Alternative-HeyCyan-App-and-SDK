@@ -1,0 +1,126 @@
+package com.fersaiyan.cyanbridge.localagent.tasker
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
+import java.security.SecureRandom
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * Small request/response bridge for Tasker. CyanBridge owns planning and policy;
+ * Tasker only observes the UI and executes the requested action, then reports the
+ * result. All transport failures are surfaced back to the caller for debugging.
+ */
+object TaskerAgentBridge {
+    data class Response(
+        val success: Boolean,
+        val payload: String?,
+        val error: String?,
+    )
+
+    private data class Pending(
+        val token: String,
+        val deferred: CompletableDeferred<Response>,
+    )
+
+    private val pending = ConcurrentHashMap<String, Pending>()
+    private val registrationMutex = Mutex()
+    @Volatile private var registered = false
+
+    suspend fun requestObservation(context: Context, timeoutMs: Long = 8_000L): Response =
+        request(
+            context = context,
+            action = TaskerAgentContract.ACTION_OBSERVE,
+            payload = "{\"contract_version\":${TaskerAgentContract.VERSION}}",
+            timeoutMs = timeoutMs,
+        )
+
+    suspend fun executeAction(
+        context: Context,
+        actionPayload: String,
+        timeoutMs: Long = 12_000L,
+    ): Response = request(
+        context = context,
+        action = TaskerAgentContract.ACTION_EXECUTE,
+        payload = actionPayload,
+        timeoutMs = timeoutMs,
+    )
+
+    private suspend fun request(
+        context: Context,
+        action: String,
+        payload: String,
+        timeoutMs: Long,
+    ): Response {
+        ensureReceiver(context.applicationContext)
+        val requestId = UUID.randomUUID().toString()
+        val callbackToken = randomToken()
+        val deferred = CompletableDeferred<Response>()
+        pending[requestId] = Pending(callbackToken, deferred)
+
+        val intent = Intent(action).apply {
+            setPackage("net.dinglisch.android.taskerm")
+            putExtra(TaskerAgentContract.EXTRA_VERSION, TaskerAgentContract.VERSION)
+            putExtra(TaskerAgentContract.EXTRA_REQUEST_ID, requestId)
+            putExtra(TaskerAgentContract.EXTRA_CALLBACK_TOKEN, callbackToken)
+            putExtra(TaskerAgentContract.EXTRA_PAYLOAD, payload)
+        }
+        context.sendBroadcast(intent)
+
+        val result = withTimeoutOrNull(timeoutMs) { deferred.await() }
+        pending.remove(requestId)
+        return result ?: Response(
+            success = false,
+            payload = null,
+            error = "tasker_timeout:$action",
+        )
+    }
+
+    private suspend fun ensureReceiver(context: Context) {
+        if (registered) return
+        registrationMutex.withLock {
+            if (registered) return
+            val filter = IntentFilter(TaskerAgentContract.ACTION_RESPONSE)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                context.registerReceiver(receiver, filter)
+            }
+            registered = true
+        }
+    }
+
+    private val receiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != TaskerAgentContract.ACTION_RESPONSE) return
+            if (intent.getIntExtra(TaskerAgentContract.EXTRA_VERSION, -1) != TaskerAgentContract.VERSION) return
+
+            val requestId = intent.getStringExtra(TaskerAgentContract.EXTRA_REQUEST_ID) ?: return
+            val expected = pending[requestId] ?: return
+            val token = intent.getStringExtra(TaskerAgentContract.EXTRA_CALLBACK_TOKEN) ?: return
+            if (token != expected.token) return
+
+            expected.deferred.complete(
+                Response(
+                    success = intent.getBooleanExtra(TaskerAgentContract.EXTRA_SUCCESS, false),
+                    payload = intent.getStringExtra(TaskerAgentContract.EXTRA_PAYLOAD),
+                    error = intent.getStringExtra(TaskerAgentContract.EXTRA_ERROR),
+                )
+            )
+        }
+    }
+
+    private fun randomToken(): String {
+        val bytes = ByteArray(24)
+        SecureRandom().nextBytes(bytes)
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+}
