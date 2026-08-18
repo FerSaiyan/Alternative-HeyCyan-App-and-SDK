@@ -1,0 +1,118 @@
+<TaskerData sr="" dvi="1" tv="6.5.11">
+    <Profile sr="prof301" ve="2">
+        <id>301</id>
+        <mid0>311</mid0>
+        <nme>CyanBridge AutoDiary Observe</nme>
+        <Share sr="Share">
+            <b>false</b>
+            <d>Receives correlated AutoDiary observation requests from CyanBridge, queries the current Android UI with AutoInput, and returns raw screen context. CyanBridge owns interval, blacklist, privacy policy, storage, indexing and summaries.</d>
+            <g>CyanBridge,AutoDiary,AutoInput</g>
+            <p>true</p>
+            <t></t>
+        </Share>
+        <Event sr="con0" ve="2">
+            <code>599</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_AUTO_DIARY_OBSERVE</Str>
+            <Int sr="arg1" val="0"/>
+            <Int sr="arg2" val="0"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+        </Event>
+    </Profile>
+    <Task sr="task311">
+        <id>311</id>
+        <nme>CyanBridge AutoDiary Observe Handler</nme>
+        <pri>10</pri>
+        <Action sr="act0" ve="7">
+            <code>15355</code>
+            <Bundle sr="arg0">
+                <Vals sr="val">
+                    <com.twofortyfouram.locale.intent.extra.BLURB>Query visible Android UI for CyanBridge AutoDiary</com.twofortyfouram.locale.intent.extra.BLURB>
+                    <com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
+                    <plugininstanceid>cyanbridge-autodiary-query-v1</plugininstanceid>
+                    <plugininstanceid-type>java.lang.String</plugininstanceid-type>
+                    <plugintypeid>com.joaomgcd.autoinput.intent.IntentUIQuery</plugintypeid>
+                    <plugintypeid-type>java.lang.String</plugintypeid-type>
+                </Vals>
+            </Bundle>
+            <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str>
+            <Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigUIQuery</Str>
+            <Int sr="arg3" val="10"/>
+            <Int sr="arg4" val="1"/>
+        </Action>
+        <Action sr="act1" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">function arr(v) {
+    if (typeof v === "undefined" || v === null) return [];
+    if (Array.isArray(v)) return v;
+    return [v];
+}
+function clean(v) {
+    return String(v == null ? "" : v).trim();
+}
+var texts = (typeof aitext !== "undefined") ? arr(aitext) : [];
+var ids = (typeof aiid !== "undefined") ? arr(aiid) : [];
+var coords = [];
+if (typeof aicoordinates !== "undefined") coords = arr(aicoordinates);
+else if (typeof aicoords !== "undefined") coords = arr(aicoords);
+var count = Math.max(texts.length, ids.length, coords.length);
+var nodes = [];
+for (var i = 0; i &lt; count &amp;&amp; i &lt; 240; i++) {
+    var coord = String(coords[i] || "");
+    var match = coord.match(/(-?\d+)\s*,\s*(-?\d+)/);
+    var x = match ? parseInt(match[1], 10) : 0;
+    var y = match ? parseInt(match[2], 10) : 0;
+    nodes.push({
+        index: i,
+        depth: 0,
+        text: clean(texts[i]),
+        content_description: "",
+        hint_text: "",
+        class_name: "",
+        view_id: clean(ids[i]),
+        clickable: false,
+        editable: false,
+        scrollable: false,
+        password: false,
+        checkable: false,
+        checked: false,
+        focused: false,
+        bounds: {left:x, top:y, right:x, bottom:y}
+    });
+}
+var seen = {};
+var summaryParts = [];
+for (var j = 0; j &lt; texts.length &amp;&amp; summaryParts.length &lt; 400; j++) {
+    var value = clean(texts[j]);
+    if (!value || seen[value]) continue;
+    seen[value] = true;
+    summaryParts.push(value);
+}
+var pkg = (typeof aipackage !== "undefined") ? clean(aipackage) : "";
+var observation = {
+    created_at_ms: Date.now(),
+    package_name: pkg,
+    text_summary: summaryParts.join("\n").slice(0, 25000),
+    nodes: nodes
+};
+var envelope = {
+    contract_version: 1,
+    request_id: String(request_id || ""),
+    callback_token: String(callback_token || ""),
+    success: true,
+    payload: JSON.stringify(observation),
+    error: null
+};
+sendIntent(
+    "com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE",
+    "receiver",
+    "com.fersaiyan.cyanbridge",
+    undefined, undefined, undefined, undefined,
+    ["response:" + JSON.stringify(envelope)]
+);</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+    </Task>
+</TaskerData>
