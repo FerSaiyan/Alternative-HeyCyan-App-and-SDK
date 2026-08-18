@@ -1,6 +1,6 @@
 # CyanBridge Local Agent ↔ Tasker contract
 
-This branch moves Local Agent screen observation and device action execution to a user-owned Tasker/AutoInput workflow while keeping task state, planning, risk classification, approvals, recovery decisions, local-model inference, and debugging in CyanBridge.
+This branch moves Local Agent screen observation and Accessibility-dependent UI execution to a user-owned Tasker/AutoInput workflow while keeping task state, planning, risk classification, approvals, recovery decisions, local-model inference, Android-native actions, and debugging in CyanBridge.
 
 ## Transport
 
@@ -21,7 +21,7 @@ Extras:
 - `callback_token` = per-request random token; echo it unchanged
 - `payload` = JSON containing the contract version
 
-Tasker should run an AutoInput UI Query, collect the active package and useful UI nodes, then reply with `TASKER_AGENT_RESPONSE`.
+Tasker runs an AutoInput UI Query, collects the active package and useful UI nodes, then replies with `TASKER_AGENT_RESPONSE`.
 
 Observation payload:
 
@@ -57,7 +57,7 @@ Observation payload:
 }
 ```
 
-AutoInput fields can be reduced when unavailable. At minimum, prefer visible text/content description, resource ID when present, center/bounds, and whether the element can be clicked, edited, or scrolled.
+AutoInput fields can be reduced when unavailable. At minimum, prefer visible text, resource ID when present, and coordinates/bounds. The CyanBridge parser intentionally tolerates partial nodes.
 
 ### Execute request
 
@@ -67,9 +67,8 @@ Action:
 
 The same request metadata is provided. `payload` is the action JSON selected by CyanBridge.
 
-Supported action types currently serialized by the bridge:
+The Tasker profile is responsible only for UI/Accessibility primitives:
 
-- `wait`
 - `global_back`
 - `global_home`
 - `click_text`
@@ -77,23 +76,27 @@ Supported action types currently serialized by the bridge:
 - `type_text`
 - `press_enter`
 - `scroll`
-- `open_app`
-- `finish`
 - `swipe`
 - `long_press`
 - `open_notifications`
 - `open_recents`
+- `read_screen_aloud`
+
+`wait` and `finish` are handled directly by `TaskerLocalAgentService`.
+
+The following model-selected actions stay in CyanBridge because they already have Android-native implementations and do not need AutoInput:
+
+- `open_app`
 - `make_call`
 - `send_sms`
+- `send_email`
 - `set_alarm`
 - `open_contacts`
 - `toggle_wifi`
 - `toggle_bluetooth`
 - `toggle_flashlight`
-- `send_email`
-- `read_screen_aloud`
 
-Tasker is an executor, not a second policy engine. It should not independently reclassify or silently cancel an action based on risk. If execution itself fails, return the concrete failure so CyanBridge can put it into task state/debug history.
+Tasker is an executor, not a second policy engine. It must not independently reclassify or silently cancel an action based on risk. If execution itself fails, it returns the concrete failure so CyanBridge can place it into task state/debug history.
 
 ## Response
 
@@ -101,35 +104,52 @@ Action:
 
 `com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE`
 
-Extras:
+### Preferred compact form
 
-- `contract_version` = `1`
-- `request_id` = exact incoming request ID
-- `callback_token` = exact incoming callback token
-- `success` = boolean
-- `payload` = observation JSON for observe requests, or a concise execution result for execute requests
-- `error` = failure reason when `success=false`
+The importable Tasker profile sends one string extra named `response`. Its value is a JSON envelope containing all correlation/result fields:
 
-Example successful action response:
-
-```text
-success=true
-payload=clicked_text:Search
+```json
+{
+  "contract_version": 1,
+  "request_id": "exact incoming request id",
+  "callback_token": "exact incoming callback token",
+  "success": true,
+  "payload": "execution result or observation JSON",
+  "error": null
+}
 ```
 
-Example failure:
+This keeps the Tasker response simple and makes every result self-contained for debugging. CyanBridge verifies the request ID, callback token, and contract version before completing a request.
 
-```text
-success=false
-error=autoinput_element_not_found:Search
-```
+### Backwards-compatible expanded form
+
+`TaskerAgentBridge` also accepts the older separate extras while hand-written/debug profiles still use them:
+
+- `contract_version`
+- `request_id`
+- `callback_token`
+- `success`
+- `payload`
+- `error`
 
 ## Approval behavior
 
-CyanBridge continues to use `LocalAgentActionManager.classifyRisk()` and the existing pending-action UI. When an action requires approval, it is queued by CyanBridge. After approval, `PendingActionsActivity` sends that approved action through `TaskerExecutionBackend`, stores Tasker's exact result in the pending-action record, and only then resumes `TaskerLocalAgentService`.
+CyanBridge continues to use `LocalAgentActionManager.classifyRisk()` and the existing pending-action UI. When an action requires approval, it is queued by CyanBridge. After approval, `PendingActionsActivity` calls `TaskerExecutionBackend`.
+
+`TaskerExecutionBackend` first uses CyanBridge's native executor for native Android actions. Only Accessibility-dependent UI primitives are sent to Tasker. The exact result is stored in the pending-action record before the planner resumes.
 
 This intentionally keeps rejection/failure debugging centralized in CyanBridge.
 
-## Deferred work
+## Current Tasker profile status
 
-AutoDiary and Visual Diary remain on their existing paths in this branch and will be migrated separately.
+`CyanBridge_LocalAgent_Tasker.XML` is the first importable profile for contract v1.
+
+The initial profile implements observation, text/coordinate clicks, text entry through AutoInput Actions v2, long press, scrolling, global Back/Home/Recents/Notifications, and screen read-aloud. `press_enter` and arbitrary `swipe` currently return explicit adapter errors rather than silently pretending they succeeded; these two primitives should be finalized against the installed AutoInput version/device during the first on-device test.
+
+## Protocol-parity note
+
+Package installation, arbitrary intents, and generic shell execution are not currently members of `LocalAgentAction` / `LocalAgentUiControlProtocol` on the base branch. The Tasker migration therefore has not removed those action types; they need a separate explicit protocol-extension pass before the model can select them directly.
+
+## Deferred plugin migrations
+
+AutoDiary and Visual Diary remain on their existing runtime paths in this branch. Their Tasker migration is planned in `TASKER_PLUGIN_MIGRATION_PLAN.md` and should be implemented only after the Local Agent profile is exercised on-device.
