@@ -11,52 +11,31 @@ import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
 import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
 import com.fersaiyan.cyanbridge.ui.requestAccessibilityServicePermission
 
-/** Best-effort launcher for LocalAgentService via intent actions. */
+/** Best-effort launcher for the Tasker-backed Local Agent service. */
 object LocalAgentController {
-
     private const val TAG = "LocalAgentController"
 
-    data class CommandResult(
-        val ok: Boolean,
-        val userMessage: String,
-        val error: String? = null,
-    )
+    data class CommandResult(val ok: Boolean, val userMessage: String, val error: String? = null)
 
-    private const val DEFAULT_SERVICE_CLASS = "com.fersaiyan.cyanbridge.localagent.LocalAgentService"
+    private const val DEFAULT_SERVICE_CLASS = "com.fersaiyan.cyanbridge.localagent.TaskerLocalAgentService"
 
     fun start(context: Context): CommandResult = start(context, goal = null)
 
     fun start(context: Context, goal: String?): CommandResult {
         val trimmedGoal = goal?.trim().orEmpty()
-        if (trimmedGoal.isBlank()) {
-            return CommandResult(false, "No agent goal was provided.", "missing_goal")
-        }
+        if (trimmedGoal.isBlank()) return CommandResult(false, "No agent goal was provided.", "missing_goal")
         LocalAgentDeviceState.availability(context)
             .takeIf { it != LocalAgentDeviceState.Availability.READY }
-            ?.let {
-                return CommandResult(
-                    false,
-                    "Unlock and wake the phone before starting the Local Agent.",
-                    it.errorCode,
-                )
-            }
+            ?.let { return CommandResult(false, "Unlock and wake the phone before starting the Local Agent.", it.errorCode) }
+
         if (!hasNotificationPermission(context)) {
             if (context is FragmentActivity) {
                 ensureNotificationPermission(context, "Local Agent") { start(context, goal) }
-                return CommandResult(
-                    true,
-                    "Notification permission is required before the Local Agent can start.",
-                )
+                return CommandResult(true, "Notification permission is required before the Local Agent can start.")
             }
-            return CommandResult(
-                false,
-                "Notification permission is required to start the Local Agent.",
-                "missing_post_notifications",
-            )
+            return CommandResult(false, "Notification permission is required to start the Local Agent.", "missing_post_notifications")
         }
 
-        // Screen observation/execution is being migrated to Tasker. Do not require
-        // CyanBridge's Accessibility service merely to start an agent task.
         return sendServiceCommand(
             context,
             LocalAgentIntents.ACTION_START,
@@ -64,84 +43,50 @@ object LocalAgentController {
         )
     }
 
-    fun stop(context: Context): CommandResult =
-        sendServiceCommand(context, LocalAgentIntents.ACTION_STOP)
+    fun stop(context: Context): CommandResult = sendServiceCommand(context, LocalAgentIntents.ACTION_STOP)
 
     fun demo(context: Context): CommandResult {
         LocalAgentDeviceState.availability(context)
             .takeIf { it != LocalAgentDeviceState.Availability.READY }
-            ?.let {
-                return CommandResult(
-                    false,
-                    "Unlock and wake the phone before running the Local Agent demo.",
-                    it.errorCode,
-                )
-            }
+            ?.let { return CommandResult(false, "Unlock and wake the phone before running the Local Agent demo.", it.errorCode) }
         return sendServiceCommand(context, LocalAgentIntents.ACTION_DEMO)
     }
 
-    /**
-     * Standalone read-screen command still uses the legacy Accessibility observer for now.
-     * It is separate from the Tasker-backed agent loop and can be migrated later.
-     */
+    /** Standalone read-screen remains on the legacy Accessibility service until its later migration. */
     fun readCurrentScreen(context: Context): CommandResult {
         LocalAgentDeviceState.availability(context)
             .takeIf { it != LocalAgentDeviceState.Availability.READY }
-            ?.let {
-                return CommandResult(
-                    false,
-                    "Unlock and wake the phone before reading the screen aloud.",
-                    it.errorCode,
-                )
-            }
+            ?.let { return CommandResult(false, "Unlock and wake the phone before reading the screen aloud.", it.errorCode) }
         if (!hasNotificationPermission(context)) {
-            return CommandResult(
-                false,
-                "Notification permission is required to read the screen aloud.",
-                "missing_post_notifications",
-            )
+            return CommandResult(false, "Notification permission is required to read the screen aloud.", "missing_post_notifications")
         }
         if (!hasAccessibilityServicePermission(context)) {
-            if (context is FragmentActivity) {
-                requestAccessibilityServicePermission(context, "Local Agent")
-            }
-            return CommandResult(
-                false,
-                "Enable Accessibility access before reading the screen aloud.",
-                "missing_accessibility_service",
-            )
+            if (context is FragmentActivity) requestAccessibilityServicePermission(context, "Local Agent")
+            return CommandResult(false, "Enable Accessibility access before reading the screen aloud.", "missing_accessibility_service")
         }
-        return sendServiceCommand(context, LocalAgentIntents.ACTION_READ_SCREEN_ALOUD)
+        return sendLegacyServiceCommand(context, LocalAgentIntents.ACTION_READ_SCREEN_ALOUD)
     }
 
-    fun requestStatus(context: Context): CommandResult =
-        sendServiceCommand(context, LocalAgentIntents.ACTION_GET_STATUS)
+    fun requestStatus(context: Context): CommandResult = sendServiceCommand(context, LocalAgentIntents.ACTION_GET_STATUS)
 
-    private fun sendServiceCommand(
+    private fun sendServiceCommand(context: Context, action: String, extras: Map<String, String> = emptyMap()): CommandResult =
+        sendCommandToClass(context, action, DEFAULT_SERVICE_CLASS, extras)
+
+    private fun sendLegacyServiceCommand(context: Context, action: String): CommandResult =
+        sendCommandToClass(context, action, "com.fersaiyan.cyanbridge.localagent.LocalAgentService", emptyMap())
+
+    private fun sendCommandToClass(
         context: Context,
         action: String,
-        extras: Map<String, String> = emptyMap(),
+        serviceClass: String,
+        extras: Map<String, String>,
     ): CommandResult {
         val pm = context.packageManager
-        val implicit = Intent(action).setPackage(context.packageName)
-        val resolved = pm.queryIntentServicesCompat(implicit)
-
-        val explicitIntent = when {
-            resolved.isNotEmpty() -> {
-                val svcInfo = resolved.first().serviceInfo
-                Intent(action).setComponent(ComponentName(svcInfo.packageName, svcInfo.name))
-            }
-            else -> Intent(action).setClassName(context.packageName, DEFAULT_SERVICE_CLASS)
-        }
-
+        val explicitIntent = Intent(action).setClassName(context.packageName, serviceClass)
         extras.forEach { (key, value) -> explicitIntent.putExtra(key, value) }
 
         if (pm.resolveService(explicitIntent, 0) == null) {
-            return CommandResult(
-                false,
-                "Local agent is not available in this build.",
-                "No service found for $action",
-            )
+            return CommandResult(false, "Local agent is not available in this build.", "No service found for $action")
         }
 
         return try {
@@ -152,18 +97,15 @@ object LocalAgentController {
             } else {
                 context.startService(explicitIntent)
             }
-            Log.i(TAG, "Command sent: ${action.substringAfterLast('.')}")
+            Log.i(TAG, "Command sent: ${action.substringAfterLast('.')} -> $serviceClass")
             CommandResult(true, "Command sent: ${action.substringAfterLast('.')}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send command: ${action.substringAfterLast('.')}", e)
-            CommandResult(
-                false,
-                "Failed to send agent command.",
-                e.message ?: e.javaClass.simpleName,
-            )
+            CommandResult(false, "Failed to send agent command.", e.message ?: e.javaClass.simpleName)
         }
     }
 
+    @Suppress("unused")
     private fun PackageManager.queryIntentServicesCompat(intent: Intent): List<android.content.pm.ResolveInfo> {
         @Suppress("DEPRECATION")
         return queryIntentServices(intent, 0)
