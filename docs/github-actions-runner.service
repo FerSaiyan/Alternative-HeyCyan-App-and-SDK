@@ -1,0 +1,16 @@
+[Unit]
+Description=GitHub Actions self-hosted runner for Alternative HeyCyan App and SDK
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/actions-runner
+ExecStart=%h/actions-runner/run.sh
+KillMode=process
+Restart=always
+RestartSec=10
+TimeoutStopSec=5min
+
+[Install]
+WantedBy=default.target

@@ -3,9 +3,6 @@ name: iOS KMP host
 on:
   workflow_dispatch:
   push:
-    branches:
-      - compose-material3-kmp-v2
-      - main
     paths:
       - .github/workflows/ios-kmp-host.yml
       - android/CyanBridge/shared/**

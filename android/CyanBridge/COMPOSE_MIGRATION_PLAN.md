@@ -436,7 +436,7 @@ Tasks:
 - Add JetBrains Compose Multiplatform plugin (`org.jetbrains.compose` 1.6.11) to `:shared`.
 - Add `compose.runtime`, `compose.foundation`, `compose.material3`, `compose.ui` dependencies to `commonMain`.
 - Change iOS simulator targets to dynamic framework (`isStatic = false`) for Skiko compatibility; keep `iosArm64` static for device.
-- Add Skiko Maven repository (`maven.packagist.org`) to `settings.gradle.kts` if needed.
+- Add the JetBrains Compose Maven repository (`maven.pkg.jetbrains.space/public/p/compose/dev`) to `settings.gradle.kts` if needed.
 - Create a trivial shared composable (`CyanBridgeApp`) in `commonMain` to validate the toolchain.
 - Create `iosMain` source set with `ComposeUIViewController` entry point (`MainViewController`).
 - Update `CyanBridgeKMPHostApp.swift` to embed the CMP `UIViewController` via `UIViewControllerRepresentable`.

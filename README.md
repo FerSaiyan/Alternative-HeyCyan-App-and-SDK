@@ -68,6 +68,10 @@ Run unit tests with:
 JAVA_HOME=/opt/android-studio/jbr ./gradlew testDebugUnitTest
 ```
 
+Android and shared-code CI runs on the local Linux Mint GitHub Actions runner.
+See [`docs/SELF_HOSTED_RUNNER.md`](docs/SELF_HOSTED_RUNNER.md) for the
+no-`sudo` runner service and maintenance commands.
+
 For device integration, use a physical Android phone with Bluetooth and the
 required nearby-device, microphone, notification, and Wi-Fi permissions. The
 Android emulator cannot validate glasses pairing or media transfer.

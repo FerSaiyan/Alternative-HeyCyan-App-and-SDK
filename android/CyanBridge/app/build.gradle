@@ -24,7 +24,9 @@ def localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {
     localProperties.load(new FileInputStream(localPropertiesFile))
 }
-def metaGithubToken = System.getenv("GITHUB_TOKEN") ?: localProperties.getProperty("github_token")
+def metaGithubToken = System.getenv("META_GITHUB_TOKEN")
+        ?: System.getenv("GITHUB_TOKEN")
+        ?: localProperties.getProperty("github_token")
 def metaDatEnabled = metaGithubToken != null && !metaGithubToken.trim().isEmpty()
 
 android {

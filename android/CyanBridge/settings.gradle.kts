@@ -13,8 +13,15 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url = uri("https://jitpack.io") }
-        // JetBrains Compose Multiplatform (Skiko native binaries for iOS)
-        maven { url = uri("https://maven.packagist.org") }
+        // JetBrains Compose Multiplatform (including Skiko native binaries for iOS).
+        // Restrict this repository so unrelated dependencies do not query it.
+        maven {
+            url = uri("https://maven.pkg.jetbrains.space/public/p/compose/dev")
+            content {
+                includeGroupByRegex("org\\.jetbrains\\.compose.*")
+                includeGroupByRegex("org\\.jetbrains\\.skiko.*")
+            }
+        }
 
         // Meta Wearables DAT SDK (requires GitHub token with read:packages scope)
         val localProps = java.util.Properties()
@@ -22,7 +29,8 @@ dependencyResolutionManagement {
         if (localPropsFile.exists()) {
             localProps.load(localPropsFile.inputStream())
         }
-        val githubToken = System.getenv("GITHUB_TOKEN")
+        val githubToken = System.getenv("META_GITHUB_TOKEN")
+            ?: System.getenv("GITHUB_TOKEN")
             ?: localProps.getProperty("github_token")
         if (!githubToken.isNullOrBlank()) {
             maven {

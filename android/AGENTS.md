@@ -160,7 +160,7 @@ The `:shared` module uses JetBrains Compose Multiplatform so both Android and iO
 - **CMP Version**: 1.8.2 (Kotlin 2.3.10).
 - **Material 3**: Uses `org.jetbrains.compose.material3` as Maven coordinate but `import androidx.compose.*` in Kotlin sources (same API surface as Jetpack Compose). All migrated screen files keep `import androidx.compose.*` — do NOT use `import org.jetbrains.compose.*`.
 - **iOS Framework**: Simulator targets use dynamic framework (`isStatic = false`) for Skiko; device uses static (`isStatic = true`).
-- **Skiko**: CMP's rendering layer (Skia). Ships as `.dylib` for simulators, `.a` for device. The `maven.packagist.org` Maven repo hosts Skiko native binaries.
+- **Skiko**: CMP's rendering layer (Skia). Ships as `.dylib` for simulators, `.a` for device. The JetBrains Compose Maven repository hosts Skiko native binaries.
 - **Test dependency**: `compose.uiTest` requires `@OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)` on the `commonTest.dependencies` block. CMP UI tests (`runComposeUiTest`) need a rendering backend — they cannot run on the JVM "portability" target. Write pure state/logic tests for `commonTest` and use Android instrumentation tests for full Compose UI testing.
 
 ### Build Commands
