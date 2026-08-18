@@ -29,6 +29,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          lfs: true
 
       - name: Verify local Android toolchain
         shell: bash
@@ -36,6 +37,7 @@ jobs:
           set -euo pipefail
           test "$(uname -s)" = "Linux"
           test "$(uname -m)" = "x86_64"
+          command -v git-lfs >/dev/null
           test -x /opt/android-studio/jbr/bin/java
           test -d "$HOME/Android/Sdk/platforms/android-35"
           test -x "$HOME/Android/Sdk/platform-tools/adb"
@@ -46,6 +48,7 @@ jobs:
             printf '%s\n' "$HOME/Android/Sdk/platform-tools" >> "$GITHUB_PATH"
           } >> "$GITHUB_ENV"
           /opt/android-studio/jbr/bin/java -version
+          git lfs version
           "$HOME/Android/Sdk/platform-tools/adb" version
 
       - name: Verify Meta SDK credential
