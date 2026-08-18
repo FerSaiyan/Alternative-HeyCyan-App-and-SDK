@@ -14,16 +14,38 @@ This document keeps the three Tasker migrations separate so Local Agent debuggin
 - risk classification
 - approval queue and rejection state
 - repeat limits and recovery decisions
-- native Android actions that do not need Accessibility
 - task history and execution-result logging
+- internal runtime controls such as `wait` and `finish`
 
 **Tasker + AutoInput own**
 
 - screen observation
-- Accessibility-dependent UI primitives
-- returning the concrete result of the requested primitive
+- every model-selected device action
+- Accessibility/UI primitives
+- app launch and Android-facing intents/actions
+- returning the concrete result of every requested device action
 
-Tasker intentionally has no independent risk/cancellation policy. If AutoInput cannot execute a requested primitive, it reports the failure and CyanBridge decides what the planner does next.
+The invariant is intentionally simple:
+
+> CyanBridge decides. Tasker executes.
+
+Tasker intentionally has no independent risk/cancellation policy. If Tasker or AutoInput cannot execute a requested action, it reports the failure and CyanBridge decides what the planner does next.
+
+### Why all device actions belong in Tasker
+
+Keeping some actions in CyanBridge just because Android exposes a normal Intent/API would create two execution authorities. A click would be audited in Tasker while an app launch, dialer action, SMS composer, email composer, alarm or settings action would be audited in CyanBridge.
+
+The target architecture instead gives every model-selected device effect the same trace:
+
+1. model proposes action
+2. CyanBridge parses/classifies it
+3. CyanBridge approves, rejects or queues it
+4. approved action is serialized to Tasker
+5. Tasker attempts the device action
+6. Tasker returns exact success/failure detail
+7. CyanBridge records the result and continues/replans
+
+This keeps policy failures distinguishable from execution failures and makes Tasker the single device-execution source of truth.
 
 ### Contract files
 
@@ -32,19 +54,41 @@ Tasker intentionally has no independent risk/cancellation policy. If AutoInput c
 - `TaskerAgentContract.kt`
 - `TaskerAgentBridge.kt`
 
+### Current action ownership
+
+Tasker receives all current device-effect actions:
+
+- Back/Home/Recents/Notifications
+- clicks, typing, scrolling, long press
+- `open_app`
+- `make_call`
+- `send_sms`
+- `send_email`
+- `set_alarm`
+- `open_contacts`
+- `toggle_wifi`
+- `toggle_bluetooth`
+- `toggle_flashlight`
+- `read_screen_aloud`
+
+CyanBridge consumes only runtime-control actions such as `wait` and `finish` without sending them to Tasker.
+
+The Tasker profile preserves existing consequence semantics where possible: calls open the dialer instead of auto-dialing, SMS/email actions open composers instead of silently sending, and Wi-Fi/Bluetooth actions open their settings screens as the previous CyanBridge executor did.
+
 ### First on-device validation sequence
 
 1. Import `CyanBridge_LocalAgent_Tasker.XML` into Tasker.
 2. Ensure Tasker and AutoInput are installed and AutoInput can use Accessibility when its actions run.
-3. Start with a deterministic goal such as opening an app and navigating to a visible text button.
-4. Verify `TASKER_AGENT_OBSERVE` returns package/text data.
+3. Verify `TASKER_AGENT_OBSERVE` returns package/text data.
+4. Verify `open_app` and confirm the result round-trips through Tasker.
 5. Verify `click_text` and `click_coord` independently.
 6. Verify text entry into a focused field.
 7. Verify Back/Home/Recents/Notifications.
 8. Verify scrolling and long press.
-9. Exercise one CyanBridge-native action such as `open_app` to confirm it does not round-trip through Tasker.
-10. Exercise a HIGH-risk action and confirm the sequence is CyanBridge approval -> execution -> stored result -> planner resume.
-11. Finalize device-compatible `press_enter` and arbitrary `swipe` adapters; v1 currently returns explicit adapter errors for those two rather than hiding failure.
+9. Verify the non-Accessibility Tasker built-ins: dialer, SMS composer, email composer, alarm, contacts, Wi-Fi/Bluetooth settings and flashlight.
+10. Exercise a HIGH-risk action and confirm the sequence is CyanBridge approval -> Tasker execution -> stored result -> planner resume.
+11. Confirm no migrated Local Agent path calls a CyanBridge-native device executor.
+12. Finalize device-compatible `press_enter` and arbitrary `swipe` adapters; v1 currently returns explicit adapter errors for those two rather than hiding failure.
 
 ### Protocol parity follow-up
 
@@ -54,10 +98,12 @@ The current base-branch Local Agent protocol does not contain first-class action
 2. the response JSON schema/parser
 3. `LocalAgentAction`
 4. risk classification and serialization
-5. the execution backend
-6. Tasker only when the operation genuinely belongs on the Tasker side
+5. `TaskerAgentContract`
+6. `CyanBridge_LocalAgent_Tasker.XML`
 
-This is separate from the Accessibility migration so protocol expansion can be reviewed/debugged independently.
+They should not gain CyanBridge-native executors. CyanBridge should parse/classify/approve them, then Tasker should perform the actual package/intent/shell operation and return its result.
+
+This protocol expansion is separate from the Accessibility migration so it can be reviewed/debugged independently.
 
 ---
 
@@ -185,7 +231,7 @@ Therefore this migration is primarily orchestration cleanup and consistency with
 - the periodic schedule/trigger only
 - invoking a one-shot CyanBridge capture command
 
-Tasker should not attempt to access the glasses camera or reproduce the visual-model pipeline.
+Tasker should not attempt to access the glasses camera or reproduce the visual-model pipeline. Visual Diary is different from Local Agent: the camera/model pipeline is an application feature, not a model-selected Android device-control action.
 
 ### Proposed profile
 
