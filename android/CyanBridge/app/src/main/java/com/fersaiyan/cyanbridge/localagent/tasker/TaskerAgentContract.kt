@@ -26,6 +26,7 @@ object TaskerAgentContract {
     const val EXTRA_PAYLOAD = "payload"
     const val EXTRA_SUCCESS = "success"
     const val EXTRA_ERROR = "error"
+    const val EXTRA_RESPONSE = "response"
 
     fun observationFromJson(raw: String): LocalAgentObservation {
         val json = JSONObject(raw)
