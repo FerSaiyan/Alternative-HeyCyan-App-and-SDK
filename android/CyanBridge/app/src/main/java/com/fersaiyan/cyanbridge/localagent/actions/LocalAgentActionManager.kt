@@ -1,22 +1,20 @@
 package com.fersaiyan.cyanbridge.localagent.actions
 
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.provider.AlarmClock
-import android.provider.ContactsContract
-import android.provider.Settings
 import com.fersaiyan.cyanbridge.data.local.entity.PendingAction
 import com.fersaiyan.cyanbridge.localagent.LocalAgentAction
 import com.fersaiyan.cyanbridge.localagent.LocalAgentDeviceState
 import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs
-import com.fersaiyan.cyanbridge.localagent.LocalAgentService
+import com.fersaiyan.cyanbridge.localagent.TaskerExecutionBackend
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import org.json.JSONObject
 
 /**
- * Manages action enqueuing, approval logic, and execution of system intents.
+ * Owns Local Agent action policy/approval state.
+ *
+ * It intentionally does not execute Android intents, Accessibility gestures, or other
+ * model-selected device effects itself. Once CyanBridge has decided that an action may
+ * run, TaskerExecutionBackend is the single execution path.
  */
 object LocalAgentActionManager {
 
@@ -55,200 +53,35 @@ object LocalAgentActionManager {
     }
 
     /**
-     * Enqueue a planned action for approval or auto-execution.
+     * Applies CyanBridge approval policy, then delegates every permitted device action
+     * to Tasker. A false result therefore means either "queued for approval" or
+     * "Tasker execution failed"; callers that need to distinguish those states already
+     * know whether the action required approval from the risk/confirmation settings.
      */
-    suspend fun processPlannedAction(context: Context, action: LocalAgentAction, source: String = "agent"): Boolean {
+    suspend fun processPlannedAction(
+        context: Context,
+        action: LocalAgentAction,
+        source: String = "agent",
+    ): Boolean {
         val risk = classifyRisk(action)
         val requireConfirm = LocalAgentPrefs.isRequireActionConfirmationEnabled(context)
-
-        // Consequential-only approval: auto-execute LOW and MEDIUM, only queue HIGH for approval.
         val shouldAutoExecute = !requireConfirm || risk != Risk.HIGH
 
         if (shouldAutoExecute) {
-            return executeNow(context, action)
+            if (!LocalAgentDeviceState.isReady(context)) return false
+            return TaskerExecutionBackend.execute(context, action).success
         }
 
-        // Store as pending
         val dao = MyApplication.database.pendingActionDao()
         dao.insert(
             PendingAction(
                 ts = System.currentTimeMillis(),
                 source = source,
                 actionJson = serializeAction(action),
-                status = "pending"
+                status = "pending",
             )
         )
         return false
-    }
-
-    /**
-     * Executes the action immediately (system intents or accessibility).
-     * Accessibility actions are handled by LocalAgentAccessibilityBridge.
-     * System-intent actions are handled here and return true on success.
-     */
-    suspend fun executeNow(context: Context, action: LocalAgentAction): Boolean {
-        if (!LocalAgentDeviceState.isReady(context)) return false
-        return when (action) {
-            is LocalAgentAction.OpenApp -> openAppIntent(context, action)
-            is LocalAgentAction.Finish -> true
-            is LocalAgentAction.SendEmail -> {
-                sendEmailIntent(context, action)
-                true
-            }
-            is LocalAgentAction.MakeCall -> {
-                makeCallIntent(context, action)
-                true
-            }
-            is LocalAgentAction.SendSms -> {
-                sendSmsIntent(context, action)
-                true
-            }
-            is LocalAgentAction.SetAlarm -> {
-                setAlarmIntent(context, action)
-                true
-            }
-            LocalAgentAction.OpenContacts -> {
-                openContactsIntent(context)
-                true
-            }
-            LocalAgentAction.ToggleWifi -> {
-                toggleWifiIntent(context)
-                true
-            }
-            LocalAgentAction.ToggleBluetooth -> {
-                toggleBluetoothIntent(context)
-                true
-            }
-            LocalAgentAction.ToggleFlashlight -> {
-                toggleFlashlightIntent(context)
-                true
-            }
-            LocalAgentAction.ReadScreenAloud -> {
-                LocalAgentService.readScreenAloud(context)
-                true
-            }
-            else -> {
-                // For a11y-only actions (click, type, swipe, scroll, etc.),
-                // the service loop delegates to LocalAgentAccessibilityBridge.
-                false
-            }
-        }
-    }
-
-    // --- System intent handlers ---
-
-    private fun sendEmailIntent(context: Context, action: LocalAgentAction.SendEmail) {
-        val intent = Intent(Intent.ACTION_SENDTO).apply {
-            data = Uri.parse("mailto:${action.to}")
-            putExtra(Intent.EXTRA_SUBJECT, action.subject)
-            putExtra(Intent.EXTRA_TEXT, action.body)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
-    private fun makeCallIntent(context: Context, action: LocalAgentAction.MakeCall) {
-        val number = action.number.trim()
-        if (number.isBlank()) return
-        // Opening the dialer keeps this action safe when the service has no Activity
-        // available to request CALL_PHONE at runtime.
-        val intent = Intent(Intent.ACTION_DIAL).apply {
-            data = Uri.parse("tel:$number")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
-    private fun sendSmsIntent(context: Context, action: LocalAgentAction.SendSms) {
-        val number = action.number.trim()
-        if (number.isBlank()) return
-        val intent = Intent(Intent.ACTION_SENDTO).apply {
-            data = Uri.parse("smsto:$number")
-            putExtra("sms_body", action.message)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
-    private fun setAlarmIntent(context: Context, action: LocalAgentAction.SetAlarm) {
-        val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
-            putExtra(AlarmClock.EXTRA_HOUR, action.hour)
-            putExtra(AlarmClock.EXTRA_MINUTES, action.minute)
-            action.label?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
-            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
-    private fun openContactsIntent(context: Context) {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            data = ContactsContract.Contacts.CONTENT_URI
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
-    private fun toggleWifiIntent(context: Context) {
-        val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
-    private fun toggleBluetoothIntent(context: Context) {
-        // Open Bluetooth settings; direct toggle requires system permissions on modern Android.
-        val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
-    private fun toggleFlashlightIntent(context: Context) {
-        // Open camera/flashlight settings; direct toggle requires CameraManager API.
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.fromParts("package", context.packageName, null)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
-    private fun openAppIntent(context: Context, action: LocalAgentAction.OpenApp): Boolean {
-        val pm = context.packageManager
-        val raw = action.appName.trim()
-        if (raw.isBlank()) return false
-
-        val packageCandidates = buildList {
-            add(raw)
-            if (!raw.contains('.')) add(raw.lowercase())
-        }
-        packageCandidates.forEach { pkg ->
-            pm.getLaunchIntentForPackage(pkg)?.let { intent ->
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                return true
-            }
-        }
-
-        val launcherIntent = Intent(Intent.ACTION_MAIN, null).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-        }
-        val candidates = pm.queryIntentActivities(launcherIntent, PackageManager.MATCH_ALL)
-        val normalized = raw.lowercase()
-
-        val best = candidates.firstOrNull { resolveInfo ->
-            resolveInfo.loadLabel(pm).toString().trim().equals(raw, ignoreCase = true)
-        } ?: candidates.firstOrNull { resolveInfo ->
-            val label = resolveInfo.loadLabel(pm).toString().trim().lowercase()
-            val pkg = resolveInfo.activityInfo.packageName.orEmpty().lowercase()
-            label.contains(normalized) || pkg.contains(normalized)
-        }
-
-        val pkg = best?.activityInfo?.packageName ?: return false
-        val intent = pm.getLaunchIntentForPackage(pkg) ?: return false
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-        return true
     }
 
     private fun actionToJson(action: LocalAgentAction): JSONObject {
