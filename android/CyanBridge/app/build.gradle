@@ -45,15 +45,12 @@ android {
         ]
         buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "false"
 
-        // Chapter 6: optional transcription API key (do not commit secrets).
         def openAiKey = project.findProperty("OPENAI_API_KEY") ?: ""
         buildConfigField "String", "OPENAI_API_KEY", "\"${openAiKey}\""
 
         def proCheapSku = project.findProperty("PRO_CHEAP_SKU") ?: "pro_cheap"
         def proStandardSku = project.findProperty("PRO_STANDARD_SKU") ?: "pro_standard"
         def proMaxSku = project.findProperty("PRO_MAX_SKU") ?: "pro_max"
-        // Never fall back to the first Play offer. Configure a base plan for each product,
-        // and an offer ID only when that specific promotional offer should be purchased.
         def proCheapBasePlanId = project.findProperty("PRO_CHEAP_BASE_PLAN_ID") ?: "pro-cheap"
         def proStandardBasePlanId = project.findProperty("PRO_STANDARD_BASE_PLAN_ID") ?: "pro-standard"
         def proMaxBasePlanId = project.findProperty("PRO_MAX_BASE_PLAN_ID") ?: "pro-max"
@@ -82,14 +79,11 @@ android {
         buildConfigField "String", "WEB_SUB_ALLOWED_COUNTRIES", "\"${webAllowedCountries}\""
         buildConfigField "String", "DONATION_URL", "\"${donationUrl}\""
 
-        vectorDrawables {
-            useSupportLibrary = true
-        }
+        vectorDrawables { useSupportLibrary = true }
     }
 
     signingConfigs {
         release {
-            // Only configure signing if keystore.properties exists.
             if (keystorePropertiesFile.exists()) {
                 storeFile = file(keystoreProperties["storeFile"])
                 storePassword = keystoreProperties["storePassword"]
@@ -101,21 +95,12 @@ android {
 
     buildTypes {
         debug {
-            // Local APKs use Meta AI Developer Mode rather than production release-channel attestation.
-            manifestPlaceholders = [
-                    mwdat_application_id: "0",
-                    mwdat_client_token: "0",
-            ]
+            manifestPlaceholders = [mwdat_application_id: "0", mwdat_client_token: "0"]
             buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "true"
         }
         release {
-            if (keystorePropertiesFile.exists()) {
-                signingConfig = signingConfigs.release
-            }
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            if (keystorePropertiesFile.exists()) signingConfig = signingConfigs.release
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
@@ -135,8 +120,6 @@ android {
         aidl = true
     }
 
-    // MYVU's protocol is maintained as a pinned upstream submodule. The source
-    // contains the hardware-verified StarryNet BLE/ECDH/RFCOMM implementation.
     sourceSets {
         main {
             java.srcDir("src/main/myvu-upstream/android/app/src/main/java")
@@ -147,19 +130,11 @@ android {
         }
     }
 
-    testOptions {
-        unitTests {
-            includeAndroidResources = true
-        }
-    }
+    testOptions { unitTests { includeAndroidResources = true } }
 }
 
-
 dependencies {
-    def localLlamaRuntimeAarPath = (
-            project.findProperty("localLlamaRuntimeAarPath")
-                    ?: ""
-    ).toString().trim()
+    def localLlamaRuntimeAarPath = (project.findProperty("localLlamaRuntimeAarPath") ?: "").toString().trim()
     def coreConnectivityVersion = project.findProperty("heycyanCoreConnectivityVersion") ?: "0.1.0-SNAPSHOT"
     implementation("com.heycyan.core:core-connectivity:${coreConnectivityVersion}")
     implementation project(":shared")
@@ -195,9 +170,8 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0"
     implementation "androidx.work:work-runtime-ktx:2.9.1"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
-    implementation "dev.rikka.shizuku:api:13.1.5"
-    implementation "dev.rikka.shizuku:provider:13.1.5"
     implementation "com.google.android.gms:play-services-location:21.3.0"
+
     if (localLlamaRuntimeAarPath.isEmpty()) {
         implementation "io.github.ljcamargo:llamacpp-kotlin:0.2.0"
     } else {
@@ -209,22 +183,13 @@ dependencies {
         implementation files(localLlamaRuntimeAar)
     }
 
-    // LiteRT runtime for local models (Google's inference engine)
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.14.0")
-
-    // Keep Walking Aid's vision runtime separate from LiteRT-LM. Loading the generic
-    // LiteRT artifacts alongside LiteRT-LM can leave nativeSendMessage blocked.
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
     implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
-
-    // Offline transcription fallback (Moonshine; vendored module)
     implementation project(":moonshine-voice")
-
-    // Legacy offline transcription fallback (Vosk) - kept for now until Moonshine is fully wired
     implementation "com.alphacephei:vosk-android:0.3.47"
 
-    // Chapter 2 storage
     def room_version = "2.7.0"
     implementation "androidx.room:room-runtime:$room_version"
     implementation "androidx.room:room-ktx:$room_version"
@@ -235,8 +200,6 @@ dependencies {
     testImplementation 'androidx.test:core:1.6.1'
     testImplementation "androidx.room:room-testing:$room_version"
 
-    // Meta Wearables DAT SDK for Meta Ray-Ban glasses integration.
-    // Requires GitHub token with read:packages scope in GITHUB_TOKEN env var.
     def metaDatVersion = "0.8.0"
     if (metaDatEnabled) {
         implementation("com.meta.wearable:mwdat-core:${metaDatVersion}")
@@ -247,7 +210,6 @@ dependencies {
         logger.warn("No GitHub package token configured - Meta Wearables DAT SDK dependencies will be skipped.")
     }
 
-    // Chapter 4 UI gating test (androidTest)
     androidTestImplementation 'androidx.test:core-ktx:1.6.1'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:runner:1.6.1'
