@@ -76,7 +76,8 @@ object AutoDiaryCaptureCoordinator {
             return CaptureResult(false, "overlay_package:$packageName")
         }
 
-        val text = normalizedText(observation.screenText, observation.screenSnapshot.nodes.map { it.text })
+        val nodeTexts = observation.screenSnapshot?.nodes.orEmpty().map { it.text }
+        val text = normalizedText(observation.screenText, nodeTexts)
         if (text.isBlank()) {
             return CaptureResult(false, "observation_text_empty")
         }
