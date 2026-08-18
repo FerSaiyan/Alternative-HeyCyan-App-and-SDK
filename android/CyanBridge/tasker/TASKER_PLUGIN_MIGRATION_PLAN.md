@@ -116,7 +116,12 @@ Its camera path is a CyanBridge-owned smart-glasses integration, not Android UI 
 - vision inference
 - visual-note storage and diagnostics
 
-The existing `VisualDiaryService` can continue to schedule periodic one-shot captures internally. A future refactor may extract a `VisualDiaryCaptureCoordinator` so scheduling and one-shot capture are cleaner units, but this does not require Tasker.
+The branch now separates those roles explicitly:
+
+- `VisualDiaryService` owns feature lifecycle, foreground-service behavior and the interval scheduler.
+- `VisualDiaryCaptureCoordinator` owns one-shot glasses readiness/capture and the handoff into the existing visual-note/model pipeline.
+
+No Tasker profile is required for the normal Visual Diary interval.
 
 ### Optional Tasker triggers
 
@@ -138,7 +143,8 @@ In that optional design, Tasker only sends a one-shot `capture now` trigger. Cya
 3. Import and validate `CyanBridge_AutoDiary_Tasker.XML` with CyanBridge Accessibility disabled.
 4. Compare Tasker AutoDiary observations against representative legacy captures.
 5. Remove the now-unused AutoDiary periodic-capture implementation from `LocalAgentAccessibilityService` after parity is proven.
-6. Keep Visual Diary in CyanBridge; only add optional Tasker triggers if a concrete Android-context trigger is desired.
+6. Validate both scheduled and manual Visual Diary captures through `VisualDiaryCaptureCoordinator` on Meta and non-Meta supported glasses.
+7. Only add optional Tasker Visual Diary triggers if a concrete Android-context trigger is desired.
 
 This keeps each failure domain easy to audit:
 
