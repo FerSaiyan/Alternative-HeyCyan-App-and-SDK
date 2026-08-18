@@ -1,6 +1,12 @@
 # CyanBridge Local Agent ↔ Tasker contract
 
-This branch moves Local Agent screen observation and Accessibility-dependent UI execution to a user-owned Tasker/AutoInput workflow while keeping task state, planning, risk classification, approvals, recovery decisions, local-model inference, Android-native actions, and debugging in CyanBridge.
+This branch moves Local Agent screen observation and every model-selected device action to a user-owned Tasker/AutoInput workflow. CyanBridge keeps task state, planning, risk classification, approvals, recovery decisions, local-model inference, and debug history.
+
+The architectural invariant is:
+
+> CyanBridge decides whether an action should happen. Tasker is the single component that performs model-selected effects on the Android device.
+
+`wait` and `finish` are internal agent-loop controls, not device effects, so `TaskerLocalAgentService` consumes them directly.
 
 ## Transport
 
@@ -67,7 +73,7 @@ Action:
 
 The same request metadata is provided. `payload` is the action JSON selected by CyanBridge.
 
-The Tasker profile is responsible only for UI/Accessibility primitives:
+Tasker is the execution target for all current model-selected device actions:
 
 - `global_back`
 - `global_home`
@@ -80,12 +86,6 @@ The Tasker profile is responsible only for UI/Accessibility primitives:
 - `long_press`
 - `open_notifications`
 - `open_recents`
-- `read_screen_aloud`
-
-`wait` and `finish` are handled directly by `TaskerLocalAgentService`.
-
-The following model-selected actions stay in CyanBridge because they already have Android-native implementations and do not need AutoInput:
-
 - `open_app`
 - `make_call`
 - `send_sms`
@@ -95,8 +95,28 @@ The following model-selected actions stay in CyanBridge because they already hav
 - `toggle_wifi`
 - `toggle_bluetooth`
 - `toggle_flashlight`
+- `read_screen_aloud`
+
+`wait` and `finish` are handled directly by `TaskerLocalAgentService` because they change agent runtime state rather than the external device.
 
 Tasker is an executor, not a second policy engine. It must not independently reclassify or silently cancel an action based on risk. If execution itself fails, it returns the concrete failure so CyanBridge can place it into task state/debug history.
+
+## Current action semantics in the Tasker profile
+
+The Tasker migration preserves the important consequence semantics of the previous CyanBridge executors rather than silently making actions more powerful:
+
+- `open_app`: Tasker `loadApp`, accepting package name or app label.
+- `make_call`: opens the dialer with the number pre-filled; it does not auto-dial.
+- `send_sms`: opens the SMS composer with number/message pre-filled; it does not silently send.
+- `send_email`: opens the email composer with fields pre-filled.
+- `set_alarm`: invokes Tasker's alarm action with confirmation/UI.
+- `open_contacts`: opens the Android contacts provider.
+- `toggle_wifi`: opens Wi-Fi settings, matching the previous CyanBridge implementation.
+- `toggle_bluetooth`: opens Bluetooth settings, matching the previous CyanBridge implementation.
+- `toggle_flashlight`: uses Tasker's Torch toggle.
+- `read_screen_aloud`: AutoInput query followed by Tasker TTS.
+
+The UI primitives use AutoInput. `press_enter` and arbitrary-coordinate `swipe` still return explicit adapter errors in v1 until their exact AutoInput export behavior is verified on-device.
 
 ## Response
 
@@ -136,19 +156,26 @@ This keeps the Tasker response simple and makes every result self-contained for 
 
 CyanBridge continues to use `LocalAgentActionManager.classifyRisk()` and the existing pending-action UI. When an action requires approval, it is queued by CyanBridge. After approval, `PendingActionsActivity` calls `TaskerExecutionBackend`.
 
-`TaskerExecutionBackend` first uses CyanBridge's native executor for native Android actions. Only Accessibility-dependent UI primitives are sent to Tasker. The exact result is stored in the pending-action record before the planner resumes.
+For LOW/MEDIUM actions that are allowed to auto-run, `LocalAgentActionManager.processPlannedAction()` also delegates to `TaskerExecutionBackend`; it no longer executes Android system intents itself.
 
-This intentionally keeps rejection/failure debugging centralized in CyanBridge.
+The exact Tasker result is stored/propagated before the planner resumes. This keeps the failure boundary unambiguous:
+
+- policy rejection/cancellation -> CyanBridge
+- execution failure -> Tasker result returned to CyanBridge
 
 ## Current Tasker profile status
 
 `CyanBridge_LocalAgent_Tasker.XML` is the first importable profile for contract v1.
 
-The initial profile implements observation, text/coordinate clicks, text entry through AutoInput Actions v2, long press, scrolling, global Back/Home/Recents/Notifications, and screen read-aloud. `press_enter` and arbitrary `swipe` currently return explicit adapter errors rather than silently pretending they succeeded; these two primitives should be finalized against the installed AutoInput version/device during the first on-device test.
+It implements observation, text/coordinate clicks, text entry through AutoInput Actions v2, long press, scrolling, global Back/Home/Recents/Notifications, app launch, dialer/SMS/email/alarm/contacts/settings actions, flashlight toggle, and screen read-aloud.
+
+`press_enter` and arbitrary `swipe` currently return explicit adapter errors rather than silently pretending they succeeded. These two primitives should be finalized against the installed AutoInput version/device during the first on-device test.
 
 ## Protocol-parity note
 
 Package installation, arbitrary intents, and generic shell execution are not currently members of `LocalAgentAction` / `LocalAgentUiControlProtocol` on the base branch. The Tasker migration therefore has not removed those action types; they need a separate explicit protocol-extension pass before the model can select them directly.
+
+When those actions are added, the same invariant applies: CyanBridge parses/classifies/approves them, and Tasker performs the actual device operation and returns its result.
 
 ## Deferred plugin migrations
 
