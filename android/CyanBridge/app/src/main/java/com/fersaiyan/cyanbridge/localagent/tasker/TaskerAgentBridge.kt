@@ -9,6 +9,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
 import java.security.SecureRandom
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -101,8 +102,18 @@ object TaskerAgentBridge {
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != TaskerAgentContract.ACTION_RESPONSE) return
-            if (intent.getIntExtra(TaskerAgentContract.EXTRA_VERSION, -1) != TaskerAgentContract.VERSION) return
 
+            // Preferred Tasker-friendly response format: one JSON envelope extra. Tasker's
+            // JavaScript sendIntent helper has a deliberately small extras surface, so putting
+            // correlation metadata and result fields in one envelope keeps the profile simple.
+            val compact = intent.getStringExtra(TaskerAgentContract.EXTRA_RESPONSE)
+            if (!compact.isNullOrBlank()) {
+                completeCompactResponse(compact)
+                return
+            }
+
+            // Backwards-compatible expanded response while hand-written/debug profiles still use it.
+            if (intent.getIntExtra(TaskerAgentContract.EXTRA_VERSION, -1) != TaskerAgentContract.VERSION) return
             val requestId = intent.getStringExtra(TaskerAgentContract.EXTRA_REQUEST_ID) ?: return
             val expected = pending[requestId] ?: return
             val token = intent.getStringExtra(TaskerAgentContract.EXTRA_CALLBACK_TOKEN) ?: return
@@ -116,6 +127,27 @@ object TaskerAgentBridge {
                 )
             )
         }
+    }
+
+    private fun completeCompactResponse(raw: String) {
+        val envelope = runCatching { JSONObject(raw) }.getOrNull() ?: return
+        if (envelope.optInt(TaskerAgentContract.EXTRA_VERSION, -1) != TaskerAgentContract.VERSION) return
+
+        val requestId = envelope.optString(TaskerAgentContract.EXTRA_REQUEST_ID).takeIf { it.isNotBlank() }
+            ?: return
+        val expected = pending[requestId] ?: return
+        val token = envelope.optString(TaskerAgentContract.EXTRA_CALLBACK_TOKEN)
+        if (token != expected.token) return
+
+        expected.deferred.complete(
+            Response(
+                success = envelope.optBoolean(TaskerAgentContract.EXTRA_SUCCESS, false),
+                payload = envelope.optString(TaskerAgentContract.EXTRA_PAYLOAD)
+                    .takeIf { it.isNotBlank() && it != "null" },
+                error = envelope.optString(TaskerAgentContract.EXTRA_ERROR)
+                    .takeIf { it.isNotBlank() && it != "null" },
+            )
+        )
     }
 
     private fun randomToken(): String {
