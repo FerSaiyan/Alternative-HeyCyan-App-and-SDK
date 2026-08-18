@@ -66,12 +66,23 @@ class AutoDiaryService : Service() {
             ACTION_SUMMARIZE -> {
                 startForegroundSafely("Preparing today's diary summary")
                 queueSummary(this)
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                if (!RUNNING.get()) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
             }
             null -> if (isEnabled(this)) startDiary() else stopSelf()
         }
         return START_STICKY
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "Foreground-service timeout: type=$fgsType; stopping without disabling AutoDiary")
+        captureJob?.cancel()
+        captureJob = null
+        RUNNING.set(false)
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        stopSelf(startId)
     }
 
     override fun onDestroy() {
