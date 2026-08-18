@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -25,21 +26,31 @@ import com.fersaiyan.cyanbridge.localagent.dailysummary.DailySummaryRegenerateWo
 import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
-import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
 import com.fersaiyan.cyanbridge.ui.ensureNotificationPermission
 import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
-import com.fersaiyan.cyanbridge.ui.requestAccessibilityServicePermission
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Native-plugin host for the existing screen-memory and daily-summary pipeline.
- * The accessibility service remains the screen observer; this service only owns
- * the plugin lifecycle and summary commands.
+ * AutoDiary lifecycle/scheduler host.
+ *
+ * CyanBridge owns feature state, interval, privacy policy, storage, indexing and summary
+ * generation. Tasker + AutoInput are the Android UI observer; CyanBridge no longer needs
+ * its own Accessibility service for AutoDiary screen collection.
  */
 class AutoDiaryService : Service() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var captureJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -64,26 +75,66 @@ class AutoDiaryService : Service() {
     }
 
     override fun onDestroy() {
+        captureJob?.cancel()
+        captureJob = null
         RUNNING.set(false)
+        scope.cancel()
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         super.onDestroy()
     }
 
     private fun startDiary() {
-        if (!hasAccessibilityServicePermission(this)) {
+        if (RUNNING.getAndSet(true)) return
+        if (!startForegroundSafely("AutoDiary is collecting screen context through Tasker")) {
+            RUNNING.set(false)
             disable(this)
             return
         }
 
-        if (RUNNING.getAndSet(true)) return
-        if (!startForegroundSafely("AutoDiary is collecting screen context")) {
-            RUNNING.set(false)
-            disable(this)
+        // Persist the new state before clearing the legacy Accessibility capture bit. This
+        // migrates users who already had AutoDiary enabled and prevents duplicate captures
+        // if CyanBridge's old Accessibility service remains enabled for debugging.
+        LocalAgentPrefs.setTaskerAutoDiaryEnabled(this, true)
+        LocalAgentPrefs.setAutoCaptureEnabled(this, false)
+
+        captureJob?.cancel()
+        captureJob = scope.launch {
+            while (isActive && isEnabled(this@AutoDiaryService)) {
+                val result = runCatching {
+                    AutoDiaryCaptureCoordinator.captureOnce(this@AutoDiaryService)
+                }.getOrElse {
+                    AutoDiaryCaptureCoordinator.CaptureResult(
+                        success = false,
+                        detail = "capture_exception:${it.javaClass.simpleName}:${it.message.orEmpty()}",
+                    )
+                }
+
+                if (result.success) {
+                    Log.i(TAG, "AutoDiary capture succeeded: ${result.detail}")
+                    updateNotification("AutoDiary captured screen context through Tasker")
+                } else {
+                    Log.w(TAG, "AutoDiary capture skipped/failed: ${result.detail}")
+                    updateNotification("AutoDiary waiting: ${result.detail.take(100)}")
+                }
+
+                val delayMs = LocalAgentPrefs.getCaptureIntervalMin(this@AutoDiaryService)
+                    .toLong()
+                    .coerceAtLeast(1L) * 60_000L
+                delay(delayMs)
+            }
+
+            if (RUNNING.get()) {
+                RUNNING.set(false)
+                runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+                stopSelf()
+            }
         }
     }
 
     private fun stopDiary() {
         clearEnabledState(this)
+        captureJob?.cancel()
+        captureJob = null
         RUNNING.set(false)
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         stopSelf()
@@ -108,6 +159,11 @@ class AutoDiaryService : Service() {
         }.isSuccess
     }
 
+    private fun updateNotification(content: String) {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        runCatching { manager.notify(NOTIFICATION_ID, notification(content)) }
+    }
+
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -117,7 +173,7 @@ class AutoDiaryService : Service() {
                 "AutoDiary",
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "Screen-memory and daily-summary automation"
+                description = "Tasker screen-memory and daily-summary automation"
                 setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PRIVATE
             },
@@ -145,6 +201,7 @@ class AutoDiaryService : Service() {
     }
 
     companion object {
+        private const val TAG = "AutoDiaryService"
         private const val CHANNEL_ID = "auto_diary"
         private const val NOTIFICATION_ID = 55241
         private val RUNNING = AtomicBoolean(false)
@@ -153,14 +210,8 @@ class AutoDiaryService : Service() {
         const val ACTION_STOP = "com.fersaiyan.cyanbridge.action.AUTO_DIARY_STOP"
         const val ACTION_SUMMARIZE = "com.fersaiyan.cyanbridge.action.AUTO_DIARY_SUMMARIZE"
 
-        /** Enables AutoDiary only after its shared capture prerequisites are available. */
+        /** Enables AutoDiary without requesting CyanBridge Accessibility permission. */
         fun enable(context: Context): Boolean {
-            if (!hasAccessibilityServicePermission(context)) {
-                if (context is FragmentActivity) {
-                    requestAccessibilityServicePermission(context, "AutoDiary screen capture")
-                }
-                return false
-            }
             if (!hasNotificationPermission(context)) {
                 if (context is FragmentActivity) {
                     ensureNotificationPermission(
@@ -177,14 +228,16 @@ class AutoDiaryService : Service() {
             return true
         }
 
-        /** Restores an already-enabled diary without trying to request permissions from a background context. */
+        /** Restores an already-enabled diary without an Accessibility prerequisite. */
         fun startIfEnabled(context: Context): Boolean {
-            if (!isEnabled(context) ||
-                !hasAccessibilityServicePermission(context) ||
-                !hasNotificationPermission(context)
-            ) {
+            if (!isEnabled(context) || !hasNotificationPermission(context)) {
                 return false
             }
+
+            // Complete the one-time migration from the legacy Accessibility capture bit.
+            LocalAgentPrefs.setTaskerAutoDiaryEnabled(context, true)
+            LocalAgentPrefs.setAutoCaptureEnabled(context, false)
+
             val intent = Intent(context, AutoDiaryService::class.java).setAction(ACTION_START)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 ContextCompat.startForegroundService(context, intent)
@@ -219,11 +272,14 @@ class AutoDiaryService : Service() {
         fun isRunning(): Boolean = RUNNING.get()
 
         fun isEnabled(context: Context): Boolean =
-            LocalAgentPrefs.isAutoCaptureEnabled(context) &&
+            LocalAgentPrefs.isTaskerAutoDiaryEnabled(context) &&
                 MemoryModeManager.isScreenOcrCaptureEnabled(context)
 
         private fun setEnabledState(context: Context, enabled: Boolean) {
-            LocalAgentPrefs.setAutoCaptureEnabled(context, enabled)
+            LocalAgentPrefs.setTaskerAutoDiaryEnabled(context, enabled)
+            // The legacy bit belongs only to LocalAgentAccessibilityService now. Always clear
+            // it from the Tasker-backed AutoDiary path so both observers cannot run together.
+            LocalAgentPrefs.setAutoCaptureEnabled(context, false)
             MemoryModeManager.setScreenOcrCaptureEnabled(context, enabled)
             CommunityPluginPrefs.setNativePluginEnabled(context, NativePluginIds.AUTO_DIARY, enabled)
         }
