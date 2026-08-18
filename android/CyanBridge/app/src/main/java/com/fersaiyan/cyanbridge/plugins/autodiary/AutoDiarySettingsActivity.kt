@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.plugins.autodiary
 
 import android.content.Intent
 import android.os.Bundle
-import android.provider.Settings
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -38,24 +38,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.daily.DailyFactsReminderScheduler
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyBulletsSettings
+import com.fersaiyan.cyanbridge.localagent.tasker.TaskerAgentBridge
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
 import com.fersaiyan.cyanbridge.ui.localagent.AppBlacklistActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
-import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
+import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
 import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
 import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
 
 class AutoDiarySettingsActivity : AppCompatActivity() {
     private var autoDiaryEnabled by mutableStateOf(false)
-    private var accessibilityEnabled by mutableStateOf(false)
+    private var taskerObserverAvailable by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,12 +63,10 @@ class AutoDiarySettingsActivity : AppCompatActivity() {
         setThemedComposeContent(composeView) {
             AutoDiarySettingsScreen(
                 enabled = autoDiaryEnabled,
-                accessibilityEnabled = accessibilityEnabled,
+                taskerObserverAvailable = taskerObserverAvailable,
                 onBack = ::finish,
                 onEnabledChanged = ::setEnabled,
-                onOpenAccessibility = {
-                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                },
+                onOpenTasker = ::openTasker,
                 onOpenBlacklist = {
                     startActivity(Intent(this, AppBlacklistActivity::class.java))
                 },
@@ -106,23 +103,27 @@ class AutoDiarySettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshUi() {
-        accessibilityEnabled = hasAccessibilityServicePermission(this)
+        taskerObserverAvailable = TaskerAgentBridge.isTaskerUiObserverAvailable(this)
         autoDiaryEnabled = AutoDiaryService.isEnabled(this)
-        if (autoDiaryEnabled && accessibilityEnabled) {
+        if (autoDiaryEnabled) {
             AutoDiaryService.startIfEnabled(this)
         }
     }
 
+    private fun openTasker() {
+        val intent = packageManager.getLaunchIntentForPackage("net.dinglisch.android.taskerm") ?: return
+        startActivity(intent)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AutoDiarySettingsScreen(
     enabled: Boolean,
-    accessibilityEnabled: Boolean,
+    taskerObserverAvailable: Boolean,
     onBack: () -> Unit,
     onEnabledChanged: (Boolean) -> Unit,
-    onOpenAccessibility: () -> Unit,
+    onOpenTasker: () -> Unit,
     onOpenBlacklist: () -> Unit,
     onOpenCaptures: () -> Unit,
     onOpenSummary: () -> Unit,
@@ -159,7 +160,8 @@ fun AutoDiarySettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                stringResource(R.string.compose_autodiary_description),
+                "Build a private daily memory from Android screen context and conversations. " +
+                    "Tasker + AutoInput observe the Android UI; CyanBridge owns privacy, storage, indexing and summaries.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             SwitchSetting(
@@ -169,19 +171,17 @@ fun AutoDiarySettingsScreen(
             )
             NativePluginShortcutPreference(
                 pluginId = com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds.AUTO_DIARY,
-                    pluginTitle = stringResource(R.string.compose_plugin_name_autodiary),
+                pluginTitle = stringResource(R.string.compose_plugin_name_autodiary),
             )
             Text(stringResource(R.string.compose_screen_capture), style = MaterialTheme.typography.titleMedium)
             Text(
-                if (accessibilityEnabled) {
-                    stringResource(R.string.compose_autodiary_accessibility_enabled)
-                } else if (enabled) {
-                    stringResource(R.string.compose_autodiary_paused)
-                } else {
-                    stringResource(R.string.compose_autodiary_accessibility_required)
+                when {
+                    taskerObserverAvailable -> "Tasker and AutoInput are installed. AutoDiary will request screen observations through the Tasker profile."
+                    enabled -> "AutoDiary is enabled, but Tasker or AutoInput is not detected. Captures will retry and report the Tasker-side failure."
+                    else -> "Tasker + AutoInput are required for screen observation. CyanBridge Accessibility permission is not required."
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = if (accessibilityEnabled) {
+                color = if (taskerObserverAvailable) {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 } else {
                     MaterialTheme.colorScheme.error
@@ -197,8 +197,8 @@ fun AutoDiarySettingsScreen(
                 },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onOpenAccessibility, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.compose_accessibility_settings))
+                OutlinedButton(onClick = onOpenTasker, modifier = Modifier.weight(1f)) {
+                    Text("Open Tasker")
                 }
                 OutlinedButton(onClick = onOpenBlacklist, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.compose_blacklist_apps))
