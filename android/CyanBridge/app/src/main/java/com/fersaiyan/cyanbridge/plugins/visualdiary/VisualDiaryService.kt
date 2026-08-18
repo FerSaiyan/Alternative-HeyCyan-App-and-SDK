@@ -68,6 +68,15 @@ class VisualDiaryService : Service() {
         return START_STICKY
     }
 
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "Foreground-service timeout: type=$fgsType; stopping without disabling Visual Diary")
+        RUNNING.set(false)
+        loopJob?.cancel()
+        loopJob = null
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        stopSelf(startId)
+    }
+
     override fun onDestroy() {
         stopLoop(clearPreference = false)
         scope.cancel()
