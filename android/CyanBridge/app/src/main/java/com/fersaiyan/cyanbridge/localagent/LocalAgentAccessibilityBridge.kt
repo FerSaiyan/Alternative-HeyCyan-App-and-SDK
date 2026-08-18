@@ -16,8 +16,7 @@ object LocalAgentAccessibilityBridge {
     fun snapshotScreenText(maxChars: Int = 12_000): String? {
         val svc = LocalAgentAccessibilityService.instance ?: return null
         return try {
-            svc.dumpActiveWindowText()
-                ?.take(maxChars)
+            svc.dumpActiveWindowText()?.take(maxChars)
         } catch (e: Exception) {
             Log.w(TAG, "snapshotScreenText failed: ${e.message}")
             null
@@ -34,15 +33,8 @@ object LocalAgentAccessibilityBridge {
             val text = svc.dumpActiveWindowText()?.take(maxChars)
             val packageName = svc.getCurrentForegroundPackageName()
 
-            if (nodes.isEmpty() && text.isNullOrBlank() && packageName.isNullOrBlank()) {
-                null
-            } else {
-                LocalAgentScreenSnapshot(
-                    packageName = packageName,
-                    textSummary = text,
-                    nodes = nodes,
-                )
-            }
+            if (nodes.isEmpty() && text.isNullOrBlank() && packageName.isNullOrBlank()) null
+            else LocalAgentScreenSnapshot(packageName, text, nodes)
         } catch (e: Exception) {
             Log.w(TAG, "snapshotScreen failed: ${e.message}")
             null
@@ -117,13 +109,12 @@ object LocalAgentAccessibilityBridge {
         }
     }
 
-    /**
-     * Uses Shizuku only after the regular Accessibility primitive failed. Callers must have
-     * already applied the normal action-risk/approval policy before invoking this helper.
-     */
-    suspend fun performWithOptionalShizukuFallback(context: android.content.Context, action: LocalAgentAction): Boolean {
+    /** Legacy call site kept during the Tasker migration. No privileged fallback remains. */
+    suspend fun performWithOptionalShizukuFallback(
+        context: android.content.Context,
+        action: LocalAgentAction,
+    ): Boolean {
         if (!LocalAgentDeviceState.isReady(context)) return false
-        if (perform(action)) return true
-        return LocalAgentShizukuFallback.performAfterAccessibilityFailure(context, action)
+        return perform(action)
     }
 }
