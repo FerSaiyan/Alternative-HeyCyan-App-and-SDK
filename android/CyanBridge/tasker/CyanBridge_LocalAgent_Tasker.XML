@@ -1,0 +1,343 @@
+<TaskerData sr="" dvi="1" tv="6.5.11">
+    <Profile sr="prof201" ve="2">
+        <id>201</id>
+        <mid0>211</mid0>
+        <nme>CyanBridge LocalAgent Observe</nme>
+        <Share sr="Share">
+            <b>false</b>
+            <d>Receives CyanBridge Local Agent observation requests, queries the current UI with AutoInput, and returns a compact JSON response envelope. Tasker is an observer/executor only; CyanBridge owns planning, approvals and cancellation decisions.</d>
+            <g>CyanBridge,Local Agent,AutoInput</g>
+            <p>true</p>
+            <t></t>
+        </Share>
+        <Event sr="con0" ve="2">
+            <code>599</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_AGENT_OBSERVE</Str>
+            <Int sr="arg1" val="0"/>
+            <Int sr="arg2" val="0"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+        </Event>
+    </Profile>
+    <Profile sr="prof202" ve="2">
+        <id>202</id>
+        <mid0>212</mid0>
+        <nme>CyanBridge LocalAgent Execute</nme>
+        <Share sr="Share">
+            <b>false</b>
+            <d>Executes CyanBridge-selected UI primitives through AutoInput and returns the exact result. No independent risk filtering is performed in Tasker. Native Android actions such as app launch, calls, SMS, email, alarms and settings remain executed by CyanBridge.</d>
+            <g>CyanBridge,Local Agent,AutoInput</g>
+            <p>true</p>
+            <t></t>
+        </Share>
+        <Event sr="con0" ve="2">
+            <code>599</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_AGENT_EXECUTE</Str>
+            <Int sr="arg1" val="0"/>
+            <Int sr="arg2" val="0"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+        </Event>
+    </Profile>
+    <Task sr="task211">
+        <id>211</id>
+        <nme>CyanBridge LocalAgent Observe Handler</nme>
+        <pri>10</pri>
+        <Action sr="act0" ve="7">
+            <code>15355</code>
+            <Bundle sr="arg0">
+                <Vals sr="val">
+                    <com.twofortyfouram.locale.intent.extra.BLURB>Query current visible UI for CyanBridge Local Agent</com.twofortyfouram.locale.intent.extra.BLURB>
+                    <com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
+                    <plugininstanceid>cyanbridge-localagent-query-v1</plugininstanceid>
+                    <plugininstanceid-type>java.lang.String</plugininstanceid-type>
+                    <plugintypeid>com.joaomgcd.autoinput.intent.IntentUIQuery</plugintypeid>
+                    <plugintypeid-type>java.lang.String</plugintypeid-type>
+                </Vals>
+            </Bundle>
+            <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str>
+            <Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigUIQuery</Str>
+            <Int sr="arg3" val="10"/>
+            <Int sr="arg4" val="1"/>
+        </Action>
+        <Action sr="act1" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">function arr(v) {
+    if (typeof v === "undefined" || v === null) return [];
+    if (Array.isArray(v)) return v;
+    return [v];
+}
+var texts = (typeof aitext !== "undefined") ? arr(aitext) : [];
+var ids = (typeof aiid !== "undefined") ? arr(aiid) : [];
+var coords = [];
+if (typeof aicoordinates !== "undefined") coords = arr(aicoordinates);
+else if (typeof aicoords !== "undefined") coords = arr(aicoords);
+var count = Math.max(texts.length, ids.length, coords.length);
+var nodes = [];
+for (var i = 0; i &lt; count &amp;&amp; i &lt; 160; i++) {
+    var coord = String(coords[i] || "");
+    var match = coord.match(/(-?\d+)\s*,\s*(-?\d+)/);
+    var x = match ? parseInt(match[1], 10) : 0;
+    var y = match ? parseInt(match[2], 10) : 0;
+    nodes.push({
+        index: i,
+        depth: 0,
+        text: String(texts[i] || ""),
+        content_description: "",
+        hint_text: "",
+        class_name: "",
+        view_id: String(ids[i] || ""),
+        clickable: false,
+        editable: false,
+        scrollable: false,
+        password: false,
+        checkable: false,
+        checked: false,
+        focused: false,
+        bounds: {left:x, top:y, right:x, bottom:y}
+    });
+}
+var pkg = (typeof aipackage !== "undefined") ? String(aipackage || "") : "";
+var summary = texts.filter(function(v){ return String(v || "").trim().length &gt; 0; })
+    .join("\n").slice(0, 12000);
+var observation = {
+    created_at_ms: Date.now(),
+    package_name: pkg,
+    text_summary: summary,
+    nodes: nodes
+};
+var envelope = {
+    contract_version: 1,
+    request_id: String(request_id || ""),
+    callback_token: String(callback_token || ""),
+    success: true,
+    payload: JSON.stringify(observation),
+    error: null
+};
+sendIntent(
+    "com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE",
+    "receiver",
+    "com.fersaiyan.cyanbridge",
+    undefined, undefined, undefined, undefined,
+    ["response:" + JSON.stringify(envelope)]
+);</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+    </Task>
+    <Task sr="task212">
+        <id>212</id>
+        <nme>CyanBridge LocalAgent Execute Handler</nme>
+        <pri>10</pri>
+        <Action sr="act0" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">function aiEscape(value) {
+    return String(value == null ? "" : value)
+        .replace(/\\/g, "\\\\")
+        .replace(/,/g, "\\,")
+        .replace(/\r?\n/g, " ");
+}
+execution_success = "true";
+execution_detail = "";
+execution_error = "";
+use_ai_v2 = "false";
+global_action = "";
+read_aloud = "false";
+ai_command = "";
+try {
+    var action = JSON.parse(String(payload || "{}"));
+    action_type = String(action.type || "");
+    switch (action_type) {
+        case "click_text":
+            ai_command = "click(text," + aiEscape(action.text) + ")";
+            use_ai_v2 = "true";
+            break;
+        case "click_coord":
+            ai_command = "click(point," + Number(action.x || 0) + "\\," + Number(action.y || 0) + ")";
+            use_ai_v2 = "true";
+            break;
+        case "type_text":
+            ai_command = "setText(focus,," + aiEscape(action.text) + ")";
+            use_ai_v2 = "true";
+            break;
+        case "long_press":
+            ai_command = "longClick(point," + Number(action.x || 0) + "\\," + Number(action.y || 0) + ")";
+            use_ai_v2 = "true";
+            break;
+        case "global_back":
+            global_action = "1";
+            break;
+        case "global_home":
+            global_action = "2";
+            break;
+        case "open_recents":
+            global_action = "3";
+            break;
+        case "open_notifications":
+            global_action = "4";
+            break;
+        case "scroll":
+            ai_command = String(action.direction || "").toLowerCase() === "up"
+                ? "scroll(backward)"
+                : "scroll(forward)";
+            use_ai_v2 = "true";
+            break;
+        case "read_screen_aloud":
+            read_aloud = "true";
+            break;
+        case "press_enter":
+            execution_success = "false";
+            execution_error = "tasker_press_enter_adapter_not_configured";
+            break;
+        case "swipe":
+            execution_success = "false";
+            execution_error = "tasker_swipe_adapter_not_configured";
+            break;
+        default:
+            execution_success = "false";
+            execution_error = "unsupported_tasker_ui_action:" + action_type;
+    }
+} catch (e) {
+    action_type = "";
+    execution_success = "false";
+    execution_error = "invalid_action_json:" + String(e);
+}</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+        <Action sr="act2" ve="7">
+            <code>107361459</code>
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%use_ai_v2</lhs><op>2</op><rhs>true</rhs></Condition></ConditionList>
+            <Bundle sr="arg0">
+                <Vals sr="val">
+                    <com.twofortyfouram.locale.intent.extra.BLURB>Dynamic CyanBridge Local Agent UI primitive: %ai_command</com.twofortyfouram.locale.intent.extra.BLURB>
+                    <com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
+                    <net.dinglisch.android.tasker.JSON_ENCODED_KEYS>parameters</net.dinglisch.android.tasker.JSON_ENCODED_KEYS>
+                    <net.dinglisch.android.tasker.JSON_ENCODED_KEYS-type>java.lang.String</net.dinglisch.android.tasker.JSON_ENCODED_KEYS-type>
+                    <net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS>parameters plugininstanceid plugintypeid </net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS>
+                    <net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS-type>java.lang.String</net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS-type>
+                    <net.dinglisch.android.tasker.subbundled>true</net.dinglisch.android.tasker.subbundled>
+                    <net.dinglisch.android.tasker.subbundled-type>java.lang.Boolean</net.dinglisch.android.tasker.subbundled-type>
+                    <parameters>{"_action":"%ai_command\n","_additionalOptions":{"checkMs":"750","preActionDelay":"75","separator":",","withCoordinates":false},"_whenToPerformAction":{"notInAutoInput":true,"notInTasker":false},"generatedValues":{}}</parameters>
+                    <parameters-type>java.lang.String</parameters-type>
+                    <plugininstanceid>cyanbridge-localagent-action-v1</plugininstanceid>
+                    <plugininstanceid-type>java.lang.String</plugininstanceid-type>
+                    <plugintypeid>com.joaomgcd.autoinput.intent.IntentActionv2</plugintypeid>
+                    <plugintypeid-type>java.lang.String</plugintypeid-type>
+                </Vals>
+            </Bundle>
+            <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str>
+            <Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigActionv2</Str>
+            <Int sr="arg3" val="20"/>
+            <Int sr="arg4" val="1"/>
+        </Action>
+        <Action sr="act3" ve="7">
+            <code>25167</code>
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%global_action</lhs><op>2</op><rhs>1</rhs></Condition></ConditionList>
+            <Bundle sr="arg0"><Vals sr="val">
+                <GlobalAction>1</GlobalAction><GlobalAction-type>java.lang.String</GlobalAction-type>
+                <com.twofortyfouram.locale.intent.extra.BLURB>CyanBridge AutoInput Back</com.twofortyfouram.locale.intent.extra.BLURB><com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
+                <plugininstanceid>cyanbridge-global-back</plugininstanceid><plugininstanceid-type>java.lang.String</plugininstanceid-type>
+                <plugintypeid>com.joaomgcd.autoinput.intent.IntentPerformGlobalAction</plugintypeid><plugintypeid-type>java.lang.String</plugintypeid-type>
+            </Vals></Bundle>
+            <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str><Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigPerformGlobalAction</Str><Int sr="arg3" val="10"/><Int sr="arg4" val="1"/>
+        </Action>
+        <Action sr="act4" ve="7">
+            <code>25167</code>
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%global_action</lhs><op>2</op><rhs>2</rhs></Condition></ConditionList>
+            <Bundle sr="arg0"><Vals sr="val">
+                <GlobalAction>2</GlobalAction><GlobalAction-type>java.lang.String</GlobalAction-type>
+                <com.twofortyfouram.locale.intent.extra.BLURB>CyanBridge AutoInput Home</com.twofortyfouram.locale.intent.extra.BLURB><com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
+                <plugininstanceid>cyanbridge-global-home</plugininstanceid><plugininstanceid-type>java.lang.String</plugininstanceid-type>
+                <plugintypeid>com.joaomgcd.autoinput.intent.IntentPerformGlobalAction</plugintypeid><plugintypeid-type>java.lang.String</plugintypeid-type>
+            </Vals></Bundle>
+            <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str><Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigPerformGlobalAction</Str><Int sr="arg3" val="10"/><Int sr="arg4" val="1"/>
+        </Action>
+        <Action sr="act5" ve="7">
+            <code>25167</code>
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%global_action</lhs><op>2</op><rhs>3</rhs></Condition></ConditionList>
+            <Bundle sr="arg0"><Vals sr="val">
+                <GlobalAction>3</GlobalAction><GlobalAction-type>java.lang.String</GlobalAction-type>
+                <com.twofortyfouram.locale.intent.extra.BLURB>CyanBridge AutoInput Recents</com.twofortyfouram.locale.intent.extra.BLURB><com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
+                <plugininstanceid>cyanbridge-global-recents</plugininstanceid><plugininstanceid-type>java.lang.String</plugininstanceid-type>
+                <plugintypeid>com.joaomgcd.autoinput.intent.IntentPerformGlobalAction</plugintypeid><plugintypeid-type>java.lang.String</plugintypeid-type>
+            </Vals></Bundle>
+            <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str><Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigPerformGlobalAction</Str><Int sr="arg3" val="10"/><Int sr="arg4" val="1"/>
+        </Action>
+        <Action sr="act6" ve="7">
+            <code>25167</code>
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%global_action</lhs><op>2</op><rhs>4</rhs></Condition></ConditionList>
+            <Bundle sr="arg0"><Vals sr="val">
+                <GlobalAction>4</GlobalAction><GlobalAction-type>java.lang.String</GlobalAction-type>
+                <com.twofortyfouram.locale.intent.extra.BLURB>CyanBridge AutoInput Notifications</com.twofortyfouram.locale.intent.extra.BLURB><com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
+                <plugininstanceid>cyanbridge-global-notifications</plugininstanceid><plugininstanceid-type>java.lang.String</plugininstanceid-type>
+                <plugintypeid>com.joaomgcd.autoinput.intent.IntentPerformGlobalAction</plugintypeid><plugintypeid-type>java.lang.String</plugintypeid-type>
+            </Vals></Bundle>
+            <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str><Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigPerformGlobalAction</Str><Int sr="arg3" val="10"/><Int sr="arg4" val="1"/>
+        </Action>
+        <Action sr="act7" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">if (typeof err !== "undefined" &amp;&amp; String(err || "") !== "" &amp;&amp; String(err || "") !== "0") {
+    execution_success = "false";
+    execution_error = "autoinput_error:" + String(err) + ":" + String(typeof errmsg !== "undefined" ? errmsg : "");
+} else if (execution_success === "true") {
+    execution_detail = "autoinput:" + String(action_type || "") + ":ok";
+}</Str>
+            <Str sr="arg1" ve="3"/><Int sr="arg2" val="1"/><Int sr="arg3" val="45"/>
+        </Action>
+        <Action sr="act8" ve="7">
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%read_aloud</lhs><op>2</op><rhs>true</rhs></Condition></ConditionList>
+            <code>15355</code>
+            <Bundle sr="arg0"><Vals sr="val">
+                <com.twofortyfouram.locale.intent.extra.BLURB>Query screen text for CyanBridge read aloud</com.twofortyfouram.locale.intent.extra.BLURB><com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
+                <plugininstanceid>cyanbridge-localagent-read-query-v1</plugininstanceid><plugininstanceid-type>java.lang.String</plugininstanceid-type>
+                <plugintypeid>com.joaomgcd.autoinput.intent.IntentUIQuery</plugintypeid><plugintypeid-type>java.lang.String</plugintypeid-type>
+            </Vals></Bundle>
+            <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str><Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigUIQuery</Str><Int sr="arg3" val="10"/><Int sr="arg4" val="1"/>
+        </Action>
+        <Action sr="act9" ve="7">
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%read_aloud</lhs><op>2</op><rhs>true</rhs></Condition></ConditionList>
+            <code>129</code>
+            <Str sr="arg0" ve="3">var speakText = "";
+if (typeof aitext !== "undefined") {
+    var parts = Array.isArray(aitext) ? aitext : [aitext];
+    speakText = parts.filter(function(v){return String(v || "").trim().length &gt; 0;}).join(". ").slice(0, 6000);
+}
+if (!speakText) {
+    execution_success = "false";
+    execution_error = "autoinput_screen_text_empty";
+} else {
+    var spoken = say(speakText, undefined, undefined, "media", 5, 5);
+    if (spoken === false) {
+        execution_success = "false";
+        execution_error = "tasker_tts_failed";
+    } else {
+        execution_detail = "read_screen_aloud:ok";
+    }
+}</Str>
+            <Str sr="arg1" ve="3"/><Int sr="arg2" val="1"/><Int sr="arg3" val="45"/>
+        </Action>
+        <Action sr="act10" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">var ok = String(execution_success || "false") === "true";
+var envelope = {
+    contract_version: 1,
+    request_id: String(request_id || ""),
+    callback_token: String(callback_token || ""),
+    success: ok,
+    payload: ok ? String(execution_detail || ("tasker:" + String(action_type || "") + ":ok")) : null,
+    error: ok ? null : String(execution_error || "tasker_execution_failed")
+};
+sendIntent(
+    "com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE",
+    "receiver",
+    "com.fersaiyan.cyanbridge",
+    undefined, undefined, undefined, undefined,
+    ["response:" + JSON.stringify(envelope)]
+);</Str>
+            <Str sr="arg1" ve="3"/><Int sr="arg2" val="1"/><Int sr="arg3" val="45"/>
+        </Action>
+    </Task>
+</TaskerData>
