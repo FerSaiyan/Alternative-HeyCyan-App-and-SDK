@@ -38,7 +38,8 @@ class VisualDiaryCaptureWorker(
             Result.success()
         } else {
             Log.w(TAG, "Tasker Visual Diary capture failed: ${result.detail}")
-            Result.retry()
+            // Tasker owns periodicity. Do not create a hidden WorkManager retry schedule.
+            Result.failure()
         }
     }
 
