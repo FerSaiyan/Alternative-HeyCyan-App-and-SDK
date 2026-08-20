@@ -1,6 +1,5 @@
 package com.fersaiyan.cyanbridge.ui
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -13,11 +12,10 @@ import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AgentPrefs
-import com.fersaiyan.cyanbridge.localagent.accessibility.LocalAgentAccessibilityService
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
+import com.fersaiyan.cyanbridge.shared.ui.onboarding.FeatureOnboardingScreen
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.shared.ui.onboarding.FeatureOnboardingScreen
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.hjq.permissions.OnPermissionCallback
 
@@ -55,7 +53,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
 
         val isAccessibilityFeature = featureIndex == SCREEN_MEMORY_FEATURE_INDEX
         localAgentAutomationEnabled = AgentPrefs.isLocalAgentAutomationEnabled(this)
-        accessibilityEnabled = isLocalAgentAccessibilityServiceEnabled()
+        accessibilityEnabled = hasAccessibilityServicePermission(this)
         glassesConnectionPermissionGranted = hasBluetooth(this)
         val appearancePreferences = AppearancePreferences(this)
         setContent {
@@ -70,6 +68,8 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                     // CyanBridge uses app-private storage, MediaStore and SAF; All Files Access is not requested.
                     showStoragePermission = false,
                     storagePermissionGranted = true,
+                    // This disclosure now refers to AutoInput's accessibility access. CyanBridge itself
+                    // no longer declares an AccessibilityService in the Android manifest.
                     showAccessibilityDisclosure = isAccessibilityFeature,
                     showOpenSourceContribution = featureIndex == OPEN_SOURCE_FEATURE_INDEX,
                     accessibilityEnabled = accessibilityEnabled,
@@ -111,23 +111,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
     }
 
     private fun refreshAccessibilityStatus() {
-        accessibilityEnabled = isLocalAgentAccessibilityServiceEnabled()
-    }
-
-    private fun isLocalAgentAccessibilityServiceEnabled(): Boolean {
-        val accessibilityEnabled = Settings.Secure.getInt(
-            contentResolver,
-            Settings.Secure.ACCESSIBILITY_ENABLED,
-            0,
-        ) == 1
-        if (!accessibilityEnabled) return false
-
-        val expected = ComponentName(this, LocalAgentAccessibilityService::class.java).flattenToString()
-        val enabledServices = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-        ).orEmpty()
-        return enabledServices.split(':').any { it.equals(expected, ignoreCase = true) }
+        accessibilityEnabled = hasAccessibilityServicePermission(this)
     }
 
     private fun goToFeature(index: Int) {
