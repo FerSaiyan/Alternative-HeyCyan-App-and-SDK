@@ -1,6 +1,5 @@
 package com.fersaiyan.cyanbridge.localagent
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -52,7 +51,7 @@ object LocalAgentController {
         return sendServiceCommand(context, LocalAgentIntents.ACTION_DEMO)
     }
 
-    /** Standalone read-screen remains on the legacy Accessibility service until its later migration. */
+    /** Standalone read-screen now uses Tasker + AutoInput; CyanBridge has no AccessibilityService. */
     fun readCurrentScreen(context: Context): CommandResult {
         LocalAgentDeviceState.availability(context)
             .takeIf { it != LocalAgentDeviceState.Availability.READY }
@@ -61,19 +60,16 @@ object LocalAgentController {
             return CommandResult(false, "Notification permission is required to read the screen aloud.", "missing_post_notifications")
         }
         if (!hasAccessibilityServicePermission(context)) {
-            if (context is FragmentActivity) requestAccessibilityServicePermission(context, "Local Agent")
-            return CommandResult(false, "Enable Accessibility access before reading the screen aloud.", "missing_accessibility_service")
+            if (context is FragmentActivity) requestAccessibilityServicePermission(context, "Local Agent screen reading")
+            return CommandResult(false, "Enable AutoInput accessibility before reading the screen aloud.", "missing_autoinput_accessibility")
         }
-        return sendLegacyServiceCommand(context, LocalAgentIntents.ACTION_READ_SCREEN_ALOUD)
+        return sendServiceCommand(context, LocalAgentIntents.ACTION_READ_SCREEN_ALOUD)
     }
 
     fun requestStatus(context: Context): CommandResult = sendServiceCommand(context, LocalAgentIntents.ACTION_GET_STATUS)
 
     private fun sendServiceCommand(context: Context, action: String, extras: Map<String, String> = emptyMap()): CommandResult =
         sendCommandToClass(context, action, DEFAULT_SERVICE_CLASS, extras)
-
-    private fun sendLegacyServiceCommand(context: Context, action: String): CommandResult =
-        sendCommandToClass(context, action, "com.fersaiyan.cyanbridge.localagent.LocalAgentService", emptyMap())
 
     private fun sendCommandToClass(
         context: Context,
