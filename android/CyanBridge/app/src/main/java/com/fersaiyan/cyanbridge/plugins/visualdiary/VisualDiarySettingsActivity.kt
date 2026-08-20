@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.Arrangement.spacedBy
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Warning
@@ -28,7 +27,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,6 +57,7 @@ class VisualDiarySettingsActivity : AppCompatActivity() {
                 lastError = lastError,
                 onBack = ::finish,
                 onEnabledChanged = ::setEnabled,
+                onOpenTasker = ::openTasker,
             )
         }
     }
@@ -76,6 +75,11 @@ class VisualDiarySettingsActivity : AppCompatActivity() {
     private fun refreshUi() {
         visualDiaryEnabled = VisualDiaryPreferences.isEnabled(this)
         lastError = VisualDiaryPreferences.getLastError(this)
+        VisualDiaryService.startIfEnabled(this)
+    }
+
+    private fun openTasker() {
+        packageManager.getLaunchIntentForPackage("net.dinglisch.android.taskerm")?.let(::startActivity)
     }
 }
 
@@ -86,10 +90,10 @@ fun VisualDiarySettingsScreen(
     lastError: String,
     onBack: () -> Unit,
     onEnabledChanged: (Boolean) -> Unit,
+    onOpenTasker: () -> Unit,
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
-    var interval by remember { mutableIntStateOf(VisualDiaryPreferences.getIntervalMinutes(context)) }
     var prompt by remember { mutableStateOf(VisualDiaryPreferences.getCustomPrompt(context)) }
 
     val hasCamera = remember { DeviceCapabilityHelper.hasCamera(context) }
@@ -150,10 +154,15 @@ fun VisualDiarySettingsScreen(
             }
 
             Text(
-                stringResource(R.string.compose_visual_description),
+                "Visual Diary keeps glasses capture and visual inference inside CyanBridge. " +
+                    "Tasker only owns the periodic trigger, avoiding a long-running dataSync scheduler.",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            SwitchSetting(stringResource(R.string.compose_visual_enabled), enabled && hasCamera, if (hasCamera) onEnabledChanged else { _ -> })
+            SwitchSetting(
+                stringResource(R.string.compose_visual_enabled),
+                enabled && hasCamera,
+                if (hasCamera) onEnabledChanged else { _ -> },
+            )
             NativePluginShortcutPreference(
                 pluginId = NativePluginIds.VISUAL_DIARY,
                 pluginTitle = stringResource(R.string.compose_plugin_name_visual_diary),
@@ -166,15 +175,14 @@ fun VisualDiarySettingsScreen(
                 )
             }
             SectionTitle(stringResource(R.string.compose_capture))
-            NumberSetting(
-                label = stringResource(R.string.compose_capture_interval_minutes),
-                value = interval,
-                range = 1..240,
-                onValueChanged = {
-                    interval = it
-                    VisualDiaryPreferences.setIntervalMinutes(context, it)
-                },
+            Text(
+                "The imported Tasker profile triggers every 15 minutes by default. Edit the Time profile in Tasker to change periodicity.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            OutlinedButton(onClick = onOpenTasker, modifier = Modifier.fillMaxWidth()) {
+                Text("Open Tasker schedule")
+            }
             OutlinedButton(
                 onClick = { VisualDiaryService.captureNow(context) },
                 modifier = Modifier.fillMaxWidth(),
@@ -192,9 +200,7 @@ fun VisualDiarySettingsScreen(
                 maxLines = 7,
             )
             OutlinedButton(
-                onClick = {
-                    onEnabledChanged(false)
-                },
+                onClick = { onEnabledChanged(false) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.compose_stop_visual_diary)) }
             SectionTitle(stringResource(R.string.compose_shared_memory))
@@ -218,26 +224,4 @@ private fun SwitchSetting(label: String, checked: Boolean, onCheckedChange: (Boo
 @Composable
 private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium)
-}
-
-@Composable
-private fun NumberSetting(
-    label: String,
-    value: Int,
-    range: IntRange,
-    onValueChanged: (Int) -> Unit,
-) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label)
-        OutlinedTextField(
-            value = text,
-            onValueChange = {
-                text = it
-                it.toIntOrNull()?.takeIf { number -> number in range }?.let(onValueChanged)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-    }
 }
