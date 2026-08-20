@@ -38,6 +38,11 @@
     <queries>
         <package android:name="net.dinglisch.android.taskerm" />
         <package android:name="com.joaomgcd.autoinput" />
+        <package android:name="com.facebook.stella" />
+        <package android:name="com.facebook.stella_debug" />
+        <package android:name="com.google.android.googlequicksearchbox" />
+        <package android:name="com.google.android.apps.bard" />
+        <package android:name="com.openai.chatgpt" />
     </queries>
 
     <application
