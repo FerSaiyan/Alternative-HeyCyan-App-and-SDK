@@ -7,6 +7,7 @@ on:
       - .github/workflows/android-self-hosted.yml
       - android/**
       - heycyan-core/**
+      - tools/hil/**
       - .gitmodules
       - README.md
 
@@ -44,6 +45,7 @@ jobs:
           test "$(uname -s)" = "Linux"
           test "$(uname -m)" = "x86_64"
           command -v git-lfs >/dev/null
+          command -v python3 >/dev/null
           test -x /opt/android-studio/jbr/bin/java
           test -d "$HOME/Android/Sdk/platforms/android-35"
           test -x "$HOME/Android/Sdk/platform-tools/adb"
@@ -59,12 +61,15 @@ jobs:
 
       - name: Verify Meta SDK credential
         env:
-          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
-        run: test -n "$META_GITHUB_TOKEN"
+          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+        run: test -n "$GITHUB_TOKEN"
+
+      - name: Validate Tasker integration contracts
+        run: python3 tools/hil/validate_tasker_profiles.py
 
       - name: Run Android and shared tests
         env:
-          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         working-directory: android/CyanBridge
         run: >-
           ./gradlew --no-daemon --stacktrace
@@ -73,7 +78,7 @@ jobs:
 
       - name: Assemble debug APK
         env:
-          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         working-directory: android/CyanBridge
         run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
 
