@@ -20,11 +20,13 @@ package_installed "$serial" "$TASKER_PACKAGE" || {
   exit 4
 }
 
+# Production profiles first, then the HIL controller that invokes their real task names.
 profiles=(
   "Tasker_AI.xml"
   "CyanBridge_LocalAgent_Tasker.XML"
   "CyanBridge_AutoDiary_Tasker.XML"
   "CyanBridge_VisualDiary_Tasker.XML"
+  "CyanBridge_HIL_Tasker.XML"
 )
 
 find_tappable_bounds() {
