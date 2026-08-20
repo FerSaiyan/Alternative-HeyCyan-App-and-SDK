@@ -54,6 +54,7 @@ class TaskerLocalAgentService : Service() {
             LocalAgentIntents.ACTION_START -> startLoop(intent.getStringExtra(LocalAgentIntents.EXTRA_GOAL))
             LocalAgentIntents.ACTION_STOP -> stopLoop("user")
             LocalAgentIntents.ACTION_GET_STATUS -> emitStatus()
+            LocalAgentIntents.ACTION_READ_SCREEN_ALOUD -> readScreenAloudOnce()
             LocalAgentIntents.ACTION_RESUME_AFTER_APPROVAL -> {
                 val rejected = intent.getBooleanExtra(LocalAgentIntents.EXTRA_REJECTED, false)
                 approvalDeferred?.takeIf { !it.isCompleted }?.complete(!rejected)
@@ -69,6 +70,22 @@ class TaskerLocalAgentService : Service() {
         approvalDeferred = null
         scope.cancel()
         super.onDestroy()
+    }
+
+    private fun readScreenAloudOnce() {
+        if (loopJob?.isActive == true) return
+        startForeground(NOTIFICATION_ID, notification("Reading screen through Tasker"))
+        setStatus("Reading screen through Tasker", null)
+        loopJob = scope.launch {
+            val result = withTimeoutOrNull(EXECUTION_TIMEOUT_MS) {
+                TaskerExecutionBackend.execute(applicationContext, LocalAgentAction.ReadScreenAloud)
+            } ?: LocalAgentBackendExecutionResult(false, "tasker_execution_timeout")
+            if (result.success) {
+                finishService("Screen read aloud", null)
+            } else {
+                finishService("Screen read failed", result.detail)
+            }
+        }
     }
 
     private fun startLoop(goalRaw: String?) {
@@ -166,8 +183,6 @@ class TaskerLocalAgentService : Service() {
                     val needsApproval = requireConfirm && risk == LocalAgentActionManager.Risk.HIGH
 
                     if (needsApproval) {
-                        // CyanBridge is the only policy authority. Tasker never decides whether
-                        // an action is allowed; it only receives the action after approval.
                         LocalAgentActionManager.processPlannedAction(
                             applicationContext,
                             action,
@@ -180,8 +195,6 @@ class TaskerLocalAgentService : Service() {
                             stepFailed = true
                             break
                         }
-                        // PendingActionsActivity performs the approved action through Tasker and
-                        // reports the result in the pending-action record before resuming us.
                         resultParts += "${action.javaClass.simpleName}: approved_and_executed"
                     } else {
                         val execution = withTimeoutOrNull(EXECUTION_TIMEOUT_MS) {
@@ -265,6 +278,7 @@ class TaskerLocalAgentService : Service() {
     private fun finishService(status: String, error: String?) {
         setStatus(status, error)
         cancelRequested.set(true)
+        loopJob = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
