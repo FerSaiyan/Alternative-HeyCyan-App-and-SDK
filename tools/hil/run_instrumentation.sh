@@ -6,6 +6,7 @@ serial="${1:-${CYANBRIDGE_HIL_SERIAL:-}}"
 mode="${2:-hardware}"
 classes="${3:-}"
 glasses="${CYANBRIDGE_HIL_GLASSES:-false}"
+expect_visual_fact="${CYANBRIDGE_HIL_EXPECT_VISUAL_FACT:-false}"
 
 if [[ -z "$serial" ]]; then
   serial="$(find_serial any || true)"
@@ -22,6 +23,7 @@ cmd=(
   shell am instrument -w -r
   -e hil_mode "$mode"
   -e hil_glasses "$glasses"
+  -e hil_expect_visual_fact "$expect_visual_fact"
 )
 if [[ -n "$classes" ]]; then
   cmd+=( -e class "$classes" )
