@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.plugins.autodiary
 
 import android.content.Context
 import android.util.Log
-import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.LocalAgentDeviceState
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryRoomIndex
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
@@ -13,10 +12,10 @@ import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultBootstrap
 import com.fersaiyan.cyanbridge.memoryvault.VaultLockStateManager
 
 /**
- * Coordinates one AutoDiary screen sample.
+ * Coordinates AutoDiary screen-memory ingestion.
  *
- * CyanBridge remains the source of truth for feature state, privacy policy, blacklist,
- * storage and indexing. Tasker/AutoInput is only the Android UI observer.
+ * Tasker owns periodicity, package exclusions and Android UI observation. CyanBridge owns
+ * feature state, Memory Mode, encrypted persistence, indexing and downstream daily facts/RAG.
  */
 object AutoDiaryCaptureCoordinator {
     data class CaptureResult(
@@ -24,26 +23,14 @@ object AutoDiaryCaptureCoordinator {
         val detail: String,
     )
 
+    /** Debug/manual pull path retained for parity testing. Normal periodic operation is Tasker-push. */
     suspend fun captureOnce(context: Context): CaptureResult {
         val appContext = context.applicationContext
-
-        if (!AutoDiaryService.isEnabled(appContext)) {
-            return CaptureResult(false, "auto_diary_disabled")
-        }
-        if (!MemoryModeManager.isScreenOcrCaptureEnabled(appContext)) {
-            return CaptureResult(false, "screen_memory_disabled")
-        }
-        if (!LocalAgentDeviceState.isReady(appContext)) {
-            return CaptureResult(false, "device_not_ready")
-        }
-        if (VaultLockStateManager.isLocked(appContext)) {
-            return CaptureResult(false, "memory_vault_locked")
-        }
+        val preflight = preflight(appContext)
+        if (preflight != null) return preflight
         if (!TaskerAgentBridge.isTaskerUiObserverAvailable(appContext)) {
             return CaptureResult(false, "tasker_or_autoinput_missing")
         }
-
-        MemoryVaultBootstrap.ensureInitialized(appContext)
 
         val response = TaskerAgentBridge.requestAutoDiaryObservation(appContext)
         if (!response.success || response.payload.isNullOrBlank()) {
@@ -52,9 +39,16 @@ object AutoDiaryCaptureCoordinator {
                 response.error?.takeIf { it.isNotBlank() } ?: "tasker_observation_failed",
             )
         }
+        return ingestObservationJson(appContext, response.payload)
+    }
+
+    suspend fun ingestObservationJson(context: Context, payload: String): CaptureResult {
+        val appContext = context.applicationContext
+        val preflight = preflight(appContext)
+        if (preflight != null) return preflight
 
         val observation = runCatching {
-            TaskerAgentContract.observationFromJson(response.payload)
+            TaskerAgentContract.observationFromJson(payload)
         }.getOrElse {
             return CaptureResult(false, "invalid_tasker_observation:${it.javaClass.simpleName}")
         }
@@ -67,10 +61,8 @@ object AutoDiaryCaptureCoordinator {
             return CaptureResult(false, "observation_package_missing")
         }
 
-        if (LocalAgentPrefs.getCaptureBlacklistPackages(appContext).contains(packageName)) {
-            Log.d(TAG, "Skipping blacklisted package: $packageName")
-            return CaptureResult(false, "blacklisted_package:$packageName")
-        }
+        // User-selected exclusions live in Tasker so CyanBridge never needs package inventory
+        // visibility. Keep only a fixed launcher/system guard here as defense in depth.
         if (isOverlayPackage(packageName)) {
             Log.d(TAG, "Skipping overlay/system package: $packageName")
             return CaptureResult(false, "overlay_package:$packageName")
@@ -82,6 +74,7 @@ object AutoDiaryCaptureCoordinator {
             return CaptureResult(false, "observation_text_empty")
         }
 
+        MemoryVaultBootstrap.ensureInitialized(appContext)
         val timestamp = observation.createdAtMs.takeIf { it > 0L } ?: System.currentTimeMillis()
         LocalAgentMemoryStore.appendScreenCapture(
             context = appContext,
@@ -98,6 +91,22 @@ object AutoDiaryCaptureCoordinator {
 
         Log.i(TAG, "Stored Tasker AutoDiary capture: pkg=$packageName chars=${text.length}")
         return CaptureResult(true, "stored:$packageName:${text.length}")
+    }
+
+    private fun preflight(context: Context): CaptureResult? {
+        if (!AutoDiaryService.isEnabled(context)) {
+            return CaptureResult(false, "auto_diary_disabled")
+        }
+        if (!MemoryModeManager.isScreenOcrCaptureEnabled(context)) {
+            return CaptureResult(false, "screen_memory_disabled")
+        }
+        if (!LocalAgentDeviceState.isReady(context)) {
+            return CaptureResult(false, "device_not_ready")
+        }
+        if (VaultLockStateManager.isLocked(context)) {
+            return CaptureResult(false, "memory_vault_locked")
+        }
+        return null
     }
 
     private fun normalizedText(summary: String?, nodeTexts: List<String>): String {
@@ -128,9 +137,7 @@ object AutoDiaryCaptureCoordinator {
     private const val MAX_LINES = 400
     private const val MAX_CAPTURE_CHARS = 25_000
 
-    private val OVERLAY_PACKAGE_NAMES = setOf(
-        "com.android.systemui",
-    )
+    private val OVERLAY_PACKAGE_NAMES = setOf("com.android.systemui")
     private val OVERLAY_PACKAGE_PREFIXES = setOf(
         "com.android.launcher",
         "com.google.android.launcher",
