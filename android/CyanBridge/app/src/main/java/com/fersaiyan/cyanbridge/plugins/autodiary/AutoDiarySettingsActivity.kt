@@ -45,7 +45,6 @@ import com.fersaiyan.cyanbridge.localagent.daily.DailyFactsReminderScheduler
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyBulletsSettings
 import com.fersaiyan.cyanbridge.localagent.tasker.TaskerAgentBridge
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.localagent.AppBlacklistActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
 import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
@@ -67,15 +66,8 @@ class AutoDiarySettingsActivity : AppCompatActivity() {
                 onBack = ::finish,
                 onEnabledChanged = ::setEnabled,
                 onOpenTasker = ::openTasker,
-                onOpenBlacklist = {
-                    startActivity(Intent(this, AppBlacklistActivity::class.java))
-                },
-                onOpenCaptures = {
-                    startActivity(Intent(this, ScreenCapturesActivity::class.java))
-                },
-                onOpenSummary = {
-                    startActivity(Intent(this, DailySummaryActivity::class.java))
-                },
+                onOpenCaptures = { startActivity(Intent(this, ScreenCapturesActivity::class.java)) },
+                onOpenSummary = { startActivity(Intent(this, DailySummaryActivity::class.java)) },
                 onOpenDailyFactsDraft = {
                     startActivity(
                         Intent(this, DailyFactsActivity::class.java)
@@ -105,14 +97,11 @@ class AutoDiarySettingsActivity : AppCompatActivity() {
     private fun refreshUi() {
         taskerObserverAvailable = TaskerAgentBridge.isTaskerUiObserverAvailable(this)
         autoDiaryEnabled = AutoDiaryService.isEnabled(this)
-        if (autoDiaryEnabled) {
-            AutoDiaryService.startIfEnabled(this)
-        }
+        AutoDiaryService.startIfEnabled(this)
     }
 
     private fun openTasker() {
-        val intent = packageManager.getLaunchIntentForPackage("net.dinglisch.android.taskerm") ?: return
-        startActivity(intent)
+        packageManager.getLaunchIntentForPackage("net.dinglisch.android.taskerm")?.let(::startActivity)
     }
 }
 
@@ -124,7 +113,6 @@ fun AutoDiarySettingsScreen(
     onBack: () -> Unit,
     onEnabledChanged: (Boolean) -> Unit,
     onOpenTasker: () -> Unit,
-    onOpenBlacklist: () -> Unit,
     onOpenCaptures: () -> Unit,
     onOpenSummary: () -> Unit,
     onOpenDailyFactsDraft: () -> Unit,
@@ -132,7 +120,6 @@ fun AutoDiarySettingsScreen(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
-    var interval by remember { mutableIntStateOf(LocalAgentPrefs.getCaptureIntervalMin(context)) }
     var reminder by remember { mutableStateOf(LocalAgentPrefs.isDailyFactsReminderEnabled(context)) }
     var autoSaveFacts by remember { mutableStateOf(com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.isAutoSaveDailyFactsEnabled(context)) }
     var extractFacts by remember { mutableStateOf(com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.isExtractUserFactCandidatesEnabled(context)) }
@@ -161,7 +148,7 @@ fun AutoDiarySettingsScreen(
         ) {
             Text(
                 "Build a private daily memory from Android screen context and conversations. " +
-                    "Tasker + AutoInput observe the Android UI; CyanBridge owns privacy, storage, indexing and summaries.",
+                    "Tasker owns the schedule, app exclusions and AutoInput observation; CyanBridge owns the encrypted memory, indexing, facts, summaries and RAG.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             SwitchSetting(
@@ -176,33 +163,21 @@ fun AutoDiarySettingsScreen(
             Text(stringResource(R.string.compose_screen_capture), style = MaterialTheme.typography.titleMedium)
             Text(
                 when {
-                    taskerObserverAvailable -> "Tasker and AutoInput are installed. AutoDiary will request screen observations through the Tasker profile."
-                    enabled -> "AutoDiary is enabled, but Tasker or AutoInput is not detected. Captures will retry and report the Tasker-side failure."
-                    else -> "Tasker + AutoInput are required for screen observation. CyanBridge Accessibility permission is not required."
+                    taskerObserverAvailable -> "Tasker and AutoInput are installed. The imported profile captures every 10 minutes by default. Edit the Time profile in Tasker to change the schedule."
+                    enabled -> "AutoDiary is enabled, but Tasker or AutoInput is not detected. Install/import the Tasker profile before expecting screen captures."
+                    else -> "Tasker + AutoInput are required for screen observation. CyanBridge Accessibility and installed-app visibility are not required."
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = if (taskerObserverAvailable) {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                } else {
-                    MaterialTheme.colorScheme.error
-                },
+                color = if (taskerObserverAvailable) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
             )
-            NumberSetting(
-                label = stringResource(R.string.compose_capture_interval_minutes),
-                value = interval,
-                range = 1..1440,
-                onValueChanged = {
-                    interval = it
-                    LocalAgentPrefs.setCaptureIntervalMin(context, it)
-                },
+            Text(
+                "Excluded apps are configured in Tasker with the global variable %CB_AutoDiaryExcluded. " +
+                    "Use package names separated by commas, spaces, semicolons or new lines. Excluded screen text is not sent to CyanBridge.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onOpenTasker, modifier = Modifier.weight(1f)) {
-                    Text("Open Tasker")
-                }
-                OutlinedButton(onClick = onOpenBlacklist, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.compose_blacklist_apps))
-                }
+            OutlinedButton(onClick = onOpenTasker, modifier = Modifier.fillMaxWidth()) {
+                Text("Open Tasker schedule / exclusions")
             }
             OutlinedButton(onClick = onOpenCaptures, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.compose_view_screen_captures))
