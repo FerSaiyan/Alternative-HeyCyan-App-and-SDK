@@ -1,0 +1,117 @@
+<TaskerData sr="" dvi="1" tv="6.5.11">
+    <Profile sr="prof901" ve="2">
+        <id>901</id>
+        <mid0>911</mid0>
+        <nme>CyanBridge HIL AutoDiary Now</nme>
+        <Share sr="Share">
+            <b>false</b>
+            <d>HIL-only trigger. Invokes the real CyanBridge AutoDiary Periodic Handler immediately.</d>
+            <g>CyanBridge,HIL,AutoDiary</g>
+            <p>true</p>
+            <t></t>
+        </Share>
+        <Event sr="con0" ve="2">
+            <code>599</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.HIL_AUTODIARY_NOW</Str>
+            <Int sr="arg1" val="0"/>
+            <Int sr="arg2" val="0"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+        </Event>
+    </Profile>
+    <Profile sr="prof902" ve="2">
+        <id>902</id>
+        <mid0>912</mid0>
+        <nme>CyanBridge HIL VisualDiary Now</nme>
+        <Share sr="Share">
+            <b>false</b>
+            <d>HIL-only trigger. Invokes the real CyanBridge VisualDiary Periodic Handler immediately.</d>
+            <g>CyanBridge,HIL,Visual Diary</g>
+            <p>true</p>
+            <t></t>
+        </Share>
+        <Event sr="con0" ve="2">
+            <code>599</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.HIL_VISUALDIARY_NOW</Str>
+            <Int sr="arg1" val="0"/>
+            <Int sr="arg2" val="0"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+        </Event>
+    </Profile>
+    <Profile sr="prof903" ve="2">
+        <id>903</id>
+        <mid0>913</mid0>
+        <nme>CyanBridge HIL Set AutoDiary Excluded</nme>
+        <Event sr="con0" ve="2">
+            <code>599</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.HIL_SET_AUTODIARY_EXCLUDED</Str>
+            <Int sr="arg1" val="0"/>
+            <Int sr="arg2" val="0"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+        </Event>
+    </Profile>
+    <Profile sr="prof904" ve="2">
+        <id>904</id>
+        <mid0>914</mid0>
+        <nme>CyanBridge HIL Set LocalAgent Blocked</nme>
+        <Event sr="con0" ve="2">
+            <code>599</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.HIL_SET_LOCALAGENT_BLOCKED</Str>
+            <Int sr="arg1" val="0"/>
+            <Int sr="arg2" val="0"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+        </Event>
+    </Profile>
+
+    <Task sr="task911">
+        <id>911</id>
+        <nme>CyanBridge HIL AutoDiary Now Handler</nme>
+        <pri>10</pri>
+        <Action sr="act0" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">performTask("CyanBridge AutoDiary Periodic Handler", 10, "", "");</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+    </Task>
+    <Task sr="task912">
+        <id>912</id>
+        <nme>CyanBridge HIL VisualDiary Now Handler</nme>
+        <pri>10</pri>
+        <Action sr="act0" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">performTask("CyanBridge VisualDiary Periodic Handler", 10, "", "");</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+    </Task>
+    <Task sr="task913">
+        <id>913</id>
+        <nme>CyanBridge HIL Set AutoDiary Excluded Handler</nme>
+        <pri>10</pri>
+        <Action sr="act0" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">var value = (typeof packages === "undefined" || packages == null) ? "" : String(packages); setGlobal("CB_AutoDiaryExcluded", value);</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+    </Task>
+    <Task sr="task914">
+        <id>914</id>
+        <nme>CyanBridge HIL Set LocalAgent Blocked Handler</nme>
+        <pri>10</pri>
+        <Action sr="act0" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">var value = (typeof packages === "undefined" || packages == null) ? "" : String(packages); setGlobal("CB_LocalAgentBlocked", value);</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+    </Task>
+</TaskerData>
