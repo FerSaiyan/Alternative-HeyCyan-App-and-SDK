@@ -1,0 +1,87 @@
+name: Android self-hosted CI
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/android-self-hosted.yml
+      - android/**
+      - heycyan-core/**
+      - .gitmodules
+      - README.md
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: android-self-hosted-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android unit tests and debug APK
+    if: github.repository == 'FerSaiyan/Alternative-HeyCyan-App-and-SDK'
+    runs-on: [self-hosted, linux, x64, homelab]
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: true
+
+      - name: Fetch Moonshine Android LFS assets
+        working-directory: third_party/moonshine
+        run: >-
+          git lfs pull
+          --include="core/speaker-embedding-model-data.cpp,core/third-party/onnxruntime/lib/android/arm64/libonnxruntime.so"
+
+      - name: Verify local Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = "Linux"
+          test "$(uname -m)" = "x86_64"
+          command -v git-lfs >/dev/null
+          test -x /opt/android-studio/jbr/bin/java
+          test -d "$HOME/Android/Sdk/platforms/android-35"
+          test -x "$HOME/Android/Sdk/platform-tools/adb"
+          {
+            printf 'JAVA_HOME=/opt/android-studio/jbr\n'
+            printf 'ANDROID_HOME=%s\n' "$HOME/Android/Sdk"
+            printf 'ANDROID_SDK_ROOT=%s\n' "$HOME/Android/Sdk"
+            printf '%s\n' "$HOME/Android/Sdk/platform-tools" >> "$GITHUB_PATH"
+          } >> "$GITHUB_ENV"
+          /opt/android-studio/jbr/bin/java -version
+          git lfs version
+          "$HOME/Android/Sdk/platform-tools/adb" version
+
+      - name: Verify Meta SDK credential
+        env:
+          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+        run: test -n "$META_GITHUB_TOKEN"
+
+      - name: Run Android and shared tests
+        env:
+          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+        working-directory: android/CyanBridge
+        run: >-
+          ./gradlew --no-daemon --stacktrace
+          :app:testDebugUnitTest
+          :shared:portabilityTest
+
+      - name: Assemble debug APK
+        env:
+          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+        working-directory: android/CyanBridge
+        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Upload debug APK
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyanbridge-debug-apk-${{ github.sha }}
+          path: android/CyanBridge/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
