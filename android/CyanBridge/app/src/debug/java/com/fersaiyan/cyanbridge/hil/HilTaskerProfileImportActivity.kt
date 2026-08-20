@@ -66,6 +66,7 @@ class HilTaskerProfileImportActivity : AppCompatActivity() {
             "CyanBridge_LocalAgent_Tasker.XML",
             "CyanBridge_AutoDiary_Tasker.XML",
             "CyanBridge_VisualDiary_Tasker.XML",
+            "CyanBridge_HIL_Tasker.XML",
         )
     }
 }
