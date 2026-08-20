@@ -88,7 +88,6 @@ private fun requiredBluetoothPermissions(): List<String> {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         listOf(Permission.BLUETOOTH_SCAN, Permission.BLUETOOTH_CONNECT)
     } else {
-        // BLE discovery uses location on Android 11 and earlier.
         listOf(Permission.ACCESS_FINE_LOCATION)
     }
 }
@@ -98,7 +97,6 @@ fun hasBluetooth(context: Context): Boolean {
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
     }
 }
-
 
 fun requestSMSPermission(
     activity: FragmentActivity,
@@ -215,7 +213,6 @@ private fun requiredWifiP2pPermissions(): List<String> {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         listOf(Permission.NEARBY_WIFI_DEVICES)
     } else {
-        // Wifi Direct discovery is location-gated before Android 13.
         listOf(Permission.ACCESS_FINE_LOCATION)
     }
 }
@@ -331,19 +328,6 @@ fun ensureNotificationPermission(
         }
     })
 }
-
-
-fun requestAllPermission(
-    activity: FragmentActivity,
-    callback: OnPermissionCallback
-) {
-    XXPermissions.with(activity)
-//        .permission(Permission.WRITE_EXTERNAL_STORAGE)
-//        .permission(Permission.READ_EXTERNAL_STORAGE)
-        .permission(Permission.MANAGE_EXTERNAL_STORAGE)
-        .request(callback)
-}
-
 
 fun requestCameraPermission(
     activity: FragmentActivity,
