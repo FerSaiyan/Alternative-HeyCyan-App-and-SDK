@@ -19,10 +19,9 @@ permissions:
   contents: read
   packages: read
 
-# One lab phone must never be manipulated by two commits at once. Queue newer runs instead
-# of cancelling an instrumentation session half-way through a Tasker action.
+# There is one shared lab phone. Main and feature branches must queue behind each other too.
 concurrency:
-  group: cyanbridge-android-hil-${{ github.ref }}
+  group: cyanbridge-android-hil-phone-01
   cancel-in-progress: false
 
 jobs:
@@ -112,6 +111,10 @@ jobs:
       - name: Detect physical HIL phone
         id: phone
         shell: bash
+        env:
+          # Optional: set repository variable CYANBRIDGE_HIL_PHONE_SERIAL once the dedicated
+          # phone is attached. If unset, the first non-emulator adb device is used.
+          CYANBRIDGE_HIL_SERIAL: ${{ vars.CYANBRIDGE_HIL_PHONE_SERIAL }}
         run: |
           source tools/hil/common.sh
           serial="$(find_serial physical || true)"
@@ -146,18 +149,22 @@ jobs:
         if: steps.phone.outputs.available == 'true'
         env:
           CYANBRIDGE_HIL_SERIAL: ${{ steps.phone.outputs.serial }}
+          # Leave false until the dedicated phone is paired to HeyCyan and stable.
+          CYANBRIDGE_HIL_GLASSES: ${{ vars.CYANBRIDGE_HIL_ENABLE_GLASSES || 'false' }}
+          # Optional stronger assertion: requires a configured Gemma 4 visual model and waits
+          # for the captured scene to become a candidate daily fact.
+          CYANBRIDGE_HIL_EXPECT_VISUAL_FACT: ${{ vars.CYANBRIDGE_HIL_EXPECT_VISUAL_FACT || 'false' }}
         run: >-
           bash tools/hil/run_instrumentation.sh
           '${{ steps.phone.outputs.serial }}'
           hardware
-          com.fersaiyan.cyanbridge.hil.HilFixtureSmokeTest,com.fersaiyan.cyanbridge.hil.TaskerLocalAgentHilTest,com.fersaiyan.cyanbridge.hil.AutoDiaryTaskerHilTest,com.fersaiyan.cyanbridge.hil.AiTaskerProfileHilTest
+          com.fersaiyan.cyanbridge.hil.HilFixtureSmokeTest,com.fersaiyan.cyanbridge.hil.TaskerLocalAgentHilTest,com.fersaiyan.cyanbridge.hil.AutoDiaryTaskerHilTest,com.fersaiyan.cyanbridge.hil.AiTaskerProfileHilTest,com.fersaiyan.cyanbridge.hil.VisualDiaryHeyCyanHilTest
 
       - name: Collect physical-phone diagnostics
         if: failure() && steps.phone.outputs.available == 'true'
         env:
           CYANBRIDGE_HIL_SERIAL: ${{ steps.phone.outputs.serial }}
-          # Set this to true in the runner environment only when you explicitly want
-          # screenshots/UI XML. Default artifacts avoid potentially sensitive account UI.
+          # Set this to true only when screenshots/UI XML are acceptable in CI artifacts.
           CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS: ${{ vars.CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS || 'false' }}
         run: bash tools/hil/collect_diagnostics.sh '${{ steps.phone.outputs.serial }}'
 
