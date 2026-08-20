@@ -136,6 +136,12 @@ jobs:
         if: steps.phone.outputs.available == 'true'
         run: bash tools/hil/install.sh '${{ steps.phone.outputs.serial }}'
 
+      - name: Sync exact branch Tasker profiles
+        if: steps.phone.outputs.available == 'true'
+        env:
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.phone.outputs.serial }}
+        run: bash tools/hil/sync_tasker_profiles.sh '${{ steps.phone.outputs.serial }}'
+
       - name: Run physical Tasker HIL suite
         if: steps.phone.outputs.available == 'true'
         env:
