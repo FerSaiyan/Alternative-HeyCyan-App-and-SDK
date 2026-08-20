@@ -5,8 +5,8 @@
         <nme>CyanBridge LocalAgent Observe</nme>
         <Share sr="Share">
             <b>false</b>
-            <d>Receives CyanBridge Local Agent observation requests, queries the current UI with AutoInput, and returns a compact JSON response envelope. CyanBridge owns planning, approvals and cancellation decisions; Tasker owns device observation/execution.</d>
-            <g>CyanBridge,Local Agent,AutoInput</g>
+            <d>Receives CyanBridge Local Agent observation requests, queries the current UI with AutoInput, blocks packages listed in %CB_LocalAgentBlocked before returning screen content, and returns a compact JSON response envelope.</d>
+            <g>CyanBridge,Local Agent,AutoInput,Privacy</g>
             <p>true</p>
             <t></t>
         </Share>
@@ -25,7 +25,7 @@
         <nme>CyanBridge LocalAgent Execute</nme>
         <Share sr="Share">
             <b>false</b>
-            <d>Single device-execution boundary for CyanBridge Local Agent. Executes every model-selected device action through Tasker/AutoInput or Tasker built-ins and returns the exact result. Tasker performs no independent risk filtering; CyanBridge owns policy and approvals.</d>
+            <d>Single device-execution boundary for CyanBridge Local Agent. Executes every model-selected device action through Tasker/AutoInput or Tasker built-ins and returns the exact result. Tasker performs no independent action-risk filtering; CyanBridge owns policy and approvals.</d>
             <g>CyanBridge,Local Agent,AutoInput</g>
             <p>true</p>
             <t></t>
@@ -67,6 +67,31 @@
     if (Array.isArray(v)) return v;
     return [v];
 }
+function parsePackages(raw) {
+    var out = {};
+    String(raw == null ? "" : raw).toLowerCase().split(/[\s,;]+/).forEach(function(v){ if (v) out[v] = true; });
+    return out;
+}
+var pkg = (typeof aipackage !== "undefined") ? String(aipackage || "").trim().toLowerCase() : "";
+var blockedPackages = parsePackages(global("CB_LocalAgentBlocked"));
+if (pkg &amp;&amp; blockedPackages[pkg]) {
+    var blockedEnvelope = {
+        contract_version: 1,
+        request_id: String(request_id || ""),
+        callback_token: String(callback_token || ""),
+        success: false,
+        payload: null,
+        error: "blocked_package:" + pkg
+    };
+    sendIntent(
+        "com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE",
+        "receiver",
+        "com.fersaiyan.cyanbridge",
+        undefined, undefined, undefined, undefined,
+        ["response:" + JSON.stringify(blockedEnvelope)]
+    );
+    exit();
+}
 var texts = (typeof aitext !== "undefined") ? arr(aitext) : [];
 var ids = (typeof aiid !== "undefined") ? arr(aiid) : [];
 var coords = [];
@@ -97,7 +122,6 @@ for (var i = 0; i &lt; count &amp;&amp; i &lt; 160; i++) {
         bounds: {left:x, top:y, right:x, bottom:y}
     });
 }
-var pkg = (typeof aipackage !== "undefined") ? String(aipackage || "") : "";
 var summary = texts.filter(function(v){ return String(v || "").trim().length &gt; 0; })
     .join("\n").slice(0, 12000);
 var observation = {
@@ -193,46 +217,22 @@ try {
             use_ai_v2 = "true";
             break;
         case "open_app":
-            recordBuiltin(
-                loadApp(String(action.app_name || ""), undefined, false),
-                "open_app:launched",
-                "tasker_open_app_failed"
-            );
+            recordBuiltin(loadApp(String(action.app_name || ""), undefined, false), "open_app:launched", "tasker_open_app_failed");
             break;
         case "make_call":
-            recordBuiltin(
-                call(String(action.number || ""), false),
-                "make_call:dialer_opened",
-                "tasker_dialer_failed"
-            );
+            recordBuiltin(call(String(action.number || ""), false), "make_call:dialer_opened", "tasker_dialer_failed");
             break;
         case "send_sms":
-            recordBuiltin(
-                composeSMS(String(action.number || ""), String(action.message || "")),
-                "send_sms:composer_opened",
-                "tasker_sms_composer_failed"
-            );
+            recordBuiltin(composeSMS(String(action.number || ""), String(action.message || "")), "send_sms:composer_opened", "tasker_sms_composer_failed");
             break;
         case "send_email":
-            recordBuiltin(
-                composeEmail(String(action.to || ""), String(action.subject || ""), String(action.body || "")),
-                "send_email:composer_opened",
-                "tasker_email_composer_failed"
-            );
+            recordBuiltin(composeEmail(String(action.to || ""), String(action.subject || ""), String(action.body || "")), "send_email:composer_opened", "tasker_email_composer_failed");
             break;
         case "set_alarm":
-            recordBuiltin(
-                setAlarm(Number(action.hour || 0), Number(action.minute || 0), String(action.label || ""), true),
-                "set_alarm:clock_opened",
-                "tasker_set_alarm_failed"
-            );
+            recordBuiltin(setAlarm(Number(action.hour || 0), Number(action.minute || 0), String(action.label || ""), true), "set_alarm:clock_opened", "tasker_set_alarm_failed");
             break;
         case "open_contacts":
-            recordBuiltin(
-                sendIntent("android.intent.action.VIEW", "activity", undefined, undefined, undefined, "content://contacts/people", undefined, undefined),
-                "open_contacts:opened",
-                "tasker_open_contacts_failed"
-            );
+            recordBuiltin(sendIntent("android.intent.action.VIEW", "activity", undefined, undefined, undefined, "content://contacts/people", undefined, undefined), "open_contacts:opened", "tasker_open_contacts_failed");
             break;
         case "toggle_wifi":
             recordBuiltin(settings("wifi"), "toggle_wifi:settings_opened", "tasker_wifi_settings_failed");
