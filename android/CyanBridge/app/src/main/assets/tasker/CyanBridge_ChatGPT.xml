@@ -5,7 +5,7 @@
 		<nme>CyanBridge ChatGPT v1</nme>
 		<Share sr="Share">
 			<b>false</b>
-			<d>CyanBridge external voice and image UI adapter for ChatGPT. Requires ChatGPT as Android's default assistant, Tasker, AutoInput, and an unlocked phone.</d>
+			<d>CyanBridge external voice and image UI adapter for ChatGPT. Requires ChatGPT as Android's default assistant, Tasker, AutoInput, and an unlocked phone. This profile ignores Gemini-targeted events so both CyanBridge assistant profiles can safely be installed together.</d>
 			<g>CyanBridge,ChatGPT,Assistant</g>
 			<p>true</p>
 			<t></t>
@@ -24,6 +24,10 @@
 		<nme>CyanBridge ChatGPT Handler</nme>
 		<pri>10</pri>
 		<Action sr="act0" ve="7">
+			<code>37</code>
+			<ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%assistant</lhs><op>2</op><rhs>ChatGPT</rhs></Condition></ConditionList>
+		</Action>
+		<Action sr="act1" ve="7">
 			<code>877</code>
 			<Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.AI_IMAGE_PROFILE</Str>
 			<Int sr="arg1" val="0"/>
@@ -36,11 +40,11 @@
 			<Str sr="arg8" ve="3"/>
 			<Int sr="arg9" val="1"/>
 		</Action>
-		<Action sr="act1" ve="7">
+		<Action sr="act2" ve="7">
 			<code>37</code>
 			<ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%type</lhs><op>2</op><rhs>voice</rhs></Condition></ConditionList>
 		</Action>
-		<Action sr="act2" ve="7">
+		<Action sr="act3" ve="7">
 			<code>877</code>
 			<Str sr="arg0" ve="3">android.intent.action.VOICE_COMMAND</Str>
 			<Int sr="arg1" val="1"/>
@@ -53,16 +57,16 @@
 			<Str sr="arg8" ve="3"/>
 			<Int sr="arg9" val="1"/>
 		</Action>
-		<Action sr="act3" ve="7"><code>38</code></Action>
-		<Action sr="act4" ve="7">
+		<Action sr="act4" ve="7"><code>38</code></Action>
+		<Action sr="act5" ve="7">
 			<code>37</code>
 			<ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%type</lhs><op>2</op><rhs>image</rhs></Condition></ConditionList>
 		</Action>
-		<Action sr="act5" ve="7">
+		<Action sr="act6" ve="7">
 			<code>37</code>
 			<ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%handoff_mode</lhs><op>2</op><rhs>direct_share</rhs></Condition></ConditionList>
 		</Action>
-		<Action sr="act6" ve="7">
+		<Action sr="act7" ve="7">
 			<code>107361459</code>
 			<Bundle sr="arg0"><Vals sr="val">
 				<com.twofortyfouram.locale.intent.extra.BLURB>Fill and send the CyanBridge question in ChatGPT</com.twofortyfouram.locale.intent.extra.BLURB>
@@ -85,7 +89,8 @@
 			<Int sr="arg3" val="60"/>
 			<Int sr="arg4" val="1"/>
 		</Action>
-		<Action sr="act7" ve="7"><code>38</code></Action>
 		<Action sr="act8" ve="7"><code>38</code></Action>
+		<Action sr="act9" ve="7"><code>38</code></Action>
+		<Action sr="act10" ve="7"><code>38</code></Action>
 	</Task>
 </TaskerData>
