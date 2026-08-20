@@ -22,6 +22,9 @@ object HilTestSupport {
     val glassesRequired: Boolean
         get() = args.getString("hil_glasses", "false").toBoolean()
 
+    val expectVisualFact: Boolean
+        get() = args.getString("hil_expect_visual_fact", "false").toBoolean()
+
     fun packageInstalled(context: Context, packageName: String): Boolean = runCatching {
         @Suppress("DEPRECATION")
         context.packageManager.getPackageInfo(packageName, 0)
