@@ -1,32 +1,32 @@
 # CyanBridge Tasker migration plan
 
-The migration boundary is now explicit:
+The current boundary is:
 
-> **CyanBridge owns product logic, state, policy, memory, models and smart-glasses integrations. Tasker owns Android UI observation and model-selected Android-side execution.**
+> **CyanBridge owns product logic, state, model/action policy, memory, facts/RAG and smart-glasses integrations. Tasker owns Android UI observation/execution plus the lightweight periodic triggers that would otherwise require long-running CyanBridge scheduler services.**
 
-Tasker is deliberately mechanical. It does not independently reclassify risk, silently cancel actions, apply AutoDiary privacy rules, or become a second source of truth for CyanBridge settings.
+Package exclusions are a source-privacy exception: Tasker may suppress an observation before screen contents are returned to CyanBridge. Tasker does not independently reclassify Local Agent action risk.
 
 ---
 
-## 1. Local Agent — implemented on this branch
+## 1. Local Agent — implemented
 
 ### CyanBridge owns
 
-- task goal and task state
-- local/remote model inference
-- action selection
-- risk classification and approval queue
-- repeat limits and recovery decisions
-- task history and exact result logging
+- goal/task state
+- model inference and action selection
+- risk classification / approvals
+- recovery/repeat logic
+- task history and result logging
 
 ### Tasker + AutoInput own
 
 - Android screen observation
-- UI primitives such as clicks, typing, scrolling and global navigation
-- model-selected Android device effects such as app launch, dialer/SMS/email composers, alarms, contacts, settings and flashlight
-- returning concrete success/failure details
+- `%CB_LocalAgentBlocked` source-privacy blocklist
+- UI primitives and global navigation
+- every model-selected Android device effect
+- concrete execution results
 
-`wait` and `finish` remain CyanBridge runtime operations because they are not Android device effects.
+The old CyanBridge installed-app blacklist is no longer a second policy authority. CyanBridge does not enumerate installed packages for this feature.
 
 Files:
 
@@ -35,120 +35,137 @@ Files:
 - `TaskerAgentContract.kt`
 - `TaskerAgentBridge.kt`
 
-Current caveat: `press_enter` and arbitrary `swipe` still return explicit adapter errors until their exact AutoInput configuration is validated on-device.
-
-### Protocol-parity follow-up
-
-The current Local Agent action schema still does not contain first-class model actions for package installation, arbitrary Android intents or generic shell commands. If/when those are added, CyanBridge should own parsing/risk/approval and Tasker should own execution. Do not add parallel CyanBridge-native executors for them.
+`press_enter` and arbitrary `swipe` remain explicit adapter errors pending real-device AutoInput validation.
 
 ---
 
-## 2. AutoDiary — Tasker observation path implemented on this branch
-
-AutoDiary is different from Local Agent: Tasker does not execute a model action. CyanBridge decides when a diary sample is due; Tasker only observes the Android UI.
+## 2. AutoDiary — Tasker scheduled/push path implemented
 
 ### CyanBridge owns
 
-- AutoDiary enabled state
-- capture interval and scheduler
-- device-ready/vault checks
-- app blacklist and overlay exclusions
-- capture normalization
-- memory persistence and retention
-- Room / FTS indexing
-- facts, embeddings, summaries and review UI
-- diagnostics
+- enabled state
+- Memory Mode / Vault checks
+- observation validation/normalization
+- encrypted memory persistence and retention
+- Room / FTS / embeddings / RAG
+- candidate and confirmed daily facts
+- daily summaries/review UI
 
 ### Tasker + AutoInput own
 
-- responding to a correlated observation request
-- AutoInput UI Query
-- returning foreground package, visible text and best-effort node metadata
+- periodic Time profile, default 10 minutes
+- `%CB_AutoDiaryExcluded` passive-capture exclusions
+- foreground package detection via AutoInput query
+- screen observation
+- sending allowed observations to CyanBridge
+
+The normal flow is:
+
+```text
+Tasker Time profile
+  -> AutoInput UI Query
+  -> exclude package if configured
+  -> TASKER_AUTO_DIARY_CAPTURE
+  -> AutoDiaryTaskerCaptureReceiver
+  -> AutoDiaryCaptureCoordinator
+  -> LocalAgentMemoryStore + LocalAgentMemoryRoomIndex
+  -> Memory Vault / FTS / RAG / facts / summaries
+```
+
+CyanBridge no longer maintains a long-running AutoDiary `dataSync` scheduler service.
 
 Files:
 
 - `CyanBridge_AutoDiary_Tasker.XML`
 - `AUTO_DIARY_TASKER_CONTRACT.md`
+- `AutoDiaryTaskerCaptureReceiver.kt`
 - `AutoDiaryCaptureCoordinator.kt`
-- updated `AutoDiaryService.kt`
-- shared `TaskerAgentBridge.kt` / `TaskerAgentContract.kt`
-
-### State migration
-
-The old Accessibility-backed AutoDiary reused `LocalAgentPrefs.auto_capture_enabled`. The Tasker-backed version uses a separate `tasker_auto_diary_enabled` state. On migration, CyanBridge persists the new state and clears the legacy Accessibility auto-capture bit so an enabled CyanBridge Accessibility service cannot create duplicate screen captures.
-
-The capture interval, blacklist and memory settings remain in CyanBridge.
-
-### On-device validation
-
-1. Import `CyanBridge_AutoDiary_Tasker.XML`.
-2. Disable CyanBridge Accessibility access.
-3. Keep AutoInput Accessibility access enabled.
-4. Enable AutoDiary.
-5. Verify a benign app is captured at the configured interval.
-6. Verify blacklisted/overlay packages are rejected by CyanBridge.
-7. Verify Memory Vault lock prevents storage.
-8. Verify captures still feed the existing daily-summary/facts pipeline.
-9. Verify no duplicate capture comes from the legacy CyanBridge Accessibility service.
-
-Once this works on-device, the remaining AutoDiary-specific periodic capture code inside `LocalAgentAccessibilityService` can be deleted as cleanup rather than as a functional dependency.
+- `AutoDiaryService.kt` (feature-state controller, no Android Service)
 
 ---
 
-## 3. Visual Diary / Vision Diary — keep in CyanBridge
+## 3. Visual Diary / Vision Diary — Tasker schedules; CyanBridge captures
 
-Visual Diary does **not** need a mandatory Tasker migration for the Accessibility-removal objective.
+Tasker owns only the periodic trigger. Glasses I/O and vision processing stay in CyanBridge.
 
-Its camera path is a CyanBridge-owned smart-glasses integration, not Android UI automation:
+### Tasker owns
 
-- Meta Ray-Ban capture goes through `MetaRaybanManager` / DAT
-- other supported glasses use the existing CyanBridge capture path
-- image persistence and Gemma/vision processing stay in CyanBridge
+- Visual Diary Time profile, default 15 minutes
+- enable/disable mirror (`%CB_VisualDiaryEnabled`)
+- sending `TASKER_VISUAL_DIARY_CAPTURE`
 
 ### CyanBridge owns
 
-- Visual Diary enabled state and interval
 - selected-device capability checks
-- Meta/HeyCyan/native glasses communication
-- one-shot photo capture
-- image persistence
-- prompt/model selection
-- vision inference
-- visual-note storage and diagnostics
+- Meta DAT / HeyCyan/native glasses communication
+- photo acquisition and persistence
+- custom visual prompt
+- vision inference / visual-note generation
+- errors and diagnostics
 
-The branch now separates those roles explicitly:
+`VisualDiaryTaskerCaptureReceiver` turns Tasker's trigger into a one-shot `VisualDiaryCaptureWorker`. `VisualDiaryCaptureCoordinator` remains the only glasses/vision implementation. `VisualDiaryService` is retained only as a short-lived manual "Capture now" foreground host and uses `connectedDevice`, not `dataSync`.
 
-- `VisualDiaryService` owns feature lifecycle, foreground-service behavior and the interval scheduler.
-- `VisualDiaryCaptureCoordinator` owns one-shot glasses readiness/capture and the handoff into the existing visual-note/model pipeline.
+Files:
 
-No Tasker profile is required for the normal Visual Diary interval.
-
-### Optional Tasker triggers
-
-A Tasker Visual Diary profile is useful only for Android-context triggers that CyanBridge does not otherwise own, for example:
-
-- capture after phone unlock
-- capture when arriving at a location
-- capture when a particular Android app opens
-- capture when a particular Bluetooth condition occurs
-
-In that optional design, Tasker only sends a one-shot `capture now` trigger. CyanBridge still performs all glasses-camera and vision-model work. Tasker must not mirror the normal Visual Diary interval because that would create two interval sources of truth.
+- `CyanBridge_VisualDiary_Tasker.XML`
+- `VisualDiaryTaskerCaptureReceiver.kt`
+- `VisualDiaryCaptureWorker.kt`
+- `VisualDiaryCaptureCoordinator.kt`
+- one-shot `VisualDiaryService.kt`
 
 ---
 
-## Recommended validation order
+## 4. Permission de-escalation implemented
 
-1. Import and validate `CyanBridge_LocalAgent_Tasker.XML`.
-2. Resolve real-device AutoInput quirks for `press_enter` / arbitrary `swipe`.
-3. Import and validate `CyanBridge_AutoDiary_Tasker.XML` with CyanBridge Accessibility disabled.
-4. Compare Tasker AutoDiary observations against representative legacy captures.
-5. Remove the now-unused AutoDiary periodic-capture implementation from `LocalAgentAccessibilityService` after parity is proven.
-6. Validate both scheduled and manual Visual Diary captures through `VisualDiaryCaptureCoordinator` on Meta and non-Meta supported glasses.
-7. Only add optional Tasker Visual Diary triggers if a concrete Android-context trigger is desired.
+The branch removes from the modern CyanBridge manifest:
 
-This keeps each failure domain easy to audit:
+- `QUERY_ALL_PACKAGES`
+- `MANAGE_EXTERNAL_STORAGE`
 
-- **CyanBridge policy/state failure** → logged in CyanBridge
-- **Tasker/AutoInput Android automation failure** → returned by Tasker and logged in CyanBridge
-- **smart-glasses camera/protocol failure** → remains in CyanBridge diagnostics
-- **model/memory pipeline failure** → remains in CyanBridge diagnostics
+Storage permissions are restricted to legacy Android only:
+
+- `READ_EXTERNAL_STORAGE` with `maxSdkVersion=28`
+- `WRITE_EXTERNAL_STORAGE` with `maxSdkVersion=28`
+
+Modern Android keeps using existing scoped mechanisms:
+
+- encrypted/private memory: Room + `filesDir`
+- app-private external files: `getExternalFilesDir()`
+- user-visible synced images/videos: existing MediaStore `DCIM/CyanBridge` path
+- backup/import/export: existing user-selected URI / Storage Access Framework style flow
+
+Only Tasker and AutoInput are declared in manifest `<queries>` for targeted package visibility.
+
+The package-enumerating `AppBlacklistActivity` and the obsolete `requestAllPermission()` helper were removed. Onboarding no longer asks for All Files Access.
+
+These changes intentionally do **not** modify:
+
+- `SyncedMediaFolder` / `SyncedMediaQuery`
+- Meta image saving into `DCIM/CyanBridge`
+- `LocalAgentMemoryStore`
+- `MemoryVaultService`
+- candidate/confirmed daily-facts processing
+- daily summaries
+- memory embeddings / RAG retrieval
+
+---
+
+## Validation order
+
+1. Import all three Tasker XML files.
+2. Validate Local Agent observation/execution and `%CB_LocalAgentBlocked`.
+3. Validate AutoDiary enable/disable mirroring and 10-minute default schedule.
+4. Validate `%CB_AutoDiaryExcluded` prevents excluded screen contents from reaching CyanBridge.
+5. Verify allowed captures appear in screen memory and remain retrievable through RAG.
+6. Verify candidate facts, confirmed facts and summaries still consume those captures.
+7. Verify synced photos/videos still appear in `DCIM/CyanBridge` and the CyanBridge gallery.
+8. Validate Visual Diary 15-minute Tasker trigger on Meta and non-Meta supported glasses.
+9. Validate manual Visual Diary "Capture now" separately.
+10. Build/test the branch and remove any remaining dead legacy Accessibility-specific diary capture code only after on-device parity is confirmed.
+
+Failure domains remain distinct:
+
+- CyanBridge action policy/state → CyanBridge logs
+- Tasker/AutoInput observation/device automation → Tasker result
+- glasses protocol/camera → CyanBridge diagnostics
+- memory/facts/RAG/model pipeline → CyanBridge diagnostics
