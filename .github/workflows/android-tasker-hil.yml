@@ -1,0 +1,177 @@
+name: Android Tasker HIL
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - security/tasker-agent-split
+      - 'security/tasker-*'
+      - 'tasker/**'
+    paths:
+      - .github/workflows/android-tasker-hil.yml
+      - android/**
+      - tools/hil/**
+      - heycyan-core/**
+      - .gitmodules
+
+permissions:
+  contents: read
+  packages: read
+
+# One lab phone must never be manipulated by two commits at once. Queue newer runs instead
+# of cancelling an instrumentation session half-way through a Tasker action.
+concurrency:
+  group: cyanbridge-android-hil-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tasker-hil:
+    name: Emulator smoke + physical Tasker HIL
+    if: github.repository == 'FerSaiyan/Alternative-HeyCyan-App-and-SDK'
+    runs-on: [self-hosted, linux, x64, homelab]
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: true
+
+      - name: Fetch Moonshine Android LFS assets
+        working-directory: third_party/moonshine
+        run: >-
+          git lfs pull
+          --include="core/speaker-embedding-model-data.cpp,core/third-party/onnxruntime/lib/android/arm64/libonnxruntime.so"
+
+      - name: Configure local Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = "Linux"
+          test "$(uname -m)" = "x86_64"
+          command -v python3 >/dev/null
+          command -v git-lfs >/dev/null
+          test -x /opt/android-studio/jbr/bin/java
+          test -d "$HOME/Android/Sdk/platforms/android-35"
+          test -x "$HOME/Android/Sdk/platform-tools/adb"
+          {
+            printf 'JAVA_HOME=/opt/android-studio/jbr\n'
+            printf 'ANDROID_HOME=%s\n' "$HOME/Android/Sdk"
+            printf 'ANDROID_SDK_ROOT=%s\n' "$HOME/Android/Sdk"
+            printf '%s\n' "$HOME/Android/Sdk/platform-tools" >> "$GITHUB_PATH"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify Meta SDK credential
+        env:
+          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+        run: test -n "$GITHUB_TOKEN"
+
+      - name: Validate Tasker and Play-sensitive contracts
+        run: python3 tools/hil/validate_tasker_profiles.py
+
+      - name: Build debug app and instrumentation APKs
+        env:
+          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+        working-directory: android/CyanBridge
+        run: >-
+          ./gradlew --no-daemon --stacktrace
+          :app:assembleDebug
+          :app:assembleDebugAndroidTest
+
+      - name: Find or start emulator
+        id: emulator
+        shell: bash
+        run: |
+          set +e
+          serial="$(bash tools/hil/start_emulator.sh)"
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ] && [ -n "$serial" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "serial=$serial" >> "$GITHUB_OUTPUT"
+            echo "Emulator available: $serial"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "No configured AVD is available; emulator smoke test skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Install branch build on emulator
+        if: steps.emulator.outputs.available == 'true'
+        run: bash tools/hil/install.sh '${{ steps.emulator.outputs.serial }}'
+
+      - name: Run emulator fixture smoke test
+        if: steps.emulator.outputs.available == 'true'
+        run: >-
+          bash tools/hil/run_instrumentation.sh
+          '${{ steps.emulator.outputs.serial }}'
+          emulator
+          com.fersaiyan.cyanbridge.hil.HilFixtureSmokeTest
+
+      - name: Detect physical HIL phone
+        id: phone
+        shell: bash
+        run: |
+          source tools/hil/common.sh
+          serial="$(find_serial physical || true)"
+          if [ -n "$serial" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "serial=$serial" >> "$GITHUB_OUTPUT"
+            echo "Physical HIL phone detected: $serial" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Physical HIL phone not connected; Tasker/AutoInput hardware tests were not run." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Physical phone preflight
+        if: steps.phone.outputs.available == 'true'
+        run: bash tools/hil/preflight.sh '${{ steps.phone.outputs.serial }}'
+
+      - name: Clear integration logcat window
+        if: steps.phone.outputs.available == 'true'
+        run: '$ANDROID_HOME/platform-tools/adb -s "${{ steps.phone.outputs.serial }}" logcat -c'
+
+      - name: Install branch build on physical phone
+        if: steps.phone.outputs.available == 'true'
+        run: bash tools/hil/install.sh '${{ steps.phone.outputs.serial }}'
+
+      - name: Run physical Tasker HIL suite
+        if: steps.phone.outputs.available == 'true'
+        env:
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.phone.outputs.serial }}
+        run: >-
+          bash tools/hil/run_instrumentation.sh
+          '${{ steps.phone.outputs.serial }}'
+          hardware
+          com.fersaiyan.cyanbridge.hil.HilFixtureSmokeTest,com.fersaiyan.cyanbridge.hil.TaskerLocalAgentHilTest,com.fersaiyan.cyanbridge.hil.AutoDiaryTaskerHilTest,com.fersaiyan.cyanbridge.hil.AiTaskerProfileHilTest
+
+      - name: Collect physical-phone diagnostics
+        if: failure() && steps.phone.outputs.available == 'true'
+        env:
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.phone.outputs.serial }}
+          # Set this to true in the runner environment only when you explicitly want
+          # screenshots/UI XML. Default artifacts avoid potentially sensitive account UI.
+          CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS: ${{ vars.CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS || 'false' }}
+        run: bash tools/hil/collect_diagnostics.sh '${{ steps.phone.outputs.serial }}'
+
+      - name: Upload HIL test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyanbridge-hil-results-${{ github.sha }}
+          path: |
+            build/hil/results/**
+            build/hil/diagnostics-safe/**
+            build/hil/emulator.log
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Upload opt-in private visual diagnostics
+        if: failure() && vars.CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyanbridge-hil-private-visuals-${{ github.sha }}
+          path: build/hil/diagnostics-private/**
+          if-no-files-found: ignore
+          retention-days: 1
