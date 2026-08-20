@@ -20,6 +20,7 @@ class AutoDiaryTaskerHilTest {
     fun periodicHandlerStoresAllowedScreenAndSkipsExcludedPackage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         HilTestSupport.requireTaskerStack(context)
+        val wasEnabled = AutoDiaryService.isEnabled(context)
 
         ActivityScenario.launch(HilFixtureActivity::class.java).use {
             AutoDiaryService.enable(context)
@@ -48,8 +49,9 @@ class AutoDiaryTaskerHilTest {
                     afterBlocked,
                 )
             } finally {
-                // Never leave the shared lab phone with the fixture app excluded after a failed test.
+                // Never leave the shared lab phone with test-only privacy state after a failed test.
                 setExcludedPackages(context, "")
+                if (!wasEnabled) AutoDiaryService.disable(context)
             }
         }
     }
