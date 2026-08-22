@@ -45,7 +45,7 @@ def forbid(text: str, needle: str, where: str) -> None:
         fail(f"{where}: forbidden fragment still present {needle!r}")
 
 
-ai = load_xml("Tasker_AI.xml")
+ai = load_xml("Tasker_AI.prj.xml")
 for needle in (
     "CyanBridge Gemini v3",
     "CyanBridge ChatGPT v1",
@@ -58,9 +58,9 @@ for needle in (
     "<rhs>ChatGPT</rhs>",
     "com.joaomgcd.autoinput",
 ):
-    require(ai, needle, "Tasker_AI.xml")
+    require(ai, needle, "Tasker_AI.prj.xml")
 
-local_agent = load_xml("CyanBridge_LocalAgent_Tasker.XML")
+local_agent = load_xml("CyanBridge_LocalAgent_Tasker.prj.xml")
 for needle in (
     "com.fersaiyan.cyanbridge.TASKER_AGENT_OBSERVE",
     "com.fersaiyan.cyanbridge.TASKER_AGENT_EXECUTE",
@@ -69,9 +69,9 @@ for needle in (
     "com.joaomgcd.autoinput",
     "read_screen_aloud",
 ):
-    require(local_agent, needle, "CyanBridge_LocalAgent_Tasker.XML")
+    require(local_agent, needle, "CyanBridge_LocalAgent_Tasker.prj.xml")
 
-auto_diary = load_xml("CyanBridge_AutoDiary_Tasker.XML")
+auto_diary = load_xml("CyanBridge_AutoDiary_Tasker.prj.xml")
 for needle in (
     "CyanBridge AutoDiary Periodic Capture",
     "CyanBridge AutoDiary Periodic Handler",
@@ -82,9 +82,9 @@ for needle in (
     "<repval>10</repval>",
     "com.joaomgcd.autoinput",
 ):
-    require(auto_diary, needle, "CyanBridge_AutoDiary_Tasker.XML")
+    require(auto_diary, needle, "CyanBridge_AutoDiary_Tasker.prj.xml")
 
-visual_diary = load_xml("CyanBridge_VisualDiary_Tasker.XML")
+visual_diary = load_xml("CyanBridge_VisualDiary_Tasker.prj.xml")
 for needle in (
     "CyanBridge VisualDiary Periodic Capture",
     "CyanBridge VisualDiary Periodic Handler",
@@ -93,9 +93,9 @@ for needle in (
     "com.fersaiyan.cyanbridge.TASKER_VISUAL_DIARY_DISABLE",
     "<repval>15</repval>",
 ):
-    require(visual_diary, needle, "CyanBridge_VisualDiary_Tasker.XML")
+    require(visual_diary, needle, "CyanBridge_VisualDiary_Tasker.prj.xml")
 
-hil = load_xml("CyanBridge_HIL_Tasker.XML")
+hil = load_xml("CyanBridge_HIL_Tasker.prj.xml")
 for needle in (
     "com.fersaiyan.cyanbridge.HIL_AUTODIARY_NOW",
     "com.fersaiyan.cyanbridge.HIL_VISUALDIARY_NOW",
@@ -106,7 +106,40 @@ for needle in (
     'setGlobal("CB_AutoDiaryExcluded"',
     'setGlobal("CB_LocalAgentBlocked"',
 ):
-    require(hil, needle, "CyanBridge_HIL_Tasker.XML")
+    require(hil, needle, "CyanBridge_HIL_Tasker.prj.xml")
+
+for name, text in (
+    ("Tasker_AI.prj.xml", ai),
+    ("CyanBridge_LocalAgent_Tasker.prj.xml", local_agent),
+    ("CyanBridge_AutoDiary_Tasker.prj.xml", auto_diary),
+    ("CyanBridge_VisualDiary_Tasker.prj.xml", visual_diary),
+    ("CyanBridge_HIL_Tasker.prj.xml", hil),
+):
+    require(text, '<Project sr="proj0"', name)
+    require(text, "<cdate>", name)
+    require(text, "<pids>", name)
+    require(text, "<tids>", name)
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        continue
+    project = root.find("Project")
+    if project is None:
+        continue
+    profiles = {node.findtext("id", "") for node in root.findall("Profile")}
+    tasks = {node.findtext("id", "") for node in root.findall("Task")}
+    project_profiles = set(project.findtext("pids", "").split(","))
+    project_tasks = set(project.findtext("tids", "").split(","))
+    if project_profiles != profiles:
+        fail(f"{name}: project profile IDs {project_profiles} do not match {profiles}")
+    if project_tasks != tasks:
+        fail(f"{name}: project task IDs {project_tasks} do not match {tasks}")
+    for node in root.findall("Profile"):
+        if node.get("sr") != f'prof{node.findtext("id", "")}':
+            fail(f"{name}: profile sr does not match its id")
+    for node in root.findall("Task"):
+        if node.get("sr") != f'task{node.findtext("id", "")}':
+            fail(f"{name}: task sr does not match its id")
 
 manifest = MANIFEST.read_text(encoding="utf-8")
 for needle in (

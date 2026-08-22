@@ -132,7 +132,7 @@ This keeps the failure boundary clear:
 
 ## Current profile status
 
-`CyanBridge_LocalAgent_Tasker.XML` implements the current observation/execution contract and `%CB_LocalAgentBlocked` source-privacy filtering.
+`CyanBridge_LocalAgent_Tasker.prj.xml` implements the current observation/execution contract and `%CB_LocalAgentBlocked` source-privacy filtering.
 
 Package installation, generic arbitrary intents and generic shell execution are not currently first-class members of `LocalAgentAction` / `LocalAgentUiControlProtocol`; adding them remains a separate protocol-extension pass. When added, CyanBridge should parse/classify/approve them and Tasker should execute them.
 

@@ -30,7 +30,7 @@ The old CyanBridge installed-app blacklist is no longer a second policy authorit
 
 Files:
 
-- `CyanBridge_LocalAgent_Tasker.XML`
+- `CyanBridge_LocalAgent_Tasker.prj.xml`
 - `LOCAL_AGENT_TASKER_CONTRACT.md`
 - `TaskerAgentContract.kt`
 - `TaskerAgentBridge.kt`
@@ -76,7 +76,7 @@ CyanBridge no longer maintains a long-running AutoDiary `dataSync` scheduler ser
 
 Files:
 
-- `CyanBridge_AutoDiary_Tasker.XML`
+- `CyanBridge_AutoDiary_Tasker.prj.xml`
 - `AUTO_DIARY_TASKER_CONTRACT.md`
 - `AutoDiaryTaskerCaptureReceiver.kt`
 - `AutoDiaryCaptureCoordinator.kt`
@@ -107,7 +107,7 @@ Tasker owns only the periodic trigger. Glasses I/O and vision processing stay in
 
 Files:
 
-- `CyanBridge_VisualDiary_Tasker.XML`
+- `CyanBridge_VisualDiary_Tasker.prj.xml`
 - `VisualDiaryTaskerCaptureReceiver.kt`
 - `VisualDiaryCaptureWorker.kt`
 - `VisualDiaryCaptureCoordinator.kt`

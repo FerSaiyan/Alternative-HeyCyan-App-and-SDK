@@ -38,7 +38,7 @@ The imported profile mirrors this into `%CB_AutoDiaryEnabled`.
 
 ## Periodicity
 
-`CyanBridge_AutoDiary_Tasker.XML` contains `CyanBridge AutoDiary Periodic Capture`, configured for every **10 minutes** by default. Edit that Time context in Tasker to change periodicity.
+`CyanBridge_AutoDiary_Tasker.prj.xml` contains `CyanBridge AutoDiary Periodic Capture`, configured for every **10 minutes** by default. Edit that Time context in Tasker to change periodicity.
 
 CyanBridge no longer runs a long-lived AutoDiary `dataSync` foreground service just to wait between captures.
 
@@ -115,7 +115,7 @@ AutoDiary memory remains in CyanBridge app-private storage and the encrypted Roo
 
 ## On-device validation
 
-1. Import `CyanBridge_AutoDiary_Tasker.XML`.
+1. Import `CyanBridge_AutoDiary_Tasker.prj.xml`.
 2. Give AutoInput Accessibility access; CyanBridge Accessibility should not be needed for AutoDiary.
 3. Enable AutoDiary in CyanBridge and verify `%CB_AutoDiaryEnabled` becomes `1` in Tasker.
 4. Verify the periodic profile produces a screen capture after its Time interval.

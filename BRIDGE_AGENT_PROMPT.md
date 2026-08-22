@@ -65,7 +65,7 @@ Specific CyanBridge areas to inspect first:
 android/CyanBridge/
 android/CyanBridge/app/src/main/AndroidManifest.xml
 android/CyanBridge/app/src/main/java/**
-android/CyanBridge/tasker/Tasker_AI.xml
+android/CyanBridge/tasker/Tasker_AI.prj.xml
 heycyan-core/**
 README.md
 AGENTS.md

@@ -39,20 +39,48 @@
             <Str sr="arg4" ve="3"/>
         </Event>
     </Profile>
+    <Project sr="proj0" ve="2">
+        <cdate>1787360400000</cdate>
+        <name>CyanBridge Local Agent</name>
+        <pids>201,202</pids>
+        <tids>211,212</tids>
+    </Project>
     <Task sr="task211">
         <id>211</id>
         <nme>CyanBridge LocalAgent Observe Handler</nme>
         <pri>10</pri>
         <Action sr="act0" ve="7">
-            <code>15355</code>
+            <code>1040876951</code>
             <Bundle sr="arg0">
                 <Vals sr="val">
+                    <AppPackage>&lt;null&gt;</AppPackage>
+                    <AppPackage-type>java.lang.String</AppPackage-type>
+                    <EnableDisableAccessibilityService>&lt;null&gt;</EnableDisableAccessibilityService>
+                    <EnableDisableAccessibilityService-type>java.lang.String</EnableDisableAccessibilityService-type>
+                    <IsFirstAction>false</IsFirstAction>
+                    <IsFirstAction-type>java.lang.Boolean</IsFirstAction-type>
+                    <OnlyClickable>false</OnlyClickable>
+                    <OnlyClickable-type>java.lang.Boolean</OnlyClickable-type>
+                    <OnlyVisible>true</OnlyVisible>
+                    <OnlyVisible-type>java.lang.Boolean</OnlyVisible-type>
+                    <Password>&lt;null&gt;</Password>
+                    <Password-type>java.lang.String</Password-type>
+                    <Regex>false</Regex>
+                    <Regex-type>java.lang.Boolean</Regex-type>
+                    <UIUpdateFields>&lt;null&gt;</UIUpdateFields>
+                    <UIUpdateFields-type>java.lang.String</UIUpdateFields-type>
+                    <UIUpdateText>&lt;null&gt;</UIUpdateText>
+                    <UIUpdateText-type>java.lang.String</UIUpdateText-type>
                     <com.twofortyfouram.locale.intent.extra.BLURB>Query current visible UI for CyanBridge Local Agent</com.twofortyfouram.locale.intent.extra.BLURB>
                     <com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
                     <plugininstanceid>cyanbridge-localagent-query-v1</plugininstanceid>
                     <plugininstanceid-type>java.lang.String</plugininstanceid-type>
                     <plugintypeid>com.joaomgcd.autoinput.intent.IntentUIQuery</plugintypeid>
                     <plugintypeid-type>java.lang.String</plugintypeid-type>
+                    <net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS>AppPackage UIUpdateFields plugininstanceid plugintypeid </net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS>
+                    <net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS-type>java.lang.String</net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS-type>
+                    <net.dinglisch.android.tasker.subbundled>true</net.dinglisch.android.tasker.subbundled>
+                    <net.dinglisch.android.tasker.subbundled-type>java.lang.Boolean</net.dinglisch.android.tasker.subbundled-type>
                 </Vals>
             </Bundle>
             <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str>
@@ -74,6 +102,7 @@ function parsePackages(raw) {
 }
 var pkg = (typeof aipackage !== "undefined") ? String(aipackage || "").trim().toLowerCase() : "";
 var blockedPackages = parsePackages(global("CB_LocalAgentBlocked"));
+var response = "";
 if (pkg &amp;&amp; blockedPackages[pkg]) {
     var blockedEnvelope = {
         contract_version: 1,
@@ -83,15 +112,9 @@ if (pkg &amp;&amp; blockedPackages[pkg]) {
         payload: null,
         error: "blocked_package:" + pkg
     };
-    sendIntent(
-        "com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE",
-        "receiver",
-        "com.fersaiyan.cyanbridge",
-        undefined, undefined, undefined, undefined,
-        ["response:" + JSON.stringify(blockedEnvelope)]
-    );
-    exit();
+    response = JSON.stringify(blockedEnvelope);
 }
+if (!response) {
 var texts = (typeof aitext !== "undefined") ? arr(aitext) : [];
 var ids = (typeof aiid !== "undefined") ? arr(aiid) : [];
 var coords = [];
@@ -138,16 +161,24 @@ var envelope = {
     payload: JSON.stringify(observation),
     error: null
 };
-sendIntent(
-    "com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE",
-    "receiver",
-    "com.fersaiyan.cyanbridge",
-    undefined, undefined, undefined, undefined,
-    ["response:" + JSON.stringify(envelope)]
-);</Str>
+response = JSON.stringify(envelope);
+}</Str>
             <Str sr="arg1" ve="3"/>
             <Int sr="arg2" val="1"/>
             <Int sr="arg3" val="45"/>
+        </Action>
+        <Action sr="act2" ve="7">
+            <code>877</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE</Str>
+            <Int sr="arg1" val="0"/>
+            <Str sr="arg2" ve="3"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3">response:%response</Str>
+            <Str sr="arg5" ve="3"/>
+            <Str sr="arg6" ve="3"/>
+            <Str sr="arg7" ve="3">com.fersaiyan.cyanbridge</Str>
+            <Str sr="arg8" ve="3"/>
+            <Int sr="arg9" val="0"/>
         </Action>
     </Task>
     <Task sr="task212">
@@ -170,14 +201,17 @@ function recordBuiltin(result, detail, error) {
         execution_detail = detail;
     }
 }
-execution_success = "true";
-execution_detail = "";
-execution_error = "";
-use_ai_v2 = "false";
-global_action = "";
-read_aloud = "false";
-toggle_flashlight = "false";
-ai_command = "";
+var execution_success = "true";
+var execution_detail = "";
+var execution_error = "";
+var use_ai_v2 = "false";
+var global_action = "";
+var read_aloud = "false";
+var toggle_flashlight = "false";
+var ai_command = "";
+var action_type = "";
+var err = "";
+var errmsg = "";
 try {
     var action = JSON.parse(String(payload || "{}"));
     action_type = String(action.type || "");
@@ -302,7 +336,7 @@ try {
             <Int sr="arg4" val="1"/>
         </Action>
         <Action sr="act2" ve="7">
-            <code>25167</code>
+            <code>811079103</code>
             <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%global_action</lhs><op>2</op><rhs>1</rhs></Condition></ConditionList>
             <Bundle sr="arg0"><Vals sr="val">
                 <GlobalAction>1</GlobalAction><GlobalAction-type>java.lang.String</GlobalAction-type>
@@ -313,7 +347,7 @@ try {
             <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str><Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigPerformGlobalAction</Str><Int sr="arg3" val="10"/><Int sr="arg4" val="1"/>
         </Action>
         <Action sr="act3" ve="7">
-            <code>25167</code>
+            <code>811079103</code>
             <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%global_action</lhs><op>2</op><rhs>2</rhs></Condition></ConditionList>
             <Bundle sr="arg0"><Vals sr="val">
                 <GlobalAction>2</GlobalAction><GlobalAction-type>java.lang.String</GlobalAction-type>
@@ -324,7 +358,7 @@ try {
             <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str><Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigPerformGlobalAction</Str><Int sr="arg3" val="10"/><Int sr="arg4" val="1"/>
         </Action>
         <Action sr="act4" ve="7">
-            <code>25167</code>
+            <code>811079103</code>
             <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%global_action</lhs><op>2</op><rhs>3</rhs></Condition></ConditionList>
             <Bundle sr="arg0"><Vals sr="val">
                 <GlobalAction>3</GlobalAction><GlobalAction-type>java.lang.String</GlobalAction-type>
@@ -335,7 +369,7 @@ try {
             <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str><Str sr="arg2" ve="3">com.joaomgcd.autoinput.activity.ActivityConfigPerformGlobalAction</Str><Int sr="arg3" val="10"/><Int sr="arg4" val="1"/>
         </Action>
         <Action sr="act5" ve="7">
-            <code>25167</code>
+            <code>811079103</code>
             <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%global_action</lhs><op>2</op><rhs>4</rhs></Condition></ConditionList>
             <Bundle sr="arg0"><Vals sr="val">
                 <GlobalAction>4</GlobalAction><GlobalAction-type>java.lang.String</GlobalAction-type>
@@ -352,7 +386,7 @@ try {
         </Action>
         <Action sr="act7" ve="7">
             <code>129</code>
-            <Str sr="arg0" ve="3">if (typeof err !== "undefined" &amp;&amp; String(err || "") !== "" &amp;&amp; String(err || "") !== "0") {
+            <Str sr="arg0" ve="3">if (typeof errmsg !== "undefined" &amp;&amp; String(errmsg || "") !== "") {
     execution_success = "false";
     execution_error = "tasker_action_error:" + String(err) + ":" + String(typeof errmsg !== "undefined" ? errmsg : "");
 } else if (execution_success === "true" &amp;&amp; !String(execution_detail || "")) {
@@ -362,7 +396,7 @@ try {
         </Action>
         <Action sr="act8" ve="7">
             <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%read_aloud</lhs><op>2</op><rhs>true</rhs></Condition></ConditionList>
-            <code>15355</code>
+            <code>1040876951</code>
             <Bundle sr="arg0"><Vals sr="val">
                 <com.twofortyfouram.locale.intent.extra.BLURB>Query screen text for CyanBridge read aloud</com.twofortyfouram.locale.intent.extra.BLURB><com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
                 <plugininstanceid>cyanbridge-localagent-read-query-v1</plugininstanceid><plugininstanceid-type>java.lang.String</plugininstanceid-type>
@@ -403,14 +437,21 @@ var envelope = {
     payload: ok ? String(execution_detail || ("tasker:" + String(action_type || "") + ":ok")) : null,
     error: ok ? null : String(execution_error || "tasker_execution_failed")
 };
-sendIntent(
-    "com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE",
-    "receiver",
-    "com.fersaiyan.cyanbridge",
-    undefined, undefined, undefined, undefined,
-    ["response:" + JSON.stringify(envelope)]
-);</Str>
+var response = JSON.stringify(envelope);</Str>
             <Str sr="arg1" ve="3"/><Int sr="arg2" val="1"/><Int sr="arg3" val="45"/>
+        </Action>
+        <Action sr="act11" ve="7">
+            <code>877</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE</Str>
+            <Int sr="arg1" val="0"/>
+            <Str sr="arg2" ve="3"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3">response:%response</Str>
+            <Str sr="arg5" ve="3"/>
+            <Str sr="arg6" ve="3"/>
+            <Str sr="arg7" ve="3">com.fersaiyan.cyanbridge</Str>
+            <Str sr="arg8" ve="3"/>
+            <Int sr="arg9" val="0"/>
         </Action>
     </Task>
 </TaskerData>

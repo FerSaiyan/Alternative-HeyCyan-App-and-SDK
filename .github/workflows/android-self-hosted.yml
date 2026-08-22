@@ -28,9 +28,12 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        env:
+          # Persistent self-hosted workspaces may already contain an LFS pre-push hook.
+          # Skip checkout's LFS setup and hydrate the required nested assets explicitly.
+          GIT_LFS_SKIP_SMUDGE: '1'
         with:
           submodules: recursive
-          lfs: true
 
       - name: Fetch Moonshine Android LFS assets
         working-directory: third_party/moonshine

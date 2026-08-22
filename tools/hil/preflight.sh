@@ -4,10 +4,10 @@ source "$(dirname "$0")/common.sh"
 
 serial="${1:-${CYANBRIDGE_HIL_SERIAL:-}}"
 if [[ -z "$serial" ]]; then
-  serial="$(find_serial physical || true)"
+  serial="$(find_serial any || true)"
 fi
 if [[ -z "$serial" ]]; then
-  echo "No physical Android HIL device is connected" >&2
+  echo "No Android Tasker HIL target is connected" >&2
   exit 3
 fi
 
@@ -58,4 +58,4 @@ echo "Lockscreen disabled query: ${lock_disabled:-unsupported}"
 battery="$(adb_for "$serial" shell dumpsys battery 2>/dev/null | sed -n 's/^  USB powered: /USB=/p; s/^  AC powered: /AC=/p; s/^  level: /level=/p' | paste -sd' ' - || true)"
 echo "Power: ${battery:-unknown}"
 
-echo "Physical HIL preflight passed"
+echo "Tasker HIL preflight passed"

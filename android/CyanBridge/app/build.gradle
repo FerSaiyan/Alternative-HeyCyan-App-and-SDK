@@ -230,7 +230,7 @@ dependencies {
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.12.2'
-    testImplementation 'androidx.test:core:1.6.1'
+    testImplementation 'androidx.test:core:1.7.0'
     testImplementation "androidx.room:room-testing:$room_version"
 
     // Meta Wearables DAT SDK for Meta Ray-Ban glasses integration.
@@ -246,11 +246,11 @@ dependencies {
     }
 
     // Chapter 4 UI gating test (androidTest)
-    androidTestImplementation 'androidx.test:core-ktx:1.6.1'
-    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
-    androidTestImplementation 'androidx.test:runner:1.6.1'
-    androidTestImplementation 'androidx.test:rules:1.6.1'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    androidTestImplementation 'androidx.test:core-ktx:1.7.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+    androidTestImplementation 'androidx.test:runner:1.7.0'
+    androidTestImplementation 'androidx.test:rules:1.7.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
 }

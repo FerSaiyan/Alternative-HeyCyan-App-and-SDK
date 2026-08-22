@@ -61,7 +61,7 @@ object TaskerExecutionBackend : LocalAgentExecutionBackend {
     override val id: String = "tasker"
 
     override suspend fun isReady(context: Context): Boolean {
-        val probe = TaskerAgentBridge.requestObservation(context, timeoutMs = 2_500L)
+        val probe = TaskerAgentBridge.requestObservation(context)
         return probe.success && !probe.payload.isNullOrBlank()
     }
 

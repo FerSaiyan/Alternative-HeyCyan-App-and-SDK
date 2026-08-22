@@ -19,8 +19,10 @@ self-hosted Linux runner; Jenkins is not required.
    - Verifies the deterministic `HilFixtureActivity` and instrumentation plumbing.
    - Does not pretend to validate Tasker, AutoInput, or glasses unless those apps/hardware exist.
 
-3. **Physical Tasker HIL**
-   - Installs the branch APK with `adb install -r` so the dedicated phone keeps its pairing/settings.
+3. **Tasker HIL (emulator or physical phone)**
+   - Prefers a configured/physical device and falls back to the running emulator.
+   - Requires Tasker, AutoInput, and the AutoInput Accessibility service; missing prerequisites fail the workflow instead of silently skipping integration coverage.
+   - Installs the branch APK with `adb install -r` so the target keeps its settings.
    - Synchronizes the exact Tasker XML files from the checked-out commit.
    - Verifies Local Agent observe/click/type and `%CB_LocalAgentBlocked`.
    - Invokes the real AutoDiary periodic Tasker handler and verifies both Memory Vault ingestion and `%CB_AutoDiaryExcluded`.
@@ -32,9 +34,9 @@ self-hosted Linux runner; Jenkins is not required.
    - Pass condition is a new usable `AUTO_LOOP_THUMB_*.jpg` created by the real glasses thumbnail path.
    - Optionally waits for a new `Glasses scene ...` candidate fact when the lab phone has a compatible Gemma 4 visual model configured.
 
-## Dedicated phone setup
+## Tasker HIL target setup
 
-Recommended phone state:
+Recommended emulator or phone state:
 
 - USB debugging enabled and permanently authorized for the lab PC.
 - No PIN/password on this dedicated test device.
@@ -45,8 +47,7 @@ Recommended phone state:
 - AutoInput Accessibility service enabled.
 - CyanBridge Accessibility service must not exist/be enabled.
 - Tasker and AutoInput excluded from aggressive battery optimization if the OEM requires it.
-- CyanBridge installed/configured once and the HeyCyan glasses paired.
-- HeyCyan selected as the active CyanBridge device profile for the glasses suite.
+- For optional physical-glasses coverage, CyanBridge must be configured once with the HeyCyan glasses paired and selected.
 
 An OLED-protection app such as Extinguisher is compatible as long as Android remains logically
 interactive and AutoInput still sees the underlying foreground app. If Tasker profile import
@@ -57,9 +58,10 @@ exception for Tasker/CyanBridge during HIL runs or temporarily disable the overl
 
 All variables are optional. Defaults keep the suite safe before the phone is connected.
 
-- `CYANBRIDGE_HIL_PHONE_SERIAL`
-  - Recommended once the dedicated phone is attached.
-  - Set to the exact `adb devices` serial so another USB phone cannot be selected accidentally.
+- `CYANBRIDGE_HIL_SERIAL`
+  - Recommended for either a dedicated emulator or phone.
+  - Set to the exact `adb devices` serial so another target cannot be selected accidentally.
+  - The legacy `CYANBRIDGE_HIL_PHONE_SERIAL` variable remains a fallback.
 
 - `CYANBRIDGE_HIL_ENABLE_GLASSES`
   - Default: `false`.
@@ -105,7 +107,7 @@ From the repository root:
 python3 tools/hil/validate_tasker_profiles.py
 ```
 
-When the phone is connected:
+When the Tasker HIL target is connected:
 
 ```bash
 bash tools/hil/preflight.sh <adb-serial>
@@ -138,6 +140,6 @@ Safe failure diagnostics are written under `build/hil/diagnostics-safe/` and inc
 CyanBridge/Tasker/AutoDiary/VisualDiary/glasses logs and device state. Full screenshots/UI dumps
 are opt-in and use `build/hil/diagnostics-private/` with shorter artifact retention.
 
-The physical-phone tests intentionally restore HIL-only blacklist/exclusion state after each run
+The Tasker HIL tests intentionally restore HIL-only blacklist/exclusion state after each run
 and restore AutoDiary/Visual Diary enabled state when the test enabled a feature that had previously
 been disabled.

@@ -66,6 +66,13 @@
         </Event>
     </Profile>
 
+    <Project sr="proj0" ve="2">
+        <cdate>1787360400000</cdate>
+        <name>CyanBridge HIL</name>
+        <pids>901,902,903,904</pids>
+        <tids>911,912,913,914</tids>
+    </Project>
+
     <Task sr="task911">
         <id>911</id>
         <nme>CyanBridge HIL AutoDiary Now Handler</nme>

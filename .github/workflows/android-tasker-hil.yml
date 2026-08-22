@@ -34,9 +34,12 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        env:
+          # Persistent self-hosted workspaces may already contain an LFS pre-push hook.
+          # Skip checkout's LFS setup and hydrate the required nested assets explicitly.
+          GIT_LFS_SKIP_SMUDGE: '1'
         with:
           submodules: recursive
-          lfs: true
 
       - name: Fetch Moonshine Android LFS assets
         working-directory: third_party/moonshine
@@ -108,65 +111,65 @@ jobs:
           emulator
           com.fersaiyan.cyanbridge.hil.HilFixtureSmokeTest
 
-      - name: Detect physical HIL phone
-        id: phone
+      - name: Detect Tasker HIL target
+        id: tasker
         shell: bash
         env:
-          # Optional: set repository variable CYANBRIDGE_HIL_PHONE_SERIAL once the dedicated
-          # phone is attached. If unset, the first non-emulator adb device is used.
-          CYANBRIDGE_HIL_SERIAL: ${{ vars.CYANBRIDGE_HIL_PHONE_SERIAL }}
+          # Prefer the generic serial variable. Keep the phone-specific name as a fallback
+          # for existing repository configuration.
+          CYANBRIDGE_HIL_SERIAL: ${{ vars.CYANBRIDGE_HIL_SERIAL || vars.CYANBRIDGE_HIL_PHONE_SERIAL }}
         run: |
           source tools/hil/common.sh
+          kind=physical
           serial="$(find_serial physical || true)"
-          if [ -n "$serial" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "serial=$serial" >> "$GITHUB_OUTPUT"
-            echo "Physical HIL phone detected: $serial" | tee -a "$GITHUB_STEP_SUMMARY"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "Physical HIL phone not connected; Tasker/AutoInput hardware tests were not run." | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ -z "$serial" ]; then
+            kind=emulator
+            serial="$(find_serial emulator || true)"
           fi
+          if [ -z "$serial" ]; then
+            echo "No Android target is available for required Tasker HIL tests." | tee -a "$GITHUB_STEP_SUMMARY" >&2
+            exit 1
+          fi
+          echo "serial=$serial" >> "$GITHUB_OUTPUT"
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "Tasker HIL target: $serial ($kind)" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Physical phone preflight
-        if: steps.phone.outputs.available == 'true'
-        run: bash tools/hil/preflight.sh '${{ steps.phone.outputs.serial }}'
+      - name: Tasker HIL preflight
+        run: bash tools/hil/preflight.sh '${{ steps.tasker.outputs.serial }}'
 
       - name: Clear integration logcat window
-        if: steps.phone.outputs.available == 'true'
-        run: '$ANDROID_HOME/platform-tools/adb -s "${{ steps.phone.outputs.serial }}" logcat -c'
+        run: '$ANDROID_HOME/platform-tools/adb -s "${{ steps.tasker.outputs.serial }}" logcat -c'
 
-      - name: Install branch build on physical phone
-        if: steps.phone.outputs.available == 'true'
-        run: bash tools/hil/install.sh '${{ steps.phone.outputs.serial }}'
+      - name: Install branch build on Tasker HIL target
+        run: bash tools/hil/install.sh '${{ steps.tasker.outputs.serial }}'
 
       - name: Sync exact branch Tasker profiles
-        if: steps.phone.outputs.available == 'true'
         env:
-          CYANBRIDGE_HIL_SERIAL: ${{ steps.phone.outputs.serial }}
-        run: bash tools/hil/sync_tasker_profiles.sh '${{ steps.phone.outputs.serial }}'
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
+        run: bash tools/hil/sync_tasker_profiles.sh '${{ steps.tasker.outputs.serial }}'
 
-      - name: Run physical Tasker HIL suite
-        if: steps.phone.outputs.available == 'true'
+      - name: Run Tasker HIL suite
         env:
-          CYANBRIDGE_HIL_SERIAL: ${{ steps.phone.outputs.serial }}
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
           # Leave false until the dedicated phone is paired to HeyCyan and stable.
-          CYANBRIDGE_HIL_GLASSES: ${{ vars.CYANBRIDGE_HIL_ENABLE_GLASSES || 'false' }}
+          # Never require real glasses when the Tasker target is an emulator.
+          CYANBRIDGE_HIL_GLASSES: ${{ steps.tasker.outputs.kind == 'physical' && vars.CYANBRIDGE_HIL_ENABLE_GLASSES || 'false' }}
           # Optional stronger assertion: requires a configured Gemma 4 visual model and waits
           # for the captured scene to become a candidate daily fact.
-          CYANBRIDGE_HIL_EXPECT_VISUAL_FACT: ${{ vars.CYANBRIDGE_HIL_EXPECT_VISUAL_FACT || 'false' }}
+          CYANBRIDGE_HIL_EXPECT_VISUAL_FACT: ${{ steps.tasker.outputs.kind == 'physical' && vars.CYANBRIDGE_HIL_EXPECT_VISUAL_FACT || 'false' }}
         run: >-
           bash tools/hil/run_instrumentation.sh
-          '${{ steps.phone.outputs.serial }}'
+          '${{ steps.tasker.outputs.serial }}'
           hardware
           com.fersaiyan.cyanbridge.hil.HilFixtureSmokeTest,com.fersaiyan.cyanbridge.hil.TaskerLocalAgentHilTest,com.fersaiyan.cyanbridge.hil.AutoDiaryTaskerHilTest,com.fersaiyan.cyanbridge.hil.AiTaskerProfileHilTest,com.fersaiyan.cyanbridge.hil.VisualDiaryHeyCyanHilTest
 
-      - name: Collect physical-phone diagnostics
-        if: failure() && steps.phone.outputs.available == 'true'
+      - name: Collect Tasker HIL diagnostics
+        if: failure() && steps.tasker.outputs.serial != ''
         env:
-          CYANBRIDGE_HIL_SERIAL: ${{ steps.phone.outputs.serial }}
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
           # Set this to true only when screenshots/UI XML are acceptable in CI artifacts.
           CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS: ${{ vars.CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS || 'false' }}
-        run: bash tools/hil/collect_diagnostics.sh '${{ steps.phone.outputs.serial }}'
+        run: bash tools/hil/collect_diagnostics.sh '${{ steps.tasker.outputs.serial }}'
 
       - name: Upload HIL test output
         if: always()

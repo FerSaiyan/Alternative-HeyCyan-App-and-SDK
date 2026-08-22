@@ -95,25 +95,25 @@ class CommunityPluginsActivity : AppCompatActivity() {
             id = TASKER_AI_ID,
             title = "Gemini / ChatGPT Image Assistant",
             description = "Tasker + AutoInput adapter used by the AI image-question flow. The current bundle contains Gemini v3 and ChatGPT v1 and safely supports both profiles on the same phone.",
-            fileName = "Tasker_AI.xml",
+            fileName = "Tasker_AI.prj.xml",
         ),
         taskerIntegration(
             id = NativePluginIds.LOCAL_AGENT,
             title = "Local Agent",
             description = "Required Tasker + AutoInput observer/executor for CyanBridge Local Agent. CyanBridge still owns planning, approvals, memory and recovery.",
-            fileName = "CyanBridge_LocalAgent_Tasker.XML",
+            fileName = "CyanBridge_LocalAgent_Tasker.prj.xml",
         ),
         taskerIntegration(
             id = NativePluginIds.AUTO_DIARY,
             title = "AutoDiary",
             description = "Tasker profile for periodic screen-memory capture and package exclusions. Daily facts, summaries, Memory Vault and RAG remain inside CyanBridge.",
-            fileName = "CyanBridge_AutoDiary_Tasker.XML",
+            fileName = "CyanBridge_AutoDiary_Tasker.prj.xml",
         ),
         taskerIntegration(
             id = NativePluginIds.VISUAL_DIARY,
             title = "Visual Diary",
             description = "Tasker profile that owns the periodic trigger. CyanBridge still captures from the glasses, saves images, runs vision inference and writes visual memory.",
-            fileName = "CyanBridge_VisualDiary_Tasker.XML",
+            fileName = "CyanBridge_VisualDiary_Tasker.prj.xml",
         ),
     )
 

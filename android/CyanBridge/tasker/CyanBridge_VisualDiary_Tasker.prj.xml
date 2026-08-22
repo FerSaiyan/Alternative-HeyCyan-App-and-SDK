@@ -45,6 +45,12 @@
             <tm>-1</tm>
         </Time>
     </Profile>
+    <Project sr="proj0" ve="2">
+        <cdate>1787360400000</cdate>
+        <name>CyanBridge Visual Diary</name>
+        <pids>401,402,403</pids>
+        <tids>411,412,413</tids>
+    </Project>
     <Task sr="task411">
         <id>411</id>
         <nme>CyanBridge VisualDiary Enable Handler</nme>

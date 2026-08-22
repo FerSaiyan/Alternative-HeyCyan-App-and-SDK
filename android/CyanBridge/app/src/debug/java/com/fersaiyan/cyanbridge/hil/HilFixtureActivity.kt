@@ -135,7 +135,7 @@ class HilFixtureActivity : AppCompatActivity() {
 
     companion object {
         const val MARKER_TEXT = "CYANBRIDGE_HIL_SCREEN_72941"
-        const val STATUS_READY = "HIL_STATUS_READY"
+        const val STATUS_READY = "HIL_STATUS_READY $MARKER_TEXT"
         const val STATUS_LONG_PRESSED = "HIL_LONG_PRESS_OK"
         const val CLICK_BUTTON_TEXT = "HIL CLICK ME"
         const val INPUT_HINT = "HIL INPUT"

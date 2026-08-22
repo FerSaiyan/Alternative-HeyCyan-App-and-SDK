@@ -65,12 +65,18 @@
             <tm>-1</tm>
         </Time>
     </Profile>
+    <Project sr="proj0" ve="2">
+        <cdate>1787360400000</cdate>
+        <name>CyanBridge AutoDiary</name>
+        <pids>301,302,303,304</pids>
+        <tids>311,312,313,314</tids>
+    </Project>
     <Task sr="task311">
         <id>311</id>
         <nme>CyanBridge AutoDiary Observe Debug Handler</nme>
         <pri>10</pri>
         <Action sr="act0" ve="7">
-            <code>15355</code>
+            <code>1040876951</code>
             <Bundle sr="arg0">
                 <Vals sr="val">
                     <com.twofortyfouram.locale.intent.extra.BLURB>Query visible Android UI for CyanBridge AutoDiary debug capture</com.twofortyfouram.locale.intent.extra.BLURB>
@@ -153,14 +159,14 @@ if (global("CB_AutoDiaryExcluded") == null) setGlobal("CB_AutoDiaryExcluded", ""
         <pri>10</pri>
         <Action sr="act0" ve="7">
             <code>129</code>
-            <Str sr="arg0" ve="3">cb_enabled = global("CB_AutoDiaryEnabled") === "1" ? "true" : "false";</Str>
+            <Str sr="arg0" ve="3">var cb_enabled = global("CB_AutoDiaryEnabled") === "1" ? "true" : "false";</Str>
             <Str sr="arg1" ve="3"/>
             <Int sr="arg2" val="1"/>
             <Int sr="arg3" val="45"/>
         </Action>
         <Action sr="act1" ve="7">
             <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%cb_enabled</lhs><op>2</op><rhs>true</rhs></Condition></ConditionList>
-            <code>15355</code>
+            <code>1040876951</code>
             <Bundle sr="arg0">
                 <Vals sr="val">
                     <com.twofortyfouram.locale.intent.extra.BLURB>Periodic CyanBridge AutoDiary UI Query</com.twofortyfouram.locale.intent.extra.BLURB>

@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.hil
 
+import android.content.ClipData
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
@@ -32,22 +33,13 @@ class HilTaskerProfileImportActivity : AppCompatActivity() {
         }
 
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/xml")
-            setPackage(TASKER_PACKAGE)
+        val importIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "text/xml")
+            setClassName(TASKER_PACKAGE, TASKER_IMPORT_ACTIVITY)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = ClipData.newRawUri(profile, uri)
         }
-        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/xml"
-            setPackage(TASKER_PACKAGE)
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        val importIntent = listOf(viewIntent, sendIntent).firstOrNull {
-            it.resolveActivity(packageManager) != null
-        }
-        if (importIntent == null) {
+        if (importIntent.resolveActivity(packageManager) == null) {
             setResult(RESULT_CANCELED)
             finish()
             return
@@ -61,12 +53,14 @@ class HilTaskerProfileImportActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_PROFILE = "profile"
         private const val TASKER_PACKAGE = "net.dinglisch.android.taskerm"
+        private const val TASKER_IMPORT_ACTIVITY =
+            "com.joaomgcd.taskerm.datashare.import.ActivityImportTaskerDataFromXml"
         private val ALLOWED_PROFILES = setOf(
-            "Tasker_AI.xml",
-            "CyanBridge_LocalAgent_Tasker.XML",
-            "CyanBridge_AutoDiary_Tasker.XML",
-            "CyanBridge_VisualDiary_Tasker.XML",
-            "CyanBridge_HIL_Tasker.XML",
+            "Tasker_AI.prj.xml",
+            "CyanBridge_LocalAgent_Tasker.prj.xml",
+            "CyanBridge_AutoDiary_Tasker.prj.xml",
+            "CyanBridge_VisualDiary_Tasker.prj.xml",
+            "CyanBridge_HIL_Tasker.prj.xml",
         )
     }
 }
