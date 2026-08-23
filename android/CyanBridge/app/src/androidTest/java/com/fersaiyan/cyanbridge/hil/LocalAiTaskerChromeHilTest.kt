@@ -9,10 +9,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
 import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
+import com.fersaiyan.cyanbridge.localagent.TaskerExecutionBackend
 import com.fersaiyan.cyanbridge.localagent.TaskerLocalAgentService
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -83,6 +85,18 @@ class LocalAiTaskerChromeHilTest {
                     "Local AI HIL unexpectedly switched to a remote model endpoint",
                     RemoteOpenAiPrefs.isActive(context),
                 )
+
+                // Prove the navigation itself ended on the real Chrome article through the same
+                // production Tasker/AutoInput observation boundary used by the planner.
+                val finalObservation = runBlocking { TaskerExecutionBackend.observe(context) }
+                assertTrue(
+                    "Tasker did not observe Chrome after local-AI navigation: ${finalObservation?.packageName}",
+                    finalObservation?.packageName == CHROME_PACKAGE,
+                )
+                assertTrue(
+                    "Tasker did not reach the first-result article marker: ${finalObservation?.screenText}",
+                    finalObservation?.screenText?.contains(ARTICLE_MARKER) == true,
+                )
             } finally {
                 context.startService(
                     Intent(context, TaskerLocalAgentService::class.java).apply {
@@ -133,6 +147,8 @@ class LocalAiTaskerChromeHilTest {
     companion object {
         private const val ACTION_HIL_SET_LOCALAGENT_BLOCKED =
             "com.fersaiyan.cyanbridge.HIL_SET_LOCALAGENT_BLOCKED"
+        private const val CHROME_PACKAGE = "com.android.chrome"
+        private const val ARTICLE_MARKER = "CYANBRIDGE_HIL_WEB_ARTICLE_72941"
         private const val LOCAL_AI_TIMEOUT_MS = 6 * 60_000L
         private const val GOAL =
             "Open Chrome. On the CyanBridge HIL Search page, type the query 'local agent architecture' " +
