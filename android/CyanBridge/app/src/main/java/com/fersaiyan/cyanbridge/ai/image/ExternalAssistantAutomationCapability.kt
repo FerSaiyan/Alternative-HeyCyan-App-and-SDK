@@ -28,8 +28,6 @@ object ExternalAssistantAutomationPolicy {
             "Install or update ${capability.target.label} first."
         !capability.taskerInstalled ->
             "Install Tasker and complete Tasker integration setup first."
-        !capability.taskerAccessibilityEnabled ->
-            "Enable Tasker's Accessibility Access through Tasker's own permission flow."
         !capability.profileCompatible ->
             "Import/update and verify the ${capability.target.label} CyanBridge Tasker profile."
         capability.phoneLocked ->
