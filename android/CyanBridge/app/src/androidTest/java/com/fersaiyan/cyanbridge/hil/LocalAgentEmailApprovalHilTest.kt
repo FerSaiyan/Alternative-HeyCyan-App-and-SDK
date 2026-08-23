@@ -8,6 +8,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.data.local.entity.PendingAction
+import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
 import com.fersaiyan.cyanbridge.localagent.LocalAgentObservation
 import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
@@ -102,6 +103,8 @@ class LocalAgentEmailApprovalHilTest {
                 val pendingJson = pending.actionJson.lowercase()
                 assertTrue("Pending email has wrong recipient: ${pending.actionJson}", pendingJson.contains(RECIPIENT))
                 assertTrue("Pending email lost the unique subject: ${pending.actionJson}", pending.actionJson.contains(subject))
+                // None of these values appear in the task goal. The only way the planner can put
+                // them into the email is by navigating Chrome and grounding on the observed page.
                 assertTrue(
                     "AI email body was not grounded in the observed smartglasses fixture: ${pending.actionJson}",
                     pendingJson.contains("42") && pendingJson.contains("eight-hour") && pendingJson.contains("cobalt horizon 88417"),
@@ -116,9 +119,10 @@ class LocalAgentEmailApprovalHilTest {
                     beforeApproval?.packageName == HilTestSupport.GMAIL_PACKAGE,
                 )
 
-                // Send real textual replies into the production CyanBridge service boundary.
+                // Send real textual replies through the production LocalAgentController/service.
                 // Ambiguous text must leave the queued action untouched.
-                sendApprovalReply(context, "maybe")
+                val ambiguousCommand = LocalAgentController.replyToApproval(context, "maybe")
+                assertTrue("CyanBridge could not route the ambiguous approval reply", ambiguousCommand.ok)
                 Thread.sleep(750L)
                 assertTrue(
                     "Ambiguous approval unexpectedly consumed the pending email",
@@ -133,7 +137,8 @@ class LocalAgentEmailApprovalHilTest {
                 // This literal `yes` is the simulated user's reply. The service routes it through
                 // LocalAgentApprovalCoordinator, which authorizes the queued high-risk action and
                 // delegates the prepared email composer to Tasker.
-                sendApprovalReply(context, "yes")
+                val approvalCommand = LocalAgentController.replyToApproval(context, "yes")
+                assertTrue("CyanBridge could not route the literal yes approval", approvalCommand.ok)
                 val executedApproval = awaitApprovalExecution(pending.id)
                 assertEquals("executed", executedApproval.status)
                 assertTrue(
@@ -263,15 +268,6 @@ class LocalAgentEmailApprovalHilTest {
         return status
     }
 
-    private fun sendApprovalReply(context: Context, reply: String) {
-        context.startService(
-            Intent(context, TaskerLocalAgentService::class.java).apply {
-                action = LocalAgentIntents.ACTION_APPROVAL_REPLY
-                putExtra(LocalAgentIntents.EXTRA_APPROVAL_REPLY, reply)
-            },
-        )
-    }
-
     private fun looksLikeComposer(text: String): Boolean {
         val normalized = text.lowercase()
         return normalized.contains(RECIPIENT) &&
@@ -288,12 +284,11 @@ class LocalAgentEmailApprovalHilTest {
 
     private fun buildGoal(subject: String): String =
         "Open Chrome. On the CyanBridge HIL Search page, search for 'latest smartglasses news', " +
-            "open the first result, read the first visible article without scrolling, and summarize the key facts. " +
+            "open the first result, read only the first visible article without scrolling, and summarize the important facts you actually observe. " +
             "Then prepare an email to $RECIPIENT with the exact subject '$subject'. The body must clearly say this " +
-            "is an automated CyanBridge HIL test using fixture data, not live news, and must summarize the observed " +
-            "42-gram frame, bilingual live captions, eight-hour mixed-use battery target, and the verification phrase " +
-            "'cobalt horizon 88417'. Use the send_email action for the prepared message. Before any email submission, " +
-            "wait for CyanBridge to ask the user for confirmation. Only after the user replies yes may Tasker proceed " +
+            "is an automated CyanBridge HIL test using deterministic fixture data, not live news, and must summarize " +
+            "the article's concrete product details plus its unique verification phrase exactly as observed. Use the send_email action for the prepared message. " +
+            "Before any email submission, wait for CyanBridge to ask the user for confirmation. Only after the user replies yes may Tasker proceed " +
             "with Gmail and click the visible Send control. Because the recipient is this same test account, wait for " +
             "the sent message with subject '$subject' to appear in Gmail, then finish and tell the user the test email was sent."
 
