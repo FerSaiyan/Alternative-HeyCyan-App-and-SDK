@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic local web fixture for CyanBridge's Chrome/Tasker HIL test."""
+"""Deterministic local web fixture for CyanBridge's Chrome/Tasker HIL tests."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 SEARCH_MARKER = "CYANBRIDGE_HIL_WEB_SEARCH_72941"
 RESULTS_MARKER = "CYANBRIDGE_HIL_WEB_RESULTS_72941"
 ARTICLE_MARKER = "CYANBRIDGE_HIL_WEB_ARTICLE_72941"
+SMARTGLASSES_MARKER = "CYANBRIDGE_HIL_SMARTGLASSES_NEWS_88417"
 
 
 def page(title: str, body: str) -> bytes:
@@ -50,11 +51,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/search":
             query = parse_qs(parsed.query).get("q", [""])[0]
+            normalized = query.lower()
+            if "smartglass" in normalized or "smart glass" in normalized:
+                first_result = '<a href="/smartglasses-news">Latest smartglasses news — first result</a>'
+            else:
+                first_result = '<a href="/result">Borealis Field Note — first result</a>'
             body = f"""
 <h1>Search results</h1>
 <p>{RESULTS_MARKER}</p>
 <p>Results for: <strong>{html.escape(query)}</strong></p>
-<a href="/result">Borealis Field Note — first result</a>
+{first_result}
 """
             self.respond(page("CyanBridge HIL Results", body))
             return
@@ -71,6 +77,20 @@ class Handler(BaseHTTPRequestHandler):
 </article>
 """
             self.respond(page("Borealis Field Note", body))
+            return
+
+        if parsed.path == "/smartglasses-news":
+            body = f"""
+<article>
+  <h1>Latest smartglasses news — CyanBridge HIL fixture</h1>
+  <p>{SMARTGLASSES_MARKER}</p>
+  <p><strong>Automation fixture:</strong> this is deterministic test content, not live reporting.</p>
+  <p>On August 23, 2026, the fictional Aurora Lens 2 test device added a 42-gram frame, bilingual live captions, and an eight-hour mixed-use battery target.</p>
+  <p>The fixture also says developers can hand Android UI execution to Tasker while CyanBridge keeps planning, summarization, approval policy, and the final user response.</p>
+  <p>The unique verification phrase for this CI page is: cobalt horizon 88417.</p>
+</article>
+"""
+            self.respond(page("Latest smartglasses news — HIL fixture", body))
             return
 
         self.send_error(404)
