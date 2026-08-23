@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.localagent.actions
 
+import com.fersaiyan.cyanbridge.localagent.LocalAgentAction
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -35,5 +36,18 @@ class LocalAgentApprovalCoordinatorTest {
                 LocalAgentApprovalCoordinator.classifyReply(reply),
             )
         }
+    }
+
+    @Test
+    fun sendEmailRemainsHighRisk() {
+        val action = LocalAgentAction.SendEmail(
+            to = "self@example.com",
+            subject = "HIL",
+            body = "test",
+        )
+        assertEquals(
+            LocalAgentActionManager.Risk.HIGH,
+            LocalAgentActionManager.classifyRisk(action),
+        )
     }
 }
