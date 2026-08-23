@@ -1,90 +1,116 @@
-# Tasker HIL / GitHub Actions Repair Worklog
+# Tasker-Integration-Polish: AI/Gmail CI Tests — Handoff Worklog
 
-Updated: 2026-08-23
+Updated: 2026-08-23 (session 2, context limit reached — CONTINUE FROM "Next Steps")
 
-## Goal
+## Mission
 
-Repair the `security/tasker-agent-split` GitHub Actions workflows and make CyanBridge automatically exercise the real Tasker projects on the Pixel 9a emulator. Finish all HIL failures, validate the complete branch, commit, push, and verify both workflows.
+Make the new CI tests on branch `tasker-integration-polish` actually green — not "green because skipped". Specifically:
 
-## Status: COMPLETE — branch merged content pushed, both workflows GREEN
+- `LocalAiTaskerChromeHilTest` — CyanBridge local model plans, Tasker/AutoInput drives Chrome against a deterministic web fixture, answer must be grounded in observed page facts.
+- `LocalAgentEmailApprovalHilTest` — full real-email flow: Chrome research → summary → SendEmail queued as HIGH-risk → voice prompt → "maybe" gets clarification → literal "yes" approves → Tasker executes Gmail compose+Send → unique `CB-HIL-<ts>` subject must appear in Gmail. Recipient is the user's own account: `fernandosaiyan10@gmail.com` (user explicitly authorized real sends).
 
-- Branch `security/tasker-agent-split` pushed through commit `09e5a12` (`d35c45f..09e5a12`).
-- Both GitHub Actions runs on the pushed tip are **success**:
-  - Android Tasker HIL — run 32620989475
-  - Android self-hosted CI — run 32620989527
-- All five Tasker HIL classes pass locally and in CI (`OK (5 tests)` via the workflow's exact comma-joined invocation).
-- Unit tests, portability tests, both APK assemblies, static checks: green.
-- Nothing further is pending for this effort. Sections below are kept as the investigative record.
+Both tests are gated by repo variables that are currently UNSET, so the last branch CI run (32656567419, both workflows success) skipped them. Default gates are green; the two optional layers have never run.
 
-## Repository And Worktrees
+## Current Status
 
-- Main repository: `/mnt/seagate/ML/HeyCyanSmartGlassesSDK` (stays on `main`; keep its unrelated `.idea/*` edits untouched; an identical copy of this worklog also lives there locally)
-- This file (`/worklog.md`) is committed on `security/tasker-agent-split` as the canonical handoff record.
-- Remote: `git@github.com:FerSaiyan/Alternative-HeyCyan-App-and-SDK.git`
-- Target branch: `security/tasker-agent-split`
-- Authoritative editing worktree: `/tmp/opencode/HeyCyan-tasker-split`
-- Clean build worktree: `/tmp/opencode/HeyCyan-tasker-verify` (Moonshine at `79b0217f...`, builds fine)
+- Branch/worktree: `/tmp/opencode/HeyCyan-tasker-polish`, branch `tasker-integration-polish`, tracking `origin/tasker-integration-polish`, HEAD `617f8e7` + local UNCOMMITTED fixes (see below).
+- Core 5-class HIL suite passes on emulator (`OK` per isolated class): fixture smoke, LocalAgent, AutoDiary, AiTaskerProfile, VisualDiary.
+- Gmail on emulator `emulator-5554`: SIGNED IN as fernandosaiyan10@gmail.com; first-run screens completed (welcome tour GOT IT → TAKE ME TO GMAIL → notifications Allow → Meet Got it).
+- Local model: **currently NOT installed** (deleted to free storage during APK reinstall). Must re-download via catalog UI before running either AI test (exact steps below).
+- Web fixture: running on host port **18765** (8765 is occupied on this host by an LTFS server, pid 3381957 — that is also a real CI hazard, fixed in workflow, see below). Process: `nohup python3 tools/hil/serve_web_fixture.py --port 18765` (log `/tmp/opencode/tasker-polish-web-fixture-18765.log`). `adb reverse tcp:18765 tcp:18765` was set; re-run after any emulator restart. Chrome was prelaunched at `http://127.0.0.1:18765/` and marker `CYANBRIDGE_HIL_WEB_SEARCH_72941` verified visible, then HOME pressed.
+- Build: `:app:assembleDebug :app:assembleDebugAndroidTest` green (needs both submodules initialized, see below).
 
-## Emulator And Installed Apps
+## Uncommitted Fixes In The Worktree (all verified locally, need commit+push)
 
-- Serial `emulator-5554`, AVD `Pixel_9a`, API 37 (`sdk_gphone16k_x86_64`), headless `-no-window -no-snapshot-save`.
-- Tasker 6.6.20, AutoInput 3.0.12, AutoApps installed (restored the user's existing AutoInput entitlement through official Play flow — no purchase/bypass).
-- Accessibility services enabled (both required):
-  - `com.joaomgcd.autoinput/com.joaomgcd.autoinput.service.ServiceAccessibilityV2`
-  - `net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyAccessibilityService`
-- API 37 adbd drops connections frequently: prefix device ops with `adb -s emulator-5554 wait-for-device`. Full-suite single-shot runs die mid-run; per-class runs are reliable.
-- Play proxy `10.0.2.2:8888` via `python3 -B /tmp/opencode/tcp_connect_proxy.py`.
+1. `.github/workflows/android-tasker-hil.yml` — fixture port collision fix:
+   - Old code hard-coded port 8765; on this self-hosted runner `127.0.0.1:8765` is already used by `ltfs_web.py`, so `serve_web_fixture.py` died with `Address already in use` and the health check would pass against the WRONG server (it only checked HTTP 200).
+   - New behavior: allocate an ephemeral host port, `echo port=... >> $GITHUB_OUTPUT` (step id `web_fixture`), `export CYANBRIDGE_HIL_FIXTURE_PORT`, health check requires body marker `CYANBRIDGE_HIL_WEB_SEARCH_72941`, `adb reverse tcp:$port tcp:$port`, Chrome opened at `http://127.0.0.1:$port/`, "Reset Chrome fixture" and "Stop fixture" steps use `steps.web_fixture.outputs.port`.
+2. `android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/localmodels/device/DeviceCapabilityService.kt` — unit fix: replaced `GIB = 1024^3` divisor with `GIGABYTE = 1_000_000_000.0` (catalog `minRamGb`/`minStorageGb`/`sizeBytes` are decimal GB). Before this, a nominal 4 GB AVD reported 3.82 "GB" and every 4 GB-tier model was rejected ("RAM unsuitable: device has 3.8 GB, model needs at least 4.0 GB").
+3. `android/CyanBridge/shared/src/commonMain/kotlin/com/fersaiyan/cyanbridge/localmodels/catalog/LocalModelCatalog.kt` — qwen2.5-0.5b entry: `minStorageGb` 1.0 → 0.75 → **0.5** (with comment). Rationale: 0.5B model is ~0.47 GB; the 6 GB emulator data partition hovers around 0.5–0.8 GB free with Chrome/Gmail/Tasker resident, so a 1.0 GB post-install floor made the supported starter model permanently unloadable. Download headroom check (size+0.35 GB) is separate and still enforced.
+4. `android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/localmodels/download/LocalModelDownloadManager.kt` — downloader hardening: OkHttp client now `.protocols(listOf(Protocol.HTTP_1_1))` (Hugging Face large-file redirects intermittently reset HTTP/2 streams on Android: `StreamResetException: stream was reset: CANCEL`), and the retry loop catches `java.io.IOException` (covers StreamReset/Socket/DNS) instead of only SocketException+UnknownHostException. Verified: catalog download then completed ("Download complete", Status: ready).
 
-## Root Causes Solved Today (after commit d89e472)
+Static checks pass: `python3 tools/hil/validate_tasker_profiles.py`, `bash -n tools/hil/*.sh`, `git diff --check`.
 
-1. **AutoInput entitlement**: plugin actions silently failed until the user's existing license was restored by installing the official **AutoApps** app from Play ("You already bought AutoInput before").
-2. **Tasker accessibility consent**: importing/running profiles that rely on `%WIN` requires Tasker's own "Accessibility Access" granted through **its official disclosure flow** (dialog OK → system screen → toggle → Allow). `settings put secure enabled_accessibility_services` gets reverted by Android and does NOT set Tasker's internal consent flag. Symptom was "Missing Permissions ... Accessibility Access" at import and at task play.
-3. **AutoDiary foreground package**: AutoInput's `%aipackage` stays empty unless an AppPackage filter is set, so exclusion logic never matched. Fixed by deriving package from Tasker `%WIN` (requires item 2), falling back to `%aipackage`.
-4. **JS `sendIntent` unreliable**: Tasker 6.6.20 JavaScriptlets finish without delivering package-targeted broadcasts. All CyanBridge deliveries (Local Agent responses earlier; now AutoDiary debug response, AutoDiary periodic capture, Visual Diary trigger) use **native Send Intent actions** (code 877, arg9=0 receiver target, arg7=package). Validator now forbids `sendIntent("com.fersaiyan.cyanbridge...` patterns.
-5. **Transport escaping of JSON extras**: Tasker decodes one backslash-escape level inside Send Intent extra values, turning JSON `\n` into raw newlines and corrupting org.json parsing (`invalid_tasker_observation:JSONException`). Fix: `JSON.stringify(x).replace(/\\/g, "\\\\")` before assigning to the Tasker variable used in the extra.
-6. **JavaScriptlet local-variable export**: only `var`-declared lowercase variables reach later Tasker actions; implicit assignments don't. All gate/result vars are declared explicitly (`var cb_enabled`, `var capture_payload`, etc.). Keep declarations as leading statements; bottom-of-script `var` declarations were observed flaky.
-7. **UI Query bundle schema**: minimal bundles hang the plugin until its timeout. Both AutoDiary query actions got the full field set copied from the proven Local Agent export (AppPackage `<null>`, OnlyVisible true, subbundled, VARIABLE_REPLACE_KEYS, normalized code `1040876951`).
-8. **Deterministic profile import**: the sync script previously exited early on transient focus changes, leaving stale half-imported projects. It now classifies each dialog (import → overwrite → enable-profiles) via fresh `uiautomator` dumps, requires import+enable confirmations plus two consecutive polls with the importer gone, and detects importer errors including the singular "Missing permission" form.
-9. **16 KB compatibility dialog steals focus**: on API 35+ emulators, launching CyanBridge pops a system-owned "Android App Compatibility" overlay (Meta Wearables SDK libs are not 16 KB aligned). It holds window focus so `%WIN`=android and Compose taps get lost. `run_instrumentation.sh` now auto-taps "Don't Show Again" when present.
+## Submodule Note (fresh worktrees)
 
-## Known-Failing, NOT CI-Gated (pre-existing, documented intentionally)
+This branch adds a second submodule. Both must be initialized or the build fails:
+- `third_party/moonshine` @ 79b0217 (missing → `cmake.path ... doesn't exist`)
+- `android/CyanBridge/app/src/main/myvu-upstream` @ 66ec6f6 (missing → dozens of `Unresolved reference 'myvu'`)
 
-Six Compose UI screen tests fail on this emulator but are **run by neither GitHub Actions workflow** (self-hosted CI runs unit+portability+assemble only; HIL workflow runs exactly the five `hil.*` classes). They also predate this branch (last touched in `b8ec53a`/earlier) and were unrunnable before the Espresso upgrade because every instrumentation crashed on Espresso 3.6.1's removed-API call:
+```bash
+git submodule update --init --recursive
+git -C third_party/moonshine lfs pull --include="core/speaker-embedding-model-data.cpp,core/third-party/onnxruntime/lib/android/arm64/libonnxruntime.so"
+```
 
-- `GlassesManagerUiGatingTest.genericAudioProfile_hidesExtrasPanel` — expects "Meeting capture" node displayed under GENERIC_AUDIO gating
-- `ui.glasses.GlassesDashboardScreenTest`
-- `ui.localmodels.LocalModelsConfigureScreenTest` — 'Catalog Model 9' not found in scroll range
-- `ui.MetaPairingScreenTest`
-- `ui.onboarding.WelcomeScreenTest.setupRequiresAnExplicitLanguageChoice` — Español click does not invoke callback (fails even after `pm clear`)
-- `ui.settings.SettingsScreenTest` — TestTag 'settings_section_AI' absent / touch injection failure
+CI is fine (workflow checks out submodules recursively + LFS pull); this is only for local worktrees.
 
-The 16 KB dialog fix may improve some; they still fail as of this writing. Investigating them belongs to a separate non-security branch.
+## Reproduction Trail (what was observed, in order)
 
-## Committed in `09e5a12` (AutoDiary/HIL-tooling fixes)
+1. `LocalAgentEmailApprovalHilTest` with `CYANBRIDGE_HIL_EMAIL_SEND=true` → fails safely at prereq: "No CyanBridge local model is installed/selected for the email automation HIL" (no email sent).
+2. Imported the 0.5B GGUF via app UI (Import model file → Downloads → pick file). Import path has NO capability gate, but load-time gate then crashed the test app: `RAM unsuitable ... 3.8 GB` → fixed by decimal-GB change (#2).
+3. After #2, load gate: `Not enough free storage. Need about 1.00 GB` (custom imports fall back to hardcoded min 4.0 RAM/1.0 storage in `LocalChatSessionManager.ensureModelLoaded` capabilityEntry) → decided to use the CATALOG download instead (catalog floor now 0.5).
+4. Catalog download failed twice with `stream was reset: CANCEL` (HTTP/2) → fixed by #4; then downloaded successfully via the app UI.
+5. `LocalAiTaskerChromeHilTest` then reached model load and failed only on the storage floor (0.75) → lowered to 0.5 (#3). APK replacement then hit `INSTALL_FAILED_INSUFFICIENT_STORAGE`; recovered by deleting `files/local_models` via `run-as` + `cmd package trim-caches 2G` + reinstall (Success).
+6. **Stopped here**: about to re-download the model via catalog UI and rerun the local-AI test.
 
-All now on the remote branch:
+## Next Steps (in order)
 
-- `android/CyanBridge/tasker/CyanBridge_AutoDiary_Tasker.prj.xml` — %WIN-based package resolution with %aipackage fallback; explicit var declarations; complete UIQuery bundle schema on both query actions; native Send Intent for debug-response and periodic-capture; backslash transport-escaping of both payloads
-- `android/CyanBridge/tasker/CyanBridge_VisualDiary_Tasker.prj.xml` — periodic trigger via conditioned native Send Intent (`%visual_capture_fire`)
-- `tools/hil/sync_tasker_profiles.sh` — deterministic three-dialog confirmation; idempotent enabling of BOTH accessibility services before imports; error classifier covers "Missing permission"/"needed permissions"
-- `tools/hil/preflight.sh` — requires Tasker accessibility service alongside AutoInput's
-- `tools/hil/run_instrumentation.sh` — dismisses the 16 KB compatibility dialog before running
-- `tools/hil/validate_tasker_profiles.py` — forbids JS `sendIntent("com.fersaiyan.cyanbridge` delivery pattern; requires `payload:%capture_payload`
+1. **Re-install + re-download model** (emulator `emulator-5554`):
+   - APKs are already installed (patched build). If needed: `bash tools/hil/install.sh emulator-5554` from the polish worktree.
+   - Free storage first if low: `adb shell cmd package trim-caches 2G`; check `adb shell df -k /data` (need ≥ ~1.2 GB free for download headroom 0.4+0.35 GB; after install ~0.5 GB is enough to LOAD).
+   - UI recipe (coordinates are for this 1080x2424 AVD, verified working):
+     1. `adb shell monkey -p com.fersaiyan.cyanbridge 1` (launch; dismiss any permission dialog with Allow at ~(540,1325))
+     2. Tap Settings tab: (980,2190)
+     3. Swipe up: `input swipe 540 1900 540 700 500`
+     4. Tap "Configure local models" row parent (text bounds ~[147,1140..1282]; tap ~(300,1193) — re-dump `uiautomator` and compute from `text="Configure local models"` if unsure)
+     5. In Local models screen: tap "Curated catalog" header to expand (~(500,1157) or wherever the header is; verify `Collapse Curated catalog` appears)
+     6. Swipe down: `input swipe 540 2200 540 700 600` until `text="Qwen2.5 0.5B Instruct (Q4_K_M)"` visible with `Device suitable`
+     7. Tap its **Download** button — it is the LEFT button of the pair, e.g. bounds [84,1335][529,1461] → tap (300,1387). (The right button is "Info".)
+     8. Wait ~90 s; verify `Status: ready` and "Download complete". If "stream was reset" appears, the HTTP/1.1 fix isn't installed — rebuild/reinstall first.
+   - Fallback (if catalog download keeps failing): `adb push /tmp/opencode/qwen2.5-0.5b-instruct-q4_k_m.gguf /sdcard/Download/` then app → Local models → "Import model file" → Downloads → tap the file card (left card, e.g. (300,1000)). Caveat: imported-custom models use hardcoded floors (4.0 RAM/1.0 storage) in `LocalChatSessionManager` — with the decimal-GB fix RAM passes (4.1 GB), but storage needs ≥1.0 GB free; trim caches or free space first. Catalog download is preferred.
+2. **Run local-AI test** (fixture must be up):
+   ```bash
+   nohup python3 tools/hil/serve_web_fixture.py --port 18765 >/tmp/opencode/tasker-polish-web-fixture-18765.log 2>&1 &
+   adb -s emulator-5554 reverse tcp:18765 tcp:18765
+   adb -s emulator-5554 shell am force-stop com.android.chrome
+   adb -s emulator-5554 shell am start -W -a android.intent.action.VIEW -d 'http://127.0.0.1:18765/' -p com.android.chrome
+   sleep 3; adb -s emulator-5554 shell input keyevent KEYCODE_HOME
+   CYANBRIDGE_HIL_LOCAL_AI=true bash tools/hil/run_instrumentation.sh emulator-5554 hardware com.fersaiyan.cyanbridge.hil.LocalAiTaskerChromeHilTest
+   ```
+   Test must answer with "37", "amber", "cyanbridge", "tasker" (Borealis fixture facts) and end observed on Chrome article marker `CYANBRIDGE_HIL_WEB_ARTICLE_72941`. Debug with `adb logcat -s TaskerLocalAgent LocalChatSession LocalModelDownload` and `run-as com.fersaiyan.cyanbridge cat shared_prefs/local_agent_prefs.xml` (status/last_error). Planner is Qwen 0.5B on CPU — steps are slow; BRAIN_TIMEOUT_MS=60 s per step, test budget 6 min.
+3. **Run the real-email test** (user authorized; sends exactly one self-email per run):
+   ```bash
+   adb -s emulator-5554 shell am force-stop com.android.chrome
+   adb -s emulator-5554 shell am start -W -a android.intent.action.VIEW -d 'http://127.0.0.1:18765/' -p com.android.chrome
+   sleep 2; adb -s emulator-5554 shell input keyevent KEYCODE_HOME
+   CYANBRIDGE_HIL_EMAIL_SEND=true bash tools/hil/run_instrumentation.sh emulator-5554 hardware com.fersaiyan.cyanbridge.hil.LocalAgentEmailApprovalHilTest
+   ```
+   Preconditions inside the test: NO pre-existing pending actions (assert fails otherwise — resolve via app Pending Actions UI if needed), provider becomes LOCAL_AGENT (or already PRO_SUBSCRIPTION), `RemoteOpenAiPrefs.isActive` false, model installed. Replies "maybe"/"yes" are injected textually via `LocalAgentController.replyToApproval` (no real mic needed), but the voice session still speaks via TTS and listens (silence tolerated; external reply wins).
+4. **Fix whatever the tests expose** (product bugs, keep changes minimal), then:
+   - `python3 tools/hil/validate_tasker_profiles.py && bash -n tools/hil/*.sh && git diff --check`
+   - `./gradlew --no-daemon :app:testDebugUnitTest :shared:portabilityTest`
+   - Core suite (5 classes) still green.
+5. **Commit** the four files listed above (+ any new fixes) on `tasker-integration-polish` and push. Suggested message themes: fixture port collision + marker health check; decimal-GB capability units; 0.5B storage floor; HTTP/1.1 + IOException retry for model downloads.
+6. **Enable CI layers** (requires repo admin; `gh variable list` currently shows NO CYANBRIDGE_* vars):
+   ```bash
+   gh variable set CYANBRIDGE_HIL_ENABLE_EMAIL_SEND --body true -R FerSaiyan/Alternative-HeyCyan-App-and-SDK
+   gh variable set CYANBRIDGE_HIL_ENABLE_LOCAL_AI  --body true -R FerSaiyan/Alternative-HeyCyan-App-and-SDK   # optional but recommended
+   ```
+   If you cannot set vars, ask the user to add them in GitHub → Settings → Secrets and variables → Actions → Variables.
+7. **Verify CI**: push → watch `Android Tasker HIL` run; the previously "skipped" steps (Prepare persistent emulator for AI automation HIL, Prepare deterministic Chrome fixture, Run CyanBridge local AI through Tasker and Chrome, Reset Chrome fixture, Run approved Gmail self-send HIL) must now RUN and PASS. Note the runner's persistent AVD is presumably this same machine's AVD (self-hosted homelab runner) — local emulator state (Gmail sign-in, installed model, Tasker entitlements) IS the CI state; keep it healthy, never wipe.
+8. Update this worklog with final results.
 
-## Validation Performed (all green)
+## Operational Notes
 
-- `python3 tools/hil/validate_tasker_profiles.py`; `bash -n` all `tools/hil/*.sh`; `git diff --check`
-- `:app:testDebugUnitTest` + `:shared:portabilityTest` (clean verify worktree)
-- `:app:assembleDebug` + `:app:assembleDebugAndroidTest`; both APKs reinstalled on emulator
-- Preflight; deterministic 5-project profile sync (15 confirmations)
-- Focused HIL classes individually AND workflow-style combined run: `OK (5 tests)` (14.7s)
-
-## Final Steps
-
-1. ~~Commit and push~~ **DONE**: commits `d89e472` + `09e5a12` pushed (`d35c45f..09e5a12`).
-2. ~~Watch Actions~~ **DONE**: both workflows green (Tasker HIL 32620989475, self-hosted CI 32620989527).
+- ADB on this API 37 emulator drops constantly (`error: device offline/not found`). Pattern that works: `adb kill-server; adb start-server; adb -s emulator-5554 wait-for-device` before each batch; retry failed taps once.
+- `run_instrumentation.sh` already: dismisses the 16 KB compat dialog, splits comma-lists into one process per class, and recovers offline emulators via `tools/hil/start_emulator.sh` (cold boot, userdata preserved).
+- Storage is the recurring constraint (6 GB /data, ~80–92% used). Recovery recipe that worked: `adb shell am force-stop com.fersaiyan.cyanbridge; adb exec-out run-as com.fersaiyan.cyanbridge sh -c 'rm -rf files/local_models'; adb shell cmd package trim-caches 2G; adb install -r -d <apk>`.
+- Gmail/Tasker/AutoInput state, Google account, and accessibility grants must never be wiped (`pm clear`, `-wipe-data` are forbidden).
+- The email test's Tasker side executes the approved SendEmail through the Local Agent Tasker project (`android/CyanBridge/tasker/CyanBridge_LocalAgent_Tasker.prj.xml`); if execution fails, check `TaskerExecutionBackend.execute` results in the pending-action record and the Tasker run log. The planner prompt requires a second observation proving compose is gone before finishing.
+- Repo variables/secret context: `META_GITHUB_TOKEN` secret exists; `CYANBRIDGE_HIL_*` vars do not (as of this writing).
 
 ## Constraints (unchanged)
 
-- No subagents. No credential exposure. No billing bypass.
-- Do not modify unrelated main-checkout files or use destructive Git commands.
+- No subagents. No credential exposure. No billing/entitlement bypass (Tasker/AutoInput entitlements were legitimately restored earlier via the user's own AutoApps purchases).
+- Real email ONLY to `fernandosaiyan10@gmail.com`, one per test run, unique `CB-HIL-<ts>` subject, body labeled as deterministic fixture data.
+- Do not `pm clear` CyanBridge/Gmail/Tasker; do not wipe the AVD; do not force-push without approval.
