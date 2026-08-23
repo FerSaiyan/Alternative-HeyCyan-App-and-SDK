@@ -42,13 +42,11 @@ class ExternalAssistantAutomationPolicyTest {
     }
 
     @Test
-    fun taskerAccessibilityIsRequiredForVoiceAutomation() {
+    fun taskerAccessibilityIsDiagnosedButDoesNotBlockAssistantProfileThatDoesNotUseWin() {
         val capability = readyCapability(ImageAutomationTarget.GEMINI).copy(taskerAccessibilityEnabled = false)
 
-        assertEquals(
-            "Enable Tasker's Accessibility Access through Tasker's own permission flow.",
-            ExternalAssistantAutomationPolicy.voiceBlockingReason(capability),
-        )
+        assertNull(ExternalAssistantAutomationPolicy.voiceBlockingReason(capability))
+        assertNull(ExternalAssistantAutomationPolicy.imageBlockingReason(capability))
     }
 
     @Test
