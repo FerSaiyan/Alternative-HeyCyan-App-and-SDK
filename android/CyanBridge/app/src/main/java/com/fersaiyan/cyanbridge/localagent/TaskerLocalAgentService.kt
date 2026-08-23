@@ -14,6 +14,7 @@ import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentActionManager
+import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalCoordinator
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +56,15 @@ class TaskerLocalAgentService : Service() {
             LocalAgentIntents.ACTION_STOP -> stopLoop("user")
             LocalAgentIntents.ACTION_GET_STATUS -> emitStatus()
             LocalAgentIntents.ACTION_READ_SCREEN_ALOUD -> readScreenAloudOnce()
+            LocalAgentIntents.ACTION_APPROVAL_REPLY -> {
+                val reply = intent.getStringExtra(LocalAgentIntents.EXTRA_APPROVAL_REPLY).orEmpty()
+                scope.launch {
+                    val result = LocalAgentApprovalCoordinator.handleReply(applicationContext, reply)
+                    if (result.kind == LocalAgentApprovalCoordinator.ReplyKind.UNKNOWN) {
+                        setStatus("Waiting for approval: reply yes or no", null)
+                    }
+                }
+            }
             LocalAgentIntents.ACTION_RESUME_AFTER_APPROVAL -> {
                 val rejected = intent.getBooleanExtra(LocalAgentIntents.EXTRA_REJECTED, false)
                 approvalDeferred?.takeIf { !it.isCompleted }?.complete(!rejected)
