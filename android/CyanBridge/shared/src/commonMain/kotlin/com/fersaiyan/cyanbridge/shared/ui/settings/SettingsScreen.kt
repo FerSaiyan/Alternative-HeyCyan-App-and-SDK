@@ -100,6 +100,7 @@ interface SettingsScreenActions {
     fun openSubscription()
     fun setProviderType(type: AgentProviderType)
     fun openLocalModels()
+    fun openTaskerIntegrations()
     fun setDefaultImageQuestion(question: String)
     fun resetDefaultImageQuestion()
     fun setMemoryMode(mode: MemoryPrivacyMode)
@@ -500,11 +501,26 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
             Text(localizedProviderLabel(type), style = MaterialTheme.typography.bodyMedium)
         }
     }
-    OutlinedButton(
-        onClick = actions::openLocalModels,
+    Row(
         modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(stringResource(Res.string.settings_configure_local_models))
+        OutlinedButton(
+            onClick = actions::openLocalModels,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("settings_local_models"),
+        ) {
+            Text(stringResource(Res.string.settings_configure_local_models))
+        }
+        OutlinedButton(
+            onClick = actions::openTaskerIntegrations,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("settings_tasker_integrations"),
+        ) {
+            Text("Tasker integrations")
+        }
     }
     Text(
         text = stringResource(Res.string.image_questions_title),
