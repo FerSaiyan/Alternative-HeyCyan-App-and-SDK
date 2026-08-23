@@ -1,7 +1,5 @@
 package com.fersaiyan.cyanbridge.ui.localagent
 
-import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -12,11 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.data.local.entity.PendingAction
 import com.fersaiyan.cyanbridge.localagent.LocalAgentActionParser
-import com.fersaiyan.cyanbridge.localagent.LocalAgentDeviceState
-import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs
-import com.fersaiyan.cyanbridge.localagent.TaskerExecutionBackend
-import com.fersaiyan.cyanbridge.localagent.TaskerLocalAgentService
+import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalCoordinator
 import com.fersaiyan.cyanbridge.shared.ui.localagent.PendingActionsScreen
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
@@ -120,94 +114,34 @@ class PendingActionsActivity : AppCompatActivity() {
     }
 
     private fun rejectCurrent() {
-        val p = current ?: return
         lifecycleScope.launch {
-            val dao = MyApplication.database.pendingActionDao()
-            withContext(Dispatchers.IO) {
-                p.status = "rejected"
-                p.result = "rejected_by_user"
-                dao.update(p)
+            val result = withContext(Dispatchers.IO) {
+                LocalAgentApprovalCoordinator.handleReply(this@PendingActionsActivity, "no")
             }
-            notifyServiceResumeAfterApproval(rejected = true)
-            Toast.makeText(this@PendingActionsActivity, "Rejected action #${p.id}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this@PendingActionsActivity,
+                if (result.action != null) "Rejected action #${result.action.id}" else "No pending action",
+                Toast.LENGTH_SHORT,
+            ).show()
             loadPending()
         }
     }
 
     private fun approveCurrent() {
-        val p = current ?: return
         lifecycleScope.launch {
-            val dao = MyApplication.database.pendingActionDao()
-            withContext(Dispatchers.IO) {
-                p.status = "approved"
-                p.result = null
-                dao.update(p)
+            val result = withContext(Dispatchers.IO) {
+                LocalAgentApprovalCoordinator.handleReply(this@PendingActionsActivity, "yes")
             }
-
-            val actions = LocalAgentActionParser.parseList(p.actionJson)
-            if (actions.isEmpty()) {
-                withContext(Dispatchers.IO) {
-                    p.status = "executed"
-                    p.result = "parse_failed"
-                    dao.update(p)
-                }
-                Toast.makeText(this@PendingActionsActivity, "Could not parse action JSON", Toast.LENGTH_SHORT).show()
-                loadPending()
-                return@launch
-            }
-
-            val results = mutableListOf<String>()
-            var allSucceeded = true
-            for (action in actions) {
-                val availability = LocalAgentDeviceState.availability(this@PendingActionsActivity)
-                if (availability != LocalAgentDeviceState.Availability.READY) {
-                    LocalAgentPrefs.setStatus(this@PendingActionsActivity, "Action blocked: ${availability.statusText}")
-                    LocalAgentPrefs.setLastError(this@PendingActionsActivity, availability.errorCode)
-                    results += "${action.javaClass.simpleName}: blocked_device_state"
-                    allSucceeded = false
-                    break
-                }
-
-                val execution = runCatching {
-                    TaskerExecutionBackend.execute(this@PendingActionsActivity, action)
-                }.getOrElse {
-                    com.fersaiyan.cyanbridge.localagent.LocalAgentBackendExecutionResult(
-                        success = false,
-                        detail = "tasker_exception:${it.javaClass.simpleName}:${it.message.orEmpty()}",
-                    )
-                }
-                results += "${action.javaClass.simpleName}: ${execution.detail}"
-                if (!execution.success) {
-                    allSucceeded = false
-                    break
-                }
-            }
-
-            withContext(Dispatchers.IO) {
-                p.status = "executed"
-                p.result = results.joinToString("; ")
-                dao.update(p)
-            }
-
             Toast.makeText(
                 this@PendingActionsActivity,
-                if (allSucceeded) "Executed action #${p.id}" else "Tasker failed action #${p.id}",
+                when {
+                    result.action == null -> "No pending action"
+                    result.executed -> "Executed action #${result.action.id}"
+                    else -> "Tasker failed action #${result.action.id}"
+                },
                 Toast.LENGTH_SHORT,
             ).show()
-
-            // Resume the CyanBridge planner. The exact Tasker result remains in the pending
-            // action record, so a rejection/failure can be traced from one place.
-            notifyServiceResumeAfterApproval(rejected = !allSucceeded)
             loadPending()
         }
-    }
-
-    private fun notifyServiceResumeAfterApproval(rejected: Boolean) {
-        val intent = Intent(this, TaskerLocalAgentService::class.java).apply {
-            action = LocalAgentIntents.ACTION_RESUME_AFTER_APPROVAL
-            putExtra(LocalAgentIntents.EXTRA_REJECTED, rejected)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-        else startService(intent)
     }
 }
