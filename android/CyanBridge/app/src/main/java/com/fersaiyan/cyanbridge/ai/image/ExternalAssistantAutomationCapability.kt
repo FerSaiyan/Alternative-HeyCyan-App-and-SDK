@@ -1,17 +1,19 @@
 package com.fersaiyan.cyanbridge.ai.image
 
 import android.app.KeyguardManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.provider.Settings
+import com.fersaiyan.cyanbridge.tasker.TaskerEnvironmentInspector
 
 data class ExternalAssistantAutomationCapability(
     val target: ImageAutomationTarget,
     val targetPackage: String?,
     val taskerInstalled: Boolean,
+    val taskerVersion: String?,
+    val taskerAccessibilityEnabled: Boolean,
     val autoInputInstalled: Boolean,
+    val autoInputVersion: String?,
     val autoInputAccessibilityEnabled: Boolean,
     val profileCompatible: Boolean,
     val imageShareAvailable: Boolean,
@@ -25,9 +27,11 @@ object ExternalAssistantAutomationPolicy {
         capability.targetPackage == null ->
             "Install or update ${capability.target.label} first."
         !capability.taskerInstalled ->
-            "Install Tasker and complete Gemini / ChatGPT automation setup first."
+            "Install Tasker and complete Tasker integration setup first."
+        !capability.taskerAccessibilityEnabled ->
+            "Enable Tasker's Accessibility Access through Tasker's own permission flow."
         !capability.profileCompatible ->
-            "Import and verify the ${capability.target.label} CyanBridge Tasker profile first."
+            "Import/update and verify the ${capability.target.label} CyanBridge Tasker profile."
         capability.phoneLocked ->
             "Unlock your phone before using Tasker assistant automation."
         else -> null
@@ -36,7 +40,7 @@ object ExternalAssistantAutomationPolicy {
     fun imageBlockingReason(capability: ExternalAssistantAutomationCapability): String? =
         voiceBlockingReason(capability) ?: when {
             !capability.autoInputInstalled ->
-                "Install AutoInput and complete Gemini / ChatGPT automation setup first."
+                "Install AutoInput and complete Tasker integration setup first."
             !capability.autoInputAccessibilityEnabled ->
                 "Enable AutoInput accessibility before using external image questions."
             !capability.imageShareAvailable ->
@@ -49,16 +53,23 @@ object ExternalAssistantAutomationInspector {
     fun inspect(context: Context): ExternalAssistantAutomationCapability {
         val target = ImageAutomationTarget.forDefaultAssistant(DefaultAssistantResolver.packageName(context))
         val targetPackage = target.packageNames.firstOrNull { isPackageInstalled(context, it) }
+        val environment = TaskerEnvironmentInspector.inspect(context)
+        val importedVersion = target.requiredProfileVersion?.let {
+            TaskerImageProfileStore.version(context, target.wireName)
+        }
         return ExternalAssistantAutomationCapability(
             target = target,
             targetPackage = targetPackage,
-            taskerInstalled = isPackageInstalled(context, ExternalImageAutomationIntents.TASKER_PACKAGE),
-            autoInputInstalled = isPackageInstalled(context, ExternalImageAutomationIntents.AUTO_INPUT_PACKAGE),
-            autoInputAccessibilityEnabled = isAutoInputAccessibilityEnabled(context),
+            taskerInstalled = environment.taskerInstalled,
+            taskerVersion = environment.taskerVersion,
+            taskerAccessibilityEnabled = environment.taskerAccessibilityEnabled,
+            autoInputInstalled = environment.autoInputInstalled,
+            autoInputVersion = environment.autoInputVersion,
+            autoInputAccessibilityEnabled = environment.autoInputAccessibilityEnabled,
             profileCompatible = TaskerImageProfileCompatibility.supports(
                 target = target,
-                importedTarget = TaskerImageProfileStore.target(context),
-                importedVersion = TaskerImageProfileStore.version(context),
+                importedTarget = importedVersion?.let { target.wireName } ?: TaskerImageProfileStore.target(context),
+                importedVersion = importedVersion ?: TaskerImageProfileStore.version(context),
             ),
             imageShareAvailable = targetPackage?.let { canResolveImageShare(context, it) } == true,
             phoneLocked = isDeviceLocked(context),
@@ -77,19 +88,6 @@ object ExternalAssistantAutomationInspector {
             setPackage(packageName)
         }
         return intent.resolveActivity(context.packageManager) != null
-    }
-
-    private fun isAutoInputAccessibilityEnabled(context: Context): Boolean {
-        if (Settings.Secure.getInt(context.contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0) != 1) {
-            return false
-        }
-        val enabled = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-        ).orEmpty()
-        return enabled.split(':')
-            .mapNotNull(ComponentName::unflattenFromString)
-            .any { it.packageName == ExternalImageAutomationIntents.AUTO_INPUT_PACKAGE }
     }
 
     private fun isDeviceLocked(context: Context): Boolean {
