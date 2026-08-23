@@ -65,7 +65,15 @@ class TaskerLocalAgentService : Service() {
     }
 
     override fun onDestroy() {
-        stopLoop("service_destroy")
+        // A successful finish stores the model's final user-facing answer before stopSelf().
+        // Preserve that terminal status during normal teardown; only mark service_destroy when
+        // Android actually destroys an active, non-terminal loop unexpectedly.
+        if (loopJob?.isActive == true && !cancelRequested.get()) {
+            setStatus("Stopped", "service_destroy")
+        }
+        cancelRequested.set(true)
+        loopJob?.cancel()
+        loopJob = null
         approvalDeferred?.takeIf { !it.isCompleted }?.complete(false)
         approvalDeferred = null
         scope.cancel()
