@@ -115,9 +115,7 @@ class PendingActionsActivity : AppCompatActivity() {
 
     private fun rejectCurrent() {
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                LocalAgentApprovalCoordinator.handleReply(this@PendingActionsActivity, "no")
-            }
+            val result = LocalAgentApprovalCoordinator.handleReply(this@PendingActionsActivity, "no")
             Toast.makeText(
                 this@PendingActionsActivity,
                 if (result.action != null) "Rejected action #${result.action.id}" else "No pending action",
@@ -129,9 +127,7 @@ class PendingActionsActivity : AppCompatActivity() {
 
     private fun approveCurrent() {
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                LocalAgentApprovalCoordinator.handleReply(this@PendingActionsActivity, "yes")
-            }
+            val result = LocalAgentApprovalCoordinator.handleReply(this@PendingActionsActivity, "yes")
             Toast.makeText(
                 this@PendingActionsActivity,
                 when {
