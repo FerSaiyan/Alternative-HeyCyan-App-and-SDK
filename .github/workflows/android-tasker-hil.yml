@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - tasker-integration-polish
       - security/tasker-agent-split
       - 'security/tasker-*'
       - 'tasker/**'
@@ -162,6 +163,62 @@ jobs:
           '${{ steps.tasker.outputs.serial }}'
           hardware
           com.fersaiyan.cyanbridge.hil.HilFixtureSmokeTest,com.fersaiyan.cyanbridge.hil.TaskerLocalAgentHilTest,com.fersaiyan.cyanbridge.hil.AutoDiaryTaskerHilTest,com.fersaiyan.cyanbridge.hil.AiTaskerProfileHilTest,com.fersaiyan.cyanbridge.hil.VisualDiaryHeyCyanHilTest
+
+      - name: Prepare deterministic Chrome fixture for local AI HIL
+        if: steps.tasker.outputs.kind == 'physical'
+        shell: bash
+        run: |
+          set -euo pipefail
+          serial='${{ steps.tasker.outputs.serial }}'
+          mkdir -p build/hil/results
+          python3 tools/hil/serve_web_fixture.py --port 8765 > build/hil/results/web-fixture.log 2>&1 &
+          echo $! > build/hil/web-fixture.pid
+          python3 - <<'PY'
+          import time
+          import urllib.request
+          for attempt in range(30):
+              try:
+                  with urllib.request.urlopen("http://127.0.0.1:8765/", timeout=1) as response:
+                      if response.status == 200:
+                          break
+              except Exception:
+                  if attempt == 29:
+                      raise
+                  time.sleep(0.2)
+          PY
+          "$ANDROID_HOME/platform-tools/adb" -s "$serial" reverse tcp:8765 tcp:8765
+          "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell pm path com.android.chrome | grep -q '^package:'
+          "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell pm grant com.fersaiyan.cyanbridge android.permission.POST_NOTIFICATIONS || true
+          "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell am force-stop com.android.chrome
+          "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell am start -W \
+            -a android.intent.action.VIEW \
+            -d 'http://127.0.0.1:8765/' \
+            -p com.android.chrome
+          sleep 2
+          # This only seeds the deterministic initial browser tab. The tested run starts from
+          # CyanBridge and all search/result navigation is performed through the Tasker backend.
+          "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell input keyevent KEYCODE_HOME
+
+      - name: Run CyanBridge local AI through Tasker and Chrome
+        if: steps.tasker.outputs.kind == 'physical'
+        env:
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
+          CYANBRIDGE_HIL_LOCAL_AI: 'true'
+        run: >-
+          bash tools/hil/run_instrumentation.sh
+          '${{ steps.tasker.outputs.serial }}'
+          hardware
+          com.fersaiyan.cyanbridge.hil.LocalAiTaskerChromeHilTest
+
+      - name: Stop deterministic Chrome fixture
+        if: always() && steps.tasker.outputs.kind == 'physical'
+        shell: bash
+        run: |
+          serial='${{ steps.tasker.outputs.serial }}'
+          "$ANDROID_HOME/platform-tools/adb" -s "$serial" reverse --remove tcp:8765 >/dev/null 2>&1 || true
+          if [ -f build/hil/web-fixture.pid ]; then
+            kill "$(cat build/hil/web-fixture.pid)" >/dev/null 2>&1 || true
+          fi
 
       - name: Collect Tasker HIL diagnostics
         if: failure() && steps.tasker.outputs.serial != ''
