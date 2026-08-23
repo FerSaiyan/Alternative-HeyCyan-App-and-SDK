@@ -42,6 +42,16 @@ class ExternalAssistantAutomationPolicyTest {
     }
 
     @Test
+    fun taskerAccessibilityIsRequiredForVoiceAutomation() {
+        val capability = readyCapability(ImageAutomationTarget.GEMINI).copy(taskerAccessibilityEnabled = false)
+
+        assertEquals(
+            "Enable Tasker's Accessibility Access through Tasker's own permission flow.",
+            ExternalAssistantAutomationPolicy.voiceBlockingReason(capability),
+        )
+    }
+
+    @Test
     fun imageRequiresAutoInputButVoiceDoesNot() {
         val capability = readyCapability(ImageAutomationTarget.GEMINI).copy(
             autoInputInstalled = false,
@@ -50,7 +60,7 @@ class ExternalAssistantAutomationPolicyTest {
 
         assertNull(ExternalAssistantAutomationPolicy.voiceBlockingReason(capability))
         assertEquals(
-            "Install AutoInput and complete Gemini / ChatGPT automation setup first.",
+            "Install AutoInput and complete Tasker integration setup first.",
             ExternalAssistantAutomationPolicy.imageBlockingReason(capability),
         )
     }
@@ -59,7 +69,10 @@ class ExternalAssistantAutomationPolicyTest {
         target = target,
         targetPackage = target.packageNames.firstOrNull(),
         taskerInstalled = true,
+        taskerVersion = "6.6.20",
+        taskerAccessibilityEnabled = true,
         autoInputInstalled = true,
+        autoInputVersion = "3.0.12",
         autoInputAccessibilityEnabled = true,
         profileCompatible = true,
         imageShareAvailable = true,
