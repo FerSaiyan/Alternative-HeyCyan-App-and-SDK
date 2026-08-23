@@ -16,6 +16,35 @@ if [[ -z "$serial" ]]; then
   exit 3
 fi
 
+# API 35+ emulators show a system-owned "Android App Compatibility" overlay for every
+# app whose native libs are not 16 KB page-size aligned (the Meta Wearables SDK is not).
+# The dialog steals window focus, so Tasker's %WIN reports "android", AutoInput queries
+# the wrong window, and Compose tests lose taps. Dismiss it permanently per package
+# before running anything.
+dismiss_16kb_compat_dialog() {
+  local s="$1"
+  adb_for "$s" shell true >/dev/null 2>&1 || return 0
+  local xml
+  xml="$(adb_for "$s" exec-out uiautomator dump /dev/tty 2>/dev/null | tr -d '\r' || true)"
+  if ! grep -q 'Android App Compatibility\|16 KB compatible' <<<"$xml"; then
+    return 0
+  fi
+  local xy
+  xy="$(python3 -c '
+import re, sys
+m = re.search(r"<node[^>]+text=\"Don.t Show Again\"[^>]+bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"", sys.argv[1])
+if m:
+    print((int(m.group(1)) + int(m.group(3))) // 2, (int(m.group(2)) + int(m.group(4))) // 2)
+' "$xml")"
+  if [[ -n "$xy" ]]; then
+    echo "Dismissing 16 KB compatibility dialog" >&2
+    read -r x y <<<"$xy"
+    adb_for "$s" shell input tap "$x" "$y" >/dev/null
+    sleep 1
+  fi
+}
+dismiss_16kb_compat_dialog "$serial"
+
 mkdir -p "$HIL_BUILD_DIR/results"
 out="$HIL_BUILD_DIR/results/instrumentation-${mode}-${serial//[:\/]/_}.txt"
 

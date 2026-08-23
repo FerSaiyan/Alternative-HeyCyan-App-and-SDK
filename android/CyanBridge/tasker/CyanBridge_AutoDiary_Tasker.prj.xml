@@ -79,12 +79,34 @@
             <code>1040876951</code>
             <Bundle sr="arg0">
                 <Vals sr="val">
+                    <AppPackage>&lt;null&gt;</AppPackage>
+                    <AppPackage-type>java.lang.String</AppPackage-type>
+                    <EnableDisableAccessibilityService>&lt;null&gt;</EnableDisableAccessibilityService>
+                    <EnableDisableAccessibilityService-type>java.lang.String</EnableDisableAccessibilityService-type>
+                    <IsFirstAction>false</IsFirstAction>
+                    <IsFirstAction-type>java.lang.Boolean</IsFirstAction-type>
+                    <OnlyClickable>false</OnlyClickable>
+                    <OnlyClickable-type>java.lang.Boolean</OnlyClickable-type>
+                    <OnlyVisible>true</OnlyVisible>
+                    <OnlyVisible-type>java.lang.Boolean</OnlyVisible-type>
+                    <Password>&lt;null&gt;</Password>
+                    <Password-type>java.lang.String</Password-type>
+                    <Regex>false</Regex>
+                    <Regex-type>java.lang.Boolean</Regex-type>
+                    <UIUpdateFields>&lt;null&gt;</UIUpdateFields>
+                    <UIUpdateFields-type>java.lang.String</UIUpdateFields-type>
+                    <UIUpdateText>&lt;null&gt;</UIUpdateText>
+                    <UIUpdateText-type>java.lang.String</UIUpdateText-type>
                     <com.twofortyfouram.locale.intent.extra.BLURB>Query visible Android UI for CyanBridge AutoDiary debug capture</com.twofortyfouram.locale.intent.extra.BLURB>
                     <com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
                     <plugininstanceid>cyanbridge-autodiary-query-v2-debug</plugininstanceid>
                     <plugininstanceid-type>java.lang.String</plugininstanceid-type>
                     <plugintypeid>com.joaomgcd.autoinput.intent.IntentUIQuery</plugintypeid>
                     <plugintypeid-type>java.lang.String</plugintypeid-type>
+                    <net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS>AppPackage UIUpdateFields plugininstanceid plugintypeid </net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS>
+                    <net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS-type>java.lang.String</net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS-type>
+                    <net.dinglisch.android.tasker.subbundled>true</net.dinglisch.android.tasker.subbundled>
+                    <net.dinglisch.android.tasker.subbundled-type>java.lang.Boolean</net.dinglisch.android.tasker.subbundled-type>
                 </Vals>
             </Bundle>
             <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str>
@@ -122,10 +144,24 @@ for (var j = 0; j &lt; texts.length &amp;&amp; summaryParts.length &lt; 400; j++
 var pkg = (typeof aipackage !== "undefined") ? clean(aipackage) : "";
 var observation = {created_at_ms:Date.now(),package_name:pkg,text_summary:summaryParts.join("\n").slice(0,25000),nodes:nodes};
 var envelope = {contract_version:1,request_id:String(request_id || ""),callback_token:String(callback_token || ""),success:true,payload:JSON.stringify(observation),error:null};
-sendIntent("com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE","receiver","com.fersaiyan.cyanbridge",undefined,undefined,undefined,undefined,["response:" + JSON.stringify(envelope)]);</Str>
+// Same transport-escaping rationale as the periodic handler below.
+var response = JSON.stringify(envelope).replace(/\\/g, "\\\\");</Str>
             <Str sr="arg1" ve="3"/>
             <Int sr="arg2" val="1"/>
             <Int sr="arg3" val="45"/>
+        </Action>
+        <Action sr="act2" ve="7">
+            <code>877</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE</Str>
+            <Int sr="arg1" val="0"/>
+            <Str sr="arg2" ve="3"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3">response:%response</Str>
+            <Str sr="arg5" ve="3"/>
+            <Str sr="arg6" ve="3"/>
+            <Str sr="arg7" ve="3">com.fersaiyan.cyanbridge</Str>
+            <Str sr="arg8" ve="3"/>
+            <Int sr="arg9" val="0"/>
         </Action>
     </Task>
     <Task sr="task312">
@@ -169,12 +205,34 @@ if (global("CB_AutoDiaryExcluded") == null) setGlobal("CB_AutoDiaryExcluded", ""
             <code>1040876951</code>
             <Bundle sr="arg0">
                 <Vals sr="val">
+                    <AppPackage>&lt;null&gt;</AppPackage>
+                    <AppPackage-type>java.lang.String</AppPackage-type>
+                    <EnableDisableAccessibilityService>&lt;null&gt;</EnableDisableAccessibilityService>
+                    <EnableDisableAccessibilityService-type>java.lang.String</EnableDisableAccessibilityService-type>
+                    <IsFirstAction>false</IsFirstAction>
+                    <IsFirstAction-type>java.lang.Boolean</IsFirstAction-type>
+                    <OnlyClickable>false</OnlyClickable>
+                    <OnlyClickable-type>java.lang.Boolean</OnlyClickable-type>
+                    <OnlyVisible>true</OnlyVisible>
+                    <OnlyVisible-type>java.lang.Boolean</OnlyVisible-type>
+                    <Password>&lt;null&gt;</Password>
+                    <Password-type>java.lang.String</Password-type>
+                    <Regex>false</Regex>
+                    <Regex-type>java.lang.Boolean</Regex-type>
+                    <UIUpdateFields>&lt;null&gt;</UIUpdateFields>
+                    <UIUpdateFields-type>java.lang.String</UIUpdateFields-type>
+                    <UIUpdateText>&lt;null&gt;</UIUpdateText>
+                    <UIUpdateText-type>java.lang.String</UIUpdateText-type>
                     <com.twofortyfouram.locale.intent.extra.BLURB>Periodic CyanBridge AutoDiary UI Query</com.twofortyfouram.locale.intent.extra.BLURB>
                     <com.twofortyfouram.locale.intent.extra.BLURB-type>java.lang.String</com.twofortyfouram.locale.intent.extra.BLURB-type>
                     <plugininstanceid>cyanbridge-autodiary-query-v2-periodic</plugininstanceid>
                     <plugininstanceid-type>java.lang.String</plugininstanceid-type>
                     <plugintypeid>com.joaomgcd.autoinput.intent.IntentUIQuery</plugintypeid>
                     <plugintypeid-type>java.lang.String</plugintypeid-type>
+                    <net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS>AppPackage UIUpdateFields plugininstanceid plugintypeid </net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS>
+                    <net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS-type>java.lang.String</net.dinglisch.android.tasker.extras.VARIABLE_REPLACE_KEYS-type>
+                    <net.dinglisch.android.tasker.subbundled>true</net.dinglisch.android.tasker.subbundled>
+                    <net.dinglisch.android.tasker.subbundled-type>java.lang.Boolean</net.dinglisch.android.tasker.subbundled-type>
                 </Vals>
             </Bundle>
             <Str sr="arg1" ve="3">com.joaomgcd.autoinput</Str>
@@ -185,7 +243,8 @@ if (global("CB_AutoDiaryExcluded") == null) setGlobal("CB_AutoDiaryExcluded", ""
         <Action sr="act2" ve="7">
             <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%cb_enabled</lhs><op>2</op><rhs>true</rhs></Condition></ConditionList>
             <code>129</code>
-            <Str sr="arg0" ve="3">function arr(v) {
+            <Str sr="arg0" ve="3">var capture_payload = "";
+function arr(v) {
     if (typeof v === "undefined" || v === null) return [];
     if (Array.isArray(v)) return v;
     return [v];
@@ -196,7 +255,17 @@ function parsePackages(raw) {
     String(raw == null ? "" : raw).toLowerCase().split(/[\s,;]+/).forEach(function(v){ if (v) out[v] = true; });
     return out;
 }
-var pkg = (typeof aipackage !== "undefined") ? clean(aipackage).toLowerCase() : "";
+// Foreground package comes from Tasker's %WIN (requires Tasker accessibility);
+// AutoInput's %aipackage is only a fallback because it stays empty unless an
+// app filter was configured on the UI Query action.
+var winInfo = clean(global("WIN"));
+var winPkg = winInfo.split("/")[0].trim().toLowerCase();
+var pkg = "";
+if (winPkg &amp;&amp; winPkg.indexOf(".") &gt; 0) {
+    pkg = winPkg;
+} else if (typeof aipackage !== "undefined") {
+    pkg = clean(aipackage).toLowerCase();
+}
 if (!pkg) exit();
 var excluded = parsePackages(global("CB_AutoDiaryExcluded"));
 var fixedExcluded = pkg === "com.android.systemui" || pkg.indexOf("com.android.launcher") === 0 || pkg.indexOf("com.google.android.launcher") === 0 || pkg.indexOf("com.samsung.android.launcher") === 0;
@@ -222,10 +291,26 @@ for (var j = 0; j &lt; texts.length &amp;&amp; summaryParts.length &lt; 400; j++
 }
 if (!summaryParts.length) exit();
 var observation = {created_at_ms:Date.now(),package_name:pkg,text_summary:summaryParts.join("\n").slice(0,25000),nodes:nodes};
-sendIntent("com.fersaiyan.cyanbridge.TASKER_AUTO_DIARY_CAPTURE","receiver","com.fersaiyan.cyanbridge",undefined,undefined,undefined,undefined,["payload:" + JSON.stringify(observation)]);</Str>
+// Tasker decodes one backslash-escape level inside Send Intent extra values, which would
+// turn JSON \n sequences into raw newlines and corrupt the payload for org.json. Escape
+// for transport so CyanBridge receives exactly JSON.stringify output.
+var capture_payload = JSON.stringify(observation).replace(/\\/g, "\\\\");</Str>
             <Str sr="arg1" ve="3"/>
             <Int sr="arg2" val="1"/>
             <Int sr="arg3" val="45"/>
+        </Action>
+        <Action sr="act3" ve="7">
+            <code>877</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_AUTO_DIARY_CAPTURE</Str>
+            <Int sr="arg1" val="0"/>
+            <Str sr="arg2" ve="3"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3">payload:%capture_payload</Str>
+            <Str sr="arg5" ve="3"/>
+            <Str sr="arg6" ve="3"/>
+            <Str sr="arg7" ve="3">com.fersaiyan.cyanbridge</Str>
+            <Str sr="arg8" ve="3"/>
+            <Int sr="arg9" val="0"/>
         </Action>
     </Task>
 </TaskerData>

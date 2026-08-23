@@ -59,8 +59,10 @@ for n in root.iter("node"):
             buttons.append((label, tuple(map(int, m.groups()))))
 joined = " ".join(texts)
 if ("import failed" in joined
-        or ("couldn" in joined and "try to import" in joined)
-        or "bad data" in joined or "missing permissions" in joined):
+        or ("couldn" in joined and ("try to import" in joined or "needed permissions" in joined))
+        or "bad data" in joined
+        or "missing permission" in joined
+        or "missing permissions" in joined):
     print("ERROR importer reported failure")
     raise SystemExit(0)
 kind = None
@@ -183,6 +185,31 @@ adb_for "$serial" shell run-as "$CYANBRIDGE_PACKAGE" mkdir -p cache/hil-profiles
 # The Local Agent project exposes a make_call command, so Tasker must hold this runtime
 # permission before its project importer can complete unattended.
 adb_for "$serial" shell pm grant "$TASKER_PACKAGE" android.permission.CALL_PHONE >/dev/null
+
+# Foreground-package privacy checks run inside Tasker using %WIN, which only populates
+# while Tasker's own accessibility service is enabled; the importer's permission scan
+# refuses projects relying on it otherwise. AutoInput's query service must be live too.
+# The shell identity may change these secure settings on emulators and userdebug phones,
+# so grant both idempotently instead of failing mid-import.
+ensure_accessibility_service() {
+  local component="$1"
+  local current
+  current="$(adb_for "$serial" shell settings get secure enabled_accessibility_services 2>/dev/null | tr -d '\r' || true)"
+  if grep -q "$component" <<<"$current"; then
+    return 0
+  fi
+  echo "Enabling accessibility service: $component" >&2
+  if [[ -z "$current" || "$current" == "null" ]]; then
+    adb_for "$serial" shell settings put secure enabled_accessibility_services "$component" >/dev/null
+  else
+    adb_for "$serial" shell settings put secure enabled_accessibility_services "$current:$component" >/dev/null
+  fi
+  adb_for "$serial" shell settings put secure accessibility_enabled 1 >/dev/null
+  sleep 2
+}
+
+ensure_accessibility_service "com.joaomgcd.autoinput/com.joaomgcd.autoinput.service.ServiceAccessibilityV2"
+ensure_accessibility_service "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyAccessibilityService"
 
 for profile in "${profiles[@]}"; do
   local_file="$HIL_REPO_ROOT/android/CyanBridge/tasker/$profile"

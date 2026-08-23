@@ -81,12 +81,24 @@
         <pri>10</pri>
         <Action sr="act0" ve="7">
             <code>129</code>
-            <Str sr="arg0" ve="3">if (global("CB_VisualDiaryEnabled") === "1") {
-    sendIntent("com.fersaiyan.cyanbridge.TASKER_VISUAL_DIARY_CAPTURE","receiver","com.fersaiyan.cyanbridge",undefined,undefined,undefined,undefined,[]);
-}</Str>
+            <Str sr="arg0" ve="3">var visual_capture_fire = global("CB_VisualDiaryEnabled") === "1" ? "true" : "false";</Str>
             <Str sr="arg1" ve="3"/>
             <Int sr="arg2" val="1"/>
             <Int sr="arg3" val="45"/>
+        </Action>
+        <Action sr="act1" ve="7">
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%visual_capture_fire</lhs><op>2</op><rhs>true</rhs></Condition></ConditionList>
+            <code>877</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_VISUAL_DIARY_CAPTURE</Str>
+            <Int sr="arg1" val="0"/>
+            <Str sr="arg2" ve="3"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+            <Str sr="arg5" ve="3"/>
+            <Str sr="arg6" ve="3"/>
+            <Str sr="arg7" ve="3">com.fersaiyan.cyanbridge</Str>
+            <Str sr="arg8" ve="3"/>
+            <Int sr="arg9" val="0"/>
         </Action>
     </Task>
 </TaskerData>

@@ -81,6 +81,7 @@ for needle in (
     "CB_AutoDiaryExcluded",
     "<repval>10</repval>",
     "com.joaomgcd.autoinput",
+    "payload:%capture_payload",
 ):
     require(auto_diary, needle, "CyanBridge_AutoDiary_Tasker.prj.xml")
 
@@ -119,6 +120,10 @@ for name, text in (
     require(text, "<cdate>", name)
     require(text, "<pids>", name)
     require(text, "<tids>", name)
+    # Tasker 6.6.20 JavaScriptlets finish without delivering package-targeted
+    # broadcasts via the JS sendIntent helper; every CyanBridge response/capture
+    # must use Tasker's native Send Intent action instead.
+    forbid(text, 'sendIntent("com.fersaiyan.cyanbridge', name)
     try:
         root = ET.fromstring(text)
     except ET.ParseError:

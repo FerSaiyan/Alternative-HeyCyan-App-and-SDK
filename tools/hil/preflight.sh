@@ -48,6 +48,10 @@ if ! grep -q "$AUTOINPUT_PACKAGE" <<<"$enabled_accessibility"; then
   echo "AutoInput Accessibility service is not enabled on the HIL phone" >&2
   exit 5
 fi
+if ! grep -q "$TASKER_PACKAGE" <<<"$enabled_accessibility"; then
+  echo "Tasker Accessibility service is not enabled on the HIL phone (required for %WIN foreground-package privacy checks)" >&2
+  exit 5
+fi
 if grep -q "$CYANBRIDGE_PACKAGE" <<<"$enabled_accessibility"; then
   echo "WARNING: a stale CyanBridge Accessibility entry is still present in Android settings." >&2
 fi
