@@ -166,6 +166,7 @@ class TaskerLocalAgentService : Service() {
                 }
 
                 var stepFailed = false
+                var requiresFreshObservation = false
                 val resultParts = mutableListOf<String>()
 
                 for (action in output.actions) {
@@ -203,7 +204,12 @@ class TaskerLocalAgentService : Service() {
                             stepFailed = true
                             break
                         }
-                        resultParts += "${action.javaClass.simpleName}: approved_and_executed"
+                        // The approval coordinator has now executed the approved high-risk action
+                        // through Tasker. Always re-observe before allowing completion so the model
+                        // can verify the resulting UI state (for example, a Gmail compose screen)
+                        // and perform any final low/medium-risk submit control through Tasker.
+                        resultParts += "${action.javaClass.simpleName}: approved_and_executed_through_tasker"
+                        requiresFreshObservation = true
                     } else {
                         val execution = withTimeoutOrNull(EXECUTION_TIMEOUT_MS) {
                             backend.execute(applicationContext, action)
@@ -249,7 +255,7 @@ class TaskerLocalAgentService : Service() {
                     failed = stepFailed,
                 )
 
-                if (output.isComplete && !stepFailed) {
+                if (output.isComplete && !stepFailed && !requiresFreshObservation) {
                     finishService(output.note ?: "Done", null)
                     return@launch
                 }
