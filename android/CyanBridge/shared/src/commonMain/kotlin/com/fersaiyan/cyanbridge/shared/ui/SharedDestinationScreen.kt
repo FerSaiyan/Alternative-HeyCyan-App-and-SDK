@@ -509,6 +509,7 @@ private class SharedSettingsScreenActions(
     override fun sendDebugLogs() = Unit
     override fun stopMeetingCapture() = Unit
     override fun setProviderType(type: AgentProviderType) = update { it.copy(providerType = type) }
+    override fun openTaskerIntegrations() = Unit
     override fun openLocalModels() = Unit
 }
 
