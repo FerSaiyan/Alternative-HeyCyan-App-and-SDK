@@ -18,7 +18,8 @@ Repair the `security/tasker-agent-split` GitHub Actions workflows and make CyanB
 
 ## Repository And Worktrees
 
-- Main repository: `/mnt/seagate/ML/HeyCyanSmartGlassesSDK` (stays on `main`; keep its unrelated `.idea/*` edits untouched; `worklog.md` here is a local handoff file, not part of the branch)
+- Main repository: `/mnt/seagate/ML/HeyCyanSmartGlassesSDK` (stays on `main`; keep its unrelated `.idea/*` edits untouched; an identical copy of this worklog also lives there locally)
+- This file (`/worklog.md`) is committed on `security/tasker-agent-split` as the canonical handoff record.
 - Remote: `git@github.com:FerSaiyan/Alternative-HeyCyan-App-and-SDK.git`
 - Target branch: `security/tasker-agent-split`
 - Authoritative editing worktree: `/tmp/opencode/HeyCyan-tasker-split`
