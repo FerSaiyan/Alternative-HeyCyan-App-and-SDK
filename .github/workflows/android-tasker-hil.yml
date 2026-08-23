@@ -21,6 +21,7 @@ permissions:
   packages: read
 
 # There is one shared Tasker lab target. Main and feature branches must queue behind each other too.
+# Do not cancel a run that may be midway through a real device action or approved-email HIL.
 concurrency:
   group: cyanbridge-android-hil-phone-01
   cancel-in-progress: false
@@ -84,6 +85,8 @@ jobs:
       - name: Find or start emulator
         id: emulator
         shell: bash
+        env:
+          CYANBRIDGE_HIL_EMULATOR_AVD: ${{ vars.CYANBRIDGE_HIL_EMULATOR_AVD || '' }}
         run: |
           set +e
           serial="$(bash tools/hil/start_emulator.sh)"
@@ -145,25 +148,56 @@ jobs:
           CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
         run: bash tools/hil/sync_tasker_profiles.sh '${{ steps.tasker.outputs.serial }}'
 
+      - name: Verify or recover Tasker HIL target after profile import
+        id: tasker_ready
+        shell: bash
+        env:
+          CYANBRIDGE_HIL_EMULATOR_AVD: ${{ vars.CYANBRIDGE_HIL_EMULATOR_AVD || '' }}
+        run: |
+          set -euo pipefail
+          serial='${{ steps.tasker.outputs.serial }}'
+          kind='${{ steps.tasker.outputs.kind }}'
+          adb="$ANDROID_HOME/platform-tools/adb"
+
+          sleep 3
+          state="$($adb -s "$serial" get-state 2>/dev/null || true)"
+          if [ "$state" != "device" ]; then
+            if [ "$kind" != "emulator" ]; then
+              echo "Physical Tasker HIL target disconnected after profile import; refusing to substitute another device." >&2
+              exit 1
+            fi
+            echo "Persistent emulator disappeared after Tasker import; restarting the same configured AVD." | tee -a "$GITHUB_STEP_SUMMARY"
+            serial="$(bash tools/hil/start_emulator.sh)"
+            test -n "$serial"
+            bash tools/hil/preflight.sh "$serial"
+            # Replacement install preserves the persistent AVD's Google/Tasker/AutoInput state.
+            bash tools/hil/install.sh "$serial"
+          fi
+
+          test "$($adb -s "$serial" get-state)" = "device"
+          echo "serial=$serial" >> "$GITHUB_OUTPUT"
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "Ready Tasker HIL target: $serial ($kind)" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Run Tasker HIL suite
         env:
-          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
-          CYANBRIDGE_HIL_GLASSES: ${{ steps.tasker.outputs.kind == 'physical' && vars.CYANBRIDGE_HIL_ENABLE_GLASSES || 'false' }}
-          CYANBRIDGE_HIL_EXPECT_VISUAL_FACT: ${{ steps.tasker.outputs.kind == 'physical' && vars.CYANBRIDGE_HIL_EXPECT_VISUAL_FACT || 'false' }}
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker_ready.outputs.serial }}
+          CYANBRIDGE_HIL_GLASSES: ${{ steps.tasker_ready.outputs.kind == 'physical' && vars.CYANBRIDGE_HIL_ENABLE_GLASSES || 'false' }}
+          CYANBRIDGE_HIL_EXPECT_VISUAL_FACT: ${{ steps.tasker_ready.outputs.kind == 'physical' && vars.CYANBRIDGE_HIL_EXPECT_VISUAL_FACT || 'false' }}
         run: >-
           bash tools/hil/run_instrumentation.sh
-          '${{ steps.tasker.outputs.serial }}'
+          '${{ steps.tasker_ready.outputs.serial }}'
           hardware
           com.fersaiyan.cyanbridge.hil.HilFixtureSmokeTest,com.fersaiyan.cyanbridge.hil.TaskerLocalAgentHilTest,com.fersaiyan.cyanbridge.hil.AutoDiaryTaskerHilTest,com.fersaiyan.cyanbridge.hil.AiTaskerProfileHilTest,com.fersaiyan.cyanbridge.hil.VisualDiaryHeyCyanHilTest
 
       - name: Prepare deterministic Chrome fixture for agent HIL
-        if: steps.tasker.outputs.kind == 'physical' || vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND == 'true'
+        if: steps.tasker_ready.outputs.kind == 'physical' || vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND == 'true'
         shell: bash
         env:
           ENABLE_EMAIL_SEND: ${{ vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND || 'false' }}
         run: |
           set -euo pipefail
-          serial='${{ steps.tasker.outputs.serial }}'
+          serial='${{ steps.tasker_ready.outputs.serial }}'
           mkdir -p build/hil/results
           python3 tools/hil/serve_web_fixture.py --port 8765 > build/hil/results/web-fixture.log 2>&1 &
           echo $! > build/hil/web-fixture.pid
@@ -195,13 +229,13 @@ jobs:
           "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell input keyevent KEYCODE_HOME
 
       - name: Run CyanBridge local AI through Tasker and Chrome
-        if: steps.tasker.outputs.kind == 'physical'
+        if: steps.tasker_ready.outputs.kind == 'physical'
         env:
-          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker_ready.outputs.serial }}
           CYANBRIDGE_HIL_LOCAL_AI: 'true'
         run: >-
           bash tools/hil/run_instrumentation.sh
-          '${{ steps.tasker.outputs.serial }}'
+          '${{ steps.tasker_ready.outputs.serial }}'
           hardware
           com.fersaiyan.cyanbridge.hil.LocalAiTaskerChromeHilTest
 
@@ -210,7 +244,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          serial='${{ steps.tasker.outputs.serial }}'
+          serial='${{ steps.tasker_ready.outputs.serial }}'
           "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell am force-stop com.android.chrome
           "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell am start -W \
             -a android.intent.action.VIEW \
@@ -222,30 +256,36 @@ jobs:
       - name: Run approved smartglasses-summary Gmail self-send HIL
         if: vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND == 'true'
         env:
-          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker_ready.outputs.serial }}
           CYANBRIDGE_HIL_EMAIL_SEND: 'true'
         run: >-
           bash tools/hil/run_instrumentation.sh
-          '${{ steps.tasker.outputs.serial }}'
+          '${{ steps.tasker_ready.outputs.serial }}'
           hardware
           com.fersaiyan.cyanbridge.hil.LocalAgentEmailApprovalHilTest
 
       - name: Stop deterministic Chrome fixture
-        if: always() && (steps.tasker.outputs.kind == 'physical' || vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND == 'true')
+        if: always() && (steps.tasker_ready.outputs.kind == 'physical' || vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND == 'true')
         shell: bash
         run: |
-          serial='${{ steps.tasker.outputs.serial }}'
-          "$ANDROID_HOME/platform-tools/adb" -s "$serial" reverse --remove tcp:8765 >/dev/null 2>&1 || true
+          serial='${{ steps.tasker_ready.outputs.serial }}'
+          if [ -n "$serial" ]; then
+            "$ANDROID_HOME/platform-tools/adb" -s "$serial" reverse --remove tcp:8765 >/dev/null 2>&1 || true
+          fi
           if [ -f build/hil/web-fixture.pid ]; then
             kill "$(cat build/hil/web-fixture.pid)" >/dev/null 2>&1 || true
           fi
 
       - name: Collect Tasker HIL diagnostics
-        if: failure() && steps.tasker.outputs.serial != ''
+        if: failure()
         env:
-          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker_ready.outputs.serial || steps.tasker.outputs.serial }}
           CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS: ${{ vars.CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS || 'false' }}
-        run: bash tools/hil/collect_diagnostics.sh '${{ steps.tasker.outputs.serial }}'
+        run: |
+          serial='${{ steps.tasker_ready.outputs.serial || steps.tasker.outputs.serial }}'
+          if [ -n "$serial" ]; then
+            bash tools/hil/collect_diagnostics.sh "$serial"
+          fi
 
       - name: Upload HIL test output
         if: always()
