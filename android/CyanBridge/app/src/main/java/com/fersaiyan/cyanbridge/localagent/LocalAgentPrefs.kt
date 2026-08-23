@@ -11,6 +11,8 @@ object LocalAgentPrefs {
 
     private const val KEY_STATUS = "status"
     private const val KEY_LAST_ERROR = "last_error"
+    private const val KEY_LAST_APPROVAL_VOICE_PROMPT = "last_approval_voice_prompt"
+    private const val KEY_LAST_APPROVAL_VOICE_REPLY = "last_approval_voice_reply"
 
     // Debug: last context injection details (normal chat System prompt)
     private const val KEY_LAST_CONTEXT_INJECTION_DEBUG = "last_context_injection_debug"
@@ -121,6 +123,28 @@ object LocalAgentPrefs {
 
     fun clearLastError(context: Context) {
         setLastError(context, "(none)")
+    }
+
+    fun setLastApprovalVoicePrompt(context: Context, prompt: String) {
+        prefs(context).edit().putString(KEY_LAST_APPROVAL_VOICE_PROMPT, prompt.take(2_000)).apply()
+    }
+
+    fun getLastApprovalVoicePrompt(context: Context): String =
+        prefs(context).getString(KEY_LAST_APPROVAL_VOICE_PROMPT, "").orEmpty()
+
+    fun clearLastApprovalVoicePrompt(context: Context) {
+        prefs(context).edit().remove(KEY_LAST_APPROVAL_VOICE_PROMPT).apply()
+    }
+
+    fun setLastApprovalVoiceReply(context: Context, reply: String) {
+        prefs(context).edit().putString(KEY_LAST_APPROVAL_VOICE_REPLY, reply.take(500)).apply()
+    }
+
+    fun getLastApprovalVoiceReply(context: Context): String =
+        prefs(context).getString(KEY_LAST_APPROVAL_VOICE_REPLY, "").orEmpty()
+
+    fun clearLastApprovalVoiceReply(context: Context) {
+        prefs(context).edit().remove(KEY_LAST_APPROVAL_VOICE_REPLY).apply()
     }
 
     fun setLastContextInjectionDebug(context: Context, debugText: String) {
