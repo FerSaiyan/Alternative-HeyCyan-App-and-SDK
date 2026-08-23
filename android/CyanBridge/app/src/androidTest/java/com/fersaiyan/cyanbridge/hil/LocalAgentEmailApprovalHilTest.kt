@@ -18,6 +18,7 @@ import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.ui.MyApplication
+import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsActivity
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -110,13 +111,24 @@ class LocalAgentEmailApprovalHilTest {
                     pendingJson.contains("42") && pendingJson.contains("eight-hour") && pendingJson.contains("cobalt horizon 88417"),
                 )
 
-                // The high-risk action must still be queued at this point. Tasker must not have
-                // opened Gmail before CyanBridge receives explicit consent.
-                val beforeApproval = runBlocking { TaskerExecutionBackend.observe(context) }
-                assertNotNull("Tasker observation unavailable while waiting for approval", beforeApproval)
+                // Prove the actual CyanBridge confirmation surface exposes the prepared message
+                // before authorization. This is what a human can inspect before replying yes/no.
+                context.startActivity(
+                    Intent(context, PendingActionsActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                val confirmation = awaitVisibleConfirmation(context, subject)
+                val confirmationText = confirmation.screenText.orEmpty().lowercase()
+                assertEquals(context.packageName, confirmation.packageName)
+                assertTrue("Confirmation UI omitted recipient: ${confirmation.screenText}", confirmationText.contains(RECIPIENT))
+                assertTrue("Confirmation UI omitted unique subject: ${confirmation.screenText}", confirmationText.contains(runTag.lowercase()))
+                assertTrue(
+                    "Confirmation UI omitted the grounded article content: ${confirmation.screenText}",
+                    confirmationText.contains("42") && confirmationText.contains("cobalt horizon 88417"),
+                )
                 assertFalse(
                     "Gmail opened before the user approved the high-risk SendEmail action",
-                    beforeApproval?.packageName == HilTestSupport.GMAIL_PACKAGE,
+                    confirmation.packageName == HilTestSupport.GMAIL_PACKAGE,
                 )
 
                 // Send real textual replies through the production LocalAgentController/service.
@@ -209,6 +221,24 @@ class LocalAgentEmailApprovalHilTest {
         throw AssertionError("Timed out waiting for SendEmail approval. Last status=$lastStatus")
     }
 
+    private fun awaitVisibleConfirmation(context: Context, subject: String): LocalAgentObservation {
+        val deadline = System.currentTimeMillis() + CONFIRMATION_UI_TIMEOUT_MS
+        var last: LocalAgentObservation? = null
+        while (System.currentTimeMillis() < deadline) {
+            last = runBlocking { TaskerExecutionBackend.observe(context) }
+            val text = last?.screenText.orEmpty()
+            if (
+                last?.packageName == context.packageName &&
+                text.contains(RECIPIENT, ignoreCase = true) &&
+                text.contains(subject, ignoreCase = true)
+            ) {
+                return last
+            }
+            Thread.sleep(500L)
+        }
+        throw AssertionError("CyanBridge pending-action confirmation did not become visible. Last observation=${last?.screenText}")
+    }
+
     private fun awaitApprovalExecution(id: Long): PendingAction {
         val dao = MyApplication.database.pendingActionDao()
         val deadline = System.currentTimeMillis() + APPROVAL_EXECUTION_TIMEOUT_MS
@@ -297,6 +327,7 @@ class LocalAgentEmailApprovalHilTest {
         private const val ACTION_HIL_SET_LOCALAGENT_BLOCKED =
             "com.fersaiyan.cyanbridge.HIL_SET_LOCALAGENT_BLOCKED"
         private const val PLANNING_TIMEOUT_MS = 10 * 60_000L
+        private const val CONFIRMATION_UI_TIMEOUT_MS = 10_000L
         private const val APPROVAL_EXECUTION_TIMEOUT_MS = 45_000L
         private const val DELIVERY_TIMEOUT_MS = 2 * 60_000L
     }
