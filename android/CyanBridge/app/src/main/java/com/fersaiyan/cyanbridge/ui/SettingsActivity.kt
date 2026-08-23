@@ -29,6 +29,7 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionVerifier
+import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivity
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
@@ -293,9 +294,12 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
         refreshSettingsUi()
     }
 
-
     override fun openLocalModels() {
         startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
+    }
+
+    override fun openTaskerIntegrations() {
+        startActivity(Intent(this, ExternalAssistantAutomationSetupActivity::class.java))
     }
 
     override fun setDefaultImageQuestion(question: String) {
@@ -631,5 +635,4 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
         }
         return "section_expanded_$legacyCardName"
     }
-
 }
