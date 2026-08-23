@@ -7,6 +7,7 @@ mode="${2:-hardware}"
 classes="${3:-}"
 glasses="${CYANBRIDGE_HIL_GLASSES:-false}"
 expect_visual_fact="${CYANBRIDGE_HIL_EXPECT_VISUAL_FACT:-false}"
+local_ai="${CYANBRIDGE_HIL_LOCAL_AI:-false}"
 
 if [[ -z "$serial" ]]; then
   serial="$(find_serial any || true)"
@@ -53,6 +54,7 @@ cmd=(
   -e hil_mode "$mode"
   -e hil_glasses "$glasses"
   -e hil_expect_visual_fact "$expect_visual_fact"
+  -e hil_local_ai "$local_ai"
 )
 if [[ -n "$classes" ]]; then
   cmd+=( -e class "$classes" )
