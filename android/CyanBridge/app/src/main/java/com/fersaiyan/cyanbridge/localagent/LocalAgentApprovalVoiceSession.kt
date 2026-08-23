@@ -16,6 +16,7 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.ai.AiQuestionForegroundService
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -34,9 +35,11 @@ import kotlin.coroutines.resume
  * Hands-free approval voice loop for Local Agent high-risk actions.
  *
  * Production input is Android speech recognition using the active Bluetooth/phone microphone.
- * Other trusted CyanBridge surfaces can feed equivalent transcribed replies through
- * [submitExternalReply]; HIL uses that same path so it can test the conversation deterministically
- * without pretending an emulator microphone heard synthetic speech.
+ * The same dedicated microphone foreground-service lifecycle used by glasses AI questions keeps
+ * the spoken confirmation alive while CyanBridge is not visible. Other trusted CyanBridge
+ * surfaces can feed equivalent transcribed replies through [submitExternalReply]; HIL uses that
+ * same path so it can test the conversation deterministically without pretending an emulator
+ * microphone heard synthetic speech.
  */
 class LocalAgentApprovalVoiceSession(
     context: Context,
@@ -56,35 +59,40 @@ class LocalAgentApprovalVoiceSession(
     }
 
     suspend fun askAndListen(prompt: String, timeoutMs: Long = DEFAULT_LISTEN_TIMEOUT_MS): String? {
-        LocalAgentPrefs.setLastApprovalVoicePrompt(appContext, prompt)
-        LocalAgentPrefs.clearLastApprovalVoiceReply(appContext)
-        onStatus("Speaking voice confirmation")
-        speakAndAwait(prompt)
-        onStatus("Listening for confirmation")
+        AiQuestionForegroundService.start(appContext, "Waiting for spoken Local Agent approval")
+        return try {
+            LocalAgentPrefs.setLastApprovalVoicePrompt(appContext, prompt)
+            LocalAgentPrefs.clearLastApprovalVoiceReply(appContext)
+            onStatus("Speaking voice confirmation")
+            speakAndAwait(prompt)
+            onStatus("Listening for confirmation")
 
-        val speechAvailable = ContextCompat.checkSelfPermission(
-            appContext,
-            Manifest.permission.RECORD_AUDIO,
-        ) == PackageManager.PERMISSION_GRANTED && SpeechRecognizer.isRecognitionAvailable(appContext)
+            val speechAvailable = ContextCompat.checkSelfPermission(
+                appContext,
+                Manifest.permission.RECORD_AUDIO,
+            ) == PackageManager.PERMISSION_GRANTED && SpeechRecognizer.isRecognitionAvailable(appContext)
 
-        val reply = if (!speechAvailable) {
-            withTimeoutOrNull(timeoutMs) { externalReplies.receive() }
-        } else {
-            coroutineScope {
-                val speech = async { recognizeOnce(timeoutMs) }
-                val first = select<String?> {
-                    externalReplies.onReceive { it }
-                    speech.onAwait { it }
+            val reply = if (!speechAvailable) {
+                withTimeoutOrNull(timeoutMs) { externalReplies.receive() }
+            } else {
+                coroutineScope {
+                    val speech = async { recognizeOnce(timeoutMs) }
+                    val first = select<String?> {
+                        externalReplies.onReceive { it }
+                        speech.onAwait { it }
+                    }
+                    if (!speech.isCompleted) speech.cancel()
+                    if (first != null) first else withTimeoutOrNull(timeoutMs) { externalReplies.receive() }
                 }
-                if (!speech.isCompleted) speech.cancel()
-                if (first != null) first else withTimeoutOrNull(timeoutMs) { externalReplies.receive() }
             }
-        }
 
-        reply?.trim()?.takeIf { it.isNotBlank() }?.also {
-            LocalAgentPrefs.setLastApprovalVoiceReply(appContext, it)
+            reply?.trim()?.takeIf { it.isNotBlank() }?.also {
+                LocalAgentPrefs.setLastApprovalVoiceReply(appContext, it)
+            }
+            reply
+        } finally {
+            AiQuestionForegroundService.stop(appContext)
         }
-        return reply
     }
 
     private suspend fun speakAndAwait(text: String) {
@@ -230,6 +238,7 @@ class LocalAgentApprovalVoiceSession(
 
     override fun close() {
         externalReplies.close()
+        AiQuestionForegroundService.stop(appContext)
         runCatching { tts.stop() }
         runCatching { tts.shutdown() }
     }
