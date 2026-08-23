@@ -25,6 +25,9 @@ object HilTestSupport {
     val expectVisualFact: Boolean
         get() = args.getString("hil_expect_visual_fact", "false").toBoolean()
 
+    val localAiRequired: Boolean
+        get() = args.getString("hil_local_ai", "false").toBoolean()
+
     fun packageInstalled(context: Context, packageName: String): Boolean = runCatching {
         @Suppress("DEPRECATION")
         context.packageManager.getPackageInfo(packageName, 0)
