@@ -13,6 +13,12 @@ import com.fersaiyan.cyanbridge.localagent.LocalAgentAction
  */
 object LocalAgentApprovalClarifier {
 
+    data class ClarificationResult(
+        val text: String,
+        val usedModel: Boolean,
+        val detail: String,
+    )
+
     fun initialPrompt(action: LocalAgentAction): String = when (action) {
         is LocalAgentAction.SendEmail -> buildString {
             append("I’m ready to send an email to ${action.to}")
@@ -41,9 +47,9 @@ object LocalAgentApprovalClarifier {
         originalGoal: String,
         action: LocalAgentAction,
         ambiguousReply: String,
-    ): String {
+    ): ClarificationResult {
         val fallback = fallbackClarification(action, ambiguousReply)
-        return runCatching {
+        val modelAttempt = runCatching {
             AgentInferenceRouter.complete(
                 context = context,
                 purpose = AgentInferencePurpose.UI_PLANNING,
@@ -60,13 +66,29 @@ object LocalAgentApprovalClarifier {
                     append(ambiguousReply.take(400))
                 },
             )
-        }.getOrNull()
+        }
+        val modelText = modelAttempt.getOrNull()
             ?.trim()
             ?.replace(Regex("\\s+"), " ")
             ?.removePrefix("\"")
             ?.removeSuffix("\"")
             ?.takeIf { it.length in 12..500 }
-            ?: fallback
+
+        return if (modelText != null) {
+            ClarificationResult(
+                text = modelText,
+                usedModel = true,
+                detail = "configured_planner_model",
+            )
+        } else {
+            ClarificationResult(
+                text = fallback,
+                usedModel = false,
+                detail = modelAttempt.exceptionOrNull()?.let {
+                    "fallback:${it.javaClass.simpleName}:${it.message.orEmpty()}"
+                } ?: "fallback:empty_or_invalid_model_reply",
+            )
+        }
     }
 
     fun fallbackClarification(action: LocalAgentAction, ambiguousReply: String): String {
