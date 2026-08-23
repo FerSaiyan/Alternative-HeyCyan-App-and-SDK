@@ -9,6 +9,8 @@ import org.junit.Assume.assumeTrue
 object HilTestSupport {
     const val TASKER_PACKAGE = "net.dinglisch.android.taskerm"
     const val AUTOINPUT_PACKAGE = "com.joaomgcd.autoinput"
+    const val CHROME_PACKAGE = "com.android.chrome"
+    const val GMAIL_PACKAGE = "com.google.android.gm"
 
     private val args: Bundle
         get() = InstrumentationRegistry.getArguments()
@@ -27,6 +29,9 @@ object HilTestSupport {
 
     val localAiRequired: Boolean
         get() = args.getString("hil_local_ai", "false").toBoolean()
+
+    val emailSendRequired: Boolean
+        get() = args.getString("hil_email_send", "false").toBoolean()
 
     fun packageInstalled(context: Context, packageName: String): Boolean = runCatching {
         @Suppress("DEPRECATION")
