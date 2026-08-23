@@ -14,6 +14,7 @@ import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentActionManager
+import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalClarifier
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalCoordinator
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import kotlinx.coroutines.CompletableDeferred
@@ -41,6 +42,7 @@ class TaskerLocalAgentService : Service() {
     private var loopJob: Job? = null
     private val cancelRequested = AtomicBoolean(false)
     private var approvalDeferred: CompletableDeferred<Boolean>? = null
+    private lateinit var approvalVoiceSession: LocalAgentApprovalVoiceSession
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -48,6 +50,9 @@ class TaskerLocalAgentService : Service() {
         super.onCreate()
         ensureNotificationChannel()
         LocalAgentMemoryStore.ensureSeedFiles(applicationContext)
+        approvalVoiceSession = LocalAgentApprovalVoiceSession(applicationContext) { status ->
+            setStatus(status, null)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -58,10 +63,14 @@ class TaskerLocalAgentService : Service() {
             LocalAgentIntents.ACTION_READ_SCREEN_ALOUD -> readScreenAloudOnce()
             LocalAgentIntents.ACTION_APPROVAL_REPLY -> {
                 val reply = intent.getStringExtra(LocalAgentIntents.EXTRA_APPROVAL_REPLY).orEmpty()
-                scope.launch {
-                    val result = LocalAgentApprovalCoordinator.handleReply(applicationContext, reply)
-                    if (result.kind == LocalAgentApprovalCoordinator.ReplyKind.UNKNOWN) {
-                        setStatus("Waiting for approval: reply yes or no", null)
+                if (approvalDeferred != null) {
+                    approvalVoiceSession.submitExternalReply(reply)
+                } else if (reply.isNotBlank()) {
+                    scope.launch {
+                        val result = LocalAgentApprovalCoordinator.handleReply(applicationContext, reply)
+                        if (result.kind == LocalAgentApprovalCoordinator.ReplyKind.UNKNOWN) {
+                            setStatus("No active voice confirmation understood that reply", null)
+                        }
                     }
                 }
             }
@@ -75,9 +84,6 @@ class TaskerLocalAgentService : Service() {
     }
 
     override fun onDestroy() {
-        // A successful finish stores the model's final user-facing answer before stopSelf().
-        // Preserve that terminal status during normal teardown; only mark service_destroy when
-        // Android actually destroys an active, non-terminal loop unexpectedly.
         if (loopJob?.isActive == true && !cancelRequested.get()) {
             setStatus("Stopped", "service_destroy")
         }
@@ -86,6 +92,7 @@ class TaskerLocalAgentService : Service() {
         loopJob = null
         approvalDeferred?.takeIf { !it.isCompleted }?.complete(false)
         approvalDeferred = null
+        if (::approvalVoiceSession.isInitialized) approvalVoiceSession.close()
         scope.cancel()
         super.onDestroy()
     }
@@ -207,19 +214,29 @@ class TaskerLocalAgentService : Service() {
                             action,
                             source = "tasker_agent",
                         )
-                        setStatus("Waiting for approval: ${action.javaClass.simpleName}", null)
-                        val approved = awaitApproval()
-                        if (!approved) {
-                            resultParts += "${action.javaClass.simpleName}: rejected_by_user"
-                            stepFailed = true
-                            break
+                        when (awaitApprovalConversation(goal, action)) {
+                            ApprovalOutcome.APPROVED -> {
+                                resultParts += "${action.javaClass.simpleName}: approved_and_executed_through_tasker"
+                                requiresFreshObservation = true
+                            }
+                            ApprovalOutcome.REJECTED -> {
+                                resultParts += "${action.javaClass.simpleName}: rejected_by_user"
+                                stepFailed = true
+                                break
+                            }
+                            ApprovalOutcome.EXECUTION_FAILED -> {
+                                resultParts += "${action.javaClass.simpleName}: approved_but_tasker_execution_failed"
+                                stepFailed = true
+                                break
+                            }
+                            ApprovalOutcome.TIMED_OUT -> {
+                                finishService(
+                                    "Voice confirmation timed out; the action is still pending",
+                                    "approval_timeout_pending",
+                                )
+                                return@launch
+                            }
                         }
-                        // The approval coordinator has now executed the approved high-risk action
-                        // through Tasker. Always re-observe before allowing completion so the model
-                        // can verify the resulting UI state (for example, a Gmail compose screen)
-                        // and perform any final low/medium-risk submit control through Tasker.
-                        resultParts += "${action.javaClass.simpleName}: approved_and_executed_through_tasker"
-                        requiresFreshObservation = true
                     } else {
                         val execution = withTimeoutOrNull(EXECUTION_TIMEOUT_MS) {
                             backend.execute(applicationContext, action)
@@ -278,11 +295,71 @@ class TaskerLocalAgentService : Service() {
         }
     }
 
-    private suspend fun awaitApproval(): Boolean {
+    private enum class ApprovalOutcome { APPROVED, REJECTED, EXECUTION_FAILED, TIMED_OUT }
+
+    private suspend fun awaitApprovalConversation(
+        goal: String,
+        action: LocalAgentAction,
+    ): ApprovalOutcome {
         val deferred = CompletableDeferred<Boolean>()
         approvalDeferred = deferred
+        LocalAgentPrefs.clearLastApprovalVoiceReply(applicationContext)
+        val deadline = System.currentTimeMillis() + APPROVAL_TIMEOUT_MS
+        var prompt = LocalAgentApprovalClarifier.initialPrompt(action)
+        var silenceCount = 0
+
         return try {
-            withTimeoutOrNull(APPROVAL_TIMEOUT_MS) { deferred.await() } ?: false
+            while (System.currentTimeMillis() < deadline && !cancelRequested.get()) {
+                if (deferred.isCompleted) {
+                    return if (deferred.await()) ApprovalOutcome.APPROVED else ApprovalOutcome.REJECTED
+                }
+
+                val remaining = (deadline - System.currentTimeMillis()).coerceAtLeast(1L)
+                val reply = approvalVoiceSession.askAndListen(
+                    prompt = prompt,
+                    timeoutMs = minOf(LocalAgentApprovalVoiceSession.DEFAULT_LISTEN_TIMEOUT_MS, remaining),
+                )
+
+                if (deferred.isCompleted) {
+                    return if (deferred.await()) ApprovalOutcome.APPROVED else ApprovalOutcome.REJECTED
+                }
+
+                if (reply.isNullOrBlank()) {
+                    silenceCount++
+                    prompt = if (silenceCount == 1) {
+                        "I didn’t catch an answer. The action is still waiting. Please say yes to continue or no to cancel."
+                    } else {
+                        "I’m still waiting for your confirmation. Say yes to continue or no to cancel."
+                    }
+                    continue
+                }
+
+                silenceCount = 0
+                when (LocalAgentApprovalCoordinator.classifyReply(reply)) {
+                    LocalAgentApprovalCoordinator.ReplyKind.APPROVE -> {
+                        setStatus("Voice approval received", null)
+                        val result = LocalAgentApprovalCoordinator.handleReply(applicationContext, reply)
+                        return if (result.executed) ApprovalOutcome.APPROVED else ApprovalOutcome.EXECUTION_FAILED
+                    }
+                    LocalAgentApprovalCoordinator.ReplyKind.REJECT -> {
+                        setStatus("Voice rejection received", null)
+                        LocalAgentApprovalCoordinator.handleReply(applicationContext, reply)
+                        return ApprovalOutcome.REJECTED
+                    }
+                    LocalAgentApprovalCoordinator.ReplyKind.UNKNOWN -> {
+                        setStatus("Asking for clarification", null)
+                        prompt = withTimeoutOrNull(CLARIFICATION_TIMEOUT_MS) {
+                            LocalAgentApprovalClarifier.clarificationPrompt(
+                                context = applicationContext,
+                                originalGoal = goal,
+                                action = action,
+                                ambiguousReply = reply,
+                            )
+                        } ?: LocalAgentApprovalClarifier.fallbackClarification(action, reply)
+                    }
+                }
+            }
+            ApprovalOutcome.TIMED_OUT
         } finally {
             if (approvalDeferred === deferred) approvalDeferred = null
         }
@@ -353,6 +430,7 @@ class TaskerLocalAgentService : Service() {
         private const val EXECUTION_TIMEOUT_MS = 15_000L
         private const val BRAIN_TIMEOUT_MS = 60_000L
         private const val APPROVAL_TIMEOUT_MS = 10 * 60_000L
+        private const val CLARIFICATION_TIMEOUT_MS = 60_000L
         private const val RETRY_DELAY_MS = 1_000L
     }
 }
