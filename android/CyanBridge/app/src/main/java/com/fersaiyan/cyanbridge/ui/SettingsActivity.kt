@@ -73,7 +73,7 @@ import java.util.Locale
 
 class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
 
-    private var settingsUiState by mutableStateOf(SettingsUiState())
+    private var settingsUiState by mutableStateOf(SettingsUiState(taskerIntegrationsAvailable = true))
     private var expandedSections by mutableStateOf<Set<SettingsSection>>(emptySet())
     private var meetingReceiverRegistered = false
 
@@ -197,6 +197,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             proPlan = formatPlan(ProSubscriptionPrefs.getPlan(this)),
             appLanguageLabel = AppLanguagePreferences.selected(this).displayName(this),
             providerType = providerType,
+            taskerIntegrationsAvailable = true,
             defaultImageQuestion = imageQuestionSettings.defaultQuestion,
             memoryMode = memoryMode,
             memoryModeAvailability = MemoryModeManager.modeAvailabilityText(memoryMode),
