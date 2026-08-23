@@ -348,14 +348,24 @@ class TaskerLocalAgentService : Service() {
                     }
                     LocalAgentApprovalCoordinator.ReplyKind.UNKNOWN -> {
                         setStatus("Asking for clarification", null)
-                        prompt = withTimeoutOrNull(CLARIFICATION_TIMEOUT_MS) {
+                        val clarification = withTimeoutOrNull(CLARIFICATION_TIMEOUT_MS) {
                             LocalAgentApprovalClarifier.clarificationPrompt(
                                 context = applicationContext,
                                 originalGoal = goal,
                                 action = action,
                                 ambiguousReply = reply,
                             )
-                        } ?: LocalAgentApprovalClarifier.fallbackClarification(action, reply)
+                        } ?: LocalAgentApprovalClarifier.ClarificationResult(
+                            text = LocalAgentApprovalClarifier.fallbackClarification(action, reply),
+                            usedModel = false,
+                            detail = "fallback:clarification_timeout",
+                        )
+                        Log.i(
+                            TAG,
+                            "Approval clarification source=${if (clarification.usedModel) "model" else "fallback"} " +
+                                "detail=${clarification.detail}",
+                        )
+                        prompt = clarification.text
                     }
                 }
             }
