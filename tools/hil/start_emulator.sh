@@ -29,13 +29,15 @@ fi
 
 mkdir -p "$HIL_BUILD_DIR"
 log="$HIL_BUILD_DIR/emulator.log"
-echo "Starting AVD '$avd' headlessly" >&2
+echo "Starting persistent AVD '$avd' headlessly with a cold boot" >&2
+# -no-snapshot disables Quick Boot RAM snapshot load/save but does NOT wipe the AVD userdata
+# partition. Paid Tasker/AutoInput installs, Google account state, and permissions therefore persist.
 nohup "$emulator_bin" \
   -avd "$avd" \
   -no-window \
   -no-audio \
   -no-boot-anim \
-  -no-snapshot-save \
+  -no-snapshot \
   -gpu swiftshader_indirect \
   >"$log" 2>&1 &
 
