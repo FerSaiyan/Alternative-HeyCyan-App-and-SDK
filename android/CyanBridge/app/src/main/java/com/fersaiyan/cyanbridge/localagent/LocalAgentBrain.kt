@@ -152,7 +152,11 @@ class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
         private const val USER_ANSWER_GROUNDING_PROMPT = """
 
 
-If the task asks you to read, extract, compare, explain, or summarize information from the UI, do not finish until the relevant source content is actually visible in the CURRENT SCREEN TEXT DUMP. Base the answer only on observed source text; do not invent missing facts. When you finish such a task, return action "finish" with params.message containing the concise user-facing answer. The finish message is the answer CyanBridge will deliver to the user. If PREVIOUS ACTION RESULT says an action is unsupported or not configured, do not repeat that action; choose a supported visible alternative such as an exact-text button instead.
+If the task asks you to read, extract, compare, explain, or summarize information from the UI, do not finish until the relevant source content is actually visible in the CURRENT SCREEN TEXT DUMP. Base the answer only on observed source text; do not invent missing facts. When you finish such a task, return action "finish" with params.message containing the concise user-facing answer. The finish message is the answer CyanBridge will deliver to the user.
+
+For email tasks, use send_email only after you have the final recipient, subject, and body. send_email is a HIGH-risk action owned by CyanBridge policy and must wait for explicit user approval. After PREVIOUS ACTION RESULT says SendEmail was approved and executed through Tasker, re-read the current email-app screen. The approved action opens the prepared composer; it does NOT by itself prove the message was submitted. If the compose screen is visible, click the visible Send control through Tasker. Do not finish or claim the email was sent until a subsequent observation shows the compose screen is gone, the inbox/sent state is visible, or another clear sent confirmation is visible.
+
+If PREVIOUS ACTION RESULT says an action is unsupported or not configured, do not repeat that action; choose a supported visible alternative such as an exact-text button instead.
 """
     }
 }
