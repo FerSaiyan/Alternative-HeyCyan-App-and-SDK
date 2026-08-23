@@ -20,24 +20,22 @@ permissions:
   contents: read
   packages: read
 
-# There is one shared lab phone. Main and feature branches must queue behind each other too.
+# There is one shared Tasker lab target. Main and feature branches must queue behind each other too.
 concurrency:
   group: cyanbridge-android-hil-phone-01
   cancel-in-progress: false
 
 jobs:
   tasker-hil:
-    name: Emulator smoke + physical Tasker HIL
+    name: Emulator smoke + Tasker HIL
     if: github.repository == 'FerSaiyan/Alternative-HeyCyan-App-and-SDK'
     runs-on: [self-hosted, linux, x64, homelab]
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
         env:
-          # Persistent self-hosted workspaces may already contain an LFS pre-push hook.
-          # Skip checkout's LFS setup and hydrate the required nested assets explicitly.
           GIT_LFS_SKIP_SMUDGE: '1'
         with:
           submodules: recursive
@@ -116,8 +114,6 @@ jobs:
         id: tasker
         shell: bash
         env:
-          # Prefer the generic serial variable. Keep the phone-specific name as a fallback
-          # for existing repository configuration.
           CYANBRIDGE_HIL_SERIAL: ${{ vars.CYANBRIDGE_HIL_SERIAL || vars.CYANBRIDGE_HIL_PHONE_SERIAL }}
         run: |
           source tools/hil/common.sh
@@ -152,11 +148,7 @@ jobs:
       - name: Run Tasker HIL suite
         env:
           CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
-          # Leave false until the dedicated phone is paired to HeyCyan and stable.
-          # Never require real glasses when the Tasker target is an emulator.
           CYANBRIDGE_HIL_GLASSES: ${{ steps.tasker.outputs.kind == 'physical' && vars.CYANBRIDGE_HIL_ENABLE_GLASSES || 'false' }}
-          # Optional stronger assertion: requires a configured Gemma 4 visual model and waits
-          # for the captured scene to become a candidate daily fact.
           CYANBRIDGE_HIL_EXPECT_VISUAL_FACT: ${{ steps.tasker.outputs.kind == 'physical' && vars.CYANBRIDGE_HIL_EXPECT_VISUAL_FACT || 'false' }}
         run: >-
           bash tools/hil/run_instrumentation.sh
@@ -164,9 +156,11 @@ jobs:
           hardware
           com.fersaiyan.cyanbridge.hil.HilFixtureSmokeTest,com.fersaiyan.cyanbridge.hil.TaskerLocalAgentHilTest,com.fersaiyan.cyanbridge.hil.AutoDiaryTaskerHilTest,com.fersaiyan.cyanbridge.hil.AiTaskerProfileHilTest,com.fersaiyan.cyanbridge.hil.VisualDiaryHeyCyanHilTest
 
-      - name: Prepare deterministic Chrome fixture for local AI HIL
-        if: steps.tasker.outputs.kind == 'physical'
+      - name: Prepare deterministic Chrome fixture for agent HIL
+        if: steps.tasker.outputs.kind == 'physical' || vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND == 'true'
         shell: bash
+        env:
+          ENABLE_EMAIL_SEND: ${{ vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND || 'false' }}
         run: |
           set -euo pipefail
           serial='${{ steps.tasker.outputs.serial }}'
@@ -188,6 +182,9 @@ jobs:
           PY
           "$ANDROID_HOME/platform-tools/adb" -s "$serial" reverse tcp:8765 tcp:8765
           "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell pm path com.android.chrome | grep -q '^package:'
+          if [ "$ENABLE_EMAIL_SEND" = "true" ]; then
+            "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell pm path com.google.android.gm | grep -q '^package:'
+          fi
           "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell pm grant com.fersaiyan.cyanbridge android.permission.POST_NOTIFICATIONS || true
           "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell am force-stop com.android.chrome
           "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell am start -W \
@@ -195,8 +192,6 @@ jobs:
             -d 'http://127.0.0.1:8765/' \
             -p com.android.chrome
           sleep 2
-          # This only seeds the deterministic initial browser tab. The tested run starts from
-          # CyanBridge and all search/result navigation is performed through the Tasker backend.
           "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell input keyevent KEYCODE_HOME
 
       - name: Run CyanBridge local AI through Tasker and Chrome
@@ -210,8 +205,33 @@ jobs:
           hardware
           com.fersaiyan.cyanbridge.hil.LocalAiTaskerChromeHilTest
 
+      - name: Reset Chrome fixture for approved email HIL
+        if: vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          serial='${{ steps.tasker.outputs.serial }}'
+          "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell am force-stop com.android.chrome
+          "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell am start -W \
+            -a android.intent.action.VIEW \
+            -d 'http://127.0.0.1:8765/' \
+            -p com.android.chrome
+          sleep 2
+          "$ANDROID_HOME/platform-tools/adb" -s "$serial" shell input keyevent KEYCODE_HOME
+
+      - name: Run approved smartglasses-summary Gmail self-send HIL
+        if: vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND == 'true'
+        env:
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
+          CYANBRIDGE_HIL_EMAIL_SEND: 'true'
+        run: >-
+          bash tools/hil/run_instrumentation.sh
+          '${{ steps.tasker.outputs.serial }}'
+          hardware
+          com.fersaiyan.cyanbridge.hil.LocalAgentEmailApprovalHilTest
+
       - name: Stop deterministic Chrome fixture
-        if: always() && steps.tasker.outputs.kind == 'physical'
+        if: always() && (steps.tasker.outputs.kind == 'physical' || vars.CYANBRIDGE_HIL_ENABLE_EMAIL_SEND == 'true')
         shell: bash
         run: |
           serial='${{ steps.tasker.outputs.serial }}'
@@ -224,7 +244,6 @@ jobs:
         if: failure() && steps.tasker.outputs.serial != ''
         env:
           CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
-          # Set this to true only when screenshots/UI XML are acceptable in CI artifacts.
           CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS: ${{ vars.CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS || 'false' }}
         run: bash tools/hil/collect_diagnostics.sh '${{ steps.tasker.outputs.serial }}'
 
