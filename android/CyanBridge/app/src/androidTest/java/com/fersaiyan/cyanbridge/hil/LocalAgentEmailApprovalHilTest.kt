@@ -18,7 +18,6 @@ import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.ui.MyApplication
-import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsActivity
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,7 +33,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LocalAgentEmailApprovalHilTest {
     @Test
-    fun cyanBridgeResearchesSummarizesRequestsYesAndTaskerSendsSelfEmail() {
+    fun cyanBridgeResearchesSummarizesClarifiesVoiceApprovalAndTaskerSendsSelfEmail() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         HilTestSupport.requireTaskerStack(context)
         HilTestSupport.requireOrSkip(
@@ -56,8 +55,6 @@ class LocalAgentEmailApprovalHilTest {
         val previousScreenshotPlanning = RuntimePrefs.isScreenshotPlanningEnabled(context)
         val previousRemoteScreenshotUpload = RuntimePrefs.isRemoteScreenshotUploadEnabled(context)
 
-        // Respect an explicitly selected Pro Subscription planner. Otherwise force the local-model
-        // CyanBridge planner, never Tasker as the intelligence source for this architecture test.
         val providerForTest = if (previousProvider == AgentProviderType.PRO_SUBSCRIPTION) {
             AgentProviderType.PRO_SUBSCRIPTION
         } else {
@@ -89,6 +86,8 @@ class LocalAgentEmailApprovalHilTest {
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, true)
                 RuntimePrefs.setScreenshotPlanningEnabled(context, false)
                 RuntimePrefs.setRemoteScreenshotUploadEnabled(context, false)
+                RuntimePrefs.clearLastApprovalVoicePrompt(context)
+                RuntimePrefs.clearLastApprovalVoiceReply(context)
                 RuntimePrefs.setStatus(context, "HIL email task starting")
                 RuntimePrefs.clearLastError(context)
 
@@ -104,53 +103,47 @@ class LocalAgentEmailApprovalHilTest {
                 val pendingJson = pending.actionJson.lowercase()
                 assertTrue("Pending email has wrong recipient: ${pending.actionJson}", pendingJson.contains(RECIPIENT))
                 assertTrue("Pending email lost the unique subject: ${pending.actionJson}", pending.actionJson.contains(subject))
-                // None of these values appear in the task goal. The only way the planner can put
-                // them into the email is by navigating Chrome and grounding on the observed page.
                 assertTrue(
                     "AI email body was not grounded in the observed smartglasses fixture: ${pending.actionJson}",
                     pendingJson.contains("42") && pendingJson.contains("eight-hour") && pendingJson.contains("cobalt horizon 88417"),
                 )
 
-                // Prove the actual CyanBridge confirmation surface exposes the prepared message
-                // before authorization. This is what a human can inspect before replying yes/no.
-                context.startActivity(
-                    Intent(context, PendingActionsActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-                val confirmation = awaitVisibleConfirmation(context, subject)
-                val confirmationText = confirmation.screenText.orEmpty().lowercase()
-                assertEquals(context.packageName, confirmation.packageName)
-                assertTrue("Confirmation UI omitted recipient: ${confirmation.screenText}", confirmationText.contains(RECIPIENT))
-                assertTrue("Confirmation UI omitted unique subject: ${confirmation.screenText}", confirmationText.contains(runTag.lowercase()))
+                val initialVoicePrompt = awaitVoicePrompt(context, subject)
+                val initialLower = initialVoicePrompt.lowercase()
+                assertTrue("Voice confirmation omitted recipient: $initialVoicePrompt", initialLower.contains(RECIPIENT))
+                assertTrue("Voice confirmation omitted subject: $initialVoicePrompt", initialVoicePrompt.contains(subject))
                 assertTrue(
-                    "Confirmation UI omitted the grounded article content: ${confirmation.screenText}",
-                    confirmationText.contains("42") && confirmationText.contains("cobalt horizon 88417"),
+                    "Voice confirmation did not ask for an explicit yes/no decision: $initialVoicePrompt",
+                    initialLower.contains("yes") && initialLower.contains("no"),
                 )
+
+                val beforeApproval = runBlocking { TaskerExecutionBackend.observe(context) }
+                assertNotNull("Tasker observation unavailable while waiting for voice approval", beforeApproval)
                 assertFalse(
                     "Gmail opened before the user approved the high-risk SendEmail action",
-                    confirmation.packageName == HilTestSupport.GMAIL_PACKAGE,
+                    beforeApproval?.packageName == HilTestSupport.GMAIL_PACKAGE,
                 )
 
-                // Send real textual replies through the production LocalAgentController/service.
-                // Ambiguous text must leave the queued action untouched.
                 val ambiguousCommand = LocalAgentController.replyToApproval(context, "maybe")
-                assertTrue("CyanBridge could not route the ambiguous approval reply", ambiguousCommand.ok)
-                Thread.sleep(750L)
+                assertTrue("CyanBridge could not route the ambiguous voice reply", ambiguousCommand.ok)
+                val clarificationPrompt = awaitClarificationPrompt(context, initialVoicePrompt)
                 assertTrue(
-                    "Ambiguous approval unexpectedly consumed the pending email",
+                    "Ambiguous reply was not preserved as the last heard voice answer",
+                    RuntimePrefs.getLastApprovalVoiceReply(context).equals("maybe", ignoreCase = true),
+                )
+                assertTrue(
+                    "Ambiguous voice reply unexpectedly consumed the pending email",
                     runBlocking { dao.getActionsByStatus("pending") }.any { it.id == pending.id },
                 )
+                val clarificationLower = clarificationPrompt.lowercase()
                 assertTrue(
-                    "CyanBridge did not remain in its confirmation state after an ambiguous reply: ${RuntimePrefs.getStatus(context)}",
-                    RuntimePrefs.getStatus(context).contains("yes or no", ignoreCase = true) ||
-                        RuntimePrefs.getStatus(context).contains("Waiting for approval", ignoreCase = true),
+                    "Clarification did not preserve an explicit yes/no choice: $clarificationPrompt",
+                    clarificationLower.contains("yes") && clarificationLower.contains("no"),
                 )
+                println("CYANBRIDGE_EMAIL_HIL clarification_prompt=$clarificationPrompt")
 
-                // This literal `yes` is the simulated user's reply. The service routes it through
-                // LocalAgentApprovalCoordinator, which authorizes the queued high-risk action and
-                // delegates the prepared email composer to Tasker.
                 val approvalCommand = LocalAgentController.replyToApproval(context, "yes")
-                assertTrue("CyanBridge could not route the literal yes approval", approvalCommand.ok)
+                assertTrue("CyanBridge could not route the literal yes voice approval", approvalCommand.ok)
                 val executedApproval = awaitApprovalExecution(pending.id)
                 assertEquals("executed", executedApproval.status)
                 assertTrue(
@@ -203,13 +196,7 @@ class LocalAgentEmailApprovalHilTest {
                         action.actionJson.contains(RECIPIENT, ignoreCase = true) &&
                         action.actionJson.contains(subject)
                 }
-            if (pending != null) {
-                assertTrue(
-                    "Service did not expose the confirmation wait state: ${RuntimePrefs.getStatus(context)}",
-                    RuntimePrefs.getStatus(context).contains("Waiting for approval", ignoreCase = true),
-                )
-                return pending
-            }
+            if (pending != null) return pending
 
             lastStatus = RuntimePrefs.getStatus(context)
             val error = RuntimePrefs.getLastError(context)
@@ -221,22 +208,30 @@ class LocalAgentEmailApprovalHilTest {
         throw AssertionError("Timed out waiting for SendEmail approval. Last status=$lastStatus")
     }
 
-    private fun awaitVisibleConfirmation(context: Context, subject: String): LocalAgentObservation {
-        val deadline = System.currentTimeMillis() + CONFIRMATION_UI_TIMEOUT_MS
-        var last: LocalAgentObservation? = null
+    private fun awaitVoicePrompt(context: Context, subject: String): String {
+        val deadline = System.currentTimeMillis() + VOICE_PROMPT_TIMEOUT_MS
+        var last = ""
         while (System.currentTimeMillis() < deadline) {
-            last = runBlocking { TaskerExecutionBackend.observe(context) }
-            val text = last?.screenText.orEmpty()
-            if (
-                last?.packageName == context.packageName &&
-                text.contains(RECIPIENT, ignoreCase = true) &&
-                text.contains(subject, ignoreCase = true)
-            ) {
-                return last
-            }
-            Thread.sleep(500L)
+            last = RuntimePrefs.getLastApprovalVoicePrompt(context)
+            if (last.contains(RECIPIENT, ignoreCase = true) && last.contains(subject)) return last
+            Thread.sleep(250L)
         }
-        throw AssertionError("CyanBridge pending-action confirmation did not become visible. Last observation=${last?.screenText}")
+        throw AssertionError("Voice confirmation prompt was not prepared. Last prompt=$last status=${RuntimePrefs.getStatus(context)}")
+    }
+
+    private fun awaitClarificationPrompt(context: Context, initialPrompt: String): String {
+        val deadline = System.currentTimeMillis() + CLARIFICATION_PROMPT_TIMEOUT_MS
+        var last = RuntimePrefs.getLastApprovalVoicePrompt(context)
+        while (System.currentTimeMillis() < deadline) {
+            last = RuntimePrefs.getLastApprovalVoicePrompt(context)
+            if (last.isNotBlank() && last != initialPrompt) return last
+            val error = RuntimePrefs.getLastError(context)
+            if (error != "(none)" && error.isNotBlank()) {
+                throw AssertionError("Voice clarification failed: status=${RuntimePrefs.getStatus(context)} error=$error")
+            }
+            Thread.sleep(250L)
+        }
+        throw AssertionError("Ambiguous reply never produced a new spoken clarification. Last prompt=$last")
     }
 
     private fun awaitApprovalExecution(id: Long): PendingAction {
@@ -277,8 +272,7 @@ class LocalAgentEmailApprovalHilTest {
             Thread.sleep(1_500L)
         }
         throw AssertionError(
-            "Timed out waiting for the self-delivered Gmail subject after approval. " +
-                "Last observation=${lastObservation?.screenText}",
+            "Timed out waiting for the self-delivered Gmail subject after approval. Last observation=${lastObservation?.screenText}",
         )
     }
 
@@ -288,7 +282,9 @@ class LocalAgentEmailApprovalHilTest {
         while (System.currentTimeMillis() < deadline) {
             status = RuntimePrefs.getStatus(context)
             if (!status.startsWith("Tasker step", ignoreCase = true) &&
-                !status.startsWith("Waiting for approval", ignoreCase = true) &&
+                !status.startsWith("Speaking voice", ignoreCase = true) &&
+                !status.startsWith("Listening for confirmation", ignoreCase = true) &&
+                !status.startsWith("Asking for clarification", ignoreCase = true) &&
                 !status.startsWith("Connecting", ignoreCase = true)
             ) {
                 return status
@@ -318,8 +314,9 @@ class LocalAgentEmailApprovalHilTest {
             "Then prepare an email to $RECIPIENT with the exact subject '$subject'. The body must clearly say this " +
             "is an automated CyanBridge HIL test using deterministic fixture data, not live news, and must summarize " +
             "the article's concrete product details plus its unique verification phrase exactly as observed. Use the send_email action for the prepared message. " +
-            "Before any email submission, wait for CyanBridge to ask the user for confirmation. Only after the user replies yes may Tasker proceed " +
-            "with Gmail and click the visible Send control. Because the recipient is this same test account, wait for " +
+            "Before any email submission, CyanBridge must ask for confirmation aloud and listen for the user's spoken answer. " +
+            "If the answer is ambiguous, ask a spoken clarification and keep waiting; do not treat ambiguity as rejection or approval. " +
+            "Only after an unambiguous yes may Tasker proceed with Gmail and click the visible Send control. Because the recipient is this same test account, wait for " +
             "the sent message with subject '$subject' to appear in Gmail, then finish and tell the user the test email was sent."
 
     companion object {
@@ -327,7 +324,8 @@ class LocalAgentEmailApprovalHilTest {
         private const val ACTION_HIL_SET_LOCALAGENT_BLOCKED =
             "com.fersaiyan.cyanbridge.HIL_SET_LOCALAGENT_BLOCKED"
         private const val PLANNING_TIMEOUT_MS = 10 * 60_000L
-        private const val CONFIRMATION_UI_TIMEOUT_MS = 10_000L
+        private const val VOICE_PROMPT_TIMEOUT_MS = 30_000L
+        private const val CLARIFICATION_PROMPT_TIMEOUT_MS = 90_000L
         private const val APPROVAL_EXECUTION_TIMEOUT_MS = 45_000L
         private const val DELIVERY_TIMEOUT_MS = 2 * 60_000L
     }
