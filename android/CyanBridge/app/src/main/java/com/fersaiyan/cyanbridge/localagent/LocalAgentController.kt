@@ -51,6 +51,19 @@ object LocalAgentController {
         return sendServiceCommand(context, LocalAgentIntents.ACTION_DEMO)
     }
 
+    /** Routes conversational yes/no text through CyanBridge's production high-risk approval boundary. */
+    fun replyToApproval(context: Context, reply: String): CommandResult {
+        val clean = reply.trim()
+        if (clean.isBlank()) {
+            return CommandResult(false, "Enter yes or no.", "empty_approval_reply")
+        }
+        return sendServiceCommand(
+            context,
+            LocalAgentIntents.ACTION_APPROVAL_REPLY,
+            extras = mapOf(LocalAgentIntents.EXTRA_APPROVAL_REPLY to clean),
+        )
+    }
+
     /** Standalone read-screen now uses Tasker + AutoInput; CyanBridge has no AccessibilityService. */
     fun readCurrentScreen(context: Context): CommandResult {
         LocalAgentDeviceState.availability(context)
