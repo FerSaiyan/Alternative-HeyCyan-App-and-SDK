@@ -28,7 +28,22 @@ self-hosted Linux runner; Jenkins is not required.
    - Invokes the real AutoDiary periodic Tasker handler and verifies both Memory Vault ingestion and `%CB_AutoDiaryExcluded`.
    - Verifies Gemini and ChatGPT profile handshakes independently.
 
-4. **Optional HeyCyan HIL**
+4. **CyanBridge planner -> Tasker -> Chrome HIL**
+   - Uses a deterministic web fixture exposed to Chrome with `adb reverse`.
+   - The production CyanBridge planner chooses every action while Tasker/AutoInput performs Android UI execution.
+   - The local-model test proves a final summary contains facts that only exist on the observed browser page.
+   - Unsupported Tasker primitives must be recovered from by the planner instead of being hidden by ADB test-side input.
+
+5. **Optional approved real-email HIL**
+   - Disabled by default because it creates a real external side effect.
+   - CyanBridge researches the deterministic smartglasses-news fixture in Chrome, summarizes it, and prepares a uniquely tagged email to `fernandosaiyan10@gmail.com`.
+   - `SendEmail` is a HIGH-risk action and must remain queued in CyanBridge while Gmail is still unopened.
+   - An ambiguous reply such as `maybe` must not authorize anything.
+   - A literal production approval reply `yes` executes the queued action through Tasker, after which the planner re-observes Gmail and Tasker clicks the visible Send control.
+   - Because sender and recipient are the same lab account, the test waits for the unique subject to appear after the compose UI has closed.
+   - If Pro Subscription is selected in CyanBridge, the Pro planner is allowed; otherwise the test requires the on-device local-model path.
+
+6. **Optional HeyCyan HIL**
    - Invokes the real Visual Diary periodic Tasker handler.
    - Requires the dedicated phone to have `DeviceClass.HEY_CYAN` selected and BLE connected.
    - Pass condition is a new usable `AUTO_LOOP_THUMB_*.jpg` created by the real glasses thumbnail path.
@@ -48,6 +63,7 @@ Recommended emulator or phone state:
 - CyanBridge Accessibility service must not exist/be enabled.
 - Tasker and AutoInput excluded from aggressive battery optimization if the OEM requires it.
 - For optional physical-glasses coverage, CyanBridge must be configured once with the HeyCyan glasses paired and selected.
+- For real-email HIL, Chrome and Gmail must be installed and Gmail must already be signed into the test account. Do not make CI responsible for Google account or paid-app provisioning.
 
 An OLED-protection app such as Extinguisher is compatible as long as Android remains logically
 interactive and AutoInput still sees the underlying foreground app. If Tasker profile import
@@ -72,6 +88,12 @@ All variables are optional. Defaults keep the suite safe before the phone is con
   - Default: `false`.
   - Set to `true` only when the phone has the intended Gemma 4 visual model selected and usable.
   - Adds the stronger assertion that the captured image produces a new candidate `Glasses scene ...` fact.
+
+- `CYANBRIDGE_HIL_ENABLE_EMAIL_SEND`
+  - Default: `false`.
+  - Set to `true` only on the dedicated Tasker/Gmail lab target after Gmail is signed into the intended self-test account.
+  - Causes one real self-addressed test email to be sent on each HIL workflow run that reaches this stage.
+  - The test uses a unique `CB-HIL-<timestamp>` subject and clearly labels its body as deterministic fixture data, not live smartglasses news.
 
 - `CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS`
   - Default: `false`.
@@ -115,7 +137,7 @@ bash tools/hil/install.sh <adb-serial>
 bash tools/hil/sync_tasker_profiles.sh <adb-serial>
 ```
 
-Run the full physical instrumentation suite in the same form used by CI:
+Run the core physical instrumentation suite in the same form used by CI:
 
 ```bash
 CYANBRIDGE_HIL_GLASSES=false \
@@ -132,6 +154,16 @@ CYANBRIDGE_HIL_EXPECT_VISUAL_FACT=false \
   bash tools/hil/run_instrumentation.sh \
   <adb-serial> hardware \
   com.fersaiyan.cyanbridge.hil.VisualDiaryHeyCyanHilTest
+```
+
+For the real approved Gmail self-send layer, start the deterministic fixture and reverse port first,
+then run:
+
+```bash
+CYANBRIDGE_HIL_EMAIL_SEND=true \
+  bash tools/hil/run_instrumentation.sh \
+  <adb-serial> hardware \
+  com.fersaiyan.cyanbridge.hil.LocalAgentEmailApprovalHilTest
 ```
 
 ## Diagnostics
