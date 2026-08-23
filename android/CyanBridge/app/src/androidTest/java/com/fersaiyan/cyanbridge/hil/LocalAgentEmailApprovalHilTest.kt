@@ -7,12 +7,12 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
-import com.fersaiyan.cyanbridge.localagent.LocalAgentAction
+import com.fersaiyan.cyanbridge.data.local.entity.PendingAction
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
+import com.fersaiyan.cyanbridge.localagent.LocalAgentObservation
 import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
 import com.fersaiyan.cyanbridge.localagent.TaskerExecutionBackend
 import com.fersaiyan.cyanbridge.localagent.TaskerLocalAgentService
-import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalCoordinator
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
@@ -116,38 +116,48 @@ class LocalAgentEmailApprovalHilTest {
                     beforeApproval?.packageName == HilTestSupport.GMAIL_PACKAGE,
                 )
 
-                // An ambiguous answer must not consume or execute the queued action.
-                val ambiguous = runBlocking { LocalAgentApprovalCoordinator.handleReply(context, "maybe") }
-                assertEquals(LocalAgentApprovalCoordinator.ReplyKind.UNKNOWN, ambiguous.kind)
+                // Send real textual replies into the production CyanBridge service boundary.
+                // Ambiguous text must leave the queued action untouched.
+                sendApprovalReply(context, "maybe")
+                Thread.sleep(750L)
                 assertTrue(
                     "Ambiguous approval unexpectedly consumed the pending email",
                     runBlocking { dao.getActionsByStatus("pending") }.any { it.id == pending.id },
                 )
+                assertTrue(
+                    "CyanBridge did not remain in its confirmation state after an ambiguous reply: ${RuntimePrefs.getStatus(context)}",
+                    RuntimePrefs.getStatus(context).contains("yes or no", ignoreCase = true) ||
+                        RuntimePrefs.getStatus(context).contains("Waiting for approval", ignoreCase = true),
+                )
 
-                // This is the simulated user's literal reply. It exercises the same production
-                // coordinator used by the Pending Actions UI.
-                val approval = runBlocking { LocalAgentApprovalCoordinator.handleReply(context, "yes") }
-                assertEquals(LocalAgentApprovalCoordinator.ReplyKind.APPROVE, approval.kind)
-                assertEquals(pending.id, approval.action?.id)
-                assertTrue("Approved SendEmail did not execute through Tasker: ${approval.detail}", approval.executed)
+                // This literal `yes` is the simulated user's reply. The service routes it through
+                // LocalAgentApprovalCoordinator, which authorizes the queued high-risk action and
+                // delegates the prepared email composer to Tasker.
+                sendApprovalReply(context, "yes")
+                val executedApproval = awaitApprovalExecution(pending.id)
+                assertEquals("executed", executedApproval.status)
+                assertTrue(
+                    "Approved SendEmail did not execute through Tasker: ${executedApproval.result}",
+                    executedApproval.result?.contains("SendEmail") == true &&
+                        !executedApproval.result.orEmpty().contains("failed", ignoreCase = true),
+                )
 
                 val sentObservation = awaitSelfDeliveredMessage(context, subject)
                 val sentText = sentObservation.screenText.orEmpty().lowercase()
                 assertEquals(HilTestSupport.GMAIL_PACKAGE, sentObservation.packageName)
-                assertTrue("Self-delivered Gmail message subject was not visible: ${sentObservation.screenText}", sentText.contains(runTag.lowercase()))
+                assertTrue(
+                    "Self-delivered Gmail message subject was not visible: ${sentObservation.screenText}",
+                    sentText.contains(runTag.lowercase()),
+                )
                 assertFalse(
                     "The test still appears to be in the Gmail compose screen rather than after send: ${sentObservation.screenText}",
-                    sentText.contains(RECIPIENT) && (sentText.contains("send") || sentText.contains("subject")),
+                    looksLikeComposer(sentObservation.screenText.orEmpty()),
                 )
 
                 val finalStatus = awaitTerminalStatus(context)
                 val finalError = RuntimePrefs.getLastError(context)
                 assertTrue("Local Agent did not report completion after the email send: $finalStatus", finalStatus.isNotBlank())
                 assertTrue("Local Agent finished with an error: $finalError", finalError == "(none)")
-
-                val executed = runBlocking { dao.getActionById(pending.id) }
-                assertEquals("executed", executed?.status)
-                assertTrue("Executed approval record lost Tasker result: ${executed?.result}", executed?.result?.contains("SendEmail") == true)
             } finally {
                 context.startService(
                     Intent(context, TaskerLocalAgentService::class.java).apply {
@@ -165,7 +175,7 @@ class LocalAgentEmailApprovalHilTest {
         }
     }
 
-    private fun awaitEmailApproval(context: Context, subject: String): com.fersaiyan.cyanbridge.data.local.entity.PendingAction {
+    private fun awaitEmailApproval(context: Context, subject: String): PendingAction {
         val dao = MyApplication.database.pendingActionDao()
         val deadline = System.currentTimeMillis() + PLANNING_TIMEOUT_MS
         var lastStatus = RuntimePrefs.getStatus(context)
@@ -194,12 +204,24 @@ class LocalAgentEmailApprovalHilTest {
         throw AssertionError("Timed out waiting for SendEmail approval. Last status=$lastStatus")
     }
 
-    private fun awaitSelfDeliveredMessage(
-        context: Context,
-        subject: String,
-    ): com.fersaiyan.cyanbridge.localagent.LocalAgentObservation {
+    private fun awaitApprovalExecution(id: Long): PendingAction {
+        val dao = MyApplication.database.pendingActionDao()
+        val deadline = System.currentTimeMillis() + APPROVAL_EXECUTION_TIMEOUT_MS
+        var last: PendingAction? = null
+        while (System.currentTimeMillis() < deadline) {
+            last = runBlocking { dao.getActionById(id) }
+            if (last?.status == "executed") return last
+            if (last?.status == "rejected") {
+                throw AssertionError("Literal yes unexpectedly rejected the pending email: ${last.result}")
+            }
+            Thread.sleep(500L)
+        }
+        throw AssertionError("Timed out waiting for the approved SendEmail action to execute. Last record=$last")
+    }
+
+    private fun awaitSelfDeliveredMessage(context: Context, subject: String): LocalAgentObservation {
         val deadline = System.currentTimeMillis() + DELIVERY_TIMEOUT_MS
-        var lastObservation: com.fersaiyan.cyanbridge.localagent.LocalAgentObservation? = null
+        var lastObservation: LocalAgentObservation? = null
         while (System.currentTimeMillis() < deadline) {
             lastObservation = runBlocking { TaskerExecutionBackend.observe(context) }
             val text = lastObservation?.screenText.orEmpty()
@@ -241,6 +263,15 @@ class LocalAgentEmailApprovalHilTest {
         return status
     }
 
+    private fun sendApprovalReply(context: Context, reply: String) {
+        context.startService(
+            Intent(context, TaskerLocalAgentService::class.java).apply {
+                action = LocalAgentIntents.ACTION_APPROVAL_REPLY
+                putExtra(LocalAgentIntents.EXTRA_APPROVAL_REPLY, reply)
+            },
+        )
+    }
+
     private fun looksLikeComposer(text: String): Boolean {
         val normalized = text.lowercase()
         return normalized.contains(RECIPIENT) &&
@@ -271,6 +302,7 @@ class LocalAgentEmailApprovalHilTest {
         private const val ACTION_HIL_SET_LOCALAGENT_BLOCKED =
             "com.fersaiyan.cyanbridge.HIL_SET_LOCALAGENT_BLOCKED"
         private const val PLANNING_TIMEOUT_MS = 10 * 60_000L
+        private const val APPROVAL_EXECUTION_TIMEOUT_MS = 45_000L
         private const val DELIVERY_TIMEOUT_MS = 2 * 60_000L
     }
 }
