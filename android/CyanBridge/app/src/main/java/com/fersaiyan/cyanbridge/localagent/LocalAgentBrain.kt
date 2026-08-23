@@ -91,7 +91,7 @@ class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
             val inference = AgentInferenceRouter.completeUiPlanning(
                 context = context,
                 sessionId = "local-agent-ui-${taskState.startedAtMs}",
-                systemPrompt = prompt.system,
+                systemPrompt = prompt.system + USER_ANSWER_GROUNDING_PROMPT,
                 userPrompt = prompt.user,
                 imagePath = screenshot?.file?.absolutePath,
                 allowRemoteImageUpload = LocalAgentPrefs.isRemoteScreenshotUploadEnabled(context),
@@ -149,5 +149,10 @@ class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
 
     private companion object {
         private const val MAX_CONSECUTIVE_FAILURES = 5
+        private const val USER_ANSWER_GROUNDING_PROMPT = """
+
+
+If the task asks you to read, extract, compare, explain, or summarize information from the UI, do not finish until the relevant source content is actually visible in the CURRENT SCREEN TEXT DUMP. Base the answer only on observed source text; do not invent missing facts. When you finish such a task, return action "finish" with params.message containing the concise user-facing answer. The finish message is the answer CyanBridge will deliver to the user.
+"""
     }
 }
