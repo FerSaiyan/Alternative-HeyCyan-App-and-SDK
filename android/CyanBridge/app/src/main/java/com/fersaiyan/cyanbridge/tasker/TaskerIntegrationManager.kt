@@ -1,6 +1,5 @@
 package com.fersaiyan.cyanbridge.tasker
 
-import android.content.ComponentName
 import android.content.Context
 import android.provider.Settings
 import com.fersaiyan.cyanbridge.ai.image.DefaultAssistantResolver
@@ -26,19 +25,24 @@ object TaskerEnvironmentInspector {
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
             ).orEmpty(),
         )
+        val taskerVersion = packageVersion(context, ExternalImageAutomationIntents.TASKER_PACKAGE)
+        val autoInputVersion = packageVersion(context, ExternalImageAutomationIntents.AUTO_INPUT_PACKAGE)
         return TaskerEnvironmentStatus(
-            taskerInstalled = packageVersion(context, ExternalImageAutomationIntents.TASKER_PACKAGE) != null,
-            taskerVersion = packageVersion(context, ExternalImageAutomationIntents.TASKER_PACKAGE),
-            autoInputInstalled = packageVersion(context, ExternalImageAutomationIntents.AUTO_INPUT_PACKAGE) != null,
-            autoInputVersion = packageVersion(context, ExternalImageAutomationIntents.AUTO_INPUT_PACKAGE),
+            taskerInstalled = taskerVersion != null,
+            taskerVersion = taskerVersion,
+            autoInputInstalled = autoInputVersion != null,
+            autoInputVersion = autoInputVersion,
             taskerAccessibilityEnabled = ExternalImageAutomationIntents.TASKER_PACKAGE in enabledPackages,
             autoInputAccessibilityEnabled = ExternalImageAutomationIntents.AUTO_INPUT_PACKAGE in enabledPackages,
         )
     }
 
+    /** Pure parser so this contract remains testable in local JVM unit tests. */
     internal fun enabledAccessibilityPackages(flattened: String): Set<String> = flattened
         .split(':')
-        .mapNotNull { ComponentName.unflattenFromString(it)?.packageName }
+        .mapNotNull { component ->
+            component.substringBefore('/').trim().takeIf(String::isNotBlank)
+        }
         .toSet()
 
     private fun packageVersion(context: Context, packageName: String): String? = runCatching {
@@ -120,8 +124,11 @@ object TaskerIntegrationManager {
             reportedTarget = reportedTarget,
             reportedVersion = reportedVersion,
         )
-        if (!environment.taskerInstalled) health = IntegrationHealth.ENVIRONMENT_BLOCKED
-        if (target != defaultTarget && reportedVersion == null && health == IntegrationHealth.NEEDS_SETUP) {
+        if (!environment.taskerInstalled) {
+            health = IntegrationHealth.ENVIRONMENT_BLOCKED
+        } else if (target != defaultTarget && perTargetVersion == null) {
+            // Do not label an unselected assistant "wrong profile" just because the other assistant
+            // was the most recently verified legacy value.
             health = IntegrationHealth.NOT_SELECTED
         }
         val detail = when (health) {
@@ -140,7 +147,7 @@ object TaskerIntegrationManager {
         return IntegrationState(
             id = target.wireName,
             name = target.label,
-            installedVersion = reportedVersion,
+            installedVersion = perTargetVersion ?: legacyVersion.takeIf { legacyTarget == target.wireName },
             requiredVersion = required,
             health = health,
             detail = detail,
