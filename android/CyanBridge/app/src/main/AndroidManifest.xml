@@ -104,7 +104,7 @@
         <activity android:name=".ui.debug.TranscriptionDebugActivity" android:exported="false" android:label="Transcription Debug" />
         <activity android:name=".ui.notes.NotesListActivity" android:exported="false" android:label="Notes" />
         <activity android:name=".ui.notes.NoteDetailActivity" android:exported="false" android:label="Note" />
-        <activity android:name=".ui.recordings.RecordingsListActivity" android:exported="false" android:label="Recordings" />
+        <activity android:name=".ui.recordings.RecordingsListActivity" android:exported="false" android:label="@string/nav_transcriptions_recordings" />
         <activity android:name=".ui.recordings.SyncedMediaGalleryActivity" android:exported="false" android:label="Synced photos and videos" />
         <activity android:name=".agent.ProSubscriptionActivity" android:exported="true" android:label="Pro Subscription">
             <intent-filter>
@@ -135,7 +135,7 @@
         <service android:name=".ai.AiQuestionForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|dataSync|microphone" />
         <service android:name=".plugins.walkingaid.WalkingAidService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".plugins.meetingsparknotes.MeetingSparkNotesService" android:exported="false" android:foregroundServiceType="microphone" />
-        <service android:name=".plugins.livecaptionrelay.HandsFreeTranslatorService" android:exported="false" android:foregroundServiceType="microphone" />
+        <service android:name=".plugins.livecaptionrelay.LiveCaptionRelayService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.handsfreetranslator.HandsFreeTranslatorService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.errandbrain.ErrandBrainService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.visualdiary.VisualDiaryService" android:exported="false" android:foregroundServiceType="connectedDevice" />
