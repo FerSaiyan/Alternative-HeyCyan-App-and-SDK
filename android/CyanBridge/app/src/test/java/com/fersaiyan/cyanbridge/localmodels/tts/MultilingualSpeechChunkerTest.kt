@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.localmodels.tts
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -19,6 +20,7 @@ class MultilingualSpeechChunkerTest {
         val config = SpeechChunkingConfig(
             firstChunkMinCodePoints = 5,
             normalChunkMinCodePoints = 5,
+            firstChunkPreferredMaxCodePoints = 30,
             preferredChunkMaxCodePoints = 60,
             hardChunkMaxCodePoints = 100,
             candidateBoundaryDelayMs = 0L,
@@ -65,6 +67,37 @@ class MultilingualSpeechChunkerTest {
         chunker.append("Door ahead.")
         chunker.finish()
         assertEquals("Door ahead.", producedChunks.joinToString(" "))
+    }
+
+    @Test
+    fun testFirstStableClauseFlushesAtCommaBeforeGenerationFinishes() {
+        chunker.append("A person is ahead, standing by the doorway")
+
+        assertTrue("First clause should be available immediately", producedChunks.isNotEmpty())
+        assertEquals("A person is ahead,", producedChunks.first())
+    }
+
+    @Test
+    fun testTerminalPeriodConfirmsBeforeIdleTimeout() = runBlocking {
+        val fastChunks = mutableListOf<String>()
+        val fastChunker = MultilingualSpeechChunker(
+            config = SpeechChunkingConfig(
+                firstChunkMinCodePoints = 5,
+                normalChunkMinCodePoints = 5,
+                candidateBoundaryDelayMs = 20L,
+                firstChunkIdleFlushMs = 1_000L,
+                normalChunkIdleFlushMs = 1_000L,
+            ),
+            scope = CoroutineScope(Dispatchers.Default),
+            onChunkReady = { _, chunk -> fastChunks.add(chunk) },
+        )
+        fastChunker.startSession(90L)
+        fastChunker.append("Door ahead.")
+
+        delay(100L)
+
+        assertEquals(listOf("Door ahead."), fastChunks)
+        fastChunker.reset()
     }
 
     @Test
@@ -175,6 +208,7 @@ class MultilingualSpeechChunkerTest {
             config = SpeechChunkingConfig(
                 firstChunkMinCodePoints = 1,
                 normalChunkMinCodePoints = 1,
+                firstChunkPreferredMaxCodePoints = 4,
                 preferredChunkMaxCodePoints = 4,
                 hardChunkMaxCodePoints = 5,
             ),
