@@ -8,12 +8,12 @@ import org.junit.Test
 
 class LocalModelCatalogRepositoryTest {
     @Test
-    fun catalog_contains_required_starter_ids() {
+    fun catalog_contains_current_curated_models() {
         val ids = LocalModelCatalogRepository.curatedModels.map { it.id }.toSet()
-        assertTrue(ids.contains("qwen2.5-0.5b-instruct-q4"))
-        assertTrue(ids.contains("qwen2.5-1.5b-instruct-q4"))
+        assertTrue(ids.contains("qwen3.5-0.8b-q4"))
         assertTrue(ids.contains("gemma4-e2b-it-litert"))
         assertTrue(ids.contains("gemma4-e4b-it-litert"))
+        assertTrue(ids.none { it.startsWith("qwen2.5") })
     }
 
     @Test
@@ -33,9 +33,10 @@ class LocalModelCatalogRepositoryTest {
     }
 
     @Test
-    fun can_find_model_by_id() {
-        val model = LocalModelCatalogRepository.findById("qwen2.5-0.5b-instruct-q4")
+    fun can_find_current_qwen_by_id() {
+        val model = LocalModelCatalogRepository.findById("qwen3.5-0.8b-q4")
         assertNotNull(model)
         assertEquals("qwen", model?.family)
+        assertEquals("Qwen3.5-0.8B-Q4_0.gguf", model?.expectedFilename)
     }
 }
