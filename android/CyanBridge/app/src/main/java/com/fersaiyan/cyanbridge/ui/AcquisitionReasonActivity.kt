@@ -50,15 +50,17 @@ object AcquisitionReasonDialog {
                     val appearance by rememberAppearanceSettings(appearancePreferences)
                     CyanBridgeTheme(appearance) {
                         AcquisitionReasonScreen(
-                            sharingInitiallyEnabled = AnalyticsPreferences.isSharingEnabled(activity),
+                            sharingInitiallyEnabled = AnalyticsPreferences.suggestedSharingChoice(),
                             onSubmit = { primary, secondary, other, shareAnalytics ->
                                 AnalyticsPreferences.setSharingEnabled(activity, shareAnalytics)
                                 AnalyticsClient.queueAcquisitionResponse(activity, primary, secondary, other)
+                                if (shareAnalytics) AnalyticsClient.recordDailyHeartbeat(activity)
                                 dialog.dismiss()
                             },
                             onSkip = { shareAnalytics ->
                                 AnalyticsPreferences.setSharingEnabled(activity, shareAnalytics)
                                 AnalyticsClient.skipAcquisition(activity)
+                                if (shareAnalytics) AnalyticsClient.recordDailyHeartbeat(activity)
                                 dialog.dismiss()
                             },
                         )
@@ -178,7 +180,7 @@ private fun AcquisitionReasonScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Share anonymous usage analytics", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "Sends a random installation ID, app version, distribution channel, and one daily activity heartbeat. It never sends photos, audio, prompts, transcripts, contacts, or files.",
+                            "Sends a random installation ID, app version, distribution channel, and one daily activity heartbeat. No heartbeat is sent until you save this choice, and CyanBridge never includes photos, audio, prompts, transcripts, contacts, or files in product analytics.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
