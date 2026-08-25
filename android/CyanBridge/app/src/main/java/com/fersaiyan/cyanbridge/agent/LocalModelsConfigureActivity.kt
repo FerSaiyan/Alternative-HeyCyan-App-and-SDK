@@ -37,6 +37,7 @@ import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceSnapshot
 import com.fersaiyan.cyanbridge.localmodels.download.ModelDownloadForegroundService
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
+import com.fersaiyan.cyanbridge.localmodels.session.LocalModelTestSummary
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalGenerationSettings
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelPerformanceProfile
@@ -607,6 +608,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                         cpuThreads = parseCpuThreadsInput(fallback = defaults.cpuThreads),
                         gpuLayers = parseGpuLayersInput(fallback = defaults.gpuLayers),
                         modelRuntime = defaults.modelRuntime,
+                        systemPromptOverride = editSystemPrompt.text?.toString().orEmpty(),
                     ),
                 )
                 syncComposeState?.invoke()
@@ -1073,7 +1075,6 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                     }
                     ModelDownloadForegroundService.BROADCAST_DOWNLOAD_FINISHED -> {
                         val success = intent.getBooleanExtra(ModelDownloadForegroundService.EXTRA_SUCCESS, false)
-                        val modelId = intent.getStringExtra(ModelDownloadForegroundService.EXTRA_MODEL_ID)
                         val error = intent.getStringExtra(ModelDownloadForegroundService.EXTRA_ERROR)
                         if (success) {
                             showDownloadFinished("Download complete", success = true)
@@ -1310,7 +1311,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
 
     private fun runWarmupProbe() {
         if (warmupJob?.isActive == true) {
-            Log.i("LocalModelsConfigureActivity", "Ignoring duplicate warm-up request while a probe is active")
+            Log.i("LocalModelsConfigureActivity", "Ignoring duplicate model-test request while a test is active")
             return
         }
 
@@ -1323,7 +1324,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
         val settings = LocalModelSettingsRepository.getForModel(this, model.id)
         val entry = LocalModelCatalogRepository.findById(model.catalogId)
 
-        tvWarmupResult.text = "Running warm-up..."
+        tvWarmupResult.text = "Testing model..."
         syncComposeState?.invoke()
         warmupJob = lifecycleScope.launch {
             val outcome = runCatching {
@@ -1346,44 +1347,32 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                 outcome.fold(
                     onSuccess = { (loadDetails, result) ->
                         runCatching {
-                            val genTps = (result.generatedTokens * 1000.0 / result.elapsedMs).coerceAtLeast(0.1)
-                            val totalTps = (result.totalTokens * 1000.0 / result.elapsedMs).coerceAtLeast(0.1)
-                            val isAccel = result.backend == LocalComputeBackend.GPU || result.backend == LocalComputeBackend.NPU_EXPERIMENTAL
-                            val backend = when (result.backend) {
-                                LocalComputeBackend.NPU_EXPERIMENTAL -> "NPU"
-                                LocalComputeBackend.GPU -> "GPU"
-                                LocalComputeBackend.CPU -> "CPU"
-                            }
-                            val gpuLayersSuffix = if (isAccel) {
-                                val layers = if (loadDetails.activeGpuLayers == -1) "auto(-1)" else loadDetails.activeGpuLayers.toString()
-                                ", n_gpu_layers=$layers"
-                            } else {
-                                ""
-                            }
-                            val fallbackSuffix = if (loadDetails.fallbackReason.isNullOrBlank() || isAccel) {
-                                ""
-                            } else {
-                                " | fallback: CPU"
-                            }
-                            val msg = "Warm-up complete: ${String.format("%.2f", genTps)} gen tok/s, ${String.format("%.2f", totalTps)} total tok/s, ${result.elapsedMs}ms, backend=$backend$gpuLayersSuffix$fallbackSuffix"
+                            val msg = LocalModelTestSummary.success(
+                                generatedTokens = result.generatedTokens,
+                                elapsedMs = result.elapsedMs,
+                                backend = result.backend,
+                                activeGpuLayers = loadDetails.activeGpuLayers,
+                                fallbackReason = loadDetails.fallbackReason,
+                            )
                             Log.i("LocalModelsConfigureActivity", msg)
                             tvWarmupResult.text = msg
                             LocalModelsPrefs.setLastBenchmark(this@LocalModelsConfigureActivity, msg)
+                            val isAccel = result.backend == LocalComputeBackend.GPU || result.backend == LocalComputeBackend.NPU_EXPERIMENTAL
                             if (!loadDetails.fallbackReason.isNullOrBlank() && !isAccel) {
                                 Toast.makeText(this@LocalModelsConfigureActivity, loadDetails.fallbackReason, Toast.LENGTH_LONG).show()
                             }
                             syncComposeState?.invoke()
                         }.onFailure { uiErr ->
-                            tvWarmupResult.text = "Warm-up failed: ${uiErr.message ?: "unexpected UI error"}"
+                            tvWarmupResult.text = "Model test failed: ${uiErr.message ?: "unexpected UI error"}"
                             syncComposeState?.invoke()
                         }
                     },
                     onFailure = { err ->
                         if (err is CancellationException) {
-                            tvWarmupResult.text = "Warm-up cancelled"
+                            tvWarmupResult.text = "Model test cancelled"
                         } else {
-                            Log.e("LocalModelsConfigureActivity", "Warm-up failed", err)
-                            tvWarmupResult.text = "Warm-up failed: ${err.message ?: "unknown error"}"
+                            Log.e("LocalModelsConfigureActivity", "Model test failed", err)
+                            tvWarmupResult.text = "Model test failed: ${err.message ?: "unknown error"}"
                             val shouldOfferLogs =
                                 selectedModelRuntimeFromUi() == LocalModelRuntime.LITERT ||
                                     selectedComputeBackendFromUi() != LocalComputeBackend.CPU ||
@@ -1393,7 +1382,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                                     activity = this@LocalModelsConfigureActivity,
                                     title = "Local runtime issue",
                                     issueType = "Local runtime issue",
-                                    description = "The local model warm-up failed. This can help diagnose LiteRT, Vulkan, or GPU initialization issues.",
+                                    description = "The local model test failed. This can help diagnose LiteRT, Vulkan, or GPU initialization issues.",
                                     extraInfo = linkedMapOf(
                                         "screen" to "local_models_configure",
                                         "selected_runtime" to selectedModelRuntimeFromUi().name,
@@ -1461,7 +1450,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                 }
             LocalComputeBackend.CPU ->
                 if (runtime == LocalModelRuntime.LITERT) {
-                    "LiteRT CPU mode is safest for first runs. Move to GPU or NPU after a successful warm-up."
+                    "LiteRT CPU mode is safest for first runs. Move to GPU or NPU after a successful model test."
                 } else {
                     "CPU mode is the most compatible option. Increase CPU threads for speed if your device remains responsive."
                 }
