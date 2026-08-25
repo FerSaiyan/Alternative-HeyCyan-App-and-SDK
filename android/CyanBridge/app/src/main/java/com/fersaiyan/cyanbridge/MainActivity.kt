@@ -1802,6 +1802,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (BuildConfig.DEBUG && isHeyCyanSelected()) wifiAdbDebugController.stop()
             }
             GlassesDashboardAction.MetaRegister -> binding.btnMetaRegister.performClick()
+            GlassesDashboardAction.MetaOpenPairing ->
+                startActivity(Intent(this, MetaPairingActivity::class.java))
+            GlassesDashboardAction.MetaOpenMetaAi -> openMetaAiAppOrStore()
             GlassesDashboardAction.MetaUnregister -> binding.btnMetaUnregister.performClick()
             GlassesDashboardAction.MetaStartSession -> binding.btnMetaSessionStart.performClick()
             GlassesDashboardAction.MetaStopSession -> binding.btnMetaSessionStop.performClick()
@@ -6633,6 +6636,31 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
     }
 
+    private fun openMetaAiAppOrStore() {
+        val manager = getOrCreateMetaRaybanManager()
+        val launchIntent = manager.installedMetaAiPackageName()
+            ?.let(packageManager::getLaunchIntentForPackage)
+        if (launchIntent != null) {
+            startActivity(launchIntent)
+            return
+        }
+        runCatching {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.facebook.stella"))
+                    .setPackage("com.android.vending"),
+            )
+        }.recoverCatching {
+            startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://play.google.com/store/apps/details?id=com.facebook.stella"),
+                ),
+            )
+        }.onFailure {
+            Toast.makeText(this, "Could not open the Meta AI download page", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun showMetaError(operation: String, message: String) {
         val manager = getOrCreateMetaRaybanManager()
         val detail = manager.lastError.value?.takeIf { it.isNotBlank() } ?: message
@@ -6695,6 +6723,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     availableDeviceCount = manager.availableDeviceCount.value,
                     setupGuidance = manager.registrationGuidance(),
                     lastError = manager.lastError.value,
+                    metaAiInstalled = manager.isMetaAiInstalled(),
                     displayCapable = displayCapable,
                     displayActive = isDisplayActive,
                     canRegister = regState != com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.RegistrationState.REGISTERED &&

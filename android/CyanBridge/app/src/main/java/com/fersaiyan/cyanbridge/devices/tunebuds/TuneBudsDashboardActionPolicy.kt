@@ -49,6 +49,8 @@ internal fun GlassesDashboardAction.isSupportedForTuneBudsDashboard(): Boolean =
     GlassesDashboardAction.RequestStartWifiAdbDebug,
     GlassesDashboardAction.StopWifiAdbDebug,
     GlassesDashboardAction.MetaRegister,
+    GlassesDashboardAction.MetaOpenPairing,
+    GlassesDashboardAction.MetaOpenMetaAi,
     GlassesDashboardAction.MetaUnregister,
     GlassesDashboardAction.MetaStartSession,
     GlassesDashboardAction.MetaStopSession,

@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +27,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -54,6 +56,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
+import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
+import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
@@ -73,6 +77,7 @@ data class MetaPairingScreenState(
     val glassesCameraGranted: Boolean = false,
     val guidance: String? = null,
     val lastError: String? = null,
+    val metaAiInstalled: Boolean = true,
 ) {
     val androidPermissionsGranted: Boolean
         get() = androidCameraGranted && nearbyDevicesGranted
@@ -88,6 +93,7 @@ data class MetaPairingScreenState(
         get() = when {
             !androidPermissionsGranted -> "Grant required permissions"
             !initialized -> "Initialize Meta connection"
+            !metaAiInstalled -> "Install Meta AI"
             !isRegistered -> "Register CyanBridge in Meta AI"
             availableDeviceCount == 0 -> "Refresh glasses connection"
             !glassesCameraGranted -> "Grant glasses camera access"
@@ -126,7 +132,7 @@ class MetaPairingActivity : AppCompatActivity() {
                     onBack = ::finish,
                     onOpenMetaAi = ::openMetaAi,
                     onPrimaryAction = ::performPrimaryAction,
-                    onOpenAppSettings = ::openAppSettings,
+                    onRetryPairing = ::retryPairing,
                     onSendDiagnostics = ::showDiagnostics,
                 )
             }
@@ -171,6 +177,7 @@ class MetaPairingActivity : AppCompatActivity() {
             selectedDeviceName = manager.selectedDeviceName.value,
             guidance = manager.registrationGuidance(),
             lastError = manager.lastError.value,
+            metaAiInstalled = manager.isMetaAiInstalled(),
         )
         if (checkGlassesCamera && screenState.initialized && screenState.isRegistered) {
             checkGlassesCameraPermission()
@@ -207,6 +214,7 @@ class MetaPairingActivity : AppCompatActivity() {
             !screenState.androidPermissionsGranted ->
                 androidPermissionLauncher.launch(requiredAndroidPermissions())
             !screenState.initialized -> initializeDat()
+            !screenState.metaAiInstalled -> openMetaAi()
             !screenState.isRegistered -> manager.startRegistration(this)
             screenState.availableDeviceCount == 0 -> {
                 manager.refreshRegistrationState()
@@ -225,6 +233,23 @@ class MetaPairingActivity : AppCompatActivity() {
                     addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 },
             )
+        }
+    }
+
+    private fun retryPairing() {
+        when {
+            !screenState.androidPermissionsGranted ->
+                androidPermissionLauncher.launch(requiredAndroidPermissions())
+            !screenState.initialized -> initializeDat()
+            !screenState.metaAiInstalled -> openMetaAi()
+            !screenState.isRegistered -> manager.startRegistration(this)
+            screenState.availableDeviceCount == 0 -> {
+                manager.refreshRegistrationState()
+                refreshState()
+            }
+            !screenState.glassesCameraGranted ->
+                glassesCameraPermissionLauncher.launch(Permission.CAMERA)
+            else -> refreshState()
         }
     }
 
@@ -259,20 +284,22 @@ class MetaPairingActivity : AppCompatActivity() {
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
     private fun openMetaAi() {
-        val launchIntent = packageManager.getLaunchIntentForPackage(META_AI_PACKAGE)
+        val launchIntent = manager.installedMetaAiPackageName()
+            ?.let(packageManager::getLaunchIntentForPackage)
         if (launchIntent != null) {
             startActivity(launchIntent)
         } else {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(META_AI_PLAY_STORE_URL)))
+            runCatching {
+                startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$META_AI_PACKAGE"))
+                        .setPackage("com.android.vending"),
+                )
+            }.recoverCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(META_AI_PLAY_STORE_URL)))
+            }.onFailure {
+                Toast.makeText(this, "Could not open the Meta AI download page", Toast.LENGTH_LONG).show()
+            }
         }
-    }
-
-    private fun openAppSettings() {
-        startActivity(
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.parse("package:$packageName")
-            },
-        )
     }
 
     private fun showDiagnostics() {
@@ -299,9 +326,49 @@ fun MetaPairingScreen(
     onBack: () -> Unit,
     onOpenMetaAi: () -> Unit,
     onPrimaryAction: () -> Unit,
-    onOpenAppSettings: () -> Unit,
+    onRetryPairing: () -> Unit,
     onSendDiagnostics: () -> Unit,
 ) {
+    val pairingIssue = resolveMetaPairingIssue(
+        metaAiInstalled = state.metaAiInstalled,
+        lastError = state.lastError ?: if (!state.metaAiInstalled) "Meta AI app is not installed" else null,
+        setupGuidance = state.guidance,
+    )
+    var showPairingIssue by androidx.compose.runtime.remember(state.lastError, state.metaAiInstalled) {
+        mutableStateOf(pairingIssue != null)
+    }
+    if (pairingIssue != null && showPairingIssue) {
+        AlertDialog(
+            onDismissRequest = { showPairingIssue = false },
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = { Text(pairingIssue.title) },
+            text = { Text(pairingIssue.message) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPairingIssue = false
+                        when (pairingIssue.action) {
+                            MetaPairingIssueAction.INSTALL_META_AI -> onOpenMetaAi()
+                            MetaPairingIssueAction.OPEN_PAIRING -> onRetryPairing()
+                        }
+                    },
+                ) {
+                    Text(pairingIssue.primaryLabel)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPairingIssue = false
+                        onSendDiagnostics()
+                    },
+                ) {
+                    Text("Details")
+                }
+            },
+        )
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
@@ -390,20 +457,6 @@ fun MetaPairingScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.testTag("meta_pairing_guidance"),
                     )
-                }
-            }
-            state.lastError?.takeIf { it.isNotBlank() }?.let { error ->
-                item {
-                    Card(modifier = Modifier.fillMaxWidth().testTag("meta_pairing_error")) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text("Meta connection error", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                            Text(error, style = MaterialTheme.typography.bodySmall)
-                            OutlinedButton(onClick = onOpenAppSettings) { Text("Open app settings") }
-                        }
-                    }
                 }
             }
             item {

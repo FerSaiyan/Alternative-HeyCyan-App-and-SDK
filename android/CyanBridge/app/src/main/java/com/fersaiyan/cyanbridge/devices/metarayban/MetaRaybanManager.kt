@@ -888,6 +888,12 @@ class MetaRaybanManager private constructor(context: Context) {
 
     fun registrationGuidance(): String? = registrationGuidance(datReadiness())
 
+    fun installedMetaAiPackageName(): String? = META_AI_PACKAGES.firstOrNull { packageName ->
+        runCatching { context.packageManager.getPackageInfo(packageName, 0) }.isSuccess
+    }
+
+    fun isMetaAiInstalled(): Boolean = installedMetaAiPackageName() != null
+
     private fun registrationGuidance(readiness: MetaDatReadiness): String? = metaDatSetupGuidance(
         registrationState = _registrationState.value,
         availableDeviceCount = _availableDeviceCount.value,
@@ -912,9 +918,7 @@ class MetaRaybanManager private constructor(context: Context) {
             }.getOrDefault(false)
         }
         return MetaDatReadiness(
-            metaAiInstalled = META_AI_PACKAGES.any { packageName ->
-                runCatching { context.packageManager.getPackageInfo(packageName, 0) }.isSuccess
-            },
+            metaAiInstalled = isMetaAiInstalled(),
             bluetoothPermissionGranted = bluetoothPermissionGranted,
             bluetoothEnabled = runCatching { adapter?.isEnabled == true }.getOrDefault(false),
             bondedDeviceCount = bondedDevices?.size,

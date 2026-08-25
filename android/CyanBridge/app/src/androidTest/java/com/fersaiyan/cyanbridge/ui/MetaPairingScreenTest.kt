@@ -33,7 +33,7 @@ class MetaPairingScreenTest {
                     onBack = {},
                     onOpenMetaAi = {},
                     onPrimaryAction = { clicked = true },
-                    onOpenAppSettings = {},
+                    onRetryPairing = {},
                     onSendDiagnostics = {},
                 )
             }
@@ -43,5 +43,49 @@ class MetaPairingScreenTest {
         composeRule.onNodeWithText("Ray-Ban Meta").assertIsDisplayed()
         composeRule.onNodeWithText("Test AI image question").performClick()
         composeRule.runOnIdle { assertTrue(clicked) }
+    }
+
+    @Test
+    fun missingMetaAiShowsInstallDialog() {
+        var installClicked = false
+        composeRule.setContent {
+            CyanBridgeTheme {
+                MetaPairingScreen(
+                    state = MetaPairingScreenState(metaAiInstalled = false),
+                    onBack = {},
+                    onOpenMetaAi = { installClicked = true },
+                    onPrimaryAction = {},
+                    onRetryPairing = {},
+                    onSendDiagnostics = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Meta AI is required").assertIsDisplayed()
+        composeRule.onNodeWithText("Install Meta AI").performClick()
+        composeRule.runOnIdle { assertTrue(installClicked) }
+    }
+
+    @Test
+    fun unknownFailureShowsRetryDialog() {
+        var retryClicked = false
+        composeRule.setContent {
+            CyanBridgeTheme {
+                MetaPairingScreen(
+                    state = MetaPairingScreenState(
+                        lastError = "registration: opaque sdk failure 42",
+                    ),
+                    onBack = {},
+                    onOpenMetaAi = {},
+                    onPrimaryAction = {},
+                    onRetryPairing = { retryClicked = true },
+                    onSendDiagnostics = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("We could not finish Meta pairing").assertIsDisplayed()
+        composeRule.onNodeWithText("Try again").performClick()
+        composeRule.runOnIdle { assertTrue(retryClicked) }
     }
 }

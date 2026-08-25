@@ -213,9 +213,32 @@ class GlassesDashboardScreenTest {
             }
         }
 
-        composeRule.onNodeWithTag("meta_rayban_last_error").assertIsDisplayed()
-        composeRule.onNodeWithText("Send Meta diagnostics").performClick()
+        composeRule.onNodeWithText("Meta glasses are not ready").assertIsDisplayed()
+        composeRule.onNodeWithText("Details").performClick()
         composeRule.runOnIdle { assertEquals(GlassesDashboardAction.MetaSendDiagnostics, action) }
+    }
+
+    @Test
+    fun missingMetaAiShowsInstallDialog() {
+        var action: GlassesDashboardAction? = null
+        composeRule.setContent {
+            CyanBridgeTheme {
+                GlassesDashboardScreen(
+                    state = GlassesDashboardUiState(
+                        showMetaRaybanControls = true,
+                        metaRayban = MetaRaybanUiState(
+                            metaAiInstalled = false,
+                            lastError = "registration: The Meta AI app is not installed on the device",
+                        ),
+                    ),
+                    onAction = { action = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Meta AI is required").assertIsDisplayed()
+        composeRule.onNodeWithText("Install Meta AI").performClick()
+        composeRule.runOnIdle { assertEquals(GlassesDashboardAction.MetaOpenMetaAi, action) }
     }
 
     @Test

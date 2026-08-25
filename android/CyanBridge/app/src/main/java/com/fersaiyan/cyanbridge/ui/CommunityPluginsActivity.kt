@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivity
@@ -62,6 +63,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.lang.ref.WeakReference
 
 private val TASKER_FILE_SUFFIXES = listOf(".prj.xml", ".prf.xml", ".tsk.xml", ".scn.xml")
@@ -75,6 +77,17 @@ internal fun taskerDownloadFileName(sourceFileName: String, uniqueId: Long): Str
         sourceFileName.removeSuffix(".xml")
     }
     return "${baseName}_$uniqueId$suffix"
+}
+
+internal fun requireValidTaskerProject(xml: String) {
+    require(xml.length <= 1_000_000) { "The downloaded Tasker project is unexpectedly large" }
+    val normalized = xml.removePrefix("\uFEFF").trimStart()
+    require(normalized.startsWith("<TaskerData")) {
+        "The server did not return a Tasker XML file"
+    }
+    require(Regex("<Project(?:\\s|>)").containsMatchIn(normalized)) {
+        "The downloaded XML is not a Tasker project"
+    }
 }
 
 class CommunityPluginsActivity : AppCompatActivity() {
@@ -469,6 +482,12 @@ class CommunityPluginsActivity : AppCompatActivity() {
     }
 
     private fun openCommunityPlugin(plugin: CommunityPluginCardData) {
+        if (plugin.badge.equals("Tasker", ignoreCase = true) &&
+            plugin.downloadUrl?.let { Uri.parse(it).lastPathSegment?.endsWith(".xml", ignoreCase = true) } == true
+        ) {
+            downloadTaskerIntegration(plugin)
+            return
+        }
         val link = plugin.taskerNetLink ?: plugin.downloadUrl ?: return
         runCatching {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
@@ -479,12 +498,72 @@ class CommunityPluginsActivity : AppCompatActivity() {
 
     private fun downloadTaskerIntegration(plugin: CommunityPluginCardData) {
         val link = plugin.downloadUrl ?: return
-        pendingTaskerDownloadTitle = plugin.title
-        pendingTaskerDownloadUrl = link
         val sourceFileName = Uri.parse(link).lastPathSegment ?: "${plugin.id}.prj.xml"
-        val fileName = taskerDownloadFileName(sourceFileName, System.currentTimeMillis())
-        pendingTaskerDownloadFileName = fileName
-        saveTaskerProfileLauncher.launch(fileName)
+        Toast.makeText(this, "Preparing ${plugin.title} for Tasker...", Toast.LENGTH_SHORT).show()
+        val appContext = applicationContext
+        val activityRef = WeakReference(this)
+        taskerDownloadScope.launch {
+            val result = runCatching { downloadTaskerProject(link, sourceFileName) }
+            withContext(Dispatchers.Main) {
+                val activity = activityRef.get()?.takeUnless { it.isFinishing || it.isDestroyed }
+                result.onSuccess { file ->
+                    if (activity == null) {
+                        Toast.makeText(
+                            appContext,
+                            "${plugin.title} is ready. Open Plugins and tap Download profile again to import it.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        return@onSuccess
+                    }
+                    val uri = FileProvider.getUriForFile(
+                        activity,
+                        "${activity.packageName}.fileprovider",
+                        file,
+                    )
+                    if (!TaskerProfileGuidance.openImporter(activity, uri, sourceFileName)) {
+                        val fallbackFileName = taskerDownloadFileName(sourceFileName, System.currentTimeMillis())
+                        activity.pendingTaskerDownloadTitle = plugin.title
+                        activity.pendingTaskerDownloadUrl = link
+                        activity.pendingTaskerDownloadFileName = fallbackFileName
+                        Toast.makeText(
+                            activity,
+                            "Tasker could not import directly. Choose where to save the project.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        activity.saveTaskerProfileLauncher.launch(fallbackFileName)
+                    }
+                }.onFailure { error ->
+                    Toast.makeText(
+                        activity ?: appContext,
+                        "Could not prepare ${plugin.title}: ${error.message}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun downloadTaskerProject(link: String, fileName: String): File {
+        val connection = java.net.URL(link).openConnection() as java.net.HttpURLConnection
+        val xml = try {
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 30_000
+            connection.instanceFollowRedirects = true
+            if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
+            connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } finally {
+            connection.disconnect()
+        }
+        requireValidTaskerProject(xml)
+
+        val directory = File(cacheDir, "tasker-downloads").apply { mkdirs() }
+        val safeFileName = fileName.substringAfterLast('/').substringAfterLast('\\')
+        val destination = File(directory, safeFileName)
+        val temporary = File(directory, "$safeFileName.part")
+        temporary.writeText(xml, Charsets.UTF_8)
+        if (destination.exists()) check(destination.delete()) { "Could not replace the cached Tasker project" }
+        check(temporary.renameTo(destination)) { "Could not finish the Tasker project download" }
+        return destination
     }
 
     private fun saveTaskerProfile(title: String, link: String, fileName: String, destination: Uri) {
@@ -637,7 +716,7 @@ class CommunityPluginsActivity : AppCompatActivity() {
     private companion object {
         private const val TASKER_AI_ID = "tasker_ai_assistant"
         private const val TASKER_PROFILE_BASE_URL =
-            "https://raw.githubusercontent.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/main/android/CyanBridge/tasker"
+            "https://cyanbridge.vercel.app/downloads/tasker/2026-08-24"
         private const val STATE_PENDING_TASKER_TITLE = "pending_tasker_download_title"
         private const val STATE_PENDING_TASKER_URL = "pending_tasker_download_url"
         private const val STATE_PENDING_TASKER_FILE_NAME = "pending_tasker_download_file_name"

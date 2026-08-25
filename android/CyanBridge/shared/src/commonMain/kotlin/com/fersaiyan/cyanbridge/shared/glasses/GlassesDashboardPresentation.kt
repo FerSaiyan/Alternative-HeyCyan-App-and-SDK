@@ -115,6 +115,7 @@ data class MetaRaybanUiState(
     val availableDeviceCount: Int = 0,
     val setupGuidance: String? = null,
     val lastError: String? = null,
+    val metaAiInstalled: Boolean = true,
     val displayCapable: Boolean = false,
     val displayActive: Boolean = false,
     val canRegister: Boolean = true,
@@ -255,6 +256,8 @@ sealed interface GlassesDashboardAction {
     data object RequestStartWifiAdbDebug : GlassesDashboardAction
     data object StopWifiAdbDebug : GlassesDashboardAction
     data object MetaRegister : GlassesDashboardAction
+    data object MetaOpenPairing : GlassesDashboardAction
+    data object MetaOpenMetaAi : GlassesDashboardAction
     data object MetaUnregister : GlassesDashboardAction
     data object MetaStartSession : GlassesDashboardAction
     data object MetaStopSession : GlassesDashboardAction

@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Card
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -58,6 +59,8 @@ import com.fersaiyan.cyanbridge.shared.glasses.FirmwarePatchRequestUiState
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
 import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
+import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
+import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
@@ -905,6 +908,46 @@ private fun MetaRaybanControls(
     state: MetaRaybanUiState,
     onAction: (GlassesDashboardAction) -> Unit,
 ) {
+    val pairingIssue = resolveMetaPairingIssue(
+        metaAiInstalled = state.metaAiInstalled,
+        lastError = state.lastError,
+        setupGuidance = state.setupGuidance,
+    )
+    var showPairingIssue by remember(state.lastError) { mutableStateOf(pairingIssue != null) }
+    if (pairingIssue != null && showPairingIssue) {
+        AlertDialog(
+            onDismissRequest = { showPairingIssue = false },
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = { Text(pairingIssue.title) },
+            text = { Text(pairingIssue.message) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPairingIssue = false
+                        onAction(
+                            when (pairingIssue.action) {
+                                MetaPairingIssueAction.INSTALL_META_AI -> GlassesDashboardAction.MetaOpenMetaAi
+                                MetaPairingIssueAction.OPEN_PAIRING -> GlassesDashboardAction.MetaOpenPairing
+                            },
+                        )
+                    },
+                ) {
+                    Text(pairingIssue.primaryLabel)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPairingIssue = false
+                        onAction(GlassesDashboardAction.MetaSendDiagnostics)
+                    },
+                ) {
+                    Text("Details")
+                }
+            },
+        )
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionTitle(stringResource(Res.string.meta_rayban_title), accented = true)
         Text(
@@ -924,39 +967,11 @@ private fun MetaRaybanControls(
                 modifier = Modifier.testTag("meta_rayban_setup_guidance"),
             )
         }
-        state.lastError?.takeIf { it.isNotBlank() }?.let { error ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("meta_rayban_last_error"),
-            ) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = stringResource(Res.string.meta_rayban_last_error),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedButton(
-                        onClick = { onAction(GlassesDashboardAction.MetaSendDiagnostics) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(Res.string.meta_rayban_send_diagnostics))
-                    }
-                }
-            }
-        }
-        if (state.lastError.isNullOrBlank()) {
-            OutlinedButton(
-                onClick = { onAction(GlassesDashboardAction.MetaSendDiagnostics) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(Res.string.meta_rayban_send_diagnostics))
-            }
+        OutlinedButton(
+            onClick = { onAction(GlassesDashboardAction.MetaSendDiagnostics) },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(Res.string.meta_rayban_send_diagnostics))
         }
         Text(
             text = stringResource(Res.string.meta_rayban_registration_status, state.registrationLabel),
