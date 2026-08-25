@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.ota
 
 import android.util.Log
 import java.io.File
+import java.net.BindException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -28,14 +29,12 @@ class OtaHttpServer(
 
     @Synchronized
     fun start(file: File, bindAddress: String) {
-        if (running) {
+        val restarting = running
+        if (restarting) {
             Log.w(TAG, "Server already running, stopping previous instance")
             stop()
         }
-        val socket = ServerSocket().apply {
-            reuseAddress = true
-            bind(InetSocketAddress(InetAddress.getByName(bindAddress), port))
-        }
+        val socket = bindSocket(bindAddress, retryAfterClose = restarting)
         serveFile = file
         serverSocket = socket
         running = true
@@ -104,6 +103,34 @@ class OtaHttpServer(
         Log.i(TAG, "Stopped")
     }
 
+    private fun bindSocket(bindAddress: String, retryAfterClose: Boolean): ServerSocket {
+        val attempts = if (retryAfterClose) BIND_RETRY_ATTEMPTS else 1
+        var lastBindError: BindException? = null
+        repeat(attempts) { attempt ->
+            val socket = ServerSocket()
+            try {
+                socket.reuseAddress = true
+                socket.bind(InetSocketAddress(InetAddress.getByName(bindAddress), port))
+                return socket
+            } catch (e: BindException) {
+                lastBindError = e
+                runCatching { socket.close() }
+                if (attempt + 1 < attempts) {
+                    try {
+                        Thread.sleep(BIND_RETRY_DELAY_MS)
+                    } catch (interrupted: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        throw e
+                    }
+                }
+            } catch (e: Exception) {
+                runCatching { socket.close() }
+                throw e
+            }
+        }
+        throw lastBindError ?: BindException("Unable to bind OTA HTTP server to $bindAddress:$port")
+    }
+
     private fun handleClient(socket: Socket, file: File) {
         try {
             val input = socket.getInputStream().bufferedReader()
@@ -151,5 +178,7 @@ class OtaHttpServer(
     companion object {
         private const val TAG = "OtaHttpServer"
         private const val CLIENT_READ_TIMEOUT_MS = 10_000
+        private const val BIND_RETRY_ATTEMPTS = 5
+        private const val BIND_RETRY_DELAY_MS = 25L
     }
 }
