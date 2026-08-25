@@ -7,12 +7,15 @@ data class EngineLoadConfig(
     val cpuThreads: Int,
     val computeBackend: LocalComputeBackend,
     val gpuLayers: Int,
+    /** null uses the runtime/model default; true/false explicitly controls MTP/speculative decode. */
+    val speculativeDecoding: Boolean? = null,
 )
 
 data class EngineLoadResult(
     val activeBackend: LocalComputeBackend,
     val activeGpuLayers: Int,
     val fallbackReason: String? = null,
+    val speculativeDecodingEnabled: Boolean? = null,
 )
 
 data class GenerationConfig(
