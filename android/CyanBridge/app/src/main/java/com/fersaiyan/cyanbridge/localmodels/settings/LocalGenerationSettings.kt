@@ -2,6 +2,11 @@ package com.fersaiyan.cyanbridge.localmodels.settings
 
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
 
+/**
+ * Kept for backwards compatibility with settings saved by older CyanBridge builds.
+ * The Local Models UI no longer exposes performance profiles; all new/default settings use the
+ * same predictable generation defaults and explicit backend controls instead.
+ */
 enum class LocalModelPerformanceProfile(val label: String) {
     FAST("Fast"),
     BALANCED("Balanced"),
@@ -9,9 +14,9 @@ enum class LocalModelPerformanceProfile(val label: String) {
 }
 
 enum class LocalComputeBackend(val label: String) {
-    CPU("CPU"),
     GPU("GPU"),
-    NPU_EXPERIMENTAL("NPU (Experimental)"),
+    CPU("CPU"),
+    NPU_EXPERIMENTAL("NPU"),
 }
 
 enum class LocalModelRuntime(val label: String) {
@@ -44,6 +49,11 @@ data class LocalGenerationSettings(
         const val MIN_CONTEXT_SIZE = 1024
         const val MAX_CONTEXT_SIZE = 32768
 
+        const val DEFAULT_TEMPERATURE = 0.7
+        const val DEFAULT_TOP_P = 0.92
+        const val DEFAULT_TOP_K = 40
+        const val DEFAULT_REPETITION_PENALTY = 1.1
+
         /**
          * Default prompt for interactive local models. It is intentionally stored in the same
          * user-editable system prompt field as any custom prompt: users can change or clear it per
@@ -59,70 +69,36 @@ data class LocalGenerationSettings(
             return Runtime.getRuntime().availableProcessors().coerceIn(2, 8)
         }
 
+        /**
+         * The profile argument is accepted only so older stored settings and call sites remain
+         * source/binary compatible. It no longer changes quality/performance behavior.
+         */
         fun defaultsFor(
             entry: LocalModelCatalogEntry?,
-            profile: LocalModelPerformanceProfile,
+            profile: LocalModelPerformanceProfile = LocalModelPerformanceProfile.BALANCED,
         ): LocalGenerationSettings {
             val baseCtx = entry?.contextSizeDefault ?: 4096
             val defaultRuntime = when (entry?.engine?.lowercase()) {
                 "litert" -> LocalModelRuntime.LITERT
                 else -> LocalModelRuntime.LLAMA_CPP
             }
-            return when (profile) {
-                LocalModelPerformanceProfile.FAST -> LocalGenerationSettings(
-                    profile = profile,
-                    temperature = 0.6,
-                    topP = 0.9,
-                    topK = 24,
-                    maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
-                    repetitionPenalty = 1.05,
-                    contextSize = (baseCtx / 2).coerceAtLeast(2048),
-                    seed = -1,
-                    systemPromptOverride = DEFAULT_SYSTEM_PROMPT,
-                    templateOverrideId = null,
-                    experimentalStructuredJson = false,
-                    computeBackend = LocalComputeBackend.CPU,
-                    cpuThreads = defaultCpuThreads(),
-                    gpuLayers = -1,
-                    modelRuntime = defaultRuntime,
-                )
-
-                LocalModelPerformanceProfile.BALANCED -> LocalGenerationSettings(
-                    profile = profile,
-                    temperature = 0.7,
-                    topP = 0.92,
-                    topK = 40,
-                    maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
-                    repetitionPenalty = 1.1,
-                    contextSize = baseCtx,
-                    seed = -1,
-                    systemPromptOverride = DEFAULT_SYSTEM_PROMPT,
-                    templateOverrideId = null,
-                    experimentalStructuredJson = false,
-                    computeBackend = LocalComputeBackend.CPU,
-                    cpuThreads = defaultCpuThreads(),
-                    gpuLayers = -1,
-                    modelRuntime = defaultRuntime,
-                )
-
-                LocalModelPerformanceProfile.HIGH_QUALITY -> LocalGenerationSettings(
-                    profile = profile,
-                    temperature = 0.75,
-                    topP = 0.95,
-                    topK = 64,
-                    maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
-                    repetitionPenalty = 1.12,
-                    contextSize = (baseCtx + 1024).coerceAtMost(MAX_CONTEXT_SIZE),
-                    seed = -1,
-                    systemPromptOverride = DEFAULT_SYSTEM_PROMPT,
-                    templateOverrideId = null,
-                    experimentalStructuredJson = false,
-                    computeBackend = LocalComputeBackend.CPU,
-                    cpuThreads = defaultCpuThreads(),
-                    gpuLayers = -1,
-                    modelRuntime = defaultRuntime,
-                )
-            }
+            return LocalGenerationSettings(
+                profile = LocalModelPerformanceProfile.BALANCED,
+                temperature = DEFAULT_TEMPERATURE,
+                topP = DEFAULT_TOP_P,
+                topK = DEFAULT_TOP_K,
+                maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
+                repetitionPenalty = DEFAULT_REPETITION_PENALTY,
+                contextSize = baseCtx.coerceIn(MIN_CONTEXT_SIZE, MAX_CONTEXT_SIZE),
+                seed = -1,
+                systemPromptOverride = DEFAULT_SYSTEM_PROMPT,
+                templateOverrideId = null,
+                experimentalStructuredJson = false,
+                computeBackend = LocalComputeBackend.GPU,
+                cpuThreads = defaultCpuThreads(),
+                gpuLayers = -1,
+                modelRuntime = defaultRuntime,
+            )
         }
     }
 }
