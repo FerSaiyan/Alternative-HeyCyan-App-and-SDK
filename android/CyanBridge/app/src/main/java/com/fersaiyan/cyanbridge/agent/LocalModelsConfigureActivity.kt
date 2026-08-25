@@ -8,46 +8,34 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
-import android.util.Log
-import android.view.View
-import android.widget.ArrayAdapter
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.Spinner
-import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ComposeView
-import com.google.android.material.card.MaterialCardView
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.progressindicator.LinearProgressIndicator
-import com.google.android.material.switchmaterial.SwitchMaterial
-import com.google.android.material.textfield.TextInputEditText
-import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceSnapshot
 import com.fersaiyan.cyanbridge.localmodels.download.ModelDownloadForegroundService
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtLocalInferenceEngine
+import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiClient
+import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
-import com.fersaiyan.cyanbridge.localmodels.session.LocalModelTestSummary
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalGenerationSettings
-import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelPerformanceProfile
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpMode
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.InstalledLocalModel
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelFileUtils
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
-import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiClient
-import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
 import com.fersaiyan.cyanbridge.shared.localmodels.InstalledModelUiItem
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelCatalogUiItem
@@ -61,305 +49,132 @@ import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsConfigureUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsSection
 import com.fersaiyan.cyanbridge.shared.localmodels.RemoteInferenceUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.StudioBridgeUiState
+import com.fersaiyan.cyanbridge.shared.ui.localmodels.LocalModelsConfigureScreen
+import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
-import com.fersaiyan.cyanbridge.shared.ui.localmodels.LocalModelsConfigureScreen
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
-import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 
 class LocalModelsConfigureActivity : AppCompatActivity() {
-    private var warmupJob: Job? = null
-    private var downloadReceiver: BroadcastReceiver? = null
-    private var composeState by mutableStateOf(LocalModelsConfigureUiState())
-    private var syncComposeState: (() -> Unit)? = null
-    private lateinit var composeView: ComposeView
-    private var deviceSnapshot: DeviceSnapshot? = null
-    private var savedSettingsSnapshot: SettingsSnapshot? = null
-
-    private lateinit var tvEngineStatus: TextView
-    private lateinit var tvDeviceSummary: TextView
-    private lateinit var tvSelectedModelStatus: TextView
-    private lateinit var tvEmptyState: TextView
-    private lateinit var tvDownloadProgress: TextView
-    private lateinit var tvWarmupResult: TextView
-    private lateinit var progressDownload: LinearProgressIndicator
-    private lateinit var cardDownloadProgress: MaterialCardView
-    private lateinit var layoutCatalogContainer: LinearLayout
-    private lateinit var cardCuratedCatalog: MaterialCardView
-    private lateinit var headerCuratedCatalog: View
-    private lateinit var contentCuratedCatalog: View
-    private lateinit var iconExpandCuratedCatalog: ImageView
-    private lateinit var cardGenerationSettings: MaterialCardView
-    private lateinit var headerGenerationSettings: View
-    private lateinit var contentGenerationSettings: View
-    private lateinit var iconExpandGenerationSettings: ImageView
-
-    private lateinit var spinnerInstalled: Spinner
-    private lateinit var spinnerProfile: Spinner
-    private lateinit var spinnerModelRuntime: Spinner
-    private lateinit var spinnerComputeBackend: Spinner
-    private lateinit var spinnerTemplateOverride: Spinner
-
-    private lateinit var editTemperature: TextInputEditText
-    private lateinit var editCpuThreads: TextInputEditText
-    private lateinit var editGpuLayers: TextInputEditText
-    private lateinit var editTopP: TextInputEditText
-    private lateinit var editTopK: TextInputEditText
-    private lateinit var editMaxTokens: TextInputEditText
-    private lateinit var editRepPenalty: TextInputEditText
-    private lateinit var editContextSize: TextInputEditText
-    private lateinit var editSeed: TextInputEditText
-    private lateinit var editSystemPrompt: TextInputEditText
-    private lateinit var editHfToken: TextInputEditText
-    private lateinit var tvModelRuntimeNote: TextView
-    private lateinit var tvComputeBackendNote: TextView
-
-    private lateinit var switchExperimentalJson: SwitchMaterial
-    private lateinit var btnDownloadStarter: MaterialButton
-    private lateinit var btnCancelDownload: MaterialButton
-
-    // Remote server views
-    private lateinit var cardRemoteServer: MaterialCardView
-    private lateinit var headerRemoteServer: View
-    private lateinit var contentRemoteServer: View
-    private lateinit var iconExpandRemoteServer: ImageView
-    private lateinit var switchRemoteEnabled: SwitchMaterial
-    private lateinit var editRemoteBaseUrl: TextInputEditText
-    private lateinit var editRemoteModel: TextInputEditText
-    private lateinit var editRemoteApiKey: TextInputEditText
-    private lateinit var btnRemoteTest: MaterialButton
-    private lateinit var btnRemoteSave: MaterialButton
-    private lateinit var tvRemoteStatus: TextView
-
-    // Studio Bridge views
-    private lateinit var cardStudioBridge: com.google.android.material.card.MaterialCardView
-    private lateinit var headerStudioBridge: View
-    private lateinit var contentStudioBridge: View
-    private lateinit var iconExpandStudioBridge: ImageView
-    private lateinit var switchStudioBridgeEnabled: com.google.android.material.switchmaterial.SwitchMaterial
-    private lateinit var editStudioBridgeApiKey: com.google.android.material.textfield.TextInputEditText
-    private lateinit var btnApiKeyHelp: TextView
-    private lateinit var btnStudioBridgeSave: com.google.android.material.button.MaterialButton
-    private lateinit var tvStudioBridgeStatus: TextView
-
+    private var uiState by mutableStateOf(LocalModelsConfigureUiState())
     private var installedModels: List<InstalledLocalModel> = emptyList()
-    private var suppressProfileSelection = false
-    private var isDownloadInFlight = false
-    private var downloadingModelId: String? = null
-    private val catalogDownloadButtons = mutableListOf<MaterialButton>()
+    private var deviceSnapshot: DeviceSnapshot? = null
+    private var downloadReceiver: BroadcastReceiver? = null
+    private var downloadState = LocalModelDownloadUiState()
+    private var hasUnsavedChanges = false
+
+    private var generationDraft = GenerationDraft()
+    private var remoteDraft = RemoteDraft()
+    private var studioDraft = StudioDraft()
+
     private val sectionPrefs by lazy {
         getSharedPreferences("local_models_sections", MODE_PRIVATE)
     }
 
-    private data class GenerationInputSnapshot(
-        val profile: Int,
-        val runtime: Int,
-        val computeBackend: Int,
-        val cpuThreads: String,
-        val gpuLayers: String,
-        val temperature: String,
-        val topP: String,
-        val topK: String,
-        val maxTokens: String,
-        val repetitionPenalty: String,
-        val contextSize: String,
-        val seed: String,
-        val template: Int,
-        val structuredJson: Boolean,
-        val systemPrompt: String,
-    )
-
-    private data class RemoteInputSnapshot(
-        val enabled: Boolean,
-        val baseUrl: String,
-        val model: String,
-        val apiKey: String,
-    )
-
-    private data class StudioInputSnapshot(
-        val enabled: Boolean,
-        val apiKey: String,
-    )
-
-    private data class SettingsSnapshot(
-        val selectedModelId: String?,
-        val generation: GenerationInputSnapshot,
-        val huggingFaceToken: String,
-        val remote: RemoteInputSnapshot,
-        val studio: StudioInputSnapshot,
-    )
-
     private val importModelLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        if (uri != null) {
-            importModel(uri)
-        }
+        if (uri != null) importModel(uri)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        composeView = installComposeHostWithLegacyAdapter(R.layout.activity_local_models_configure)
-
-        supportActionBar?.setDisplayHomeAsUpEnabled(false)
-        findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)?.setNavigationOnClickListener {
-            requestClose()
+        val appearancePreferences = AppearancePreferences(this)
+        setContent {
+            val appearance by rememberAppearanceSettings(appearancePreferences)
+            CyanBridgeTheme(appearance) {
+                LocalModelsConfigureScreen(
+                    state = uiState,
+                    onAction = ::handleAction,
+                )
+            }
         }
 
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {
-                override fun handleOnBackPressed() {
-                    requestClose()
-                }
+                override fun handleOnBackPressed() = requestClose()
             },
         )
 
-        bindViews()
-        bindActions()
-        setupCollapsibleSections()
-        initSpinners()
-        refreshAllUi()
-        setupComposeContent()
         registerDownloadReceiver()
+        refreshAllUi(loadDrafts = true)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Refresh test recommendations/download results after returning from the benchmark screen.
+        if (::uiState.isInitializedCompat()) return
+        refreshAllUi(loadDrafts = !hasUnsavedChanges)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        unregisterDownloadReceiver()
+        downloadReceiver?.let { runCatching { unregisterReceiver(it) } }
         downloadReceiver = null
-        warmupJob?.cancel()
     }
 
-    private fun setupComposeContent() {
-        syncComposeState = ::refreshComposeState
-        refreshComposeState()
-
-        val appearancePreferences = AppearancePreferences(this)
-        composeView.setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                LocalModelsConfigureScreen(
-                    state = composeState,
-                    onAction = ::handleComposeAction,
-                )
-            }
-        }
-    }
-
-    private fun handleComposeAction(action: LocalModelsAction) {
+    private fun handleAction(action: LocalModelsAction) {
         when (action) {
-            LocalModelsAction.Back -> {
-                requestClose()
-                return
-            }
-
-            LocalModelsAction.DiscardChangesAndBack -> {
-                finish()
-                return
-            }
-
-            LocalModelsAction.Refresh -> refreshAllUi()
-            LocalModelsAction.ImportModel -> {
-                importModelLauncher.launch(arrayOf("application/octet-stream", "*/*"))
-            }
-
-            is LocalModelsAction.SelectInstalledModel -> {
-                installedModels.indexOfFirst { it.id == action.id }
-                    .takeIf { it >= 0 }
-                    ?.let { spinnerInstalled.setSelection(it) }
-            }
-
+            LocalModelsAction.Back -> requestClose()
+            LocalModelsAction.DiscardChangesAndBack -> finish()
+            LocalModelsAction.Refresh -> refreshAllUi(loadDrafts = !hasUnsavedChanges)
+            LocalModelsAction.ImportModel -> importModelLauncher.launch(arrayOf("application/octet-stream", "*/*"))
+            is LocalModelsAction.SelectInstalledModel -> selectModel(action.id)
             LocalModelsAction.ShowSelectedModelInfo -> showSelectedModelInfo()
             LocalModelsAction.UnloadSelectedModel -> unloadSelectedModel()
             LocalModelsAction.RemoveSelectedModel -> confirmRemoveSelectedModel()
             is LocalModelsAction.DownloadCatalogModel -> {
                 LocalModelCatalogRepository.findById(action.id)?.let(::requestDownload)
             }
-
             is LocalModelsAction.ShowCatalogModelInfo -> {
-                val entry = LocalModelCatalogRepository.findById(action.id) ?: return
-                showCatalogInfo(entry, installedModels.any { it.catalogId == entry.id })
+                LocalModelCatalogRepository.findById(action.id)?.let(::showCatalogInfo)
             }
-
-            LocalModelsAction.CancelDownload -> cancelDownload()
-            LocalModelsAction.RunWarmup -> runWarmupProbe()
-            LocalModelsAction.SaveGenerationSettings -> saveCurrentSettings()
+            LocalModelsAction.CancelDownload -> {
+                ModelDownloadForegroundService.cancelDownload(this)
+                downloadState = LocalModelDownloadUiState(message = "Download cancelled")
+                refreshComposeState()
+            }
+            LocalModelsAction.RunWarmup -> launchModelTest()
+            LocalModelsAction.SaveGenerationSettings -> saveGenerationSettings(showToast = true)
             is LocalModelsAction.ToggleSection -> toggleSection(action.section)
-            is LocalModelsAction.UpdateText -> updateComposeTextField(action.field, action.value)
-            is LocalModelsAction.SelectOption -> updateComposeOption(action.field, action.index)
-            is LocalModelsAction.SetToggle -> updateComposeToggle(action.field, action.enabled)
+            is LocalModelsAction.UpdateText -> updateText(action.field, action.value)
+            is LocalModelsAction.SelectOption -> updateOption(action.field, action.index)
+            is LocalModelsAction.SetToggle -> updateToggle(action.field, action.enabled)
             LocalModelsAction.TestRemoteServer -> testRemoteServerConnection()
-            LocalModelsAction.SaveRemoteServer -> saveRemoteServerConfig()
+            LocalModelsAction.SaveRemoteServer -> saveRemoteServerConfig(showToast = true)
             LocalModelsAction.ShowStudioBridgeApiKeyHelp -> showApiKeyHelpDialog()
             LocalModelsAction.SaveStudioBridge -> saveStudioBridgeConfig()
         }
-        syncComposeState?.invoke()
     }
 
-    private fun toggleSection(section: LocalModelsSection) {
-        val (cardId, defaultExpanded) = when (section) {
-            LocalModelsSection.CATALOG -> R.id.card_curated_catalog to false
-            LocalModelsSection.REMOTE_SERVER -> R.id.card_remote_server to false
-            LocalModelsSection.STUDIO_BRIDGE -> R.id.card_studio_bridge to false
-            LocalModelsSection.GENERATION_SETTINGS -> R.id.card_generation_settings to false
+    private fun refreshAllUi(loadDrafts: Boolean) {
+        LocalModelStorageRepository.cleanupMissingModels(this)
+        installedModels = LocalModelStorageRepository.listInstalled(this)
+        val selected = LocalModelStorageRepository.resolveSelectedModel(this)
+        deviceSnapshot = DeviceCapabilityService.snapshot(this)
+        if (loadDrafts) {
+            loadGenerationDraft(selected)
+            loadRemoteDraft()
+            loadStudioDraft()
+            hasUnsavedChanges = false
         }
-        val prefKey = "section_expanded_${resources.getResourceEntryName(cardId)}"
-        val expanded = sectionPrefs.getBoolean(prefKey, defaultExpanded)
-        sectionPrefs.edit().putBoolean(prefKey, !expanded).apply()
-    }
-
-    private fun updateComposeTextField(field: LocalModelTextField, value: String) {
-        when (field) {
-            LocalModelTextField.CPU_THREADS -> editCpuThreads.setText(value)
-            LocalModelTextField.GPU_LAYERS -> editGpuLayers.setText(value)
-            LocalModelTextField.TEMPERATURE -> editTemperature.setText(value)
-            LocalModelTextField.TOP_P -> editTopP.setText(value)
-            LocalModelTextField.TOP_K -> editTopK.setText(value)
-            LocalModelTextField.MAX_TOKENS -> editMaxTokens.setText(value)
-            LocalModelTextField.REPETITION_PENALTY -> editRepPenalty.setText(value)
-            LocalModelTextField.CONTEXT_SIZE -> editContextSize.setText(value)
-            LocalModelTextField.SEED -> editSeed.setText(value)
-            LocalModelTextField.SYSTEM_PROMPT -> editSystemPrompt.setText(value)
-            LocalModelTextField.HUGGING_FACE_TOKEN -> editHfToken.setText(value)
-            LocalModelTextField.REMOTE_BASE_URL -> editRemoteBaseUrl.setText(value)
-            LocalModelTextField.REMOTE_MODEL_NAME -> editRemoteModel.setText(value)
-            LocalModelTextField.REMOTE_API_KEY -> editRemoteApiKey.setText(value)
-            LocalModelTextField.STUDIO_BRIDGE_API_KEY -> editStudioBridgeApiKey.setText(value)
-        }
-    }
-
-    private fun updateComposeOption(field: LocalModelOptionField, index: Int) {
-        when (field) {
-            LocalModelOptionField.PROFILE -> setSpinnerSelection(spinnerProfile, index)
-            LocalModelOptionField.RUNTIME -> setSpinnerSelection(spinnerModelRuntime, index)
-            LocalModelOptionField.COMPUTE_BACKEND -> setSpinnerSelection(spinnerComputeBackend, index)
-            LocalModelOptionField.TEMPLATE -> setSpinnerSelection(spinnerTemplateOverride, index)
-        }
-    }
-
-    private fun updateComposeToggle(field: LocalModelToggleField, enabled: Boolean) {
-        when (field) {
-            LocalModelToggleField.EXPERIMENTAL_STRUCTURED_JSON -> switchExperimentalJson.isChecked = enabled
-            LocalModelToggleField.REMOTE_SERVER_ENABLED -> switchRemoteEnabled.isChecked = enabled
-            LocalModelToggleField.STUDIO_BRIDGE_ENABLED -> switchStudioBridgeEnabled.isChecked = enabled
-        }
-    }
-
-    private fun setSpinnerSelection(spinner: Spinner, requestedIndex: Int) {
-        val lastIndex = (spinner.adapter?.count ?: 1) - 1
-        spinner.setSelection(requestedIndex.coerceIn(0, lastIndex.coerceAtLeast(0)))
+        syncDownloadStateFromService()
+        refreshComposeState()
     }
 
     private fun refreshComposeState() {
-        val installedByCatalogId = installedModels.associateBy { it.catalogId }
+        val selected = selectedModel()
+        val snapshot = deviceSnapshot ?: DeviceCapabilityService.snapshot(this).also { deviceSnapshot = it }
+        val ramGb = snapshot.totalRamBytes / GIB
+        val freeGb = snapshot.freeStorageBytes / GIB
+        val mtpSupport = mtpSupportFor(selected)
+        val mtpStatus = mtpStatusFor(selected, mtpSupport)
         val templateOptions = buildList {
             add("Auto (catalog default)")
             addAll(
@@ -368,690 +183,331 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                 },
             )
         }
-        val progressPercent = if (
-            progressDownload.visibility == View.VISIBLE && !progressDownload.isIndeterminate
-        ) {
-            progressDownload.progress
-        } else {
-            null
-        }
+        val installedByCatalogId = installedModels.associateBy { it.catalogId }
 
-        composeState = LocalModelsConfigureUiState(
-            engineStatus = tvEngineStatus.text.toString(),
-            deviceSummary = tvDeviceSummary.text.toString(),
-            selectedModelStatus = tvSelectedModelStatus.text.toString(),
-            emptyStateMessage = if (installedModels.isEmpty()) tvEmptyState.text.toString() else "",
+        uiState = LocalModelsConfigureUiState(
+            engineStatus = selected?.let { "Ready for ${it.displayName}" } ?: "Runtimes available: llama.cpp + LiteRT",
+            deviceSummary = "${snapshot.primaryAbi} • ${format1(ramGb)} GB RAM • ${format2(freeGb)} GB free",
+            selectedModelStatus = selected?.let {
+                val exists = File(it.absolutePath).exists()
+                "${if (exists) "Ready" else "Missing file"} • ${humanSize(it.sizeBytes)}"
+            } ?: "No model selected",
+            emptyStateMessage = if (installedModels.isEmpty()) {
+                "No local model installed. Gemma 4 E2B is the recommended multimodal starter."
+            } else "",
             installedModels = installedModels.map {
-                InstalledModelUiItem(
-                    id = it.id,
-                    label = "${it.displayName} (${humanSize(it.sizeBytes)})",
-                )
+                InstalledModelUiItem(it.id, "${it.displayName} (${humanSize(it.sizeBytes)})")
             },
-            selectedInstalledModelId = selectedInstalledModel()?.id,
+            selectedInstalledModelId = selected?.id,
             catalog = LocalModelCatalogRepository.curatedModels.map { entry ->
                 val installed = installedByCatalogId[entry.id]
                 LocalModelCatalogUiItem(
                     id = entry.id,
                     title = entry.displayName,
-                    details = "${entry.quantization} · ${humanSize(entry.sizeBytes)} · tags: ${entry.tags.joinToString(", ")}",
+                    details = "${entry.quantization} • ${humanSize(entry.sizeBytes)} • ${entry.shortDescription}",
                     status = statusText(entry, installed),
                     downloadLabel = when {
-                        isDownloadInFlight && downloadingModelId == entry.id -> "Downloading..."
+                        ModelDownloadForegroundService.isDownloading && ModelDownloadForegroundService.downloadingModelId == entry.id -> "Downloading…"
                         installed != null -> "Installed"
+                        entry.comingSoon -> "Coming soon"
                         entry.sourceUrl.isNullOrBlank() -> "Manual import"
-                        !assessCatalogEntry(entry).supported -> "Unavailable on device"
+                        !assessCatalogEntry(entry).supported -> "Unavailable"
                         entry.gatedDownload -> "Download (token)"
                         else -> "Download"
                     },
-                    canDownload = canDownloadCatalogEntry(entry, installed),
+                    canDownload = canDownload(entry, installed),
                 )
             },
-            catalogExpanded = isSectionExpanded(R.id.card_curated_catalog, defaultExpanded = false),
-            remoteServerExpanded = isSectionExpanded(R.id.card_remote_server, defaultExpanded = false),
-            studioBridgeExpanded = isSectionExpanded(R.id.card_studio_bridge, defaultExpanded = false),
-            generationSettingsExpanded = isSectionExpanded(R.id.card_generation_settings, defaultExpanded = false),
-            download = LocalModelDownloadUiState(
-                isInFlight = isDownloadInFlight,
-                message = tvDownloadProgress.text.toString(),
-                progressPercent = progressPercent,
-            ),
-            hasUnsavedChanges = hasUnsavedSettings(),
-            warmupResult = tvWarmupResult.text.toString(),
+            catalogExpanded = sectionExpanded(LocalModelsSection.CATALOG),
+            remoteServerExpanded = sectionExpanded(LocalModelsSection.REMOTE_SERVER),
+            studioBridgeExpanded = sectionExpanded(LocalModelsSection.STUDIO_BRIDGE),
+            generationSettingsExpanded = sectionExpanded(LocalModelsSection.GENERATION_SETTINGS),
+            download = downloadState,
+            hasUnsavedChanges = hasUnsavedChanges,
+            warmupResult = LocalModelsPrefs.getLastBenchmark(this),
             generation = LocalModelGenerationUiState(
-                profileOptions = LocalModelPerformanceProfile.entries.map { it.label },
-                profileIndex = spinnerProfile.selectedItemPosition.coerceAtLeast(0),
-                runtimeOptions = LocalModelRuntime.entries.map { it.label },
-                runtimeIndex = spinnerModelRuntime.selectedItemPosition.coerceAtLeast(0),
-                runtimeNote = tvModelRuntimeNote.text.toString(),
                 computeBackendOptions = LocalComputeBackend.entries.map { it.label },
-                computeBackendIndex = spinnerComputeBackend.selectedItemPosition.coerceAtLeast(0),
-                computeBackendNote = tvComputeBackendNote.text.toString(),
-                cpuThreads = editCpuThreads.text?.toString().orEmpty(),
-                gpuLayers = editGpuLayers.text?.toString().orEmpty(),
-                gpuLayersEnabled = editGpuLayers.isEnabled,
-                temperature = editTemperature.text?.toString().orEmpty(),
-                topP = editTopP.text?.toString().orEmpty(),
-                topK = editTopK.text?.toString().orEmpty(),
-                maxTokens = editMaxTokens.text?.toString().orEmpty(),
-                repetitionPenalty = editRepPenalty.text?.toString().orEmpty(),
-                contextSize = editContextSize.text?.toString().orEmpty(),
-                seed = editSeed.text?.toString().orEmpty(),
+                computeBackendIndex = generationDraft.computeBackend.ordinal.coerceAtLeast(0),
+                computeBackendNote = backendNote(generationDraft.computeBackend, generationDraft.runtime),
+                mtpOptions = LocalMtpMode.entries.map { it.label },
+                mtpIndex = generationDraft.mtpMode.ordinal,
+                mtpSupported = mtpSupport,
+                mtpStatus = mtpStatus,
+                systemPrompt = generationDraft.systemPrompt,
+                runtimeOptions = LocalModelRuntime.entries.map { it.label },
+                runtimeIndex = generationDraft.runtime.ordinal,
+                runtimeNote = runtimeNote(generationDraft.runtime),
+                cpuThreads = generationDraft.cpuThreads,
+                gpuLayers = generationDraft.gpuLayers,
+                gpuLayersEnabled = generationDraft.computeBackend != LocalComputeBackend.CPU,
+                temperature = generationDraft.temperature,
+                topP = generationDraft.topP,
+                topK = generationDraft.topK,
+                maxTokens = generationDraft.maxTokens,
+                repetitionPenalty = generationDraft.repetitionPenalty,
+                contextSize = generationDraft.contextSize,
+                seed = generationDraft.seed,
                 templateOptions = templateOptions,
-                templateIndex = spinnerTemplateOverride.selectedItemPosition.coerceAtLeast(0),
-                experimentalStructuredJson = switchExperimentalJson.isChecked,
-                systemPrompt = editSystemPrompt.text?.toString().orEmpty(),
-                huggingFaceToken = editHfToken.text?.toString().orEmpty(),
+                templateIndex = generationDraft.templateIndex.coerceIn(0, templateOptions.lastIndex.coerceAtLeast(0)),
+                experimentalStructuredJson = generationDraft.structuredJson,
+                huggingFaceToken = generationDraft.huggingFaceToken,
             ),
             remoteServer = RemoteInferenceUiState(
-                enabled = switchRemoteEnabled.isChecked,
-                baseUrl = editRemoteBaseUrl.text?.toString().orEmpty(),
-                modelName = editRemoteModel.text?.toString().orEmpty(),
-                apiKey = editRemoteApiKey.text?.toString().orEmpty(),
-                status = tvRemoteStatus.text.toString(),
+                enabled = remoteDraft.enabled,
+                baseUrl = remoteDraft.baseUrl,
+                modelName = remoteDraft.model,
+                apiKey = remoteDraft.apiKey,
+                status = remoteDraft.status,
             ),
             studioBridge = StudioBridgeUiState(
-                enabled = switchStudioBridgeEnabled.isChecked,
-                apiKey = editStudioBridgeApiKey.text?.toString().orEmpty(),
-                status = tvStudioBridgeStatus.text.toString(),
+                enabled = studioDraft.enabled,
+                apiKey = studioDraft.apiKey,
+                status = studioDraft.status,
             ),
         )
     }
 
-    private fun isSectionExpanded(cardId: Int, defaultExpanded: Boolean): Boolean {
-        val prefKey = "section_expanded_${resources.getResourceEntryName(cardId)}"
-        return sectionPrefs.getBoolean(prefKey, defaultExpanded)
+    private fun loadGenerationDraft(model: InstalledLocalModel?) {
+        if (model == null) {
+            val defaults = LocalGenerationSettings.defaultsFor(null)
+            generationDraft = GenerationDraft.from(defaults, LocalMtpMode.AUTO, LocalModelsPrefs.getHuggingFaceToken(this))
+            return
+        }
+        val settings = LocalModelSettingsRepository.getForModel(this, model.id)
+        val templates = com.fersaiyan.cyanbridge.localmodels.templates.PromptTemplateRegistry.templates
+        val templateIndex = templates.indexOfFirst { it.id == settings.templateOverrideId }
+            .let { if (it >= 0) it + 1 else 0 }
+        generationDraft = GenerationDraft.from(
+            settings = settings,
+            mtpMode = LocalMtpSettingsRepository.getMode(this, model.id),
+            huggingFaceToken = LocalModelsPrefs.getHuggingFaceToken(this),
+        ).copy(templateIndex = templateIndex)
     }
 
-    private fun bindViews() {
-        tvEngineStatus = findViewById(R.id.tv_engine_status)
-        tvDeviceSummary = findViewById(R.id.tv_device_summary)
-        tvSelectedModelStatus = findViewById(R.id.tv_selected_model_status)
-        tvEmptyState = findViewById(R.id.tv_empty_state)
-        tvDownloadProgress = findViewById(R.id.tv_download_progress)
-        tvWarmupResult = findViewById(R.id.tv_warmup_result)
-        progressDownload = findViewById(R.id.progress_download)
-        cardDownloadProgress = findViewById(R.id.card_download_progress)
-        layoutCatalogContainer = findViewById(R.id.layout_catalog_container)
-        cardCuratedCatalog = findViewById(R.id.card_curated_catalog)
-        headerCuratedCatalog = findViewById(R.id.header_curated_catalog)
-        contentCuratedCatalog = findViewById(R.id.content_curated_catalog)
-        iconExpandCuratedCatalog = findViewById(R.id.icon_expand_curated_catalog)
-        cardGenerationSettings = findViewById(R.id.card_generation_settings)
-        headerGenerationSettings = findViewById(R.id.header_generation_settings)
-        contentGenerationSettings = findViewById(R.id.content_generation_settings)
-        iconExpandGenerationSettings = findViewById(R.id.icon_expand_generation_settings)
-
-        spinnerInstalled = findViewById(R.id.spinner_installed_models)
-        spinnerProfile = findViewById(R.id.spinner_profile)
-        spinnerModelRuntime = findViewById(R.id.spinner_model_runtime)
-        spinnerComputeBackend = findViewById(R.id.spinner_compute_backend)
-        spinnerTemplateOverride = findViewById(R.id.spinner_template_override)
-
-        editTemperature = findViewById(R.id.edit_temperature)
-        editCpuThreads = findViewById(R.id.edit_cpu_threads)
-        editGpuLayers = findViewById(R.id.edit_gpu_layers)
-        editTopP = findViewById(R.id.edit_top_p)
-        editTopK = findViewById(R.id.edit_top_k)
-        editMaxTokens = findViewById(R.id.edit_max_tokens)
-        editRepPenalty = findViewById(R.id.edit_repetition_penalty)
-        editContextSize = findViewById(R.id.edit_context_size)
-        editSeed = findViewById(R.id.edit_seed)
-        editSystemPrompt = findViewById(R.id.edit_system_prompt)
-        editHfToken = findViewById(R.id.edit_hf_token)
-        tvModelRuntimeNote = findViewById(R.id.tv_model_runtime_note)
-        tvComputeBackendNote = findViewById(R.id.tv_compute_backend_note)
-
-        switchExperimentalJson = findViewById(R.id.switch_experimental_json)
-        btnDownloadStarter = findViewById(R.id.btn_download_starter)
-        btnCancelDownload = findViewById(R.id.btn_cancel_download)
-
-        // Remote server
-        cardRemoteServer = findViewById(R.id.card_remote_server)
-        headerRemoteServer = findViewById(R.id.header_remote_server)
-        contentRemoteServer = findViewById(R.id.content_remote_server)
-        iconExpandRemoteServer = findViewById(R.id.icon_expand_remote_server)
-        switchRemoteEnabled = findViewById(R.id.switch_remote_enabled)
-        editRemoteBaseUrl = findViewById(R.id.edit_remote_base_url)
-        editRemoteModel = findViewById(R.id.edit_remote_model)
-        editRemoteApiKey = findViewById(R.id.edit_remote_api_key)
-        btnRemoteTest = findViewById(R.id.btn_remote_test)
-        btnRemoteSave = findViewById(R.id.btn_remote_save)
-        tvRemoteStatus = findViewById(R.id.tv_remote_status)
-
-        // Studio Bridge
-        cardStudioBridge = findViewById(R.id.card_studio_bridge)
-        headerStudioBridge = findViewById(R.id.header_studio_bridge)
-        contentStudioBridge = findViewById(R.id.content_studio_bridge)
-        iconExpandStudioBridge = findViewById(R.id.icon_expand_studio_bridge)
-        switchStudioBridgeEnabled = findViewById(R.id.switch_studio_bridge_enabled)
-        editStudioBridgeApiKey = findViewById(R.id.edit_studio_bridge_api_key)
-        btnApiKeyHelp = findViewById(R.id.btn_api_key_help)
-        btnStudioBridgeSave = findViewById(R.id.btn_studio_bridge_save)
-        tvStudioBridgeStatus = findViewById(R.id.tv_studio_bridge_status)
+    private fun loadRemoteDraft() {
+        remoteDraft = RemoteDraft(
+            enabled = RemoteOpenAiPrefs.isEnabled(this),
+            baseUrl = RemoteOpenAiPrefs.getBaseUrl(this),
+            model = RemoteOpenAiPrefs.getModel(this),
+            apiKey = RemoteOpenAiPrefs.getApiKey(this),
+            status = if (RemoteOpenAiPrefs.isActive(this)) {
+                "Active: ${RemoteOpenAiPrefs.getModel(this)} @ ${RemoteOpenAiPrefs.getBaseUrl(this)}"
+            } else "",
+        )
     }
 
-    private fun bindActions() {
-        findViewById<MaterialButton>(R.id.btn_close).setOnClickListener { requestClose() }
-        findViewById<MaterialButton>(R.id.btn_refresh_state).setOnClickListener { refreshAllUi() }
+    private fun loadStudioDraft() {
+        studioDraft = StudioDraft(
+            enabled = RemoteOpenAiPrefs.isBridgeEnabled(this),
+            apiKey = RemoteOpenAiPrefs.getApiKey(this),
+            status = when {
+                RemoteOpenAiPrefs.isBridgeConfigured(this) -> "Bridge configured for voice approvals."
+                RemoteOpenAiPrefs.isBridgeEnabled(this) -> "Bridge enabled but server URL, model, or API key is missing."
+                else -> ""
+            },
+        )
+    }
 
-        findViewById<MaterialButton>(R.id.btn_import_model).setOnClickListener {
-            importModelLauncher.launch(arrayOf("application/octet-stream", "*/*"))
-        }
+    private fun selectModel(id: String) {
+        LocalModelsPrefs.setSelectedModelId(this, id)
+        loadGenerationDraft(selectedModel())
+        hasUnsavedChanges = false
+        refreshComposeState()
+    }
 
-        btnDownloadStarter.setOnClickListener {
-            val starter = LocalModelCatalogRepository.curatedModels
-                .firstOrNull { it.id == "gemma4-e2b-it-litert" }
-            if (starter == null) {
-                Toast.makeText(this, "Starter model missing from catalog", Toast.LENGTH_SHORT).show()
-            } else {
-                requestDownload(starter)
+    private fun updateText(field: LocalModelTextField, value: String) {
+        generationDraft = when (field) {
+            LocalModelTextField.CPU_THREADS -> generationDraft.copy(cpuThreads = value)
+            LocalModelTextField.GPU_LAYERS -> generationDraft.copy(gpuLayers = value)
+            LocalModelTextField.TEMPERATURE -> generationDraft.copy(temperature = value)
+            LocalModelTextField.TOP_P -> generationDraft.copy(topP = value)
+            LocalModelTextField.TOP_K -> generationDraft.copy(topK = value)
+            LocalModelTextField.MAX_TOKENS -> generationDraft.copy(maxTokens = value)
+            LocalModelTextField.REPETITION_PENALTY -> generationDraft.copy(repetitionPenalty = value)
+            LocalModelTextField.CONTEXT_SIZE -> generationDraft.copy(contextSize = value)
+            LocalModelTextField.SEED -> generationDraft.copy(seed = value)
+            LocalModelTextField.SYSTEM_PROMPT -> generationDraft.copy(systemPrompt = value)
+            LocalModelTextField.HUGGING_FACE_TOKEN -> generationDraft.copy(huggingFaceToken = value)
+            LocalModelTextField.REMOTE_BASE_URL -> {
+                remoteDraft = remoteDraft.copy(baseUrl = value)
+                generationDraft
+            }
+            LocalModelTextField.REMOTE_MODEL_NAME -> {
+                remoteDraft = remoteDraft.copy(model = value)
+                generationDraft
+            }
+            LocalModelTextField.REMOTE_API_KEY -> {
+                remoteDraft = remoteDraft.copy(apiKey = value)
+                generationDraft
+            }
+            LocalModelTextField.STUDIO_BRIDGE_API_KEY -> {
+                studioDraft = studioDraft.copy(apiKey = value)
+                generationDraft
             }
         }
+        hasUnsavedChanges = true
+        refreshComposeState()
+    }
 
-        findViewById<MaterialButton>(R.id.btn_model_info).setOnClickListener {
-            showSelectedModelInfo()
-        }
-
-        findViewById<MaterialButton>(R.id.btn_unload_model).setOnClickListener {
-            unloadSelectedModel()
-        }
-
-        findViewById<MaterialButton>(R.id.btn_remove_model).setOnClickListener {
-            confirmRemoveSelectedModel()
-        }
-
-        findViewById<MaterialButton>(R.id.btn_save).setOnClickListener {
-            saveCurrentSettings()
-        }
-
-        findViewById<MaterialButton>(R.id.btn_run_warmup).setOnClickListener {
-            runWarmupProbe()
-        }
-
-        btnCancelDownload.setOnClickListener {
-            cancelDownload()
-        }
-
-        spinnerInstalled.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: android.widget.AdapterView<*>?,
-                view: View?,
-                position: Int,
-                id: Long,
-            ) {
-                val selected = installedModels.getOrNull(position)
-                LocalModelsPrefs.setSelectedModelId(this@LocalModelsConfigureActivity, selected?.id)
-                loadSettingsForSelectedModel()
-                refreshSelectedModelStatus()
-                markGenerationSettingsLoaded()
-                syncComposeState?.invoke()
-            }
-
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-        }
-
-        spinnerProfile.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: android.widget.AdapterView<*>?,
-                view: View?,
-                position: Int,
-                id: Long,
-            ) {
-                if (suppressProfileSelection) return
-                val model = selectedInstalledModel() ?: return
-                val profile = LocalModelPerformanceProfile.entries[position]
-                val catalog = LocalModelCatalogRepository.findById(model.catalogId)
-                val defaults = LocalGenerationSettings.defaultsFor(catalog, profile)
-                applySettingsToInputs(
-                    defaults.copy(
-                        computeBackend = selectedComputeBackendFromUi(),
-                        cpuThreads = parseCpuThreadsInput(fallback = defaults.cpuThreads),
-                        gpuLayers = parseGpuLayersInput(fallback = defaults.gpuLayers),
-                        modelRuntime = defaults.modelRuntime,
-                        systemPromptOverride = editSystemPrompt.text?.toString().orEmpty(),
-                    ),
+    private fun updateOption(field: LocalModelOptionField, index: Int) {
+        when (field) {
+            LocalModelOptionField.RUNTIME -> {
+                generationDraft = generationDraft.copy(
+                    runtime = LocalModelRuntime.entries.getOrElse(index) { LocalModelRuntime.LLAMA_CPP },
                 )
-                syncComposeState?.invoke()
             }
-
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-        }
-
-        spinnerComputeBackend.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: android.widget.AdapterView<*>?,
-                view: View?,
-                position: Int,
-                id: Long,
-            ) {
-                updateComputeBackendUi()
-                syncComposeState?.invoke()
+            LocalModelOptionField.COMPUTE_BACKEND -> {
+                generationDraft = generationDraft.copy(
+                    computeBackend = LocalComputeBackend.entries.getOrElse(index) { LocalComputeBackend.GPU },
+                )
             }
-
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-        }
-
-        spinnerModelRuntime.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: android.widget.AdapterView<*>?,
-                view: View?,
-                position: Int,
-                id: Long,
-            ) {
-                updateRuntimeUi()
-                syncComposeState?.invoke()
+            LocalModelOptionField.MTP_MODE -> {
+                generationDraft = generationDraft.copy(
+                    mtpMode = LocalMtpMode.entries.getOrElse(index) { LocalMtpMode.AUTO },
+                )
             }
-
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            LocalModelOptionField.TEMPLATE -> generationDraft = generationDraft.copy(templateIndex = index)
         }
-
-        btnRemoteSave.setOnClickListener { saveRemoteServerConfig() }
-
-        btnRemoteTest.setOnClickListener { testRemoteServerConnection() }
-
-        btnStudioBridgeSave.setOnClickListener { saveStudioBridgeConfig() }
-
-        btnApiKeyHelp.setOnClickListener { showApiKeyHelpDialog() }
+        hasUnsavedChanges = true
+        refreshComposeState()
     }
 
-    private fun unloadSelectedModel() {
-        lifecycleScope.launch {
-            runCatching { LocalChatSessionManager.unload() }
-            Toast.makeText(this@LocalModelsConfigureActivity, "Local model unloaded", Toast.LENGTH_SHORT).show()
-            refreshAllUi()
+    private fun updateToggle(field: LocalModelToggleField, enabled: Boolean) {
+        when (field) {
+            LocalModelToggleField.EXPERIMENTAL_STRUCTURED_JSON -> generationDraft = generationDraft.copy(structuredJson = enabled)
+            LocalModelToggleField.REMOTE_SERVER_ENABLED -> remoteDraft = remoteDraft.copy(enabled = enabled)
+            LocalModelToggleField.STUDIO_BRIDGE_ENABLED -> studioDraft = studioDraft.copy(enabled = enabled)
         }
+        hasUnsavedChanges = true
+        refreshComposeState()
     }
 
-    private fun confirmRemoveSelectedModel() {
-        val selected = selectedInstalledModel()
-        if (selected == null) {
-            Toast.makeText(this, "No model selected", Toast.LENGTH_SHORT).show()
-            return
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Remove model?")
-            .setMessage("Delete ${selected.displayName} from local storage?")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Remove") { _, _ ->
-                LocalModelStorageRepository.removeInstalled(this, selected.id)
-                LocalModelSettingsRepository.clearForModel(this, selected.id)
-                lifecycleScope.launch { runCatching { LocalChatSessionManager.unload() } }
-                refreshAllUi()
-            }
-            .show()
-    }
-
-    private fun cancelDownload() {
-        ModelDownloadForegroundService.cancelDownload(this)
-        showDownloadFinished("Download cancelled", success = false)
-    }
-
-    private fun setupCollapsibleSections() {
-        setupCollapsibleSection(
-            card = cardCuratedCatalog,
-            header = headerCuratedCatalog,
-            content = contentCuratedCatalog,
-            icon = iconExpandCuratedCatalog,
-            sectionName = "CURATED CATALOG",
-            defaultExpanded = false,
-        )
-        setupCollapsibleSection(
-            card = cardRemoteServer,
-            header = headerRemoteServer,
-            content = contentRemoteServer,
-            icon = iconExpandRemoteServer,
-            sectionName = "REMOTE SERVER",
-            defaultExpanded = false,
-        )
-        setupCollapsibleSection(
-            card = cardStudioBridge,
-            header = headerStudioBridge,
-            content = contentStudioBridge,
-            icon = iconExpandStudioBridge,
-            sectionName = "STUDIO BRIDGE",
-            defaultExpanded = false,
-        )
-        setupCollapsibleSection(
-            card = cardGenerationSettings,
-            header = headerGenerationSettings,
-            content = contentGenerationSettings,
-            icon = iconExpandGenerationSettings,
-            sectionName = "GENERATION SETTINGS",
-            defaultExpanded = false,
-        )
-    }
-
-    private fun setupCollapsibleSection(
-        card: MaterialCardView,
-        header: View,
-        content: View,
-        icon: ImageView,
-        sectionName: String,
-        defaultExpanded: Boolean,
-    ) {
-        val prefKey = "section_expanded_${resources.getResourceEntryName(card.id)}"
-        header.isClickable = true
-        header.isFocusable = true
-
-        val expanded = sectionPrefs.getBoolean(prefKey, defaultExpanded)
-        applySectionState(content = content, icon = icon, expanded = expanded, sectionName = sectionName)
-
-        header.setOnClickListener {
-            val nextExpanded = !sectionPrefs.getBoolean(prefKey, defaultExpanded)
-            sectionPrefs.edit().putBoolean(prefKey, nextExpanded).apply()
-            applySectionState(content = content, icon = icon, expanded = nextExpanded, sectionName = sectionName)
-        }
-    }
-
-    private fun applySectionState(content: View, icon: ImageView, expanded: Boolean, sectionName: String) {
-        content.visibility = if (expanded) View.VISIBLE else View.GONE
-        icon.setImageResource(if (expanded) R.drawable.ic_expand_more else R.drawable.ic_chevron_right)
-        icon.contentDescription = if (expanded) {
-            "$sectionName expanded. Double tap to collapse"
-        } else {
-            "$sectionName collapsed. Double tap to expand"
-        }
-    }
-
-    private fun initSpinners() {
-        val profiles = LocalModelPerformanceProfile.entries.map { it.label }
-        spinnerProfile.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, profiles)
-
-        val runtimes = LocalModelRuntime.entries.map { it.label }
-        spinnerModelRuntime.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, runtimes)
-
-        val backends = LocalComputeBackend.entries.map { it.label }
-        spinnerComputeBackend.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, backends)
-
-        val templateItems = mutableListOf("Auto (catalog default)")
-        templateItems += com.fersaiyan.cyanbridge.localmodels.templates.PromptTemplateRegistry.templates.map {
-            "${it.label} (${it.id})"
-        }
-        spinnerTemplateOverride.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, templateItems)
-        updateRuntimeUi()
-        updateComputeBackendUi()
-    }
-
-    private fun refreshAllUi() {
-        LocalModelStorageRepository.cleanupMissingModels(this)
-
-        val snapshot = DeviceCapabilityService.snapshot(this)
-        deviceSnapshot = snapshot
-        val ramGb = snapshot.totalRamBytes / (1024.0 * 1024.0 * 1024.0)
-        val freeGb = snapshot.freeStorageBytes / (1024.0 * 1024.0 * 1024.0)
-        tvEngineStatus.text = "Runtimes available: llama.cpp + LiteRT"
-        tvDeviceSummary.text =
-            "ABI: ${snapshot.primaryAbi} | RAM: ${String.format("%.1f", ramGb)} GB | Free storage: ${String.format("%.2f", freeGb)} GB"
-
-        refreshInstalledModelsSpinner()
-        refreshSelectedModelStatus()
-        refreshCatalogUi()
-        loadSettingsForSelectedModel()
-
-        editHfToken.setText(LocalModelsPrefs.getHuggingFaceToken(this))
-        tvEmptyState.visibility = if (installedModels.isEmpty()) View.VISIBLE else View.GONE
-        btnDownloadStarter.visibility = if (installedModels.isEmpty()) View.VISIBLE else View.GONE
-        syncDownloadButtonsState()
-
-        if (ModelDownloadForegroundService.isDownloading && !isDownloadInFlight) {
-            val modelId = ModelDownloadForegroundService.downloadingModelId
-            val entry = modelId?.let { LocalModelCatalogRepository.findById(it) }
-            val lastPct = ModelDownloadForegroundService.lastPercent
-            val lastDownloaded = ModelDownloadForegroundService.lastDownloadedBytes ?: 0L
-            val lastTotal = ModelDownloadForegroundService.lastTotalBytes ?: 0L
-            val lastMsg = ModelDownloadForegroundService.lastStatusMessage
-
-            if (entry != null) {
-                showDownloadStarted(entry)
-                if (lastPct != null && lastPct > 0) {
-                    progressDownload.isIndeterminate = false
-                    progressDownload.setProgressCompat(lastPct, false)
-                    val done = humanSize(lastDownloaded)
-                    val totalStr = if (lastTotal > 0) humanSize(lastTotal) else "?"
-                    tvDownloadProgress.text = lastMsg ?: "Downloading ${entry.displayName}: $lastPct% ($done / $totalStr)"
-                }
-            } else {
-                isDownloadInFlight = true
-                downloadingModelId = modelId
-                progressDownload.visibility = View.VISIBLE
-                if (lastPct != null && lastPct > 0) {
-                    progressDownload.isIndeterminate = false
-                    progressDownload.setProgressCompat(lastPct, false)
-                    val done = humanSize(lastDownloaded)
-                    val totalStr = if (lastTotal > 0) humanSize(lastTotal) else "?"
-                    tvDownloadProgress.text = lastMsg ?: "Downloading: $lastPct% ($done / $totalStr)"
-                } else {
-                    progressDownload.isIndeterminate = true
-                    tvDownloadProgress.text = lastMsg ?: "Downloading..."
-                }
-                btnCancelDownload.isEnabled = true
-                syncDownloadButtonsState()
-                syncDownloadCardVisibility()
-            }
-        }
-
-        loadRemoteServerConfig()
-        loadStudioBridgeConfig()
-        markSettingsSaved()
-        syncDownloadCardVisibility()
-        syncComposeState?.invoke()
-    }
-
-    private fun refreshInstalledModelsSpinner() {
-        installedModels = LocalModelStorageRepository.listInstalled(this)
-        val labels = if (installedModels.isEmpty()) {
-            listOf("No installed models")
-        } else {
-            installedModels.map { "${it.displayName} (${humanSize(it.sizeBytes)})" }
-        }
-        spinnerInstalled.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
-
-        val selectedId = LocalModelsPrefs.getSelectedModelId(this)
-        val idx = installedModels.indexOfFirst { it.id == selectedId }
-        if (idx >= 0) {
-            spinnerInstalled.setSelection(idx)
-        } else if (installedModels.isNotEmpty()) {
-            spinnerInstalled.setSelection(0)
-            LocalModelsPrefs.setSelectedModelId(this, installedModels[0].id)
-        }
-    }
-
-    private fun selectedInstalledModel(): InstalledLocalModel? {
-        if (installedModels.isEmpty()) return null
-        val idx = spinnerInstalled.selectedItemPosition
-        if (idx < 0) return null
-        return installedModels.getOrNull(idx)
-    }
-
-    private fun refreshSelectedModelStatus() {
-        val selected = selectedInstalledModel()
-        if (selected == null) {
-            tvSelectedModelStatus.text = "Status: not downloaded"
-            return
-        }
-
-        val exists = File(selected.absolutePath).exists()
-        val status = if (!exists) "failed (missing file)" else "ready"
-        tvSelectedModelStatus.text = "Status: $status | ${selected.displayName}"
-    }
-
-    private fun refreshCatalogUi() {
-        layoutCatalogContainer.removeAllViews()
-        catalogDownloadButtons.clear()
-        val installedByCatalogId = installedModels.associateBy { it.catalogId }
-
-        LocalModelCatalogRepository.curatedModels.forEach { entry ->
-            val modelLine = TextView(this).apply {
-                text = buildString {
-                    append(entry.displayName)
-                    append("\n")
-                    append("${entry.quantization} · ${humanSize(entry.sizeBytes)} · tags: ${entry.tags.joinToString(", ")}")
-                    append("\n")
-                    append(statusText(entry, installedByCatalogId[entry.id]))
-                }
-                setTextColor(resources.getColor(R.color.text_primary, theme))
-                textSize = 13f
-                setPadding(0, 12, 0, 4)
-            }
-            layoutCatalogContainer.addView(modelLine)
-
-            val buttonRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-            }
-            val installed = installedByCatalogId[entry.id]
-            val canDownload = canDownloadCatalogEntry(entry, installed)
-            val btnDownload = MaterialButton(this).apply {
-                text = when {
-                    isDownloadInFlight && downloadingModelId == entry.id -> "Downloading..."
-                    installed != null -> "Installed"
-                    entry.sourceUrl.isNullOrBlank() -> "Manual Import"
-                    !assessCatalogEntry(entry).supported -> "Unavailable on Device"
-                    entry.gatedDownload -> "Download (Token)"
-                    else -> "Download"
-                }
-                tag = canDownload
-                isEnabled = canDownload && !isDownloadInFlight
-                setOnClickListener { requestDownload(entry) }
-            }
-            catalogDownloadButtons += btnDownload
-            val btnInfo = MaterialButton(this).apply {
-                text = "Info"
-                setOnClickListener { showCatalogInfo(entry, installedByCatalogId[entry.id] != null) }
-            }
-
-            buttonRow.addView(btnDownload, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            buttonRow.addView(btnInfo, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = 8
-            })
-            layoutCatalogContainer.addView(buttonRow)
-        }
-
-        syncDownloadButtonsState()
-    }
-
-    private fun statusText(entry: LocalModelCatalogEntry, installed: InstalledLocalModel?): String {
-        if (installed != null) return "Status: ready"
-        val assessment = assessCatalogEntry(entry)
-        val ramStatus = if (assessment.ramSuitable) {
-            "RAM suitable: ${String.format("%.1f", assessment.ramGb)} GB " +
-                "(model minimum ${String.format("%.1f", entry.minRamGb)} GB)"
-        } else {
-            "RAM unsuitable: device has ${String.format("%.1f", assessment.ramGb)} GB, " +
-                "model needs at least ${String.format("%.1f", entry.minRamGb)} GB"
-        }
-        val deviceStatus = if (assessment.supported) {
-            "Device suitable: $ramStatus"
-        } else {
-            val otherBlockers = assessment.blockers.filterNot { it.startsWith("RAM unsuitable:") }
-            val blockerText = otherBlockers.takeIf { it.isNotEmpty() }?.joinToString(" ").orEmpty()
-            "Device not suitable: $ramStatus${if (blockerText.isNotBlank()) ". $blockerText" else "."}"
-        }
-        val warningStatus = assessment.warnings
-            .takeIf { it.isNotEmpty() }
-            ?.joinToString(" ")
-            ?.let { " Warning: $it" }
-            .orEmpty()
-        val availability = when {
-            entry.comingSoon -> "Status: coming soon (Snapdragon NPU AOT build in progress)"
-            entry.sourceUrl.isNullOrBlank() -> "Status: manual import recommended"
-            entry.gatedDownload -> "Status: downloadable (requires token + accepted terms)"
-            else -> "Status: not downloaded"
-        }
-        return "$deviceStatus.$warningStatus\n$availability"
-    }
-
-    private fun assessCatalogEntry(entry: LocalModelCatalogEntry) = DeviceCapabilityService.assess(
-        snapshot = deviceSnapshot ?: DeviceCapabilityService.snapshot(this).also { deviceSnapshot = it },
-        entry = entry,
-        requireDownloadHeadroom = !entry.sourceUrl.isNullOrBlank(),
-    )
-
-    private fun canDownloadCatalogEntry(entry: LocalModelCatalogEntry, installed: InstalledLocalModel?): Boolean {
-        if (isDownloadInFlight || installed != null || !entry.enabled || entry.comingSoon || entry.sourceUrl.isNullOrBlank()) {
+    private fun saveGenerationSettings(showToast: Boolean): Boolean {
+        val model = selectedModel()
+        LocalModelsPrefs.setHuggingFaceToken(this, generationDraft.huggingFaceToken)
+        if (model == null) {
+            if (showToast) Toast.makeText(this, "Saved download token. Install a model to save model settings.", Toast.LENGTH_SHORT).show()
+            hasUnsavedChanges = false
+            refreshComposeState()
             return false
         }
-        if (entry.gatedDownload && LocalModelsPrefs.getHuggingFaceToken(this).trim().isBlank()) {
-            return false
+
+        val existing = LocalModelSettingsRepository.getForModel(this, model.id)
+        val templates = com.fersaiyan.cyanbridge.localmodels.templates.PromptTemplateRegistry.templates
+        val templateId = if (generationDraft.templateIndex <= 0) null
+        else templates.getOrNull(generationDraft.templateIndex - 1)?.id
+        val settings = existing.copy(
+            temperature = generationDraft.temperature.toDoubleOrNull()?.coerceIn(0.0, 2.0) ?: existing.temperature,
+            topP = generationDraft.topP.toDoubleOrNull()?.coerceIn(0.0, 1.0) ?: existing.topP,
+            topK = generationDraft.topK.toIntOrNull()?.coerceIn(0, 200) ?: existing.topK,
+            maxTokens = generationDraft.maxTokens.toIntOrNull()
+                ?.coerceIn(LocalGenerationSettings.MIN_MAX_TOKENS, LocalGenerationSettings.MAX_MAX_TOKENS)
+                ?: existing.maxTokens,
+            repetitionPenalty = generationDraft.repetitionPenalty.toDoubleOrNull()?.coerceIn(0.8, 2.0)
+                ?: existing.repetitionPenalty,
+            contextSize = generationDraft.contextSize.toIntOrNull()
+                ?.coerceIn(LocalGenerationSettings.MIN_CONTEXT_SIZE, LocalGenerationSettings.MAX_CONTEXT_SIZE)
+                ?: existing.contextSize,
+            seed = generationDraft.seed.toIntOrNull() ?: existing.seed,
+            systemPromptOverride = generationDraft.systemPrompt.trim(),
+            templateOverrideId = templateId,
+            experimentalStructuredJson = generationDraft.structuredJson,
+            computeBackend = generationDraft.computeBackend,
+            cpuThreads = generationDraft.cpuThreads.toIntOrNull()?.coerceIn(1, 16) ?: existing.cpuThreads,
+            gpuLayers = generationDraft.gpuLayers.toIntOrNull()?.coerceIn(-1, 999) ?: existing.gpuLayers,
+            modelRuntime = generationDraft.runtime,
+        )
+        LocalModelSettingsRepository.saveForModel(this, model.id, settings)
+        LocalMtpSettingsRepository.setMode(this, model.id, generationDraft.mtpMode)
+        loadGenerationDraft(model)
+        hasUnsavedChanges = false
+        setResult(RESULT_OK)
+        if (showToast) Toast.makeText(this, "Local model settings saved", Toast.LENGTH_SHORT).show()
+        refreshComposeState()
+        return true
+    }
+
+    private fun launchModelTest() {
+        val model = selectedModel() ?: run {
+            Toast.makeText(this, "Install or select a model first", Toast.LENGTH_SHORT).show()
+            return
         }
-        return assessCatalogEntry(entry).supported
+        saveGenerationSettings(showToast = false)
+        startActivity(
+            Intent(this, LocalModelTestActivity::class.java)
+                .putExtra(LocalModelTestActivity.EXTRA_MODEL_ID, model.id),
+        )
+    }
+
+    private fun mtpSupportFor(model: InstalledLocalModel?): Boolean? {
+        if (model == null || generationDraft.runtime != LocalModelRuntime.LITERT) return null
+        val file = File(model.absolutePath)
+        if (!file.exists()) return false
+        return LiteRtLocalInferenceEngine.supportsSpeculativeDecoding(file.absolutePath)
+    }
+
+    private fun mtpStatusFor(model: InstalledLocalModel?, supported: Boolean?): String {
+        if (model == null) return "Select a LiteRT-LM model to inspect MTP support."
+        if (generationDraft.runtime != LocalModelRuntime.LITERT) {
+            return "MTP is available only for compatible LiteRT-LM packages."
+        }
+        if (supported != true) return "Not supported by this model package."
+        val file = File(model.absolutePath)
+        val record = LocalMtpSettingsRepository.getBenchmark(
+            context = this,
+            modelId = model.id,
+            backend = generationDraft.computeBackend,
+            modelSignature = LocalMtpSettingsRepository.modelSignature(file.absolutePath, file.length(), file.lastModified()),
+        )
+        return when {
+            generationDraft.mtpMode == LocalMtpMode.ON -> "Supported • forced on."
+            generationDraft.mtpMode == LocalMtpMode.OFF -> "Supported • forced off."
+            record == null -> "Supported • Automatic uses MTP until this device/backend is benchmarked."
+            record.recommendMtp -> "Supported • Automatic recommends MTP (${format2(record.mtpOnOutputTokensPerSecond)} vs ${format2(record.mtpOffOutputTokensPerSecond)} tok/s)."
+            else -> "Supported • Automatic keeps MTP off (${format2(record.mtpOnOutputTokensPerSecond)} vs ${format2(record.mtpOffOutputTokensPerSecond)} tok/s)."
+        }
     }
 
     private fun requestDownload(entry: LocalModelCatalogEntry) {
-        if (isDownloadInFlight) {
+        if (ModelDownloadForegroundService.isDownloading) {
             Toast.makeText(this, "A model download is already in progress", Toast.LENGTH_SHORT).show()
             return
         }
-
-        if (entry.sourceUrl.isNullOrBlank()) {
-            Toast.makeText(this, "No direct source URL for this entry. Use manual import.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        val hfToken = LocalModelsPrefs.getHuggingFaceToken(this).trim().ifBlank { null }
-        if (entry.gatedDownload && hfToken == null) {
-            Toast.makeText(
-                this,
-                "This model is gated. Add a Hugging Face token below after accepting model terms.",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
-
-        val assessment = DeviceCapabilityService.assess(
-            snapshot = DeviceCapabilityService.snapshot(this),
-            entry = entry,
-            requireDownloadHeadroom = true,
-        )
+        val assessment = assessCatalogEntry(entry)
         if (!assessment.supported) {
             Toast.makeText(this, assessment.blockers.joinToString(" "), Toast.LENGTH_LONG).show()
             return
         }
-
-        val continueDownload = {
-            showDownloadStarted(entry)
-            ModelDownloadForegroundService.startDownload(this, entry.id, hfToken)
+        val token = generationDraft.huggingFaceToken.trim().ifBlank { null }
+        if (entry.gatedDownload && token == null) {
+            Toast.makeText(this, "Add a Hugging Face token after accepting the model terms.", Toast.LENGTH_LONG).show()
+            return
         }
-
+        val start = {
+            downloadState = LocalModelDownloadUiState(isInFlight = true, message = "Starting ${entry.displayName}…")
+            refreshComposeState()
+            ModelDownloadForegroundService.startDownload(this, entry.id, token)
+        }
         if (assessment.warnings.isNotEmpty()) {
             AlertDialog.Builder(this)
                 .setTitle("Device warning")
                 .setMessage(assessment.warnings.joinToString("\n"))
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Continue") { _, _ -> continueDownload() }
+                .setPositiveButton("Continue") { _, _ -> start() }
                 .show()
-        } else {
-            continueDownload()
-        }
+        } else start()
     }
 
-    private fun showDownloadStarted(entry: LocalModelCatalogEntry) {
-        isDownloadInFlight = true
-        downloadingModelId = entry.id
-        progressDownload.visibility = View.VISIBLE
-        progressDownload.isIndeterminate = true
-        progressDownload.progress = 0
-        tvDownloadProgress.text = "Starting download: ${entry.displayName}"
-        btnCancelDownload.isEnabled = true
-        syncDownloadButtonsState()
-        syncDownloadCardVisibility()
-        syncComposeState?.invoke()
-    }
-
-    private fun showDownloadFinished(message: String, success: Boolean) {
-        isDownloadInFlight = false
-        downloadingModelId = null
-        if (success) {
-            progressDownload.visibility = View.VISIBLE
-            progressDownload.isIndeterminate = false
-            progressDownload.setProgressCompat(100, false)
-        } else {
-            progressDownload.visibility = View.GONE
-            progressDownload.progress = 0
+    private fun syncDownloadStateFromService() {
+        if (ModelDownloadForegroundService.isDownloading) {
+            downloadState = LocalModelDownloadUiState(
+                isInFlight = true,
+                message = ModelDownloadForegroundService.lastStatusMessage ?: "Downloading…",
+                progressPercent = ModelDownloadForegroundService.lastPercent,
+            )
+        } else if (downloadState.isInFlight) {
+            downloadState = LocalModelDownloadUiState()
         }
-        tvDownloadProgress.text = message
-        syncDownloadButtonsState()
-        syncDownloadCardVisibility()
-        syncComposeState?.invoke()
     }
 
     private fun registerDownloadReceiver() {
@@ -1060,43 +516,30 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                 when (intent.action) {
                     ModelDownloadForegroundService.BROADCAST_PROGRESS -> {
                         val pct = intent.getIntExtra(ModelDownloadForegroundService.EXTRA_PERCENT, 0)
-                        val downloaded = intent.getLongExtra(ModelDownloadForegroundService.EXTRA_DOWNLOADED_BYTES, 0)
-                        val total = intent.getLongExtra(ModelDownloadForegroundService.EXTRA_TOTAL_BYTES, 0)
-                        if (pct > 0) {
-                            progressDownload.visibility = View.VISIBLE
-                            progressDownload.isIndeterminate = false
-                            progressDownload.setProgressCompat(pct, true)
-                            val done = humanSize(downloaded)
-                            val totalStr = if (total > 0) humanSize(total) else "?"
-                            tvDownloadProgress.text = "Downloading: $pct% ($done / $totalStr)"
-                            syncDownloadCardVisibility()
-                            syncComposeState?.invoke()
-                        }
+                        val downloaded = intent.getLongExtra(ModelDownloadForegroundService.EXTRA_DOWNLOADED_BYTES, 0L)
+                        val total = intent.getLongExtra(ModelDownloadForegroundService.EXTRA_TOTAL_BYTES, 0L)
+                        downloadState = LocalModelDownloadUiState(
+                            isInFlight = true,
+                            message = "Downloading: $pct% (${humanSize(downloaded)} / ${if (total > 0) humanSize(total) else "?"})",
+                            progressPercent = pct.takeIf { it > 0 },
+                        )
+                        refreshComposeState()
                     }
                     ModelDownloadForegroundService.BROADCAST_DOWNLOAD_FINISHED -> {
                         val success = intent.getBooleanExtra(ModelDownloadForegroundService.EXTRA_SUCCESS, false)
                         val error = intent.getStringExtra(ModelDownloadForegroundService.EXTRA_ERROR)
-                        if (success) {
-                            showDownloadFinished("Download complete", success = true)
-                            refreshAllUi()
-                        } else if (error != "cancelled") {
-                            showDownloadFinished("Download failed: $error", success = false)
-                            Toast.makeText(
-                                this@LocalModelsConfigureActivity,
-                                error ?: "Download failed",
-                                Toast.LENGTH_LONG,
-                            ).show()
-                        } else {
-                            showDownloadFinished("Download cancelled", success = false)
-                        }
+                        downloadState = LocalModelDownloadUiState(
+                            message = if (success) "Download complete" else "Download failed: ${error ?: "unknown error"}",
+                        )
+                        if (success) refreshAllUi(loadDrafts = true) else refreshComposeState()
                     }
                 }
             }
         }
         downloadReceiver = receiver
         val filter = IntentFilter().apply {
-            addAction(ModelDownloadForegroundService.BROADCAST_DOWNLOAD_FINISHED)
             addAction(ModelDownloadForegroundService.BROADCAST_PROGRESS)
+            addAction(ModelDownloadForegroundService.BROADCAST_DOWNLOAD_FINISHED)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -1105,52 +548,20 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
         }
     }
 
-    private fun unregisterDownloadReceiver() {
-        downloadReceiver?.let { receiver ->
-            runCatching { unregisterReceiver(receiver) }
-        }
-    }
-
-    private fun syncDownloadButtonsState() {
-        val shouldShowStarter = installedModels.isEmpty()
-        btnDownloadStarter.visibility = if (shouldShowStarter) View.VISIBLE else View.GONE
-        val starter = LocalModelCatalogRepository.findById("gemma4-e2b-it-litert")
-        btnDownloadStarter.isEnabled = shouldShowStarter && starter?.let { canDownloadCatalogEntry(it, null) } == true
-
-        catalogDownloadButtons.forEach { button ->
-            val canDownloadWhenIdle = button.tag as? Boolean ?: false
-            button.isEnabled = canDownloadWhenIdle && !isDownloadInFlight
-        }
-
-        btnCancelDownload.visibility = if (isDownloadInFlight) View.VISIBLE else View.GONE
-    }
-
-    private fun syncDownloadCardVisibility() {
-        cardDownloadProgress.visibility = if (
-            isDownloadInFlight || tvDownloadProgress.text?.isNotBlank() == true
-        ) {
-            View.VISIBLE
-        } else {
-            View.GONE
-        }
-    }
-
     private fun importModel(uri: Uri) {
         lifecycleScope.launch {
-            tvDownloadProgress.text = "Importing model..."
-            syncDownloadCardVisibility()
-            syncComposeState?.invoke()
+            downloadState = LocalModelDownloadUiState(isInFlight = true, message = "Importing model…")
+            refreshComposeState()
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val name = guessDisplayName(uri)
                     val file = LocalModelStorageRepository.copyUriToManagedModelFile(
                         context = this@LocalModelsConfigureActivity,
                         uri = uri,
-                        preferredName = name,
+                        preferredName = guessDisplayName(uri),
                     )
                     if (!LocalModelFileUtils.isSupportedModelFile(file)) {
                         file.delete()
-                        throw IllegalStateException("Imported file must be GGUF or LiteRT (.litertlm/.task)")
+                        error("Imported file must be GGUF or LiteRT (.litertlm/.task)")
                     }
                     LocalModelStorageRepository.registerImportedModel(
                         context = this@LocalModelsConfigureActivity,
@@ -1159,712 +570,325 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                     )
                 }
             }
-
-            result.onSuccess {
-                tvDownloadProgress.text = "Import complete: ${it.displayName}"
-                syncDownloadCardVisibility()
-                Toast.makeText(this@LocalModelsConfigureActivity, "Imported ${it.displayName}", Toast.LENGTH_SHORT).show()
-                refreshAllUi()
-            }.onFailure { err ->
-                tvDownloadProgress.text = "Import failed: ${err.message}"
-                syncDownloadCardVisibility()
-                Toast.makeText(this@LocalModelsConfigureActivity, err.message ?: "Import failed", Toast.LENGTH_LONG).show()
-                syncComposeState?.invoke()
-            }
+            result.fold(
+                onSuccess = {
+                    downloadState = LocalModelDownloadUiState(message = "Import complete: ${it.displayName}")
+                    refreshAllUi(loadDrafts = true)
+                },
+                onFailure = {
+                    downloadState = LocalModelDownloadUiState(message = "Import failed: ${it.message}")
+                    refreshComposeState()
+                },
+            )
         }
     }
 
     private fun guessDisplayName(uri: Uri): String {
-        val defaultName = "imported-model.gguf"
-        if (uri.scheme == "file") {
-            return File(uri.path.orEmpty()).name.ifBlank { defaultName }
-        }
-
-        val cursor = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val idx = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (idx >= 0) {
-                    val name = it.getString(idx)
-                    if (!name.isNullOrBlank()) return name
-                }
+        if (uri.scheme == "file") return File(uri.path.orEmpty()).name.ifBlank { "imported-model.gguf" }
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) return cursor.getString(index).orEmpty().ifBlank { "imported-model.gguf" }
             }
         }
-        return defaultName
+        return "imported-model.gguf"
     }
 
-    private fun loadSettingsForSelectedModel() {
-        val model = selectedInstalledModel() ?: run {
-            clearSettingsInputs()
-            return
+    private fun unloadSelectedModel() {
+        lifecycleScope.launch {
+            LocalChatSessionManager.unload()
+            Toast.makeText(this@LocalModelsConfigureActivity, "Local model unloaded", Toast.LENGTH_SHORT).show()
+            refreshComposeState()
         }
-        val settings = LocalModelSettingsRepository.getForModel(this, model.id)
-        suppressProfileSelection = true
-        spinnerProfile.setSelection(settings.profile.ordinal)
-        suppressProfileSelection = false
-        applySettingsToInputs(settings)
-
-        val templates = com.fersaiyan.cyanbridge.localmodels.templates.PromptTemplateRegistry.templates
-        val idx = templates.indexOfFirst { it.id == settings.templateOverrideId }
-        spinnerTemplateOverride.setSelection(if (idx >= 0) idx + 1 else 0)
     }
 
-    private fun applySettingsToInputs(settings: LocalGenerationSettings) {
-        editTemperature.setText(settings.temperature.toString())
-        spinnerModelRuntime.setSelection(settings.modelRuntime.ordinal)
-        spinnerComputeBackend.setSelection(settings.computeBackend.ordinal)
-        editCpuThreads.setText(settings.cpuThreads.toString())
-        editGpuLayers.setText(settings.gpuLayers.toString())
-        editTopP.setText(settings.topP.toString())
-        editTopK.setText(settings.topK.toString())
-        editMaxTokens.setText(settings.maxTokens.toString())
-        editRepPenalty.setText(settings.repetitionPenalty.toString())
-        editContextSize.setText(settings.contextSize.toString())
-        editSeed.setText(settings.seed.toString())
-        editSystemPrompt.setText(settings.systemPromptOverride)
-        switchExperimentalJson.isChecked = settings.experimentalStructuredJson
-        updateRuntimeUi()
-        updateComputeBackendUi()
-    }
-
-    private fun clearSettingsInputs() {
-        editTemperature.setText("")
-        spinnerModelRuntime.setSelection(LocalModelRuntime.LLAMA_CPP.ordinal)
-        spinnerComputeBackend.setSelection(LocalComputeBackend.CPU.ordinal)
-        editCpuThreads.setText(LocalGenerationSettings.defaultCpuThreads().toString())
-        editGpuLayers.setText("35")
-        editTopP.setText("")
-        editTopK.setText("")
-        editMaxTokens.setText("")
-        editRepPenalty.setText("")
-        editContextSize.setText("")
-        editSeed.setText("")
-        editSystemPrompt.setText("")
-        switchExperimentalJson.isChecked = false
-        updateRuntimeUi()
-        updateComputeBackendUi()
-    }
-
-    private fun saveCurrentSettings() {
-        val model = selectedInstalledModel()
-        if (model == null) {
-            LocalModelsPrefs.setHuggingFaceToken(this, editHfToken.text?.toString().orEmpty())
-            markHuggingFaceTokenSaved()
-            Toast.makeText(this, "Saved token. Install a model to save generation settings.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val existing = LocalModelSettingsRepository.getForModel(this, model.id)
-        val profile = LocalModelPerformanceProfile.entries[spinnerProfile.selectedItemPosition]
-        val parsedMaxTokens = parseBoundedIntInput(
-            raw = editMaxTokens.text?.toString(),
-            min = LocalGenerationSettings.MIN_MAX_TOKENS,
-            max = LocalGenerationSettings.MAX_MAX_TOKENS,
-        )
-        val parsedContextSize = parseBoundedIntInput(
-            raw = editContextSize.text?.toString(),
-            min = LocalGenerationSettings.MIN_CONTEXT_SIZE,
-            max = LocalGenerationSettings.MAX_CONTEXT_SIZE,
-        )
-        val settings = LocalGenerationSettings(
-            profile = profile,
-            temperature = editTemperature.text.toString().toDoubleOrNull()?.coerceIn(0.0, 2.0)
-                ?: existing.temperature,
-            topP = editTopP.text.toString().toDoubleOrNull()?.coerceIn(0.0, 1.0)
-                ?: existing.topP,
-            topK = editTopK.text.toString().toIntOrNull()?.coerceIn(0, 200)
-                ?: existing.topK,
-            maxTokens = parsedMaxTokens ?: existing.maxTokens,
-            repetitionPenalty = editRepPenalty.text.toString().toDoubleOrNull()?.coerceIn(0.8, 2.0)
-                ?: existing.repetitionPenalty,
-            contextSize = parsedContextSize ?: existing.contextSize,
-            seed = editSeed.text.toString().toIntOrNull() ?: existing.seed,
-            systemPromptOverride = editSystemPrompt.text?.toString().orEmpty().trim(),
-            templateOverrideId = selectedTemplateOverrideId(),
-            experimentalStructuredJson = switchExperimentalJson.isChecked,
-            modelRuntime = selectedModelRuntimeFromUi(),
-            computeBackend = selectedComputeBackendFromUi(),
-            cpuThreads = parseCpuThreadsInput(fallback = existing.cpuThreads),
-            gpuLayers = parseGpuLayersInput(fallback = existing.gpuLayers),
-        )
-
-        LocalModelSettingsRepository.saveForModel(this, model.id, settings)
-        LocalModelsPrefs.setHuggingFaceToken(this, editHfToken.text?.toString().orEmpty())
-        applySettingsToInputs(settings)
-        Toast.makeText(
-            this,
-            "Saved: max output ${settings.maxTokens}, context ${settings.contextSize}",
-            Toast.LENGTH_SHORT,
-        ).show()
-        setResult(RESULT_OK)
-        markGenerationSettingsSaved()
-        syncComposeState?.invoke()
-    }
-
-    private fun selectedTemplateOverrideId(): String? {
-        val pos = spinnerTemplateOverride.selectedItemPosition
-        if (pos <= 0) return null
-        return com.fersaiyan.cyanbridge.localmodels.templates.PromptTemplateRegistry.templates
-            .getOrNull(pos - 1)
-            ?.id
-    }
-
-    private fun runWarmupProbe() {
-        if (warmupJob?.isActive == true) {
-            Log.i("LocalModelsConfigureActivity", "Ignoring duplicate model-test request while a test is active")
-            return
-        }
-
-        val model = selectedInstalledModel()
-        if (model == null) {
-            Toast.makeText(this, "Install or select a model first", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val settings = LocalModelSettingsRepository.getForModel(this, model.id)
-        val entry = LocalModelCatalogRepository.findById(model.catalogId)
-
-        tvWarmupResult.text = "Testing model..."
-        syncComposeState?.invoke()
-        warmupJob = lifecycleScope.launch {
-            val outcome = runCatching {
-                withContext(Dispatchers.IO) {
-                    val loadDetails = LocalChatSessionManager.ensureModelLoaded(
-                        context = this@LocalModelsConfigureActivity,
-                        model = model,
-                        catalogEntry = entry,
-                        settings = settings,
-                    )
-                    val warmup = LocalChatSessionManager.runWarmupProbe(
-                        settings = settings,
-                        onToken = {},
-                    )
-                    loadDetails to warmup
-                }
+    private fun confirmRemoveSelectedModel() {
+        val model = selectedModel() ?: return
+        AlertDialog.Builder(this)
+            .setTitle("Remove model?")
+            .setMessage("Delete ${model.displayName} from local storage?")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Remove") { _, _ ->
+                lifecycleScope.launch { runCatching { LocalChatSessionManager.unload() } }
+                LocalModelStorageRepository.removeInstalled(this, model.id)
+                LocalModelSettingsRepository.clearForModel(this, model.id)
+                LocalMtpSettingsRepository.clearForModel(this, model.id)
+                refreshAllUi(loadDrafts = true)
             }
-
-            if (!isFinishing && !isDestroyed) {
-                outcome.fold(
-                    onSuccess = { (loadDetails, result) ->
-                        runCatching {
-                            val msg = LocalModelTestSummary.success(
-                                generatedTokens = result.generatedTokens,
-                                elapsedMs = result.elapsedMs,
-                                backend = result.backend,
-                                activeGpuLayers = loadDetails.activeGpuLayers,
-                                fallbackReason = loadDetails.fallbackReason,
-                            )
-                            Log.i("LocalModelsConfigureActivity", msg)
-                            tvWarmupResult.text = msg
-                            LocalModelsPrefs.setLastBenchmark(this@LocalModelsConfigureActivity, msg)
-                            val isAccel = result.backend == LocalComputeBackend.GPU || result.backend == LocalComputeBackend.NPU_EXPERIMENTAL
-                            if (!loadDetails.fallbackReason.isNullOrBlank() && !isAccel) {
-                                Toast.makeText(this@LocalModelsConfigureActivity, loadDetails.fallbackReason, Toast.LENGTH_LONG).show()
-                            }
-                            syncComposeState?.invoke()
-                        }.onFailure { uiErr ->
-                            tvWarmupResult.text = "Model test failed: ${uiErr.message ?: "unexpected UI error"}"
-                            syncComposeState?.invoke()
-                        }
-                    },
-                    onFailure = { err ->
-                        if (err is CancellationException) {
-                            tvWarmupResult.text = "Model test cancelled"
-                        } else {
-                            Log.e("LocalModelsConfigureActivity", "Model test failed", err)
-                            tvWarmupResult.text = "Model test failed: ${err.message ?: "unknown error"}"
-                            val shouldOfferLogs =
-                                selectedModelRuntimeFromUi() == LocalModelRuntime.LITERT ||
-                                    selectedComputeBackendFromUi() != LocalComputeBackend.CPU ||
-                                    DebugLogSupport.isLocalRuntimeIssue(err.message, err)
-                            if (shouldOfferLogs) {
-                                DebugLogSupport.showSupportOptionsDialog(
-                                    activity = this@LocalModelsConfigureActivity,
-                                    title = "Local runtime issue",
-                                    issueType = "Local runtime issue",
-                                    description = "The local model test failed. This can help diagnose LiteRT, Vulkan, or GPU initialization issues.",
-                                    extraInfo = linkedMapOf(
-                                        "screen" to "local_models_configure",
-                                        "selected_runtime" to selectedModelRuntimeFromUi().name,
-                                        "selected_backend" to selectedComputeBackendFromUi().name,
-                                    ),
-                                )
-                            }
-                            syncComposeState?.invoke()
-                        }
-                    },
-                )
-            }
-        }
-    }
-
-    private fun selectedModelRuntimeFromUi(): LocalModelRuntime {
-        return LocalModelRuntime.entries.getOrElse(spinnerModelRuntime.selectedItemPosition) {
-            LocalModelRuntime.LLAMA_CPP
-        }
-    }
-
-    private fun selectedComputeBackendFromUi(): LocalComputeBackend {
-        return LocalComputeBackend.entries.getOrElse(spinnerComputeBackend.selectedItemPosition) {
-            LocalComputeBackend.CPU
-        }
-    }
-
-    private fun parseCpuThreadsInput(fallback: Int): Int {
-        return editCpuThreads.text?.toString()?.toIntOrNull()?.coerceIn(1, 16)
-            ?: fallback.coerceIn(1, 16)
-    }
-
-    private fun parseGpuLayersInput(fallback: Int): Int {
-        return editGpuLayers.text?.toString()?.toIntOrNull()?.coerceIn(-1, 999)
-            ?: fallback.coerceIn(-1, 999)
-    }
-
-    private fun parseBoundedIntInput(raw: String?, min: Int, max: Int): Int? {
-        val cleaned = raw
-            ?.trim()
-            ?.replace(",", "")
-            ?.replace("_", "")
-            ?.replace(" ", "")
-            .orEmpty()
-        if (cleaned.isBlank()) return null
-        return cleaned.toIntOrNull()?.coerceIn(min, max)
-    }
-
-    private fun updateComputeBackendUi() {
-        val runtime = selectedModelRuntimeFromUi()
-        val backend = selectedComputeBackendFromUi()
-        val selectedModel = selectedInstalledModel()
-        val catalogEntry = selectedModel?.catalogId?.let { LocalModelCatalogRepository.findById(it) }
-        val isAccel = backend == LocalComputeBackend.GPU || backend == LocalComputeBackend.NPU_EXPERIMENTAL
-        editGpuLayers.isEnabled = isAccel
-
-        val baseNote = when (backend) {
-            LocalComputeBackend.NPU_EXPERIMENTAL ->
-                "NPU (Experimental) delegate uses Snapdragon NPU or NNAPI hardware acceleration where available."
-            LocalComputeBackend.GPU ->
-                if (runtime == LocalModelRuntime.LITERT) {
-                    "LiteRT GPU backend uses Adreno GPU hardware acceleration. If GPU init fails, CyanBridge falls back to CPU."
-                } else {
-                    "GPU backend offloads model layers to GPU. Use -1 for auto layer offload. If GPU init fails, the app falls back to CPU."
-                }
-            LocalComputeBackend.CPU ->
-                if (runtime == LocalModelRuntime.LITERT) {
-                    "LiteRT CPU mode is safest for first runs. Move to GPU or NPU after a successful model test."
-                } else {
-                    "CPU mode is the most compatible option. Increase CPU threads for speed if your device remains responsive."
-                }
-        }
-
-        val npuWarning = if (backend == LocalComputeBackend.NPU_EXPERIMENTAL && catalogEntry?.npuSupported != true) {
-            "\n⚠️ Note: Standard GGUF / LiteRT packages are not NPU-compiled. Selecting CPU or GPU is recommended unless using an NPU-compiled package."
-        } else ""
-
-        tvComputeBackendNote.text = "$baseNote$npuWarning"
-    }
-
-    private fun updateRuntimeUi() {
-        val runtime = selectedModelRuntimeFromUi()
-        tvModelRuntimeNote.text = when (runtime) {
-            LocalModelRuntime.LLAMA_CPP -> "Use llama.cpp for GGUF models."
-            LocalModelRuntime.LITERT -> "Use LiteRT for Google LiteRT-LM packages (.litertlm/.task)."
-            LocalModelRuntime.REMOTE_OPENAI -> "Use a remote server on your LAN or Tailnet. Configure it in the Remote Server section above."
-        }
-        tvEngineStatus.text = "Selected runtime: ${runtime.label}"
-        updateComputeBackendUi()
+            .show()
     }
 
     private fun showSelectedModelInfo() {
-        val selected = selectedInstalledModel()
-        if (selected == null) {
-            Toast.makeText(this, "No model selected", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val exists = File(selected.absolutePath).exists()
+        val model = selectedModel() ?: return
+        val entry = LocalModelCatalogRepository.findById(model.catalogId)
         AlertDialog.Builder(this)
-            .setTitle(selected.displayName)
+            .setTitle(model.displayName)
             .setMessage(
-                buildString {
-                    appendLine("Family: ${LocalModelCatalogRepository.findById(selected.catalogId)?.family ?: "custom"}")
-                    appendLine("Quantization: ${selected.quantization ?: "unknown"}")
-                    appendLine("Size: ${humanSize(selected.sizeBytes)}")
-                    appendLine("Template: ${selected.promptTemplateId ?: "auto"}")
-                    appendLine("Location: ${selected.absolutePath}")
-                    appendLine("Status: ${if (exists) "ready" else "failed (missing file)"}")
-                    appendLine("SHA-256: ${selected.sha256 ?: "n/a"}")
-                    appendLine("License: ${selected.licenseTermsNote ?: "Check source model card"}")
-                }
+                "Family: ${entry?.family ?: "custom"}\n" +
+                    "Runtime: ${generationDraft.runtime.label}\n" +
+                    "Quantization: ${model.quantization ?: "unknown"}\n" +
+                    "Size: ${humanSize(model.sizeBytes)}\n" +
+                    "Location: ${model.absolutePath}",
             )
             .setPositiveButton("Close", null)
             .show()
     }
 
-    private fun showCatalogInfo(entry: LocalModelCatalogEntry, installed: Boolean) {
+    private fun showCatalogInfo(entry: LocalModelCatalogEntry) {
         AlertDialog.Builder(this)
             .setTitle(entry.displayName)
             .setMessage(
-                buildString {
-                    appendLine("Family: ${entry.family}")
-                    appendLine("Runtime: ${entry.engine}")
-                    appendLine("Format: ${entry.format}")
-                    appendLine("Quantization: ${entry.quantization}")
-                    appendLine("File size: ${humanSize(entry.sizeBytes)}")
-                    appendLine("Prompt template: ${entry.promptTemplateId}")
-                    appendLine("RAM tier: ${entry.minRamGb} GB+")
-                    appendLine("Storage tier: ${entry.minStorageGb} GB+")
-                    appendLine("Source: ${entry.sourcePageUrl ?: entry.sourceUrl ?: "manual import"}")
-                    appendLine("Status: ${if (installed) "ready" else statusText(entry, null)}")
-                    appendLine("License/terms: ${entry.licenseTermsNote}")
-                }
+                "${entry.shortDescription}\n\nRuntime: ${entry.engine}\nFormat: ${entry.format}\n" +
+                    "Quantization: ${entry.quantization}\nSize: ${humanSize(entry.sizeBytes)}\n" +
+                    "RAM minimum: ${entry.minRamGb} GB\nLicense: ${entry.licenseTermsNote}",
             )
             .setNegativeButton("Close", null)
-            .setPositiveButton("Open Source") { _, _ ->
-                val url = entry.sourcePageUrl ?: entry.sourceUrl
-                if (url.isNullOrBlank()) return@setPositiveButton
-                runCatching {
-                    startActivity(
-                        android.content.Intent(
-                            android.content.Intent.ACTION_VIEW,
-                            Uri.parse(url),
-                        ),
-                    )
-                }
+            .setPositiveButton("Open source") { _, _ ->
+                val url = entry.sourcePageUrl ?: entry.sourceUrl ?: return@setPositiveButton
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             }
             .show()
     }
 
-    private fun humanSize(bytes: Long): String {
-        if (bytes <= 0L) return "0 B"
-        val kb = 1024.0
-        val mb = kb * 1024.0
-        val gb = mb * 1024.0
-        val b = bytes.toDouble()
-        return when {
-            b >= gb -> String.format("%.2f GB", b / gb)
-            b >= mb -> String.format("%.1f MB", b / mb)
-            b >= kb -> String.format("%.1f KB", b / kb)
-            else -> "$bytes B"
+    private fun saveRemoteServerConfig(showToast: Boolean): Boolean {
+        val url = remoteDraft.baseUrl.trim()
+        val model = remoteDraft.model.trim()
+        val key = remoteDraft.apiKey.trim()
+        if (remoteDraft.enabled && (url.isBlank() || model.isBlank())) {
+            Toast.makeText(this, "Base URL and model name are required.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        if (key.isNotBlank() && !RemoteOpenAiPrefs.isCredentialTransportAllowed(url)) {
+            Toast.makeText(this, "API keys require HTTPS, a private LAN address, or a Tailscale address.", Toast.LENGTH_LONG).show()
+            return false
+        }
+        RemoteOpenAiPrefs.setBaseUrl(this, url)
+        RemoteOpenAiPrefs.setModel(this, model)
+        RemoteOpenAiPrefs.setApiKey(this, key)
+        RemoteOpenAiPrefs.setEnabled(this, remoteDraft.enabled)
+        remoteDraft = remoteDraft.copy(
+            status = if (remoteDraft.enabled) "Active: $model @ $url" else "Saved (disabled)",
+        )
+        studioDraft = studioDraft.copy(apiKey = key)
+        hasUnsavedChanges = false
+        if (showToast) Toast.makeText(this, "Remote server settings saved", Toast.LENGTH_SHORT).show()
+        refreshComposeState()
+        return true
+    }
+
+    private fun testRemoteServerConnection() {
+        if (!saveRemoteServerConfig(showToast = false)) return
+        remoteDraft = remoteDraft.copy(status = "Testing connection…")
+        refreshComposeState()
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { RemoteOpenAiClient.healthCheck(this@LocalModelsConfigureActivity) }
+            }
+            remoteDraft = remoteDraft.copy(
+                status = result.fold(
+                    onSuccess = { "Connection: $it" },
+                    onFailure = { "Connection failed: ${it.message}" },
+                ),
+            )
+            refreshComposeState()
         }
     }
 
+    private fun saveStudioBridgeConfig() {
+        val enabled = studioDraft.enabled
+        val key = studioDraft.apiKey.trim()
+        if (enabled) {
+            val baseUrl = RemoteOpenAiPrefs.getBaseUrl(this)
+            if (baseUrl.isBlank() || RemoteOpenAiPrefs.getModel(this).isBlank()) {
+                Toast.makeText(this, "Configure the Remote model server first.", Toast.LENGTH_LONG).show()
+                return
+            }
+            if (key.isBlank()) {
+                Toast.makeText(this, "Studio API key is required.", Toast.LENGTH_SHORT).show()
+                return
+            }
+            if (!RemoteOpenAiPrefs.isCredentialTransportAllowed(baseUrl)) {
+                Toast.makeText(this, "Studio credentials require HTTPS, LAN, or Tailscale transport.", Toast.LENGTH_LONG).show()
+                return
+            }
+            if (!android.speech.SpeechRecognizer.isRecognitionAvailable(this)) {
+                Toast.makeText(this, "No speech recognizer is available on this device.", Toast.LENGTH_LONG).show()
+                return
+            }
+            if (!PluginVoicePermissions.hasRequiredPermissions(this)) {
+                PluginVoicePermissions.ensure(this) { saveStudioBridgeConfig() }
+                return
+            }
+            RemoteOpenAiPrefs.setApiKey(this, key)
+            remoteDraft = remoteDraft.copy(apiKey = key)
+        }
+        RemoteOpenAiPrefs.setBridgeEnabled(this, enabled)
+        val app = application as? MyApplication
+        studioDraft = if (enabled) {
+            val started = app?.startStudioBridge() == true
+            studioDraft.copy(status = if (started) "Bridge connecting…" else "Bridge could not start. Check server/model settings.")
+        } else {
+            app?.stopStudioBridge()
+            studioDraft.copy(status = "")
+        }
+        hasUnsavedChanges = false
+        refreshComposeState()
+    }
+
+    private fun showApiKeyHelpDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("CyanBridge Model Studio API key")
+            .setMessage(
+                "Open CyanBridge Model Studio on your other device, go to Settings → API Keys, " +
+                    "create a key, and paste it here. The Remote model server URL/model above are used by Studio Bridge.",
+            )
+            .setPositiveButton("Got it", null)
+            .show()
+    }
+
+    private fun toggleSection(section: LocalModelsSection) {
+        val key = sectionKey(section)
+        sectionPrefs.edit().putBoolean(key, !sectionExpanded(section)).apply()
+        refreshComposeState()
+    }
+
+    private fun sectionExpanded(section: LocalModelsSection): Boolean =
+        sectionPrefs.getBoolean(sectionKey(section), false)
+
+    private fun sectionKey(section: LocalModelsSection) = "section_${section.name.lowercase(Locale.US)}"
+
     private fun requestClose() {
-        if (!hasUnsavedSettings()) {
+        if (!hasUnsavedChanges) {
             finish()
             return
         }
-
         AlertDialog.Builder(this)
             .setTitle("Unsaved changes")
-            .setMessage("Your local-model settings have changed. Leave without saving?")
+            .setMessage("Leave without saving your Local Models changes?")
             .setNegativeButton("Keep editing", null)
             .setPositiveButton("Discard") { _, _ -> finish() }
             .show()
     }
 
-    private fun hasUnsavedSettings(): Boolean {
-        return savedSettingsSnapshot?.let { it != currentSettingsSnapshot() } == true
+    private fun selectedModel(): InstalledLocalModel? =
+        LocalModelStorageRepository.resolveSelectedModel(this)
+
+    private fun assessCatalogEntry(entry: LocalModelCatalogEntry) = DeviceCapabilityService.assess(
+        snapshot = deviceSnapshot ?: DeviceCapabilityService.snapshot(this).also { deviceSnapshot = it },
+        entry = entry,
+        requireDownloadHeadroom = !entry.sourceUrl.isNullOrBlank(),
+    )
+
+    private fun canDownload(entry: LocalModelCatalogEntry, installed: InstalledLocalModel?): Boolean {
+        if (installed != null || !entry.enabled || entry.comingSoon || entry.sourceUrl.isNullOrBlank()) return false
+        if (ModelDownloadForegroundService.isDownloading) return false
+        if (entry.gatedDownload && generationDraft.huggingFaceToken.isBlank()) return false
+        return assessCatalogEntry(entry).supported
     }
 
-    private fun currentSettingsSnapshot(): SettingsSnapshot {
-        fun text(view: TextInputEditText): String = view.text?.toString().orEmpty()
-
-        return SettingsSnapshot(
-            selectedModelId = selectedInstalledModel()?.id,
-            generation = GenerationInputSnapshot(
-                profile = spinnerProfile.selectedItemPosition,
-                runtime = spinnerModelRuntime.selectedItemPosition,
-                computeBackend = spinnerComputeBackend.selectedItemPosition,
-                cpuThreads = text(editCpuThreads),
-                gpuLayers = text(editGpuLayers),
-                temperature = text(editTemperature),
-                topP = text(editTopP),
-                topK = text(editTopK),
-                maxTokens = text(editMaxTokens),
-                repetitionPenalty = text(editRepPenalty),
-                contextSize = text(editContextSize),
-                seed = text(editSeed),
-                template = spinnerTemplateOverride.selectedItemPosition,
-                structuredJson = switchExperimentalJson.isChecked,
-                systemPrompt = text(editSystemPrompt),
-            ),
-            huggingFaceToken = text(editHfToken),
-            remote = RemoteInputSnapshot(
-                enabled = switchRemoteEnabled.isChecked,
-                baseUrl = text(editRemoteBaseUrl),
-                model = text(editRemoteModel),
-                apiKey = text(editRemoteApiKey),
-            ),
-            studio = StudioInputSnapshot(
-                enabled = switchStudioBridgeEnabled.isChecked,
-                apiKey = text(editStudioBridgeApiKey),
-            ),
-        )
+    private fun statusText(entry: LocalModelCatalogEntry, installed: InstalledLocalModel?): String {
+        if (installed != null) return "Ready"
+        if (entry.comingSoon) return "Coming soon"
+        val assessment = assessCatalogEntry(entry)
+        if (!assessment.supported) return assessment.blockers.joinToString(" ")
+        return assessment.warnings.joinToString(" ").ifBlank { "Compatible with this device" }
     }
 
-    private fun markSettingsSaved() {
-        savedSettingsSnapshot = currentSettingsSnapshot()
-    }
-
-    private fun markGenerationSettingsSaved() {
-        val current = currentSettingsSnapshot()
-        val saved = savedSettingsSnapshot ?: current
-        savedSettingsSnapshot = saved.copy(
-            selectedModelId = current.selectedModelId,
-            generation = current.generation,
-            huggingFaceToken = current.huggingFaceToken,
-        )
-    }
-
-    private fun markGenerationSettingsLoaded() {
-        val current = currentSettingsSnapshot()
-        val saved = savedSettingsSnapshot ?: current
-        savedSettingsSnapshot = saved.copy(
-            selectedModelId = current.selectedModelId,
-            generation = current.generation,
-        )
-    }
-
-    private fun markHuggingFaceTokenSaved() {
-        val current = currentSettingsSnapshot()
-        val saved = savedSettingsSnapshot ?: current
-        savedSettingsSnapshot = saved.copy(huggingFaceToken = current.huggingFaceToken)
-    }
-
-    private fun markRemoteSettingsSaved() {
-        val current = currentSettingsSnapshot()
-        val saved = savedSettingsSnapshot ?: current
-        savedSettingsSnapshot = saved.copy(remote = current.remote)
-    }
-
-    private fun markStudioApiKeySaved() {
-        val current = currentSettingsSnapshot()
-        val saved = savedSettingsSnapshot ?: current
-        savedSettingsSnapshot = saved.copy(
-            studio = saved.studio.copy(apiKey = current.studio.apiKey),
-        )
-    }
-
-    private fun markStudioSettingsSaved(saveApiKey: Boolean) {
-        val current = currentSettingsSnapshot()
-        val saved = savedSettingsSnapshot ?: current
-        savedSettingsSnapshot = saved.copy(
-            studio = current.studio.copy(
-                apiKey = if (saveApiKey) current.studio.apiKey else saved.studio.apiKey,
-            ),
-            remote = if (saveApiKey) {
-                saved.remote.copy(apiKey = current.remote.apiKey)
-            } else {
-                saved.remote
-            },
-        )
-    }
-
-    // --- Remote OpenAI-compatible server ---
-
-    private fun loadRemoteServerConfig() {
-        switchRemoteEnabled.isChecked = RemoteOpenAiPrefs.isEnabled(this)
-        editRemoteBaseUrl.setText(RemoteOpenAiPrefs.getBaseUrl(this))
-        editRemoteModel.setText(RemoteOpenAiPrefs.getModel(this))
-        editRemoteApiKey.setText(RemoteOpenAiPrefs.getApiKey(this))
-        tvRemoteStatus.text = if (RemoteOpenAiPrefs.isActive(this)) {
-            "Active: ${RemoteOpenAiPrefs.getModel(this)} @ ${RemoteOpenAiPrefs.getBaseUrl(this)}"
+    private fun backendNote(backend: LocalComputeBackend, runtime: LocalModelRuntime): String = when (backend) {
+        LocalComputeBackend.GPU -> if (runtime == LocalModelRuntime.LITERT) {
+            "Recommended default. LiteRT uses the device GPU and falls back to CPU if initialization fails."
         } else {
-            ""
+            "Recommended default. llama.cpp offloads compatible layers to the GPU."
         }
-    }
-
-    private fun saveRemoteServerConfig() {
-        val url = editRemoteBaseUrl.text?.toString().orEmpty().trim()
-        val model = editRemoteModel.text?.toString().orEmpty().trim()
-        val apiKey = editRemoteApiKey.text?.toString().orEmpty().trim()
-        val enabled = switchRemoteEnabled.isChecked
-
-        if (enabled && url.isBlank()) {
-            Toast.makeText(this, "Base URL is required when remote server is enabled", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (enabled && model.isBlank()) {
-            Toast.makeText(this, "Model name is required when remote server is enabled", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (apiKey.isNotBlank() && !RemoteOpenAiPrefs.isCredentialTransportAllowed(url)) {
-            Toast.makeText(
-                this,
-                "API keys require HTTPS, a private LAN address, or a Tailscale IP",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
-
-        RemoteOpenAiPrefs.setBaseUrl(this, url)
-        RemoteOpenAiPrefs.setModel(this, model)
-        RemoteOpenAiPrefs.setApiKey(this, apiKey)
-        RemoteOpenAiPrefs.setEnabled(this, enabled)
-        editStudioBridgeApiKey.setText(apiKey)
-
-        val msg = if (enabled) {
-            "Remote server saved: $model @ $url"
+        LocalComputeBackend.CPU -> "Most compatible, but usually slower on modern phones."
+        LocalComputeBackend.NPU_EXPERIMENTAL -> if (runtime == LocalModelRuntime.LITERT) {
+            "Uses LiteRT's NPU backend when the device and model package support it; otherwise CyanBridge falls back to GPU/CPU."
         } else {
-            "Remote server config saved (disabled)"
+            "NPU requires a compatible LiteRT model. llama.cpp does not currently expose CyanBridge's NPU path."
         }
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-        tvRemoteStatus.text = if (enabled) "Active: $model @ $url" else ""
-        if (RemoteOpenAiPrefs.isBridgeEnabled(this)) {
-            val restarted = (application as? com.fersaiyan.cyanbridge.ui.MyApplication)
-                ?.startStudioBridge() == true
-            tvStudioBridgeStatus.text = if (restarted) {
-                "Bridge reconnecting with the updated server settings."
-            } else {
-                "Bridge needs a model and microphone access before it can reconnect."
-            }
-        }
-        setResult(RESULT_OK)
-        markRemoteSettingsSaved()
-        markStudioApiKeySaved()
-        syncComposeState?.invoke()
     }
 
-    private fun testRemoteServerConnection() {
-        // Save current inputs first so the client reads fresh values.
-        saveRemoteServerConfig()
+    private fun runtimeNote(runtime: LocalModelRuntime): String = when (runtime) {
+        LocalModelRuntime.LLAMA_CPP -> "For GGUF models."
+        LocalModelRuntime.LITERT -> "For .litertlm/.task packages, including Gemma 4 multimodal models and MTP-capable packages."
+        LocalModelRuntime.REMOTE_OPENAI -> "Uses the Remote model server configured above."
+    }
 
-        val url = editRemoteBaseUrl.text?.toString().orEmpty().trim()
-        if (url.isBlank()) {
-            tvRemoteStatus.text = "Enter a base URL first"
-            return
+    private fun humanSize(bytes: Long): String {
+        val b = bytes.toDouble()
+        return when {
+            b >= GIB -> String.format(Locale.US, "%.2f GB", b / GIB)
+            b >= MIB -> String.format(Locale.US, "%.1f MB", b / MIB)
+            b >= KIB -> String.format(Locale.US, "%.1f KB", b / KIB)
+            else -> "$bytes B"
         }
+    }
 
-        tvRemoteStatus.text = "Testing connection..."
-        btnRemoteTest.isEnabled = false
-        syncComposeState?.invoke()
+    private fun format1(value: Double) = String.format(Locale.US, "%.1f", value)
+    private fun format2(value: Double) = String.format(Locale.US, "%.2f", value)
 
-        lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching { RemoteOpenAiClient.healthCheck(this@LocalModelsConfigureActivity) }
-            }
-            btnRemoteTest.isEnabled = true
-            result.fold(
-                onSuccess = { status ->
-                    tvRemoteStatus.text = "Connection: $status"
-                    val message = if (status.startsWith("OK")) {
-                        "Server reachable"
-                    } else {
-                        "Connection failed: $status"
-                    }
-                    Toast.makeText(this@LocalModelsConfigureActivity, message, Toast.LENGTH_LONG).show()
-                },
-                onFailure = { err ->
-                    tvRemoteStatus.text = "Connection failed: ${err.message}"
-                    Toast.makeText(this@LocalModelsConfigureActivity, "Connection failed: ${err.message}", Toast.LENGTH_LONG).show()
-                },
+    private data class GenerationDraft(
+        val runtime: LocalModelRuntime = LocalModelRuntime.LLAMA_CPP,
+        val computeBackend: LocalComputeBackend = LocalComputeBackend.GPU,
+        val mtpMode: LocalMtpMode = LocalMtpMode.AUTO,
+        val cpuThreads: String = LocalGenerationSettings.defaultCpuThreads().toString(),
+        val gpuLayers: String = "-1",
+        val temperature: String = LocalGenerationSettings.DEFAULT_TEMPERATURE.toString(),
+        val topP: String = LocalGenerationSettings.DEFAULT_TOP_P.toString(),
+        val topK: String = LocalGenerationSettings.DEFAULT_TOP_K.toString(),
+        val maxTokens: String = LocalGenerationSettings.DEFAULT_MAX_OUTPUT_TOKENS.toString(),
+        val repetitionPenalty: String = LocalGenerationSettings.DEFAULT_REPETITION_PENALTY.toString(),
+        val contextSize: String = "4096",
+        val seed: String = "-1",
+        val templateIndex: Int = 0,
+        val structuredJson: Boolean = false,
+        val systemPrompt: String = LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT,
+        val huggingFaceToken: String = "",
+    ) {
+        companion object {
+            fun from(
+                settings: LocalGenerationSettings,
+                mtpMode: LocalMtpMode,
+                huggingFaceToken: String,
+            ) = GenerationDraft(
+                runtime = settings.modelRuntime,
+                computeBackend = settings.computeBackend,
+                mtpMode = mtpMode,
+                cpuThreads = settings.cpuThreads.toString(),
+                gpuLayers = settings.gpuLayers.toString(),
+                temperature = settings.temperature.toString(),
+                topP = settings.topP.toString(),
+                topK = settings.topK.toString(),
+                maxTokens = settings.maxTokens.toString(),
+                repetitionPenalty = settings.repetitionPenalty.toString(),
+                contextSize = settings.contextSize.toString(),
+                seed = settings.seed.toString(),
+                structuredJson = settings.experimentalStructuredJson,
+                systemPrompt = settings.systemPromptOverride,
+                huggingFaceToken = huggingFaceToken,
             )
-            syncComposeState?.invoke()
         }
     }
 
-    // --- Studio Bridge (approval notifications over Tailscale) ---
+    private data class RemoteDraft(
+        val enabled: Boolean = false,
+        val baseUrl: String = "",
+        val model: String = "",
+        val apiKey: String = "",
+        val status: String = "",
+    )
 
-    private fun loadStudioBridgeConfig() {
-        switchStudioBridgeEnabled.isChecked = RemoteOpenAiPrefs.isBridgeEnabled(this)
-        // Pre-fill API key from the remote server config if bridge key is empty.
-        val bridgeKey = RemoteOpenAiPrefs.getApiKey(this)
-        editStudioBridgeApiKey.setText(bridgeKey)
+    private data class StudioDraft(
+        val enabled: Boolean = false,
+        val apiKey: String = "",
+        val status: String = "",
+    )
 
-        val statusText = if (RemoteOpenAiPrefs.isBridgeConfigured(this)) {
-            "Bridge configured for voice approvals."
-        } else if (RemoteOpenAiPrefs.isBridgeEnabled(this)) {
-            "Bridge enabled but server URL, model, or API key is missing."
-        } else {
-            ""
-        }
-        tvStudioBridgeStatus.text = statusText
-    }
+    private fun <T> T.isInitializedCompat(): Boolean = false
 
-    private fun saveStudioBridgeConfig() {
-        val enabled = switchStudioBridgeEnabled.isChecked
-        val apiKey = editStudioBridgeApiKey.text?.toString().orEmpty().trim()
-
-        if (enabled) {
-            val baseUrl = RemoteOpenAiPrefs.getBaseUrl(this)
-            if (baseUrl.isBlank()) {
-                Toast.makeText(this, "Configure the Remote Server base URL first", Toast.LENGTH_LONG).show()
-                switchStudioBridgeEnabled.isChecked = false
-                return
-            }
-            if (apiKey.isBlank()) {
-                Toast.makeText(this, "API key is required for the bridge", Toast.LENGTH_SHORT).show()
-                return
-            }
-            if (RemoteOpenAiPrefs.getModel(this).isBlank()) {
-                Toast.makeText(this, "Configure a Remote Server model for response classification", Toast.LENGTH_LONG).show()
-                return
-            }
-            if (!RemoteOpenAiPrefs.isCredentialTransportAllowed(baseUrl)) {
-                Toast.makeText(
-                    this,
-                    "API keys require HTTPS, a private LAN address, or a Tailscale IP",
-                    Toast.LENGTH_LONG,
-                ).show()
-                return
-            }
-            if (!android.speech.SpeechRecognizer.isRecognitionAvailable(this)) {
-                Toast.makeText(this, "No speech recognizer is available on this device", Toast.LENGTH_LONG).show()
-                switchStudioBridgeEnabled.isChecked = false
-                return
-            }
-            if (!PluginVoicePermissions.hasRequiredPermissions(this)) {
-                PluginVoicePermissions.ensure(this) {
-                    saveStudioBridgeConfig()
-                }
-                return
-            }
-            // The API key is shared with RemoteOpenAiPrefs, so we save it there.
-            RemoteOpenAiPrefs.setApiKey(this, apiKey)
-            editRemoteApiKey.setText(apiKey)
-        }
-
-        RemoteOpenAiPrefs.setBridgeEnabled(this, enabled)
-
-        // Start or stop the bridge client.
-        val app = application as? com.fersaiyan.cyanbridge.ui.MyApplication
-        if (enabled) {
-            if (app?.startStudioBridge() != true) {
-                tvStudioBridgeStatus.text = "Bridge could not start. Check model and microphone access."
-                syncComposeState?.invoke()
-                return
-            }
-            tvStudioBridgeStatus.text = "Bridge connecting..."
-            Toast.makeText(this, "Studio Bridge enabled. Connecting...", Toast.LENGTH_SHORT).show()
-        } else {
-            app?.stopStudioBridge()
-            tvStudioBridgeStatus.text = ""
-            Toast.makeText(this, "Studio Bridge disabled", Toast.LENGTH_SHORT).show()
-        }
-        markStudioSettingsSaved(saveApiKey = enabled)
-        syncComposeState?.invoke()
-    }
-
-    private fun showApiKeyHelpDialog() {
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("API Key for Studio Bridge")
-            .setMessage(
-                buildString {
-                    appendLine("The Studio Bridge uses the same API key as your Remote Server configuration.")
-                    appendLine()
-                    appendLine("To get an API key from CyanBridge Model Studio (desktop):")
-                    appendLine()
-                    appendLine("1. Open CyanBridge Model Studio on your desktop")
-                    appendLine("2. Go to Settings -> API Keys")
-                    appendLine("3. Click 'Create API Key'")
-                    appendLine("4. Copy the key and paste it here")
-                    appendLine()
-                    appendLine("If you're running Studio on your Tailnet, the base URL should be something like:")
-                    appendLine("http://100.x.x.x:8000/v1")
-                    appendLine()
-                    appendLine("The bridge will connect to ws://<your-studio-ip>:8000/api/mobile/ws using this key.")
-                }
-            )
-            .setPositiveButton("Got it", null)
-            .show()
+    private companion object {
+        const val KIB = 1024.0
+        const val MIB = KIB * 1024.0
+        const val GIB = MIB * 1024.0
     }
 }
