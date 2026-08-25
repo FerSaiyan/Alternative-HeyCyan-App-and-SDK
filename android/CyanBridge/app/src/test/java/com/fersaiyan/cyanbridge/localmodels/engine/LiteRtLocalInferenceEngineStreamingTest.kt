@@ -3,9 +3,14 @@ package com.fersaiyan.cyanbridge.localmodels.engine
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class LiteRtLocalInferenceEngineStreamingTest {
-    private val engine = LiteRtLocalInferenceEngine(ApplicationProvider.getApplicationContext())
+    private val engine by lazy {
+        LiteRtLocalInferenceEngine(ApplicationProvider.getApplicationContext())
+    }
 
     @Test
     fun cumulativeCallbacksEmitOnlyNewSuffix() {
