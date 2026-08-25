@@ -14,6 +14,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Legacy Android 7-9 compatibility only. Android 10+ uses scoped MediaStore/app storage. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:usesPermissionFlags="neverForLocation" />
@@ -33,6 +34,7 @@
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- Narrow package visibility replaces QUERY_ALL_PACKAGES. -->
     <queries>
         <package android:name="net.dinglisch.android.taskerm" />
         <package android:name="com.joaomgcd.autoinput" />
@@ -92,30 +94,6 @@
         <activity android:name=".plugins.walkingaid.WalkingAidSettingsActivity" android:exported="false" android:label="Walking Aid Settings" />
         <activity android:name=".plugins.meetingsparknotes.MeetingSparkNotesSettingsActivity" android:exported="false" android:label="Meeting Spark Notes Settings" />
         <activity android:name=".plugins.livecaptionrelay.LiveCaptionRelaySettingsActivity" android:exported="false" android:label="Live Caption Relay Settings" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" android:exported="false" android:label="Hands-Free Translator Settings" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" android:exported="false" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
-        <activity android:name=".plugins.handsfreetanslator.HandsFreeTranslatorSettingsActivity" tools:node="remove" />
         <activity android:name=".plugins.handsfreetranslator.HandsFreeTranslatorSettingsActivity" android:exported="false" android:label="Hands-Free Translator Settings" />
         <activity android:name=".plugins.errandbrain.ErrandBrainSettingsActivity" android:exported="false" android:label="Errand Brain Settings" />
         <activity android:name=".plugins.walkingaid.WalkingAidChatActivity" android:exported="false" android:label="Walking Aid Chat" android:windowSoftInputMode="adjustResize" />
@@ -163,10 +141,14 @@
         <service android:name=".plugins.errandbrain.ErrandBrainService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.visualdiary.VisualDiaryService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <receiver android:name=".plugins.autodiary.AutoDiaryTaskerCaptureReceiver" android:exported="true">
-            <intent-filter><action android:name="com.fersaiyan.cyanbridge.TASKER_AUTO_DIARY_CAPTURE" /></intent-filter>
+            <intent-filter>
+                <action android:name="com.fersaiyan.cyanbridge.TASKER_AUTO_DIARY_CAPTURE" />
+            </intent-filter>
         </receiver>
         <receiver android:name=".plugins.visualdiary.VisualDiaryTaskerCaptureReceiver" android:exported="true">
-            <intent-filter><action android:name="com.fersaiyan.cyanbridge.TASKER_VISUAL_DIARY_CAPTURE" /></intent-filter>
+            <intent-filter>
+                <action android:name="com.fersaiyan.cyanbridge.TASKER_VISUAL_DIARY_CAPTURE" />
+            </intent-filter>
         </receiver>
         <receiver android:name=".plugins.errandbrain.ErrandBrainReminderReceiver" android:exported="false" />
         <receiver android:name=".ai.image.ImageAutomationStatusReceiver" android:exported="true">
