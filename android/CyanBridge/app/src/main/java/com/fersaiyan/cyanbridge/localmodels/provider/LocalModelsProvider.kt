@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.localmodels.provider
 import android.content.Context
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
+import com.fersaiyan.cyanbridge.localmodels.session.LocalModelLoadDetails
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
@@ -50,6 +51,39 @@ internal fun buildMultimodalPrompt(
 class LocalModelsProvider {
     companion object {
         const val STATUS_MAX_TOKENS_REACHED = "__MAX_TOKENS_REACHED__"
+    }
+
+    /**
+     * Loads the currently selected local model without starting generation. Glasses voice/image
+     * flows call this as soon as their foreground session begins so model initialization overlaps
+     * image transfer, the listening cue, and the user's question instead of sitting on the critical
+     * path after those steps finish.
+     *
+     * Returns null when the request would not use a local model (remote backend, no selection, or a
+     * remote-only runtime). It deliberately does not run a warm-up generation because that could
+     * occupy the generation mutex when the real user request arrives.
+     */
+    suspend fun prepareSelectedModel(
+        context: Context,
+        onStatus: ((String) -> Unit)? = null,
+    ): LocalModelLoadDetails? {
+        return withContext(Dispatchers.IO) {
+            if (RemoteOpenAiPrefs.isActive(context)) return@withContext null
+
+            LocalModelStorageRepository.cleanupMissingModels(context)
+            val selected = LocalModelStorageRepository.resolveSelectedModel(context) ?: return@withContext null
+            val catalogEntry = LocalModelCatalogRepository.findById(selected.catalogId)
+            val settings = LocalModelSettingsRepository.getForModel(context, selected.id)
+            if (settings.modelRuntime == LocalModelRuntime.REMOTE_OPENAI) return@withContext null
+
+            onStatus?.invoke("Preparing ${selected.displayName}...")
+            LocalChatSessionManager.ensureModelLoaded(
+                context = context,
+                model = selected,
+                catalogEntry = catalogEntry,
+                settings = settings,
+            )
+        }
     }
 
     suspend fun streamChat(
@@ -100,51 +134,51 @@ class LocalModelsProvider {
                 }
             }
 
-val chatMessages = messages
-            .mapNotNull { m ->
-                val role = m["role"]?.trim().orEmpty()
-                val content = m["content"]?.trim().orEmpty()
-                if (role.isBlank() || content.isBlank()) null else PromptMessage(role = role, content = content)
+            val chatMessages = messages
+                .mapNotNull { m ->
+                    val role = m["role"]?.trim().orEmpty()
+                    val content = m["content"]?.trim().orEmpty()
+                    if (role.isBlank() || content.isBlank()) null else PromptMessage(role = role, content = content)
+                }
+
+            // LiteRT accepts one prompt alongside image/audio attachments. Preserve system instructions
+            // instead of dropping them when moving from the chat template to the media API.
+            val effectivePrompt = if (hasMediaAttachments) {
+                buildMultimodalPrompt(systemPrompt, chatMessages)
+            } else {
+                // For text-only, use the full template-rendered prompt
+                PromptTemplateRegistry.renderPrompt(
+                    templateId = templateId,
+                    systemPrompt = systemPrompt,
+                    messages = chatMessages,
+                )
             }
 
-        // LiteRT accepts one prompt alongside image/audio attachments. Preserve system instructions
-        // instead of dropping them when moving from the chat template to the media API.
-        val effectivePrompt = if (hasMediaAttachments) {
-            buildMultimodalPrompt(systemPrompt, chatMessages)
-        } else {
-            // For text-only, use the full template-rendered prompt
-            PromptTemplateRegistry.renderPrompt(
-                templateId = templateId,
-                systemPrompt = systemPrompt,
-                messages = chatMessages,
-            )
-        }
-
-        onStatus?.invoke("Loading ${selected.displayName}...")
+            onStatus?.invoke("Loading ${selected.displayName}...")
             val loadDetails = LocalChatSessionManager.ensureModelLoaded(
                 context = context,
                 model = selected,
                 catalogEntry = catalogEntry,
                 settings = settings,
             )
-onStatus?.invoke(generationStatus(loadDetails.activeBackend))
-        if (!loadDetails.fallbackReason.isNullOrBlank()) {
-            if (loadDetails.activeBackend == LocalComputeBackend.CPU) {
-                onStatus?.invoke("GPU unavailable, using CPU")
-            } else {
-                onStatus?.invoke("GPU active (audio/vision backend disabled)")
+            onStatus?.invoke(generationStatus(loadDetails.activeBackend))
+            if (!loadDetails.fallbackReason.isNullOrBlank()) {
+                if (loadDetails.activeBackend == LocalComputeBackend.CPU) {
+                    onStatus?.invoke("GPU unavailable, using CPU")
+                } else {
+                    onStatus?.invoke("GPU active (audio/vision backend disabled)")
+                }
             }
-        }
 
-val firstReply = LocalChatSessionManager.streamGenerate(
-            settings = settings,
-            prompt = effectivePrompt,
-            onToken = { token -> onToken?.invoke(token) },
-            imagePaths = imagePaths,
-            audioPath = audioPath,
-            requestPriority = requestPriority,
-            maxTokensOverride = maxTokens,
-        )
+            val firstReply = LocalChatSessionManager.streamGenerate(
+                settings = settings,
+                prompt = effectivePrompt,
+                onToken = { token -> onToken?.invoke(token) },
+                imagePaths = imagePaths,
+                audioPath = audioPath,
+                requestPriority = requestPriority,
+                maxTokensOverride = maxTokens,
+            )
 
             val firstCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()
             if (firstCapped) {
@@ -174,15 +208,15 @@ val firstReply = LocalChatSessionManager.streamGenerate(
                 }
             }
 
-val retryReply = LocalChatSessionManager.streamGenerate(
-            settings = settings,
-            prompt = effectivePrompt,
-            onToken = { token -> onToken?.invoke(token) },
-            imagePaths = imagePaths,
-            audioPath = audioPath,
-            requestPriority = requestPriority,
-            maxTokensOverride = maxTokens,
-        )
+            val retryReply = LocalChatSessionManager.streamGenerate(
+                settings = settings,
+                prompt = effectivePrompt,
+                onToken = { token -> onToken?.invoke(token) },
+                imagePaths = imagePaths,
+                audioPath = audioPath,
+                requestPriority = requestPriority,
+                maxTokensOverride = maxTokens,
+            )
 
             val retryCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()
             if (retryCapped) {
