@@ -45,8 +45,8 @@ class MultilingualSpeechChunker(
     }
 
     /**
-     * Accepts either a delta or a cumulative callback. LiteRT currently emits the latter while
-     * remote backends emit deltas, so only a previously unseen suffix is appended when possible.
+     * Accepts either a delta or a cumulative callback. LiteRT and remote backends have historically
+     * differed here, so only a previously unseen suffix is appended when possible.
      */
     @Synchronized
     fun append(rawInput: String, sessionId: Long = activeSessionId) {
@@ -130,7 +130,8 @@ class MultilingualSpeechChunker(
         if (text.isBlank()) return
 
         val minCodePoints = if (firstChunk) config.firstChunkMinCodePoints else config.normalChunkMinCodePoints
-        if (codePointCount(text) >= config.hardChunkMaxCodePoints) {
+        val currentCodePoints = codePointCount(text)
+        if (currentCodePoints >= config.hardChunkMaxCodePoints) {
             flushAt(findBestSplitIndex(text, config.preferredChunkMaxCodePoints))
             return
         }
@@ -152,14 +153,32 @@ class MultilingualSpeechChunker(
             }
         }
 
-        if (codePointCount(text) >= config.preferredChunkMaxCodePoints) {
+        // The first audible output optimizes for latency rather than perfect sentence prosody.
+        // Once a useful short clause has arrived, a comma/colon/semicolon/dash is a safe place to
+        // start speaking while the model continues generating the rest of the answer.
+        if (firstChunk) {
+            findLastSoftBoundary(text)?.let { boundary ->
+                val prefix = text.substring(0, boundary.endIndex)
+                if (codePointCount(prefix) >= minCodePoints) {
+                    flushAt(boundary.endIndex)
+                    return
+                }
+            }
+        }
+
+        val preferredMax = if (firstChunk) {
+            config.firstChunkPreferredMaxCodePoints
+        } else {
+            config.preferredChunkMaxCodePoints
+        }
+        if (currentCodePoints >= preferredMax) {
             findLastSoftBoundary(text)?.let {
                 flushAt(it.endIndex)
                 return
             }
         }
 
-        if (forceFlush && codePointCount(text) >= minCodePoints) {
+        if (forceFlush && currentCodePoints >= minCodePoints) {
             flushRemaining()
         }
     }
@@ -202,11 +221,18 @@ class MultilingualSpeechChunker(
                 if (sessionId != activeSessionId || buffer.length < boundary.endIndex) return@synchronized
                 candidateJob = null
                 candidateEndIndex = -1
-                // Re-evaluate with the later context. If no later fragment arrived, leave the
-                // candidate for the idle timer rather than guessing that an abbreviation ended.
-                if (buffer.length > boundary.endIndex) {
-                    evaluateBuffer(forceFlush = false)
+
+                val noLaterText = buffer.length == boundary.endIndex
+                val minCodePoints = if (firstChunk) config.firstChunkMinCodePoints else config.normalChunkMinCodePoints
+                if (noLaterText && codePointCount(buffer.toString()) < minCodePoints) {
+                    // Tiny fragments such as "Dr." are too ambiguous to speak immediately.
+                    return@synchronized
                 }
+
+                // Re-evaluate with later context when available. If the model paused at a useful
+                // sentence boundary, confirm it after the short candidate delay instead of waiting
+                // for the much longer idle flush.
+                evaluateBuffer(forceFlush = noLaterText)
             }
         }
     }
