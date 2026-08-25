@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.ui
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
@@ -11,8 +10,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AgentPrefs
-import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.FeatureOnboardingScreen
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
@@ -22,8 +19,6 @@ import com.hjq.permissions.OnPermissionCallback
 class OnboardingFeatureActivity : AppCompatActivity() {
 
     private var featureIndex = 0
-    private var localAgentAutomationEnabled by mutableStateOf(false)
-    private var accessibilityEnabled by mutableStateOf(false)
     private var glassesConnectionPermissionGranted by mutableStateOf(false)
 
     data class OnboardingFeature(
@@ -41,7 +36,6 @@ class OnboardingFeatureActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        refreshAccessibilityStatus()
         glassesConnectionPermissionGranted = hasBluetooth(this)
     }
 
@@ -51,9 +45,6 @@ class OnboardingFeatureActivity : AppCompatActivity() {
             return
         }
 
-        val isAccessibilityFeature = featureIndex == SCREEN_MEMORY_FEATURE_INDEX
-        localAgentAutomationEnabled = AgentPrefs.isLocalAgentAutomationEnabled(this)
-        accessibilityEnabled = hasAccessibilityServicePermission(this)
         glassesConnectionPermissionGranted = hasBluetooth(this)
         val appearancePreferences = AppearancePreferences(this)
         setContent {
@@ -68,12 +59,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                     // CyanBridge uses app-private storage, MediaStore and SAF; All Files Access is not requested.
                     showStoragePermission = false,
                     storagePermissionGranted = true,
-                    // This disclosure now refers to AutoInput's accessibility access. CyanBridge itself
-                    // no longer declares an AccessibilityService in the Android manifest.
-                    showAccessibilityDisclosure = isAccessibilityFeature,
                     showOpenSourceContribution = featureIndex == OPEN_SOURCE_FEATURE_INDEX,
-                    accessibilityEnabled = accessibilityEnabled,
-                    localAgentAutomationEnabled = localAgentAutomationEnabled,
                     backLabel = getString(
                         if (featureIndex == 0) R.string.onboarding_skip_all else R.string.onboarding_back,
                     ),
@@ -86,14 +72,6 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                         })
                     },
                     onRequestStoragePermission = {},
-                    onLocalAgentAutomationChange = {
-                        localAgentAutomationEnabled = it
-                        AgentPrefs.setLocalAgentAutomationEnabled(this, it)
-                        if (it) LocalAgentMemoryStore.ensureSeedFiles(this)
-                    },
-                    onOpenAccessibilitySettings = {
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    },
                     onOpenSourceRepository = {
                         runCatching {
                             startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(GITHUB_REPOSITORY_URL)))
@@ -108,10 +86,6 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                 )
             }
         }
-    }
-
-    private fun refreshAccessibilityStatus() {
-        accessibilityEnabled = hasAccessibilityServicePermission(this)
     }
 
     private fun goToFeature(index: Int) {
@@ -150,7 +124,6 @@ class OnboardingFeatureActivity : AppCompatActivity() {
         private const val EXTRA_FEATURE_INDEX = "feature_index"
         private const val PREFS = "cyanbridge_prefs"
         private const val GLASSES_CONNECTION_FEATURE_INDEX = 0
-        private const val SCREEN_MEMORY_FEATURE_INDEX = 1
         private const val OPEN_SOURCE_FEATURE_INDEX = 2
         private const val GITHUB_REPOSITORY_URL = "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK"
 

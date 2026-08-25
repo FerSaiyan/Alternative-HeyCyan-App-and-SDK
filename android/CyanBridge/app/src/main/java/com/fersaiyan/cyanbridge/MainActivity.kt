@@ -125,11 +125,9 @@ import com.fersaiyan.cyanbridge.privacy.PrivacyPrefs
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.bleIpBridge
 import com.fersaiyan.cyanbridge.ui.hasBluetooth
-import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
 import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import com.fersaiyan.cyanbridge.ui.requestBluetoothPermission
-import com.fersaiyan.cyanbridge.ui.requestAccessibilityServicePermission
 import com.fersaiyan.cyanbridge.ui.ensureNotificationPermission
 import com.fersaiyan.cyanbridge.ui.requestWifiP2pPermission
 import com.fersaiyan.cyanbridge.ui.setOnClickListener
@@ -253,7 +251,7 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutButton
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
-import com.fersaiyan.cyanbridge.localagent.LocalAgentAccessibilityBridge
+import com.fersaiyan.cyanbridge.tasker.TaskerIntegrationManager
 import com.fersaiyan.cyanbridge.localagent.context.LocalAgentContextBuilder
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsStorage
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemorySearch
@@ -479,6 +477,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     // AI Hijack settings
     private var isAiHijackEnabled = true // Default to enabled
+    private var overlayPermissionPromptShown = false
     private var isImageAssistantMode = true // Use assistant vs share intent
     private var aiAssistantMode = AI_MODE_PHONE_ASSISTANT
     private var wakeWordConfiguredForConnection = false
@@ -576,7 +575,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var batteryCallbackRegistered = false
     private var enabledFeaturePermissionRequestActive = false
     private var enabledMetaCameraCheckActive = false
-    private var enabledAccessibilityPromptShown = false
 
     // Chapter 5: meeting capture UI + state
     private val meetingTimerOptions: List<Pair<Long?, String>> = listOf(
@@ -908,7 +906,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         // Check for Overlay permission needed for background launch
-        if (isAiHijackEnabled && !Settings.canDrawOverlays(this)) {
+        if (isAiHijackEnabled && !Settings.canDrawOverlays(this) && !overlayPermissionPromptShown) {
+            overlayPermissionPromptShown = true
             val intent = Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 Uri.parse("package:$packageName")
@@ -967,14 +966,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        val needsAccessibility = AutoDiaryService.isEnabled(this) || LocalAgentPlugin.isEnabled(this)
-        if (!needsAccessibility || hasAccessibilityServicePermission(this)) {
-            enabledAccessibilityPromptShown = false
-        } else if (!enabledAccessibilityPromptShown) {
-            enabledAccessibilityPromptShown = true
-            requestAccessibilityServicePermission(this, "screen-memory features")
-            return
-        }
     }
 
     private fun restartEnabledBackgroundFeatures() {
@@ -2039,11 +2030,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     when (pluginId) {
                         NativePluginIds.LOCAL_AGENT -> {
                             LocalAgentPlugin.setEnabled(this, true)
-                            if (!hasAccessibilityServicePermission(this)) {
-                                requestAccessibilityServicePermission(this, "Local Agent automation")
-                            } else {
-                                Toast.makeText(this, "Local Agent automation enabled", Toast.LENGTH_SHORT).show()
-                            }
+                            Toast.makeText(
+                                this,
+                                "Local Agent enabled. Complete Tasker and AutoInput setup in Plugins.",
+                                Toast.LENGTH_LONG,
+                            ).show()
                         }
                         NativePluginIds.MEETING_SPARK_NOTES -> {
                             MeetingSparkNotesPreferences.setEnabled(this, true)
@@ -5623,9 +5614,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                     speak("Unlock your phone before I control it.")
                                     return@runOnUiThread
                                 }
-                                if (!LocalAgentAccessibilityBridge.isConnected()) {
+                                if (!TaskerIntegrationManager.inspect(this@MainActivity).automationEnvironmentReady) {
                                     finishVoiceQueryWork()
-                                    speak("Please enable CyanBridge accessibility control first.")
+                                    speak("Complete Tasker and AutoInput setup in CyanBridge Plugins first.")
                                     return@runOnUiThread
                                 }
 

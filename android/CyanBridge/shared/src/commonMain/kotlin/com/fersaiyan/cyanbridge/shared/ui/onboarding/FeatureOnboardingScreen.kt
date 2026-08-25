@@ -18,19 +18,13 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.generated.resources.Res
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_accessibility_body
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_accessibility_disabled
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_accessibility_enabled
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_accessibility_title
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_allow_glasses_connection
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_allow_media_access
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_bluetooth_allowed
@@ -39,10 +33,8 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_connect_gl
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_connect_glasses_title
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_file_access_allowed
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_file_access_denied
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_local_agent_toggle
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_media_files_body
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_media_files_title
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_open_accessibility
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_open_github
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_open_source_body
 import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_open_source_title
@@ -61,16 +53,11 @@ fun FeatureOnboardingScreen(
     glassesConnectionPermissionGranted: Boolean,
     showStoragePermission: Boolean,
     storagePermissionGranted: Boolean,
-    showAccessibilityDisclosure: Boolean,
     showOpenSourceContribution: Boolean,
-    accessibilityEnabled: Boolean,
-    localAgentAutomationEnabled: Boolean,
     backLabel: String,
     nextLabel: String,
     onRequestGlassesConnectionPermission: () -> Unit,
     onRequestStoragePermission: () -> Unit,
-    onLocalAgentAutomationChange: (Boolean) -> Unit,
-    onOpenAccessibilitySettings: () -> Unit,
     onOpenSourceRepository: () -> Unit,
     onBack: () -> Unit,
     onNext: () -> Unit,
@@ -162,35 +149,6 @@ fun FeatureOnboardingScreen(
                     }
                 }
             }
-            if (showAccessibilityDisclosure) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(stringResource(Res.string.onboarding_accessibility_title), style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            stringResource(Res.string.onboarding_accessibility_body),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        ToggleRow(
-                            label = stringResource(Res.string.onboarding_local_agent_toggle),
-                            checked = localAgentAutomationEnabled,
-                            onCheckedChange = onLocalAgentAutomationChange,
-                        )
-                        Text(
-                            text = if (accessibilityEnabled) {
-                                stringResource(Res.string.onboarding_accessibility_enabled)
-                            } else {
-                                stringResource(Res.string.onboarding_accessibility_disabled)
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (accessibilityEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        OutlinedButton(onClick = onOpenAccessibilitySettings) {
-                            Text(stringResource(Res.string.onboarding_open_accessibility))
-                        }
-                    }
-                }
-            }
             if (showOpenSourceContribution) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -213,20 +171,5 @@ fun FeatureOnboardingScreen(
                 FilledTonalButton(onClick = onNext) { Text(nextLabel) }
             }
         }
-    }
-}
-
-@Composable
-private fun ToggleRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }

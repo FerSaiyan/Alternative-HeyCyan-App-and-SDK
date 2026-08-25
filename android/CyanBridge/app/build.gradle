@@ -31,14 +31,14 @@ def metaDatEnabled = metaGithubToken != null && !metaGithubToken.trim().isEmpty(
 
 android {
     namespace = "com.fersaiyan.cyanbridge"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.fersaiyan.cyanbridge"
         // Meta DAT declares minSdk 29. Keep the regular build on API 24 if Meta SDK is skipped.
         minSdk = metaDatEnabled ? 29 : 24
-        targetSdk = 35
-        versionCode = 17
+        targetSdk = 36
+        versionCode = 18
         versionName = "2.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [

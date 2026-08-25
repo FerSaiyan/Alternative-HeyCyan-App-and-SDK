@@ -1,10 +1,10 @@
 package com.fersaiyan.cyanbridge.ui
 
 import android.app.Activity
-import android.app.Dialog
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.view.ViewGroup
+import androidx.activity.ComponentDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,7 +42,7 @@ object AcquisitionReasonDialog {
     fun show(activity: Activity) {
         if (activity.isFinishing || activity.isDestroyed || AnalyticsPreferences.isAcquisitionComplete(activity)) return
 
-        val dialog = Dialog(activity)
+        val dialog = ComponentDialog(activity)
         val appearancePreferences = AppearancePreferences(activity)
         dialog.setContentView(
             ComposeView(activity).apply {
