@@ -15,6 +15,7 @@ import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ToolProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -258,24 +259,32 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         return if (chunks.isNotEmpty()) chunks.joinToString(separator = "") else message.toString()
     }
 
+    /**
+     * Uses LiteRT-LM's coroutine Flow API so the caller receives model output while decoding is
+     * still running. The SDK may emit cumulative text or deltas depending on model/runtime version;
+     * incrementalDelta normalizes both forms before they reach UI/TTS consumers.
+     */
     private suspend fun generateFromConversation(
         conversation: Conversation,
         prompt: String,
         userContents: Contents?,
         onToken: (String) -> Unit,
     ): String {
-        // LiteRT-LM 0.14's async callback targets a coroutine ABI removed in 1.10.
-        // Generation already runs on Dispatchers.IO, so use the synchronous SDK call safely.
-        val message = if (userContents != null) {
-            conversation.sendMessage(userContents, emptyMap<String, Any>())
-        } else {
-            conversation.sendMessage(prompt, emptyMap<String, Any>())
+        val contents = userContents ?: Contents.Companion.of(Content.Text(prompt))
+        val assembled = StringBuilder()
+
+        conversation.sendMessageAsync(contents, emptyMap<String, Any>()).collect { message ->
+            val currentText = extractText(message)
+            if (currentText.isBlank()) return@collect
+
+            val delta = incrementalDelta(assembled.toString(), currentText)
+            if (delta.isNotEmpty()) {
+                assembled.append(delta)
+                onToken(delta)
+            }
         }
-        val text = extractText(message)
-        if (text.isNotBlank()) {
-            onToken(text)
-        }
-        return text
+
+        return assembled.toString()
     }
 
     private fun buildUserContents(config: GenerationConfig): Contents? {
@@ -318,7 +327,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         activeConversation = null
     }
 
-    private fun incrementalDelta(previous: String, current: String): String {
+    internal fun incrementalDelta(previous: String, current: String): String {
         if (previous.isBlank()) return current
         if (current.startsWith(previous)) {
             return current.substring(previous.length)
