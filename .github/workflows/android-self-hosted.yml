@@ -29,12 +29,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
         env:
+          # The Android build no longer requires Moonshine/LFS assets. Keep automatic
+          # smudging disabled so unrelated LFS content cannot slow persistent runners.
           GIT_LFS_SKIP_SMUDGE: '1'
         with:
           submodules: recursive
-          # Required LFS assets live in Moonshine and are pulled explicitly below.
-          # Keeping checkout's global LFS setup disabled also avoids clobbering a
-          # pre-existing hook on the persistent self-hosted runner workspace.
           lfs: false
 
       - name: Verify local Android toolchain
@@ -43,7 +42,6 @@ jobs:
           set -euo pipefail
           test "$(uname -s)" = "Linux"
           test "$(uname -m)" = "x86_64"
-          command -v git-lfs >/dev/null
           command -v python3 >/dev/null
           test -x /opt/android-studio/jbr/bin/java
           test -d "$HOME/Android/Sdk/platforms/android-35"
@@ -55,7 +53,6 @@ jobs:
             printf '%s\n' "$HOME/Android/Sdk/platform-tools" >> "$GITHUB_PATH"
           } >> "$GITHUB_ENV"
           /opt/android-studio/jbr/bin/java -version
-          git lfs version
           "$HOME/Android/Sdk/platform-tools/adb" version
 
       - name: Verify Meta SDK credential
