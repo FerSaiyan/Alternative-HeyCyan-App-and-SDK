@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.localmodels
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceSnapshot
-import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelPerformanceProfile
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -11,7 +10,7 @@ import org.junit.Test
 class DeviceCapabilityServiceTest {
     @Test
     fun unsupported_abi_is_blocked() {
-        val entry = LocalModelCatalogRepository.findById("qwen2.5-0.5b-instruct-q4")!!
+        val entry = LocalModelCatalogRepository.findById("qwen3.5-0.8b-q4")!!
         val snapshot = DeviceSnapshot(
             primaryAbi = "armeabi-v7a",
             supportedAbis = listOf("armeabi-v7a"),
@@ -27,7 +26,7 @@ class DeviceCapabilityServiceTest {
 
     @Test
     fun low_storage_is_blocked_for_download() {
-        val entry = LocalModelCatalogRepository.findById("qwen2.5-1.5b-instruct-q4")!!
+        val entry = LocalModelCatalogRepository.findById("qwen3.5-0.8b-q4")!!
         val snapshot = DeviceSnapshot(
             primaryAbi = "arm64-v8a",
             supportedAbis = listOf("arm64-v8a"),
@@ -38,11 +37,12 @@ class DeviceCapabilityServiceTest {
 
         val result = DeviceCapabilityService.assess(snapshot, entry, requireDownloadHeadroom = true)
         assertFalse(result.supported)
+        assertTrue(result.blockers.any { it.contains("free storage", ignoreCase = true) })
     }
 
     @Test
     fun insufficient_ram_is_blocked_before_download() {
-        val entry = LocalModelCatalogRepository.findById("qwen2.5-1.5b-instruct-q4")!!
+        val entry = LocalModelCatalogRepository.findById("gemma4-e2b-it-litert")!!
         val snapshot = DeviceSnapshot(
             primaryAbi = "arm64-v8a",
             supportedAbis = listOf("arm64-v8a"),
@@ -58,8 +58,8 @@ class DeviceCapabilityServiceTest {
     }
 
     @Test
-    fun profile_recommendation_prefers_fast_on_small_ram() {
-        val entry = LocalModelCatalogRepository.findById("qwen2.5-1.5b-instruct-q4")!!
+    fun compact_qwen_is_supported_at_its_declared_ram_floor() {
+        val entry = LocalModelCatalogRepository.findById("qwen3.5-0.8b-q4")!!
         val snapshot = DeviceSnapshot(
             primaryAbi = "arm64-v8a",
             supportedAbis = listOf("arm64-v8a"),
@@ -68,7 +68,8 @@ class DeviceCapabilityServiceTest {
             cpuCoreCount = 6,
         )
 
-        val profile = DeviceCapabilityService.recommendProfile(snapshot, entry)
-        assertTrue(profile == LocalModelPerformanceProfile.FAST)
+        val result = DeviceCapabilityService.assess(snapshot, entry, requireDownloadHeadroom = false)
+        assertTrue(result.ramSuitable)
+        assertTrue(result.supported)
     }
 }
