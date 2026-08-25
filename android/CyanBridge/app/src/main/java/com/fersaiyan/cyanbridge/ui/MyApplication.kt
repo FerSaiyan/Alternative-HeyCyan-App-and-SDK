@@ -16,6 +16,7 @@ import com.oudmon.ble.base.communication.LargeDataHandler
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
+import com.fersaiyan.cyanbridge.analytics.ProductAnalyticsLifecycle
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.localagent.daily.DailyFactsReminderScheduler
 import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiaryService
@@ -39,7 +40,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
-import kotlin.properties.Delegates
 
 /**
  * @Author: Hzy
@@ -62,6 +62,7 @@ class MyApplication : Application(){
         instance = this
         CONTEXT = applicationContext
         AppLanguagePreferences.applyStoredLocale(this)
+        ProductAnalyticsLifecycle.register(this)
         initBle()
 
         // Keep the BLE control channel connected while the app process is alive.
