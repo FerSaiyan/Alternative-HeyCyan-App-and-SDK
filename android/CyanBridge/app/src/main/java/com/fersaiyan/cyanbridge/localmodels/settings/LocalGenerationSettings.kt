@@ -3,9 +3,8 @@ package com.fersaiyan.cyanbridge.localmodels.settings
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
 
 /**
- * Kept for backwards compatibility with settings saved by older CyanBridge builds.
- * The Local Models UI no longer exposes performance profiles; all new/default settings use the
- * same predictable generation defaults and explicit backend controls instead.
+ * Kept only for backwards compatibility with settings saved by older CyanBridge builds.
+ * Performance profiles are no longer exposed and no longer change generation behavior.
  */
 enum class LocalModelPerformanceProfile(val label: String) {
     FAST("Fast"),
@@ -55,9 +54,7 @@ data class LocalGenerationSettings(
         const val DEFAULT_REPETITION_PENALTY = 1.1
 
         /**
-         * Default prompt for interactive local models. It is intentionally stored in the same
-         * user-editable system prompt field as any custom prompt: users can change or clear it per
-         * model from Local Model settings without CyanBridge silently adding a second hidden prompt.
+         * Default prompt for interactive local models. It remains user-editable per model.
          */
         const val DEFAULT_SYSTEM_PROMPT =
             "You are CyanBridge's assistant. Answer the user's request directly. " +
@@ -67,6 +64,15 @@ data class LocalGenerationSettings(
 
         fun defaultCpuThreads(): Int {
             return Runtime.getRuntime().availableProcessors().coerceIn(2, 8)
+        }
+
+        /**
+         * Compatibility helper for older onboarding/call sites. Since the profile layer has been
+         * retired, every model now resolves to the same neutral stored profile and explicit GPU/
+         * CPU/NPU controls determine performance.
+         */
+        fun recommendedProfileFor(entry: LocalModelCatalogEntry?): LocalModelPerformanceProfile {
+            return LocalModelPerformanceProfile.BALANCED
         }
 
         /**

@@ -121,7 +121,7 @@ object LocalChatSessionManager {
                 contextSizeDefault = settings.contextSize,
                 promptTemplateId = model.promptTemplateId ?: "generic_chatml",
                 minRamGb = 4.0,
-                minStorageGb = 1.0,
+                minStorageGb = 0.5,
                 shortDescription = "Imported GGUF model",
                 tags = listOf("offline"),
                 gatedDownload = false,

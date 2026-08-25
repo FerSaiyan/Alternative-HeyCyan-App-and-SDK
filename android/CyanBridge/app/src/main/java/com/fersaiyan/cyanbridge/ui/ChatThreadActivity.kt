@@ -322,7 +322,8 @@ class ChatThreadActivity : AppCompatActivity() {
             return
         }
 
-        if (isLocalModelsProviderSelected() && !hasLocalModelAvailable()) {
+        val hasMedia = pendingImagePaths.isNotEmpty() || !pendingAudioPath.isNullOrBlank()
+        if (isLocalModelsProviderSelected() && !hasLocalModelAvailable() && !hasMedia) {
             promptLocalModelSetup()
             return
         }
@@ -331,7 +332,6 @@ class ChatThreadActivity : AppCompatActivity() {
         if (isMediaRecording) {
             stopAudioRecording(saveAsAttachment = true)
         }
-        val hasMedia = pendingImagePaths.isNotEmpty() || !pendingAudioPath.isNullOrBlank()
         if (text.isNotEmpty() || hasMedia) {
             if (isLocalModelsProviderSelected() && localTitleGenerationInProgress && !isDailyFactsReview) {
                 enqueueLocalPrompt(text)
@@ -343,28 +343,10 @@ class ChatThreadActivity : AppCompatActivity() {
     }
 
     private fun attachImage() {
-        val unsupportedReason = mediaAttachmentUnsupportedReason()
-        if (unsupportedReason != null) {
-            android.widget.Toast.makeText(
-                this,
-                unsupportedReason,
-                android.widget.Toast.LENGTH_SHORT,
-            ).show()
-            return
-        }
         pickChatImageLauncher.launch(arrayOf("image/*"))
     }
 
     private fun toggleAudioRecording() {
-        val unsupportedReason = mediaAttachmentUnsupportedReason()
-        if (unsupportedReason != null) {
-            android.widget.Toast.makeText(
-                this,
-                unsupportedReason,
-                android.widget.Toast.LENGTH_SHORT,
-            ).show()
-            return
-        }
         if (isMediaRecording) {
             stopAudioRecording(saveAsAttachment = true)
         } else {
@@ -699,35 +681,6 @@ class ChatThreadActivity : AppCompatActivity() {
         return LocalModelStorageRepository.resolveSelectedModel(this) != null
     }
 
-    private fun supportsCurrentLocalRuntimeMedia(): Boolean {
-        if (!isLocalModelsProviderSelected()) return false
-        if (isRemoteOpenAiBackendActive()) return true
-        val selected = LocalModelStorageRepository.resolveSelectedModel(this) ?: return false
-        val settings = LocalModelSettingsRepository.getForModel(this, selected.id)
-        return settings.modelRuntime == LocalModelRuntime.LITERT
-    }
-
-    private fun mediaAttachmentUnsupportedReason(): String? {
-        return when (AutomationPrefs.getProviderType(this)) {
-            AgentProviderType.PRO_SUBSCRIPTION -> null
-            AgentProviderType.LOCAL_AGENT -> if (supportsCurrentLocalRuntimeMedia()) {
-                null
-            } else {
-                "Local media attachments require Local Models + LiteRT runtime."
-            }
-            AgentProviderType.TASKER -> when (AiProviderPrefs.getProvider(this)) {
-                AiProviderType.CLI_RELAY -> null
-                AiProviderType.LOCAL_MODELS -> if (supportsCurrentLocalRuntimeMedia()) {
-                    null
-                } else {
-                    "Local media attachments require Local Models + LiteRT runtime."
-                }
-                AiProviderType.MOCK,
-                AiProviderType.COMPANY_BACKEND -> "Media attachments require Pro Subscription or Local Models + LiteRT."
-            }
-        }
-    }
-
     private fun updateComposerForGenerationState() {
         if (localGenerationRunning) {
             composerUiState = ChatComposerUiState(
@@ -1050,15 +1003,6 @@ class ChatThreadActivity : AppCompatActivity() {
     private fun sendMessage(text: String) {
         val images = pendingImagePaths.toList()
         val audio = pendingAudioPath
-        val unsupportedReason = mediaAttachmentUnsupportedReason()
-        if ((images.isNotEmpty() || !audio.isNullOrBlank()) && unsupportedReason != null) {
-            android.widget.Toast.makeText(
-                this,
-                unsupportedReason,
-                android.widget.Toast.LENGTH_SHORT,
-            ).show()
-            return
-        }
         val promptText = text.ifBlank {
             if (images.isNotEmpty() || !audio.isNullOrBlank()) {
                 "Please analyze the attached media."
@@ -1096,14 +1040,6 @@ class ChatThreadActivity : AppCompatActivity() {
     private fun enqueueLocalPrompt(text: String) {
         val images = pendingImagePaths.toList()
         val audio = pendingAudioPath
-        if ((images.isNotEmpty() || !audio.isNullOrBlank()) && !supportsCurrentLocalRuntimeMedia()) {
-            android.widget.Toast.makeText(
-                this,
-                "Media attachments require Local Models + LiteRT runtime.",
-                android.widget.Toast.LENGTH_SHORT,
-            ).show()
-            return
-        }
         val promptText = text.ifBlank {
             if (images.isNotEmpty() || !audio.isNullOrBlank()) {
                 "Please analyze the attached media."

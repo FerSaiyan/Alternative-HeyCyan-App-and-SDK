@@ -29,7 +29,7 @@ object LocalModelSettingsRepository {
 
         val profile = runCatching {
             LocalModelPerformanceProfile.valueOf(existing?.optString("profile").orEmpty())
-        }.getOrElse { LocalModelPerformanceProfile.BALANCED }
+        }.getOrElse { LocalGenerationSettings.recommendedProfileFor(entry) }
 
         val defaults = LocalGenerationSettings.defaultsFor(entry, profile)
         if (existing == null) return defaults

@@ -145,12 +145,7 @@
     <string name="recordings_transcribing">转录中</string>
     <string name="recordings_transcribe">转录</string>
     <string name="recordings_view_transcript">查看转录</string>
-    <string name="recordings_transcription_engine">转录引擎</string>
-    <string name="recordings_local_moonshine">本地 Moonshine 语音模型</string>
-    <string name="recordings_gemma_litert">使用 LiteRT 本地运行时的 Gemma</string>
     <string name="recordings_close">关闭</string>
-    <string name="recordings_moonshine_local">Moonshine（本地）</string>
-    <string name="recordings_gemma_local">Gemma（本地 LiteRT）</string>
     <string name="media_selected">已选择 %1$d 项</string>
     <string name="media_share">分享</string>
     <string name="media_delete">删除</string>

@@ -48,9 +48,6 @@ rootProject.name = "CyanBridgeManagerApp"
 include(":app")
 include(":shared")
 
-// Moonshine Voice (local wrapper module that builds vendored native sources)
-include(":moonshine-voice")
-
 // HeyCyan Core - bundled as composite build for easy compilation
 val heycyanCoreDir = file("../../heycyan-core")
 if (heycyanCoreDir.exists()) {

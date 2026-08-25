@@ -34,6 +34,7 @@ class LocalModelCatalogTest {
         val qwen = LocalModelCatalogRepository.findById("qwen3.5-0.8b-q4")
         assertEquals("qwen3.5-0.8b-q4", qwen?.id)
         assertEquals("Qwen3.5-0.8B-Q4_0.gguf", qwen?.expectedFilename)
+        assertEquals(0.35, qwen?.minStorageGb)
         assertTrue(LocalModelCatalogRepository.curatedModels.none { it.id.startsWith("qwen2.5") })
     }
 }

@@ -10,7 +10,6 @@ import androidx.compose.ui.test.performClick
 import com.fersaiyan.cyanbridge.shared.recordings.MeetingRecordingUiState
 import com.fersaiyan.cyanbridge.shared.recordings.RecordingItem
 import com.fersaiyan.cyanbridge.shared.recordings.SyncedMediaItem
-import com.fersaiyan.cyanbridge.shared.recordings.TranscriptionEngine
 import com.fersaiyan.cyanbridge.shared.ui.recordings.RecordingsScreen
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import org.junit.Assert.assertEquals
@@ -49,8 +48,6 @@ class RecordingsScreenTest {
                     playingSessionId = null,
                     transcribingSessionId = null,
                     meetingRecording = MeetingRecordingUiState(),
-                    showEngineChooser = false,
-                    selectedEngine = TranscriptionEngine.GEMMA,
                     transcriptionProgress = null,
                     transcriptDialog = null,
                     formatTimestamp = noopTimestamp,
@@ -61,9 +58,6 @@ class RecordingsScreenTest {
                     onTranscribe = { transcribedSessionId = it.id },
                     onViewTranscript = {},
                     onStopMeetingCapture = {},
-                    onEngineSelected = {},
-                    onConfirmEngine = {},
-                    onDismissEngineChooser = {},
                     onDismissTranscript = {},
                     onDestinationSelected = {},
                 )
@@ -103,8 +97,6 @@ class RecordingsScreenTest {
                     playingSessionId = null,
                     transcribingSessionId = null,
                     meetingRecording = MeetingRecordingUiState(),
-                    showEngineChooser = false,
-                    selectedEngine = TranscriptionEngine.GEMMA,
                     transcriptionProgress = null,
                     transcriptDialog = null,
                     formatTimestamp = noopTimestamp,
@@ -115,9 +107,6 @@ class RecordingsScreenTest {
                     onTranscribe = {},
                     onViewTranscript = {},
                     onStopMeetingCapture = {},
-                    onEngineSelected = {},
-                    onConfirmEngine = {},
-                    onDismissEngineChooser = {},
                     onDismissTranscript = {},
                     onDestinationSelected = {},
                 )

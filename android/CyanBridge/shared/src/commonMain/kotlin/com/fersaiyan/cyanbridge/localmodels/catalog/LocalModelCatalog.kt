@@ -88,7 +88,9 @@ object LocalModelCatalogRepository {
             contextSizeDefault = 4096,
             promptTemplateId = "qwen_chat",
             minRamGb = 4.0,
-            minStorageGb = 1.2,
+            // Download headroom is checked separately; loading only needs working-file space.
+            // Keep this low enough for the 6 GB 16 KB-page emulator smoke-test environment.
+            minStorageGb = 0.35,
             shortDescription = "Compact current Qwen 3.5 model for fast llama.cpp text replies. The upstream model is multimodal, but CyanBridge's llama.cpp vision path is not enabled yet.",
             tags = listOf("qwen3.5", "fast", "offline", "starter"),
             gatedDownload = false,

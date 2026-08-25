@@ -265,6 +265,7 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
     ): Map<String, Any> {
         Log.i(TAG, "Initializing llama context runtime=$runtimeApi params=${params.keys}")
         val modelFd = params["model_fd"] as? Int
+        var startSucceeded = false
         val result: Any? = try {
             runCatching {
                 startEngineCompat(engine, runtimeApi, params)
@@ -277,9 +278,12 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
                     )
                 }
                 throw error
-            }
+            }.also { if (it != null) startSucceeded = true }
         } finally {
-            if (modelFd != null) {
+            // V2 runtime takes ownership of model_fd on success (native side dup/ownership).
+            // Closing here on success triggers fdsan double-close on 0.4.0 (seen on 16k emulator).
+            // Only close on failure/leak path.
+            if (modelFd != null && !startSucceeded) {
                 runCatching { ParcelFileDescriptor.adoptFd(modelFd).close() }
             }
         }

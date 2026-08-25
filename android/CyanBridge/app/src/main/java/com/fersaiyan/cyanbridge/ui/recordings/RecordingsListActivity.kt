@@ -3,14 +3,12 @@ package com.fersaiyan.cyanbridge.ui.recordings
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.setContent
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,23 +16,15 @@ import androidx.compose.runtime.setValue
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
+import com.fersaiyan.cyanbridge.ai.transcription.AutomaticTranscriptionEngine
 import com.fersaiyan.cyanbridge.ai.transcription.DefaultTranscriptionService
-import com.fersaiyan.cyanbridge.ai.transcription.GemmaLiteRtTranscriptionProvider
-import com.fersaiyan.cyanbridge.ai.transcription.Mp4AudioChunker
-import com.fersaiyan.cyanbridge.ai.transcription.NoOpAudioChunker
-import com.fersaiyan.cyanbridge.ai.transcription.RetryPolicy
-import com.fersaiyan.cyanbridge.ai.transcription.RetryingTranscriptionProvider
 import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionProgress
 import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionResult
 import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionService
-import com.fersaiyan.cyanbridge.ai.transcription.moonshine.MoonshineModelManager
-import com.fersaiyan.cyanbridge.ai.transcription.moonshine.MoonshineTranscriptionProvider
 import com.fersaiyan.cyanbridge.shared.recordings.MeetingRecordingUiState as SharedMeetingRecordingUiState
 import com.fersaiyan.cyanbridge.shared.recordings.RecordingItem
 import com.fersaiyan.cyanbridge.shared.recordings.SyncedMediaItem
 import com.fersaiyan.cyanbridge.shared.recordings.TranscriptDialogUiState as SharedTranscriptDialogUiState
-import com.fersaiyan.cyanbridge.shared.recordings.TranscriptionEngine
 import com.fersaiyan.cyanbridge.shared.recordings.TranscriptionProgressUiState as SharedTranscriptionProgressUiState
 import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
 import com.fersaiyan.cyanbridge.audio.MeetingCapturePrefs
@@ -43,9 +33,6 @@ import com.fersaiyan.cyanbridge.shared.chat.ChatRole
 import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.data.local.entity.CaptureSession
 import com.fersaiyan.cyanbridge.localagent.userfacts.TranscriptCandidateFactsAppender
-import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
-import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
-import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.privacy.PrivacyPrefs
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.ui.recordings.RecordingsScreen
@@ -57,7 +44,6 @@ import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
@@ -70,11 +56,6 @@ import java.io.File
 
 class RecordingsListActivity : AppCompatActivity() {
 
-    companion object {
-        private const val PREFS_TRANSCRIPTION_ENGINE = "recordings_transcription_engine"
-        private const val KEY_TRANSCRIPTION_ENGINE = "engine"
-    }
-
     private val uiScope = MainScope()
     private var sessionsJob: Job? = null
     private var recentMediaJob: Job? = null
@@ -85,18 +66,12 @@ class RecordingsListActivity : AppCompatActivity() {
     private var meetingRecording by mutableStateOf(SharedMeetingRecordingUiState())
     private var currentlyPlayingId by mutableStateOf<Long?>(null)
     private var transcribingId by mutableStateOf<Long?>(null)
-    private var pendingTranscriptionSession by mutableStateOf<CaptureSession?>(null)
-    private var selectedEngine by mutableStateOf(TranscriptionEngine.GEMMA)
     private var transcriptionProgress by mutableStateOf<SharedTranscriptionProgressUiState?>(null)
     private var transcriptDialog by mutableStateOf<SharedTranscriptDialogUiState?>(null)
 
     private var mediaPlayer: MediaPlayer? = null
     private val ephemeralTranscripts = mutableMapOf<Long, String>()
     private var meetingStateReceiverRegistered = false
-
-    private val transcriptionPrefs: SharedPreferences by lazy {
-        getSharedPreferences(PREFS_TRANSCRIPTION_ENGINE, MODE_PRIVATE)
-    }
 
     private val meetingStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: Intent?) {
@@ -131,8 +106,6 @@ class RecordingsListActivity : AppCompatActivity() {
                     playingSessionId = currentlyPlayingId,
                     transcribingSessionId = transcribingId,
                     meetingRecording = meetingRecording,
-                    showEngineChooser = pendingTranscriptionSession != null,
-                    selectedEngine = selectedEngine,
                     transcriptionProgress = transcriptionProgress,
                     transcriptDialog = transcriptDialog,
                     formatTimestamp = { ms -> java.text.DateFormat.getDateTimeInstance().format(java.util.Date(ms)) },
@@ -145,9 +118,6 @@ class RecordingsListActivity : AppCompatActivity() {
                     onTranscribe = { item -> sessions.firstOrNull { it.id == item.id }?.let(::onTranscribeClicked) },
                     onViewTranscript = { item -> sessions.firstOrNull { it.id == item.id }?.let(::onViewTranscriptionClicked) },
                     onStopMeetingCapture = { MeetingCaptureService.stop(this) },
-                    onEngineSelected = { selectedEngine = it },
-                    onConfirmEngine = ::confirmTranscription,
-                    onDismissEngineChooser = { pendingTranscriptionSession = null },
                     onDismissTranscript = { transcriptDialog = null },
                     onDestinationSelected = ::navigateTo,
                 )
@@ -311,32 +281,19 @@ class RecordingsListActivity : AppCompatActivity() {
             return
         }
 
-        selectedEngine = transcriptionEngineFromWire(
-            transcriptionPrefs.getString(KEY_TRANSCRIPTION_ENGINE, null),
-        )
-        pendingTranscriptionSession = session
+        startTranscription(session)
     }
 
-    private fun confirmTranscription() {
-        val session = pendingTranscriptionSession ?: return
-        pendingTranscriptionSession = null
-        transcriptionPrefs.edit().putString(KEY_TRANSCRIPTION_ENGINE, selectedEngine.wire).apply()
-        startTranscriptionWithEngine(session, selectedEngine)
-    }
-
-    private fun startTranscriptionWithEngine(session: CaptureSession, engine: TranscriptionEngine) {
+    private fun startTranscription(session: CaptureSession) {
         if (transcribingId != null) {
             Toast.makeText(this, "Already transcribing...", Toast.LENGTH_SHORT).show()
             return
         }
-        if (engine == TranscriptionEngine.GEMMA && !isGemmaLiteRtReady()) {
-            showGemmaRequiresLiteRtDialog()
-            return
-        }
+        val engine = AutomaticTranscriptionEngine.select(applicationContext)
 
         transcribingId = session.id
         transcriptionProgress = SharedTranscriptionProgressUiState(
-            title = "Transcribing (${engine.title})",
+            title = "Transcribing (${engine.route.label})",
             message = "Preparing...",
             progress = 0,
         )
@@ -344,83 +301,22 @@ class RecordingsListActivity : AppCompatActivity() {
         uiScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    val provider: com.fersaiyan.cyanbridge.ai.transcription.TranscriptionProvider
-                    val chunker: com.fersaiyan.cyanbridge.ai.transcription.AudioChunker
-
-                    when (engine) {
-                        TranscriptionEngine.GEMMA -> {
-                            provider = RetryingTranscriptionProvider(
-                                GemmaLiteRtTranscriptionProvider(applicationContext),
-                                policy = RetryPolicy(maxAttempts = 1),
-                            )
-                            chunker = Mp4AudioChunker(applicationContext)
-                        }
-
-                        TranscriptionEngine.MOONSHINE -> {
-                            val kind = MoonshineModelManager.chooseDefault(languageHint = null)
-                            val modelDir = MoonshineModelManager.modelDir(applicationContext, kind)
-                            if (!MoonshineModelManager.isInstalled(applicationContext, kind)) {
-                                val approved = CompletableDeferred<Boolean>()
-                                withContext(Dispatchers.Main) {
-                                    AlertDialog.Builder(this@RecordingsListActivity)
-                                        .setTitle("Download local Moonshine model?")
-                                        .setMessage(
-                                            "To transcribe with Moonshine local model, the app needs to download the model files once. Proceed?",
-                                        )
-                                        .setNegativeButton("Not now") { _, _ -> approved.complete(false) }
-                                        .setPositiveButton("Download") { _, _ -> approved.complete(true) }
-                                        .setCancelable(false)
-                                        .show()
-                                }
-                                if (!approved.await()) {
-                                    return@withContext TranscriptionResult.Failure(
-                                        kind = TranscriptionResult.FailureKind.BAD_REQUEST,
-                                        message = "Moonshine local model not installed",
-                                        canRetry = true,
-                                    )
-                                }
-                                MoonshineModelManager.installIfNeeded(applicationContext, kind) { update ->
-                                    runOnUiThread {
-                                        transcriptionProgress = SharedTranscriptionProgressUiState(
-                                            title = "Transcribing (${engine.title})",
-                                            message = update.message,
-                                            progress = update.percent.coerceIn(0, 100),
-                                        )
-                                    }
-                                }
-                            }
-                            provider = RetryingTranscriptionProvider(
-                                MoonshineTranscriptionProvider(
-                                    context = applicationContext,
-                                    modelDir = modelDir,
-                                    modelArch = kind.modelArch,
-                                ),
-                                policy = RetryPolicy(maxAttempts = 1),
-                            )
-                            chunker = NoOpAudioChunker()
-                        }
-                    }
-
                     val service: TranscriptionService = DefaultTranscriptionService(
                         context = applicationContext,
                         repository = MyApplication.repository,
-                        provider = provider,
-                        chunker = chunker,
+                        provider = engine.provider,
+                        chunker = engine.chunker,
                     )
-                    val isGemma = engine == TranscriptionEngine.GEMMA
-                    val isMoonshine = engine == TranscriptionEngine.MOONSHINE
                     service.transcribe(
                         session = session,
                         options = TranscriptionService.Options(
-                            chunkDurationSec = if (isGemma) 45 else 60,
+                            chunkDurationSec = engine.chunkDurationSec,
                         ),
                         onProgress = { progress ->
                             runOnUiThread {
                                 transcriptionProgress = progress.toUiState(
-                                    engine = engine,
-                                    showIndeterminate =
-                                        (isGemma || isMoonshine) &&
-                                            progress.stage == TranscriptionProgress.Stage.TRANSCRIBING,
+                                    title = "Transcribing (${engine.route.label})",
+                                    showIndeterminate = progress.stage == TranscriptionProgress.Stage.TRANSCRIBING,
                                 )
                             }
                         },
@@ -444,10 +340,7 @@ class RecordingsListActivity : AppCompatActivity() {
 
                     is TranscriptionResult.Failure -> {
                         Log.e("RecordingsListActivity", "Transcription failed: ${result.message}")
-                        if (isGemmaLiteRtRequirementIssue(result.message)) {
-                            showGemmaRequiresLiteRtDialog()
-                        }
-                        if (engine == TranscriptionEngine.GEMMA || DebugLogSupport.isLocalRuntimeIssue(result.message)) {
+                        if (DebugLogSupport.isLocalRuntimeIssue(result.message)) {
                             DebugLogSupport.showSupportOptionsDialog(
                                 activity = this@RecordingsListActivity,
                                 title = "Local runtime issue",
@@ -455,7 +348,7 @@ class RecordingsListActivity : AppCompatActivity() {
                                 description = "Transcription failed while using a local runtime. Sending logs can help diagnose LiteRT or GPU issues.",
                                 extraInfo = linkedMapOf(
                                     "screen" to "recordings",
-                                    "transcription_engine" to engine.name,
+                                    "transcription_engine" to "local_multimodal_litert",
                                 ),
                             )
                         }
@@ -468,10 +361,7 @@ class RecordingsListActivity : AppCompatActivity() {
                 }
             } catch (throwable: Throwable) {
                 Log.e("RecordingsListActivity", "Transcription threw an exception", throwable)
-                if (isGemmaLiteRtRequirementIssue(throwable.message)) {
-                    showGemmaRequiresLiteRtDialog()
-                }
-                if (engine == TranscriptionEngine.GEMMA || DebugLogSupport.isLocalRuntimeIssue(throwable.message, throwable)) {
+                if (DebugLogSupport.isLocalRuntimeIssue(throwable.message, throwable)) {
                     DebugLogSupport.showSupportOptionsDialog(
                         activity = this@RecordingsListActivity,
                         title = "Local runtime issue",
@@ -479,7 +369,7 @@ class RecordingsListActivity : AppCompatActivity() {
                         description = "Transcription crashed while using a local runtime. Sending logs can help diagnose LiteRT or GPU issues.",
                         extraInfo = linkedMapOf(
                             "screen" to "recordings",
-                            "transcription_engine" to engine.name,
+                            "transcription_engine" to "local_multimodal_litert",
                         ),
                     )
                 }
@@ -520,32 +410,6 @@ class RecordingsListActivity : AppCompatActivity() {
         }
     }
 
-    private fun isGemmaLiteRtReady(): Boolean {
-        val selectedModel = runCatching {
-            LocalModelStorageRepository.resolveSelectedModel(applicationContext)
-        }.getOrNull() ?: return false
-        val settings = runCatching {
-            LocalModelSettingsRepository.getForModel(applicationContext, selectedModel.id)
-        }.getOrNull() ?: return false
-        return settings.modelRuntime == LocalModelRuntime.LITERT
-    }
-
-    private fun isGemmaLiteRtRequirementIssue(message: String?): Boolean {
-        val normalized = message?.trim()?.lowercase().orEmpty()
-        return normalized.contains("gemma transcription requires local runtime = litert")
-    }
-
-    private fun showGemmaRequiresLiteRtDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Gemma Requires LiteRT")
-            .setMessage("Gemma transcription only works with Local Runtime set to LiteRT. Open Local Models settings and switch the selected model runtime to LiteRT.")
-            .setNegativeButton("Close", null)
-            .setPositiveButton("Open model settings") { _, _ ->
-                startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
-            }
-            .show()
-    }
-
     private fun stopPlayback() {
         runCatching { mediaPlayer?.stop() }
         runCatching { mediaPlayer?.release() }
@@ -553,33 +417,13 @@ class RecordingsListActivity : AppCompatActivity() {
         currentlyPlayingId = null
     }
 
-    private fun transcriptionEngineFromWire(value: String?): TranscriptionEngine {
-        return when (value?.trim()?.lowercase()) {
-            "moonshot", "moonshine" -> TranscriptionEngine.MOONSHINE
-            else -> TranscriptionEngine.GEMMA
-        }
-    }
-
-    private val TranscriptionEngine.wire: String
-        get() = when (this) {
-            TranscriptionEngine.MOONSHINE -> "moonshine"
-            TranscriptionEngine.GEMMA -> "gemma"
-        }
-
-    private val TranscriptionEngine.title: String
-        get() = when (this) {
-            TranscriptionEngine.MOONSHINE -> "Moonshine (local)"
-            TranscriptionEngine.GEMMA -> "Gemma (LiteRT local)"
-        }
-
     private fun TranscriptionProgress.toUiState(
-        engine: TranscriptionEngine,
+        title: String,
         showIndeterminate: Boolean,
     ): SharedTranscriptionProgressUiState {
         val detail = detail?.let { " · $it" }.orEmpty()
         val message = when {
-            showIndeterminate && engine == TranscriptionEngine.GEMMA -> "Transcribing with Gemma...$detail"
-            showIndeterminate && engine == TranscriptionEngine.MOONSHINE -> "Transcribing with Moonshine...$detail"
+            showIndeterminate -> "Transcribing with the local model...$detail"
             else -> when (stage) {
                 TranscriptionProgress.Stage.PREPARING -> "Preparing... $percent%$detail"
                 TranscriptionProgress.Stage.CHUNKING -> "Chunking... $percent%$detail"
@@ -590,7 +434,7 @@ class RecordingsListActivity : AppCompatActivity() {
             }
         }
         return SharedTranscriptionProgressUiState(
-            title = "Transcribing (${engine.title})",
+            title = title,
             message = message,
             progress = if (showIndeterminate) null else percent.coerceIn(0, 100),
         )

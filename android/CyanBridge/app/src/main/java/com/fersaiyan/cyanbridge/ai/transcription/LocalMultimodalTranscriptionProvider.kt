@@ -18,21 +18,17 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Locale
 
-/**
- * Audio transcription with local LiteRT Gemma models.
- *
- * For long meetings, this provider is expected to receive chunks from the transcription service.
- */
-class GemmaLiteRtTranscriptionProvider(
+/** Audio transcription with the selected local multimodal LiteRT model. */
+class LocalMultimodalTranscriptionProvider(
     private val context: Context,
     private val localModelsProvider: LocalModelsProvider = LocalModelsProvider(),
 ) : TranscriptionProvider {
 
-    override val name: String = "gemma_litert"
+    override val name: String = "local_multimodal_litert"
 
     override suspend fun transcribe(audioFile: File, mimeType: String, language: String?): String {
         Log.i(TAG, "transcribe file=${audioFile.absolutePath} size=${audioFile.length()} mimeType=$mimeType")
-        requireGemmaLiteRtSelected()
+        requireMultimodalLiteRtModel()
 
         val prepared = ensureLiteRtCompatibleAudio(audioFile)
         Log.i(TAG, "preparedAudio=${prepared.absolutePath} size=${prepared.length()}")
@@ -51,13 +47,13 @@ class GemmaLiteRtTranscriptionProvider(
                 requestPriority = LocalModelRequestPriority.HIGH,
             ).trim()
             if (isLocalGenerationFallbackResponse(raw)) {
-                Log.w(TAG, "Gemma local transcription returned fallback response")
+                Log.w(TAG, "Local transcription returned fallback response")
                 ""
             } else {
                 raw.sanitizeTranscript()
             }
         } catch (t: Throwable) {
-            Log.e(TAG, "Gemma LiteRT transcription failed", t)
+            Log.e(TAG, "Local LiteRT transcription failed", t)
             throw t
         } finally {
             if (prepared.absolutePath != audioFile.absolutePath) {
@@ -66,16 +62,12 @@ class GemmaLiteRtTranscriptionProvider(
         }
     }
 
-    private fun requireGemmaLiteRtSelected() {
+    private fun requireMultimodalLiteRtModel() {
         val selected = LocalModelStorageRepository.resolveSelectedModel(context)
-            ?: throw IllegalStateException("No local model selected. Install/select a Gemma LiteRT model first.")
+            ?: throw IllegalStateException("No local model selected. Install or select a multimodal LiteRT model first.")
         val settings = LocalModelSettingsRepository.getForModel(context, selected.id)
         if (settings.modelRuntime != LocalModelRuntime.LITERT) {
-            throw IllegalStateException("Gemma transcription requires Local Runtime = LiteRT.")
-        }
-        val hint = "${selected.displayName} ${selected.catalogId.orEmpty()}".lowercase(Locale.US)
-        if (!hint.contains("gemma")) {
-            throw IllegalStateException("Selected local model is not Gemma. Please select a Gemma 4 LiteRT model.")
+            throw IllegalStateException("Local media transcription requires a LiteRT model.")
         }
     }
 
@@ -117,7 +109,7 @@ class GemmaLiteRtTranscriptionProvider(
         }
         if (trackIndex < 0 || inputFormat == null) {
             extractor.release()
-            throw IllegalStateException("No audio track found for Gemma transcription")
+            throw IllegalStateException("No audio track found for local transcription")
         }
 
         extractor.selectTrack(trackIndex)
@@ -205,7 +197,7 @@ class GemmaLiteRtTranscriptionProvider(
             runCatching { extractor.release() }
         }
 
-        val outDir = File(context.cacheDir, "gemma_transcribe_audio").apply { mkdirs() }
+        val outDir = File(context.cacheDir, "local_transcribe_audio").apply { mkdirs() }
         val wavFile = File(outDir, "${input.nameWithoutExtension}_${System.currentTimeMillis()}.wav")
         val rawPcmBytes = pcm.toByteArray()
         val compactedSamples = SilenceCompactor.compactMonoPcm(

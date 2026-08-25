@@ -145,12 +145,7 @@
     <string name="recordings_transcribing">텍스트 변환 중</string>
     <string name="recordings_transcribe">텍스트 변환</string>
     <string name="recordings_view_transcript">텍스트 변환 보기</string>
-    <string name="recordings_transcription_engine">텍스트 변환 엔진</string>
-    <string name="recordings_local_moonshine">로컬 Moonshine 음성 모델</string>
-    <string name="recordings_gemma_litert">LiteRT 로컬 런타임의 Gemma</string>
     <string name="recordings_close">닫기</string>
-    <string name="recordings_moonshine_local">Moonshine(로컬)</string>
-    <string name="recordings_gemma_local">Gemma(LiteRT 로컬)</string>
     <string name="media_selected">%1$d개 선택됨</string>
     <string name="media_share">공유</string>
     <string name="media_delete">삭제</string>

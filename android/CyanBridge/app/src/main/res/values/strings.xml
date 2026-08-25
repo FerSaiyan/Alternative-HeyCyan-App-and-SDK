@@ -68,6 +68,9 @@
     <string name="onboarding_optional_features_title">Optional Features, Your Choice</string>
     <string name="onboarding_optional_features_desc">AutoDiary, Auto Audio, Local Agent, and Pro features are optional and configured from Plugins.</string>
     <string name="onboarding_optional_features_details">Start with glasses connection, then explore Plugins whenever you are ready. Each plugin explains what it does and requests only the permissions it needs when you enable it. You can review or turn off features at any time.</string>
+    <string name="onboarding_local_model_title">Choose Your On-Device AI</string>
+    <string name="onboarding_local_model_desc">Pick a starter model. CyanBridge will download it in the background while you finish setup.</string>
+    <string name="onboarding_local_model_details">Generation settings are selected automatically for the model and GPU acceleration is preferred. You can change or import models later in Local Models.</string>
 
     <string name="onboarding_open_source_title">Built in the Open</string>
     <string name="onboarding_open_source_desc">Review the code, report issues, and help improve CyanBridge for everyone.</string>

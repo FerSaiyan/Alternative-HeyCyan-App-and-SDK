@@ -1,6 +1,6 @@
 # Local Models Vulkan Runtime Integration
 
-This app currently uses `io.github.ljcamargo:llamacpp-kotlin:0.2.0`, which is still CPU-focused in practice for our current integration path.
+This app uses `io.github.ljcamargo:llamacpp-kotlin:0.4.0` and prefers GPU execution, with an automatic CPU fallback when GPU initialization is unavailable.
 
 This guide describes the "build your own runtime" path so we can ship a custom Android AAR with Vulkan-enabled llama.cpp and load it in this app without changing the chat product surface.
 
@@ -82,16 +82,14 @@ Manifest is prepared with optional native loader declarations:
 ## 6) Verification checklist
 
 1. Install debug build on a Vulkan-capable device.
-2. Set Local Models -> Generation Settings:
-   - Compute backend: `GPU (Experimental)`
-   - GPU layers: > 0
+2. Confirm Local Models -> Generation Settings uses the default GPU backend and automatic GPU-layer selection.
 3. Run warm-up probe and confirm backend in result line.
 4. Confirm no fallback message appears for GPU-capable devices.
 5. Send a normal chat prompt and validate status badge shows GPU generation path.
 
 ## 7) Rollback
 
-To return to the published CPU runtime:
+To return to the published runtime:
 
 - Build without `localLlamaRuntimeAarPath`.
 - Or remove the local AAR property from your command/CI.

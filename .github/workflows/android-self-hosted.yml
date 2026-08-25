@@ -37,12 +37,6 @@ jobs:
           # pre-existing hook on the persistent self-hosted runner workspace.
           lfs: false
 
-      - name: Fetch Moonshine Android LFS assets
-        working-directory: third_party/moonshine
-        run: >-
-          git lfs pull
-          --include="core/speaker-embedding-model-data.cpp,core/third-party/onnxruntime/lib/android/arm64/libonnxruntime.so"
-
       - name: Verify local Android toolchain
         shell: bash
         run: |

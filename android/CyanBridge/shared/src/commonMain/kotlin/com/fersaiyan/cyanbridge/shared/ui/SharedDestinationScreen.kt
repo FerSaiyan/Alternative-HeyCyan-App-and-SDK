@@ -30,7 +30,6 @@ import com.fersaiyan.cyanbridge.shared.plugins.PluginTimeWindow
 import com.fersaiyan.cyanbridge.shared.recordings.MeetingRecordingUiState
 import com.fersaiyan.cyanbridge.shared.recordings.RecordingItem
 import com.fersaiyan.cyanbridge.shared.recordings.SyncedMediaItem
-import com.fersaiyan.cyanbridge.shared.recordings.TranscriptionEngine
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
@@ -317,8 +316,6 @@ private fun SharedMediaDestination(onDestinationSelected: (AppDestination) -> Un
             playingSessionId = null,
             transcribingSessionId = null,
             meetingRecording = MeetingRecordingUiState(),
-            showEngineChooser = false,
-            selectedEngine = TranscriptionEngine.MOONSHINE,
             transcriptionProgress = null,
             transcriptDialog = null,
              formatTimestamp = formatTimestamp,
@@ -329,9 +326,6 @@ private fun SharedMediaDestination(onDestinationSelected: (AppDestination) -> Un
             onTranscribe = {},
             onViewTranscript = {},
             onStopMeetingCapture = {},
-            onEngineSelected = {},
-            onConfirmEngine = {},
-            onDismissEngineChooser = {},
             onDismissTranscript = {},
             onDestinationSelected = onDestinationSelected,
         )
