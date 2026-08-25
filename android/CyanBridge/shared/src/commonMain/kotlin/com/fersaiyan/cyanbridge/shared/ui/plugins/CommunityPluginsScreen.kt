@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -81,6 +82,7 @@ fun CommunityPluginsScreen(
     taskerIntegrations: List<CommunityPluginCardData> = emptyList(),
     onDownloadTaskerIntegration: (CommunityPluginCardData) -> Unit = {},
     onOpenTaskerIntegrationSettings: (String) -> Unit = {},
+    onWatchTaskerTutorial: (() -> Unit)? = null,
 ) {
     var selectedPluginTitle by rememberSaveable { mutableStateOf<String?>(null) }
     var detailsPluginTitle by rememberSaveable { mutableStateOf<String?>(null) }
@@ -153,6 +155,18 @@ fun CommunityPluginsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                onWatchTaskerTutorial?.let { watchTutorial ->
+                    item {
+                        OutlinedButton(
+                            onClick = watchTutorial,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Outlined.PlayCircle, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Watch Tasker setup videos")
+                        }
+                    }
                 }
                 itemsIndexed(taskerIntegrations, key = { _, p -> "tasker-${p.id}" }) { _, plugin ->
                     TaskerIntegrationCard(

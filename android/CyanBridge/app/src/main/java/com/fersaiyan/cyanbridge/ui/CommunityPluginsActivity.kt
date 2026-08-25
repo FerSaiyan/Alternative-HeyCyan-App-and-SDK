@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +47,7 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.PluginTimeWindow
 import com.fersaiyan.cyanbridge.shared.ui.plugins.CommunityPluginsScreen
+import com.fersaiyan.cyanbridge.tasker.TaskerProfileGuidance
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListActivity
@@ -54,10 +56,26 @@ import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.lang.ref.WeakReference
+
+private val TASKER_FILE_SUFFIXES = listOf(".prj.xml", ".prf.xml", ".tsk.xml", ".scn.xml")
+
+internal fun taskerDownloadFileName(sourceFileName: String, uniqueId: Long): String {
+    val suffix = TASKER_FILE_SUFFIXES.firstOrNull { sourceFileName.endsWith(it, ignoreCase = true) }
+        ?: ".prj.xml"
+    val baseName = if (sourceFileName.endsWith(suffix, ignoreCase = true)) {
+        sourceFileName.dropLast(suffix.length)
+    } else {
+        sourceFileName.removeSuffix(".xml")
+    }
+    return "${baseName}_$uniqueId$suffix"
+}
 
 class CommunityPluginsActivity : AppCompatActivity() {
 
@@ -67,6 +85,22 @@ class CommunityPluginsActivity : AppCompatActivity() {
     private var communityPlugins by mutableStateOf<List<CommunityPluginCardData>>(emptyList())
     private var nativePluginsState by mutableStateOf<List<NativePluginCardData>>(emptyList())
     private var pendingMetaCameraPlugin: String? = null
+    private var pendingTaskerDownloadTitle: String? = null
+    private var pendingTaskerDownloadUrl: String? = null
+    private var pendingTaskerDownloadFileName: String? = null
+
+    private val saveTaskerProfileLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/xml"),
+    ) { uri ->
+        val title = pendingTaskerDownloadTitle
+        val link = pendingTaskerDownloadUrl
+        val fileName = pendingTaskerDownloadFileName
+        pendingTaskerDownloadTitle = null
+        pendingTaskerDownloadUrl = null
+        pendingTaskerDownloadFileName = null
+        if (uri == null || title == null || link == null || fileName == null) return@registerForActivityResult
+        saveTaskerProfile(title, link, fileName, uri)
+    }
 
     private val metaWearablePermissionLauncher =
         registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
@@ -227,6 +261,9 @@ class CommunityPluginsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingTaskerDownloadTitle = savedInstanceState?.getString(STATE_PENDING_TASKER_TITLE)
+        pendingTaskerDownloadUrl = savedInstanceState?.getString(STATE_PENDING_TASKER_URL)
+        pendingTaskerDownloadFileName = savedInstanceState?.getString(STATE_PENDING_TASKER_FILE_NAME)
         refreshNativePluginUi()
 
         val appearancePreferences = AppearancePreferences(this)
@@ -241,8 +278,9 @@ class CommunityPluginsActivity : AppCompatActivity() {
                     taskerIntegrations = taskerIntegrationPool(),
                     onOpenNativePluginSettings = ::openNativePluginSettings,
                     onToggleNativePlugin = ::toggleNativePlugin,
-                    onDownloadTaskerIntegration = ::openCommunityPlugin,
+                    onDownloadTaskerIntegration = ::downloadTaskerIntegration,
                     onOpenTaskerIntegrationSettings = ::openTaskerIntegrationSettings,
+                    onWatchTaskerTutorial = { TaskerProfileGuidance.openTutorial(this) },
                     onWindowSelected = { selectedWindow = it },
                     onRefresh = ::fetchPluginsFromServer,
                     onOpenCommunityPlugin = ::openCommunityPlugin,
@@ -254,6 +292,13 @@ class CommunityPluginsActivity : AppCompatActivity() {
             }
         }
         fetchPluginsFromServer()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(STATE_PENDING_TASKER_TITLE, pendingTaskerDownloadTitle)
+        outState.putString(STATE_PENDING_TASKER_URL, pendingTaskerDownloadUrl)
+        outState.putString(STATE_PENDING_TASKER_FILE_NAME, pendingTaskerDownloadFileName)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
@@ -432,6 +477,57 @@ class CommunityPluginsActivity : AppCompatActivity() {
         }
     }
 
+    private fun downloadTaskerIntegration(plugin: CommunityPluginCardData) {
+        val link = plugin.downloadUrl ?: return
+        pendingTaskerDownloadTitle = plugin.title
+        pendingTaskerDownloadUrl = link
+        val sourceFileName = Uri.parse(link).lastPathSegment ?: "${plugin.id}.prj.xml"
+        val fileName = taskerDownloadFileName(sourceFileName, System.currentTimeMillis())
+        pendingTaskerDownloadFileName = fileName
+        saveTaskerProfileLauncher.launch(fileName)
+    }
+
+    private fun saveTaskerProfile(title: String, link: String, fileName: String, destination: Uri) {
+        Toast.makeText(this, "Downloading $title...", Toast.LENGTH_SHORT).show()
+        val appContext = applicationContext
+        val activityRef = WeakReference(this)
+        taskerDownloadScope.launch {
+            val result = runCatching {
+                val connection = java.net.URL(link).openConnection() as java.net.HttpURLConnection
+                try {
+                    connection.connectTimeout = 10_000
+                    connection.readTimeout = 30_000
+                    if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
+                    connection.inputStream.use { input ->
+                        appContext.contentResolver.openOutputStream(destination)?.use(input::copyTo)
+                            ?: error("The selected folder could not create the file")
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            }
+            if (result.isFailure) {
+                runCatching { appContext.contentResolver.delete(destination, null, null) }
+            }
+            withContext(Dispatchers.Main) {
+                val activity = activityRef.get()?.takeUnless { it.isFinishing || it.isDestroyed }
+                result.onSuccess {
+                    if (activity != null) {
+                        TaskerProfileGuidance.showSavedDialog(activity, fileName, destination)
+                    } else {
+                        Toast.makeText(appContext, "$title saved to the selected folder", Toast.LENGTH_LONG).show()
+                    }
+                }.onFailure { error ->
+                    Toast.makeText(
+                        activity ?: appContext,
+                        "Could not download $title: ${error.message}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
+    }
+
     private fun downloadCommunityPlugins(): List<CommunityPluginCardData> {
         val relayUrl = AiProviderPrefs.getRelayBaseUrl(this).trimEnd('/')
         val connection = java.net.URL("$relayUrl/plugins").openConnection()
@@ -542,6 +638,10 @@ class CommunityPluginsActivity : AppCompatActivity() {
         private const val TASKER_AI_ID = "tasker_ai_assistant"
         private const val TASKER_PROFILE_BASE_URL =
             "https://raw.githubusercontent.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/main/android/CyanBridge/tasker"
+        private const val STATE_PENDING_TASKER_TITLE = "pending_tasker_download_title"
+        private const val STATE_PENDING_TASKER_URL = "pending_tasker_download_url"
+        private const val STATE_PENDING_TASKER_FILE_NAME = "pending_tasker_download_file_name"
+        private val taskerDownloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         private val VOICE_PLUGIN_IDS = setOf(
             NativePluginIds.MEETING_SPARK_NOTES,

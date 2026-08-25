@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,6 +55,7 @@ import com.fersaiyan.cyanbridge.tasker.IntegrationHealth
 import com.fersaiyan.cyanbridge.tasker.IntegrationState
 import com.fersaiyan.cyanbridge.tasker.TaskerIntegrationManager
 import com.fersaiyan.cyanbridge.tasker.TaskerIntegrationStatus
+import com.fersaiyan.cyanbridge.tasker.TaskerProfileGuidance
 import com.fersaiyan.cyanbridge.ui.CommunityPluginsActivity
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
@@ -71,9 +73,34 @@ import java.io.File
  */
 class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
     private var uiState by mutableStateOf(ExternalAssistantSetupUiState())
+    private var pendingProfileAsset: String? = null
+    private var pendingProfileFileName: String? = null
+
+    private val saveProfileLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/xml"),
+    ) { uri ->
+        val assetName = pendingProfileAsset
+        val fileName = pendingProfileFileName
+        pendingProfileAsset = null
+        pendingProfileFileName = null
+        if (uri == null || assetName == null || fileName == null) return@registerForActivityResult
+        runCatching {
+            assets.open(assetName).use { input ->
+                contentResolver.openOutputStream(uri)?.use(input::copyTo)
+                    ?: error("The selected folder could not create the file")
+            }
+        }.onSuccess {
+            TaskerProfileGuidance.showSavedDialog(this, fileName, uri)
+        }.onFailure { error ->
+            runCatching { contentResolver.delete(uri, null, null) }
+            showLongToast("Could not save the Tasker profile: ${error.message}")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingProfileAsset = savedInstanceState?.getString(STATE_PENDING_PROFILE_ASSET)
+        pendingProfileFileName = savedInstanceState?.getString(STATE_PENDING_PROFILE_FILE_NAME)
         refreshSetupState()
         val appearancePreferences = AppearancePreferences(this)
         setContent {
@@ -87,11 +114,18 @@ class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
                     onVerifyProfile = ::verifyImportedProfile,
                     onOpenAccessibility = ::openAccessibilitySettings,
                     onOpenPlugins = ::openPlugins,
+                    onWatchTutorial = { TaskerProfileGuidance.openTutorial(this) },
                     onTestVoice = ::testTaskerVoiceLaunch,
                     onRefresh = ::refreshSetupState,
                 )
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(STATE_PENDING_PROFILE_ASSET, pendingProfileAsset)
+        outState.putString(STATE_PENDING_PROFILE_FILE_NAME, pendingProfileFileName)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
@@ -127,31 +161,28 @@ class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
             return
         }
 
-        val profileFile = File(cacheDir, assetName.substringAfterLast('/'))
-        runCatching {
+        val fileName = profileFileName(assetName)
+        val profileFile = File(cacheDir, "tasker/$fileName")
+        val imported = runCatching {
+            profileFile.parentFile?.mkdirs()
             assets.open(assetName).use { input ->
                 profileFile.outputStream().use(input::copyTo)
             }
             val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", profileFile)
-            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/xml")
-                setPackage(ExternalImageAutomationIntents.TASKER_PACKAGE)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/xml"
-                setPackage(ExternalImageAutomationIntents.TASKER_PACKAGE)
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            val importIntent = listOf(viewIntent, sendIntent).firstOrNull {
-                it.resolveActivity(packageManager) != null
-            } ?: throw IllegalStateException("Tasker did not expose a profile import activity")
-            startActivity(importIntent)
-        }.onFailure { error ->
-            showLongToast("Could not open the Tasker profile: ${error.message}")
+            TaskerProfileGuidance.openImporter(this, uri, fileName)
+        }.getOrDefault(false)
+        if (!imported) {
+            pendingProfileAsset = assetName
+            val fallbackFileName = fileName.removeSuffix(".prf.xml") +
+                "_${System.currentTimeMillis()}.prf.xml"
+            pendingProfileFileName = fallbackFileName
+            showLongToast("Tasker could not import directly. Choose where to save the profile, then import it from Tasker.")
+            saveProfileLauncher.launch(fallbackFileName)
         }
     }
+
+    private fun profileFileName(assetName: String): String =
+        assetName.substringAfterLast('/').removeSuffix(".xml") + ".prf.xml"
 
     private fun verifyImportedProfile() {
         val capability = ExternalAssistantAutomationInspector.inspect(this)
@@ -304,6 +335,11 @@ class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
     private fun showLongToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
+
+    private companion object {
+        const val STATE_PENDING_PROFILE_ASSET = "pending_profile_asset"
+        const val STATE_PENDING_PROFILE_FILE_NAME = "pending_profile_file_name"
+    }
 }
 
 data class ExternalAssistantSetupUiState(
@@ -336,6 +372,7 @@ fun ExternalAssistantAutomationSetupScreen(
     onVerifyProfile: () -> Unit,
     onOpenAccessibility: () -> Unit,
     onOpenPlugins: () -> Unit,
+    onWatchTutorial: () -> Unit,
     onTestVoice: () -> Unit,
     onRefresh: () -> Unit,
 ) {
@@ -414,6 +451,12 @@ fun ExternalAssistantAutomationSetupScreen(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Open Plugins / Tasker profile downloads")
+                    }
+                    OutlinedButton(
+                        onClick = onWatchTutorial,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Watch Tasker setup videos")
                     }
                     Button(
                         onClick = onTestVoice,
