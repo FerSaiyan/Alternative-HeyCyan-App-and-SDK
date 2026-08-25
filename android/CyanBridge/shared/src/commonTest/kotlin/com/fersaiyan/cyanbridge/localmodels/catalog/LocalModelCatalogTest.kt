@@ -28,12 +28,12 @@ class LocalModelCatalogTest {
     }
 
     @Test
-    fun lookupRejectsBlankIdsAndFindsKnownEntries() {
+    fun lookupRejectsBlankIdsAndFindsCurrentQwenStarter() {
         assertNull(LocalModelCatalogRepository.findById(null))
         assertNull(LocalModelCatalogRepository.findById("  "))
-        assertEquals(
-            "qwen2.5-0.5b-instruct-q4",
-            LocalModelCatalogRepository.findById("qwen2.5-0.5b-instruct-q4")?.id,
-        )
+        val qwen = LocalModelCatalogRepository.findById("qwen3.5-0.8b-q4")
+        assertEquals("qwen3.5-0.8b-q4", qwen?.id)
+        assertEquals("Qwen3.5-0.8B-Q4_0.gguf", qwen?.expectedFilename)
+        assertTrue(LocalModelCatalogRepository.curatedModels.none { it.id.startsWith("qwen2.5") })
     }
 }
