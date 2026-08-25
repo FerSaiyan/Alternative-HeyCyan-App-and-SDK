@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.localagent
 
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -12,10 +11,10 @@ import org.robolectric.annotation.Config
 class LocalAgentShizukuFallbackTest {
 
     @Test
-    fun `fallback exposes only fixed input actions`() {
-        assertTrue(LocalAgentShizukuFallback.supportsFixedInputOperation(LocalAgentAction.PressEnter, 1080, 2400))
-        assertTrue(LocalAgentShizukuFallback.supportsFixedInputOperation(LocalAgentAction.GlobalBack, 1080, 2400))
-        assertTrue(LocalAgentShizukuFallback.supportsFixedInputOperation(LocalAgentAction.GlobalHome, 1080, 2400))
+    fun `removed fallback rejects all fixed input actions`() {
+        assertFalse(LocalAgentShizukuFallback.supportsFixedInputOperation(LocalAgentAction.PressEnter, 1080, 2400))
+        assertFalse(LocalAgentShizukuFallback.supportsFixedInputOperation(LocalAgentAction.GlobalBack, 1080, 2400))
+        assertFalse(LocalAgentShizukuFallback.supportsFixedInputOperation(LocalAgentAction.GlobalHome, 1080, 2400))
         assertFalse(
             LocalAgentShizukuFallback.supportsFixedInputOperation(
                 LocalAgentAction.ClickText("Send"),

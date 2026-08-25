@@ -12,7 +12,8 @@ import androidx.fragment.app.FragmentActivity
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
-import com.fersaiyan.cyanbridge.localagent.accessibility.LocalAgentAccessibilityService
+
+private const val AUTO_INPUT_PACKAGE = "com.joaomgcd.autoinput"
 
 /**
  * @author hzy ,
@@ -88,7 +89,6 @@ private fun requiredBluetoothPermissions(): List<String> {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         listOf(Permission.BLUETOOTH_SCAN, Permission.BLUETOOTH_CONNECT)
     } else {
-        // BLE discovery uses location on Android 11 and earlier.
         listOf(Permission.ACCESS_FINE_LOCATION)
     }
 }
@@ -98,7 +98,6 @@ fun hasBluetooth(context: Context): Boolean {
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
     }
 }
-
 
 fun requestSMSPermission(
     activity: FragmentActivity,
@@ -215,7 +214,6 @@ private fun requiredWifiP2pPermissions(): List<String> {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         listOf(Permission.NEARBY_WIFI_DEVICES)
     } else {
-        // Wifi Direct discovery is location-gated before Android 13.
         listOf(Permission.ACCESS_FINE_LOCATION)
     }
 }
@@ -262,6 +260,11 @@ fun requestNotificationPermission(
         .request(requestCallback)
 }
 
+/**
+ * Compatibility name retained for older callers. CyanBridge no longer declares its own
+ * AccessibilityService; Android UI automation is delegated to AutoInput, so readiness now
+ * means that AutoInput's accessibility service is enabled.
+ */
 fun hasAccessibilityServicePermission(context: Context): Boolean {
     val enabled = Settings.Secure.getInt(
         context.contentResolver,
@@ -270,12 +273,13 @@ fun hasAccessibilityServicePermission(context: Context): Boolean {
     ) == 1
     if (!enabled) return false
 
-    val expected = ComponentName(context, LocalAgentAccessibilityService::class.java).flattenToString()
     val services = Settings.Secure.getString(
         context.contentResolver,
         Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-    ) ?: return false
-    return services.split(':').any { it.equals(expected, ignoreCase = true) }
+    ).orEmpty()
+    return services.split(':')
+        .mapNotNull(ComponentName::unflattenFromString)
+        .any { it.packageName.equals(AUTO_INPUT_PACKAGE, ignoreCase = true) }
 }
 
 fun requestAccessibilityServicePermission(
@@ -285,7 +289,7 @@ fun requestAccessibilityServicePermission(
     if (hasAccessibilityServicePermission(activity)) return true
     Toast.makeText(
         activity,
-        "Enable Accessibility access for $feature to continue",
+        "Enable AutoInput accessibility for $feature to continue",
         Toast.LENGTH_LONG,
     ).show()
     activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -331,19 +335,6 @@ fun ensureNotificationPermission(
         }
     })
 }
-
-
-fun requestAllPermission(
-    activity: FragmentActivity,
-    callback: OnPermissionCallback
-) {
-    XXPermissions.with(activity)
-//        .permission(Permission.WRITE_EXTERNAL_STORAGE)
-//        .permission(Permission.READ_EXTERNAL_STORAGE)
-        .permission(Permission.MANAGE_EXTERNAL_STORAGE)
-        .request(callback)
-}
-
 
 fun requestCameraPermission(
     activity: FragmentActivity,

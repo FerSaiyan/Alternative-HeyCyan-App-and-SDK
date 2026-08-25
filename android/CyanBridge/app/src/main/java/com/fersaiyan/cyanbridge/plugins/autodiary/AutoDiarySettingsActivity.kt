@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.plugins.autodiary
 
 import android.content.Intent
 import android.os.Bundle
-import android.provider.Settings
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -38,24 +38,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.daily.DailyFactsReminderScheduler
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyBulletsSettings
+import com.fersaiyan.cyanbridge.localagent.tasker.TaskerAgentBridge
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
-import com.fersaiyan.cyanbridge.ui.localagent.AppBlacklistActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
-import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
+import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
 import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
 import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
 
 class AutoDiarySettingsActivity : AppCompatActivity() {
     private var autoDiaryEnabled by mutableStateOf(false)
-    private var accessibilityEnabled by mutableStateOf(false)
+    private var taskerObserverAvailable by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,21 +62,12 @@ class AutoDiarySettingsActivity : AppCompatActivity() {
         setThemedComposeContent(composeView) {
             AutoDiarySettingsScreen(
                 enabled = autoDiaryEnabled,
-                accessibilityEnabled = accessibilityEnabled,
+                taskerObserverAvailable = taskerObserverAvailable,
                 onBack = ::finish,
                 onEnabledChanged = ::setEnabled,
-                onOpenAccessibility = {
-                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                },
-                onOpenBlacklist = {
-                    startActivity(Intent(this, AppBlacklistActivity::class.java))
-                },
-                onOpenCaptures = {
-                    startActivity(Intent(this, ScreenCapturesActivity::class.java))
-                },
-                onOpenSummary = {
-                    startActivity(Intent(this, DailySummaryActivity::class.java))
-                },
+                onOpenTasker = ::openTasker,
+                onOpenCaptures = { startActivity(Intent(this, ScreenCapturesActivity::class.java)) },
+                onOpenSummary = { startActivity(Intent(this, DailySummaryActivity::class.java)) },
                 onOpenDailyFactsDraft = {
                     startActivity(
                         Intent(this, DailyFactsActivity::class.java)
@@ -106,24 +95,24 @@ class AutoDiarySettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshUi() {
-        accessibilityEnabled = hasAccessibilityServicePermission(this)
+        taskerObserverAvailable = TaskerAgentBridge.isTaskerUiObserverAvailable(this)
         autoDiaryEnabled = AutoDiaryService.isEnabled(this)
-        if (autoDiaryEnabled && accessibilityEnabled) {
-            AutoDiaryService.startIfEnabled(this)
-        }
+        AutoDiaryService.startIfEnabled(this)
     }
 
+    private fun openTasker() {
+        packageManager.getLaunchIntentForPackage("net.dinglisch.android.taskerm")?.let(::startActivity)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AutoDiarySettingsScreen(
     enabled: Boolean,
-    accessibilityEnabled: Boolean,
+    taskerObserverAvailable: Boolean,
     onBack: () -> Unit,
     onEnabledChanged: (Boolean) -> Unit,
-    onOpenAccessibility: () -> Unit,
-    onOpenBlacklist: () -> Unit,
+    onOpenTasker: () -> Unit,
     onOpenCaptures: () -> Unit,
     onOpenSummary: () -> Unit,
     onOpenDailyFactsDraft: () -> Unit,
@@ -131,7 +120,6 @@ fun AutoDiarySettingsScreen(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
-    var interval by remember { mutableIntStateOf(LocalAgentPrefs.getCaptureIntervalMin(context)) }
     var reminder by remember { mutableStateOf(LocalAgentPrefs.isDailyFactsReminderEnabled(context)) }
     var autoSaveFacts by remember { mutableStateOf(com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.isAutoSaveDailyFactsEnabled(context)) }
     var extractFacts by remember { mutableStateOf(com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.isExtractUserFactCandidatesEnabled(context)) }
@@ -159,7 +147,8 @@ fun AutoDiarySettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                stringResource(R.string.compose_autodiary_description),
+                "Build a private daily memory from Android screen context and conversations. " +
+                    "Tasker owns the schedule, app exclusions and AutoInput observation; CyanBridge owns the encrypted memory, indexing, facts, summaries and RAG.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             SwitchSetting(
@@ -169,40 +158,26 @@ fun AutoDiarySettingsScreen(
             )
             NativePluginShortcutPreference(
                 pluginId = com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds.AUTO_DIARY,
-                    pluginTitle = stringResource(R.string.compose_plugin_name_autodiary),
+                pluginTitle = stringResource(R.string.compose_plugin_name_autodiary),
             )
             Text(stringResource(R.string.compose_screen_capture), style = MaterialTheme.typography.titleMedium)
             Text(
-                if (accessibilityEnabled) {
-                    stringResource(R.string.compose_autodiary_accessibility_enabled)
-                } else if (enabled) {
-                    stringResource(R.string.compose_autodiary_paused)
-                } else {
-                    stringResource(R.string.compose_autodiary_accessibility_required)
+                when {
+                    taskerObserverAvailable -> "Tasker and AutoInput are installed. The imported profile captures every 10 minutes by default. Edit the Time profile in Tasker to change the schedule."
+                    enabled -> "AutoDiary is enabled, but Tasker or AutoInput is not detected. Install/import the Tasker profile before expecting screen captures."
+                    else -> "Tasker + AutoInput are required for screen observation. CyanBridge Accessibility and installed-app visibility are not required."
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = if (accessibilityEnabled) {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                } else {
-                    MaterialTheme.colorScheme.error
-                },
+                color = if (taskerObserverAvailable) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
             )
-            NumberSetting(
-                label = stringResource(R.string.compose_capture_interval_minutes),
-                value = interval,
-                range = 1..1440,
-                onValueChanged = {
-                    interval = it
-                    LocalAgentPrefs.setCaptureIntervalMin(context, it)
-                },
+            Text(
+                "Excluded apps are configured in Tasker with the global variable %CB_AutoDiaryExcluded. " +
+                    "Use package names separated by commas, spaces, semicolons or new lines. Excluded screen text is not sent to CyanBridge.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onOpenAccessibility, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.compose_accessibility_settings))
-                }
-                OutlinedButton(onClick = onOpenBlacklist, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.compose_blacklist_apps))
-                }
+            OutlinedButton(onClick = onOpenTasker, modifier = Modifier.fillMaxWidth()) {
+                Text("Open Tasker schedule / exclusions")
             }
             OutlinedButton(onClick = onOpenCaptures, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.compose_view_screen_captures))

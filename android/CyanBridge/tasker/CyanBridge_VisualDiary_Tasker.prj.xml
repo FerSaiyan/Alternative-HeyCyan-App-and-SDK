@@ -1,0 +1,104 @@
+<TaskerData sr="" dvi="1" tv="6.5.11">
+    <Profile sr="prof401" ve="2">
+        <id>401</id>
+        <mid0>411</mid0>
+        <nme>CyanBridge VisualDiary Enable</nme>
+        <Event sr="con0" ve="2">
+            <code>599</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_VISUAL_DIARY_ENABLE</Str>
+            <Int sr="arg1" val="0"/>
+            <Int sr="arg2" val="0"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+        </Event>
+    </Profile>
+    <Profile sr="prof402" ve="2">
+        <id>402</id>
+        <mid0>412</mid0>
+        <nme>CyanBridge VisualDiary Disable</nme>
+        <Event sr="con0" ve="2">
+            <code>599</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_VISUAL_DIARY_DISABLE</Str>
+            <Int sr="arg1" val="0"/>
+            <Int sr="arg2" val="0"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+        </Event>
+    </Profile>
+    <Profile sr="prof403" ve="2">
+        <id>403</id>
+        <mid0>413</mid0>
+        <nme>CyanBridge VisualDiary Periodic Capture</nme>
+        <Share sr="Share">
+            <b>false</b>
+            <d>Default every 15 minutes. Edit this Time context in Tasker to change Visual Diary periodicity. Tasker only triggers; CyanBridge still owns glasses capture, image saving and visual inference.</d>
+            <g>CyanBridge,Visual Diary,Schedule</g>
+            <p>true</p>
+            <t></t>
+        </Share>
+        <Time sr="con0">
+            <fh>-1</fh>
+            <fm>-1</fm>
+            <rep>2</rep>
+            <repval>15</repval>
+            <th>-1</th>
+            <tm>-1</tm>
+        </Time>
+    </Profile>
+    <Project sr="proj0" ve="2">
+        <cdate>1787360400000</cdate>
+        <name>CyanBridge Visual Diary</name>
+        <pids>401,402,403</pids>
+        <tids>411,412,413</tids>
+    </Project>
+    <Task sr="task411">
+        <id>411</id>
+        <nme>CyanBridge VisualDiary Enable Handler</nme>
+        <pri>10</pri>
+        <Action sr="act0" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">setGlobal("CB_VisualDiaryEnabled", "1");</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+    </Task>
+    <Task sr="task412">
+        <id>412</id>
+        <nme>CyanBridge VisualDiary Disable Handler</nme>
+        <pri>10</pri>
+        <Action sr="act0" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">setGlobal("CB_VisualDiaryEnabled", "0");</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+    </Task>
+    <Task sr="task413">
+        <id>413</id>
+        <nme>CyanBridge VisualDiary Periodic Handler</nme>
+        <pri>10</pri>
+        <Action sr="act0" ve="7">
+            <code>129</code>
+            <Str sr="arg0" ve="3">var visual_capture_fire = global("CB_VisualDiaryEnabled") === "1" ? "true" : "false";</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+        <Action sr="act1" ve="7">
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%visual_capture_fire</lhs><op>2</op><rhs>true</rhs></Condition></ConditionList>
+            <code>877</code>
+            <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_VISUAL_DIARY_CAPTURE</Str>
+            <Int sr="arg1" val="0"/>
+            <Str sr="arg2" ve="3"/>
+            <Str sr="arg3" ve="3"/>
+            <Str sr="arg4" ve="3"/>
+            <Str sr="arg5" ve="3"/>
+            <Str sr="arg6" ve="3"/>
+            <Str sr="arg7" ve="3">com.fersaiyan.cyanbridge</Str>
+            <Str sr="arg8" ve="3"/>
+            <Int sr="arg9" val="0"/>
+        </Action>
+    </Task>
+</TaskerData>

@@ -13,7 +13,11 @@ object LocalAgentPrefs {
     private const val KEY_AUTOMATION_ENABLED = "automation_enabled"
 
     // Screen content capture / memory
+    // KEY_AUTO_CAPTURE_ENABLED is now legacy Accessibility capture state. Tasker-backed
+    // AutoDiary uses its own key so enabling AutoDiary does not also wake the old
+    // CyanBridge Accessibility observer and create duplicate captures.
     private const val KEY_AUTO_CAPTURE_ENABLED = "auto_capture_enabled"
+    private const val KEY_TASKER_AUTO_DIARY_ENABLED = "tasker_auto_diary_enabled"
     private const val KEY_CAPTURE_INTERVAL_MIN = "capture_interval_min"
     private const val KEY_CAPTURE_BLACKLIST = "capture_blacklist"
     private const val KEY_HIDE_SYSTEM_APPS = "hide_system_apps"
@@ -112,15 +116,38 @@ object LocalAgentPrefs {
             .apply()
     }
 
+    /** Legacy CyanBridge Accessibility-based screen capture switch. */
     fun isAutoCaptureEnabled(context: Context): Boolean {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(KEY_AUTO_CAPTURE_ENABLED, false)
     }
 
+    /** Legacy CyanBridge Accessibility-based screen capture switch. */
     fun setAutoCaptureEnabled(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_AUTO_CAPTURE_ENABLED, enabled)
+            .apply()
+    }
+
+    /**
+     * Tasker-backed AutoDiary feature switch. Before the first migration write, fall back
+     * to the legacy capture bit so already-enabled users can be migrated without losing
+     * their setting. AutoDiaryService persists this new key before clearing the legacy bit.
+     */
+    fun isTaskerAutoDiaryEnabled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return if (prefs.contains(KEY_TASKER_AUTO_DIARY_ENABLED)) {
+            prefs.getBoolean(KEY_TASKER_AUTO_DIARY_ENABLED, false)
+        } else {
+            prefs.getBoolean(KEY_AUTO_CAPTURE_ENABLED, false)
+        }
+    }
+
+    fun setTaskerAutoDiaryEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_TASKER_AUTO_DIARY_ENABLED, enabled)
             .apply()
     }
 

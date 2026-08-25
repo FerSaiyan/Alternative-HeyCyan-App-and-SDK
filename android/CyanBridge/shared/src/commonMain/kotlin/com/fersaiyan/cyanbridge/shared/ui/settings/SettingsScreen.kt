@@ -73,6 +73,7 @@ data class SettingsUiState(
     val proPlan: String = "Pro",
     val appLanguageLabel: String = "System default",
     val providerType: AgentProviderType = AgentProviderType.PRO_SUBSCRIPTION,
+    val taskerIntegrationsAvailable: Boolean = false,
     val defaultImageQuestion: String = "Give me a concise description of the image",
     val memoryMode: MemoryPrivacyMode = MemoryPrivacyMode.PRIVATE_LOCAL,
     val memoryModeAvailability: String = "",
@@ -100,6 +101,7 @@ interface SettingsScreenActions {
     fun openSubscription()
     fun setProviderType(type: AgentProviderType)
     fun openLocalModels()
+    fun openTaskerIntegrations() = Unit
     fun setDefaultImageQuestion(question: String)
     fun resetDefaultImageQuestion()
     fun setMemoryMode(mode: MemoryPrivacyMode)
@@ -500,11 +502,35 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
             Text(localizedProviderLabel(type), style = MaterialTheme.typography.bodyMedium)
         }
     }
-    OutlinedButton(
-        onClick = actions::openLocalModels,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(stringResource(Res.string.settings_configure_local_models))
+    if (state.taskerIntegrationsAvailable) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(
+                onClick = actions::openLocalModels,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("settings_local_models"),
+            ) {
+                Text(stringResource(Res.string.settings_configure_local_models))
+            }
+            OutlinedButton(
+                onClick = actions::openTaskerIntegrations,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("settings_tasker_integrations"),
+            ) {
+                Text("Tasker integrations")
+            }
+        }
+    } else {
+        OutlinedButton(
+            onClick = actions::openLocalModels,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(Res.string.settings_configure_local_models))
+        }
     }
     Text(
         text = stringResource(Res.string.image_questions_title),

@@ -1,6 +1,5 @@
 package com.fersaiyan.cyanbridge.ui
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -13,15 +12,12 @@ import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AgentPrefs
-import com.fersaiyan.cyanbridge.localagent.accessibility.LocalAgentAccessibilityService
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
+import com.fersaiyan.cyanbridge.shared.ui.onboarding.FeatureOnboardingScreen
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.shared.ui.onboarding.FeatureOnboardingScreen
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.hjq.permissions.OnPermissionCallback
-import com.hjq.permissions.Permission
-import com.hjq.permissions.XXPermissions
 
 class OnboardingFeatureActivity : AppCompatActivity() {
 
@@ -29,7 +25,6 @@ class OnboardingFeatureActivity : AppCompatActivity() {
     private var localAgentAutomationEnabled by mutableStateOf(false)
     private var accessibilityEnabled by mutableStateOf(false)
     private var glassesConnectionPermissionGranted by mutableStateOf(false)
-    private var storagePermissionGranted by mutableStateOf(false)
 
     data class OnboardingFeature(
         val iconRes: Int,
@@ -48,7 +43,6 @@ class OnboardingFeatureActivity : AppCompatActivity() {
         super.onResume()
         refreshAccessibilityStatus()
         glassesConnectionPermissionGranted = hasBluetooth(this)
-        storagePermissionGranted = XXPermissions.isGranted(this, Permission.MANAGE_EXTERNAL_STORAGE)
     }
 
     private fun setupFeatureScreen() {
@@ -59,9 +53,8 @@ class OnboardingFeatureActivity : AppCompatActivity() {
 
         val isAccessibilityFeature = featureIndex == SCREEN_MEMORY_FEATURE_INDEX
         localAgentAutomationEnabled = AgentPrefs.isLocalAgentAutomationEnabled(this)
-        accessibilityEnabled = isLocalAgentAccessibilityServiceEnabled()
+        accessibilityEnabled = hasAccessibilityServicePermission(this)
         glassesConnectionPermissionGranted = hasBluetooth(this)
-        storagePermissionGranted = XXPermissions.isGranted(this, Permission.MANAGE_EXTERNAL_STORAGE)
         val appearancePreferences = AppearancePreferences(this)
         setContent {
             val appearance by rememberAppearanceSettings(appearancePreferences)
@@ -72,31 +65,27 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                     details = getString(feature.detailsRes),
                     showGlassesConnectionPermission = featureIndex == GLASSES_CONNECTION_FEATURE_INDEX,
                     glassesConnectionPermissionGranted = glassesConnectionPermissionGranted,
-                    showStoragePermission = featureIndex == GLASSES_CONNECTION_FEATURE_INDEX,
-                    storagePermissionGranted = storagePermissionGranted,
+                    // CyanBridge uses app-private storage, MediaStore and SAF; All Files Access is not requested.
+                    showStoragePermission = false,
+                    storagePermissionGranted = true,
+                    // This disclosure now refers to AutoInput's accessibility access. CyanBridge itself
+                    // no longer declares an AccessibilityService in the Android manifest.
                     showAccessibilityDisclosure = isAccessibilityFeature,
                     showOpenSourceContribution = featureIndex == OPEN_SOURCE_FEATURE_INDEX,
                     accessibilityEnabled = accessibilityEnabled,
                     localAgentAutomationEnabled = localAgentAutomationEnabled,
-                     backLabel = getString(
-                         if (featureIndex == 0) R.string.onboarding_skip_all else R.string.onboarding_back,
-                     ),
-                     nextLabel = getString(
-                         if (featureIndex == FEATURES.lastIndex) R.string.onboarding_get_started else R.string.onboarding_next,
-                     ),
+                    backLabel = getString(
+                        if (featureIndex == 0) R.string.onboarding_skip_all else R.string.onboarding_back,
+                    ),
+                    nextLabel = getString(
+                        if (featureIndex == FEATURES.lastIndex) R.string.onboarding_get_started else R.string.onboarding_next,
+                    ),
                     onRequestGlassesConnectionPermission = {
                         requestBluetoothPermission(this, OnPermissionCallback { _, allGranted ->
                             glassesConnectionPermissionGranted = allGranted && hasBluetooth(this)
                         })
                     },
-                    onRequestStoragePermission = {
-                        requestAllPermission(this, OnPermissionCallback { _, allGranted ->
-                            storagePermissionGranted = allGranted && XXPermissions.isGranted(
-                                this,
-                                Permission.MANAGE_EXTERNAL_STORAGE,
-                            )
-                        })
-                    },
+                    onRequestStoragePermission = {},
                     onLocalAgentAutomationChange = {
                         localAgentAutomationEnabled = it
                         AgentPrefs.setLocalAgentAutomationEnabled(this, it)
@@ -122,23 +111,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
     }
 
     private fun refreshAccessibilityStatus() {
-        accessibilityEnabled = isLocalAgentAccessibilityServiceEnabled()
-    }
-
-    private fun isLocalAgentAccessibilityServiceEnabled(): Boolean {
-        val accessibilityEnabled = Settings.Secure.getInt(
-            contentResolver,
-            Settings.Secure.ACCESSIBILITY_ENABLED,
-            0,
-        ) == 1
-        if (!accessibilityEnabled) return false
-
-        val expected = ComponentName(this, LocalAgentAccessibilityService::class.java).flattenToString()
-        val enabledServices = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-        ).orEmpty()
-        return enabledServices.split(':').any { it.equals(expected, ignoreCase = true) }
+        accessibilityEnabled = hasAccessibilityServicePermission(this)
     }
 
     private fun goToFeature(index: Int) {
@@ -205,7 +178,6 @@ class OnboardingFeatureActivity : AppCompatActivity() {
         fun launchIfNeeded(activity: AppCompatActivity) {
             val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             if (prefs.getBoolean("onboarding_completed", false)) return
-
             activity.startActivity(Intent(activity, OnboardingFeatureActivity::class.java))
         }
     }

@@ -11,41 +11,19 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- Meeting capture (microphone) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-
-    <!-- Storage -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" /> <!-- Keep if truly needed for pre-Android 11 legacy, otherwise can be removed -->
-
-    <!-- Bluetooth -->
+    <!-- Legacy Android 7-9 compatibility only. Android 10+ uses scoped MediaStore/app storage. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:usesPermissionFlags="neverForLocation" />
-
-    <!-- Location -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" android:usesPermissionFlags="neverForLocation" />
-
-    <!-- Wi-Fi Direct / Nearby Devices -->
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" tools:targetApi="33" />
-
-    <!-- DAT uses the wearable camera; a phone camera is not required for install. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
-
-
-    <!-- The local-agent capture blacklist must enumerate installed packages so users can exclude any app. -->
-    <uses-permission
-        android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission" />
-
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_USER_PRESENT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -56,6 +34,16 @@
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- Narrow package visibility replaces QUERY_ALL_PACKAGES. -->
+    <queries>
+        <package android:name="net.dinglisch.android.taskerm" />
+        <package android:name="com.joaomgcd.autoinput" />
+        <package android:name="com.facebook.stella" />
+        <package android:name="com.facebook.stella_debug" />
+        <package android:name="com.google.android.googlequicksearchbox" />
+        <package android:name="com.google.android.apps.bard" />
+        <package android:name="com.openai.chatgpt" />
+    </queries>
 
     <application
         android:name=".ui.MyApplication"
@@ -71,44 +59,20 @@
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"
         tools:targetApi="31">
-        <uses-native-library
-            android:name="libvulkan.so"
-            android:required="false" />
-        <uses-native-library
-            android:name="libOpenCL.so"
-            android:required="false" />
+        <uses-native-library android:name="libvulkan.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <meta-data android:name="com.meta.wearable.mwdat.APPLICATION_ID" android:value="${mwdat_application_id}" />
+        <meta-data android:name="com.meta.wearable.mwdat.CLIENT_TOKEN" android:value="${mwdat_client_token}" />
+        <meta-data android:name="com.meta.wearable.mwdat.DAM_ENABLED" android:value="true" />
 
-        <!-- Meta Wearables Device Access Toolkit (DAT) SDK Configuration -->
-        <meta-data
-            android:name="com.meta.wearable.mwdat.APPLICATION_ID"
-            android:value="${mwdat_application_id}" />
-        <meta-data
-            android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
-            android:value="${mwdat_client_token}" />
-        <meta-data
-            android:name="com.meta.wearable.mwdat.DAM_ENABLED"
-            android:value="true" />
-
-        <activity
-            android:name=".ui.WelcomeActivity"
-            android:exported="true">
+        <activity android:name=".ui.WelcomeActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:label="@string/app_name" />
-        <activity
-            android:name=".ui.MetaPairingActivity"
-            android:exported="true"
-            android:launchMode="singleTask"
-            android:label="@string/meta_pairing_title">
-            <!-- Callback scheme for Meta AI app to return to CyanBridge after registration -->
+        <activity android:name=".MainActivity" android:exported="true" android:label="@string/app_name" />
+        <activity android:name=".ui.MetaPairingActivity" android:exported="true" android:launchMode="singleTask" android:label="@string/meta_pairing_title">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -116,345 +80,94 @@
                 <data android:scheme="cyanbridge" />
             </intent-filter>
         </activity>
-
-        <!-- AppLockGuideActivity removed (redundant onboarding screen) -->
-
-        <activity
-            android:name=".ui.BatteryOptimizationGuideActivity"
-            android:exported="false"
-            android:label="@string/battery_opt_title" />
-
-        <activity
-            android:name=".ui.OnboardingFeatureActivity"
-            android:exported="false"
-            android:label="Setup" />
-
-        <activity
-            android:name=".ui.DeviceBindActivity" />
-        <service
-            android:name=".devices.meizumyvu.MeizuMyvuConnectionService"
-            android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
-        <activity
-            android:name=".ui.ChatListActivity"
-            android:exported="false"
-            android:label="Chats" />
-
-        <activity
-            android:name=".ui.ChatThreadActivity"
-            android:exported="false"
-            android:label="Chat"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".ui.SettingsActivity"
-            android:exported="false"
-            android:label="Settings" />
-
-        <activity
-            android:name=".ai.image.ExternalAssistantAutomationSetupActivity"
-            android:exported="false"
-            android:label="Gemini / ChatGPT automation setup" />
-
-        <activity
-            android:name=".ui.appearance.AppearanceActivity"
-            android:exported="false"
-            android:label="Appearance" />
-
-        <activity
-            android:name=".ui.CommunityPluginsActivity"
-            android:exported="false"
-            android:label="Community Plugins" />
-
-        <activity
-            android:name=".ui.PublishPluginActivity"
-            android:exported="false"
-            android:label="Publish Plugin" />
-
-        <activity
-            android:name=".plugins.walkingaid.WalkingAidSettingsActivity"
-            android:exported="false"
-            android:label="Walking Aid Settings" />
-
-        <activity
-            android:name=".plugins.meetingsparknotes.MeetingSparkNotesSettingsActivity"
-            android:exported="false"
-            android:label="Meeting Spark Notes Settings" />
-
-        <activity
-            android:name=".plugins.livecaptionrelay.LiveCaptionRelaySettingsActivity"
-            android:exported="false"
-            android:label="Live Caption Relay Settings" />
-
-        <activity
-            android:name=".plugins.handsfreetranslator.HandsFreeTranslatorSettingsActivity"
-            android:exported="false"
-            android:label="Hands-Free Translator Settings" />
-
-        <activity
-            android:name=".plugins.errandbrain.ErrandBrainSettingsActivity"
-            android:exported="false"
-            android:label="Errand Brain Settings" />
-
-        <activity
-            android:name=".plugins.walkingaid.WalkingAidChatActivity"
-            android:exported="false"
-            android:label="Walking Aid Chat"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".ui.localagent.PendingActionsActivity"
-            android:exported="false"
-            android:label="Pending actions" />
-
-        <activity
-            android:name=".ui.localagent.AppBlacklistActivity"
-            android:exported="false"
-            android:label="Blacklist apps" />
-
-        <activity
-            android:name=".ui.localagent.DailyFactsActivity"
-            android:exported="false"
-            android:label="Daily facts" />
-
-        <activity
-            android:name=".ui.localagent.ScreenCapturesActivity"
-            android:exported="false"
-            android:label="Screen captures" />
-
-        <activity
-            android:name=".ui.localagent.DailySummaryActivity"
-            android:exported="false"
-            android:label="Daily summary" />
-
-        <activity
-            android:name=".ui.debug.TranscriptionDebugActivity"
-            android:exported="false"
-            android:label="Transcription Debug" />
-
-        <activity
-            android:name=".ui.notes.NotesListActivity"
-            android:exported="false"
-            android:label="Notes" />
-
-        <activity
-            android:name=".ui.notes.NoteDetailActivity"
-            android:exported="false"
-            android:label="Note" />
-
-        <activity
-            android:name=".ui.recordings.RecordingsListActivity"
-            android:exported="false"
-            android:label="@string/nav_transcriptions_recordings" />
-
-        <activity
-            android:name=".ui.recordings.SyncedMediaGalleryActivity"
-            android:exported="false"
-            android:label="Synced photos and videos" />
-
-        <!-- Pro subscription configuration activities -->
-        <activity
-            android:name=".agent.ProSubscriptionActivity"
-            android:exported="true"
-            android:label="Pro Subscription">
+        <activity android:name=".ui.BatteryOptimizationGuideActivity" android:exported="false" android:label="@string/battery_opt_title" />
+        <activity android:name=".ui.OnboardingFeatureActivity" android:exported="false" android:label="Setup" />
+        <activity android:name=".ui.DeviceBindActivity" />
+        <service android:name=".devices.meizumyvu.MeizuMyvuConnectionService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <activity android:name=".ui.ChatListActivity" android:exported="false" android:label="Chats" />
+        <activity android:name=".ui.ChatThreadActivity" android:exported="false" android:label="Chat" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ui.SettingsActivity" android:exported="false" android:label="Settings" />
+        <activity android:name=".ai.image.ExternalAssistantAutomationSetupActivity" android:exported="false" android:label="Gemini / ChatGPT automation setup" />
+        <activity android:name=".ui.appearance.AppearanceActivity" android:exported="false" android:label="Appearance" />
+        <activity android:name=".ui.CommunityPluginsActivity" android:exported="false" android:label="Community Plugins" />
+        <activity android:name=".ui.PublishPluginActivity" android:exported="false" android:label="Publish Plugin" />
+        <activity android:name=".plugins.walkingaid.WalkingAidSettingsActivity" android:exported="false" android:label="Walking Aid Settings" />
+        <activity android:name=".plugins.meetingsparknotes.MeetingSparkNotesSettingsActivity" android:exported="false" android:label="Meeting Spark Notes Settings" />
+        <activity android:name=".plugins.livecaptionrelay.LiveCaptionRelaySettingsActivity" android:exported="false" android:label="Live Caption Relay Settings" />
+        <activity android:name=".plugins.handsfreetranslator.HandsFreeTranslatorSettingsActivity" android:exported="false" android:label="Hands-Free Translator Settings" />
+        <activity android:name=".plugins.errandbrain.ErrandBrainSettingsActivity" android:exported="false" android:label="Errand Brain Settings" />
+        <activity android:name=".plugins.walkingaid.WalkingAidChatActivity" android:exported="false" android:label="Walking Aid Chat" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ui.localagent.PendingActionsActivity" android:exported="false" android:label="Pending actions" />
+        <activity android:name=".ui.localagent.DailyFactsActivity" android:exported="false" android:label="Daily facts" />
+        <activity android:name=".ui.localagent.ScreenCapturesActivity" android:exported="false" android:label="Screen captures" />
+        <activity android:name=".ui.localagent.DailySummaryActivity" android:exported="false" android:label="Daily summary" />
+        <activity android:name=".ui.debug.TranscriptionDebugActivity" android:exported="false" android:label="Transcription Debug" />
+        <activity android:name=".ui.notes.NotesListActivity" android:exported="false" android:label="Notes" />
+        <activity android:name=".ui.notes.NoteDetailActivity" android:exported="false" android:label="Note" />
+        <activity android:name=".ui.recordings.RecordingsListActivity" android:exported="false" android:label="@string/nav_transcriptions_recordings" />
+        <activity android:name=".ui.recordings.SyncedMediaGalleryActivity" android:exported="false" android:label="Synced photos and videos" />
+        <activity android:name=".agent.ProSubscriptionActivity" android:exported="true" android:label="Pro Subscription">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
-
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-
-                <data
-                    android:scheme="fersaiyan"
-                    android:host="pro-sub"
-                    android:path="/restore" />
+                <data android:scheme="fersaiyan" android:host="pro-sub" android:path="/restore" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".agent.WebSubscriptionCallbackActivity"
-            android:exported="true"
-            android:label="Subscription Callback"
-            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
-            <!-- The relay must publish assetlinks.json for this HTTPS App Link. -->
+        <activity android:name=".agent.WebSubscriptionCallbackActivity" android:exported="true" android:label="Subscription Callback" android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
-
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-
-                <data
-                    android:scheme="https"
-                    android:host="cyanbridge.vercel.app"
-                    android:path="/web-subscribe/callback" />
+                <data android:scheme="https" android:host="cyanbridge.vercel.app" android:path="/web-subscribe/callback" />
             </intent-filter>
         </activity>
+        <activity android:name=".agent.ProSubscriptionSettingsActivity" android:exported="false" android:label="Pro Subscription Settings" />
+        <activity android:name=".ai.live.GeminiLiveActivity" android:exported="false" android:label="Gemini Live Preview" />
+        <activity android:name=".agent.LocalModelsConfigureActivity" android:exported="false" android:label="Configure Local Models" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+        <activity android:name=".plugins.autodiary.AutoDiarySettingsActivity" android:exported="false" android:label="AutoDiary Settings" />
+        <activity android:name=".plugins.localagent.LocalAgentSettingsActivity" android:exported="false" android:label="Local Agent Settings" />
+        <activity android:name=".plugins.autoaudio.AutoAudioSettingsActivity" android:exported="false" android:label="Auto Audio Settings" />
+        <activity android:name=".plugins.visualdiary.VisualDiarySettingsActivity" android:exported="false" android:label="Visual Diary Settings" />
+        <activity android:name=".bridge.runtimes.evenhub.EvenHubRuntimeActivity" android:exported="false" />
 
-        <activity
-            android:name=".agent.ProSubscriptionSettingsActivity"
-            android:exported="false"
-            android:label="Pro Subscription Settings" />
-        <activity
-            android:name=".ai.live.GeminiLiveActivity"
-            android:exported="false"
-            android:label="Gemini Live Preview" />
-        <activity
-            android:name=".agent.LocalModelsConfigureActivity"
-            android:exported="false"
-            android:label="Configure Local Models"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
-
-        <activity
-            android:name=".plugins.autodiary.AutoDiarySettingsActivity"
-            android:exported="false"
-            android:label="AutoDiary Settings" />
-        <activity
-            android:name=".plugins.localagent.LocalAgentSettingsActivity"
-            android:exported="false"
-            android:label="Local Agent Settings" />
-        <activity
-            android:name=".plugins.autoaudio.AutoAudioSettingsActivity"
-            android:exported="false"
-            android:label="Auto Audio Settings" />
-        <activity
-            android:name=".plugins.visualdiary.VisualDiarySettingsActivity"
-            android:exported="false"
-            android:label="Visual Diary Settings" />
-
-        <activity
-            android:name=".bridge.runtimes.evenhub.EvenHubRuntimeActivity"
-            android:exported="false" />
-
-        <!-- Duplicate activity declarations removed -->
-
-        <service
-            android:name=".localmodels.download.ModelDownloadForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <service
-            android:name=".ai.AiQuestionForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="connectedDevice|dataSync|microphone" />
-
-        <service
-            android:name=".localagent.accessibility.LocalAgentAccessibilityService"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="false"
-            android:label="@string/local_agent_accessibility_service_label">
+        <service android:name=".localmodels.download.ModelDownloadForegroundService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".ai.AiQuestionForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|dataSync|microphone" />
+        <service android:name=".plugins.walkingaid.WalkingAidService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".plugins.meetingsparknotes.MeetingSparkNotesService" android:exported="false" android:foregroundServiceType="microphone" />
+        <service android:name=".plugins.livecaptionrelay.LiveCaptionRelayService" android:exported="false" android:foregroundServiceType="microphone" />
+        <service android:name=".plugins.handsfreetranslator.HandsFreeTranslatorService" android:exported="false" android:foregroundServiceType="microphone" />
+        <service android:name=".plugins.errandbrain.ErrandBrainService" android:exported="false" android:foregroundServiceType="microphone" />
+        <service android:name=".plugins.visualdiary.VisualDiaryService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <receiver android:name=".plugins.autodiary.AutoDiaryTaskerCaptureReceiver" android:exported="true">
             <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
+                <action android:name="com.fersaiyan.cyanbridge.TASKER_AUTO_DIARY_CAPTURE" />
             </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
-
-        <service
-            android:name=".plugins.walkingaid.WalkingAidService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <service
-            android:name=".plugins.meetingsparknotes.MeetingSparkNotesService"
-            android:exported="false"
-            android:foregroundServiceType="microphone" />
-
-        <service
-            android:name=".plugins.livecaptionrelay.LiveCaptionRelayService"
-            android:exported="false"
-            android:foregroundServiceType="microphone" />
-
-        <service
-            android:name=".plugins.handsfreetranslator.HandsFreeTranslatorService"
-            android:exported="false"
-            android:foregroundServiceType="microphone" />
-
-        <service
-            android:name=".plugins.errandbrain.ErrandBrainService"
-            android:exported="false"
-            android:foregroundServiceType="microphone" />
-
-        <service
-            android:name=".plugins.autodiary.AutoDiaryService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <service
-            android:name=".plugins.visualdiary.VisualDiaryService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <receiver
-            android:name=".plugins.errandbrain.ErrandBrainReminderReceiver"
-            android:exported="false" />
-
-        <receiver
-            android:name=".ai.image.ImageAutomationStatusReceiver"
-            android:exported="true">
+        </receiver>
+        <receiver android:name=".plugins.visualdiary.VisualDiaryTaskerCaptureReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="com.fersaiyan.cyanbridge.TASKER_VISUAL_DIARY_CAPTURE" />
+            </intent-filter>
+        </receiver>
+        <receiver android:name=".plugins.errandbrain.ErrandBrainReminderReceiver" android:exported="false" />
+        <receiver android:name=".ai.image.ImageAutomationStatusReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="com.fersaiyan.cyanbridge.AI_IMAGE_STATUS" />
                 <action android:name="com.fersaiyan.cyanbridge.AI_IMAGE_PROFILE" />
             </intent-filter>
         </receiver>
-
-        <service
-            android:name=".audio.MeetingCaptureService"
-            android:exported="false"
-            android:foregroundServiceType="microphone" />
-
-        <service
-            android:name=".localagent.LocalAgentService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <service
-            android:name=".localagent.LocalAgentTelegramService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <!-- Receives the Shizuku binder only from the shell/root service. The optional Local
-             Agent fallback remains disabled until the user enables it and grants Shizuku access. -->
-        <provider
-            android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="${applicationId}.shizuku"
-            android:enabled="true"
-            android:exported="true"
-            android:multiprocess="false"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
-
-        <service
-            android:name=".media.autocapture.AutoAudioCaptureService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <service
-            android:name=".studiobridge.StudioBridgeForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="microphone" />
-
-        <service
-            android:name=".bridge.notifications.NotificationForwarderService"
-            android:exported="true"
-            android:label="CyanBridge notification forwarding"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
+        <service android:name=".audio.MeetingCaptureService" android:exported="false" android:foregroundServiceType="microphone" />
+        <service android:name=".localagent.LocalAgentService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".localagent.TaskerLocalAgentService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".localagent.LocalAgentTelegramService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".media.autocapture.AutoAudioCaptureService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".studiobridge.StudioBridgeForegroundService" android:exported="false" android:foregroundServiceType="microphone" />
+        <service android:name=".bridge.notifications.NotificationForwarderService" android:exported="true" android:label="CyanBridge notification forwarding" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
         </service>
-
-        <receiver
-            android:name=".localagent.daily.DailyFactsReminderReceiver"
-            android:exported="false" />
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
+        <receiver android:name=".localagent.daily.DailyFactsReminderReceiver" android:exported="false" />
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.fileprovider" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
     </application>
-
 </manifest>

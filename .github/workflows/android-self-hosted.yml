@@ -7,6 +7,7 @@ on:
       - .github/workflows/android-self-hosted.yml
       - android/**
       - heycyan-core/**
+      - tools/hil/**
       - .gitmodules
       - README.md
 
@@ -27,6 +28,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
         with:
           submodules: recursive
           # Required LFS assets live in Moonshine and are pulled explicitly below.
@@ -47,6 +50,7 @@ jobs:
           test "$(uname -s)" = "Linux"
           test "$(uname -m)" = "x86_64"
           command -v git-lfs >/dev/null
+          command -v python3 >/dev/null
           test -x /opt/android-studio/jbr/bin/java
           test -d "$HOME/Android/Sdk/platforms/android-35"
           test -x "$HOME/Android/Sdk/platform-tools/adb"
@@ -64,6 +68,9 @@ jobs:
         env:
           META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         run: test -n "$META_GITHUB_TOKEN"
+
+      - name: Validate Tasker integration contracts
+        run: python3 tools/hil/validate_tasker_profiles.py
 
       - name: Run Android and shared tests
         env:

@@ -11,53 +11,48 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.MainActivity
+import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivity
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
-import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
-import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
-import com.meta.wearable.dat.core.Wearables
-import com.meta.wearable.dat.core.types.Permission
-import com.meta.wearable.dat.core.types.PermissionStatus
-import com.fersaiyan.cyanbridge.shared.chat.ChatRole
 import com.fersaiyan.cyanbridge.chat.ChatStore
-import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
-import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
-import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
-import com.fersaiyan.cyanbridge.shared.plugins.PluginTimeWindow
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.shared.ui.plugins.CommunityPluginsScreen
-import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidService
-import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidPreferences
-import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesService
-import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesPreferences
-import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelayService
-import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelaySettingsActivity
-import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelayPreferences
-import com.fersaiyan.cyanbridge.plugins.handsfreetranslator.HandsFreeTranslatorService
-import com.fersaiyan.cyanbridge.plugins.handsfreetranslator.HandsFreeTranslatorSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.handsfreetranslator.HandsFreeTranslatorPreferences
-import com.fersaiyan.cyanbridge.plugins.errandbrain.ErrandBrainService
-import com.fersaiyan.cyanbridge.plugins.errandbrain.ErrandBrainSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.errandbrain.ErrandBrainPreferences
-import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiaryService
-import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsActivity
-import com.fersaiyan.cyanbridge.plugins.localagent.LocalAgentPlugin
-import com.fersaiyan.cyanbridge.plugins.localagent.LocalAgentSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.autoaudio.AutoAudioSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiaryPreferences
-import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiarySettingsActivity
-import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiaryService
+import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
 import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
-import com.fersaiyan.cyanbridge.ui.ensureNotificationPermission
-import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
+import com.fersaiyan.cyanbridge.plugins.autoaudio.AutoAudioSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsActivity
+import com.fersaiyan.cyanbridge.plugins.errandbrain.ErrandBrainPreferences
+import com.fersaiyan.cyanbridge.plugins.errandbrain.ErrandBrainService
+import com.fersaiyan.cyanbridge.plugins.errandbrain.ErrandBrainSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.handsfreetranslator.HandsFreeTranslatorPreferences
+import com.fersaiyan.cyanbridge.plugins.handsfreetranslator.HandsFreeTranslatorService
+import com.fersaiyan.cyanbridge.plugins.handsfreetranslator.HandsFreeTranslatorSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelayPreferences
+import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelayService
+import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelaySettingsActivity
+import com.fersaiyan.cyanbridge.plugins.localagent.LocalAgentSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesPreferences
+import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesService
+import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiarySettingsActivity
+import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidPreferences
+import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidService
+import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidSettingsActivity
+import com.fersaiyan.cyanbridge.shared.chat.ChatRole
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
+import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
+import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
+import com.fersaiyan.cyanbridge.shared.plugins.PluginTimeWindow
+import com.fersaiyan.cyanbridge.shared.ui.plugins.CommunityPluginsScreen
+import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
+import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListActivity
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
+import com.meta.wearable.dat.core.Wearables
+import com.meta.wearable.dat.core.types.Permission
+import com.meta.wearable.dat.core.types.PermissionStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -70,7 +65,6 @@ class CommunityPluginsActivity : AppCompatActivity() {
     private var isRefreshing by mutableStateOf(false)
     private var serverPluginsLoaded = false
     private var communityPlugins by mutableStateOf<List<CommunityPluginCardData>>(emptyList())
-
     private var nativePluginsState by mutableStateOf<List<NativePluginCardData>>(emptyList())
     private var pendingMetaCameraPlugin: String? = null
 
@@ -83,14 +77,76 @@ class CommunityPluginsActivity : AppCompatActivity() {
                 applyNativePluginToggle(pluginId, enabled = true)
             } else {
                 val manager = MetaRaybanManager.getInstance(this)
-                val detail = manager.reportExternalError("pluginCameraPermission", "Meta camera permission was denied")
+                val detail = manager.reportExternalError(
+                    "pluginCameraPermission",
+                    "Meta camera permission was denied",
+                )
                 Toast.makeText(this, detail, Toast.LENGTH_LONG).show()
             }
         }
 
+    /**
+     * These integrations are intentionally not part of the native-plugin pool. Their feature
+     * state/settings remain in CyanBridge, but Android observation/execution/scheduling requires
+     * the matching user-imported Tasker profile.
+     */
+    private fun taskerIntegrationPool(): List<CommunityPluginCardData> = listOf(
+        taskerIntegration(
+            id = TASKER_AI_ID,
+            title = "Gemini / ChatGPT Image Assistant",
+            description = "Tasker + AutoInput adapter used by the AI image-question flow. The current bundle contains Gemini v3 and ChatGPT v1 and safely supports both profiles on the same phone.",
+            fileName = "Tasker_AI.prj.xml",
+        ),
+        taskerIntegration(
+            id = NativePluginIds.LOCAL_AGENT,
+            title = "Local Agent",
+            description = "Required Tasker + AutoInput observer/executor for CyanBridge Local Agent. CyanBridge still owns planning, approvals, memory and recovery.",
+            fileName = "CyanBridge_LocalAgent_Tasker.prj.xml",
+        ),
+        taskerIntegration(
+            id = NativePluginIds.AUTO_DIARY,
+            title = "AutoDiary",
+            description = "Tasker profile for periodic screen-memory capture and package exclusions. Daily facts, summaries, Memory Vault and RAG remain inside CyanBridge.",
+            fileName = "CyanBridge_AutoDiary_Tasker.prj.xml",
+        ),
+        taskerIntegration(
+            id = NativePluginIds.VISUAL_DIARY,
+            title = "Visual Diary",
+            description = "Tasker profile that owns the periodic trigger. CyanBridge still captures from the glasses, saves images, runs vision inference and writes visual memory.",
+            fileName = "CyanBridge_VisualDiary_Tasker.prj.xml",
+        ),
+    )
+
+    private fun taskerIntegration(
+        id: String,
+        title: String,
+        description: String,
+        fileName: String,
+    ) = CommunityPluginCardData(
+        id = id,
+        title = title,
+        author = "CyanBridge",
+        description = description,
+        badge = "Tasker",
+        downloadsAll = 0,
+        downloadsMonthly = 0,
+        downloadsWeekly = 0,
+        votesAll = 0,
+        votesMonthly = 0,
+        votesWeekly = 0,
+        trendAll = 0,
+        trendMonthly = 0,
+        trendWeekly = 0,
+        downloadUrl = "$TASKER_PROFILE_BASE_URL/$fileName",
+    )
+
     private fun nativePluginPool(): List<NativePluginCardData> {
         val selectedClass = DeviceProfileStore.selectedClass(this)
-        val hasCamera = selectedClass in setOf(DeviceClass.HEY_CYAN, DeviceClass.META_RAYBAN, DeviceClass.UNKNOWN)
+        val hasCamera = selectedClass in setOf(
+            DeviceClass.HEY_CYAN,
+            DeviceClass.META_RAYBAN,
+            DeviceClass.UNKNOWN,
+        )
         val hasOnboardStorage = selectedClass == DeviceClass.HEY_CYAN || selectedClass == DeviceClass.UNKNOWN
 
         val autoAudioDescription = when (selectedClass) {
@@ -108,17 +164,10 @@ class CommunityPluginsActivity : AppCompatActivity() {
 
         return listOf(
             NativePluginCardData(
-                id = NativePluginIds.LOCAL_AGENT,
-                title = "Local Agent",
-                description = "Private phone automation with accessibility controls, action approval, local planning, and shared diary memory.",
-                badge = "Automation",
-                enabled = LocalAgentPlugin.isEnabled(this),
-                hasSettings = true,
-            ),
-            NativePluginCardData(
                 id = NativePluginIds.WALKING_AID,
                 title = "Walking Aid",
-                description = cameraUnavailableReason ?: "Real-time scene description and obstacle warnings for blind navigation. Captures images from glasses at regular intervals and describes the environment.",
+                description = cameraUnavailableReason
+                    ?: "Real-time scene description and obstacle warnings for blind navigation. Captures images from glasses at regular intervals and describes the environment.",
                 badge = "Accessibility",
                 enabled = hasCamera && CommunityPluginPrefs.isNativePluginEnabled(this, NativePluginIds.WALKING_AID),
                 hasSettings = true,
@@ -165,14 +214,6 @@ class CommunityPluginsActivity : AppCompatActivity() {
                 hasSettings = true,
             ),
             NativePluginCardData(
-                id = NativePluginIds.AUTO_DIARY,
-                title = "AutoDiary",
-                description = "Collect screen context and turn it into private daily facts, bullets, and summaries.",
-                badge = "Productivity",
-                enabled = AutoDiaryService.isEnabled(this),
-                hasSettings = true,
-            ),
-            NativePluginCardData(
                 id = NativePluginIds.AUTO_AUDIO,
                 title = "Auto Audio",
                 description = autoAudioDescription,
@@ -181,17 +222,9 @@ class CommunityPluginsActivity : AppCompatActivity() {
                 hasSettings = true,
                 isAvailable = hasOnboardStorage,
             ),
-            NativePluginCardData(
-                id = NativePluginIds.VISUAL_DIARY,
-                title = "Visual Diary",
-                description = cameraUnavailableReason ?: "Capture glasses scenes, describe them with Gemma, and append concise notes to daily memory.",
-                badge = "Productivity",
-                enabled = hasCamera && VisualDiaryPreferences.isEnabled(this),
-                hasSettings = true,
-                isAvailable = hasCamera,
-            ),
         )
     }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         refreshNativePluginUi()
@@ -205,20 +238,11 @@ class CommunityPluginsActivity : AppCompatActivity() {
                     selectedWindow = selectedWindow,
                     isRefreshing = isRefreshing,
                     nativePlugins = nativePluginsState,
-                    onOpenNativePluginSettings = { pluginId ->
-                        when (pluginId) {
-                            NativePluginIds.LOCAL_AGENT -> startActivity(Intent(this, LocalAgentSettingsActivity::class.java))
-                            NativePluginIds.WALKING_AID -> startActivity(Intent(this, WalkingAidSettingsActivity::class.java))
-                            NativePluginIds.MEETING_SPARK_NOTES -> startActivity(Intent(this, MeetingSparkNotesSettingsActivity::class.java))
-                            NativePluginIds.LIVE_CAPTION_RELAY -> startActivity(Intent(this, LiveCaptionRelaySettingsActivity::class.java))
-                            NativePluginIds.HANDS_FREE_TRANSLATOR -> startActivity(Intent(this, HandsFreeTranslatorSettingsActivity::class.java))
-                            NativePluginIds.ERRAND_BRAIN -> startActivity(Intent(this, ErrandBrainSettingsActivity::class.java))
-                            NativePluginIds.AUTO_DIARY -> startActivity(Intent(this, AutoDiarySettingsActivity::class.java))
-                            NativePluginIds.AUTO_AUDIO -> startActivity(Intent(this, AutoAudioSettingsActivity::class.java))
-                            NativePluginIds.VISUAL_DIARY -> startActivity(Intent(this, VisualDiarySettingsActivity::class.java))
-                        }
-                    },
+                    taskerIntegrations = taskerIntegrationPool(),
+                    onOpenNativePluginSettings = ::openNativePluginSettings,
                     onToggleNativePlugin = ::toggleNativePlugin,
+                    onDownloadTaskerIntegration = ::openCommunityPlugin,
+                    onOpenTaskerIntegrationSettings = ::openTaskerIntegrationSettings,
                     onWindowSelected = { selectedWindow = it },
                     onRefresh = ::fetchPluginsFromServer,
                     onOpenCommunityPlugin = ::openCommunityPlugin,
@@ -237,6 +261,30 @@ class CommunityPluginsActivity : AppCompatActivity() {
         refreshNativePluginUi()
     }
 
+    private fun openTaskerIntegrationSettings(pluginId: String) {
+        val intent = when (pluginId) {
+            TASKER_AI_ID -> Intent(this, ExternalAssistantAutomationSetupActivity::class.java)
+            NativePluginIds.LOCAL_AGENT -> Intent(this, LocalAgentSettingsActivity::class.java)
+            NativePluginIds.AUTO_DIARY -> Intent(this, AutoDiarySettingsActivity::class.java)
+            NativePluginIds.VISUAL_DIARY -> Intent(this, VisualDiarySettingsActivity::class.java)
+            else -> null
+        }
+        if (intent != null) startActivity(intent)
+    }
+
+    private fun openNativePluginSettings(pluginId: String) {
+        val intent = when (pluginId) {
+            NativePluginIds.WALKING_AID -> Intent(this, WalkingAidSettingsActivity::class.java)
+            NativePluginIds.MEETING_SPARK_NOTES -> Intent(this, MeetingSparkNotesSettingsActivity::class.java)
+            NativePluginIds.LIVE_CAPTION_RELAY -> Intent(this, LiveCaptionRelaySettingsActivity::class.java)
+            NativePluginIds.HANDS_FREE_TRANSLATOR -> Intent(this, HandsFreeTranslatorSettingsActivity::class.java)
+            NativePluginIds.ERRAND_BRAIN -> Intent(this, ErrandBrainSettingsActivity::class.java)
+            NativePluginIds.AUTO_AUDIO -> Intent(this, AutoAudioSettingsActivity::class.java)
+            else -> null
+        }
+        if (intent != null) startActivity(intent)
+    }
+
     private fun refreshNativePluginUi() {
         nativePluginsState = nativePluginPool()
     }
@@ -246,13 +294,9 @@ class CommunityPluginsActivity : AppCompatActivity() {
             Toast.makeText(this, "Auto Audio is unavailable for Meta Ray-Ban devices", Toast.LENGTH_LONG).show()
             return
         }
-        if (pluginId == NativePluginIds.AUTO_DIARY) {
-            applyNativePluginToggle(pluginId, enabled)
-            return
-        }
         if (enabled &&
             DeviceProfileStore.isMetaSelected(this) &&
-            pluginId in setOf(NativePluginIds.WALKING_AID, NativePluginIds.VISUAL_DIARY)
+            pluginId == NativePluginIds.WALKING_AID
         ) {
             val manager = MetaRaybanManager.getInstance(this)
             if (!manager.isInitialized.value) manager.initialize()
@@ -316,43 +360,28 @@ class CommunityPluginsActivity : AppCompatActivity() {
     }
 
     private fun applyNativePluginToggle(pluginId: String, enabled: Boolean) {
-        when (pluginId) {
-            NativePluginIds.AUTO_DIARY -> {
-                if (enabled) AutoDiaryService.enable(this) else AutoDiaryService.disable(this)
-                refreshNativePluginUi()
-                return
-            }
-            NativePluginIds.VISUAL_DIARY -> {
-                if (enabled) VisualDiaryService.enable(this) else VisualDiaryService.disable(this)
-                refreshNativePluginUi()
-                return
-            }
-        }
         CommunityPluginPrefs.setNativePluginEnabled(this, pluginId, enabled)
         nativePluginsState = nativePluginsState.map {
             if (it.id == pluginId) it.copy(enabled = enabled) else it
         }
         when (pluginId) {
-            NativePluginIds.LOCAL_AGENT -> {
-                LocalAgentPlugin.setEnabled(this, enabled)
-            }
-            "walking_aid" -> {
+            NativePluginIds.WALKING_AID -> {
                 WalkingAidPreferences.setEnabled(this, enabled)
                 if (enabled) WalkingAidService.start(this) else WalkingAidService.stop(this)
             }
-            "meeting_spark_notes" -> {
+            NativePluginIds.MEETING_SPARK_NOTES -> {
                 MeetingSparkNotesPreferences.setEnabled(this, enabled)
                 if (enabled) MeetingSparkNotesService.start(this) else MeetingSparkNotesService.stop(this)
             }
-            "live_caption_relay" -> {
+            NativePluginIds.LIVE_CAPTION_RELAY -> {
                 LiveCaptionRelayPreferences.setEnabled(this, enabled)
                 if (enabled) LiveCaptionRelayService.start(this) else LiveCaptionRelayService.stop(this)
             }
-            "hands_free_translator" -> {
+            NativePluginIds.HANDS_FREE_TRANSLATOR -> {
                 HandsFreeTranslatorPreferences.setEnabled(this, enabled)
                 if (enabled) HandsFreeTranslatorService.start(this) else HandsFreeTranslatorService.stop(this)
             }
-            "errand_brain" -> {
+            NativePluginIds.ERRAND_BRAIN -> {
                 ErrandBrainPreferences.setEnabled(this, enabled)
                 if (enabled) ErrandBrainService.start(this) else ErrandBrainService.stop(this)
             }
@@ -379,11 +408,15 @@ class CommunityPluginsActivity : AppCompatActivity() {
             result.onSuccess { plugins ->
                 communityPlugins = plugins
                 serverPluginsLoaded = true
-                Toast.makeText(this@CommunityPluginsActivity, "Plugins refreshed from server!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this@CommunityPluginsActivity,
+                    "Plugins refreshed from server!",
+                    Toast.LENGTH_SHORT,
+                ).show()
             }.onFailure {
                 Toast.makeText(
                     this@CommunityPluginsActivity,
-                    "Server unavailable. No community plugins were loaded.",
+                    "Server unavailable. Official Tasker integrations are still available above.",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -393,12 +426,7 @@ class CommunityPluginsActivity : AppCompatActivity() {
     private fun openCommunityPlugin(plugin: CommunityPluginCardData) {
         val link = plugin.taskerNetLink ?: plugin.downloadUrl ?: return
         runCatching {
-            startActivity(
-                Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse(link),
-                ),
-            )
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
         }.onFailure {
             Toast.makeText(this, "Could not open ${plugin.title}", Toast.LENGTH_SHORT).show()
         }
@@ -449,11 +477,11 @@ class CommunityPluginsActivity : AppCompatActivity() {
                         votesMonthly = plugin.readMetric("votes", "monthly", "month"),
                         votesWeekly = plugin.readMetric("votes", "weekly", "week"),
                         trendAll = plugin.readMetric("trend", "all_time", "all", "allTime"),
-                         trendMonthly = plugin.readMetric("trend", "monthly", "month"),
-                         trendWeekly = plugin.readMetric("trend", "weekly", "week"),
-                         taskerNetLink = plugin.readString("taskernet_link", "taskerNetLink", "taskernetLink"),
-                         downloadUrl = plugin.readString("download_url", "downloadUrl"),
-                     ),
+                        trendMonthly = plugin.readMetric("trend", "monthly", "month"),
+                        trendWeekly = plugin.readMetric("trend", "weekly", "week"),
+                        taskerNetLink = plugin.readString("taskernet_link", "taskerNetLink", "taskernetLink"),
+                        downloadUrl = plugin.readString("download_url", "downloadUrl"),
+                    ),
                 )
             }
         }
@@ -470,7 +498,8 @@ class CommunityPluginsActivity : AppCompatActivity() {
         if (nested != null) {
             nested.readInt(*names)?.let { return it }
         }
-        val flatKeys = names.map { name -> "${key}_$name" } + names.map { name -> "${key}${name.replaceFirstChar { it.uppercase() }}" }
+        val flatKeys = names.map { name -> "${key}_$name" } +
+            names.map { name -> "${key}${name.replaceFirstChar { it.uppercase() }}" }
         return readInt(*flatKeys.toTypedArray()) ?: 0
     }
 
@@ -510,18 +539,20 @@ class CommunityPluginsActivity : AppCompatActivity() {
     }
 
     private companion object {
+        private const val TASKER_AI_ID = "tasker_ai_assistant"
+        private const val TASKER_PROFILE_BASE_URL =
+            "https://raw.githubusercontent.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/main/android/CyanBridge/tasker"
+
         private val VOICE_PLUGIN_IDS = setOf(
-            "meeting_spark_notes",
-            "live_caption_relay",
-            "hands_free_translator",
-            "errand_brain",
+            NativePluginIds.MEETING_SPARK_NOTES,
+            NativePluginIds.LIVE_CAPTION_RELAY,
+            NativePluginIds.HANDS_FREE_TRANSLATOR,
+            NativePluginIds.ERRAND_BRAIN,
             NativePluginIds.AUTO_AUDIO,
         )
 
         private val NOTIFICATION_PLUGIN_IDS = setOf(
             NativePluginIds.WALKING_AID,
-            NativePluginIds.AUTO_DIARY,
-            NativePluginIds.VISUAL_DIARY,
         )
     }
 }

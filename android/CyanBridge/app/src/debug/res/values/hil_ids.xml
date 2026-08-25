@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="hil_marker" type="id" />
+    <item name="hil_status" type="id" />
+    <item name="hil_click_button" type="id" />
+    <item name="hil_input" type="id" />
+    <item name="hil_long_press" type="id" />
+    <item name="hil_scroll_container" type="id" />
+    <item name="hil_scroll_target" type="id" />
+</resources>

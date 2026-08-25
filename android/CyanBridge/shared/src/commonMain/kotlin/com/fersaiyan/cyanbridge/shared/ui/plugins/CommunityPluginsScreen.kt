@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -31,6 +32,8 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -38,8 +41,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,9 +53,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
+import com.fersaiyan.cyanbridge.shared.icons.imageVector
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.navigation.icon
-import com.fersaiyan.cyanbridge.shared.icons.imageVector
 import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.PluginTimeWindow
@@ -77,6 +78,9 @@ fun CommunityPluginsScreen(
     nativePlugins: List<NativePluginCardData> = emptyList(),
     onOpenNativePluginSettings: (String) -> Unit = {},
     onToggleNativePlugin: (String, Boolean) -> Unit = { _, _ -> },
+    taskerIntegrations: List<CommunityPluginCardData> = emptyList(),
+    onDownloadTaskerIntegration: (CommunityPluginCardData) -> Unit = {},
+    onOpenTaskerIntegrationSettings: (String) -> Unit = {},
 ) {
     var selectedPluginTitle by rememberSaveable { mutableStateOf<String?>(null) }
     var detailsPluginTitle by rememberSaveable { mutableStateOf<String?>(null) }
@@ -88,19 +92,13 @@ fun CommunityPluginsScreen(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                 title = { Text(stringResource(Res.string.plugins_title)) },
+                title = { Text(stringResource(Res.string.plugins_title)) },
                 actions = {
-                    IconButton(
-                        onClick = onRefresh,
-                        enabled = !isRefreshing,
-                    ) {
+                    IconButton(onClick = onRefresh, enabled = !isRefreshing) {
                         if (isRefreshing) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
-                            Icon(
-                                imageVector = Icons.Outlined.Refresh,
-                                 contentDescription = stringResource(Res.string.plugins_refresh),
-                            )
+                            Icon(Icons.Outlined.Refresh, contentDescription = stringResource(Res.string.plugins_refresh))
                         }
                     }
                 },
@@ -118,17 +116,14 @@ fun CommunityPluginsScreen(
                                 contentDescription = null,
                             )
                         },
-                         label = { Text(localizedDestinationLabel(destination)) },
+                        label = { Text(localizedDestinationLabel(destination)) },
                     )
                 }
             }
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onPublishPlugin) {
-                Icon(
-                    imageVector = Icons.Outlined.Add,
-                     contentDescription = stringResource(Res.string.plugins_publish),
-                )
+                Icon(Icons.Outlined.Add, contentDescription = stringResource(Res.string.plugins_publish))
             }
         },
     ) { innerPadding ->
@@ -138,22 +133,36 @@ fun CommunityPluginsScreen(
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding)
                 .testTag("community_plugins_list"),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                top = 16.dp,
-                end = 16.dp,
-                bottom = 96.dp,
-            ),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { PluginHero() }
             item {
                 Text(
-                     text = stringResource(Res.string.plugins_future_notice),
+                    text = stringResource(Res.string.plugins_future_notice),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
+            if (taskerIntegrations.isNotEmpty()) {
+                item { PluginSectionLabel("Tasker integrations") }
+                item {
+                    Text(
+                        text = "These features keep their CyanBridge settings and AI/memory logic, but require the matching Tasker profile for Android automation or scheduling.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                itemsIndexed(taskerIntegrations, key = { _, p -> "tasker-${p.id}" }) { _, plugin ->
+                    TaskerIntegrationCard(
+                        plugin = plugin,
+                        onDownload = { onDownloadTaskerIntegration(plugin) },
+                        onOpenSettings = { onOpenTaskerIntegrationSettings(plugin.id) },
+                    )
+                }
+            }
+
             if (nativePlugins.isNotEmpty()) {
                 item { PluginSectionLabel(stringResource(Res.string.native_plugins_section)) }
                 itemsIndexed(nativePlugins, key = { _, p -> "native-${p.id}" }) { _, plugin ->
@@ -164,13 +173,11 @@ fun CommunityPluginsScreen(
                     )
                 }
             }
+
             item {
-                PeriodFilter(
-                    selectedWindow = selectedWindow,
-                    onWindowSelected = onWindowSelected,
-                )
+                PeriodFilter(selectedWindow = selectedWindow, onWindowSelected = onWindowSelected)
             }
-             item { PluginSectionLabel(stringResource(Res.string.plugins_trending)) }
+            item { PluginSectionLabel(stringResource(Res.string.plugins_trending)) }
             itemsIndexed(trending, key = { _, plugin -> "trending-${plugin.title}" }) { index, plugin ->
                 PluginCard(
                     plugin = plugin,
@@ -184,7 +191,7 @@ fun CommunityPluginsScreen(
                     onOpenPlugin = { onOpenCommunityPlugin(plugin) },
                 )
             }
-             item { PluginSectionLabel(stringResource(Res.string.plugins_top_voted)) }
+            item { PluginSectionLabel(stringResource(Res.string.plugins_top_voted)) }
             itemsIndexed(topVoted, key = { _, plugin -> "voted-${plugin.title}" }) { index, plugin ->
                 PluginCard(
                     plugin = plugin,
@@ -198,7 +205,7 @@ fun CommunityPluginsScreen(
                     onOpenPlugin = { onOpenCommunityPlugin(plugin) },
                 )
             }
-             item { PluginSectionLabel(stringResource(Res.string.plugins_top_downloaded)) }
+            item { PluginSectionLabel(stringResource(Res.string.plugins_top_downloaded)) }
             itemsIndexed(topDownloaded, key = { _, plugin -> "downloaded-${plugin.title}" }) { index, plugin ->
                 PluginCard(
                     plugin = plugin,
@@ -249,15 +256,82 @@ private fun PluginHero() {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                 text = stringResource(Res.string.plugins_hero_title),
+                text = stringResource(Res.string.plugins_hero_title),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Text(
-                 text = stringResource(Res.string.plugins_hero_body),
+                text = stringResource(Res.string.plugins_hero_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
+        }
+    }
+}
+
+@Composable
+private fun TaskerIntegrationCard(
+    plugin: CommunityPluginCardData,
+    onDownload: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("tasker_plugin_card_${plugin.id}"),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = plugin.title,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Text(
+                        text = "Tasker",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+            Text(
+                text = plugin.description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onDownload,
+                    enabled = !plugin.downloadUrl.isNullOrBlank() || !plugin.taskerNetLink.isNullOrBlank(),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Outlined.Download, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Download profile")
+                }
+                OutlinedButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Outlined.Settings, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Settings")
+                }
+            }
         }
     }
 }
@@ -317,7 +391,7 @@ private fun NativePluginCard(
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,
-                             contentDescription = stringResource(Res.string.plugins_settings_content_description, plugin.title),
+                            contentDescription = stringResource(Res.string.plugins_settings_content_description, plugin.title),
                         )
                     }
                 }
@@ -333,7 +407,7 @@ private fun PeriodFilter(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-             text = stringResource(Res.string.plugins_filter_sort),
+            text = stringResource(Res.string.plugins_filter_sort),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
         )
@@ -345,7 +419,7 @@ private fun PeriodFilter(
                 FilterChip(
                     selected = window == selectedWindow,
                     onClick = { onWindowSelected(window) },
-                     label = { Text(localizedPluginTimeWindow(window)) },
+                    label = { Text(localizedPluginTimeWindow(window)) },
                 )
             }
         }
@@ -399,7 +473,7 @@ private fun PluginCard(
                 }
             }
             Text(
-                 text = stringResource(Res.string.plugins_by_author, plugin.author),
+                text = stringResource(Res.string.plugins_by_author, plugin.author),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -413,27 +487,24 @@ private fun PluginCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                     text = stringResource(Res.string.plugins_downloads, formatCount(plugin.downloads(window))),
+                    text = stringResource(Res.string.plugins_downloads, formatCount(plugin.downloads(window))),
                     style = MaterialTheme.typography.labelSmall,
                 )
                 Text(
-                     text = stringResource(Res.string.plugins_votes, formatCount(plugin.votes(window))),
+                    text = stringResource(Res.string.plugins_votes, formatCount(plugin.votes(window))),
                     style = MaterialTheme.typography.labelSmall,
                 )
                 Text(
-                     text = stringResource(
-                         Res.string.plugins_trend,
-                         localizedPluginTimeWindow(window),
-                         plugin.trend(window),
-                     ),
+                    text = stringResource(
+                        Res.string.plugins_trend,
+                        localizedPluginTimeWindow(window),
+                        plugin.trend(window),
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            OutlinedButton(
-                onClick = onSelect,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            OutlinedButton(onClick = onSelect, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     if (selected) {
                         stringResource(Res.string.plugin_selected)
@@ -444,19 +515,13 @@ private fun PluginCard(
             }
             when {
                 !plugin.taskerNetLink.isNullOrBlank() -> {
-                    TextButton(
-                        onClick = onOpenPlugin,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                         Text(stringResource(Res.string.plugins_open_tasker))
+                    TextButton(onClick = onOpenPlugin, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(Res.string.plugins_open_tasker))
                     }
                 }
                 !plugin.downloadUrl.isNullOrBlank() -> {
-                    TextButton(
-                        onClick = onOpenPlugin,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                         Text(stringResource(Res.string.plugins_download))
+                    TextButton(onClick = onOpenPlugin, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(Res.string.plugins_download))
                     }
                 }
             }
