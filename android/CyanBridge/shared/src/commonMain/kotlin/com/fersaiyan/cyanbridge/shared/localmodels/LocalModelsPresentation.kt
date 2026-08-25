@@ -1,10 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.localmodels
 
-/**
- * Platform-neutral presentation contract for local-model configuration. Model
- * files, downloads, runtime loading, credentials, and microphone permission
- * remain platform-owned and are invoked through these UI actions.
- */
+/** Platform-neutral presentation contract for local-model configuration. */
 data class LocalModelsConfigureUiState(
     val engineStatus: String = "Runtimes available: llama.cpp + LiteRT",
     val deviceSummary: String = "",
@@ -42,19 +38,26 @@ data class LocalModelCatalogUiItem(
 data class LocalModelDownloadUiState(
     val isInFlight: Boolean = false,
     val message: String = "",
-    /** Null represents indeterminate or hidden progress. */
     val progressPercent: Int? = null,
 )
 
 data class LocalModelGenerationUiState(
-    val profileOptions: List<String> = emptyList(),
-    val profileIndex: Int = 0,
-    val runtimeOptions: List<String> = emptyList(),
-    val runtimeIndex: Int = 0,
-    val runtimeNote: String = "",
+    // Primary performance controls.
     val computeBackendOptions: List<String> = emptyList(),
     val computeBackendIndex: Int = 0,
     val computeBackendNote: String = "",
+    val mtpOptions: List<String> = emptyList(),
+    val mtpIndex: Int = 0,
+    val mtpSupported: Boolean? = null,
+    val mtpStatus: String = "",
+
+    // Assistant behavior.
+    val systemPrompt: String = "",
+
+    // Advanced controls.
+    val runtimeOptions: List<String> = emptyList(),
+    val runtimeIndex: Int = 0,
+    val runtimeNote: String = "",
     val cpuThreads: String = "",
     val gpuLayers: String = "",
     val gpuLayersEnabled: Boolean = false,
@@ -68,7 +71,6 @@ data class LocalModelGenerationUiState(
     val templateOptions: List<String> = emptyList(),
     val templateIndex: Int = 0,
     val experimentalStructuredJson: Boolean = false,
-    val systemPrompt: String = "",
     val huggingFaceToken: String = "",
 )
 
@@ -112,9 +114,9 @@ enum class LocalModelTextField {
 }
 
 enum class LocalModelOptionField {
-    PROFILE,
     RUNTIME,
     COMPUTE_BACKEND,
+    MTP_MODE,
     TEMPLATE,
 }
 
@@ -124,7 +126,6 @@ enum class LocalModelToggleField {
     STUDIO_BRIDGE_ENABLED,
 }
 
-/** User intents emitted by the portable Local Models presentation. */
 sealed interface LocalModelsAction {
     data object Back : LocalModelsAction
     data object DiscardChangesAndBack : LocalModelsAction
