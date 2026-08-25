@@ -1,13 +1,15 @@
 package com.fersaiyan.cyanbridge.ui
 
-import android.os.Bundle
-import androidx.activity.compose.setContent
-import androidx.appcompat.app.AppCompatActivity
+import android.app.Activity
+import android.app.Dialog
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.view.ViewGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,7 +19,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -28,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.analytics.AnalyticsClient
@@ -36,33 +38,38 @@ import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 
-class AcquisitionReasonActivity : AppCompatActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        if (AnalyticsPreferences.isAcquisitionComplete(this)) {
-            finish()
-            return
-        }
+object AcquisitionReasonDialog {
+    fun show(activity: Activity) {
+        if (activity.isFinishing || activity.isDestroyed || AnalyticsPreferences.isAcquisitionComplete(activity)) return
 
-        val appearancePreferences = AppearancePreferences(this)
-        setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                AcquisitionReasonScreen(
-                    sharingInitiallyEnabled = AnalyticsPreferences.isSharingEnabled(this),
-                    onSubmit = { primary, secondary, other, shareAnalytics ->
-                        AnalyticsPreferences.setSharingEnabled(this, shareAnalytics)
-                        AnalyticsClient.queueAcquisitionResponse(this, primary, secondary, other)
-                        finish()
-                    },
-                    onSkip = { shareAnalytics ->
-                        AnalyticsPreferences.setSharingEnabled(this, shareAnalytics)
-                        AnalyticsClient.skipAcquisition(this)
-                        finish()
-                    },
-                )
-            }
-        }
+        val dialog = Dialog(activity)
+        val appearancePreferences = AppearancePreferences(activity)
+        dialog.setContentView(
+            ComposeView(activity).apply {
+                setContent {
+                    val appearance by rememberAppearanceSettings(appearancePreferences)
+                    CyanBridgeTheme(appearance) {
+                        AcquisitionReasonScreen(
+                            sharingInitiallyEnabled = AnalyticsPreferences.isSharingEnabled(activity),
+                            onSubmit = { primary, secondary, other, shareAnalytics ->
+                                AnalyticsPreferences.setSharingEnabled(activity, shareAnalytics)
+                                AnalyticsClient.queueAcquisitionResponse(activity, primary, secondary, other)
+                                dialog.dismiss()
+                            },
+                            onSkip = { shareAnalytics ->
+                                AnalyticsPreferences.setSharingEnabled(activity, shareAnalytics)
+                                AnalyticsClient.skipAcquisition(activity)
+                                dialog.dismiss()
+                            },
+                        )
+                    }
+                }
+            },
+        )
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 }
 
@@ -90,11 +97,14 @@ private fun AcquisitionReasonScreen(
     var otherText by remember { mutableStateOf("") }
     var shareAnalytics by remember { mutableStateOf(sharingInitiallyEnabled) }
 
-    Scaffold { innerPadding ->
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(18.dp)
+            .heightIn(max = 720.dp),
+    ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -109,9 +119,7 @@ private fun AcquisitionReasonScreen(
             acquisitionOptions.forEach { option ->
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(
