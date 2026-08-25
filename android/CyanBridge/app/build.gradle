@@ -196,7 +196,8 @@ dependencies {
     implementation 'com.android.billingclient:billing-ktx:8.1.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0"
     implementation "androidx.work:work-runtime-ktx:2.9.1"
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+    // LiteRT-LM 0.14's Flow streaming API is compiled against the newer coroutine ABI.
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"
     implementation "com.google.android.gms:play-services-location:21.3.0"
     if (localLlamaRuntimeAarPath.isEmpty()) {
         implementation "io.github.ljcamargo:llamacpp-kotlin:0.2.0"
