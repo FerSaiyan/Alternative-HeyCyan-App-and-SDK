@@ -6,22 +6,26 @@ import android.content.Context
 object AnalyticsPreferences {
     private const val PREFS = "cyanbridge_product_analytics"
     private const val KEY_SHARING_ENABLED = "sharing_enabled"
+    private const val KEY_SHARING_CHOICE_MADE = "sharing_choice_made"
     private const val KEY_LAST_HEARTBEAT_DAY = "last_heartbeat_day"
     private const val KEY_ACQUISITION_COMPLETE = "acquisition_complete"
     private const val KEY_PENDING_ACQUISITION = "pending_acquisition"
 
-    /**
-     * Anonymous operational analytics are enabled by default and can be declined on
-     * the acquisition screen. No media, prompts, transcripts, contacts, or files are sent.
-     */
-    fun isSharingEnabled(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_SHARING_ENABLED, true)
+    /** No operational heartbeat is sent until the user has seen and saved this choice. */
+    fun isSharingEnabled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_SHARING_CHOICE_MADE, false) &&
+            prefs.getBoolean(KEY_SHARING_ENABLED, true)
+    }
+
+    /** The disclosure UI may recommend sharing while still requiring an explicit saved choice. */
+    fun suggestedSharingChoice(): Boolean = true
 
     fun setSharingEnabled(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_SHARING_ENABLED, enabled)
+            .putBoolean(KEY_SHARING_CHOICE_MADE, true)
             .apply()
     }
 
