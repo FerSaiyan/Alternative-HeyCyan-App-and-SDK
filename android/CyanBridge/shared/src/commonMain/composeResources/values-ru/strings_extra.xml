@@ -145,12 +145,7 @@
     <string name="recordings_transcribing">Транскрибирование</string>
     <string name="recordings_transcribe">Транскрибировать</string>
     <string name="recordings_view_transcript">Показать транскрипцию</string>
-    <string name="recordings_transcription_engine">Движок транскрипции</string>
-    <string name="recordings_local_moonshine">Локальная речевая модель Moonshine</string>
-    <string name="recordings_gemma_litert">Gemma с локальной средой LiteRT</string>
     <string name="recordings_close">Закрыть</string>
-    <string name="recordings_moonshine_local">Moonshine (локально)</string>
-    <string name="recordings_gemma_local">Gemma (локальная LiteRT)</string>
     <string name="media_selected">Выбрано: %1$d</string>
     <string name="media_share">Поделиться</string>
     <string name="media_delete">Удалить</string>

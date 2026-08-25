@@ -145,12 +145,7 @@
     <string name="recordings_transcribing">Transkription läuft</string>
     <string name="recordings_transcribe">Transkribieren</string>
     <string name="recordings_view_transcript">Transkript anzeigen</string>
-    <string name="recordings_transcription_engine">Transkriptionsmodul</string>
-    <string name="recordings_local_moonshine">Lokales Moonshine-Sprachmodell</string>
-    <string name="recordings_gemma_litert">Gemma mit lokaler LiteRT-Laufzeit</string>
     <string name="recordings_close">Schließen</string>
-    <string name="recordings_moonshine_local">Moonshine (lokal)</string>
-    <string name="recordings_gemma_local">Gemma (lokales LiteRT)</string>
     <string name="media_selected">%1$d ausgewählt</string>
     <string name="media_share">Teilen</string>
     <string name="media_delete">Löschen</string>

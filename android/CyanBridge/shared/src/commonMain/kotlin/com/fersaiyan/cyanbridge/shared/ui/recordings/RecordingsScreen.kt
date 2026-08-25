@@ -34,7 +34,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -60,7 +59,6 @@ import com.fersaiyan.cyanbridge.shared.recordings.MeetingRecordingUiState
 import com.fersaiyan.cyanbridge.shared.recordings.RecordingItem
 import com.fersaiyan.cyanbridge.shared.recordings.SyncedMediaItem
 import com.fersaiyan.cyanbridge.shared.recordings.TranscriptDialogUiState
-import com.fersaiyan.cyanbridge.shared.recordings.TranscriptionEngine
 import com.fersaiyan.cyanbridge.shared.recordings.TranscriptionProgressUiState
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.navigation.icon
@@ -79,8 +77,6 @@ fun RecordingsScreen(
     playingSessionId: Long?,
     transcribingSessionId: Long?,
     meetingRecording: MeetingRecordingUiState,
-    showEngineChooser: Boolean,
-    selectedEngine: TranscriptionEngine,
     transcriptionProgress: TranscriptionProgressUiState?,
     transcriptDialog: TranscriptDialogUiState?,
     formatTimestamp: (Long) -> String,
@@ -91,9 +87,6 @@ fun RecordingsScreen(
     onTranscribe: (RecordingItem) -> Unit,
     onViewTranscript: (RecordingItem) -> Unit,
     onStopMeetingCapture: () -> Unit,
-    onEngineSelected: (TranscriptionEngine) -> Unit,
-    onConfirmEngine: () -> Unit,
-    onDismissEngineChooser: () -> Unit,
     onDismissTranscript: () -> Unit,
     onDestinationSelected: (AppDestination) -> Unit = {},
 ) {
@@ -229,14 +222,6 @@ fun RecordingsScreen(
         }
     }
 
-    if (showEngineChooser) {
-        TranscriptionEngineDialog(
-            selectedEngine = selectedEngine,
-            onEngineSelected = onEngineSelected,
-            onConfirm = onConfirmEngine,
-            onDismiss = onDismissEngineChooser,
-        )
-    }
     transcriptionProgress?.let { progress ->
         TranscriptionProgressDialog(progress)
     }
@@ -409,65 +394,6 @@ private fun RecordingCard(
             }
         }
     }
-}
-
-@Composable
-private fun TranscriptionEngineDialog(
-    selectedEngine: TranscriptionEngine,
-    onEngineSelected: (TranscriptionEngine) -> Unit,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-         title = { Text(stringResource(Res.string.recordings_transcription_engine)) },
-        text = {
-            Column {
-                TranscriptionEngine.entries.forEach { engine ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onEngineSelected(engine) }
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(
-                            selected = engine == selectedEngine,
-                            onClick = { onEngineSelected(engine) },
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                             Text(
-                                 stringResource(
-                                     if (engine == TranscriptionEngine.MOONSHINE) {
-                                         Res.string.recordings_moonshine_local
-                                     } else {
-                                         Res.string.recordings_gemma_local
-                                     },
-                                 ),
-                                 style = MaterialTheme.typography.bodyLarge,
-                             )
-                            Text(
-                                text = if (engine == TranscriptionEngine.MOONSHINE) {
-                                     stringResource(Res.string.recordings_local_moonshine)
-                                } else {
-                                     stringResource(Res.string.recordings_gemma_litert)
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-             TextButton(onClick = onConfirm) { Text(stringResource(Res.string.action_start)) }
-        },
-        dismissButton = {
-             TextButton(onClick = onDismiss) { Text(stringResource(Res.string.action_cancel)) }
-        },
-    )
 }
 
 @Composable

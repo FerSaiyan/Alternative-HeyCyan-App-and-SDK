@@ -145,12 +145,7 @@
     <string name="recordings_transcribing">Transcribiendo</string>
     <string name="recordings_transcribe">Transcribir</string>
     <string name="recordings_view_transcript">Ver transcripcion</string>
-    <string name="recordings_transcription_engine">Motor de transcripcion</string>
-    <string name="recordings_local_moonshine">Modelo de voz local Moonshine</string>
-    <string name="recordings_gemma_litert">Gemma con el runtime local LiteRT</string>
     <string name="recordings_close">Cerrar</string>
-    <string name="recordings_moonshine_local">Moonshine (local)</string>
-    <string name="recordings_gemma_local">Gemma (LiteRT local)</string>
     <string name="media_selected">%1$d seleccionados</string>
     <string name="media_share">Compartir</string>
     <string name="media_delete">Eliminar</string>

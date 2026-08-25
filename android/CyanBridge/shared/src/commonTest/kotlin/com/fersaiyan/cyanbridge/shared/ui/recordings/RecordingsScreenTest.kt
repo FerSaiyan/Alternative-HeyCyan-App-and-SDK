@@ -2,11 +2,9 @@ package com.fersaiyan.cyanbridge.shared.ui.recordings
 
 import com.fersaiyan.cyanbridge.shared.recordings.RecordingItem
 import com.fersaiyan.cyanbridge.shared.recordings.SyncedMediaItem
-import com.fersaiyan.cyanbridge.shared.recordings.TranscriptionEngine
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class RecordingsScreenTest {
 
@@ -44,12 +42,5 @@ class RecordingsScreenTest {
         )
         assertEquals(false, image.isVideo)
         assertEquals(true, video.isVideo)
-    }
-
-    @Test
-    fun transcriptionEngineCoversAllOptions() {
-        val engines = TranscriptionEngine.entries
-        assertTrue(engines.contains(TranscriptionEngine.MOONSHINE))
-        assertTrue(engines.contains(TranscriptionEngine.GEMMA))
     }
 }

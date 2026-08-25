@@ -655,7 +655,13 @@ object AiAssistantRouter {
         audioPath: String?,
         callbacks: ChatStreamCallbacks?,
     ): String {
-        val providerType = when (AutomationPrefs.getProviderType(context)) {
+        val preferredProvider = AutomationPrefs.getProviderType(context)
+        val effectiveProvider = if (imagePaths.isNotEmpty() || !audioPath.isNullOrBlank()) {
+            MediaInferenceRoutingPolicy.resolve(context)
+        } else {
+            preferredProvider
+        }
+        val providerType = when (effectiveProvider) {
             AgentProviderType.PRO_SUBSCRIPTION -> AiProviderType.CLI_RELAY
             AgentProviderType.LOCAL_AGENT -> AiProviderType.LOCAL_MODELS
             AgentProviderType.TASKER -> AiProviderPrefs.getProvider(context)
@@ -669,12 +675,12 @@ object AiAssistantRouter {
                 "Company backend is not configured yet in this build."
             }
             AiProviderType.CLI_RELAY -> {
-                val modelOverride = if (AutomationPrefs.getProviderType(context) == AgentProviderType.PRO_SUBSCRIPTION) {
+                val modelOverride = if (effectiveProvider == AgentProviderType.PRO_SUBSCRIPTION) {
                     ProSubscriptionAiPrefs.getRequestsModel(context)
                 } else {
                     null
                 }
-                val mediaModelOverride = if (AutomationPrefs.getProviderType(context) == AgentProviderType.PRO_SUBSCRIPTION) {
+                val mediaModelOverride = if (effectiveProvider == AgentProviderType.PRO_SUBSCRIPTION) {
                     ProSubscriptionAiPrefs.getQuestionsModel(context)
                 } else {
                     modelOverride

@@ -33,8 +33,3 @@ data class TranscriptDialogUiState(
     val title: String,
     val text: String,
 )
-
-enum class TranscriptionEngine {
-    MOONSHINE,
-    GEMMA,
-}

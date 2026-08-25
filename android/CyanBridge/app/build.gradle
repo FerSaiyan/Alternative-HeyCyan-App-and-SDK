@@ -28,6 +28,7 @@ def metaGithubToken = System.getenv("META_GITHUB_TOKEN")
         ?: System.getenv("GITHUB_TOKEN")
         ?: localProperties.getProperty("github_token")
 def metaDatEnabled = metaGithubToken != null && !metaGithubToken.trim().isEmpty()
+def testAbi = providers.gradleProperty("testAbi").orNull
 
 android {
     namespace = "com.fersaiyan.cyanbridge"
@@ -40,6 +41,9 @@ android {
         targetSdk = 36
         versionCode = 21
         versionName = "2.2.1"
+        if (testAbi != null && !testAbi.trim().isEmpty()) {
+            ndk.abiFilters.add(testAbi.trim())
+        }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [
                 mwdat_application_id: "1057183300587462",
@@ -199,7 +203,7 @@ dependencies {
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
     implementation "com.google.android.gms:play-services-location:21.3.0"
     if (localLlamaRuntimeAarPath.isEmpty()) {
-        implementation "io.github.ljcamargo:llamacpp-kotlin:0.2.0"
+        implementation "io.github.ljcamargo:llamacpp-kotlin:0.4.0"
     } else {
         def localLlamaRuntimeAar = rootProject.file(localLlamaRuntimeAarPath)
         if (!localLlamaRuntimeAar.exists()) {
@@ -212,17 +216,10 @@ dependencies {
     // LiteRT runtime for local models (Google's inference engine)
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.14.0")
 
-    // Keep Walking Aid's vision runtime separate from LiteRT-LM. Loading the generic
-    // LiteRT artifacts alongside LiteRT-LM can leave nativeSendMessage blocked.
-    implementation("org.tensorflow:tensorflow-lite:2.16.1")
-    implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
-    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
-
-    // Offline transcription fallback (Moonshine; vendored module)
-    implementation project(":moonshine-voice")
-
-    // Legacy offline transcription fallback (Vosk) - kept for now until Moonshine is fully wired
-    implementation "com.alphacephei:vosk-android:0.3.47"
+    // Walking Aid uses the Interpreter API retained by LiteRT. These artifacts package
+    // flexible-page-size native libraries for Android 15+ 16 KB devices.
+    implementation("com.google.ai.edge.litert:litert:1.4.2")
+    implementation("com.google.ai.edge.litert:litert-gpu:1.4.2")
 
     // Chapter 2 storage
     def room_version = "2.7.0"

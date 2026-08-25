@@ -1229,7 +1229,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
     private fun clearSettingsInputs() {
         editTemperature.setText("")
         spinnerModelRuntime.setSelection(LocalModelRuntime.LLAMA_CPP.ordinal)
-        spinnerComputeBackend.setSelection(LocalComputeBackend.CPU.ordinal)
+        spinnerComputeBackend.setSelection(LocalComputeBackend.GPU.ordinal)
         editCpuThreads.setText(LocalGenerationSettings.defaultCpuThreads().toString())
         editGpuLayers.setText("35")
         editTopP.setText("")

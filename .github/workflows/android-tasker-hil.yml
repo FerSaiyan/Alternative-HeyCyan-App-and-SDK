@@ -41,12 +41,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Fetch Moonshine Android LFS assets
-        working-directory: third_party/moonshine
-        run: >-
-          git lfs pull
-          --include="core/speaker-embedding-model-data.cpp,core/third-party/onnxruntime/lib/android/arm64/libonnxruntime.so"
-
       - name: Configure local Android toolchain
         shell: bash
         run: |

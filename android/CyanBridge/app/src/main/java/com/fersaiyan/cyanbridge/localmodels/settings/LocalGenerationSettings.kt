@@ -48,6 +48,15 @@ data class LocalGenerationSettings(
             return Runtime.getRuntime().availableProcessors().coerceIn(2, 8)
         }
 
+        fun recommendedProfileFor(entry: LocalModelCatalogEntry?): LocalModelPerformanceProfile {
+            return when (entry?.id) {
+                "gemma4-e4b-it-litert" -> LocalModelPerformanceProfile.HIGH_QUALITY
+                "gemma4-e2b-it-litert",
+                "qwen2.5-0.5b-instruct-q4" -> LocalModelPerformanceProfile.FAST
+                else -> LocalModelPerformanceProfile.BALANCED
+            }
+        }
+
         fun defaultsFor(
             entry: LocalModelCatalogEntry?,
             profile: LocalModelPerformanceProfile,
@@ -70,7 +79,7 @@ data class LocalGenerationSettings(
                     systemPromptOverride = "",
                     templateOverrideId = null,
                     experimentalStructuredJson = false,
-                    computeBackend = LocalComputeBackend.CPU,
+                    computeBackend = LocalComputeBackend.GPU,
                     cpuThreads = defaultCpuThreads(),
                     gpuLayers = -1,
                     modelRuntime = defaultRuntime,
@@ -88,7 +97,7 @@ data class LocalGenerationSettings(
                     systemPromptOverride = "",
                     templateOverrideId = null,
                     experimentalStructuredJson = false,
-                    computeBackend = LocalComputeBackend.CPU,
+                    computeBackend = LocalComputeBackend.GPU,
                     cpuThreads = defaultCpuThreads(),
                     gpuLayers = -1,
                     modelRuntime = defaultRuntime,
@@ -106,7 +115,7 @@ data class LocalGenerationSettings(
                     systemPromptOverride = "",
                     templateOverrideId = null,
                     experimentalStructuredJson = false,
-                    computeBackend = LocalComputeBackend.CPU,
+                    computeBackend = LocalComputeBackend.GPU,
                     cpuThreads = defaultCpuThreads(),
                     gpuLayers = -1,
                     modelRuntime = defaultRuntime,

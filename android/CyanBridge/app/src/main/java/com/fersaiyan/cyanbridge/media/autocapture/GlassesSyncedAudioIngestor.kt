@@ -3,20 +3,10 @@ package com.fersaiyan.cyanbridge.media.autocapture
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.util.Log
-import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
-import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
-import com.fersaiyan.cyanbridge.ai.transcription.AudioChunker
+import com.fersaiyan.cyanbridge.ai.transcription.AutomaticTranscriptionEngine
 import com.fersaiyan.cyanbridge.ai.transcription.DefaultTranscriptionService
-import com.fersaiyan.cyanbridge.ai.transcription.GemmaLiteRtTranscriptionProvider
-import com.fersaiyan.cyanbridge.ai.transcription.Mp4AudioChunker
-import com.fersaiyan.cyanbridge.ai.transcription.NoOpAudioChunker
-import com.fersaiyan.cyanbridge.ai.transcription.RetryPolicy
-import com.fersaiyan.cyanbridge.ai.transcription.RetryingTranscriptionProvider
-import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionProvider
 import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionResult
 import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionService
-import com.fersaiyan.cyanbridge.ai.transcription.moonshine.MoonshineModelManager
-import com.fersaiyan.cyanbridge.ai.transcription.moonshine.MoonshineTranscriptionProvider
 import com.fersaiyan.cyanbridge.data.local.entity.CaptureSession
 import com.fersaiyan.cyanbridge.localagent.userfacts.TranscriptCandidateFactsAppender
 import com.fersaiyan.cyanbridge.ui.MyApplication
@@ -94,8 +84,7 @@ object GlassesSyncedAudioIngestor {
                     return@launch
                 }
 
-                val providerType = AutomationPrefs.getProviderType(context)
-                val engine = buildTranscriptionEngine(context, providerType)
+                val engine = AutomaticTranscriptionEngine.select(context)
                 val service = DefaultTranscriptionService(
                     context = context,
                     repository = MyApplication.repository,
@@ -133,57 +122,6 @@ object GlassesSyncedAudioIngestor {
                 inFlightSessionIds.remove(session.id)
             }
         }
-    }
-
-    private data class EngineSelection(
-        val provider: TranscriptionProvider,
-        val chunker: AudioChunker,
-        val chunkDurationSec: Long,
-    )
-
-    private fun buildTranscriptionEngine(context: Context, providerType: AgentProviderType): EngineSelection {
-        return when (providerType) {
-            AgentProviderType.LOCAL_AGENT -> EngineSelection(
-                provider = RetryingTranscriptionProvider(
-                    GemmaLiteRtTranscriptionProvider(context),
-                    policy = RetryPolicy(maxAttempts = 1),
-                ),
-                chunker = Mp4AudioChunker(context),
-                chunkDurationSec = 45L,
-            )
-
-            AgentProviderType.PRO_SUBSCRIPTION,
-            AgentProviderType.TASKER -> moonshineEngineOrFallback(context)
-        }
-    }
-
-    private fun moonshineEngineOrFallback(context: Context): EngineSelection {
-        val kind = MoonshineModelManager.chooseDefault(languageHint = null)
-        val modelDir = MoonshineModelManager.modelDir(context, kind)
-        if (MoonshineModelManager.isInstalled(context, kind)) {
-            return EngineSelection(
-                provider = RetryingTranscriptionProvider(
-                    MoonshineTranscriptionProvider(
-                        context = context,
-                        modelDir = modelDir,
-                        modelArch = kind.modelArch,
-                    ),
-                    policy = RetryPolicy(maxAttempts = 1),
-                ),
-                chunker = NoOpAudioChunker(),
-                chunkDurationSec = 60L,
-            )
-        }
-
-        Log.w(TAG, "Moonshine model not installed; falling back to Gemma LiteRT for auto-synced audio transcription")
-        return EngineSelection(
-            provider = RetryingTranscriptionProvider(
-                GemmaLiteRtTranscriptionProvider(context),
-                policy = RetryPolicy(maxAttempts = 1),
-            ),
-            chunker = Mp4AudioChunker(context),
-            chunkDurationSec = 45L,
-        )
     }
 
     private fun mimeTypeForPath(path: String): String {

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +44,12 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_setup
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 
+data class OnboardingChoice(
+    val id: String,
+    val title: String,
+    val description: String,
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalResourceApi::class)
 @Composable
 fun FeatureOnboardingScreen(
@@ -54,11 +61,14 @@ fun FeatureOnboardingScreen(
     showStoragePermission: Boolean,
     storagePermissionGranted: Boolean,
     showOpenSourceContribution: Boolean,
+    choices: List<OnboardingChoice> = emptyList(),
+    selectedChoiceId: String? = null,
     backLabel: String,
     nextLabel: String,
     onRequestGlassesConnectionPermission: () -> Unit,
     onRequestStoragePermission: () -> Unit,
     onOpenSourceRepository: () -> Unit,
+    onChoiceSelected: (String) -> Unit = {},
     onBack: () -> Unit,
     onNext: () -> Unit,
 ) {
@@ -82,6 +92,36 @@ fun FeatureOnboardingScreen(
                     modifier = Modifier.padding(16.dp),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+            }
+            choices.forEach { choice ->
+                val selected = choice.id == selectedChoiceId
+                Card(
+                    onClick = { onChoiceSelected(choice.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = if (selected) "${choice.title} - Selected" else choice.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = choice.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
             if (showGlassesConnectionPermission) {
                 Card(modifier = Modifier.fillMaxWidth()) {

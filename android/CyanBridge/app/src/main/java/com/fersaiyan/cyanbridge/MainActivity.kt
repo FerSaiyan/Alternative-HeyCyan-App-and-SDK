@@ -110,17 +110,6 @@ import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaSync
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaType
 import com.fersaiyan.cyanbridge.devices.tunebuds.isSupportedForTuneBudsDashboard
 import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
-import com.fersaiyan.cyanbridge.ai.transcription.DefaultTranscriptionService
-import com.fersaiyan.cyanbridge.ai.transcription.Mp4AudioChunker
-import com.fersaiyan.cyanbridge.ai.transcription.NoOpAudioChunker
-import com.fersaiyan.cyanbridge.ai.transcription.OpenAIWhisperTranscriptionProvider
-import com.fersaiyan.cyanbridge.ai.transcription.RetryPolicy
-import com.fersaiyan.cyanbridge.ai.transcription.RetryingTranscriptionProvider
-import com.fersaiyan.cyanbridge.ai.transcription.vosk.VoskModelManager
-import com.fersaiyan.cyanbridge.ai.transcription.vosk.VoskTranscriptionProvider
-import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionProgress
-import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionResult
-import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionService
 import com.fersaiyan.cyanbridge.privacy.PrivacyPrefs
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.bleIpBridge
@@ -216,6 +205,7 @@ import com.fersaiyan.cyanbridge.ai.router.AssistantSpeechPolicy
 import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoute
 import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
+import com.fersaiyan.cyanbridge.ai.router.MediaInferenceRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
@@ -3831,27 +3821,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             customProvider = AutomationPrefs.getProviderType(this),
         )
 
-    private fun imageQueryUnsupportedReasonForCurrentSelection(): String? {
-        if (currentAssistantRoute() != GlassesAssistantRoute.LOCAL) return null
-        if (RemoteOpenAiPrefs.isActive(this)) return null
-
-        val selected = LocalModelStorageRepository.resolveSelectedModel(this)
-            ?: return "No local model selected. Install/select Gemma 4 LiteRT first."
-        val settings = LocalModelSettingsRepository.getForModel(this, selected.id)
-        if (settings.modelRuntime != LocalModelRuntime.LITERT) {
-            return "Image questions require Local Runtime = LiteRT for the selected model."
-        }
-
-        val modelHint = "${selected.displayName} ${selected.catalogId.orEmpty()} ${selected.fileName}".lowercase(Locale.US)
-        if (!modelHint.contains("gemma")) {
-            return "Select a Gemma LiteRT model for local image questions."
-        }
-        return null
-    }
-
     private fun usesExternalAssistantUi(): Boolean = when (currentAssistantRoute()) {
-        GlassesAssistantRoute.PHONE_ASSISTANT,
-        GlassesAssistantRoute.TASKER_EXTERNAL_UI -> true
+        GlassesAssistantRoute.PHONE_ASSISTANT -> true
+        GlassesAssistantRoute.TASKER_EXTERNAL_UI,
         GlassesAssistantRoute.LOCAL,
         GlassesAssistantRoute.PRO -> false
     }
@@ -4147,7 +4119,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             AgentProviderType.LOCAL_AGENT ->
                 runCatching {
-                    val modelIssue = validateSelectedGemmaForChosenProvider(imageRequested = imagePaths.isNotEmpty())
+                    val modelIssue = validateSelectedLocalMediaModel(mediaRequested = imagePaths.isNotEmpty() || !audioPath.isNullOrBlank())
                     if (modelIssue != null) {
                         return@runCatching modelIssue
                     }
@@ -4173,23 +4145,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }.trim()
     }
 
-    private fun validateSelectedGemmaForChosenProvider(imageRequested: Boolean): String? {
+    private fun validateSelectedLocalMediaModel(mediaRequested: Boolean): String? {
         if (RemoteOpenAiPrefs.isActive(this)) return null
 
         val selected = LocalModelStorageRepository.resolveSelectedModel(this)
-            ?: return "No local model selected. Install/select Gemma 4 LiteRT in Settings."
+            ?: return "No local model selected. Install or select a local model in Settings."
         val settings = LocalModelSettingsRepository.getForModel(this, selected.id)
-        if (settings.modelRuntime != LocalModelRuntime.LITERT) {
-            return "Selected local model runtime is not LiteRT. Switch runtime to LiteRT for Gemma 4 flows."
-        }
-
-        val modelHint = "${selected.displayName} ${selected.catalogId.orEmpty()} ${selected.fileName}".lowercase(Locale.US)
-        if (!modelHint.contains("gemma")) {
-            return "Selected local model is not Gemma. Please select a Gemma 4 LiteRT model."
-        }
-
-        if (imageRequested && !modelHint.contains("gemma-4") && !modelHint.contains("gemma4")) {
-            return "Image questions on glasses are configured for Gemma 4 LiteRT. Please select Gemma 4 E2B/E4B."
+        if (mediaRequested && settings.modelRuntime != LocalModelRuntime.LITERT) {
+            return "The selected local model cannot process media. Select a multimodal LiteRT model."
         }
         return null
     }
@@ -5588,12 +5551,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                             AssistantIntent.ANALYZE_IMAGE -> runOnUiThread {
                                 stopSco()
-                                val unsupportedReason = imageQueryUnsupportedReasonForCurrentSelection()
-                                if (unsupportedReason != null) {
-                                    finishVoiceQueryWork()
-                                    speak(unsupportedReason)
-                                    return@runOnUiThread
-                                }
                                 // The image flow now owns the shared foreground service. Release
                                 // only this voice-query guard without stopping that service.
                                 voiceQueryInProgress.compareAndSet(voiceQueryToken, null)
@@ -6040,10 +5997,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         
         val internalProvider = when (currentAssistantRoute()) {
-            GlassesAssistantRoute.LOCAL -> AgentProviderType.LOCAL_AGENT
-            GlassesAssistantRoute.PRO -> AgentProviderType.PRO_SUBSCRIPTION
-            GlassesAssistantRoute.PHONE_ASSISTANT,
-            GlassesAssistantRoute.TASKER_EXTERNAL_UI -> null
+            GlassesAssistantRoute.LOCAL,
+            GlassesAssistantRoute.PRO,
+            GlassesAssistantRoute.TASKER_EXTERNAL_UI -> MediaInferenceRoutingPolicy.resolve(this)
+            GlassesAssistantRoute.PHONE_ASSISTANT -> null
         }
         if (internalProvider != null) {
             triggerMemoryAwareImageQuery(
@@ -10745,14 +10702,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     )
                     if (isAiHijackEnabled) {
                         runOnUiThread {
-                            val unsupportedReason = imageQueryUnsupportedReasonForCurrentSelection()
-                            if (unsupportedReason != null) {
-                                imageCaptureAwaitingNotification.set(false)
-                                pendingImageCaptureSourceTag = null
-                                Toast.makeText(this@MainActivity, unsupportedReason, Toast.LENGTH_SHORT).show()
-                                speak(unsupportedReason)
-                                return@runOnUiThread
-                            }
                             if (maybeShowGeminiChatGptImageRequirementsWarning()) {
                                 imageCaptureAwaitingNotification.set(false)
                                 pendingImageCaptureSourceTag = null
