@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.analytics
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +20,7 @@ import java.util.TimeZone
 import java.util.concurrent.atomic.AtomicBoolean
 
 object AnalyticsClient {
+    private const val TAG = "ProductAnalytics"
     private const val SERVICE_BASE_URL = "https://cyanbridge.vercel.app"
     private const val CONNECT_TIMEOUT_MS = 5_000
     private const val READ_TIMEOUT_MS = 8_000
@@ -28,6 +30,8 @@ object AnalyticsClient {
 
     fun recordDailyHeartbeat(context: Context) {
         val appContext = context.applicationContext
+        // A submitted survey is independent of the optional daily heartbeat preference.
+        flushPendingAcquisition(appContext)
         if (!AnalyticsPreferences.isSharingEnabled(appContext)) return
         val today = utcDay()
         if (AnalyticsPreferences.getLastHeartbeatDay(appContext) == today) {
@@ -89,8 +93,9 @@ object AnalyticsClient {
                 if (responseCode in 200..299) {
                     AnalyticsPreferences.setPendingAcquisition(appContext, null)
                 }
-            } catch (_: Exception) {
+            } catch (error: Exception) {
                 // Keep the queued response for a later foreground session.
+                Log.w(TAG, "Acquisition delivery failed; response remains queued", error)
             } finally {
                 acquisitionInFlight.set(false)
             }
@@ -115,9 +120,12 @@ object AnalyticsClient {
                 writer.write(body.toString())
             }
             val code = connection.responseCode
-            runCatching {
+            val responseBody = runCatching {
                 val stream = if (code in 200..299) connection.inputStream else connection.errorStream
                 stream?.bufferedReader()?.use { it.readText() }
+            }.getOrNull()
+            if (code !in 200..299) {
+                Log.w(TAG, "POST $path failed with HTTP $code: ${responseBody.orEmpty().take(200)}")
             }
             code
         } finally {
