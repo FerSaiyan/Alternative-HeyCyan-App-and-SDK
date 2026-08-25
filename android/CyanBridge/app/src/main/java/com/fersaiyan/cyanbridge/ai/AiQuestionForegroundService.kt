@@ -16,6 +16,11 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
+import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelPreloadPolicy
+import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
+import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
+import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,12 +30,14 @@ import kotlinx.coroutines.launch
 
 /**
  * Keeps an already-started glasses voice or image question alive while MainActivity is stopped.
- * Inference remains in the existing local-model session; this service only supplies Android's
- * foreground execution and wake-lock guarantees.
+ * It also opportunistically wakes the selected local model at the beginning of a local question so
+ * expensive model initialization can overlap the listening/capture phase instead of delaying the
+ * answer after the user's input is already complete.
  */
 class AiQuestionForegroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var idleStopJob: Job? = null
+    private var modelPreloadJob: Job? = null
     private lateinit var wakeLock: PowerManager.WakeLock
 
     override fun onCreate() {
@@ -60,6 +67,7 @@ class AiQuestionForegroundService : Service() {
         startForegroundSafely(status, isQueryActive = true)
         if (wakeLock.isHeld) wakeLock.release()
         wakeLock.acquire(MAX_WORK_DURATION_MS)
+        preloadSelectedLocalModelIfUseful()
         idleStopJob?.cancel()
         idleStopJob = serviceScope.launch {
             delay(MAX_WORK_DURATION_MS)
@@ -72,11 +80,49 @@ class AiQuestionForegroundService : Service() {
 
     override fun onDestroy() {
         idleStopJob?.cancel()
+        modelPreloadJob?.cancel()
         if (wakeLock.isHeld) wakeLock.release()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun preloadSelectedLocalModelIfUseful() {
+        if (modelPreloadJob?.isActive == true) return
+
+        val assistantMode = LocalAgentPrefs.getGlassesAssistantMode(this)
+        val providerType = LocalAgentPrefs.getProviderType(this)
+        val remoteActive = RemoteOpenAiPrefs.isActive(this)
+        val hasSelectedModel = LocalModelStorageRepository.resolveSelectedModel(this) != null
+        if (!LocalModelPreloadPolicy.shouldPreload(
+                assistantMode = assistantMode,
+                providerType = providerType,
+                remoteOpenAiActive = remoteActive,
+                hasSelectedModel = hasSelectedModel,
+            )
+        ) {
+            return
+        }
+
+        modelPreloadJob = serviceScope.launch {
+            val startedAt = System.currentTimeMillis()
+            runCatching {
+                LocalModelsProvider().prepareSelectedModel(this@AiQuestionForegroundService)
+            }.onSuccess { details ->
+                if (details != null) {
+                    Log.i(
+                        TAG,
+                        "Local model prepared during input phase in ${System.currentTimeMillis() - startedAt}ms " +
+                            "backend=${details.activeBackend}",
+                    )
+                }
+            }.onFailure { error ->
+                // Preloading is an optimization only. The normal request path will retry/loading and
+                // surface any real error to the user when inference actually begins.
+                Log.w(TAG, "Early local-model preparation failed; normal request path will retry", error)
+            }
+        }
+    }
 
     private fun startForegroundSafely(status: String, isQueryActive: Boolean) {
         val openApp = PendingIntent.getActivity(
@@ -112,6 +158,7 @@ class AiQuestionForegroundService : Service() {
 
     private fun stopQuestionWork() {
         idleStopJob?.cancel()
+        modelPreloadJob?.cancel()
         if (wakeLock.isHeld) wakeLock.release()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
