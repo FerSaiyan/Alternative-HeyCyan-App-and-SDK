@@ -3,6 +3,9 @@ package com.fersaiyan.cyanbridge.localmodels.engine
 import android.content.Context
 import android.util.Log
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpResolver
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpSettingsRepository
+import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Capabilities
@@ -36,44 +39,43 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     private var activeLoadResult: EngineLoadResult? = null
 
     override suspend fun loadModel(modelPath: String, config: EngineLoadConfig): EngineLoadResult {
+        val effectiveConfig = resolveAutomaticMtp(modelPath, config)
         Log.i(
             TAG,
-            "loadModel path=$modelPath backend=${config.computeBackend} cpuThreads=${config.cpuThreads} " +
-                "context=${config.contextSize} gpuLayers=${config.gpuLayers} mtp=${config.speculativeDecoding}",
+            "loadModel path=$modelPath backend=${effectiveConfig.computeBackend} cpuThreads=${effectiveConfig.cpuThreads} " +
+                "context=${effectiveConfig.contextSize} gpuLayers=${effectiveConfig.gpuLayers} mtp=${effectiveConfig.speculativeDecoding}",
         )
-        val current = mutex.withLock {
+        mutex.withLock {
             if (
                 this.modelPath == modelPath &&
                 engine != null &&
-                activeLoadConfig == config
+                activeLoadConfig == effectiveConfig
             ) {
                 Log.i(TAG, "Reusing existing LiteRT engine for $modelPath")
-                return@withLock activeLoadResult ?: EngineLoadResult(
-                    activeBackend = config.computeBackend,
+                return activeLoadResult ?: EngineLoadResult(
+                    activeBackend = effectiveConfig.computeBackend,
                     activeGpuLayers = 0,
-                    speculativeDecodingEnabled = config.speculativeDecoding,
+                    speculativeDecodingEnabled = effectiveConfig.speculativeDecoding,
                 )
             }
-            null
         }
-        if (current != null) return current
 
         val loadOutcome = withContext(Dispatchers.IO) {
-            when (config.computeBackend) {
-                LocalComputeBackend.GPU -> initializeGpuWithFallback(modelPath, config)
-                LocalComputeBackend.NPU_EXPERIMENTAL -> initializeNpuWithFallback(modelPath, config)
+            when (effectiveConfig.computeBackend) {
+                LocalComputeBackend.GPU -> initializeGpuWithFallback(modelPath, effectiveConfig)
+                LocalComputeBackend.NPU_EXPERIMENTAL -> initializeNpuWithFallback(modelPath, effectiveConfig)
                 LocalComputeBackend.CPU -> {
                     createInitializedEngine(
                         modelPath = modelPath,
-                        backend = Backend.CPU(config.cpuThreads),
-                        visionBackend = Backend.CPU(config.cpuThreads),
-                        audioBackend = Backend.CPU(config.cpuThreads),
-                        maxNumTokens = config.contextSize,
-                        speculativeDecoding = config.speculativeDecoding,
+                        backend = Backend.CPU(effectiveConfig.cpuThreads),
+                        visionBackend = Backend.CPU(effectiveConfig.cpuThreads),
+                        audioBackend = Backend.CPU(effectiveConfig.cpuThreads),
+                        maxNumTokens = effectiveConfig.contextSize,
+                        speculativeDecoding = effectiveConfig.speculativeDecoding,
                     ) to EngineLoadResult(
                         activeBackend = LocalComputeBackend.CPU,
                         activeGpuLayers = 0,
-                        speculativeDecodingEnabled = config.speculativeDecoding,
+                        speculativeDecodingEnabled = effectiveConfig.speculativeDecoding,
                     )
                 }
             }
@@ -82,11 +84,10 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         return mutex.withLock {
             closeConversationLocked()
             closeEngineLocked()
-
-            this.engine = loadOutcome.first
-            this.modelPath = modelPath
-            this.activeLoadConfig = config
-            this.activeLoadResult = loadOutcome.second
+            engine = loadOutcome.first
+            this@LiteRtLocalInferenceEngine.modelPath = modelPath
+            activeLoadConfig = effectiveConfig
+            activeLoadResult = loadOutcome.second
             Log.i(
                 TAG,
                 "LiteRT model ready path=$modelPath activeBackend=${loadOutcome.second.activeBackend} " +
@@ -94,6 +95,33 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             )
             loadOutcome.second
         }
+    }
+
+    private fun resolveAutomaticMtp(modelPath: String, config: EngineLoadConfig): EngineLoadConfig {
+        if (config.speculativeDecoding != null) return config
+        val installed = LocalModelStorageRepository.listInstalled(context)
+            .firstOrNull { it.absolutePath == modelPath }
+            ?: return config
+        val file = File(modelPath)
+        val supported = supportsSpeculativeDecoding(modelPath)
+        val mode = LocalMtpSettingsRepository.getMode(context, installed.id)
+        val recommendation = LocalMtpSettingsRepository.cachedRecommendation(
+            context = context,
+            modelId = installed.id,
+            backend = config.computeBackend,
+            modelSignature = LocalMtpSettingsRepository.modelSignature(
+                path = file.absolutePath,
+                sizeBytes = file.length(),
+                lastModifiedMs = file.lastModified(),
+            ),
+        )
+        return config.copy(
+            speculativeDecoding = LocalMtpResolver.resolve(
+                mode = mode,
+                supported = supported,
+                cachedRecommendation = recommendation,
+            ),
+        )
     }
 
     private fun initializeGpuWithFallback(
@@ -157,8 +185,6 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             createInitializedEngine(
                 modelPath = modelPath,
                 backend = npuBackend,
-                // Vision kernels are not universally present in NPU packages; GPU is the safest
-                // accelerated companion backend and failures fall through to the next attempts.
                 visionBackend = Backend.GPU(),
                 audioBackend = Backend.CPU(config.cpuThreads),
                 maxNumTokens = config.contextSize,
@@ -204,10 +230,6 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             maxNumTokens = maxNumTokens.coerceAtLeast(1024),
             cacheDir = context.cacheDir.path,
         )
-
-        // ExperimentalFlags is process-global and is sampled by Engine's constructor. Serialize
-        // engine creation so concurrent preload/test work cannot leak one model's MTP setting into
-        // another engine.
         return synchronized(engineCreationLock) {
             val previous = ExperimentalFlags.enableSpeculativeDecoding
             try {
@@ -239,50 +261,30 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         val llm = mutex.withLock {
             engine ?: throw IllegalStateException("LiteRT engine is not initialized")
         }
-
         val conversation = withContext(Dispatchers.IO) {
             llm.createConversation(buildConversationConfig(config))
         }
-
         mutex.withLock {
             closeConversationLocked()
             activeConversation = conversation
         }
-
         return try {
             val text = withContext(Dispatchers.IO) {
                 val userContents = buildUserContents(config)
-
                 runCatching {
-                    generateFromConversation(
-                        conversation = conversation,
-                        prompt = config.prompt,
-                        userContents = userContents,
-                        onToken = onToken,
-                    )
+                    generateFromConversation(conversation, config.prompt, userContents, onToken)
                 }.recoverCatching {
                     if (userContents == null) throw it
-                    generateFromConversation(
-                        conversation = conversation,
-                        prompt = config.prompt,
-                        userContents = null,
-                        onToken = onToken,
-                    )
+                    generateFromConversation(conversation, config.prompt, null, onToken)
                 }.getOrThrow()
             }
-
-            GenerationResult(
-                text = text,
-                tokenCount = tokenizeEstimate(text),
-            )
+            GenerationResult(text = text, tokenCount = tokenizeEstimate(text))
         } catch (t: Throwable) {
             Log.e(TAG, "LiteRT generation failed", t)
             throw t
         } finally {
             mutex.withLock {
-                if (activeConversation === conversation) {
-                    closeConversationLocked()
-                }
+                if (activeConversation === conversation) closeConversationLocked()
             }
         }
     }
@@ -296,9 +298,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     }
 
     override suspend fun tokenizeCount(text: String): Int = tokenizeEstimate(text)
-
     override fun isModelLoaded(): Boolean = engine != null
-
     override fun loadedModelPath(): String? = modelPath
 
     private fun buildConversationConfig(config: GenerationConfig): ConversationConfig {
@@ -335,18 +335,15 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     ): String {
         val contents = userContents ?: Contents.of(Content.Text(prompt))
         val assembled = StringBuilder()
-
         conversation.sendMessageAsync(contents, emptyMap<String, Any>()).collect { message ->
             val currentText = extractText(message)
             if (currentText.isBlank()) return@collect
-
             val delta = incrementalDelta(assembled.toString(), currentText)
             if (delta.isNotEmpty()) {
                 assembled.append(delta)
                 onToken(delta)
             }
         }
-
         return assembled.toString()
     }
 
@@ -354,7 +351,6 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         val hasImage = config.imagePaths.isNotEmpty()
         val hasAudio = !config.audioPath.isNullOrBlank()
         if (!hasImage && !hasAudio) return null
-
         val parts = ArrayList<Content>()
         config.imagePaths.forEach { rawPath ->
             val path = rawPath.trim()
@@ -387,7 +383,6 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         if (previous.isBlank()) return current
         if (current.startsWith(previous)) return current.substring(previous.length)
         if (previous.startsWith(current)) return ""
-
         val maxPrefix = previous.length.coerceAtMost(current.length)
         var overlap = 0
         var i = maxPrefix
@@ -408,10 +403,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
 
     private fun compactError(err: Throwable?): String {
         if (err == null) return "unknown error"
-        val msg = err.message
-            ?.replace('\n', ' ')
-            ?.replace(Regex("\\s+"), " ")
-            ?.trim()
+        val msg = err.message?.replace('\n', ' ')?.replace(Regex("\\s+"), " ")?.trim()
         return if (msg.isNullOrEmpty()) err::class.java.simpleName else msg
     }
 
