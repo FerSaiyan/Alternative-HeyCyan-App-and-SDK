@@ -44,6 +44,17 @@ data class LocalGenerationSettings(
         const val MIN_CONTEXT_SIZE = 1024
         const val MAX_CONTEXT_SIZE = 32768
 
+        /**
+         * Default prompt for interactive local models. It is intentionally stored in the same
+         * user-editable system prompt field as any custom prompt: users can change or clear it per
+         * model from Local Model settings without CyanBridge silently adding a second hidden prompt.
+         */
+        const val DEFAULT_SYSTEM_PROMPT =
+            "You are CyanBridge's assistant. Answer the user's request directly. " +
+                "For spoken responses, begin with a short, self-contained sentence of at most 8 words " +
+                "that gives the most useful answer first. Then add concise detail only when helpful. " +
+                "Avoid filler, long preambles, and unnecessary formatting unless the user asks for them."
+
         fun defaultCpuThreads(): Int {
             return Runtime.getRuntime().availableProcessors().coerceIn(2, 8)
         }
@@ -67,7 +78,7 @@ data class LocalGenerationSettings(
                     repetitionPenalty = 1.05,
                     contextSize = (baseCtx / 2).coerceAtLeast(2048),
                     seed = -1,
-                    systemPromptOverride = "",
+                    systemPromptOverride = DEFAULT_SYSTEM_PROMPT,
                     templateOverrideId = null,
                     experimentalStructuredJson = false,
                     computeBackend = LocalComputeBackend.CPU,
@@ -85,7 +96,7 @@ data class LocalGenerationSettings(
                     repetitionPenalty = 1.1,
                     contextSize = baseCtx,
                     seed = -1,
-                    systemPromptOverride = "",
+                    systemPromptOverride = DEFAULT_SYSTEM_PROMPT,
                     templateOverrideId = null,
                     experimentalStructuredJson = false,
                     computeBackend = LocalComputeBackend.CPU,
@@ -103,7 +114,7 @@ data class LocalGenerationSettings(
                     repetitionPenalty = 1.12,
                     contextSize = (baseCtx + 1024).coerceAtMost(MAX_CONTEXT_SIZE),
                     seed = -1,
-                    systemPromptOverride = "",
+                    systemPromptOverride = DEFAULT_SYSTEM_PROMPT,
                     templateOverrideId = null,
                     experimentalStructuredJson = false,
                     computeBackend = LocalComputeBackend.CPU,
