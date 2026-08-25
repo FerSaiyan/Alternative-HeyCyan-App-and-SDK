@@ -5,12 +5,15 @@ import android.util.Log
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Capabilities
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ExperimentalApi
+import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ToolProvider
@@ -35,7 +38,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     override suspend fun loadModel(modelPath: String, config: EngineLoadConfig): EngineLoadResult {
         Log.i(
             TAG,
-            "loadModel path=$modelPath backend=${config.computeBackend} cpuThreads=${config.cpuThreads} context=${config.contextSize} gpuLayers=${config.gpuLayers}",
+            "loadModel path=$modelPath backend=${config.computeBackend} cpuThreads=${config.cpuThreads} " +
+                "context=${config.contextSize} gpuLayers=${config.gpuLayers} mtp=${config.speculativeDecoding}",
         )
         val current = mutex.withLock {
             if (
@@ -47,6 +51,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 return@withLock activeLoadResult ?: EngineLoadResult(
                     activeBackend = config.computeBackend,
                     activeGpuLayers = 0,
+                    speculativeDecodingEnabled = config.speculativeDecoding,
                 )
             }
             null
@@ -54,57 +59,23 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         if (current != null) return current
 
         val loadOutcome = withContext(Dispatchers.IO) {
-            if (config.computeBackend == LocalComputeBackend.GPU || config.computeBackend == LocalComputeBackend.NPU_EXPERIMENTAL) {
-                val targetBackend = config.computeBackend
-                runCatching {
-                    createInitializedEngine(
-                        modelPath = modelPath,
-                        backend = Backend.GPU(),
-                        visionBackend = Backend.CPU(config.cpuThreads),
-                        audioBackend = Backend.CPU(config.cpuThreads),
-                        maxNumTokens = config.contextSize,
-                    ) to EngineLoadResult(
-                        activeBackend = targetBackend,
-                        activeGpuLayers = config.gpuLayers.coerceAtLeast(0),
-                    )
-                }.recoverCatching { gpuMediaErr ->
-                    Log.w(TAG, "LiteRT media acceleration backend failed: ${compactError(gpuMediaErr)}", gpuMediaErr)
-                    createInitializedEngine(
-                        modelPath = modelPath,
-                        backend = Backend.GPU(),
-                        visionBackend = null,
-                        audioBackend = null,
-                        maxNumTokens = config.contextSize,
-                    ) to EngineLoadResult(
-                        activeBackend = targetBackend,
-                        activeGpuLayers = config.gpuLayers.coerceAtLeast(0),
-                        fallbackReason = "LiteRT acceleration audio/vision backend mismatch (${compactError(gpuMediaErr)}). Continuing on text acceleration backend.",
-                    )
-                }.recoverCatching { gpuErr ->
-                    Log.w(TAG, "LiteRT hardware backend unavailable, falling back to CPU: ${compactError(gpuErr)}", gpuErr)
+            when (config.computeBackend) {
+                LocalComputeBackend.GPU -> initializeGpuWithFallback(modelPath, config)
+                LocalComputeBackend.NPU_EXPERIMENTAL -> initializeNpuWithFallback(modelPath, config)
+                LocalComputeBackend.CPU -> {
                     createInitializedEngine(
                         modelPath = modelPath,
                         backend = Backend.CPU(config.cpuThreads),
                         visionBackend = Backend.CPU(config.cpuThreads),
                         audioBackend = Backend.CPU(config.cpuThreads),
                         maxNumTokens = config.contextSize,
+                        speculativeDecoding = config.speculativeDecoding,
                     ) to EngineLoadResult(
                         activeBackend = LocalComputeBackend.CPU,
                         activeGpuLayers = 0,
-                        fallbackReason = "LiteRT hardware backend unavailable (${compactError(gpuErr)}). Fell back to CPU.",
+                        speculativeDecodingEnabled = config.speculativeDecoding,
                     )
-                }.getOrThrow()
-            } else {
-                createInitializedEngine(
-                    modelPath = modelPath,
-                    backend = Backend.CPU(config.cpuThreads),
-                    visionBackend = Backend.CPU(config.cpuThreads),
-                    audioBackend = Backend.CPU(config.cpuThreads),
-                    maxNumTokens = config.contextSize,
-                ) to EngineLoadResult(
-                    activeBackend = LocalComputeBackend.CPU,
-                    activeGpuLayers = 0,
-                )
+                }
             }
         }
 
@@ -118,22 +89,112 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             this.activeLoadResult = loadOutcome.second
             Log.i(
                 TAG,
-                "LiteRT model ready path=$modelPath activeBackend=${loadOutcome.second.activeBackend} fallback=${loadOutcome.second.fallbackReason}",
+                "LiteRT model ready path=$modelPath activeBackend=${loadOutcome.second.activeBackend} " +
+                    "mtp=${loadOutcome.second.speculativeDecodingEnabled} fallback=${loadOutcome.second.fallbackReason}",
             )
             loadOutcome.second
         }
     }
 
+    private fun initializeGpuWithFallback(
+        modelPath: String,
+        config: EngineLoadConfig,
+    ): Pair<Engine, EngineLoadResult> {
+        return runCatching {
+            createInitializedEngine(
+                modelPath = modelPath,
+                backend = Backend.GPU(),
+                visionBackend = Backend.CPU(config.cpuThreads),
+                audioBackend = Backend.CPU(config.cpuThreads),
+                maxNumTokens = config.contextSize,
+                speculativeDecoding = config.speculativeDecoding,
+            ) to EngineLoadResult(
+                activeBackend = LocalComputeBackend.GPU,
+                activeGpuLayers = config.gpuLayers.coerceAtLeast(0),
+                speculativeDecodingEnabled = config.speculativeDecoding,
+            )
+        }.recoverCatching { gpuMediaErr ->
+            Log.w(TAG, "LiteRT media backend failed on GPU: ${compactError(gpuMediaErr)}", gpuMediaErr)
+            createInitializedEngine(
+                modelPath = modelPath,
+                backend = Backend.GPU(),
+                visionBackend = null,
+                audioBackend = null,
+                maxNumTokens = config.contextSize,
+                speculativeDecoding = config.speculativeDecoding,
+            ) to EngineLoadResult(
+                activeBackend = LocalComputeBackend.GPU,
+                activeGpuLayers = config.gpuLayers.coerceAtLeast(0),
+                fallbackReason =
+                    "LiteRT GPU audio/vision backend mismatch (${compactError(gpuMediaErr)}). " +
+                        "Continuing with GPU text acceleration.",
+                speculativeDecodingEnabled = config.speculativeDecoding,
+            )
+        }.recoverCatching { gpuErr ->
+            Log.w(TAG, "LiteRT GPU unavailable, falling back to CPU: ${compactError(gpuErr)}", gpuErr)
+            createInitializedEngine(
+                modelPath = modelPath,
+                backend = Backend.CPU(config.cpuThreads),
+                visionBackend = Backend.CPU(config.cpuThreads),
+                audioBackend = Backend.CPU(config.cpuThreads),
+                maxNumTokens = config.contextSize,
+                speculativeDecoding = config.speculativeDecoding,
+            ) to EngineLoadResult(
+                activeBackend = LocalComputeBackend.CPU,
+                activeGpuLayers = 0,
+                fallbackReason = "LiteRT GPU unavailable (${compactError(gpuErr)}). Fell back to CPU.",
+                speculativeDecodingEnabled = config.speculativeDecoding,
+            )
+        }.getOrThrow()
+    }
+
+    private fun initializeNpuWithFallback(
+        modelPath: String,
+        config: EngineLoadConfig,
+    ): Pair<Engine, EngineLoadResult> {
+        val npuBackend = Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
+        return runCatching {
+            createInitializedEngine(
+                modelPath = modelPath,
+                backend = npuBackend,
+                // Vision kernels are not universally present in NPU packages; GPU is the safest
+                // accelerated companion backend and failures fall through to the next attempts.
+                visionBackend = Backend.GPU(),
+                audioBackend = Backend.CPU(config.cpuThreads),
+                maxNumTokens = config.contextSize,
+                speculativeDecoding = config.speculativeDecoding,
+            ) to EngineLoadResult(
+                activeBackend = LocalComputeBackend.NPU_EXPERIMENTAL,
+                activeGpuLayers = 0,
+                speculativeDecodingEnabled = config.speculativeDecoding,
+            )
+        }.recoverCatching { npuErr ->
+            Log.w(TAG, "LiteRT NPU unavailable; trying GPU: ${compactError(npuErr)}", npuErr)
+            val gpu = initializeGpuWithFallback(modelPath, config.copy(computeBackend = LocalComputeBackend.GPU))
+            val reason = buildString {
+                append("LiteRT NPU unavailable (${compactError(npuErr)}). ")
+                append("Fell back to ${gpu.second.activeBackend.label}.")
+                gpu.second.fallbackReason?.takeIf { it.isNotBlank() }?.let { append(" $it") }
+            }
+            gpu.first to gpu.second.copy(fallbackReason = reason)
+        }.getOrThrow()
+    }
+
+    @OptIn(ExperimentalApi::class)
     private fun createInitializedEngine(
         modelPath: String,
         backend: Backend,
         visionBackend: Backend?,
         audioBackend: Backend?,
         maxNumTokens: Int,
+        speculativeDecoding: Boolean?,
     ): Engine {
         Log.i(
             TAG,
-            "Initializing LiteRT engine backend=${backend.javaClass.simpleName} vision=${visionBackend?.javaClass?.simpleName ?: "none"} audio=${audioBackend?.javaClass?.simpleName ?: "none"} maxTokens=$maxNumTokens",
+            "Initializing LiteRT engine backend=${backend.javaClass.simpleName} " +
+                "vision=${visionBackend?.javaClass?.simpleName ?: "none"} " +
+                "audio=${audioBackend?.javaClass?.simpleName ?: "none"} " +
+                "maxTokens=$maxNumTokens mtp=$speculativeDecoding",
         )
         val config = EngineConfig(
             modelPath = modelPath,
@@ -143,7 +204,19 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             maxNumTokens = maxNumTokens.coerceAtLeast(1024),
             cacheDir = context.cacheDir.path,
         )
-        return Engine(config).also { it.initialize() }
+
+        // ExperimentalFlags is process-global and is sampled by Engine's constructor. Serialize
+        // engine creation so concurrent preload/test work cannot leak one model's MTP setting into
+        // another engine.
+        return synchronized(engineCreationLock) {
+            val previous = ExperimentalFlags.enableSpeculativeDecoding
+            try {
+                ExperimentalFlags.enableSpeculativeDecoding = speculativeDecoding
+                Engine(config).also { it.initialize() }
+            } finally {
+                ExperimentalFlags.enableSpeculativeDecoding = previous
+            }
+        }
     }
 
     override suspend fun unloadModel() {
@@ -160,7 +233,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     override suspend fun generate(config: GenerationConfig, onToken: (String) -> Unit): GenerationResult {
         Log.i(
             TAG,
-            "generate promptChars=${config.prompt.length} images=${config.imagePaths.size} hasAudio=${!config.audioPath.isNullOrBlank()} maxTokens=${config.maxTokens}",
+            "generate promptChars=${config.prompt.length} images=${config.imagePaths.size} " +
+                "hasAudio=${!config.audioPath.isNullOrBlank()} maxTokens=${config.maxTokens}",
         )
         val llm = mutex.withLock {
             engine ?: throw IllegalStateException("LiteRT engine is not initialized")
@@ -221,9 +295,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         }
     }
 
-    override suspend fun tokenizeCount(text: String): Int {
-        return tokenizeEstimate(text)
-    }
+    override suspend fun tokenizeCount(text: String): Int = tokenizeEstimate(text)
 
     override fun isModelLoaded(): Boolean = engine != null
 
@@ -236,41 +308,32 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             temperature = config.temperature.coerceIn(0.0, 2.0),
             seed = config.seed,
         )
-        val systemInstruction = Contents.Companion.of("")
-        val initialMessages = emptyList<Message>()
-        val tools = emptyList<ToolProvider>()
         return ConversationConfig(
-            systemInstruction = systemInstruction,
-            initialMessages = initialMessages,
-            tools = tools,
+            systemInstruction = Contents.of(""),
+            initialMessages = emptyList<Message>(),
+            tools = emptyList<ToolProvider>(),
             samplerConfig = sampler,
             automaticToolCalling = true,
         )
     }
 
     private fun extractText(message: Message): String {
-        val chunks = message.contents.contents
-            .mapNotNull { content ->
-                when (content) {
-                    is Content.Text -> content.text
-                    else -> null
-                }
+        val chunks = message.contents.contents.mapNotNull { content ->
+            when (content) {
+                is Content.Text -> content.text
+                else -> null
             }
+        }
         return if (chunks.isNotEmpty()) chunks.joinToString(separator = "") else message.toString()
     }
 
-    /**
-     * Uses LiteRT-LM's coroutine Flow API so the caller receives model output while decoding is
-     * still running. The SDK may emit cumulative text or deltas depending on model/runtime version;
-     * incrementalDelta normalizes both forms before they reach UI/TTS consumers.
-     */
     private suspend fun generateFromConversation(
         conversation: Conversation,
         prompt: String,
         userContents: Contents?,
         onToken: (String) -> Unit,
     ): String {
-        val contents = userContents ?: Contents.Companion.of(Content.Text(prompt))
+        val contents = userContents ?: Contents.of(Content.Text(prompt))
         val assembled = StringBuilder()
 
         conversation.sendMessageAsync(contents, emptyMap<String, Any>()).collect { message ->
@@ -293,16 +356,12 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         if (!hasImage && !hasAudio) return null
 
         val parts = ArrayList<Content>()
-
         config.imagePaths.forEach { rawPath ->
             val path = rawPath.trim()
             if (path.isBlank()) return@forEach
             val file = File(path)
-            if (file.exists()) {
-                parts += Content.ImageFile(file.absolutePath)
-            }
+            if (file.exists()) parts += Content.ImageFile(file.absolutePath)
         }
-
         config.audioPath?.trim()?.takeIf { it.isNotBlank() }?.let { path ->
             val file = File(path)
             if (file.exists()) {
@@ -315,11 +374,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 parts += Content.AudioFile(file.absolutePath)
             }
         }
-
         parts += Content.Text(config.prompt)
-
-        if (parts.isEmpty()) return null
-        return Contents.Companion.of(parts)
+        return Contents.of(parts)
     }
 
     private fun closeConversationLocked() {
@@ -329,12 +385,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
 
     internal fun incrementalDelta(previous: String, current: String): String {
         if (previous.isBlank()) return current
-        if (current.startsWith(previous)) {
-            return current.substring(previous.length)
-        }
-        if (previous.startsWith(current)) {
-            return ""
-        }
+        if (current.startsWith(previous)) return current.substring(previous.length)
+        if (previous.startsWith(current)) return ""
 
         val maxPrefix = previous.length.coerceAtMost(current.length)
         var overlap = 0
@@ -368,7 +420,15 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         return (words * 1.5).toInt().coerceAtLeast(1)
     }
 
-    private companion object {
-        const val TAG = "LiteRtLocalEngine"
+    companion object {
+        private const val TAG = "LiteRtLocalEngine"
+        private val engineCreationLock = Any()
+
+        fun supportsSpeculativeDecoding(modelPath: String): Boolean {
+            if (modelPath.isBlank()) return false
+            return runCatching {
+                Capabilities(modelPath).use { it.hasSpeculativeDecodingSupport() }
+            }.getOrDefault(false)
+        }
     }
 }
