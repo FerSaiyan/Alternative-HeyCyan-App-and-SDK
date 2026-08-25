@@ -12,12 +12,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -50,7 +49,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelDownloadUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelOptionField
@@ -59,11 +57,8 @@ import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelToggleField
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsAction
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsConfigureUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsSection
-import com.fersaiyan.cyanbridge.shared.generated.resources.*
-import org.jetbrains.compose.resources.ExperimentalResourceApi
-import org.jetbrains.compose.resources.stringResource
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalResourceApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocalModelsConfigureScreen(
     state: LocalModelsConfigureUiState,
@@ -71,44 +66,27 @@ fun LocalModelsConfigureScreen(
 ) {
     var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
     val requestBack = {
-        if (state.hasUnsavedChanges) {
-            showUnsavedChangesDialog = true
-        } else {
-            onAction(LocalModelsAction.Back)
-        }
+        if (state.hasUnsavedChanges) showUnsavedChangesDialog = true
+        else onAction(LocalModelsAction.Back)
     }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                 title = { Text(stringResource(Res.string.local_models_title)) },
+                title = { Text("Local models") },
                 navigationIcon = {
                     IconButton(onClick = requestBack) {
-                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(Res.string.action_back))
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
                 },
             )
         },
         bottomBar = {
-            if (state.download.isInFlight ||
-                state.download.message.isNotBlank() ||
-                state.download.progressPercent != null
-            ) {
-                Surface(
-                    tonalElevation = 6.dp,
-                    shadowElevation = 8.dp,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        DownloadProgressCard(
-                            state = state.download,
-                            onAction = onAction,
-                        )
+            if (state.download.isInFlight || state.download.message.isNotBlank()) {
+                Surface(tonalElevation = 6.dp, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
+                    Box(Modifier.fillMaxWidth().padding(16.dp)) {
+                        DownloadProgressCard(state.download, onAction)
                     }
                 }
             }
@@ -124,57 +102,14 @@ fun LocalModelsConfigureScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                 ScreenCard(stringResource(Res.string.local_models_runtime)) {
+                ScreenCard("Current model") {
                     Text(state.engineStatus, style = MaterialTheme.typography.bodyMedium)
-                    if (state.deviceSummary.isNotBlank()) {
-                        Text(
-                            state.deviceSummary,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Text(
-                        state.selectedModelStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    ActionRow(
-                         primaryLabel = stringResource(Res.string.local_models_import),
-                        onPrimary = { onAction(LocalModelsAction.ImportModel) },
-                         secondaryLabel = stringResource(Res.string.local_models_refresh),
-                        onSecondary = { onAction(LocalModelsAction.Refresh) },
-                    )
-                    if (state.emptyStateMessage.isNotBlank()) {
-                        Text(
-                            state.emptyStateMessage,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        state.catalog.firstOrNull { it.id == "gemma4-e2b-it-litert" }?.let { starter ->
-                            FilledTonalButton(
-                                onClick = { onAction(LocalModelsAction.DownloadCatalogModel(starter.id)) },
-                                enabled = starter.canDownload,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                 Text(stringResource(Res.string.local_models_download_starter))
-                            }
-                        }
-                    }
-                }
-            }
-            item {
-                 ScreenCard(stringResource(Res.string.local_models_installed)) {
-                    if (state.installedModels.isEmpty()) {
-                        Text(
-                             stringResource(Res.string.local_models_none_installed),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
+                    if (state.deviceSummary.isNotBlank()) SupportingText(state.deviceSummary)
+                    SupportingText(state.selectedModelStatus)
+                    if (state.installedModels.isNotEmpty()) {
                         ChoiceField(
-                             label = stringResource(Res.string.local_models_selected),
-                            value = state.installedModels.firstOrNull { it.id == state.selectedInstalledModelId }?.label
-                                 ?: stringResource(Res.string.local_models_select),
+                            label = "Selected model",
+                            value = state.installedModels.firstOrNull { it.id == state.selectedInstalledModelId }?.label.orEmpty(),
                             options = state.installedModels.map { it.label },
                             onSelected = { index ->
                                 state.installedModels.getOrNull(index)?.let {
@@ -182,31 +117,92 @@ fun LocalModelsConfigureScreen(
                                 }
                             },
                         )
+                    } else {
+                        Text(
+                            state.emptyStateMessage.ifBlank { "No local model installed." },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     ActionRow(
-                         primaryLabel = stringResource(Res.string.local_models_info),
-                        onPrimary = { onAction(LocalModelsAction.ShowSelectedModelInfo) },
-                         secondaryLabel = stringResource(Res.string.local_models_unload),
-                        onSecondary = { onAction(LocalModelsAction.UnloadSelectedModel) },
-                        enabled = state.selectedInstalledModelId != null,
+                        primaryLabel = "Import model",
+                        onPrimary = { onAction(LocalModelsAction.ImportModel) },
+                        secondaryLabel = "Refresh",
+                        onSecondary = { onAction(LocalModelsAction.Refresh) },
                     )
-                    OutlinedButton(
-                        onClick = { onAction(LocalModelsAction.RemoveSelectedModel) },
-                        enabled = state.selectedInstalledModelId != null,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                         Text(stringResource(Res.string.local_models_remove_selected))
+                    if (state.selectedInstalledModelId != null) {
+                        ActionRow(
+                            primaryLabel = "Model info",
+                            onPrimary = { onAction(LocalModelsAction.ShowSelectedModelInfo) },
+                            secondaryLabel = "Unload",
+                            onSecondary = { onAction(LocalModelsAction.UnloadSelectedModel) },
+                        )
                     }
                 }
             }
+
+            item {
+                ScreenCard("Performance") {
+                    val generation = state.generation
+                    ChoiceField(
+                        label = "Compute backend",
+                        value = generation.computeBackendOptions.getOrNull(generation.computeBackendIndex).orEmpty(),
+                        options = generation.computeBackendOptions,
+                        onSelected = {
+                            onAction(LocalModelsAction.SelectOption(LocalModelOptionField.COMPUTE_BACKEND, it))
+                        },
+                    )
+                    SupportingText(generation.computeBackendNote)
+                    ChoiceField(
+                        label = "MTP acceleration",
+                        value = generation.mtpOptions.getOrNull(generation.mtpIndex).orEmpty(),
+                        options = generation.mtpOptions,
+                        enabled = state.selectedInstalledModelId != null,
+                        onSelected = {
+                            onAction(LocalModelsAction.SelectOption(LocalModelOptionField.MTP_MODE, it))
+                        },
+                    )
+                    if (generation.mtpStatus.isNotBlank()) SupportingText(generation.mtpStatus)
+                    FilledTonalButton(
+                        onClick = { onAction(LocalModelsAction.RunWarmup) },
+                        enabled = state.selectedInstalledModelId != null,
+                        modifier = Modifier.fillMaxWidth().testTag("test_model_now"),
+                    ) { Text("Test model now") }
+                    if (state.warmupResult.isNotBlank()) SupportingText(state.warmupResult)
+                }
+            }
+
+            item {
+                ScreenCard("Assistant behavior") {
+                    Text(
+                        "This prompt is sent to the selected local model. Keep the short-first instruction for faster spoken responses, or customize it for your use case.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ModelTextField(
+                        label = "System prompt",
+                        value = state.generation.systemPrompt,
+                        minLines = 4,
+                        onValueChange = {
+                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.SYSTEM_PROMPT, it))
+                        },
+                    )
+                    FilledTonalButton(
+                        onClick = { onAction(LocalModelsAction.SaveGenerationSettings) },
+                        enabled = state.selectedInstalledModelId != null,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Save local model settings") }
+                }
+            }
+
             item {
                 ExpandableCard(
-                     title = stringResource(Res.string.local_models_catalog),
+                    title = "Curated models",
                     expanded = state.catalogExpanded,
                     onToggle = { onAction(LocalModelsAction.ToggleSection(LocalModelsSection.CATALOG)) },
                 ) {
                     Text(
-                         stringResource(Res.string.local_models_catalog_description),
+                        "Download a tested starter package or import your own GGUF / LiteRT-LM model.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -214,262 +210,21 @@ fun LocalModelsConfigureScreen(
                         if (index > 0) HorizontalDivider()
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(model.title, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                model.details,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                model.status,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            SupportingText(model.details)
+                            SupportingText(model.status)
                             ActionRow(
                                 primaryLabel = model.downloadLabel,
                                 onPrimary = { onAction(LocalModelsAction.DownloadCatalogModel(model.id)) },
-                                 secondaryLabel = stringResource(Res.string.action_info),
+                                secondaryLabel = "Info",
                                 onSecondary = { onAction(LocalModelsAction.ShowCatalogModelInfo(model.id)) },
                                 enabled = model.canDownload,
                                 secondaryEnabled = true,
                             )
                         }
                     }
-                }
-            }
-            item {
-                ExpandableCard(
-                     title = stringResource(Res.string.local_models_remote_server),
-                    expanded = state.remoteServerExpanded,
-                    onToggle = { onAction(LocalModelsAction.ToggleSection(LocalModelsSection.REMOTE_SERVER)) },
-                ) {
-                    Text(
-                         stringResource(Res.string.local_models_remote_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    ToggleRow(
-                         label = stringResource(Res.string.local_models_use_remote),
-                        checked = state.remoteServer.enabled,
-                        onCheckedChange = {
-                            onAction(
-                                LocalModelsAction.SetToggle(
-                                    LocalModelToggleField.REMOTE_SERVER_ENABLED,
-                                    it,
-                                ),
-                            )
-                        },
-                    )
                     ModelTextField(
-                         label = stringResource(Res.string.local_models_base_url),
-                        value = state.remoteServer.baseUrl,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.REMOTE_BASE_URL, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_model_name),
-                        value = state.remoteServer.modelName,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.REMOTE_MODEL_NAME, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_api_key_optional),
-                        value = state.remoteServer.apiKey,
-                        password = true,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.REMOTE_API_KEY, it))
-                        },
-                    )
-                    ActionRow(
-                         primaryLabel = stringResource(Res.string.local_models_test_connection),
-                        onPrimary = { onAction(LocalModelsAction.TestRemoteServer) },
-                         secondaryLabel = stringResource(Res.string.local_models_save),
-                        onSecondary = { onAction(LocalModelsAction.SaveRemoteServer) },
-                    )
-                    if (state.remoteServer.status.isNotBlank()) {
-                        Text(
-                            state.remoteServer.status,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            item {
-                ExpandableCard(
-                     title = stringResource(Res.string.local_models_studio_bridge),
-                    expanded = state.studioBridgeExpanded,
-                    onToggle = { onAction(LocalModelsAction.ToggleSection(LocalModelsSection.STUDIO_BRIDGE)) },
-                ) {
-                    Text(
-                         stringResource(Res.string.local_models_studio_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    ToggleRow(
-                         label = stringResource(Res.string.local_models_enable_studio),
-                        checked = state.studioBridge.enabled,
-                        onCheckedChange = {
-                            onAction(
-                                LocalModelsAction.SetToggle(
-                                    LocalModelToggleField.STUDIO_BRIDGE_ENABLED,
-                                    it,
-                                ),
-                            )
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_api_key_remote),
-                        value = state.studioBridge.apiKey,
-                        password = true,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.STUDIO_BRIDGE_API_KEY, it))
-                        },
-                    )
-                    ActionRow(
-                         primaryLabel = stringResource(Res.string.local_models_save_connect),
-                        onPrimary = { onAction(LocalModelsAction.SaveStudioBridge) },
-                         secondaryLabel = stringResource(Res.string.local_models_api_key_help),
-                        onSecondary = { onAction(LocalModelsAction.ShowStudioBridgeApiKeyHelp) },
-                    )
-                    if (state.studioBridge.status.isNotBlank()) {
-                        Text(
-                            state.studioBridge.status,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            item {
-                ExpandableCard(
-                     title = stringResource(Res.string.local_models_generation),
-                    expanded = state.generationSettingsExpanded,
-                    onToggle = { onAction(LocalModelsAction.ToggleSection(LocalModelsSection.GENERATION_SETTINGS)) },
-                ) {
-                    val generation = state.generation
-                    ChoiceField(
-                         label = stringResource(Res.string.local_models_performance_profile),
-                        value = generation.profileOptions.getOrNull(generation.profileIndex).orEmpty(),
-                        options = generation.profileOptions,
-                        onSelected = {
-                            onAction(LocalModelsAction.SelectOption(LocalModelOptionField.PROFILE, it))
-                        },
-                    )
-                    ChoiceField(
-                         label = stringResource(Res.string.local_models_runtime_label),
-                        value = generation.runtimeOptions.getOrNull(generation.runtimeIndex).orEmpty(),
-                        options = generation.runtimeOptions,
-                        onSelected = {
-                            onAction(LocalModelsAction.SelectOption(LocalModelOptionField.RUNTIME, it))
-                        },
-                    )
-                    SupportingText(generation.runtimeNote)
-                    ChoiceField(
-                         label = stringResource(Res.string.local_models_compute_backend),
-                        value = generation.computeBackendOptions.getOrNull(generation.computeBackendIndex).orEmpty(),
-                        options = generation.computeBackendOptions,
-                        onSelected = {
-                            onAction(LocalModelsAction.SelectOption(LocalModelOptionField.COMPUTE_BACKEND, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_cpu_threads),
-                        value = generation.cpuThreads,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.CPU_THREADS, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_gpu_layers),
-                        value = generation.gpuLayers,
-                        enabled = generation.gpuLayersEnabled,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.GPU_LAYERS, it))
-                        },
-                    )
-                    SupportingText(generation.computeBackendNote)
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_temperature),
-                        value = generation.temperature,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.TEMPERATURE, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_top_p),
-                        value = generation.topP,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.TOP_P, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_top_k),
-                        value = generation.topK,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.TOP_K, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_max_tokens),
-                        value = generation.maxTokens,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.MAX_TOKENS, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_repetition_penalty),
-                        value = generation.repetitionPenalty,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.REPETITION_PENALTY, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_context_size),
-                        value = generation.contextSize,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.CONTEXT_SIZE, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_seed),
-                        value = generation.seed,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.SEED, it))
-                        },
-                    )
-                    ChoiceField(
-                         label = stringResource(Res.string.local_models_template_override),
-                        value = generation.templateOptions.getOrNull(generation.templateIndex).orEmpty(),
-                        options = generation.templateOptions,
-                        onSelected = {
-                            onAction(LocalModelsAction.SelectOption(LocalModelOptionField.TEMPLATE, it))
-                        },
-                    )
-                    ToggleRow(
-                         label = stringResource(Res.string.local_models_structured_json),
-                        checked = generation.experimentalStructuredJson,
-                        onCheckedChange = {
-                            onAction(
-                                LocalModelsAction.SetToggle(
-                                    LocalModelToggleField.EXPERIMENTAL_STRUCTURED_JSON,
-                                    it,
-                                ),
-                            )
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_system_prompt),
-                        value = generation.systemPrompt,
-                        minLines = 3,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.SYSTEM_PROMPT, it))
-                        },
-                    )
-                    ModelTextField(
-                         label = stringResource(Res.string.local_models_huggingface_token),
-                        value = generation.huggingFaceToken,
+                        label = "Hugging Face token (only for gated downloads)",
+                        value = state.generation.huggingFaceToken,
                         password = true,
                         onValueChange = {
                             onAction(LocalModelsAction.UpdateText(LocalModelTextField.HUGGING_FACE_TOKEN, it))
@@ -477,153 +232,300 @@ fun LocalModelsConfigureScreen(
                     )
                 }
             }
+
             item {
-                 ScreenCard(stringResource(Res.string.local_models_diagnostics)) {
+                ExpandableCard(
+                    title = "Remote model server",
+                    subtitle = "Run a model on another computer or device",
+                    expanded = state.remoteServerExpanded,
+                    onToggle = { onAction(LocalModelsAction.ToggleSection(LocalModelsSection.REMOTE_SERVER)) },
+                ) {
+                    val remote = state.remoteServer
+                    ToggleRow(
+                        label = "Use remote OpenAI-compatible server",
+                        checked = remote.enabled,
+                        onCheckedChange = {
+                            onAction(LocalModelsAction.SetToggle(LocalModelToggleField.REMOTE_SERVER_ENABLED, it))
+                        },
+                    )
+                    ModelTextField(
+                        label = "Base URL",
+                        value = remote.baseUrl,
+                        onValueChange = {
+                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.REMOTE_BASE_URL, it))
+                        },
+                    )
+                    ModelTextField(
+                        label = "Model name",
+                        value = remote.modelName,
+                        onValueChange = {
+                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.REMOTE_MODEL_NAME, it))
+                        },
+                    )
+                    ModelTextField(
+                        label = "API key (optional)",
+                        value = remote.apiKey,
+                        password = true,
+                        onValueChange = {
+                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.REMOTE_API_KEY, it))
+                        },
+                    )
+                    ActionRow(
+                        primaryLabel = "Test connection",
+                        onPrimary = { onAction(LocalModelsAction.TestRemoteServer) },
+                        secondaryLabel = "Save",
+                        onSecondary = { onAction(LocalModelsAction.SaveRemoteServer) },
+                    )
+                    if (remote.status.isNotBlank()) SupportingText(remote.status)
+                }
+            }
+
+            item {
+                ExpandableCard(
+                    title = "CyanBridge Model Studio",
+                    subtitle = "Connect to a model running on your other device",
+                    expanded = state.studioBridgeExpanded,
+                    onToggle = { onAction(LocalModelsAction.ToggleSection(LocalModelsSection.STUDIO_BRIDGE)) },
+                ) {
+                    val studio = state.studioBridge
+                    ToggleRow(
+                        label = "Enable Studio Bridge",
+                        checked = studio.enabled,
+                        onCheckedChange = {
+                            onAction(LocalModelsAction.SetToggle(LocalModelToggleField.STUDIO_BRIDGE_ENABLED, it))
+                        },
+                    )
+                    ModelTextField(
+                        label = "Studio API key",
+                        value = studio.apiKey,
+                        password = true,
+                        onValueChange = {
+                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.STUDIO_BRIDGE_API_KEY, it))
+                        },
+                    )
+                    ActionRow(
+                        primaryLabel = "Save & connect",
+                        onPrimary = { onAction(LocalModelsAction.SaveStudioBridge) },
+                        secondaryLabel = "API key help",
+                        onSecondary = { onAction(LocalModelsAction.ShowStudioBridgeApiKeyHelp) },
+                    )
+                    if (studio.status.isNotBlank()) SupportingText(studio.status)
+                }
+            }
+
+            item {
+                ExpandableCard(
+                    title = "Advanced options",
+                    subtitle = "Runtime, context and sampling controls",
+                    expanded = state.generationSettingsExpanded,
+                    onToggle = { onAction(LocalModelsAction.ToggleSection(LocalModelsSection.GENERATION_SETTINGS)) },
+                ) {
+                    val generation = state.generation
+                    ChoiceField(
+                        label = "Runtime",
+                        value = generation.runtimeOptions.getOrNull(generation.runtimeIndex).orEmpty(),
+                        options = generation.runtimeOptions,
+                        onSelected = {
+                            onAction(LocalModelsAction.SelectOption(LocalModelOptionField.RUNTIME, it))
+                        },
+                    )
+                    SupportingText(generation.runtimeNote)
+                    ModelTextField(
+                        label = "CPU threads",
+                        value = generation.cpuThreads,
+                        onValueChange = {
+                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.CPU_THREADS, it))
+                        },
+                    )
+                    ModelTextField(
+                        label = "GPU layers (-1 = auto)",
+                        value = generation.gpuLayers,
+                        enabled = generation.gpuLayersEnabled,
+                        onValueChange = {
+                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.GPU_LAYERS, it))
+                        },
+                    )
+                    ModelTextField(label = "Temperature", value = generation.temperature, onValueChange = {
+                        onAction(LocalModelsAction.UpdateText(LocalModelTextField.TEMPERATURE, it))
+                    })
+                    ModelTextField(label = "Top P", value = generation.topP, onValueChange = {
+                        onAction(LocalModelsAction.UpdateText(LocalModelTextField.TOP_P, it))
+                    })
+                    ModelTextField(label = "Top K", value = generation.topK, onValueChange = {
+                        onAction(LocalModelsAction.UpdateText(LocalModelTextField.TOP_K, it))
+                    })
+                    ModelTextField(label = "Max output tokens", value = generation.maxTokens, onValueChange = {
+                        onAction(LocalModelsAction.UpdateText(LocalModelTextField.MAX_TOKENS, it))
+                    })
+                    ModelTextField(label = "Repetition penalty", value = generation.repetitionPenalty, onValueChange = {
+                        onAction(LocalModelsAction.UpdateText(LocalModelTextField.REPETITION_PENALTY, it))
+                    })
+                    ModelTextField(label = "Context size", value = generation.contextSize, onValueChange = {
+                        onAction(LocalModelsAction.UpdateText(LocalModelTextField.CONTEXT_SIZE, it))
+                    })
+                    ModelTextField(label = "Seed (-1 = random)", value = generation.seed, onValueChange = {
+                        onAction(LocalModelsAction.UpdateText(LocalModelTextField.SEED, it))
+                    })
+                    ChoiceField(
+                        label = "Prompt template",
+                        value = generation.templateOptions.getOrNull(generation.templateIndex).orEmpty(),
+                        options = generation.templateOptions,
+                        onSelected = {
+                            onAction(LocalModelsAction.SelectOption(LocalModelOptionField.TEMPLATE, it))
+                        },
+                    )
+                    ToggleRow(
+                        label = "Experimental structured JSON",
+                        checked = generation.experimentalStructuredJson,
+                        onCheckedChange = {
+                            onAction(LocalModelsAction.SetToggle(LocalModelToggleField.EXPERIMENTAL_STRUCTURED_JSON, it))
+                        },
+                    )
                     OutlinedButton(
-                        onClick = { onAction(LocalModelsAction.RunWarmup) },
-                        enabled = state.selectedInstalledModelId != null && !state.download.isInFlight,
+                        onClick = { onAction(LocalModelsAction.RemoveSelectedModel) },
+                        enabled = state.selectedInstalledModelId != null,
                         modifier = Modifier.fillMaxWidth(),
-                    ) {
-                         Text(stringResource(Res.string.local_models_warmup))
-                    }
-                    if (state.warmupResult.isNotBlank()) {
-                        Text(
-                            state.warmupResult,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    ) { Text("Remove selected model") }
                 }
             }
-            item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                     OutlinedButton(onClick = requestBack) { Text(stringResource(Res.string.local_models_close)) }
-                    Spacer(Modifier.width(8.dp))
-                    FilledTonalButton(onClick = { onAction(LocalModelsAction.SaveGenerationSettings) }) {
-                         Text(stringResource(Res.string.local_models_save))
-                    }
-                }
-            }
+            item { Spacer(Modifier.height(8.dp)) }
         }
     }
 
     if (showUnsavedChangesDialog) {
         AlertDialog(
             onDismissRequest = { showUnsavedChangesDialog = false },
-             title = { Text(stringResource(Res.string.local_models_unsaved_title)) },
-             text = { Text(stringResource(Res.string.local_models_unsaved_message)) },
+            title = { Text("Unsaved changes") },
+            text = { Text("Leave without saving your local-model changes?") },
             dismissButton = {
-                TextButton(onClick = { showUnsavedChangesDialog = false }) {
-                     Text(stringResource(Res.string.local_models_keep_editing))
-                }
+                TextButton(onClick = { showUnsavedChangesDialog = false }) { Text("Keep editing") }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        showUnsavedChangesDialog = false
-                        onAction(LocalModelsAction.DiscardChangesAndBack)
-                    },
-                ) {
-                 Text(stringResource(Res.string.local_models_discard))
-                }
+                TextButton(onClick = { onAction(LocalModelsAction.DiscardChangesAndBack) }) { Text("Discard") }
             },
         )
     }
 }
 
-@OptIn(ExperimentalResourceApi::class)
 @Composable
-private fun DownloadProgressCard(
-    state: LocalModelDownloadUiState,
-    onAction: (LocalModelsAction) -> Unit,
-) {
-    ScreenCard(stringResource(Res.string.local_models_download_progress)) {
-        if (state.message.isNotBlank()) {
-            Text(
-                state.message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.testTag("local_model_download_message"),
-            )
-        }
-        if (state.isInFlight || state.progressPercent != null) {
-            state.progressPercent?.let { percent ->
-                LinearProgressIndicator(
-                    progress = { percent.coerceIn(0, 100) / 100f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("local_model_download_progress"),
-                )
-            } ?: LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("local_model_download_progress"),
-            )
-        }
-        if (state.isInFlight) {
-            OutlinedButton(
-                onClick = { onAction(LocalModelsAction.CancelDownload) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(Res.string.local_models_cancel_download))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScreenCard(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit,
-) {
+private fun ScreenCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            content = {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                content()
-            },
-        )
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            content()
+        }
     }
 }
 
-@OptIn(ExperimentalResourceApi::class)
 @Composable
 private fun ExpandableCard(
     title: String,
+    subtitle: String? = null,
     expanded: Boolean,
     onToggle: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
+        Column {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onToggle),
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    subtitle?.let { SupportingText(it) }
+                }
                 Icon(
-                    imageVector = if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
-                    contentDescription = if (expanded) {
-                        stringResource(Res.string.local_models_collapse, title)
-                    } else {
-                        stringResource(Res.string.local_models_expand, title)
-                    },
+                    if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
                 )
             }
-            if (expanded) content()
+            if (expanded) {
+                HorizontalDivider()
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    content = content,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun ChoiceField(
+    label: String,
+    value: String,
+    options: List<String>,
+    enabled: Boolean = true,
+    onSelected: (Int) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        Surface(
+            modifier = Modifier.fillMaxWidth().clickable(enabled = enabled) { expanded = !expanded },
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(value.ifBlank { "Select" }, modifier = Modifier.weight(1f))
+                Icon(Icons.Outlined.ExpandMore, contentDescription = null)
+            }
+        }
+        if (expanded && enabled) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    options.forEachIndexed { index, option ->
+                        Text(
+                            option,
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                expanded = false
+                                onSelected(index)
+                            }.padding(14.dp),
+                        )
+                        if (index < options.lastIndex) HorizontalDivider()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelTextField(
+    label: String,
+    value: String,
+    enabled: Boolean = true,
+    password: Boolean = false,
+    minLines: Int = 1,
+    onValueChange: (String) -> Unit,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        enabled = enabled,
+        minLines = minLines,
+        visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -636,115 +538,27 @@ private fun ActionRow(
     enabled: Boolean = true,
     secondaryEnabled: Boolean = enabled,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        FilledTonalButton(
-            onClick = onPrimary,
-            enabled = enabled,
-            modifier = Modifier.weight(1f),
-        ) {
-            Text(primaryLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilledTonalButton(onClick = onPrimary, enabled = enabled, modifier = Modifier.weight(1f)) { Text(primaryLabel) }
+        OutlinedButton(onClick = onSecondary, enabled = secondaryEnabled, modifier = Modifier.weight(1f)) { Text(secondaryLabel) }
+    }
+}
+
+@Composable
+private fun SupportingText(text: String) {
+    if (text.isBlank()) return
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun DownloadProgressCard(state: LocalModelDownloadUiState, onAction: (LocalModelsAction) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Text(state.message.ifBlank { "Model download" }, style = MaterialTheme.typography.bodyMedium)
+        if (state.isInFlight) {
+            val progress = state.progressPercent
+            if (progress == null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            else LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
+            TextButton(onClick = { onAction(LocalModelsAction.CancelDownload) }) { Text("Cancel download") }
         }
-        OutlinedButton(
-            onClick = onSecondary,
-            enabled = secondaryEnabled,
-            modifier = Modifier.weight(1f),
-        ) {
-            Text(secondaryLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-@Composable
-private fun ToggleRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun ModelTextField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    enabled: Boolean = true,
-    password: Boolean = false,
-    minLines: Int = 1,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(label) },
-        enabled = enabled,
-        singleLine = minLines == 1,
-        minLines = minLines,
-        visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-    )
-}
-
-@Composable
-private fun SupportingText(value: String) {
-    if (value.isNotBlank()) {
-        Text(
-            value,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@OptIn(ExperimentalResourceApi::class)
-@Composable
-private fun ChoiceField(
-    label: String,
-    value: String,
-    options: List<String>,
-    onSelected: (Int) -> Unit,
-) {
-    var showChoices by remember(label, options) { mutableStateOf(false) }
-    OutlinedButton(
-        onClick = { showChoices = true },
-        enabled = options.isNotEmpty(),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(label, style = MaterialTheme.typography.labelSmall)
-             Text(value.ifBlank { stringResource(Res.string.local_models_select) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-    if (showChoices) {
-        AlertDialog(
-            onDismissRequest = { showChoices = false },
-            title = { Text(label) },
-            text = {
-                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                    itemsIndexed(options) { index, option ->
-                        TextButton(
-                            onClick = {
-                                onSelected(index)
-                                showChoices = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(option, modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                 TextButton(onClick = { showChoices = false }) { Text(stringResource(Res.string.local_models_close)) }
-            },
-        )
     }
 }
