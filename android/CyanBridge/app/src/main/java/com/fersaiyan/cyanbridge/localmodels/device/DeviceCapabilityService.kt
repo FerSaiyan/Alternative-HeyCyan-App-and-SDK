@@ -5,7 +5,6 @@ import android.content.Context
 import android.os.Build
 import android.os.StatFs
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
-import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelPerformanceProfile
 
 data class DeviceSnapshot(
     val primaryAbi: String,
@@ -19,7 +18,6 @@ data class DeviceCapabilityAssessment(
     val supported: Boolean,
     val blockers: List<String>,
     val warnings: List<String>,
-    val recommendedProfile: LocalModelPerformanceProfile,
     val ramGb: Double = 0.0,
     val ramSuitable: Boolean = true,
 )
@@ -82,21 +80,8 @@ object DeviceCapabilityService {
             supported = blockers.isEmpty(),
             blockers = blockers,
             warnings = warnings,
-            recommendedProfile = recommendProfile(snapshot, entry),
             ramGb = ramGb,
             ramSuitable = ramSuitable,
         )
-    }
-
-    fun recommendProfile(
-        snapshot: DeviceSnapshot,
-        entry: LocalModelCatalogEntry,
-    ): LocalModelPerformanceProfile {
-        val ramGb = snapshot.totalRamBytes / GIB
-        return when {
-            ramGb < 6.0 || entry.minRamGb <= 4.0 -> LocalModelPerformanceProfile.FAST
-            ramGb < 9.0 -> LocalModelPerformanceProfile.BALANCED
-            else -> LocalModelPerformanceProfile.HIGH_QUALITY
-        }
     }
 }
