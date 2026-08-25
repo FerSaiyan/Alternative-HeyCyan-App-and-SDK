@@ -1,0 +1,4 @@
+<resources>
+    <string name="local_models_warmup">Test model now</string>
+    <string name="local_models_system_prompt">System prompt (editable per model)</string>
+</resources>
