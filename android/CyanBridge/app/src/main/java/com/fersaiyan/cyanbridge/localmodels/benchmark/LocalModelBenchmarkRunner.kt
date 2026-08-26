@@ -12,9 +12,12 @@ import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.InstalledLocalModel
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.BenchmarkInfo
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.ExperimentalFlags
-import com.google.ai.edge.litertlm.benchmark
+import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -89,7 +92,6 @@ object LocalModelBenchmarkRunner {
         require(file.exists()) { "Selected model file is missing" }
 
         onProgress(LocalModelBenchmarkProgress.InspectingModel)
-        var mtpSupported = false
         val offOutcome = runWorkerMeasurement(
             context = context,
             modelPath = file.absolutePath,
@@ -99,12 +101,10 @@ object LocalModelBenchmarkRunner {
             onProgress = onProgress,
         )
         val off = when (offOutcome) {
-            is WorkerOutcome.Success -> {
-                mtpSupported = offOutcome.mtpSupported
-                offOutcome.measurement
-            }
+            is WorkerOutcome.Success -> offOutcome.measurement
             is WorkerOutcome.Failure -> throw IllegalStateException(offOutcome.message)
         }
+        val mtpSupported = offOutcome.mtpSupported
         onProgress(LocalModelBenchmarkProgress.MeasurementReady(false, off))
 
         val onOutcome = if (mtpSupported) {
@@ -266,32 +266,49 @@ object LocalModelBenchmarkRunner {
         val runtimeBackend = backendFor(context, backend, cpuThreads)
         val cacheDir = File(
             context.cacheDir,
-            "local-model-benchmark/${if (mtpEnabled) "mtp-on" else "mtp-off"}",
+            "local-model-benchmark/conversation-${if (mtpEnabled) "mtp-on" else "mtp-off"}",
         ).apply { mkdirs() }
-        val previous = ExperimentalFlags.enableSpeculativeDecoding
+        val previousBenchmark = ExperimentalFlags.enableBenchmark
+        val previousMtp = ExperimentalFlags.enableSpeculativeDecoding
+        var engine: Engine? = null
         try {
+            ExperimentalFlags.enableBenchmark = true
             ExperimentalFlags.enableSpeculativeDecoding = mtpEnabled
             onProgress(LocalModelBenchmarkWorkerProtocol.RESULT_WARMING_UP)
-            benchmark(
-                modelPath = modelPath,
-                backend = runtimeBackend,
-                prefillTokens = 32,
-                decodeTokens = 16,
-                cacheDir = cacheDir.path,
-                prompt = BENCHMARK_PROMPT,
-            )
+            // LiteRT-LM's benchmark() shrinks the KV cache to prefill + decode tokens, which is
+            // below Gemma 4's minimum context for this workload. Use the production engine path.
+            engine = Engine(
+                EngineConfig(
+                    modelPath = modelPath,
+                    backend = runtimeBackend,
+                    maxNumTokens = COMPARISON_CONTEXT_TOKENS,
+                    cacheDir = cacheDir.path,
+                ),
+            ).also { it.initialize() }
 
             onProgress(LocalModelBenchmarkWorkerProtocol.RESULT_MEASURING)
-            return benchmark(
-                modelPath = modelPath,
-                backend = runtimeBackend,
-                prefillTokens = 128,
-                decodeTokens = 64,
-                cacheDir = cacheDir.path,
-                prompt = BENCHMARK_PROMPT,
-            ).toMeasurement(mtpEnabled)
+            return engine.createConversation(
+                ConversationConfig(
+                    samplerConfig = SamplerConfig(
+                        topK = 40,
+                        topP = 0.92,
+                        temperature = 0.7,
+                        seed = 0,
+                    ),
+                    automaticToolCalling = false,
+                    maxOutputToken = COMPARISON_DECODE_TOKENS,
+                ),
+            ).use { conversation ->
+                conversation.sendMessage(
+                    text = BENCHMARK_PROMPT,
+                    maxOutputToken = COMPARISON_DECODE_TOKENS,
+                )
+                conversation.getBenchmarkInfo().toMeasurement(mtpEnabled)
+            }
         } finally {
-            ExperimentalFlags.enableSpeculativeDecoding = previous
+            runCatching { engine?.close() }
+            ExperimentalFlags.enableBenchmark = previousBenchmark
+            ExperimentalFlags.enableSpeculativeDecoding = previousMtp
         }
     }
 
@@ -328,9 +345,15 @@ object LocalModelBenchmarkRunner {
     }
 
     private const val BENCHMARK_PROMPT =
-        "CyanBridge is testing local model responsiveness. Give a concise description of why low latency matters for a wearable voice assistant."
-    internal const val WORKER_TIMEOUT_MS = 60_000L
+        "CyanBridge is measuring local inference for a wearable voice assistant. Explain how low " +
+            "latency improves quick voice questions, camera assistance, navigation, and private " +
+            "on-device tasks. Compare fast first-token response with sustained output speed, " +
+            "mention battery-aware mobile hardware, and provide enough concrete detail for a " +
+            "realistic performance test. Write one concise paragraph of about 120 words."
+    internal const val WORKER_TIMEOUT_MS = 120_000L
     private const val WORKER_RESULT_TIMEOUT_MS = WORKER_TIMEOUT_MS + 5_000L
+    private const val COMPARISON_CONTEXT_TOKENS = 4096
+    private const val COMPARISON_DECODE_TOKENS = 128
 
     private sealed interface WorkerOutcome {
         data class Success(

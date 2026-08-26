@@ -196,7 +196,7 @@ dependencies {
     implementation 'com.android.billingclient:billing-ktx:8.1.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0"
     implementation "androidx.work:work-runtime-ktx:2.9.1"
-    // LiteRT-LM 0.14's Flow streaming API requires the newer coroutine ABI.
+    // LiteRT-LM's Flow streaming API requires the newer coroutine ABI.
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"
     implementation "com.google.android.gms:play-services-location:21.3.0"
     if (localLlamaRuntimeAarPath.isEmpty()) {
@@ -211,7 +211,7 @@ dependencies {
     }
 
     // LiteRT-LM local multimodal/chat runtime.
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.14.0")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.0")
 
     // Walking Aid uses the Interpreter API retained by LiteRT. These artifacts package
     // flexible-page-size native libraries for Android 15+ 16 KB devices.

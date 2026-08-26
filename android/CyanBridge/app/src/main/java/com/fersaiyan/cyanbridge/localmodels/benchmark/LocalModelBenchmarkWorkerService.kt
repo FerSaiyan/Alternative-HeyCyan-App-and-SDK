@@ -109,13 +109,19 @@ abstract class LocalModelBenchmarkWorkerService : Service() {
                     mtpEnabled = mtpEnabled,
                 ) { progress ->
                     phase = if (progress == LocalModelBenchmarkWorkerProtocol.RESULT_WARMING_UP) {
-                        "warm-up/initialization"
+                        "initialization"
                     } else {
-                        "measurement"
+                        "generation"
                     }
                     receiver?.send(progress, Bundle.EMPTY)
                 }
-                Log.i(TAG, "Worker completed mtp=$mtpEnabled pid=${Process.myPid()}")
+                Log.i(
+                    TAG,
+                    "Worker completed mtp=$mtpEnabled pid=${Process.myPid()} " +
+                        "prefill=${measurement.prefillTokens} decode=${measurement.decodeTokens} " +
+                        "ttftMs=${measurement.timeToFirstTokenMs} " +
+                        "decodeTps=${measurement.decodeTokensPerSecond}",
+                )
                 Bundle().apply {
                     putBoolean(LocalModelBenchmarkWorkerProtocol.KEY_MTP_SUPPORTED, mtpSupported)
                     putLong(LocalModelBenchmarkWorkerProtocol.KEY_INIT_TIME_MS, measurement.initTimeMs)

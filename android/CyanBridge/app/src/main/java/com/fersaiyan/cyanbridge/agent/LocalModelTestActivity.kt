@@ -167,7 +167,7 @@ class LocalModelTestActivity : ComponentActivity() {
                             recommendation = if (!result.mtpSupported) {
                                 "This model package does not contain MTP/speculative decoding support. Automatic mode will keep MTP off."
                             } else if (result.mtpOnTimedOut) {
-                                "The MTP-on test did not finish within 60 seconds. Automatic will keep MTP off for this model and backend on this device."
+                                "The MTP-on test did not finish within 120 seconds. Automatic will keep MTP off for this model and backend on this device."
                             } else if (result.mtpOnFailure != null) {
                                 "The MTP-on test could not finish. Automatic will keep MTP off for this model and backend on this device."
                             } else if (result.recommendMtp) {
