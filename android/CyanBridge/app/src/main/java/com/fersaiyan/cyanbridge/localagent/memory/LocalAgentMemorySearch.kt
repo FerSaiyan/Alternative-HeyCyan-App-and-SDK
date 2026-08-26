@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.localagent.memory
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.integrations.knowledge.ImportedKnowledgeIndex
 import com.fersaiyan.cyanbridge.memoryvault.MemorySearchOrchestrator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -27,7 +28,7 @@ object LocalAgentMemorySearch {
     ): String {
         return runCatching {
             runBlocking(Dispatchers.IO) {
-                MemorySearchOrchestrator.buildRelevantMemoryBlock(
+                val core = MemorySearchOrchestrator.buildRelevantMemoryBlock(
                     context = context,
                     queryText = queryText,
                     date = date,
@@ -39,6 +40,18 @@ object LocalAgentMemorySearch {
                         maxChars = maxChars,
                     ),
                 )
+                // Inbound integrations are intentionally local-only at prompt time.
+                // ImportedKnowledgeIndex returns an empty block whenever a relay/cloud
+                // provider is selected, so private Obsidian/ChatGPT/Claude material is
+                // never silently forwarded to an external AI service.
+                val imported = ImportedKnowledgeIndex.relevantBlock(
+                    context = context,
+                    query = queryText,
+                    maxChars = (maxChars / 2).coerceAtLeast(500),
+                )
+                listOf(core, imported).filter { it.isNotBlank() }.joinToString("\n\n").let { combined ->
+                    if (combined.length <= maxChars) combined else combined.take(maxChars).trimEnd() + "…"
+                }
             }
         }.getOrDefault("")
     }
