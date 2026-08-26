@@ -458,7 +458,7 @@ class GeminiLiveClient(
     }
 
     private fun pauseCapture() {
-        captureEnabled.set(false)
+        val wasCapturing = captureEnabled.getAndSet(false)
         speechDetector.reset()
         recorderJob?.cancel()
         recorderJob = null
@@ -467,6 +467,12 @@ class GeminiLiveClient(
             it.release()
         }
         recorder = null
+
+        // With automatic VAD enabled, Gemini asks clients to explicitly flush cached audio when
+        // a stream is actually paused (background/audio-focus). This is not used as per-turn VAD.
+        if (wasCapturing && active.get() && setupComplete.get() && socket != null) {
+            sendAudioStreamEnd()
+        }
     }
 
     private fun resumeCapture() {
@@ -476,6 +482,11 @@ class GeminiLiveClient(
     }
 
     private fun stopCapture() = pauseCapture()
+
+    private fun sendAudioStreamEnd() {
+        val realtimeInput = JSONObject().put("audioStreamEnd", true)
+        socket?.send(JSONObject().put("realtimeInput", realtimeInput).toString())
+    }
 
     private fun sendPcm(bytes: ByteArray) {
         if (!setupComplete.get() || bytes.isEmpty()) return
