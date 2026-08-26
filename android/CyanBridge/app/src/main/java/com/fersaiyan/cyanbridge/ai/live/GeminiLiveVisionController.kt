@@ -19,6 +19,9 @@ import kotlinx.coroutines.withContext
 /**
  * Feeds visual context only while Gemini Live itself is active.
  * Other Pro models/providers never instantiate or call this controller.
+ *
+ * Mutable scheduling state is owned by [scope] on the main dispatcher. Audio activity can arrive
+ * from an IO coroutine, so it is dispatched onto this scope before touching that state.
  */
 class GeminiLiveVisionController(
     context: Context,
@@ -90,15 +93,17 @@ class GeminiLiveVisionController(
     }
 
     fun onSpeechActivity(speaking: Boolean) {
-        if (!active) return
-        val changedToSpeaking = speaking && !userSpeaking
-        userSpeaking = speaking
-        if (!changedToSpeaking) return
+        scope.launch {
+            if (!active) return@launch
+            val changedToSpeaking = speaking && !userSpeaking
+            userSpeaking = speaking
+            if (!changedToSpeaking) return@launch
 
-        when (capabilities.mode) {
-            GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES -> maybeSendLatestMetaFrame(forceFreshWindow = true)
-            GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> maybeCaptureHeyCyanStill()
-            else -> Unit
+            when (capabilities.mode) {
+                GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES -> maybeSendLatestMetaFrame(forceFreshWindow = true)
+                GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> maybeCaptureHeyCyanStill()
+                else -> Unit
+            }
         }
     }
 
