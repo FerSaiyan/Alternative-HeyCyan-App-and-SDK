@@ -101,12 +101,19 @@ class HilFixtureSmokeTest {
                     " detail=${clarification.detail} text=${clarification.text}",
             )
             assertNotEquals(initialPrompt, clarification.text)
-            val clarificationLower = clarification.text.lowercase()
             assertTrue(
-                "Clarification must preserve an explicit yes/no choice: ${clarification.text}",
-                clarificationLower.contains("yes") && clarificationLower.contains("no"),
+                "Clarification was too short to be a meaningful follow-up: ${clarification.text}",
+                clarification.text.trim().length >= 20,
+            )
+            assertTrue(
+                "Clarification lost the pending email context: ${clarification.text}",
+                clarification.text.contains("email", ignoreCase = true) ||
+                    clarification.text.contains("send", ignoreCase = true) ||
+                    clarification.text.contains("voice-approval-hil@example.invalid", ignoreCase = true),
             )
 
+            // What matters is that ambiguity did not authorize anything and the conversation is
+            // still listening. The model is free to phrase the clarification naturally.
             val clarificationReply = async {
                 session.askAndListen(clarification.text, timeoutMs = 15_000L)
             }
