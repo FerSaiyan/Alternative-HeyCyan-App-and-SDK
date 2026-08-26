@@ -118,6 +118,10 @@ class GeminiLiveVisionController(
         ) return
         if (!captureInProgress.compareAndSet(false, true)) return
 
+        // HeyCyan makes an audible shutter sound when the capture command is issued. Start the
+        // cooldown on the attempt, not on successful transfer, so a BLE/thumbnail failure cannot
+        // make the next utterance immediately trigger another shutter.
+        lastAutomaticStillMs = now
         onStatus("Glasses vision: capturing a fresh still while you speak")
         stillJob = scope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -129,7 +133,6 @@ class GeminiLiveVisionController(
             }
             result.onSuccess { jpeg ->
                 if (active) {
-                    lastAutomaticStillMs = System.currentTimeMillis()
                     client.sendVideoFrame(jpeg)
                     onStatus("Glasses vision: fresh still sent")
                 }
