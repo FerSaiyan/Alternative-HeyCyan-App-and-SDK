@@ -8,6 +8,7 @@ import kotlin.test.assertTrue
 class ChatRichTextTest {
     @Test
     fun parsesCommonLlmMarkdownBlocks() {
+        val dollar = '$'
         val blocks = ChatMarkdownParser.parse(
             """
             # Result
@@ -19,7 +20,7 @@ class ChatRichTextTest {
             val answer = 42
             ```
 
-            $$E = mc^2$$
+            ${dollar}${dollar}E = mc^2${dollar}${dollar}
             """.trimIndent()
         )
 
