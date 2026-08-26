@@ -111,6 +111,8 @@ class LocalModelTestActivity : ComponentActivity() {
         model: InstalledLocalModel,
         settings: LocalGenerationSettings,
     ) {
+        uiState = uiState.copy(phase = "Releasing active model resources")
+        LocalChatSessionManager.unload()
         LocalModelBenchmarkRunner.runLiteRtComparison(
             context = this,
             model = model,
@@ -150,6 +152,7 @@ class LocalModelTestActivity : ComponentActivity() {
                         val summary = buildString {
                             append("MTP ")
                             append(if (result.recommendMtp) "recommended" else "not recommended")
+                            if (result.mtpOnTimedOut) append(" (MTP on timed out)")
                             result.decodeSpeedChangePercent?.let {
                                 append(" (${signedPercent(it)} decode speed)")
                             }
@@ -163,12 +166,17 @@ class LocalModelTestActivity : ComponentActivity() {
                             mtpOn = result.mtpOn,
                             recommendation = if (!result.mtpSupported) {
                                 "This model package does not contain MTP/speculative decoding support. Automatic mode will keep MTP off."
+                            } else if (result.mtpOnTimedOut) {
+                                "The MTP-on test did not finish within 60 seconds. Automatic will keep MTP off for this model and backend on this device."
+                            } else if (result.mtpOnFailure != null) {
+                                "The MTP-on test could not finish. Automatic will keep MTP off for this model and backend on this device."
                             } else if (result.recommendMtp) {
                                 "Automatic will enable MTP for this model and backend on this device."
                             } else {
                                 "Automatic will keep MTP off for this model and backend on this device."
                             },
                             speedDeltaPercent = result.decodeSpeedChangePercent,
+                            note = result.mtpOnFailure.orEmpty(),
                         )
                     }
                 }

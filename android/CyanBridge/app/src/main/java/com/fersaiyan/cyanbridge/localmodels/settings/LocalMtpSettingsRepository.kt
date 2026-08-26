@@ -10,10 +10,11 @@ enum class LocalMtpMode(val label: String) {
 
 data class LocalMtpBenchmarkRecord(
     val mtpOffOutputTokensPerSecond: Double,
-    val mtpOnOutputTokensPerSecond: Double,
+    val mtpOnOutputTokensPerSecond: Double?,
     val mtpOffTimeToFirstTokenMs: Long?,
     val mtpOnTimeToFirstTokenMs: Long?,
     val recommendMtp: Boolean,
+    val mtpOnFailure: String? = null,
 )
 
 /** Pure policy kept separate so it can be covered by ordinary JVM tests. */
@@ -63,9 +64,10 @@ object LocalMtpSettingsRepository {
             mtpOffOutputTokensPerSecond = Double.fromBits(
                 prefs(context).getLong("${prefix}_off_tps", 0L),
             ),
-            mtpOnOutputTokensPerSecond = Double.fromBits(
-                prefs(context).getLong("${prefix}_on_tps", 0L),
-            ),
+            mtpOnOutputTokensPerSecond = prefs(context)
+                .takeIf { it.contains("${prefix}_on_tps") }
+                ?.getLong("${prefix}_on_tps", 0L)
+                ?.let(Double::fromBits),
             mtpOffTimeToFirstTokenMs = prefs(context)
                 .getLong("${prefix}_off_ttft", -1L)
                 .takeIf { it >= 0L },
@@ -73,6 +75,7 @@ object LocalMtpSettingsRepository {
                 .getLong("${prefix}_on_ttft", -1L)
                 .takeIf { it >= 0L },
             recommendMtp = prefs(context).getBoolean("${prefix}_recommend", true),
+            mtpOnFailure = prefs(context).getString("${prefix}_on_failure", null),
         )
     }
 
@@ -84,14 +87,21 @@ object LocalMtpSettingsRepository {
         record: LocalMtpBenchmarkRecord,
     ) {
         val prefix = benchmarkPrefix(modelId, backend)
-        prefs(context).edit()
+        val editor = prefs(context).edit()
             .putString("${prefix}_signature", modelSignature)
             .putLong("${prefix}_off_tps", record.mtpOffOutputTokensPerSecond.toBits())
-            .putLong("${prefix}_on_tps", record.mtpOnOutputTokensPerSecond.toBits())
             .putLong("${prefix}_off_ttft", record.mtpOffTimeToFirstTokenMs ?: -1L)
-            .putLong("${prefix}_on_ttft", record.mtpOnTimeToFirstTokenMs ?: -1L)
             .putBoolean("${prefix}_recommend", record.recommendMtp)
-            .apply()
+        record.mtpOnOutputTokensPerSecond?.let {
+            editor.putLong("${prefix}_on_tps", it.toBits())
+        } ?: editor.remove("${prefix}_on_tps")
+        record.mtpOnTimeToFirstTokenMs?.let {
+            editor.putLong("${prefix}_on_ttft", it)
+        } ?: editor.remove("${prefix}_on_ttft")
+        record.mtpOnFailure?.let {
+            editor.putString("${prefix}_on_failure", it)
+        } ?: editor.remove("${prefix}_on_failure")
+        editor.apply()
     }
 
     fun cachedRecommendation(

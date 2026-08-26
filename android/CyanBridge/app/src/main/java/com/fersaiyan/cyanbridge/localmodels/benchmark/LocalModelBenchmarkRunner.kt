@@ -1,7 +1,11 @@
 package com.fersaiyan.cyanbridge.localmodels.benchmark
 
 import android.content.Context
-import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtLocalInferenceEngine
+import android.content.Intent
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.ResultReceiver
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpBenchmarkRecord
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpSettingsRepository
@@ -12,8 +16,12 @@ import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.benchmark
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.resume
 
 sealed interface LocalModelBenchmarkProgress {
     data object InspectingModel : LocalModelBenchmarkProgress
@@ -42,6 +50,8 @@ data class LocalModelBenchmarkResult(
     val mtpOff: LocalModelBenchmarkMeasurement,
     val mtpOn: LocalModelBenchmarkMeasurement?,
     val recommendMtp: Boolean,
+    val mtpOnFailure: String? = null,
+    val mtpOnTimedOut: Boolean = false,
 ) {
     val decodeSpeedChangePercent: Double?
         get() = mtpOn?.let { on ->
@@ -68,8 +78,6 @@ object LocalMtpBenchmarkPolicy {
 }
 
 object LocalModelBenchmarkRunner {
-    private val benchmarkLock = Any()
-
     suspend fun runLiteRtComparison(
         context: Context,
         model: InstalledLocalModel,
@@ -81,32 +89,40 @@ object LocalModelBenchmarkRunner {
         require(file.exists()) { "Selected model file is missing" }
 
         onProgress(LocalModelBenchmarkProgress.InspectingModel)
-        val mtpSupported = LiteRtLocalInferenceEngine.supportsSpeculativeDecoding(file.absolutePath)
-        onProgress(LocalModelBenchmarkProgress.CapabilityReady(mtpSupported))
-
-        val runtimeBackend = backendFor(context, backend, cpuThreads)
-        val off = runMeasurement(
+        var mtpSupported = false
+        val offOutcome = runWorkerMeasurement(
             context = context,
             modelPath = file.absolutePath,
-            backend = runtimeBackend,
+            backend = backend,
+            cpuThreads = cpuThreads,
             mtpEnabled = false,
             onProgress = onProgress,
         )
+        val off = when (offOutcome) {
+            is WorkerOutcome.Success -> {
+                mtpSupported = offOutcome.mtpSupported
+                offOutcome.measurement
+            }
+            is WorkerOutcome.Failure -> throw IllegalStateException(offOutcome.message)
+        }
         onProgress(LocalModelBenchmarkProgress.MeasurementReady(false, off))
 
-        val on = if (mtpSupported) {
-            val result = runMeasurement(
+        val onOutcome = if (mtpSupported) {
+            runWorkerMeasurement(
                 context = context,
                 modelPath = file.absolutePath,
-                backend = runtimeBackend,
+                backend = backend,
+                cpuThreads = cpuThreads,
                 mtpEnabled = true,
                 onProgress = onProgress,
             )
-            onProgress(LocalModelBenchmarkProgress.MeasurementReady(true, result))
-            result
         } else {
             null
         }
+        val on = (onOutcome as? WorkerOutcome.Success)?.measurement
+        if (on != null) onProgress(LocalModelBenchmarkProgress.MeasurementReady(true, on))
+        val onFailure = (onOutcome as? WorkerOutcome.Failure)?.message
+        val onTimedOut = (onOutcome as? WorkerOutcome.Failure)?.timedOut == true
 
         val recommend = on?.let {
             LocalMtpBenchmarkPolicy.recommend(
@@ -117,7 +133,7 @@ object LocalModelBenchmarkRunner {
             )
         } ?: false
 
-        if (on != null) {
+        if (mtpSupported) {
             LocalMtpSettingsRepository.saveBenchmark(
                 context = context,
                 modelId = model.id,
@@ -129,10 +145,11 @@ object LocalModelBenchmarkRunner {
                 ),
                 record = LocalMtpBenchmarkRecord(
                     mtpOffOutputTokensPerSecond = off.decodeTokensPerSecond,
-                    mtpOnOutputTokensPerSecond = on.decodeTokensPerSecond,
+                    mtpOnOutputTokensPerSecond = on?.decodeTokensPerSecond,
                     mtpOffTimeToFirstTokenMs = off.timeToFirstTokenMs,
-                    mtpOnTimeToFirstTokenMs = on.timeToFirstTokenMs,
+                    mtpOnTimeToFirstTokenMs = on?.timeToFirstTokenMs,
                     recommendMtp = recommend,
+                    mtpOnFailure = onFailure,
                 ),
             )
         }
@@ -142,47 +159,139 @@ object LocalModelBenchmarkRunner {
             mtpOff = off,
             mtpOn = on,
             recommendMtp = recommend,
+            mtpOnFailure = onFailure,
+            mtpOnTimedOut = onTimedOut,
         )
         onProgress(LocalModelBenchmarkProgress.Finished(result))
         result
     }
 
-    @OptIn(ExperimentalApi::class)
-    private fun runMeasurement(
+    private suspend fun runWorkerMeasurement(
         context: Context,
         modelPath: String,
-        backend: Backend,
+        backend: LocalComputeBackend,
+        cpuThreads: Int,
         mtpEnabled: Boolean,
         onProgress: (LocalModelBenchmarkProgress) -> Unit,
-    ): LocalModelBenchmarkMeasurement {
-        return synchronized(benchmarkLock) {
-            val previous = ExperimentalFlags.enableSpeculativeDecoding
-            try {
-                ExperimentalFlags.enableSpeculativeDecoding = mtpEnabled
-                onProgress(LocalModelBenchmarkProgress.WarmingUp(mtpEnabled))
-                // Keep a short warm-up separate so shader/kernel compilation does not dominate the
-                // measured pass.
-                benchmark(
-                    modelPath = modelPath,
-                    backend = backend,
-                    prefillTokens = 32,
-                    decodeTokens = 16,
-                    cacheDir = context.cacheDir.path,
-                    prompt = BENCHMARK_PROMPT,
-                )
-
-                onProgress(LocalModelBenchmarkProgress.Measuring(mtpEnabled))
-                benchmark(
-                    modelPath = modelPath,
-                    backend = backend,
-                    prefillTokens = 128,
-                    decodeTokens = 64,
-                    cacheDir = context.cacheDir.path,
-                    prompt = BENCHMARK_PROMPT,
-                ).toMeasurement(mtpEnabled)
-            } finally {
-                ExperimentalFlags.enableSpeculativeDecoding = previous
+    ): WorkerOutcome {
+        val serviceClass = if (mtpEnabled) {
+            LocalModelBenchmarkMtpOnService::class.java
+        } else {
+            LocalModelBenchmarkMtpOffService::class.java
+        }
+        val completed = AtomicBoolean(false)
+        val outcome = withTimeoutOrNull(WORKER_RESULT_TIMEOUT_MS) {
+            suspendCancellableCoroutine { continuation ->
+                val receiver = object : ResultReceiver(Handler(Looper.getMainLooper())) {
+                    override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                        when (resultCode) {
+                            LocalModelBenchmarkWorkerProtocol.RESULT_CAPABILITY -> {
+                                val supported = resultData?.getBoolean(
+                                    LocalModelBenchmarkWorkerProtocol.KEY_MTP_SUPPORTED,
+                                ) == true
+                                onProgress(LocalModelBenchmarkProgress.CapabilityReady(supported))
+                            }
+                            LocalModelBenchmarkWorkerProtocol.RESULT_WARMING_UP ->
+                                onProgress(LocalModelBenchmarkProgress.WarmingUp(mtpEnabled))
+                            LocalModelBenchmarkWorkerProtocol.RESULT_MEASURING ->
+                                onProgress(LocalModelBenchmarkProgress.Measuring(mtpEnabled))
+                            LocalModelBenchmarkWorkerProtocol.RESULT_SUCCESS -> {
+                                if (completed.compareAndSet(false, true)) {
+                                    continuation.resume(
+                                        WorkerOutcome.Success(
+                                            measurement = requireNotNull(resultData).toMeasurement(mtpEnabled),
+                                            mtpSupported = resultData.getBoolean(
+                                                LocalModelBenchmarkWorkerProtocol.KEY_MTP_SUPPORTED,
+                                            ),
+                                        ),
+                                    )
+                                }
+                            }
+                            LocalModelBenchmarkWorkerProtocol.RESULT_TIMEOUT,
+                            LocalModelBenchmarkWorkerProtocol.RESULT_ERROR -> {
+                                if (completed.compareAndSet(false, true)) {
+                                    continuation.resume(
+                                        WorkerOutcome.Failure(
+                                            message = resultData
+                                                ?.getString(LocalModelBenchmarkWorkerProtocol.KEY_ERROR)
+                                                ?: "MTP ${mtpEnabled.onOff()} benchmark worker stopped unexpectedly.",
+                                            timedOut = resultCode == LocalModelBenchmarkWorkerProtocol.RESULT_TIMEOUT,
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                val intent = Intent(context, serviceClass)
+                    .putExtra(LocalModelBenchmarkWorkerProtocol.EXTRA_MODEL_PATH, modelPath)
+                    .putExtra(LocalModelBenchmarkWorkerProtocol.EXTRA_BACKEND, backend.name)
+                    .putExtra(LocalModelBenchmarkWorkerProtocol.EXTRA_CPU_THREADS, cpuThreads)
+                    .putExtra(LocalModelBenchmarkWorkerProtocol.EXTRA_RECEIVER, receiver)
+                val started = runCatching { context.startService(intent) }.getOrNull()
+                if (started == null && completed.compareAndSet(false, true)) {
+                    continuation.resume(WorkerOutcome.Failure("Unable to start the benchmark worker.", false))
+                }
+                continuation.invokeOnCancellation {
+                    abortWorker(context, serviceClass)
+                }
             }
+        }
+        if (outcome != null) return outcome
+        completed.set(true)
+        abortWorker(context, serviceClass)
+        return WorkerOutcome.Failure(
+            message = "MTP ${mtpEnabled.onOff()} benchmark did not finish within ${WORKER_TIMEOUT_MS / 1_000} seconds.",
+            timedOut = true,
+        )
+    }
+
+    private fun abortWorker(context: Context, serviceClass: Class<*>) {
+        runCatching {
+            context.startService(
+                Intent(context, serviceClass).setAction(LocalModelBenchmarkWorkerProtocol.ACTION_ABORT),
+            )
+        }
+    }
+
+    @OptIn(ExperimentalApi::class)
+    internal fun runMeasurementInWorker(
+        context: Context,
+        modelPath: String,
+        backend: LocalComputeBackend,
+        cpuThreads: Int,
+        mtpEnabled: Boolean,
+        onProgress: (Int) -> Unit,
+    ): LocalModelBenchmarkMeasurement {
+        val runtimeBackend = backendFor(context, backend, cpuThreads)
+        val cacheDir = File(
+            context.cacheDir,
+            "local-model-benchmark/${if (mtpEnabled) "mtp-on" else "mtp-off"}",
+        ).apply { mkdirs() }
+        val previous = ExperimentalFlags.enableSpeculativeDecoding
+        try {
+            ExperimentalFlags.enableSpeculativeDecoding = mtpEnabled
+            onProgress(LocalModelBenchmarkWorkerProtocol.RESULT_WARMING_UP)
+            benchmark(
+                modelPath = modelPath,
+                backend = runtimeBackend,
+                prefillTokens = 32,
+                decodeTokens = 16,
+                cacheDir = cacheDir.path,
+                prompt = BENCHMARK_PROMPT,
+            )
+
+            onProgress(LocalModelBenchmarkWorkerProtocol.RESULT_MEASURING)
+            return benchmark(
+                modelPath = modelPath,
+                backend = runtimeBackend,
+                prefillTokens = 128,
+                decodeTokens = 64,
+                cacheDir = cacheDir.path,
+                prompt = BENCHMARK_PROMPT,
+            ).toMeasurement(mtpEnabled)
+        } finally {
+            ExperimentalFlags.enableSpeculativeDecoding = previous
         }
     }
 
@@ -194,6 +303,16 @@ object LocalModelBenchmarkRunner {
         decodeTokens = lastDecodeTokenCount,
         prefillTokensPerSecond = lastPrefillTokensPerSecond,
         decodeTokensPerSecond = lastDecodeTokensPerSecond,
+    )
+
+    private fun Bundle.toMeasurement(mtpEnabled: Boolean) = LocalModelBenchmarkMeasurement(
+        mtpEnabled = mtpEnabled,
+        initTimeMs = getLong(LocalModelBenchmarkWorkerProtocol.KEY_INIT_TIME_MS),
+        timeToFirstTokenMs = getLong(LocalModelBenchmarkWorkerProtocol.KEY_TTFT_MS),
+        prefillTokens = getInt(LocalModelBenchmarkWorkerProtocol.KEY_PREFILL_TOKENS),
+        decodeTokens = getInt(LocalModelBenchmarkWorkerProtocol.KEY_DECODE_TOKENS),
+        prefillTokensPerSecond = getDouble(LocalModelBenchmarkWorkerProtocol.KEY_PREFILL_TPS),
+        decodeTokensPerSecond = getDouble(LocalModelBenchmarkWorkerProtocol.KEY_DECODE_TPS),
     )
 
     private fun backendFor(
@@ -210,4 +329,17 @@ object LocalModelBenchmarkRunner {
 
     private const val BENCHMARK_PROMPT =
         "CyanBridge is testing local model responsiveness. Give a concise description of why low latency matters for a wearable voice assistant."
+    internal const val WORKER_TIMEOUT_MS = 60_000L
+    private const val WORKER_RESULT_TIMEOUT_MS = WORKER_TIMEOUT_MS + 5_000L
+
+    private sealed interface WorkerOutcome {
+        data class Success(
+            val measurement: LocalModelBenchmarkMeasurement,
+            val mtpSupported: Boolean,
+        ) : WorkerOutcome
+
+        data class Failure(val message: String, val timedOut: Boolean) : WorkerOutcome
+    }
 }
+
+private fun Boolean.onOff() = if (this) "on" else "off"

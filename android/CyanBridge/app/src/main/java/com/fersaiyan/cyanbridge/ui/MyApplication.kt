@@ -1,12 +1,14 @@
 package com.fersaiyan.cyanbridge.ui
 
 import android.app.Application
+import android.app.ActivityManager
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Process
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.core.content.ContextCompat
 import com.oudmon.ble.base.bluetooth.BleAction
@@ -61,6 +63,7 @@ class MyApplication : Application(){
         application = this
         instance = this
         CONTEXT = applicationContext
+        if (isLocalModelBenchmarkWorkerProcess()) return
         AppLanguagePreferences.applyStoredLocale(this)
         ProductAnalyticsLifecycle.register(this)
         initBle()
@@ -101,6 +104,18 @@ class MyApplication : Application(){
         runCatching { initPlatformPreferences(this) }
         runCatching { initSharedServices() }
 
+    }
+
+    private fun isLocalModelBenchmarkWorkerProcess(): Boolean {
+        val processName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            getProcessName()
+        } else {
+            getSystemService(ActivityManager::class.java)
+                ?.runningAppProcesses
+                ?.firstOrNull { it.pid == Process.myPid() }
+                ?.processName
+        }
+        return processName?.contains(":benchmark_mtp_") == true
     }
 
     /**

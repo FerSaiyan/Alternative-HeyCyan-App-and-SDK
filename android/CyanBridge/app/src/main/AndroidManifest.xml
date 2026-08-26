@@ -133,6 +133,14 @@
         <activity android:name=".bridge.runtimes.evenhub.EvenHubRuntimeActivity" android:exported="false" />
 
         <service android:name=".localmodels.download.ModelDownloadForegroundService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".localmodels.benchmark.LocalModelBenchmarkMtpOffService"
+            android:exported="false"
+            android:process=":benchmark_mtp_off" />
+        <service
+            android:name=".localmodels.benchmark.LocalModelBenchmarkMtpOnService"
+            android:exported="false"
+            android:process=":benchmark_mtp_on" />
         <service android:name=".ai.AiQuestionForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|dataSync|microphone" />
         <service android:name=".plugins.walkingaid.WalkingAidService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".plugins.meetingsparknotes.MeetingSparkNotesService" android:exported="false" android:foregroundServiceType="microphone" />

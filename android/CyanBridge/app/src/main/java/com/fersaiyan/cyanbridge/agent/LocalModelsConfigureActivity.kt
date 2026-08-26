@@ -463,6 +463,8 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
             generationDraft.mtpMode == LocalMtpMode.ON -> "Supported • forced on."
             generationDraft.mtpMode == LocalMtpMode.OFF -> "Supported • forced off."
             record == null -> "Supported • Automatic uses MTP until this device/backend is benchmarked."
+            record.mtpOnFailure != null || record.mtpOnOutputTokensPerSecond == null ->
+                "Supported • Automatic keeps MTP off because the MTP-on test did not finish."
             record.recommendMtp -> "Supported • Automatic recommends MTP (${format2(record.mtpOnOutputTokensPerSecond)} vs ${format2(record.mtpOffOutputTokensPerSecond)} tok/s)."
             else -> "Supported • Automatic keeps MTP off (${format2(record.mtpOnOutputTokensPerSecond)} vs ${format2(record.mtpOffOutputTokensPerSecond)} tok/s)."
         }
