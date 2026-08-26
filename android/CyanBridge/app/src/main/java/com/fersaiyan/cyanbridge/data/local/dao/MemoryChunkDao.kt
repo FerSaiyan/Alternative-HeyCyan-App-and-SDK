@@ -31,6 +31,9 @@ interface MemoryChunkDao {
     @Query("DELETE FROM memory_chunks WHERE source = :source")
     suspend fun deleteBySource(source: String): Int
 
+    @Query("DELETE FROM memory_chunks WHERE source = :source AND packageName = :packageName")
+    suspend fun deleteBySourceAndPackageName(source: String, packageName: String): Int
+
     @Query("DELETE FROM memory_chunks WHERE source = :source AND tsMs < :beforeTs")
     suspend fun deleteSourceOlderThan(source: String, beforeTs: Long): Int
 
