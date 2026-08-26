@@ -4,14 +4,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -35,11 +33,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice
+import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
+
+/**
+ * User-facing pairing intentionally groups the closely-related consumer camera-glasses protocols.
+ * HEY_CYAN is used as the UI sentinel for this automatic family; Android resolves and persists the
+ * actual HEY_CYAN / EYEVUE / TUNEBUDS protocol after the user confirms the device.
+ */
+private val pairingChoices = listOf(
+    DeviceClass.HEY_CYAN,
+    DeviceClass.META_RAYBAN,
+    DeviceClass.MEIZU_MYVU,
+    DeviceClass.GENERIC_AUDIO,
+)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalResourceApi::class)
 @Composable
@@ -49,7 +59,6 @@ fun DeviceBindScreen(
     connectingDevice: ScannedDevice?,
     selectedClass: DeviceClass,
     onScan: () -> Unit,
-    onPairMetaGlasses: () -> Unit,
     onSelectDevice: (ScannedDevice) -> Unit,
     onSelectedClassChange: (DeviceClass) -> Unit,
     onConfirmConnection: () -> Unit,
@@ -99,14 +108,6 @@ fun DeviceBindScreen(
                     )
                 }
             }
-            item {
-                OutlinedButton(
-                    onClick = onPairMetaGlasses,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(Res.string.device_bind_pair_meta))
-                }
-            }
             if (devices.isEmpty()) {
                 item {
                     Text(
@@ -129,26 +130,16 @@ fun DeviceBindScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = device.advertisedName ?: device.macAddress,
+                                    text = device.advertisedName
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: stringResource(Res.string.device_bind_unnamed_device),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = stringResource(
-                                        Res.string.device_bind_details,
-                                        device.macAddress,
-                                        device.rssi,
-                                    ),
+                                    text = stringResource(Res.string.device_bind_signal, device.rssi),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    text = stringResource(
-                                        Res.string.device_bind_detected,
-                                        localizedDeviceClass(device.effectiveSelectedClass()),
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
                                 )
                             }
                             OutlinedButton(onClick = { onSelectDevice(device) }) {
@@ -168,14 +159,28 @@ fun DeviceBindScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = device.advertisedName ?: device.macAddress,
+                        text = device.advertisedName
+                            ?.takeIf { it.isNotBlank() }
+                            ?: stringResource(Res.string.device_bind_unnamed_device),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    DeviceClass.entries.filter { it != DeviceClass.UNKNOWN }.forEach { type ->
+                    pairingChoices.forEach { type ->
                         FilterChip(
                             selected = selectedClass == type,
                             onClick = { onSelectedClassChange(type) },
-                            label = { Text(localizedDeviceClass(type)) },
+                            label = {
+                                if (type == DeviceClass.HEY_CYAN) {
+                                    Column {
+                                        Text(stringResource(Res.string.device_bind_auto_camera_glasses))
+                                        Text(
+                                            stringResource(Res.string.device_bind_auto_camera_glasses_hint),
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    }
+                                } else {
+                                    Text(localizedDeviceClass(type))
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }

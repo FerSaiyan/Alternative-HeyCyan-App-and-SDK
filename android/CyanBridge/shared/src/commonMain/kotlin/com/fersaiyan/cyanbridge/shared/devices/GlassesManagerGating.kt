@@ -70,7 +70,6 @@ object GlassesManagerGating {
                 base.add(Action.STATUS_BATTERY)
                 base.add(Action.STATUS_STORAGE)
                 base.add(Action.ADVANCED_CONTROLS)
-                base.add(Action.ADVANCED_LOCAL_AGENT)
                 base.add(Action.ADVANCED_DEVICE_INFO)
             }
             else -> {}
@@ -80,7 +79,6 @@ object GlassesManagerGating {
 
     private val heyCyanAdvancedActions = setOf(
         Action.ADVANCED_CONTROLS,
-        Action.ADVANCED_LOCAL_AGENT,
         Action.ADVANCED_DEVICE_INFO,
         Action.ADVANCED_DEVICE_VOLUME,
         Action.ADVANCED_IMAGE_QUALITY,

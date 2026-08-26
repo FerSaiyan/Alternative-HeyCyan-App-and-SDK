@@ -18,6 +18,8 @@ import android.util.Base64
 import android.util.Log
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,10 +35,13 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
-/** Direct Gemini Live WebSocket client. The relay only issues the short-lived token. */
+/**
+ * Direct Gemini Live WebSocket client. The relay only issues the short-lived token.
+ *
+ * This client is instantiated only by the explicit Gemini Live flow. Being a Pro user does not
+ * activate Live Mode or change routing for any other model/provider.
+ */
 class GeminiLiveClient(
     context: Context,
     private val listener: Listener,
@@ -45,6 +50,9 @@ class GeminiLiveClient(
         fun onStateChanged(state: GeminiLiveState, detail: String = "")
         fun onInterrupted()
         fun onNetworkChanged(available: Boolean)
+        fun onUserSpeechActivity(active: Boolean) = Unit
+        fun onTranscription(input: Boolean, text: String) = Unit
+        fun onSetupComplete() = Unit
     }
 
     private data class TokenConfig(
@@ -66,6 +74,11 @@ class GeminiLiveClient(
     private val connectivity = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val active = AtomicBoolean(false)
     private val captureEnabled = AtomicBoolean(false)
+    private val setupComplete = AtomicBoolean(false)
+    private val speechDetector = GeminiLiveSpeechActivityDetector { speaking ->
+        listener.onUserSpeechActivity(speaking)
+    }
+
     private var state = GeminiLiveState.IDLE
     private var tokenConfig: TokenConfig? = null
     private var socket: WebSocket? = null
@@ -79,7 +92,7 @@ class GeminiLiveClient(
     private var audioFocusRequest: AudioFocusRequest? = null
     private var inputAudioMs = 0L
     private var outputAudioMs = 0L
-    private var imageCount = 0
+    private var visualInputCount = 0
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -118,7 +131,9 @@ class GeminiLiveClient(
         if (!active.compareAndSet(false, true)) return
         inputAudioMs = 0L
         outputAudioMs = 0L
-        imageCount = 0
+        visualInputCount = 0
+        setupComplete.set(false)
+        speechDetector.reset()
         setState(GeminiLiveState.REQUESTING_TOKEN, "Requesting secure Live session")
         scope.launch {
             runCatching { requestToken(language, imagePrompt) }
@@ -135,6 +150,7 @@ class GeminiLiveClient(
 
     fun stop() {
         active.set(false)
+        setupComplete.set(false)
         reconnectJob?.cancel()
         reconnectJob = null
         sessionResumptionJob?.cancel()
@@ -146,7 +162,14 @@ class GeminiLiveClient(
         abandonAudioFocus()
         sessionResumptionHandle = null
         tokenConfig?.reservationId?.let { reservationId ->
-            scope.launch { releaseRelayReservation(reservationId, inputAudioMs, outputAudioMs, imageCount) }
+            scope.launch {
+                releaseRelayReservation(
+                    reservationId = reservationId,
+                    inputAudioMs = inputAudioMs,
+                    outputAudioMs = outputAudioMs,
+                    imageCount = visualInputCount,
+                )
+            }
         }
         tokenConfig = null
         setState(GeminiLiveState.STOPPED, "Stopped")
@@ -161,12 +184,12 @@ class GeminiLiveClient(
     fun pauseForBackground() = pauseCapture()
 
     fun resumeAfterForeground() {
-        if (active.get() && state == GeminiLiveState.LISTENING) resumeCapture()
+        if (active.get() && setupComplete.get() && state == GeminiLiveState.LISTENING) resumeCapture()
     }
 
-    /** Accepts a suitable raw glasses PCM source if one is exposed by the device SDK. */
+    /** Accepts raw glasses PCM if a device SDK exposes it. */
     fun offerGlassesPcm(pcm: ShortArray, sampleRateHz: Int) {
-        if (!active.get() || !captureEnabled.get()) return
+        if (!active.get() || !setupComplete.get() || !captureEnabled.get()) return
         val normalized = PcmResampler.resampleMono16(pcm, sampleRateHz, INPUT_SAMPLE_RATE_HZ)
         val bytes = ByteArray(normalized.size * 2)
         normalized.forEachIndexed { index, sample ->
@@ -176,18 +199,17 @@ class GeminiLiveClient(
         sendPcm(bytes)
     }
 
-    fun sendImage(jpegBytes: ByteArray) {
-        if (!active.get() || jpegBytes.isEmpty()) return
-        if (imageCount >= MAX_IMAGES_PER_SESSION) {
-            setState(GeminiLiveState.LISTENING, "Image limit reached for this Live session")
+    /** Backward-compatible name for explicit still images. */
+    fun sendImage(jpegBytes: ByteArray) = sendVideoFrame(jpegBytes)
+
+    /** Sends one JPEG frame through the current realtimeInput.video field. */
+    fun sendVideoFrame(jpegBytes: ByteArray) {
+        if (!active.get() || !setupComplete.get() || jpegBytes.isEmpty()) return
+        if (visualInputCount >= MAX_VISUAL_INPUTS_PER_SESSION) {
+            setState(GeminiLiveState.LISTENING, "Live visual-input safety limit reached")
             return
         }
-        val payload = JSONObject().put("realtimeInput", JSONObject().put("mediaChunks", JSONArray().put(
-            JSONObject()
-                .put("mimeType", "image/jpeg")
-                .put("data", Base64.encodeToString(jpegBytes, Base64.NO_WRAP)),
-        )))
-        if (socket?.send(payload.toString()) == true) imageCount++
+        if (sendRealtimeBlob("video", "image/jpeg", jpegBytes)) visualInputCount++
     }
 
     private fun requestToken(language: String, imagePrompt: String): TokenConfig {
@@ -260,8 +282,13 @@ class GeminiLiveClient(
             setState(GeminiLiveState.RECONNECTING, "Waiting for network")
             return
         }
+
+        setupComplete.set(false)
         socket?.cancel()
-        setState(if (reconnectAttempt == 0) GeminiLiveState.CONNECTING else GeminiLiveState.RECONNECTING, "Connecting to Google")
+        setState(
+            if (reconnectAttempt == 0) GeminiLiveState.CONNECTING else GeminiLiveState.RECONNECTING,
+            "Connecting to Google",
+        )
         val request = Request.Builder()
             .url(config.websocketUrl)
             .header("Authorization", "Token ${config.token}")
@@ -277,8 +304,7 @@ class GeminiLiveClient(
                 sendSetup(webSocket, config)
                 scheduleSessionResumption(webSocket)
                 startPlayback()
-                startCapture()
-                setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
+                setState(GeminiLiveState.CONNECTING, "Connected; waiting for Gemini setup")
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -291,11 +317,13 @@ class GeminiLiveClient(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 if (socket === webSocket) socket = null
+                setupComplete.set(false)
                 if (active.get()) scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 if (socket === webSocket) socket = null
+                setupComplete.set(false)
                 Log.w(TAG, "Gemini Live socket failed", t)
                 if (active.get()) scheduleReconnect()
             }
@@ -306,11 +334,26 @@ class GeminiLiveClient(
         val resumption = JSONObject().apply {
             sessionResumptionHandle?.takeIf { it.isNotBlank() }?.let { put("handle", it) }
         }
+        val automaticActivityDetection = JSONObject()
+            .put("disabled", false)
+            .put("startOfSpeechSensitivity", "START_SENSITIVITY_HIGH")
+            .put("endOfSpeechSensitivity", "END_SENSITIVITY_LOW")
+            .put("prefixPaddingMs", 40)
+            .put("silenceDurationMs", 500)
+        val realtimeInputConfig = JSONObject()
+            .put("automaticActivityDetection", automaticActivityDetection)
+            .put("activityHandling", "START_OF_ACTIVITY_INTERRUPTS")
+            .put("turnCoverage", "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO")
         val setup = JSONObject()
             .put("model", config.model)
             .put("generationConfig", JSONObject().put("responseModalities", JSONArray().put("AUDIO")))
+            .put("realtimeInputConfig", realtimeInputConfig)
+            .put("inputAudioTranscription", JSONObject())
+            .put("outputAudioTranscription", JSONObject())
             .put("sessionResumption", resumption)
-        check(webSocket.send(JSONObject().put("setup", setup).toString())) { "Live setup could not be sent" }
+        check(webSocket.send(JSONObject().put("setup", setup).toString())) {
+            "Live setup could not be sent"
+        }
     }
 
     private fun handleServerMessage(raw: String) {
@@ -318,27 +361,63 @@ class GeminiLiveClient(
             Log.w(TAG, "Ignoring malformed Gemini Live message")
             return
         }
+
+        if (message.has("setupComplete") && setupComplete.compareAndSet(false, true)) {
+            startCapture()
+            setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
+            listener.onSetupComplete()
+        }
+
         message.optJSONObject("sessionResumptionUpdate")
             ?.optString("newHandle")
             ?.takeIf { it.isNotBlank() }
             ?.let { sessionResumptionHandle = it }
 
+        message.optJSONObject("goAway")?.let { goAway ->
+            val timeLeft = goAway.optString("timeLeft")
+            Log.i(TAG, "Gemini Live goAway received; timeLeft=$timeLeft")
+        }
+
         val serverContent = message.optJSONObject("serverContent") ?: return
+        serverContent.optJSONObject("inputTranscription")
+            ?.optString("text")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { listener.onTranscription(true, it) }
+        serverContent.optJSONObject("outputTranscription")
+            ?.optString("text")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { listener.onTranscription(false, it) }
+
         if (serverContent.optBoolean("interrupted", false)) {
-            playback?.pause()
-            playback?.flush()
+            playback?.let { track ->
+                runCatching { track.pause() }
+                runCatching { track.flush() }
+            }
             listener.onInterrupted()
         }
-        val parts = serverContent.optJSONObject("modelTurn")?.optJSONArray("parts") ?: return
-        for (index in 0 until parts.length()) {
-            val encoded = parts.optJSONObject(index)?.optJSONObject("inlineData")?.optString("data").orEmpty()
-            if (encoded.isNotBlank()) {
-                runCatching { Base64.decode(encoded, Base64.DEFAULT) }.getOrNull()?.let(::playPcm)
+
+        val parts = serverContent.optJSONObject("modelTurn")?.optJSONArray("parts")
+        if (parts != null) {
+            for (index in 0 until parts.length()) {
+                val encoded = parts.optJSONObject(index)
+                    ?.optJSONObject("inlineData")
+                    ?.optString("data")
+                    .orEmpty()
+                if (encoded.isNotBlank()) {
+                    runCatching { Base64.decode(encoded, Base64.DEFAULT) }
+                        .getOrNull()
+                        ?.let(::playPcm)
+                }
             }
+        }
+
+        if (serverContent.optBoolean("turnComplete", false) && active.get()) {
+            setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
         }
     }
 
     private fun startCapture() {
+        if (!setupComplete.get()) return
         if (!captureEnabled.compareAndSet(false, true)) return
         requestAudioFocus()
         val minBuffer = AudioRecord.getMinBufferSize(
@@ -347,6 +426,7 @@ class GeminiLiveClient(
             AudioFormat.ENCODING_PCM_16BIT,
         )
         if (minBuffer <= 0) {
+            captureEnabled.set(false)
             setState(GeminiLiveState.ERROR, "Microphone is unavailable")
             return
         }
@@ -358,6 +438,7 @@ class GeminiLiveClient(
             maxOf(minBuffer, INPUT_CHUNK_BYTES * 4),
         )
         if (newRecorder.state != AudioRecord.STATE_INITIALIZED) {
+            captureEnabled.set(false)
             newRecorder.release()
             setState(GeminiLiveState.ERROR, "Microphone could not be initialized")
             return
@@ -366,15 +447,19 @@ class GeminiLiveClient(
         recorderJob = scope.launch {
             val buffer = ByteArray(INPUT_CHUNK_BYTES)
             newRecorder.startRecording()
-            while (active.get() && captureEnabled.get()) {
+            while (active.get() && setupComplete.get() && captureEnabled.get()) {
                 val count = newRecorder.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
-                if (count > 0) sendPcm(if (count == buffer.size) buffer else buffer.copyOf(count))
+                if (count > 0) {
+                    val packet = if (count == buffer.size) buffer else buffer.copyOf(count)
+                    sendPcm(packet)
+                }
             }
         }
     }
 
     private fun pauseCapture() {
-        captureEnabled.set(false)
+        val wasCapturing = captureEnabled.getAndSet(false)
+        speechDetector.reset()
         recorderJob?.cancel()
         recorderJob = null
         recorder?.let {
@@ -382,22 +467,43 @@ class GeminiLiveClient(
             it.release()
         }
         recorder = null
+
+        // With automatic VAD enabled, Gemini asks clients to explicitly flush cached audio when
+        // a stream is actually paused (background/audio-focus). This is not used as per-turn VAD.
+        if (wasCapturing && active.get() && setupComplete.get() && socket != null) {
+            sendAudioStreamEnd()
+        }
     }
 
     private fun resumeCapture() {
-        if (active.get() && socket != null && state == GeminiLiveState.LISTENING) startCapture()
+        if (active.get() && setupComplete.get() && socket != null && state == GeminiLiveState.LISTENING) {
+            startCapture()
+        }
     }
 
     private fun stopCapture() = pauseCapture()
 
+    private fun sendAudioStreamEnd() {
+        val realtimeInput = JSONObject().put("audioStreamEnd", true)
+        socket?.send(JSONObject().put("realtimeInput", realtimeInput).toString())
+    }
+
     private fun sendPcm(bytes: ByteArray) {
-        inputAudioMs += bytes.size.toLong() * 1_000L / (INPUT_SAMPLE_RATE_HZ * 2L)
-        val payload = JSONObject().put("realtimeInput", JSONObject().put("mediaChunks", JSONArray().put(
+        if (!setupComplete.get() || bytes.isEmpty()) return
+        speechDetector.offerPcm16Le(bytes)
+        if (sendRealtimeBlob("audio", "audio/pcm;rate=$INPUT_SAMPLE_RATE_HZ", bytes)) {
+            inputAudioMs += bytes.size.toLong() * 1_000L / (INPUT_SAMPLE_RATE_HZ * 2L)
+        }
+    }
+
+    private fun sendRealtimeBlob(field: String, mimeType: String, bytes: ByteArray): Boolean {
+        val realtimeInput = JSONObject().put(
+            field,
             JSONObject()
-                .put("mimeType", "audio/pcm;rate=$INPUT_SAMPLE_RATE_HZ")
+                .put("mimeType", mimeType)
                 .put("data", Base64.encodeToString(bytes, Base64.NO_WRAP)),
-        )))
-        socket?.send(payload.toString())
+        )
+        return socket?.send(JSONObject().put("realtimeInput", realtimeInput).toString()) == true
     }
 
     private fun startPlayback() {
@@ -428,8 +534,16 @@ class GeminiLiveClient(
     }
 
     private fun playPcm(bytes: ByteArray) {
-        outputAudioMs += bytes.size.toLong() * 1_000L / (OUTPUT_SAMPLE_RATE_HZ * 2L)
-        playback?.write(bytes, 0, bytes.size, AudioTrack.WRITE_NON_BLOCKING)
+        if (bytes.isEmpty()) return
+        if (playback == null) startPlayback()
+        val track = playback ?: return
+        if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+            runCatching { track.play() }
+        }
+        val written = track.write(bytes, 0, bytes.size, AudioTrack.WRITE_NON_BLOCKING)
+        if (written > 0) {
+            outputAudioMs += written.toLong() * 1_000L / (OUTPUT_SAMPLE_RATE_HZ * 2L)
+        }
     }
 
     private fun stopPlayback() {
@@ -444,13 +558,21 @@ class GeminiLiveClient(
     private fun requestAudioFocus() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
-                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).build())
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .build(),
+                )
                 .setOnAudioFocusChangeListener(audioFocusListener)
                 .build()
             audioManager.requestAudioFocus(audioFocusRequest!!)
         } else {
             @Suppress("DEPRECATION")
-            audioManager.requestAudioFocus(audioFocusListener, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+            audioManager.requestAudioFocus(
+                audioFocusListener,
+                AudioManager.STREAM_VOICE_CALL,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE,
+            )
         }
     }
 
@@ -477,8 +599,8 @@ class GeminiLiveClient(
     }
 
     /**
-     * Ephemeral tokens are single-use for new sessions. Google permits reconnecting with
-     * the same token only when the server-issued resumption handle is used before 10 minutes.
+     * Ephemeral tokens are single-use for new sessions. Google permits reconnecting with the
+     * same token only when the server-issued resumption handle is used before 10 minutes.
      */
     private fun scheduleSessionResumption(webSocket: WebSocket) {
         sessionResumptionJob?.cancel()
@@ -494,15 +616,13 @@ class GeminiLiveClient(
         }
     }
 
-    private fun hasInternet(): Boolean {
-        return connectivity.activeNetwork?.let { network ->
-            connectivity.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-        } == true
-    }
+    private fun hasInternet(): Boolean = connectivity.activeNetwork?.let { network ->
+        connectivity.getNetworkCapabilities(network)
+            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    } == true
 
     private fun notifyRouteChange() {
         if (active.get() && state == GeminiLiveState.LISTENING) {
-            // AudioRecord/AudioTrack follow Android's active Bluetooth or glasses route.
             setState(GeminiLiveState.LISTENING, "Audio route changed")
         }
     }
@@ -516,8 +636,8 @@ class GeminiLiveClient(
         const val TAG = "GeminiLiveClient"
         const val INPUT_SAMPLE_RATE_HZ = 16_000
         const val OUTPUT_SAMPLE_RATE_HZ = 24_000
-        const val INPUT_CHUNK_BYTES = 640 // 20 ms of mono PCM16 at 16 kHz.
+        const val INPUT_CHUNK_BYTES = 1_280 // 40 ms PCM16 mono at 16 kHz; halves WS message rate vs 20 ms.
         const val SESSION_RESUMPTION_RECONNECT_MS = 9 * 60 * 1000L
-        const val MAX_IMAGES_PER_SESSION = 10
+        const val MAX_VISUAL_INPUTS_PER_SESSION = 540 // At most 1 FPS over the 9-minute resumption window.
     }
 }

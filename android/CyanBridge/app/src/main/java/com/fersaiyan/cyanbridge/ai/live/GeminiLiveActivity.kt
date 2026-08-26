@@ -11,22 +11,27 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.button.MaterialButton
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionRoute
 import com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences
+import com.google.android.material.button.MaterialButton
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
 
-/** Visible, activity-scoped Gemini Live preview. It never records after Stop or background pause. */
+/**
+ * Visible, activity-scoped Gemini Live session.
+ *
+ * Opening/using other Pro models never starts this Activity or its audio/vision controllers.
+ */
 class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     private lateinit var client: GeminiLiveClient
+    private lateinit var visionController: GeminiLiveVisionController
     private lateinit var status: TextView
     private lateinit var elapsed: TextView
     private lateinit var network: TextView
@@ -36,6 +41,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     private var startedAtMs = 0L
     private var liveListening = false
     private var hardwareImageButtonRegistered = false
+    private var visionStatus = "Glasses vision: waiting"
     private val hardwareImageCaptureInProgress = AtomicBoolean(false)
     private val hardwareImageButtonHandler: () -> Unit = { captureHardwareImageQuestion() }
 
@@ -50,8 +56,10 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     }
 
     private val microphonePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startLive() else Toast.makeText(this, "Microphone permission is required for Gemini Live", Toast.LENGTH_LONG).show()
+        if (granted) startLive()
+        else Toast.makeText(this, "Microphone permission is required for Gemini Live", Toast.LENGTH_LONG).show()
     }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_gemini_live)
@@ -62,15 +70,26 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         startButton = findViewById(R.id.gemini_live_start)
         stopButton = findViewById(R.id.gemini_live_stop)
         client = GeminiLiveClient(this, this)
+        visionController = GeminiLiveVisionController(this, client) { message ->
+            runOnUiThread {
+                visionStatus = message
+                renderIndicators()
+            }
+        }
 
         startButton.setOnClickListener { explainAndRequestMicrophone() }
-        stopButton.setOnClickListener { client.stop() }
+        stopButton.setOnClickListener {
+            visionController.stop()
+            client.stop()
+        }
         setControls(false)
+        renderIndicators()
     }
 
     override fun onResume() {
         super.onResume()
         client.resumeAfterForeground()
+        if (liveListening) visionController.start()
     }
 
     override fun onPostResume() {
@@ -80,6 +99,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
     override fun onPause() {
         unregisterHardwareImageButton()
+        visionController.stop()
         client.pauseForBackground()
         super.onPause()
     }
@@ -87,18 +107,28 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     override fun onDestroy() {
         elapsed.removeCallbacks(ticker)
         unregisterHardwareImageButton()
+        visionController.close()
         client.close()
         super.onDestroy()
     }
 
     private fun explainAndRequestMicrophone() {
         if (!hasPaidPlan()) {
-            Toast.makeText(this, "Gemini Live requires an active paid Pro plan and network access.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this,
+                "Gemini Live requires an active paid Pro plan and network access.",
+                Toast.LENGTH_LONG,
+            ).show()
             return
         }
         AlertDialog.Builder(this)
-            .setTitle("Gemini Live preview")
-            .setMessage("Gemini Live listens through your microphone and sends live audio to Google. While this screen is open, press the glasses AI photo button to deliberately send its thumbnail to Gemini. This preview requires network access.")
+            .setTitle("Gemini Live")
+            .setMessage(
+                "Gemini Live is an optional model mode. When you start it, microphone audio is sent " +
+                    "to Google in real time. Compatible streaming glasses can contribute sampled visual " +
+                    "context while you speak; photo-only glasses use occasional stills instead. Other " +
+                    "Pro models are unaffected.",
+            )
             .setPositiveButton("Continue") { _, _ ->
                 if (hasPermission(Manifest.permission.RECORD_AUDIO)) startLive()
                 else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
@@ -114,10 +144,18 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
             settings = ImageQuestionPreferences.get(this),
             userQuestion = null,
         ).forRoute(ImageQuestionRoute.PRO_RELAY)
+        visionStatus = "Glasses vision: preparing"
+        renderIndicators()
+
+        // Streaming-capable glasses can negotiate/start their camera while the relay token and
+        // Gemini WebSocket setup happen. HeyCyan's opportunistic mode performs no capture here;
+        // its audible still is triggered only after a real user-speech window starts.
+        visionController.start()
         client.start(language, defaultImageQuestion)
     }
 
     private fun captureHardwareImageQuestion() {
+        if (!liveListening) return
         if (!hardwareImageCaptureInProgress.compareAndSet(false, true)) return
         status.text = "Receiving glasses AI photo"
         lifecycleScope.launch {
@@ -127,20 +165,24 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
             result
                 .onSuccess { image ->
                     client.sendImage(image)
-                    indicators.text = "Microphone: on   Glasses AI photo: thumbnail sent"
+                    visionStatus = "Glasses vision: manual AI-photo sent"
                     status.text = "Image sent to Gemini Live"
+                    renderIndicators()
                 }
                 .onFailure { error ->
-                    Toast.makeText(this@GeminiLiveActivity, error.message ?: "Glasses image capture failed", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this@GeminiLiveActivity,
+                        error.message ?: "Glasses image capture failed",
+                        Toast.LENGTH_LONG,
+                    ).show()
                 }
             hardwareImageCaptureInProgress.set(false)
         }
     }
 
-    private fun hasPaidPlan(): Boolean {
-        return ProSubscriptionPrefs.isActiveLocally(this) &&
+    private fun hasPaidPlan(): Boolean =
+        ProSubscriptionPrefs.isActiveLocally(this) &&
             ProSubscriptionPrefs.getPlan(this).lowercase() in setOf("cheap", "standard", "max")
-    }
 
     private fun hasPermission(permission: String): Boolean =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
@@ -151,17 +193,28 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
             val listening = state == GeminiLiveState.LISTENING
             liveListening = listening
             updateHardwareImageButtonRouting()
-            if (listening && startedAtMs == 0L) {
-                startedAtMs = System.currentTimeMillis()
-                elapsed.post(ticker)
+
+            if (listening) {
+                visionController.start()
+                if (startedAtMs == 0L) {
+                    startedAtMs = System.currentTimeMillis()
+                    elapsed.post(ticker)
+                }
             }
+
             if (state == GeminiLiveState.STOPPED || state == GeminiLiveState.ERROR) {
+                visionController.stop()
                 startedAtMs = 0L
                 elapsed.removeCallbacks(ticker)
                 elapsed.text = "Session not running"
             }
-            indicators.text = if (listening) "Gemini Live is listening   Microphone: on   Glasses AI photo: ready" else "Microphone: off   Glasses camera: off"
-            setControls(listening || state == GeminiLiveState.CONNECTING || state == GeminiLiveState.RECONNECTING)
+            renderIndicators()
+            setControls(
+                listening ||
+                    state == GeminiLiveState.CONNECTING ||
+                    state == GeminiLiveState.RECONNECTING ||
+                    state == GeminiLiveState.REQUESTING_TOKEN,
+            )
         }
     }
 
@@ -170,7 +223,37 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     }
 
     override fun onNetworkChanged(available: Boolean) {
-        runOnUiThread { network.text = if (available) "Network: connected" else "Network: lost, reconnecting when available" }
+        runOnUiThread {
+            network.text = if (available) {
+                "Network: connected"
+            } else {
+                "Network: lost, reconnecting when available"
+            }
+        }
+    }
+
+    override fun onUserSpeechActivity(active: Boolean) {
+        visionController.onSpeechActivity(active)
+    }
+
+    override fun onTranscription(input: Boolean, text: String) {
+        // Transcription is intentionally parallel metadata. It is not inserted into the
+        // audio -> Gemini -> native-audio critical path.
+        if (!input && text.isNotBlank()) {
+            android.util.Log.d("GeminiLiveActivity", "Gemini transcription: $text")
+        }
+    }
+
+    override fun onSetupComplete() {
+        // Audio capture is gated by setupComplete; the glasses camera may already be warm.
+    }
+
+    private fun renderIndicators() {
+        indicators.text = if (liveListening) {
+            "Microphone: on   $visionStatus"
+        } else {
+            "Microphone: off   Glasses vision: off"
+        }
     }
 
     private fun setControls(active: Boolean) {
@@ -179,7 +262,8 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     }
 
     private fun updateHardwareImageButtonRouting() {
-        val shouldRegister = liveListening && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+        val shouldRegister = liveListening &&
+            lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
         if (shouldRegister && !hardwareImageButtonRegistered) {
             GeminiLiveImageButtonRouter.register(hardwareImageButtonHandler)
             hardwareImageButtonRegistered = true

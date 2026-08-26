@@ -17,6 +17,8 @@ import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.bluetooth.DeviceManager
+import com.oudmon.ble.base.communication.LargeDataHandler
+import com.oudmon.ble.base.communication.utils.ByteUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +33,7 @@ import kotlinx.coroutines.launch
  * lightweight version that:
  * - reconnects to the last bound device address if present
  * - otherwise tries a best-effort fallback using already-bonded devices
+ * - reapplies user-hidden maximum capture-duration defaults after reconnect
  */
 object AutoPairManager {
     private const val TAG = "AutoPair"
@@ -91,6 +94,7 @@ object AutoPairManager {
                     }
                 }
                 if (connected && selectedClass != DeviceClass.MEIZU_MYVU) {
+                    if (selectedClass == DeviceClass.HEY_CYAN) scheduleHeyCyanMaximumDurations()
                     backoffMs = 5_000L
                     delay(20_000L)
                     continue
@@ -126,7 +130,7 @@ object AutoPairManager {
                 Log.d(TAG, "Skipping Eyevue reconnect ($reason): suppressed")
                 return
             }
-            EyevueManager.getInstance(context).connect(mac)
+            connectEyevueWithMaximumDuration(context, mac, null)
             return
         }
         if (DeviceProfileStore.selectedClass(context) == DeviceClass.TUNEBUDS) {
@@ -186,7 +190,7 @@ object AutoPairManager {
         val profile = DeviceProfileStore.loadLastSelected(context)
         if (profile?.selectedClass == DeviceClass.EYEVUE) {
             profile.macAddress.takeIf { it.isNotBlank() }?.let {
-                EyevueManager.getInstance(context).connect(it, profile.advertisedName)
+                connectEyevueWithMaximumDuration(context, it, profile.advertisedName)
             }
             return null
         }
@@ -279,7 +283,10 @@ object AutoPairManager {
         }
 
         val mgr = BleOperateManager.getInstance()
-        if (mgr.isConnected) return true
+        if (mgr.isConnected) {
+            if (profile?.selectedClass == DeviceClass.HEY_CYAN) scheduleHeyCyanMaximumDurations()
+            return true
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             !XXPermissions.isGranted(context, Permission.BLUETOOTH_CONNECT)
@@ -295,6 +302,7 @@ object AutoPairManager {
             // Optional; some SDK builds may not expose this.
         }
         mgr.connectDirectly(mac)
+        if (profile?.selectedClass == DeviceClass.HEY_CYAN) scheduleHeyCyanMaximumDurations()
         return true
     }
 
@@ -307,7 +315,7 @@ object AutoPairManager {
         if (!isBluetoothEnabled()) return false
 
         if (DeviceProfileStore.selectedClass(context) == DeviceClass.EYEVUE) {
-            EyevueManager.getInstance(context).connect(mac)
+            connectEyevueWithMaximumDuration(context, mac, null)
             return true
         }
         if (DeviceProfileStore.selectedClass(context) == DeviceClass.TUNEBUDS) {
@@ -316,7 +324,12 @@ object AutoPairManager {
         }
 
         val mgr = BleOperateManager.getInstance()
-        if (mgr.isConnected) return true
+        if (mgr.isConnected) {
+            if (DeviceProfileStore.selectedClass(context) == DeviceClass.HEY_CYAN) {
+                scheduleHeyCyanMaximumDurations()
+            }
+            return true
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             !XXPermissions.isGranted(context, Permission.BLUETOOTH_CONNECT)
@@ -330,6 +343,58 @@ object AutoPairManager {
         } catch (_: Throwable) {
         }
         mgr.connectDirectly(mac)
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.HEY_CYAN) {
+            scheduleHeyCyanMaximumDurations()
+        }
         return true
     }
+
+    private fun connectEyevueWithMaximumDuration(context: Context, mac: String, name: String?) {
+        val manager = EyevueManager.getInstance(context)
+        manager.connect(mac, name)
+        scope.launch {
+            repeat(60) {
+                if (manager.isConnected()) {
+                    manager.setRecordingDuration(EYEVUE_MAX_RECORDING_SECONDS)
+                    Log.i(TAG, "EyeVue recording duration defaulted to ${EYEVUE_MAX_RECORDING_SECONDS}s")
+                    return@launch
+                }
+                delay(100L)
+            }
+        }
+    }
+
+    private fun scheduleHeyCyanMaximumDurations() {
+        scope.launch {
+            val manager = BleOperateManager.getInstance()
+            repeat(60) {
+                if (manager.isConnected) {
+                    setHeyCyanCaptureDuration(dataType = 0x02, seconds = HEY_CYAN_MAX_VIDEO_SECONDS)
+                    delay(150L)
+                    setHeyCyanCaptureDuration(dataType = 0x06, seconds = HEY_CYAN_MAX_AUDIO_SECONDS)
+                    return@launch
+                }
+                delay(100L)
+            }
+            Log.w(TAG, "HeyCyan maximum capture durations were not applied: connection timed out")
+        }
+    }
+
+    private fun setHeyCyanCaptureDuration(dataType: Int, seconds: Int) {
+        if (!BleOperateManager.getInstance().isConnected) return
+        val command = byteArrayOf(
+            0x02,
+            dataType.toByte(),
+            0x00,
+            ByteUtil.loword(seconds).toByte(),
+            ByteUtil.hiword(seconds).toByte(),
+        )
+        LargeDataHandler.getInstance().glassesControl(command) { _, response ->
+            Log.i(TAG, "Applied HeyCyan maximum capture duration type=$dataType seconds=$seconds response=${response.dataType}")
+        }
+    }
+
+    private const val HEY_CYAN_MAX_VIDEO_SECONDS = 720
+    private const val HEY_CYAN_MAX_AUDIO_SECONDS = 7_200
+    private const val EYEVUE_MAX_RECORDING_SECONDS = 600
 }
