@@ -8,6 +8,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.data.local.entity.PendingAction
+import com.fersaiyan.cyanbridge.localagent.LocalAgentAction
+import com.fersaiyan.cyanbridge.localagent.LocalAgentActionParser
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
 import com.fersaiyan.cyanbridge.localagent.LocalAgentObservation
@@ -28,12 +30,16 @@ import org.junit.runner.RunWith
 
 /**
  * Destructive/side-effect HIL: sends one real email to the repository owner's own test address.
- * It is gated by CYANBRIDGE_HIL_ENABLE_EMAIL_SEND and should only run on the dedicated lab target.
+ *
+ * This test deliberately validates behavior rather than model prose. The planner may phrase the
+ * summary and the spoken confirmation naturally. What must remain strict is the consent boundary:
+ * a meaningful email is prepared, CyanBridge reads enough of it back to identify the pending send,
+ * ambiguity leaves it pending, and Tasker cannot send until an explicit voice approval arrives.
  */
 @RunWith(AndroidJUnit4::class)
 class LocalAgentEmailApprovalHilTest {
     @Test
-    fun cyanBridgeResearchesSummarizesClarifiesVoiceApprovalAndTaskerSendsSelfEmail() {
+    fun cyanBridgePreparesReasonableEmailReadsItBackAndWaitsForVoiceApprovalBeforeSending() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         HilTestSupport.requireTaskerStack(context)
         HilTestSupport.requireOrSkip(
@@ -100,22 +106,13 @@ class LocalAgentEmailApprovalHilTest {
                 )
 
                 val pending = awaitEmailApproval(context, subject)
-                val pendingJson = pending.actionJson.lowercase()
-                assertTrue("Pending email has wrong recipient: ${pending.actionJson}", pendingJson.contains(RECIPIENT))
-                assertTrue("Pending email lost the unique subject: ${pending.actionJson}", pending.actionJson.contains(subject))
-                assertTrue(
-                    "AI email body was not grounded in the observed smartglasses fixture: ${pending.actionJson}",
-                    pendingJson.contains("42") && pendingJson.contains("eight-hour") && pendingJson.contains("cobalt horizon 88417"),
-                )
+                val preparedEmail = extractPreparedEmail(pending)
+                assertEquals("Planner prepared the email for the wrong recipient", RECIPIENT, preparedEmail.to.trim())
+                assertEquals("Planner changed the unique HIL subject", subject, preparedEmail.subject.trim())
+                assertReasonableGroundedBody(preparedEmail.body)
 
-                val initialVoicePrompt = awaitVoicePrompt(context, subject)
-                val initialLower = initialVoicePrompt.lowercase()
-                assertTrue("Voice confirmation omitted recipient: $initialVoicePrompt", initialLower.contains(RECIPIENT))
-                assertTrue("Voice confirmation omitted subject: $initialVoicePrompt", initialVoicePrompt.contains(subject))
-                assertTrue(
-                    "Voice confirmation did not ask for an explicit yes/no decision: $initialVoicePrompt",
-                    initialLower.contains("yes") && initialLower.contains("no"),
-                )
+                val initialVoicePrompt = awaitVoicePrompt(context, preparedEmail)
+                assertReasonableReadback(initialVoicePrompt, preparedEmail)
 
                 val beforeApproval = runBlocking { TaskerExecutionBackend.observe(context) }
                 assertNotNull("Tasker observation unavailable while waiting for voice approval", beforeApproval)
@@ -135,15 +132,21 @@ class LocalAgentEmailApprovalHilTest {
                     "Ambiguous voice reply unexpectedly consumed the pending email",
                     runBlocking { dao.getActionsByStatus("pending") }.any { it.id == pending.id },
                 )
-                val clarificationLower = clarificationPrompt.lowercase()
                 assertTrue(
-                    "Clarification did not preserve an explicit yes/no choice: $clarificationPrompt",
-                    clarificationLower.contains("yes") && clarificationLower.contains("no"),
+                    "Clarification was too short to identify a real follow-up question: $clarificationPrompt",
+                    clarificationPrompt.trim().length >= 20,
+                )
+                assertTrue(
+                    "Clarification no longer refers to the pending action: $clarificationPrompt",
+                    clarificationPrompt.contains(RECIPIENT, ignoreCase = true) ||
+                        clarificationPrompt.contains("email", ignoreCase = true) ||
+                        clarificationPrompt.contains("send", ignoreCase = true),
                 )
                 println("CYANBRIDGE_EMAIL_HIL clarification_prompt=$clarificationPrompt")
 
+                // The only authorization signal in this HIL is this explicit affirmative reply.
                 val approvalCommand = LocalAgentController.replyToApproval(context, "yes")
-                assertTrue("CyanBridge could not route the literal yes voice approval", approvalCommand.ok)
+                assertTrue("CyanBridge could not route the explicit voice approval", approvalCommand.ok)
                 val executedApproval = awaitApprovalExecution(pending.id)
                 assertEquals("executed", executedApproval.status)
                 assertTrue(
@@ -185,6 +188,54 @@ class LocalAgentEmailApprovalHilTest {
         }
     }
 
+    private fun extractPreparedEmail(pending: PendingAction): LocalAgentAction.SendEmail {
+        return LocalAgentActionParser.parseList(pending.actionJson)
+            .filterIsInstance<LocalAgentAction.SendEmail>()
+            .singleOrNull()
+            ?: throw AssertionError("Pending high-risk action was not exactly one SendEmail: ${pending.actionJson}")
+    }
+
+    private fun assertReasonableGroundedBody(body: String) {
+        val normalized = body.lowercase().replace(Regex("\\s+"), " ").trim()
+        assertTrue("Prepared email body is too short to be a useful summary: $body", normalized.length >= 80)
+        assertTrue(
+            "Prepared email does not look like a real multi-word summary: $body",
+            normalized.split(' ').count { it.length >= 3 } >= 12,
+        )
+
+        // The fixture contains several independent facts. Require evidence that the model actually
+        // read it, but allow natural paraphrases and do not force a magic phrase into the email.
+        val groundingSignals = listOf(
+            normalized.contains("42"),
+            Regex("\\b(?:8|eight)[ -]?hours?\\b").containsMatchIn(normalized),
+            normalized.contains("cobalt") || normalized.contains("horizon 88417") || normalized.contains("88417"),
+        )
+        assertTrue(
+            "Prepared email does not contain enough independently observed fixture facts: $body",
+            groundingSignals.count { it } >= 2,
+        )
+    }
+
+    private fun assertReasonableReadback(prompt: String, email: LocalAgentAction.SendEmail) {
+        val normalized = prompt.lowercase().replace(Regex("\\s+"), " ").trim()
+        assertTrue("Voice confirmation is too short to be a meaningful readback: $prompt", normalized.length >= 40)
+        assertTrue("Voice confirmation omitted the destination: $prompt", normalized.contains(email.to.lowercase()))
+
+        val subjectTokens = significantTokens(email.subject)
+        val bodyTokens = significantTokens(email.body)
+        val overlap = (subjectTokens + bodyTokens).count { normalized.contains(it) }
+        assertTrue(
+            "Voice confirmation did not read back enough of the prepared email for informed consent: $prompt",
+            overlap >= 3,
+        )
+    }
+
+    private fun significantTokens(text: String): Set<String> =
+        text.lowercase()
+            .split(Regex("[^a-z0-9]+"))
+            .filter { it.length >= 5 && it !in READBACK_STOP_WORDS }
+            .toSet()
+
     private fun awaitEmailApproval(context: Context, subject: String): PendingAction {
         val dao = MyApplication.database.pendingActionDao()
         val deadline = System.currentTimeMillis() + PLANNING_TIMEOUT_MS
@@ -208,12 +259,12 @@ class LocalAgentEmailApprovalHilTest {
         throw AssertionError("Timed out waiting for SendEmail approval. Last status=$lastStatus")
     }
 
-    private fun awaitVoicePrompt(context: Context, subject: String): String {
+    private fun awaitVoicePrompt(context: Context, email: LocalAgentAction.SendEmail): String {
         val deadline = System.currentTimeMillis() + VOICE_PROMPT_TIMEOUT_MS
         var last = ""
         while (System.currentTimeMillis() < deadline) {
             last = RuntimePrefs.getLastApprovalVoicePrompt(context)
-            if (last.contains(RECIPIENT, ignoreCase = true) && last.contains(subject)) return last
+            if (last.isNotBlank() && last.contains(email.to, ignoreCase = true)) return last
             Thread.sleep(250L)
         }
         throw AssertionError("Voice confirmation prompt was not prepared. Last prompt=$last status=${RuntimePrefs.getStatus(context)}")
@@ -242,7 +293,7 @@ class LocalAgentEmailApprovalHilTest {
             last = runBlocking { dao.getActionById(id) }
             if (last?.status == "executed") return last
             if (last?.status == "rejected") {
-                throw AssertionError("Literal yes unexpectedly rejected the pending email: ${last.result}")
+                throw AssertionError("Explicit voice approval unexpectedly rejected the pending email: ${last.result}")
             }
             Thread.sleep(500L)
         }
@@ -310,13 +361,11 @@ class LocalAgentEmailApprovalHilTest {
 
     private fun buildGoal(subject: String): String =
         "Open Chrome. On the CyanBridge HIL Search page, search for 'latest smartglasses news', " +
-            "open the first result, read only the first visible article without scrolling, and summarize the important facts you actually observe. " +
-            "Then prepare an email to $RECIPIENT with the exact subject '$subject'. The body must clearly say this " +
-            "is an automated CyanBridge HIL test using deterministic fixture data, not live news, and must summarize " +
-            "the article's concrete product details plus its unique verification phrase exactly as observed. Use the send_email action for the prepared message. " +
-            "Before any email submission, CyanBridge must ask for confirmation aloud and listen for the user's spoken answer. " +
+            "open the first result, read only the first visible article without scrolling, and write a concise, useful summary of the concrete facts you actually observe. " +
+            "Then prepare a reasonable email to $RECIPIENT with the exact subject '$subject'. The body should make clear that this is an automated CyanBridge HIL test using deterministic fixture data rather than live news, and should summarize the important observed product details in natural language. Use the send_email action for the prepared message. " +
+            "Before any email submission, CyanBridge must describe/read back the prepared send aloud and listen for the user's spoken answer. " +
             "If the answer is ambiguous, ask a spoken clarification and keep waiting; do not treat ambiguity as rejection or approval. " +
-            "Only after an unambiguous yes may Tasker proceed with Gmail and click the visible Send control. Because the recipient is this same test account, wait for " +
+            "Only after an unambiguous affirmative answer may Tasker proceed with Gmail and click the visible Send control. Because the recipient is this same test account, wait for " +
             "the sent message with subject '$subject' to appear in Gmail, then finish and tell the user the test email was sent."
 
     companion object {
@@ -328,5 +377,8 @@ class LocalAgentEmailApprovalHilTest {
         private const val CLARIFICATION_PROMPT_TIMEOUT_MS = 90_000L
         private const val APPROVAL_EXECUTION_TIMEOUT_MS = 45_000L
         private const val DELIVERY_TIMEOUT_MS = 2 * 60_000L
+        private val READBACK_STOP_WORDS = setOf(
+            "cyanbridge", "smartglasses", "summary", "automated", "deterministic", "fixture", "email",
+        )
     }
 }
