@@ -63,6 +63,17 @@ class ExternalAssistantAutomationPolicyTest {
         )
     }
 
+    @Test
+    fun staleImageProfileDoesNotBlockWorkingVoicePath() {
+        val capability = readyCapability(ImageAutomationTarget.CHATGPT).copy(profileCompatible = false)
+
+        assertNull(ExternalAssistantAutomationPolicy.voiceBlockingReason(capability))
+        assertEquals(
+            "Import/update and verify the ChatGPT CyanBridge Tasker profile.",
+            ExternalAssistantAutomationPolicy.imageBlockingReason(capability),
+        )
+    }
+
     private fun readyCapability(target: ImageAutomationTarget) = ExternalAssistantAutomationCapability(
         target = target,
         targetPackage = target.packageNames.firstOrNull(),
