@@ -374,10 +374,10 @@ private fun ChatMessageBubble(
                 contentColor = contentColor,
                 shape = shape,
             ) {
-                Text(
-                    text = message.content,
+                ChatRichText(
+                    markdown = message.content,
+                    color = contentColor,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    style = MaterialTheme.typography.bodyLarge,
                 )
             }
         }
