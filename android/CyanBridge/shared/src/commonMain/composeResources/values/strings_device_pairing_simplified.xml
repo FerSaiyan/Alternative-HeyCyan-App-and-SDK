@@ -1,0 +1,8 @@
+<resources>
+    <string name="device_bind_auto_camera_glasses">HeyCyan / EyeVue / TuneBuds</string>
+    <string name="device_bind_auto_camera_glasses_hint">Protocol is detected automatically after connecting</string>
+    <string name="device_bind_unnamed_device">Bluetooth device</string>
+    <string name="device_bind_signal">Signal: %1$d dBm</string>
+    <string name="device_bind_detecting_protocol">Detecting glasses protocol…</string>
+    <string name="device_bind_detection_failed">Could not identify a compatible glasses protocol. Check that the glasses are available and try again.</string>
+</resources>
