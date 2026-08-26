@@ -65,6 +65,9 @@ presentation/
 BINARY_ANALYSIS*.md
 android/P2P_SYNC_ANALYSIS*.md
 
+# Moonshine is being phased out and must remain local only.
+third_party/moonshine/
+
 # OS
 .DS_Store
 Thumbs.db
