@@ -8,43 +8,32 @@ import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 object ProSubscriptionRoutingPolicy {
     enum class Action {
         NO_CHANGE,
-        KEPT_LOCAL_MODELS,
-        ENSURED_PRO_RELAY,
-        SWITCHED_TASKER_TO_PRO,
+        SWITCHED_TO_PRO,
     }
 
     fun applyAfterActivation(context: Context): Action {
-        return when (LocalAgentPrefs.getProviderType(context)) {
-            AgentProviderType.LOCAL_AGENT -> {
-                if (AiProviderPrefs.getProvider(context) != AiProviderType.LOCAL_MODELS) {
-                    AiProviderPrefs.setProvider(context, AiProviderType.LOCAL_MODELS)
-                }
-                Action.KEPT_LOCAL_MODELS
-            }
+        val alreadyUsingPro = LocalAgentPrefs.getProviderType(context) == AgentProviderType.PRO_SUBSCRIPTION &&
+            AiProviderPrefs.getProvider(context) == AiProviderType.CLI_RELAY
+        LocalAgentPrefs.setProviderType(context, AgentProviderType.PRO_SUBSCRIPTION)
+        AiProviderPrefs.setProvider(context, AiProviderType.CLI_RELAY)
+        return if (alreadyUsingPro) Action.NO_CHANGE else Action.SWITCHED_TO_PRO
+    }
 
-            AgentProviderType.PRO_SUBSCRIPTION -> {
-                if (AiProviderPrefs.getProvider(context) != AiProviderType.CLI_RELAY) {
-                    AiProviderPrefs.setProvider(context, AiProviderType.CLI_RELAY)
-                    Action.ENSURED_PRO_RELAY
-                } else {
-                    Action.NO_CHANGE
-                }
-            }
-
-            AgentProviderType.TASKER -> {
-                LocalAgentPrefs.setProviderType(context, AgentProviderType.PRO_SUBSCRIPTION)
-                AiProviderPrefs.setProvider(context, AiProviderType.CLI_RELAY)
-                Action.SWITCHED_TASKER_TO_PRO
-            }
-        }
+    /**
+     * Applies the activation default only when a subscription becomes active. Routine status
+     * refreshes must not call this after the user deliberately chooses Local or Tasker.
+     */
+    fun actionAfterActivationTransition(
+        context: Context,
+        wasActive: Boolean,
+    ): Action {
+        return if (wasActive) Action.NO_CHANGE else applyAfterActivation(context)
     }
 
     fun actionNote(action: Action): String {
         return when (action) {
             Action.NO_CHANGE -> ""
-            Action.KEPT_LOCAL_MODELS -> "Keeping Local Models selected"
-            Action.ENSURED_PRO_RELAY -> "Using Pro relay for AI features"
-            Action.SWITCHED_TASKER_TO_PRO -> "Switched provider to Pro Subscription"
+            Action.SWITCHED_TO_PRO -> "Switched provider to Pro Subscription"
         }
     }
 }

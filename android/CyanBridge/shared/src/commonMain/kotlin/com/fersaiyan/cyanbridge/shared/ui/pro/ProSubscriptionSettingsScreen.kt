@@ -6,14 +6,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -23,6 +21,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -66,7 +65,8 @@ fun ProSubscriptionSettingsScreen(
     onRequestsModelChange: (String) -> Unit,
     onQuestionsModelChange: (String) -> Unit,
     onTasksModelChange: (String) -> Unit,
-    onSave: () -> Unit,
+    onSystemPromptChange: (String) -> Unit,
+    onResetSystemPrompt: () -> Unit,
     onBack: () -> Unit,
 ) {
     var showChangePlanDialog by remember { mutableStateOf(false) }
@@ -124,6 +124,16 @@ fun ProSubscriptionSettingsScreen(
                      ModelChoice(stringResource(Res.string.pro_requests), state.requestsModel, state.modelOptions, onRequestsModelChange)
                      ModelChoice(stringResource(Res.string.pro_questions), state.questionsModel, state.modelOptions, onQuestionsModelChange)
                      ModelChoice(stringResource(Res.string.pro_tasks), state.tasksModel, state.modelOptions, onTasksModelChange)
+                    OutlinedTextField(
+                        value = state.systemPrompt,
+                        onValueChange = onSystemPromptChange,
+                        label = { Text(stringResource(Res.string.pro_system_prompt)) },
+                        minLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(onClick = onResetSystemPrompt) {
+                        Text(stringResource(Res.string.pro_reset_system_prompt))
+                    }
                     ActionButtons(
                          primaryLabel = stringResource(Res.string.pro_refresh_models),
                         onPrimary = onRefreshModels,
@@ -192,9 +202,7 @@ fun ProSubscriptionSettingsScreen(
             }
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                     OutlinedButton(onClick = onBack) { Text(stringResource(Res.string.pro_back)) }
-                    Spacer(Modifier.width(8.dp))
-                     FilledTonalButton(onClick = onSave) { Text(stringResource(Res.string.pro_save)) }
+                    OutlinedButton(onClick = onBack) { Text(stringResource(Res.string.pro_back)) }
                 }
             }
         }

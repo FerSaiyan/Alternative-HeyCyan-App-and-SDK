@@ -50,4 +50,5 @@ data class ProSubscriptionSettingsUiState(
     val requestsModel: String = "",
     val questionsModel: String = "",
     val tasksModel: String = "",
+    val systemPrompt: String = "",
 )

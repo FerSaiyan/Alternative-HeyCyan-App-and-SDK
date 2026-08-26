@@ -20,6 +20,7 @@ import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -223,6 +224,7 @@ class GeminiLiveClient(
         val body = JSONObject()
             .put("language", language)
             .put("image_prompt", imagePrompt)
+            .put("system_prompt", ProSubscriptionAiPrefs.getSystemPrompt(appContext))
             .toString()
             .toRequestBody("application/json; charset=utf-8".toMediaType())
         val request = Request.Builder()

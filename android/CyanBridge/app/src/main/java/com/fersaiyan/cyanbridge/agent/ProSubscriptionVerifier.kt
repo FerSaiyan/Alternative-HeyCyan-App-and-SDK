@@ -45,6 +45,7 @@ object ProSubscriptionVerifier {
     fun verifyNow(
         context: Context,
         strictForTesting: Boolean = shouldStrictVerify(context),
+        applyActivationRouting: Boolean = false,
     ): Result {
         val base = localStatus(context)
         val url = resolveVerifyUrl(context)
@@ -115,6 +116,9 @@ object ProSubscriptionVerifier {
                     if (provider == "google_play") "play_billing" else "server_verified",
                 )
                 ProSubscriptionPrefs.setLastVerifiedAt(context, System.currentTimeMillis())
+                if (active && (!base.active || applyActivationRouting)) {
+                    ProSubscriptionRoutingPolicy.applyAfterActivation(context)
+                }
 
                 Result(
                     active = active,

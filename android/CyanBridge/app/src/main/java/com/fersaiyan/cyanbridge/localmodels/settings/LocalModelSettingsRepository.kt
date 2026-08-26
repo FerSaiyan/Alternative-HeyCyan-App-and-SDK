@@ -49,7 +49,9 @@ object LocalModelSettingsRepository {
             contextSize = existing.optInt("context_size", defaults.contextSize)
                 .coerceIn(LocalGenerationSettings.MIN_CONTEXT_SIZE, LocalGenerationSettings.MAX_CONTEXT_SIZE),
             seed = existing.optInt("seed", defaults.seed),
-            systemPromptOverride = existing.optString("system_prompt_override", defaults.systemPromptOverride),
+            systemPromptOverride = LocalGenerationSettings.migrateDefaultSystemPrompt(
+                existing.optString("system_prompt_override", defaults.systemPromptOverride),
+            ),
             templateOverrideId = existing.optString("template_override", "").ifBlank { null },
             experimentalStructuredJson = existing.optBoolean(
                 "experimental_structured_json",

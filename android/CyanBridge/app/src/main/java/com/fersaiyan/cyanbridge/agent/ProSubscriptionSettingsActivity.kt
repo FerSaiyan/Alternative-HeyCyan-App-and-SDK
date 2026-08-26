@@ -147,7 +147,6 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
 
         val modelIdToLabel = linkedMapOf(
             "openrouter/free" to "Cheap models router (1x)",
-            "google/gemma-4-26b-a4b-it:free" to "Gemma 4 26B Vision (free first) (1x)",
             "google/gemma-4-26b-a4b-it" to "Gemma 4 26B Vision (2x)",
             "deepseek/deepseek-v4-flash" to "DeepSeek V4 Flash (2x)",
         )
@@ -176,6 +175,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
         val savedRequestsModel = ProSubscriptionAiPrefs.getRequestsModel(this)
         val savedQuestionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this)
         val savedTasksModel = ProSubscriptionAiPrefs.getTasksModel(this)
+        var proSystemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(this)
 
         listOf(savedRequestsModel, savedQuestionsModel, savedTasksModel).forEach { saved ->
             if (saved.isNotBlank() && modelIdToLabel.keys.none { it.equals(saved, ignoreCase = true) }) {
@@ -251,6 +251,24 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
             val selectedLabel = spinner.selectedItem?.toString()?.trim().orEmpty().ifBlank { "auto" }
             val byLabel = modelIdToLabel.entries.firstOrNull { it.value.equals(selectedLabel, ignoreCase = true) }
             return byLabel?.key ?: selectedLabel
+        }
+
+        fun saveSettings(showToast: Boolean = false) {
+            prefs.edit()
+                .putBoolean("cloud_sync", switchCloudSync.isChecked)
+                .putBoolean("priority_support", switchPrioritySupport.isChecked)
+                .putBoolean("plugin_rewards", switchPluginRewards.isChecked)
+                .putBoolean("early_access_devices", switchEarlyAccessDevices.isChecked)
+                .putInt("backup_frequency_idx", spinnerBackupFrequency.selectedItemPosition)
+                .putInt("support_channel_idx", spinnerSupportChannel.selectedItemPosition)
+                .apply()
+
+            ProSubscriptionAiPrefs.setRequestsModel(this, selectedModel(spinnerModelRequests))
+            ProSubscriptionAiPrefs.setQuestionsModel(this, selectedModel(spinnerModelQuestions))
+            ProSubscriptionAiPrefs.setTasksModel(this, selectedModel(spinnerModelTasks))
+            ProSubscriptionAiPrefs.setSystemPrompt(this, proSystemPrompt)
+
+            if (showToast) Toast.makeText(this, "Pro settings saved", Toast.LENGTH_SHORT).show()
         }
 
         fun refreshPlanDetails() {
@@ -442,7 +460,12 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                         models.forEach { option ->
                             val id = option.id.trim()
                             if (id.isBlank()) return@forEach
-                            val label = option.label.trim().ifBlank { id }
+                            val baseLabel = option.label.trim().ifBlank { id }
+                            val label = if (option.supportsVision && !baseLabel.contains("vision", ignoreCase = true)) {
+                                "$baseLabel · Vision"
+                            } else {
+                                baseLabel
+                            }
                             if (!merged.containsKey(id)) {
                                 merged[id] = label
                             }
@@ -534,20 +557,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
         }
 
         saveButton.setOnClickListener {
-            prefs.edit()
-                .putBoolean("cloud_sync", switchCloudSync.isChecked)
-                .putBoolean("priority_support", switchPrioritySupport.isChecked)
-                .putBoolean("plugin_rewards", switchPluginRewards.isChecked)
-                .putBoolean("early_access_devices", switchEarlyAccessDevices.isChecked)
-                .putInt("backup_frequency_idx", spinnerBackupFrequency.selectedItemPosition)
-                .putInt("support_channel_idx", spinnerSupportChannel.selectedItemPosition)
-                .apply()
-
-            ProSubscriptionAiPrefs.setRequestsModel(this, selectedModel(spinnerModelRequests))
-            ProSubscriptionAiPrefs.setQuestionsModel(this, selectedModel(spinnerModelQuestions))
-            ProSubscriptionAiPrefs.setTasksModel(this, selectedModel(spinnerModelTasks))
-
-            Toast.makeText(this, "Pro settings saved", Toast.LENGTH_SHORT).show()
+            saveSettings(showToast = true)
             refreshQuota()
         }
 
@@ -584,6 +594,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                 requestsModel = spinnerModelRequests.selectedItem?.toString().orEmpty(),
                 questionsModel = spinnerModelQuestions.selectedItem?.toString().orEmpty(),
                 tasksModel = spinnerModelTasks.selectedItem?.toString().orEmpty(),
+                systemPrompt = proSystemPrompt,
             )
         }
         syncComposeState?.invoke()
@@ -621,33 +632,55 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                     },
                     onCloudSyncChange = {
                         switchCloudSync.isChecked = it
+                        saveSettings()
                         syncComposeState?.invoke()
                     },
                     onPrioritySupportChange = {
                         switchPrioritySupport.isChecked = it
+                        saveSettings()
                         syncComposeState?.invoke()
                     },
                     onPluginRewardsChange = {
                         switchPluginRewards.isChecked = it
+                        saveSettings()
                         syncComposeState?.invoke()
                     },
                     onEarlyAccessDevicesChange = {
                         switchEarlyAccessDevices.isChecked = it
+                        saveSettings()
                         syncComposeState?.invoke()
                     },
                     onBackupFrequencyChange = {
                         spinnerBackupFrequency.setSelection(it.coerceIn(0, frequencyItems.lastIndex))
+                        saveSettings()
                         syncComposeState?.invoke()
                     },
                     onSupportChannelChange = {
                         spinnerSupportChannel.setSelection(it.coerceIn(0, supportItems.lastIndex))
+                        saveSettings()
                         syncComposeState?.invoke()
                     },
-                    onRequestsModelChange = { selectComposeModel(spinnerModelRequests, it) },
-                    onQuestionsModelChange = { selectComposeModel(spinnerModelQuestions, it) },
-                    onTasksModelChange = { selectComposeModel(spinnerModelTasks, it) },
-                    onSave = {
-                        saveButton.performClick()
+                    onRequestsModelChange = {
+                        selectComposeModel(spinnerModelRequests, it)
+                        saveSettings()
+                        refreshQuota()
+                    },
+                    onQuestionsModelChange = {
+                        selectComposeModel(spinnerModelQuestions, it)
+                        saveSettings()
+                    },
+                    onTasksModelChange = {
+                        selectComposeModel(spinnerModelTasks, it)
+                        saveSettings()
+                    },
+                    onSystemPromptChange = {
+                        proSystemPrompt = it
+                        ProSubscriptionAiPrefs.setSystemPrompt(this@ProSubscriptionSettingsActivity, it)
+                        syncComposeState?.invoke()
+                    },
+                    onResetSystemPrompt = {
+                        ProSubscriptionAiPrefs.resetSystemPrompt(this@ProSubscriptionSettingsActivity)
+                        proSystemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(this@ProSubscriptionSettingsActivity)
                         syncComposeState?.invoke()
                     },
                     onBack = ::finish,
