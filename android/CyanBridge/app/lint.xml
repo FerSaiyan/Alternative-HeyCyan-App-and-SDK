@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- This standalone upstream UI is excluded from CyanBridge's Java source set and resources. -->
+    <issue id="MissingInflatedId">
+        <ignore path="src/main/myvu-upstream/android/app/src/main/java/com/myvu/client/ui" />
+    </issue>
+</lint>

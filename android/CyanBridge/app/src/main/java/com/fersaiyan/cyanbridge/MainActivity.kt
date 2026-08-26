@@ -58,6 +58,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.hjq.permissions.OnPermissionCallback
+import com.hjq.permissions.Permission as HjqPermission
 import com.hjq.permissions.XXPermissions
 import com.oudmon.ble.base.communication.utils.ByteUtil
 import com.oudmon.ble.base.bluetooth.BleOperateManager
@@ -4344,7 +4345,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
         ) {
             XXPermissions.with(this)
-                .permission(Manifest.permission.RECORD_AUDIO)
+                .permission(HjqPermission.RECORD_AUDIO)
                 .request(object : OnPermissionCallback {
                     override fun onGranted(permissions: MutableList<String>, all: Boolean) {
                         handleGlassesImageButtonPressed(
@@ -5302,7 +5303,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         } else {
             "unsupported"
         }
-        val devices = audioManager.getDevices(android.media.AudioManager.GET_DEVICES_ALL)
+        val devices = audioManager.getDevices(
+            android.media.AudioManager.GET_DEVICES_INPUTS or
+                android.media.AudioManager.GET_DEVICES_OUTPUTS,
+        )
             .joinToString { "${it.type}:${it.productName}" }
         return "mode=${audioManager.mode}, sco=${audioManager.isBluetoothScoOn}, " +
             "communication=$communicationDevice, devices=[$devices]"
@@ -5321,7 +5325,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         cancelLocalStreamingSpeech("new voice query")
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             XXPermissions.with(this)
-                .permission(Manifest.permission.RECORD_AUDIO)
+                .permission(HjqPermission.RECORD_AUDIO)
                 .request(object : OnPermissionCallback {
                     override fun onGranted(permissions: MutableList<String>, all: Boolean) {
                         if (all) {

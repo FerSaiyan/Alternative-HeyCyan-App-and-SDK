@@ -1,6 +1,8 @@
 package com.fersaiyan.cyanbridge.ai.live
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
@@ -16,6 +18,7 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Base64
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import java.util.concurrent.TimeUnit
@@ -418,6 +421,13 @@ class GeminiLiveClient(
 
     private fun startCapture() {
         if (!setupComplete.get()) return
+        if (
+            ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            setState(GeminiLiveState.ERROR, "Microphone permission is required")
+            return
+        }
         if (!captureEnabled.compareAndSet(false, true)) return
         requestAudioFocus()
         val minBuffer = AudioRecord.getMinBufferSize(

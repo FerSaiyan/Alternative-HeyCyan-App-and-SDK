@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.ui
 import com.fersaiyan.cyanbridge.shared.devices.DeviceProfile
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice as SharedScannedDevice
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.ScanResult
@@ -132,6 +133,7 @@ class DeviceBindActivity : BaseActivity() {
         if (messageEvent.connect && !protocolDetectionActive) finish()
     }
 
+    @SuppressLint("MissingPermission")
     private fun startScan() {
         handler.removeCallbacks(scanTimeout)
         deviceList.clear()
@@ -381,6 +383,7 @@ class DeviceBindActivity : BaseActivity() {
         else -> detected
     }
 
+    @SuppressLint("MissingPermission")
     private fun connectMeizuMyvu(device: ScannedDevice) {
         val bonded = runCatching {
             BluetoothAdapter.getDefaultAdapter()
@@ -529,6 +532,7 @@ class DeviceBindActivity : BaseActivity() {
             isScanning = false
         }
 
+        @SuppressLint("MissingPermission")
         override fun onLeScan(device: BluetoothDevice?, rssi: Int, scanRecord: ByteArray?) {
             if (!hasBluetooth(this@DeviceBindActivity)) return
             val bluetoothDevice = device ?: return
@@ -542,6 +546,7 @@ class DeviceBindActivity : BaseActivity() {
             Log.w(TAG, "Scan failed: $errorCode")
         }
 
+        @SuppressLint("MissingPermission")
         override fun onParsedData(device: BluetoothDevice?, scanRecord: ScanRecord?) {
             if (!hasBluetooth(this@DeviceBindActivity)) return
             val bluetoothDevice = device ?: return
