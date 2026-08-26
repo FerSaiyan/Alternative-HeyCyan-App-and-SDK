@@ -21,6 +21,14 @@ data class ExternalAssistantAutomationCapability(
 )
 
 object ExternalAssistantAutomationPolicy {
+    /**
+     * Voice launch is intentionally less coupled than image automation.
+     *
+     * The Tasker voice path only receives CyanBridge's AI_EVENT and invokes Android's selected
+     * assistant. It does not use the versioned AutoInput composer selectors. A stale profile may
+     * therefore still provide a perfectly functional voice launch (as reported by real users),
+     * so profile-version verification is a diagnostic for voice rather than a hard blocker.
+     */
     fun voiceBlockingReason(capability: ExternalAssistantAutomationCapability): String? = when {
         capability.target == ImageAutomationTarget.NONE ->
             "Set Gemini or ChatGPT as your phone's default assistant first."
@@ -28,15 +36,19 @@ object ExternalAssistantAutomationPolicy {
             "Install or update ${capability.target.label} first."
         !capability.taskerInstalled ->
             "Install Tasker and complete Tasker integration setup first."
-        !capability.profileCompatible ->
-            "Import/update and verify the ${capability.target.label} CyanBridge Tasker profile."
         capability.phoneLocked ->
             "Unlock your phone before using Tasker assistant automation."
         else -> null
     }
 
+    /**
+     * Image automation keeps the strict profile contract because it depends on assistant-specific
+     * share/composer behavior and AutoInput selectors that can change between profile versions.
+     */
     fun imageBlockingReason(capability: ExternalAssistantAutomationCapability): String? =
         voiceBlockingReason(capability) ?: when {
+            !capability.profileCompatible ->
+                "Import/update and verify the ${capability.target.label} CyanBridge Tasker profile."
             !capability.autoInputInstalled ->
                 "Install AutoInput and complete Tasker integration setup first."
             !capability.autoInputAccessibilityEnabled ->
