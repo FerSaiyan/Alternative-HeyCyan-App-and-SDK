@@ -30,6 +30,8 @@ class DeviceBindScreenTest {
                             advertisedName = "Smart Glasses",
                             rssi = -54,
                             detectedClass = DeviceClass.HEY_CYAN,
+                            selectedClass = null,
+                            userOverridden = false,
                         ),
                     ),
                     isScanning = false,
@@ -60,6 +62,8 @@ class DeviceBindScreenTest {
             advertisedName = "Smart Glasses",
             rssi = -50,
             detectedClass = DeviceClass.UNKNOWN,
+            selectedClass = null,
+            userOverridden = false,
         )
         composeRule.setContent {
             CyanBridgeTheme {

@@ -65,7 +65,6 @@ import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
 import com.fersaiyan.cyanbridge.shared.glasses.WifiAdbDebugUiState
-import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import com.fersaiyan.cyanbridge.shared.ui.localizedOtaSourceDescription
 import com.fersaiyan.cyanbridge.shared.ui.localizedOtaSourceLabel
@@ -202,11 +201,13 @@ fun GlassesDashboardScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            item {
-                NativePluginShortcutSection(
-                    shortcut = state.nativePluginShortcut,
-                    onAction = onAction,
-                )
+            if (state.nativePluginShortcut != null) {
+                item {
+                    NativePluginShortcutSection(
+                        shortcut = state.nativePluginShortcut,
+                        onAction = onAction,
+                    )
+                }
             }
             if (state.showHeyCyanControls || state.showEyevueControls || state.showTuneBudsControls) {
                 item { CoreGlassesControls(state, onAction) }
@@ -320,40 +321,9 @@ private fun WifiAdbDebugSection(
 
 @Composable
 private fun NativePluginShortcutSection(
-    shortcut: NativePluginShortcutUiState?,
+    shortcut: NativePluginShortcutUiState,
     onAction: (GlassesDashboardAction) -> Unit,
 ) {
-    if (shortcut == null) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("native_plugin_shortcut_empty"),
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = stringResource(Res.string.dashboard_shortcut_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = stringResource(Res.string.dashboard_shortcut_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedButton(
-                    onClick = { onAction(GlassesDashboardAction.Navigate(AppDestination.PLUGINS)) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(Res.string.dashboard_choose_plugin))
-                }
-            }
-        }
-        return
-    }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()

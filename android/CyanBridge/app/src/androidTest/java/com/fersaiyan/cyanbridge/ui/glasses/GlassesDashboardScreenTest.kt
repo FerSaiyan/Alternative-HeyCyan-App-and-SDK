@@ -143,6 +143,21 @@ class GlassesDashboardScreenTest {
     }
 
     @Test
+    fun leavesNoSpaceForAnUnselectedNativePluginShortcut() {
+        composeRule.setContent {
+            CyanBridgeTheme {
+                GlassesDashboardScreen(
+                    state = GlassesDashboardUiState(),
+                    onAction = {},
+                )
+            }
+        }
+
+        composeRule.onAllNodesWithTag("native_plugin_shortcut_empty").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("native_plugin_shortcut_meeting_spark_notes").assertCountEquals(0)
+    }
+
+    @Test
     fun captureSettingsKeepOnlyWearingDetection() {
         composeRule.setContent {
             CyanBridgeTheme {

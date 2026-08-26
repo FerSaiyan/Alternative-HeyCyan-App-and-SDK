@@ -1889,7 +1889,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 id = id,
                 title = "Meeting Spark Notes",
                 description = "Capture a live meeting transcript and turn it into concise notes.",
-                isEnabled = CommunityPluginPrefs.isNativePluginEnabled(this, id),
+                isEnabled = MeetingCapturePrefs.getState(this).isRecording,
                 buttons = listOf(
                     NativePluginShortcutButton(NativePluginShortcutAction.START, "Start capture"),
                     NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop capture"),
@@ -1976,7 +1976,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun runNativePluginShortcut(action: NativePluginShortcutAction) {
         val pluginId = CommunityPluginPrefs.getGlassesTabShortcutPluginId(this) ?: return
-        when (action) {
+        if (pluginId == NativePluginIds.MEETING_SPARK_NOTES) {
+            when (action) {
+                NativePluginShortcutAction.START -> {
+                    Log.i("NativePluginShortcut", "Meeting Spark Notes START -> MeetingCaptureService")
+                    startMeetingCaptureFromUi()
+                }
+                NativePluginShortcutAction.STOP -> {
+                    Log.i("NativePluginShortcut", "Meeting Spark Notes STOP -> MeetingCaptureService")
+                    stopMeetingCaptureFromUi()
+                }
+                NativePluginShortcutAction.SUMMARIZE -> MeetingSparkNotesService.summarize(this)
+                else -> Unit
+            }
+        } else when (action) {
             NativePluginShortcutAction.START -> startNativePlugin(pluginId)
             NativePluginShortcutAction.STOP -> stopNativePlugin(pluginId)
             NativePluginShortcutAction.CAPTURE -> if (pluginId == NativePluginIds.VISUAL_DIARY) {
@@ -1985,9 +1998,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             NativePluginShortcutAction.SYNC -> if (pluginId == NativePluginIds.AUTO_AUDIO) {
                 binding.btnDataDownload.performClick()
             }
-            NativePluginShortcutAction.SUMMARIZE -> when (pluginId) {
-                NativePluginIds.MEETING_SPARK_NOTES -> MeetingSparkNotesService.summarize(this)
-                NativePluginIds.AUTO_DIARY -> AutoDiaryService.summarize(this)
+            NativePluginShortcutAction.SUMMARIZE -> if (pluginId == NativePluginIds.AUTO_DIARY) {
+                AutoDiaryService.summarize(this)
             }
         }
         refreshNativePluginShortcutState()
@@ -6802,6 +6814,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (!error.isNullOrBlank()) {
                     Toast.makeText(this@MainActivity, "Recording error: $error", Toast.LENGTH_LONG).show()
                 }
+                refreshNativePluginShortcutState()
             }
         }
 
