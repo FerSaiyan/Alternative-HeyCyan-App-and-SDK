@@ -22,8 +22,12 @@ object KnowledgeImportCoordinator {
     }
 
     suspend fun syncObsidian(context: Context): KnowledgeImportResult? = withContext(Dispatchers.IO) {
-        val tree = KnowledgeIntegrationPrefs.obsidianTree(context) ?: return@withContext null
-        val docs = SafKnowledgeRepository.scanObsidian(context, tree)
+        val vault = KnowledgeIntegrationPrefs.obsidianVault(context) ?: return@withContext null
+        val docs = SafKnowledgeRepository.scanObsidian(
+            context = context,
+            treeUri = vault.permissionTreeUri,
+            rootDocumentId = vault.rootDocumentId,
+        )
         val count = ImportedKnowledgeIndex.replaceSource(context, KnowledgeSource.OBSIDIAN, docs)
         KnowledgeImportResult(KnowledgeSource.OBSIDIAN, docs.size, count)
     }
