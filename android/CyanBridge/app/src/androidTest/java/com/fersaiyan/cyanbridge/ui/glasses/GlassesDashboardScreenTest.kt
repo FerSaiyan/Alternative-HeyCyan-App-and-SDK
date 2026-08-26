@@ -143,6 +143,29 @@ class GlassesDashboardScreenTest {
     }
 
     @Test
+    fun captureSettingsKeepOnlyWearingDetection() {
+        composeRule.setContent {
+            CyanBridgeTheme {
+                GlassesDashboardScreen(
+                    state = GlassesDashboardUiState(
+                        showHeyCyanControls = true,
+                        showCaptureSettings = true,
+                        wearingDetectionEnabled = true,
+                    ),
+                    onAction = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("wearing_detection_switch").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("glasses_recording_settings").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Glasses capture settings").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Maximum video length").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Maximum audio length").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Load settings from glasses").assertCountEquals(0)
+    }
+
+    @Test
     fun tuneBudsAdvancedShowsOnlyValidatedSharedSections() {
         composeRule.setContent {
             CyanBridgeTheme {
@@ -161,7 +184,7 @@ class GlassesDashboardScreenTest {
         }
 
         composeRule.onNodeWithTag("advanced_controls_toggle").assertIsDisplayed()
-        composeRule.onAllNodesWithTag("advanced_local_agent").assertCountEquals(1)
+        composeRule.onAllNodesWithTag("advanced_local_agent").assertCountEquals(0)
         composeRule.onAllNodesWithTag("advanced_device_info").assertCountEquals(1)
         composeRule.onAllNodesWithText("Model: E1749  Firmware: 0.1.0.6  Coprocessor: 1.0.1.1.4")
             .assertCountEquals(1)
