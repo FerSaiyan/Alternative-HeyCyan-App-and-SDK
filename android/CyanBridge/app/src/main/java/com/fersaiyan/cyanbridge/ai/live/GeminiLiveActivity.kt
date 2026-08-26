@@ -144,8 +144,13 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
             settings = ImageQuestionPreferences.get(this),
             userQuestion = null,
         ).forRoute(ImageQuestionRoute.PRO_RELAY)
-        visionStatus = "Glasses vision: waiting for Live setup"
+        visionStatus = "Glasses vision: preparing"
         renderIndicators()
+
+        // Streaming-capable glasses can negotiate/start their camera while the relay token and
+        // Gemini WebSocket setup happen. HeyCyan's opportunistic mode performs no capture here;
+        // its audible still is triggered only after a real user-speech window starts.
+        visionController.start()
         client.start(language, defaultImageQuestion)
     }
 
@@ -240,7 +245,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     }
 
     override fun onSetupComplete() {
-        // Audio capture and capability-aware vision are started by the LISTENING state.
+        // Audio capture is gated by setupComplete; the glasses camera may already be warm.
     }
 
     private fun renderIndicators() {
