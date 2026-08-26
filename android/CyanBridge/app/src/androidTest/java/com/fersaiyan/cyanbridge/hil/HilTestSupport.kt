@@ -46,8 +46,12 @@ object HilTestSupport {
         }
     }
 
-    fun requireTaskerStack(context: Context) {
+    fun requireTasker(context: Context) {
         requireOrSkip(packageInstalled(context, TASKER_PACKAGE), "Tasker is not installed on the HIL device")
+    }
+
+    fun requireTaskerStack(context: Context) {
+        requireTasker(context)
         requireOrSkip(packageInstalled(context, AUTOINPUT_PACKAGE), "AutoInput is not installed on the HIL device")
     }
 }
