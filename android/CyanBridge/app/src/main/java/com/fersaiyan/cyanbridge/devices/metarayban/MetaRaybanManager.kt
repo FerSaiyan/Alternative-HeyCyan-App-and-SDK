@@ -121,6 +121,9 @@ class MetaRaybanManager private constructor(context: Context) {
     private val _registrationState = MutableStateFlow(RegistrationState.UNAVAILABLE)
     val registrationState: StateFlow<RegistrationState> = _registrationState.asStateFlow()
 
+    private val _metaAccessState = MutableStateFlow(MetaAccessState.UNKNOWN)
+    val metaAccessState: StateFlow<MetaAccessState> = _metaAccessState.asStateFlow()
+
     private val _availableDeviceCount = MutableStateFlow(0)
     val availableDeviceCount: StateFlow<Int> = _availableDeviceCount.asStateFlow()
 
@@ -161,6 +164,7 @@ class MetaRaybanManager private constructor(context: Context) {
                 _isInitialized.value = true
                 observeWearables()
                 recordInfo("initialize", "Meta Wearables DAT SDK initialized")
+                updateMetaAccessState()
             },
             onFailure = { error, _ -> reportFailure("initialize", error.description) },
         )
@@ -177,6 +181,7 @@ class MetaRaybanManager private constructor(context: Context) {
                 if (previousState != nextState) {
                     recordInfo("registrationState", "$previousState -> $nextState")
                 }
+                updateMetaAccessState()
             }
         }
         registrationErrorJob = scope.launch {
@@ -220,6 +225,7 @@ class MetaRaybanManager private constructor(context: Context) {
                 "Available DAT devices: ${identifiers.size}; identifiers=${identifiers.joinToString()}",
             )
         }
+        updateMetaAccessState()
 
         val newIdentifiers = identifiers - deviceMetadataJobs.keys
         newIdentifiers.forEach { id ->
@@ -263,6 +269,7 @@ class MetaRaybanManager private constructor(context: Context) {
     fun startRegistration(activity: Activity) {
         if (!requireInitialized()) return
         if (_registrationState.value == RegistrationState.REGISTERED) return
+        clearError()
         recordInfo("registration", "Launching Meta registration UI")
         Wearables.startRegistration(activity)
     }
@@ -302,6 +309,7 @@ class MetaRaybanManager private constructor(context: Context) {
     fun refreshRegistrationState() {
         if (_isInitialized.value) {
             _registrationState.value = Wearables.registrationState.value.toManagerState()
+            updateMetaAccessState()
         }
     }
 
@@ -843,6 +851,7 @@ class MetaRaybanManager private constructor(context: Context) {
 
     private fun clearError() {
         _lastError.value = null
+        updateMetaAccessState()
     }
 
     private fun releaseMetaCameraLease() {
@@ -868,6 +877,7 @@ class MetaRaybanManager private constructor(context: Context) {
             appendLine("bondedDeviceCount=${readiness.bondedDeviceCount ?: "(unavailable)"}")
             appendLine("bondedMetaDeviceCount=${readiness.bondedMetaDeviceCount ?: "(unavailable)"}")
             appendLine("registration=${_registrationState.value}")
+            appendLine("metaAccessState=${_metaAccessState.value}")
             appendLine("availableDeviceCount=${_availableDeviceCount.value}")
             appendLine("selectedDeviceId=${selectedDeviceId ?: "(none)"}")
             appendLine("selectedDeviceName=${_selectedDeviceName.value ?: "(unknown)"}")
@@ -930,6 +940,7 @@ class MetaRaybanManager private constructor(context: Context) {
     private fun reportFailure(operation: String, message: String, throwable: Throwable? = null): String {
         val detail = "$operation: ${message.ifBlank { "Unknown DAT error" }}"
         _lastError.value = detail
+        updateMetaAccessState()
         recordDiagnostic("ERROR", operation, detail)
         Log.e(TAG, detail, throwable)
         return detail
@@ -950,6 +961,29 @@ class MetaRaybanManager private constructor(context: Context) {
         synchronized(diagnosticsLock) {
             diagnosticEvents.addLast(line)
             while (diagnosticEvents.size > MAX_DIAGNOSTIC_EVENTS) diagnosticEvents.removeFirst()
+        }
+    }
+
+    private fun updateMetaAccessState() {
+        val nextState = resolveMetaAccessState(
+            initialized = _isInitialized.value,
+            registrationState = _registrationState.value,
+            availableDeviceCount = _availableDeviceCount.value,
+            readiness = datReadiness(),
+            lastError = _lastError.value,
+        )
+        val previousState = _metaAccessState.value
+        if (previousState == nextState) return
+        _metaAccessState.value = nextState
+        when (nextState) {
+            MetaAccessState.UNKNOWN -> Unit
+            MetaAccessState.NEEDS_META_INVITE -> {
+                recordInfo("telemetry", "meta_access_required")
+                recordInfo("telemetry", "meta_access_pending")
+                recordWarning("telemetry", "meta_pairing_failed_release_channel")
+            }
+            MetaAccessState.READY -> recordInfo("telemetry", "meta_access_ready")
+            MetaAccessState.FAILED -> recordWarning("telemetry", "meta_access_failed")
         }
     }
 

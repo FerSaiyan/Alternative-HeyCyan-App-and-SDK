@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.ui
 
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaAccessState
 import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
 import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import org.junit.Assert.assertEquals
@@ -55,6 +56,19 @@ class MetaPairingScreenStateTest {
     }
 
     @Test
+    fun noEligibleDatDeviceHasFriendlyRetryAction() {
+        val issue = resolveMetaPairingIssue(
+            metaAiInstalled = true,
+            lastError = "createSession: No eligible device found",
+            setupGuidance = "Registration is complete, but DAT has not exposed a device yet.",
+        )
+
+        assertEquals("Meta glasses are not ready", issue?.title)
+        assertEquals("Try again", issue?.primaryLabel)
+        assertEquals(MetaPairingIssueAction.OPEN_PAIRING, issue?.action)
+    }
+
+    @Test
     fun unknownMetaErrorHasFriendlyRetryAction() {
         val issue = resolveMetaPairingIssue(
             metaAiInstalled = true,
@@ -65,6 +79,75 @@ class MetaPairingScreenStateTest {
         assertEquals("We could not finish Meta pairing", issue?.title)
         assertEquals("Try again", issue?.primaryLabel)
         assertEquals(MetaPairingIssueAction.OPEN_PAIRING, issue?.action)
+    }
+
+    @Test
+    fun registeredWithoutDatDeviceIsSurfacedAsPairingFailure() {
+        val state = MetaPairingScreenState(
+            androidCameraGranted = true,
+            nearbyDevicesGranted = true,
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.REGISTERED,
+            availableDeviceCount = 0,
+        )
+
+        assertEquals(
+            "No DAT device was discovered after Meta registration",
+            inferredMetaPairingError(state),
+        )
+    }
+
+    @Test
+    fun unavailableDatWithDiscoveryGuidanceIsSurfacedAsPairingFailure() {
+        val state = MetaPairingScreenState(
+            androidCameraGranted = true,
+            nearbyDevicesGranted = true,
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
+            guidance = "DAT cannot see a linked Meta wearable yet.",
+        )
+
+        assertEquals("DAT cannot see a linked Meta wearable", inferredMetaPairingError(state))
+    }
+
+    @Test
+    fun availableRegistrationDoesNotCreateSyntheticError() {
+        val state = MetaPairingScreenState(
+            androidCameraGranted = true,
+            nearbyDevicesGranted = true,
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.AVAILABLE,
+            availableDeviceCount = 1,
+        )
+
+        assertEquals(null, inferredMetaPairingError(state))
+    }
+
+    @Test
+    fun productionReleaseChannelGateRequestsMetaAccess() {
+        val state = MetaPairingScreenState(
+            androidCameraGranted = true,
+            nearbyDevicesGranted = true,
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
+            availableDeviceCount = 0,
+            metaAccessState = MetaAccessState.NEEDS_META_INVITE,
+        )
+
+        assertEquals("Request Meta access", state.primaryLabel)
+        assertEquals(
+            "Meta DAT registration is unavailable for this account or app release channel",
+            inferredMetaPairingError(state),
+        )
+        val issue = resolveMetaPairingIssue(
+            metaAiInstalled = true,
+            lastError = inferredMetaPairingError(state),
+            setupGuidance = null,
+            metaAccessRequired = true,
+        )
+        assertEquals("Meta access required", issue?.title)
+        assertEquals("Request access", issue?.primaryLabel)
+        assertEquals(MetaPairingIssueAction.REQUEST_ACCESS, issue?.action)
     }
 
     @Test
