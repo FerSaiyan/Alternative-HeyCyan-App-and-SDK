@@ -87,6 +87,7 @@
         <service android:name=".devices.meizumyvu.MeizuMyvuConnectionService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <activity android:name=".ui.ChatListActivity" android:exported="false" android:label="Chats" />
         <activity android:name=".ui.ChatThreadActivity" android:exported="false" android:label="Chat" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".integrations.knowledge.KnowledgeIntegrationsActivity" android:exported="false" android:label="Notes &amp; Obsidian" />
         <activity android:name=".ui.SettingsActivity" android:exported="false" android:label="Settings" />
         <activity android:name=".ai.image.ExternalAssistantAutomationSetupActivity" android:exported="false" android:label="Gemini / ChatGPT automation setup" />
         <activity android:name=".ui.appearance.AppearanceActivity" android:exported="false" android:label="Appearance" />
@@ -171,6 +172,10 @@
         <service android:name=".localagent.TaskerLocalAgentService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".localagent.LocalAgentTelegramService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".media.autocapture.AutoAudioCaptureService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
         <service android:name=".studiobridge.StudioBridgeForegroundService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".bridge.notifications.NotificationForwarderService" android:exported="true" android:label="CyanBridge notification forwarding" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>

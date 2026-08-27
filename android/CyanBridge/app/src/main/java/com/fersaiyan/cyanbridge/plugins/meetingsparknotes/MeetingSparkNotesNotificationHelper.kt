@@ -23,7 +23,7 @@ object MeetingSparkNotesNotificationHelper {
             "Meeting Spark Notes",
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Keeps the meeting capture loop running"
+            description = "Shows meeting recording, transcription, and summary progress"
             setShowBadge(false)
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         }

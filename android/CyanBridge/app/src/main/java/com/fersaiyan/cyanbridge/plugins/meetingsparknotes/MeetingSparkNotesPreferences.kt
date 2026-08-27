@@ -14,6 +14,8 @@ object MeetingSparkNotesPreferences {
     private const val KEY_CLOUD_MODEL_ID = "cloud_model_id"
     private const val KEY_MAX_HISTORY = "max_history"
     private const val KEY_CUSTOM_PROMPT = "custom_prompt"
+    private const val KEY_LAST_SUMMARIZED_SESSION_ID = "last_summarized_session_id"
+    private const val KEY_LAST_SAVED_NOTE_ID = "last_saved_note_id"
     private const val MAX_CUSTOM_PROMPT_CHARS = 1_500
 
     private const val DEFAULT_ENABLED = false
@@ -90,5 +92,18 @@ object MeetingSparkNotesPreferences {
 
     fun setCustomPrompt(context: Context, prompt: String) {
         prefs(context).edit().putString(KEY_CUSTOM_PROMPT, prompt.trim().take(MAX_CUSTOM_PROMPT_CHARS)).apply()
+    }
+
+    fun getLastSummarizedSessionId(context: Context): Long =
+        prefs(context).getLong(KEY_LAST_SUMMARIZED_SESSION_ID, 0L)
+
+    fun getLastSavedNoteId(context: Context): Long =
+        prefs(context).getLong(KEY_LAST_SAVED_NOTE_ID, 0L)
+
+    fun setLastSavedNote(context: Context, captureSessionId: Long, noteId: Long) {
+        prefs(context).edit()
+            .putLong(KEY_LAST_SUMMARIZED_SESSION_ID, captureSessionId)
+            .putLong(KEY_LAST_SAVED_NOTE_ID, noteId)
+            .apply()
     }
 }

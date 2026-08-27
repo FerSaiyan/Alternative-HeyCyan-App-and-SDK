@@ -59,7 +59,10 @@ class MeetingSparkNotesService : Service() {
         when (intent?.action) {
             ACTION_START -> startMeetingCapture()
             ACTION_STOP -> stopMeetingCapture()
-            ACTION_SUMMARIZE -> summarizeCurrentMeeting()
+            ACTION_SUMMARIZE -> {
+                MeetingNotesWorker.enqueue(this)
+                stopSelf()
+            }
             else -> stopSelf()
         }
         return START_NOT_STICKY
@@ -253,9 +256,7 @@ class MeetingSparkNotesService : Service() {
         }
 
         fun summarize(context: Context) {
-            context.startService(
-                Intent(context, MeetingSparkNotesService::class.java).setAction(ACTION_SUMMARIZE),
-            )
+            MeetingNotesWorker.enqueue(context)
         }
     }
 }
