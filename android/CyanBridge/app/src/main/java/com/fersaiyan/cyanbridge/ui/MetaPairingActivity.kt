@@ -101,24 +101,59 @@ data class MetaPairingScreenState(
         }
 }
 
+internal fun inferredMetaPairingError(state: MetaPairingScreenState): String? {
+    state.lastError?.takeIf { it.isNotBlank() }?.let { return it }
+    if (!state.metaAiInstalled) return "Meta AI app is not installed"
+    if (!state.initialized) return null
+
+    if (state.isRegistered && state.availableDeviceCount == 0) {
+        return "No DAT device was discovered after Meta registration"
+    }
+
+    if (state.registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE) {
+        val guidance = state.guidance.orEmpty()
+        if (guidance.contains("DAT cannot see", ignoreCase = true)) {
+            return "DAT cannot see a linked Meta wearable"
+        }
+        if (guidance.contains("Developer Mode", ignoreCase = true)) {
+            return "Meta DAT registration is unavailable because Developer Mode or device authorization is incomplete"
+        }
+        if (guidance.contains("release channel", ignoreCase = true)) {
+            return "Meta DAT registration is unavailable for this account or app release channel"
+        }
+    }
+
+    return null
+}
+
 class MetaPairingActivity : AppCompatActivity() {
     private val manager by lazy { MetaRaybanManager.getInstance(this) }
     private var screenState by mutableStateOf(MetaPairingScreenState())
     private var checkingGlassesCameraPermission = false
 
     private val androidPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
             refreshState()
-            if (hasRequiredAndroidPermissions()) initializeDat()
+            val denied = requiredAndroidPermissions().filter { permission ->
+                grants[permission] != true && !hasPermission(permission)
+            }
+            if (denied.isNotEmpty()) {
+                screenState = screenState.copy(
+                    lastError = "Android permission denied: ${denied.joinToString { it.substringAfterLast('.') }}",
+                )
+            } else if (hasRequiredAndroidPermissions()) {
+                initializeDat()
+            }
         }
 
     private val glassesCameraPermissionLauncher =
         registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
-            screenState = screenState.copy(
-                glassesCameraGranted =
-                    result.getOrDefault(PermissionStatus.Denied) == PermissionStatus.Granted,
-            )
+            val granted = result.getOrDefault(PermissionStatus.Denied) == PermissionStatus.Granted
             refreshState(checkGlassesCamera = false)
+            screenState = screenState.copy(
+                glassesCameraGranted = granted,
+                lastError = if (granted) manager.lastError.value else "Meta glasses camera permission was denied",
+            )
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -297,7 +332,7 @@ class MetaPairingActivity : AppCompatActivity() {
             }.recoverCatching {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(META_AI_PLAY_STORE_URL)))
             }.onFailure {
-                Toast.makeText(this, "Could not open the Meta AI download page", Toast.LENGTH_LONG).show()
+                screenState = screenState.copy(lastError = "Could not open the Meta AI download page")
             }
         }
     }
@@ -329,15 +364,46 @@ fun MetaPairingScreen(
     onRetryPairing: () -> Unit,
     onSendDiagnostics: () -> Unit,
 ) {
+    var showInitialPairingNotice by androidx.compose.runtime.remember {
+        mutableStateOf(true)
+    }
+    val inferredError = inferredMetaPairingError(state)
     val pairingIssue = resolveMetaPairingIssue(
         metaAiInstalled = state.metaAiInstalled,
-        lastError = state.lastError ?: if (!state.metaAiInstalled) "Meta AI app is not installed" else null,
+        lastError = inferredError,
         setupGuidance = state.guidance,
     )
-    var showPairingIssue by androidx.compose.runtime.remember(state.lastError, state.metaAiInstalled) {
+    var showPairingIssue by androidx.compose.runtime.remember(inferredError, state.guidance, state.metaAiInstalled) {
         mutableStateOf(pairingIssue != null)
     }
-    if (pairingIssue != null && showPairingIssue) {
+
+    if (showInitialPairingNotice) {
+        AlertDialog(
+            onDismissRequest = { showInitialPairingNotice = false },
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = { Text("Meta pairing reliability notice") },
+            text = {
+                Text(
+                    "Some users are experiencing issues with reliable Meta Glasses pairing, if you encounter an issue and get stuckz please send the logs with an available email for the dev to better understand and fix the issue, since I'm having difficulties reproducing the error on my device",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showInitialPairingNotice = false }) {
+                    Text("Continue")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showInitialPairingNotice = false
+                        onSendDiagnostics()
+                    },
+                ) {
+                    Text("Send logs")
+                }
+            },
+        )
+    } else if (pairingIssue != null && showPairingIssue) {
         AlertDialog(
             onDismissRequest = { showPairingIssue = false },
             icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
@@ -363,7 +429,7 @@ fun MetaPairingScreen(
                         onSendDiagnostics()
                     },
                 ) {
-                    Text("Details")
+                    Text("Send logs")
                 }
             },
         )
