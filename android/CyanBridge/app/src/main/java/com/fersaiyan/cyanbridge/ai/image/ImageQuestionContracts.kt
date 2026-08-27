@@ -44,7 +44,7 @@ enum class ImageSourceResolution {
 object ImageQuestionSourcePolicy {
     fun defaultSource(): ImageQuestionSource = ImageQuestionSource.FAST_PREVIEW
 
-    fun defaultThumbnailQuality(): ImageThumbnailQuality = ImageThumbnailQuality.DETAILED
+    fun defaultThumbnailQuality(): ImageThumbnailQuality = ImageThumbnailQuality.CLEARER
 
     /** A Wi-Fi failure must never silently turn into a BLE-thumbnail request. */
     fun onHighQualityFailure(): ImageSourceResolution =

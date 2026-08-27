@@ -5,8 +5,8 @@ import android.content.Context
 /**
  * Chapter 8 (Privacy settings): SharedPreferences-backed toggles.
  *
- * Privacy-first defaults:
- * - Transcript storage: OFF (required by spec)
+ * Defaults:
+ * - Transcript storage: ON
  * - Redact names: ON (best-effort)
  * - Include full transcription in exports: OFF
  */
@@ -19,7 +19,7 @@ object PrivacyPrefs {
 
     fun isTranscriptStorageEnabled(context: Context): Boolean {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return p.getBoolean(KEY_TRANSCRIPT_STORAGE, false)
+        return p.getBoolean(KEY_TRANSCRIPT_STORAGE, true)
     }
 
     fun setTranscriptStorageEnabled(context: Context, enabled: Boolean) {

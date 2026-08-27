@@ -21,7 +21,7 @@ class GlassesManagerCapabilityGatingTest {
         assertFalse(model.isVisible(GlassesManagerGating.Action.ADVANCED_LOCAL_AGENT))
         assertTrue(model.isVisible(GlassesManagerGating.Action.ADVANCED_DEVICE_INFO))
         assertFalse(model.isVisible(GlassesManagerGating.Action.ADVANCED_DEVICE_VOLUME))
-        assertFalse(model.isVisible(GlassesManagerGating.Action.ADVANCED_IMAGE_QUALITY))
+        assertTrue(model.isVisible(GlassesManagerGating.Action.ADVANCED_IMAGE_QUALITY))
         assertFalse(model.isVisible(GlassesManagerGating.Action.ADVANCED_DEVELOPER_TOOLS))
         assertFalse(model.isVisible(GlassesManagerGating.Action.ADVANCED_OTA))
         assertFalse(model.isVisible(GlassesManagerGating.Action.CAPTURE_SETTINGS))

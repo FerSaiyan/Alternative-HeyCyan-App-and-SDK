@@ -49,20 +49,20 @@ object ImageQuestionPreferences {
         val prefs = preferences(context)
         if (!prefs.contains(KEY_THUMBNAIL_QUALITY)) {
             prefs.edit()
-                .putInt(KEY_THUMBNAIL_QUALITY, ImageThumbnailQuality.DETAILED.sdkValue)
+                .putInt(KEY_THUMBNAIL_QUALITY, ImageThumbnailQuality.CLEARER.sdkValue)
                 .apply()
         }
         val storedValue = prefs.getInt(
             KEY_THUMBNAIL_QUALITY,
-            ImageThumbnailQuality.DETAILED.sdkValue,
+            ImageThumbnailQuality.CLEARER.sdkValue,
         )
         return ImageThumbnailQuality.entries.firstOrNull { it.sdkValue == storedValue }
-            ?: ImageThumbnailQuality.DETAILED
+            ?: ImageThumbnailQuality.CLEARER
     }
 
     fun setThumbnailQuality(context: Context, sdkValue: Int): ImageThumbnailQuality {
         val quality = ImageThumbnailQuality.entries.firstOrNull { it.sdkValue == sdkValue }
-            ?: ImageThumbnailQuality.DETAILED
+            ?: ImageThumbnailQuality.CLEARER
         preferences(context).edit()
             .putInt(KEY_THUMBNAIL_QUALITY, quality.sdkValue)
             .apply()

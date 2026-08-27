@@ -48,6 +48,7 @@ data class OnboardingChoice(
     val id: String,
     val title: String,
     val description: String,
+    val enabled: Boolean = true,
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalResourceApi::class)
@@ -97,6 +98,7 @@ fun FeatureOnboardingScreen(
                 val selected = choice.id == selectedChoiceId
                 Card(
                     onClick = { onChoiceSelected(choice.id) },
+                    enabled = choice.enabled,
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = if (selected) {
@@ -111,7 +113,11 @@ fun FeatureOnboardingScreen(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Text(
-                            text = if (selected) "${choice.title} - Selected" else choice.title,
+                            text = when {
+                                selected -> "${choice.title} - Selected"
+                                !choice.enabled -> "${choice.title} - Not enough RAM"
+                                else -> choice.title
+                            },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )

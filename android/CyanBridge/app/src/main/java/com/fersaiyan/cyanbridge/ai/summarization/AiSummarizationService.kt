@@ -27,8 +27,10 @@ class AiSummarizationService(
         }
 
         val prompt = buildString {
-            append("Analyze the following transcript and generate a structured summary.\n")
+            append("Analyze the following meeting transcript and generate factual Markdown-ready notes.\n")
             request.hintTitle?.let { append("Title context: $it\n") }
+            append("Use ${request.minSummaryBullets}-${request.maxSummaryBullets} concise bullet points for the key summary. ")
+            append("Do not invent details, speakers, decisions, or tasks.\n")
             append("Respond with:\n")
             append("Title: <concise summary title>\n")
             append("Key Bullets:\n- <bullet 1>\n- <bullet 2>\n")
@@ -43,21 +45,14 @@ class AiSummarizationService(
             chatId = "ai-summarization",
             prompt = prompt,
             messages = listOf(mapOf("role" to "user", "content" to prompt)),
-        ).getOrDefault("")
+        ).getOrElse { error ->
+            throw IllegalStateException("Meeting summary model request failed", error)
+        }.trim()
+        check(response.isNotBlank()) { "Meeting summary model returned an empty response" }
         return parseResponse(response, request.hintTitle, transcript)
     }
 
     private fun parseResponse(response: String, hintTitle: String?, transcript: String): StructuredSummary {
-        if (response.isBlank()) {
-            return StructuredSummary(
-                title = hintTitle ?: transcript.take(40).ifBlank { "Meeting Note" },
-                summaryBullets = listOf(transcript.take(150)),
-                actionItems = emptyList(),
-                keyDecisions = emptyList(),
-                openQuestions = emptyList(),
-            )
-        }
-
         val lines = response.lines().map { it.trim() }
         var title = hintTitle ?: ""
         val bullets = mutableListOf<String>()

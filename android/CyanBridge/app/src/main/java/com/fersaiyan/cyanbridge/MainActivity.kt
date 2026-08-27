@@ -99,6 +99,7 @@ import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLivePreviewManager
+import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLivePreviewPolicy
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaProfile
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaSync
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaType
@@ -757,6 +758,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onStop() {
         if (BuildConfig.DEBUG) wifiAdbDebugController.stop()
+        if (eyevueLivePreviewManager?.isActive == true) {
+            eyevueLivePreviewManager?.stop()
+        }
         super.onStop()
         stopBatteryPolling()
         unregisterMeetingCaptureReceiver()
@@ -920,7 +924,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs.isBridgeConfigured(this) ||
                 AutoAudioCapturePrefs.isEnabled(this) ||
                 setOf(
-                    NativePluginIds.MEETING_SPARK_NOTES,
                     NativePluginIds.LIVE_CAPTION_RELAY,
                     NativePluginIds.HANDS_FREE_TRANSLATOR,
                     NativePluginIds.ERRAND_BRAIN,
@@ -972,9 +975,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        if (CommunityPluginPrefs.isNativePluginEnabled(this, NativePluginIds.MEETING_SPARK_NOTES)) {
-            MeetingSparkNotesService.start(this)
-        }
         if (CommunityPluginPrefs.isNativePluginEnabled(this, NativePluginIds.LIVE_CAPTION_RELAY)) {
             LiveCaptionRelayService.start(this)
         }
@@ -1254,7 +1254,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         if (!isEyevueSelected()) return@collect
                         dashboardState = dashboardState.copy(
                             livePreview = com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState(
-                                isAvailable = BuildConfig.DEBUG,
+                                isAvailable = EyevueLivePreviewPolicy.isSupported(Build.VERSION.SDK_INT),
                                 stateLabel = lp.stateLabel,
                                 detail = lp.detail,
                                 isScanning = lp.isScanning,
@@ -1640,7 +1640,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
             is GlassesDashboardAction.SelectImageThumbnailQuality -> {
-                if (!isHeyCyanOrEyevueSelected()) return
+                if (!isHeyCyanOrEyevueSelected() && !isTuneBudsSelected()) return
                 val quality = ImageQuestionPreferences.setThumbnailQuality(this, action.sdkValue)
                 pendingImageThumbnailQuality = quality
                 updateDashboardState { state ->
@@ -1889,7 +1889,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 id = id,
                 title = "Meeting Spark Notes",
                 description = "Capture a live meeting transcript and turn it into concise notes.",
-                isEnabled = CommunityPluginPrefs.isNativePluginEnabled(this, id),
+                isEnabled = MeetingCapturePrefs.getState(this).isRecording,
                 buttons = listOf(
                     NativePluginShortcutButton(NativePluginShortcutAction.START, "Start capture"),
                     NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop capture"),
@@ -1976,7 +1976,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun runNativePluginShortcut(action: NativePluginShortcutAction) {
         val pluginId = CommunityPluginPrefs.getGlassesTabShortcutPluginId(this) ?: return
-        when (action) {
+        if (pluginId == NativePluginIds.MEETING_SPARK_NOTES) {
+            when (action) {
+                NativePluginShortcutAction.START -> {
+                    Log.i("NativePluginShortcut", "Meeting Spark Notes START -> MeetingCaptureService")
+                    startMeetingCaptureFromUi()
+                }
+                NativePluginShortcutAction.STOP -> {
+                    Log.i("NativePluginShortcut", "Meeting Spark Notes STOP -> MeetingCaptureService")
+                    stopMeetingCaptureFromUi()
+                }
+                NativePluginShortcutAction.SUMMARIZE -> MeetingSparkNotesService.summarize(this)
+                else -> Unit
+            }
+        } else when (action) {
             NativePluginShortcutAction.START -> startNativePlugin(pluginId)
             NativePluginShortcutAction.STOP -> stopNativePlugin(pluginId)
             NativePluginShortcutAction.CAPTURE -> if (pluginId == NativePluginIds.VISUAL_DIARY) {
@@ -1985,9 +1998,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             NativePluginShortcutAction.SYNC -> if (pluginId == NativePluginIds.AUTO_AUDIO) {
                 binding.btnDataDownload.performClick()
             }
-            NativePluginShortcutAction.SUMMARIZE -> when (pluginId) {
-                NativePluginIds.MEETING_SPARK_NOTES -> MeetingSparkNotesService.summarize(this)
-                NativePluginIds.AUTO_DIARY -> AutoDiaryService.summarize(this)
+            NativePluginShortcutAction.SUMMARIZE -> if (pluginId == NativePluginIds.AUTO_DIARY) {
+                AutoDiaryService.summarize(this)
             }
         }
         refreshNativePluginShortcutState()
@@ -3450,8 +3462,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun startEyevueLivePreview() {
-        if (!BuildConfig.DEBUG) {
-            Toast.makeText(this, "Eyevue live preview is available in debug builds only.", Toast.LENGTH_LONG).show()
+        if (!EyevueLivePreviewPolicy.isSupported(Build.VERSION.SDK_INT)) {
+            Toast.makeText(this, "Eyevue live preview requires Android 10 or newer.", Toast.LENGTH_LONG).show()
             return
         }
         if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
@@ -3479,7 +3491,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val lease = acquireExclusiveGlassesSession(GlassesSession.LIVE_PREVIEW) ?: return
         livePreviewSessionLease = lease
         liveManager.start(
-            profile = EyevueMediaProfile.fromProject(manager.state.value.project),
             onSessionFinished = {
                 releaseExclusiveGlassesSession(lease)
                 if (livePreviewSessionLease === lease) livePreviewSessionLease = null
@@ -4572,6 +4583,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun captureTuneBudsImageForQuestion(sourceTag: String, offerSpokenQuestion: Boolean) {
+        // Detailed = Wi-Fi high-resolution (slow, via hotspot); all other levels = fast BLE transfer (documented 0xE1 0x01 -> 0xE3)
+        val quality = pendingImageThumbnailQuality
+        if (quality == ImageThumbnailQuality.DETAILED) {
+            captureTuneBudsHighQualityImageForQuestion(sourceTag, offerSpokenQuestion)
+        } else {
+            captureTuneBudsBleImageForQuestion(sourceTag, offerSpokenQuestion)
+        }
+    }
+
+    private fun captureTuneBudsBleImageForQuestion(sourceTag: String, offerSpokenQuestion: Boolean) {
         val manager = getOrCreateTuneBudsManager()
         if (!manager.isConnected()) {
             clearPendingVoiceImageQuestion(sourceTag)
@@ -4597,7 +4618,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 withContext(Dispatchers.Main) {
                     onImageReadyForQuestion(
                         imagePath = imageFile.absolutePath,
-                        source = ImageQuestionSource.HIGH_QUALITY,
+                        source = ImageQuestionSource.FAST_PREVIEW,
                         transferDurationMs = System.currentTimeMillis() - startedAt,
                     )
                 }
@@ -4613,6 +4634,102 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     ).show()
                 }
             } finally {
+                tuneBudsAiPhotoInProgress.set(false)
+            }
+        }
+    }
+
+    private fun captureTuneBudsHighQualityImageForQuestion(sourceTag: String, offerSpokenQuestion: Boolean) {
+        val manager = getOrCreateTuneBudsManager()
+        if (!manager.isConnected()) {
+            clearPendingVoiceImageQuestion(sourceTag)
+            Toast.makeText(this, "Connect TuneBuds glasses first.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!tuneBudsAiPhotoInProgress.compareAndSet(false, true)) {
+            Log.i("AIHijack", "[$sourceTag] TuneBuds AI photo capture already in progress")
+            return
+        }
+        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
+            tuneBudsAiPhotoInProgress.set(false)
+            clearPendingVoiceImageQuestion(sourceTag)
+            ensureGlassesTransportPermissions("TuneBuds high-resolution capture") {
+                captureTuneBudsHighQualityImageForQuestion(sourceTag, offerSpokenQuestion)
+            }
+            return
+        }
+
+        prepareAiQuestionForLockScreen()
+        beginAiQuestionForegroundWork("Capturing high-resolution image from TuneBuds glasses")
+        pendingImageQuestionOfferSpokenQuestion = false
+        startParallelAudioQuestionIfEligible(offerSpokenQuestion)
+        val startedAt = System.currentTimeMillis()
+        lifecycleScope.launch(Dispatchers.IO) {
+            var hotspot: TuneBudsLocalHotspot? = null
+            var tempDir: File? = null
+            try {
+                Log.i("AIHijack", "[$sourceTag] TuneBuds Detailed requested – using Wi-Fi high-quality path")
+                // 1. Trigger glasses camera in recording mode (0) – saves JPEG to flash
+                withContext(Dispatchers.IO) { manager.takePhotoBlocking() }
+                Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds takePhoto (0) sent, waiting for save")
+                kotlinx.coroutines.delay(2500)
+
+                hotspot = TuneBudsLocalHotspot(this@MainActivity)
+                tempDir = File(cacheDir, "tunebuds_ai_high_${System.currentTimeMillis()}").apply { mkdirs() }
+                val credentials = withContext(Dispatchers.IO) { hotspot.start() }
+                Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds hotspot started ssid=${credentials.ssid}")
+
+                val baseUrl = withContext(Dispatchers.IO) {
+                    manager.startFileManager(credentials.ssid, credentials.password, credentials.channel)
+                } ?: throw IOException("TuneBuds did not report its media server address")
+                Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds media endpoint $baseUrl")
+
+                val sync = TuneBudsMediaSync(manager, hotspot, tempDir)
+                // Poll manifest for a fresh photo (glasses may need a moment to index the new file)
+                var photoItem: com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaItem? = null
+                for (attempt in 0 until 12) {
+                    val items = withContext(Dispatchers.IO) { sync.fetchManifest(baseUrl) }
+                    val photos = items.filter { it.type == TuneBudsMediaType.PHOTO }
+                    Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds manifest attempt ${attempt + 1}: ${photos.size} photos")
+                    if (photos.isNotEmpty()) {
+                        // Pick the most recently created photo – manifest is typically newest-last;
+                        // sorting by remoteName descending is a best-effort for timestamped filenames.
+                        photoItem = photos.maxByOrNull { it.remoteName } ?: photos.last()
+                        break
+                    }
+                    if (attempt < 11) kotlinx.coroutines.delay(1000)
+                }
+                val item = photoItem ?: throw IOException("No photos found on TuneBuds after capture")
+
+                Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds downloading ${item.remoteName} via Wi-Fi")
+                val downloaded = withContext(Dispatchers.IO) { sync.downloadSingle(baseUrl, item) }
+                val imageFile = File(cacheDir, "TuneBuds_AI_HQ_${System.currentTimeMillis()}.jpg")
+                withContext(Dispatchers.IO) { downloaded.copyTo(imageFile, overwrite = true) }
+
+                withContext(Dispatchers.Main) {
+                    onImageReadyForQuestion(
+                        imagePath = imageFile.absolutePath,
+                        source = ImageQuestionSource.HIGH_QUALITY,
+                        transferDurationMs = System.currentTimeMillis() - startedAt,
+                    )
+                }
+            } catch (error: Exception) {
+                Log.e("AIHijack", "[$sourceTag] TuneBuds high-quality photo failed", error)
+                withContext(Dispatchers.Main) {
+                    clearPendingVoiceImageQuestion(sourceTag)
+                    finishAiQuestionForegroundWork()
+                    Toast.makeText(
+                        this@MainActivity,
+                        error.message ?: "TuneBuds high-resolution capture failed",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } finally {
+                withContext(Dispatchers.IO) {
+                    runCatching { manager.finishTransfer() }
+                    runCatching { hotspot?.stop() }
+                    tempDir?.let { runCatching { it.deleteRecursively() } }
+                }
                 tuneBudsAiPhotoInProgress.set(false)
             }
         }
@@ -6802,6 +6919,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (!error.isNullOrBlank()) {
                     Toast.makeText(this@MainActivity, "Recording error: $error", Toast.LENGTH_LONG).show()
                 }
+                refreshNativePluginShortcutState()
             }
         }
 

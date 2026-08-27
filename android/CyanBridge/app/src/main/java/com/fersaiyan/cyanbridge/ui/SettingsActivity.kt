@@ -129,7 +129,11 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
     override fun onResume() {
         super.onResume()
         refreshSettingsUi()
-        if (ProSubscriptionPrefs.isSubscribed(this)) {
+        val shouldVerifyProState = ProSubscriptionPrefs.isSubscribed(this) || (
+            ProSubscriptionPrefs.getProvider(this) != "play_billing" &&
+                ProSubscriptionServerPrefs.getApiToken(this).isNotBlank()
+            )
+        if (shouldVerifyProState) {
             lifecycleScope.launch(Dispatchers.IO) {
                 ProSubscriptionVerifier.verifyNow(this@SettingsActivity)
                 withContext(Dispatchers.Main) { refreshSettingsUi() }

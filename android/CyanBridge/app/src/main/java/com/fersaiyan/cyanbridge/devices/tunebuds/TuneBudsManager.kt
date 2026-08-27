@@ -166,6 +166,10 @@ class TuneBudsManager private constructor(context: Context) {
         requireSuccess(request(TuneBudsProtocol.CMD_CAMERA_ON, byteArrayOf(0)))
     }
 
+    suspend fun takePhotoBlocking() {
+        requireSuccess(request(TuneBudsProtocol.CMD_CAMERA_ON, byteArrayOf(0)))
+    }
+
     suspend fun capturePhotoForAi(timeoutMs: Long = 15_000L): ByteArray? = coroutineScope {
         if (!client.isConnected()) return@coroutineScope null
         synchronized(aiPictureBuffer) { aiPictureBuffer.reset() }

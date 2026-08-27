@@ -53,14 +53,22 @@ data class LocalGenerationSettings(
         const val DEFAULT_TOP_K = 40
         const val DEFAULT_REPETITION_PENALTY = 1.1
 
-        /**
-         * Default prompt for interactive local models. It remains user-editable per model.
-         */
-        const val DEFAULT_SYSTEM_PROMPT =
+        internal const val LEGACY_EIGHT_WORD_SYSTEM_PROMPT =
             "You are CyanBridge's assistant. Answer the user's request directly. " +
                 "For spoken responses, begin with a short, self-contained sentence of at most 8 words " +
                 "that gives the most useful answer first. Then add concise detail only when helpful. " +
                 "Avoid filler, long preambles, and unnecessary formatting unless the user asks for them."
+
+        /** Shared default for interactive local models and Pro cloud models. */
+        const val DEFAULT_SYSTEM_PROMPT =
+            "You are CyanBridge's assistant. Answer the user's request directly. " +
+                "Give the most useful answer first in one clear sentence, then stop when the request is fully answered. " +
+                "For simple spoken requests, usually use 1-3 short sentences; for complex requests, include the " +
+                "important explanation, steps, caveats, and safety information needed. Use the shortest complete answer. " +
+                "Avoid filler, long preambles, repetition, and unnecessary formatting unless the user asks for them."
+
+        fun migrateDefaultSystemPrompt(prompt: String): String =
+            if (prompt.trim() == LEGACY_EIGHT_WORD_SYSTEM_PROMPT) DEFAULT_SYSTEM_PROMPT else prompt
 
         fun defaultCpuThreads(): Int {
             return Runtime.getRuntime().availableProcessors().coerceIn(2, 8)

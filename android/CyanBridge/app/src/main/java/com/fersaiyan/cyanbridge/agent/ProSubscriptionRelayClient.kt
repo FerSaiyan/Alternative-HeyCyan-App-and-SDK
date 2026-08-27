@@ -24,6 +24,7 @@ object ProSubscriptionRelayClient {
         val id: String,
         val label: String,
         val quotaMultiplier: Int,
+        val supportsVision: Boolean = false,
     )
 
     data class QuotaInfo(
@@ -311,7 +312,7 @@ object ProSubscriptionRelayClient {
     private fun parseModels(payload: JSONObject): List<ModelOption> {
         val out = linkedMapOf<String, ModelOption>()
 
-        fun putOption(id: String, label: String, quotaMultiplier: Int) {
+        fun putOption(id: String, label: String, quotaMultiplier: Int, supportsVision: Boolean = false) {
             val cleanId = id.trim()
             if (cleanId.isBlank()) return
             val key = cleanId.lowercase()
@@ -322,6 +323,7 @@ object ProSubscriptionRelayClient {
                 id = cleanId,
                 label = cleanLabel,
                 quotaMultiplier = quotaMultiplier.coerceAtLeast(1),
+                supportsVision = supportsVision,
             )
         }
 
@@ -344,6 +346,11 @@ object ProSubscriptionRelayClient {
                         val multiplier = intOrNull(item, "quota_multiplier")
                             ?: intOrNull(item, "multiplier")
                             ?: 1
+                        val supportsVision = booleanOrNull(item, "supports_vision")
+                            ?: booleanOrNull(item, "supportsVision")
+                            ?: jsonArrayContains(item.optJSONArray("input_modalities"), "image")
+                            ?: jsonArrayContains(item.optJSONArray("inputModalities"), "image")
+                            ?: false
                         val pick = when {
                             id.isNotBlank() -> id
                             model.isNotBlank() -> model
@@ -357,7 +364,7 @@ object ProSubscriptionRelayClient {
                             else -> pick
                         }
                         if (pick.isNotBlank()) {
-                            putOption(pick, pickLabel, multiplier)
+                            putOption(pick, pickLabel, multiplier, supportsVision)
                         }
                     }
                 }
@@ -418,6 +425,28 @@ object ProSubscriptionRelayClient {
             is Number -> raw.toInt()
             is String -> raw.trim().toIntOrNull()
             else -> null
+        }
+    }
+
+    private fun booleanOrNull(json: JSONObject, key: String): Boolean? {
+        if (!json.has(key) || json.isNull(key)) return null
+        return when (val raw = json.opt(key)) {
+            is Boolean -> raw
+            is String -> raw.trim().lowercase().let { value ->
+                when (value) {
+                    "true" -> true
+                    "false" -> false
+                    else -> null
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun jsonArrayContains(array: JSONArray?, expected: String): Boolean? {
+        if (array == null) return null
+        return (0 until array.length()).any { index ->
+            array.optString(index).equals(expected, ignoreCase = true)
         }
     }
 

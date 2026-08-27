@@ -91,13 +91,13 @@ class EyevueManager private constructor(context: Context) {
             return
         }
         connectJob?.cancel()
+        _state.value = EyevueState(
+            connectionLabel = "Connecting to Eyevue",
+            protocolState = EyevueGattState.CONNECTING.name,
+            deviceAddress = normalized,
+            deviceName = deviceName,
+        )
         connectJob = scope.launch {
-            _state.value = EyevueState(
-                connectionLabel = "Connecting to Eyevue",
-                protocolState = EyevueGattState.CONNECTING.name,
-                deviceAddress = normalized,
-                deviceName = deviceName,
-            )
             val result = client.connect(normalized)
             if (result.isFailure) {
                 updateError(result.exceptionOrNull()?.message ?: "Eyevue connection failed")
@@ -121,11 +121,9 @@ class EyevueManager private constructor(context: Context) {
         connectJob?.cancel()
         connectJob = null
         client.disconnect()
-        _state.value = _state.value.copy(
+        _state.value = EyevueState(
             connectionLabel = "Eyevue disconnected",
             protocolState = EyevueGattState.DISCONNECTED.name,
-            isVideoRecording = false,
-            isAudioRecording = false,
         )
     }
 
@@ -199,26 +197,50 @@ class EyevueManager private constructor(context: Context) {
         }
     }
 
-    suspend fun awaitProject(timeoutMs: Long = 5_000L): String? {
-        if (!_state.value.project.isNullOrBlank()) return _state.value.project
-        send(EyevueProtocol.buildGetCustomerPacket(), "get customer")
-        return withTimeoutOrNull(timeoutMs) {
+    suspend fun awaitProject(timeoutMs: Long = 15_000L): String? = coroutineScope {
+        _state.value = _state.value.copy(customer = null, project = null)
+        val project = async(start = CoroutineStart.UNDISPATCHED) {
             state
                 .filter { !it.project.isNullOrBlank() }
                 .first()
                 .project
         }
+        try {
+            if (!sendNow(EyevueProtocol.buildGetCustomerPacket(), "get customer")) {
+                throw IOException("Could not request the Eyevue project/model")
+            }
+            withTimeoutOrNull(timeoutMs) { project.await() }
+        } finally {
+            if (project.isActive) project.cancel()
+        }
     }
 
-    fun startLive(ap: Boolean) {
-        send(
-            if (ap) EyevueProtocol.buildStartLiveApPacket() else EyevueProtocol.buildStartLiveP2pPacket(),
-            "start live",
-        )
-        requestWifiInfo(p2p = !ap)
+    suspend fun startLiveAndAwaitSsid(ap: Boolean, timeoutMs: Long = 15_000L): String? = coroutineScope {
+        _state.value = _state.value.copy(wifiSsid = null)
+        val ssid = async(start = CoroutineStart.UNDISPATCHED) {
+            state
+                .filter { !it.wifiSsid.isNullOrBlank() }
+                .first()
+                .wifiSsid
+        }
+        val packet = if (ap) {
+            EyevueProtocol.buildStartLiveApPacket()
+        } else {
+            EyevueProtocol.buildStartLiveP2pPacket()
+        }
+        try {
+            if (!sendNow(packet, "start live")) {
+                throw IOException("Could not send the Eyevue live command")
+            }
+            withTimeoutOrNull(timeoutMs) { ssid.await() }
+        } finally {
+            if (ssid.isActive) ssid.cancel()
+        }
     }
 
-    fun stopLive() = send(EyevueProtocol.buildFinishTransferPacket(), "stop live")
+    suspend fun stopLiveBlocking() {
+        sendNow(EyevueProtocol.buildFinishTransferPacket(), "stop live")
+    }
 
     fun syncTime() = send(EyevueProtocol.buildSetTimePacket(), "sync time")
 
@@ -243,14 +265,16 @@ class EyevueManager private constructor(context: Context) {
         scope.launch { sendNow(packet, operation) }
     }
 
-    private suspend fun sendNow(packet: ByteArray, operation: String) {
+    private suspend fun sendNow(packet: ByteArray, operation: String): Boolean {
         val result = client.write(packet)
         if (result.isFailure) {
             val error = result.exceptionOrNull() ?: IOException("Unknown Eyevue write failure")
             Log.w(TAG, "Eyevue $operation failed: ${error.message}")
             updateError("Could not $operation: ${error.message}")
+            return false
         } else {
             Log.d(TAG, "Eyevue command sent: $operation")
+            return true
         }
     }
 

@@ -59,6 +59,7 @@ fun DeviceBindScreen(
     connectingDevice: ScannedDevice?,
     selectedClass: DeviceClass,
     onScan: () -> Unit,
+    onPairMetaGlasses: () -> Unit,
     onSelectDevice: (ScannedDevice) -> Unit,
     onSelectedClassChange: (DeviceClass) -> Unit,
     onConfirmConnection: () -> Unit,
@@ -106,6 +107,14 @@ fun DeviceBindScreen(
                             stringResource(Res.string.device_bind_scan)
                         },
                     )
+                }
+            }
+            item {
+                OutlinedButton(
+                    onClick = onPairMetaGlasses,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(Res.string.device_bind_pair_meta))
                 }
             }
             if (devices.isEmpty()) {

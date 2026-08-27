@@ -30,7 +30,11 @@ class WebSubscriptionCallbackActivity : AppCompatActivity() {
     private fun verifySubscription() {
         thread {
             // A browser redirect is never proof of payment. Require a fresh server response.
-            val verified = ProSubscriptionVerifier.verifyNow(this, strictForTesting = true)
+            val verified = ProSubscriptionVerifier.verifyNow(
+                this,
+                strictForTesting = true,
+                applyActivationRouting = true,
+            )
             val result = CallbackResult(
                 success = verified.active,
                 message = if (verified.active) {

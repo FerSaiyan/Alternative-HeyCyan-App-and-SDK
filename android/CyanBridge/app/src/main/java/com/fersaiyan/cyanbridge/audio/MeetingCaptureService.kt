@@ -130,6 +130,7 @@ class MeetingCaptureService : Service() {
 
             val outputFile = createOutputFile()
             outputPath = outputFile.absolutePath
+            Log.i(TAG, "Preparing audio capture source=$source path=${outputFile.absolutePath}")
 
             val startOk = runCatching {
                 val r = MediaRecorder()
@@ -157,6 +158,7 @@ class MeetingCaptureService : Service() {
                 r.start()
 
                 recorder = r
+                Log.i(TAG, "MediaRecorder started source=$source path=${outputFile.absolutePath}")
                 true
             }.getOrElse { e ->
                 Log.e(TAG, "Failed to start MediaRecorder", e)
@@ -237,8 +239,14 @@ class MeetingCaptureService : Service() {
             AutoAudioCapturePrefs.setPausedForMeeting(applicationContext, false)
 
             if (path != null) {
+                val outputFile = File(path)
+                Log.i(
+                    TAG,
+                    "Finalizing audio capture path=$path exists=${outputFile.exists()} bytes=${outputFile.length()} " +
+                        "durationSec=$durationSec stopReason=$stopReason error=${error ?: "none"}",
+                )
                 runCatching {
-                    MyApplication.repository.insertCaptureSession(
+                    val sessionId = MyApplication.repository.insertCaptureSession(
                         CaptureSession(
                             startedAt = started,
                             endedAt = endedAtMs,
@@ -251,6 +259,7 @@ class MeetingCaptureService : Service() {
                             error = error,
                         )
                     )
+                    Log.i(TAG, "Persisted capture session id=$sessionId path=$path")
                 }.onFailure { dbErr ->
                     Log.e(TAG, "Failed to persist capture session", dbErr)
                 }

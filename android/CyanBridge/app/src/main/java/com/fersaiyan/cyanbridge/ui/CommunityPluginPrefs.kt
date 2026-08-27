@@ -1,14 +1,12 @@
 package com.fersaiyan.cyanbridge.ui
 
 import android.content.Context
-import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 
 object CommunityPluginPrefs {
     private const val PREFS = "community_plugins"
     private const val KEY_TASKER_ASSISTANT_ENABLED = "tasker_assistant_enabled"
     private const val LEGACY_KEY_GEMINI_CHATGPT_IMAGE_AUTOMATION = "gemini_chatgpt_image_automation"
     private const val KEY_GLASS_TAB_SHORTCUT_PLUGIN = "glasses_tab_shortcut_plugin"
-    private const val DEFAULT_GLASS_TAB_SHORTCUT_PLUGIN = NativePluginIds.MEETING_SPARK_NOTES
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -35,7 +33,7 @@ object CommunityPluginPrefs {
 
     fun getGlassesTabShortcutPluginId(context: Context): String? {
         return prefs(context)
-            .getString(KEY_GLASS_TAB_SHORTCUT_PLUGIN, DEFAULT_GLASS_TAB_SHORTCUT_PLUGIN)
+            .getString(KEY_GLASS_TAB_SHORTCUT_PLUGIN, null)
             ?.takeIf { it.isNotBlank() }
     }
 

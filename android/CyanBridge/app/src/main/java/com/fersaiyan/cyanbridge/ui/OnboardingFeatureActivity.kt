@@ -14,6 +14,7 @@ import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
+import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.download.ModelDownloadForegroundService
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
@@ -24,12 +25,14 @@ import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.hjq.permissions.OnPermissionCallback
+import java.util.Locale
 
 class OnboardingFeatureActivity : AppCompatActivity() {
 
     private var featureIndex = 0
     private var glassesConnectionPermissionGranted by mutableStateOf(false)
-    private var selectedModelId by mutableStateOf(DEFAULT_MODEL_ID)
+    private var selectedModelId by mutableStateOf<String?>(null)
+    private var modelChoices = emptyList<OnboardingChoice>()
 
     data class OnboardingFeature(
         val iconRes: Int,
@@ -41,9 +44,17 @@ class OnboardingFeatureActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         featureIndex = intent.getIntExtra(EXTRA_FEATURE_INDEX, 0)
-        selectedModelId = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_ONBOARDING_MODEL_ID, DEFAULT_MODEL_ID)
-            ?: DEFAULT_MODEL_ID
+        val ramGb = DeviceCapabilityService.totalRamGb(
+            DeviceCapabilityService.snapshot(this).totalRamBytes,
+        )
+        val recommended = LocalModelCatalogRepository.recommendedStarterForRam(ramGb)
+        val storedModelId = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_ONBOARDING_MODEL_ID, null)
+        selectedModelId = LocalModelCatalogRepository.findById(storedModelId)
+            ?.takeIf { it.enabled && !it.comingSoon && ramGb >= it.minRamGb }
+            ?.id
+            ?: recommended?.id
+        modelChoices = buildModelChoices(ramGb, recommended?.id)
         setupFeatureScreen()
     }
 
@@ -73,7 +84,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                     showStoragePermission = false,
                     storagePermissionGranted = true,
                     showOpenSourceContribution = featureIndex == OPEN_SOURCE_FEATURE_INDEX,
-                    choices = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) MODEL_CHOICES else emptyList(),
+                    choices = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) modelChoices else emptyList(),
                     selectedChoiceId = selectedModelId,
                     backLabel = getString(
                         if (featureIndex == 0) R.string.onboarding_skip_all else R.string.onboarding_back,
@@ -147,6 +158,19 @@ class OnboardingFeatureActivity : AppCompatActivity() {
 
     private fun startSelectedModelDownload() {
         val entry = LocalModelCatalogRepository.findById(selectedModelId) ?: return
+        val assessment = DeviceCapabilityService.assess(
+            snapshot = DeviceCapabilityService.snapshot(this),
+            entry = entry,
+            requireDownloadHeadroom = true,
+        )
+        if (!assessment.supported) {
+            android.widget.Toast.makeText(
+                this,
+                assessment.blockers.joinToString("\n"),
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
         LocalAgentPrefs.setProviderType(this, AgentProviderType.LOCAL_AGENT)
         AiProviderPrefs.setProvider(this, AiProviderType.LOCAL_MODELS)
         LocalModelSettingsRepository.saveForModel(
@@ -179,7 +203,6 @@ class OnboardingFeatureActivity : AppCompatActivity() {
         private const val GLASSES_CONNECTION_FEATURE_INDEX = 0
         private const val LOCAL_MODEL_FEATURE_INDEX = 1
         private const val OPEN_SOURCE_FEATURE_INDEX = 3
-        private const val DEFAULT_MODEL_ID = "gemma4-e2b-it-litert"
         private const val GITHUB_REPOSITORY_URL = "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK"
 
         private val FEATURES = listOf(
@@ -209,21 +232,21 @@ class OnboardingFeatureActivity : AppCompatActivity() {
             ),
         )
 
-        private val MODEL_CHOICES = listOf(
-            OnboardingChoice(
-                id = "gemma4-e2b-it-litert",
-                title = "Gemma 4 E2B - Fast",
-                description = "Fast local text, image, and audio understanding.",
+        private val MODEL_CHOICE_COPY = listOf(
+            Triple(
+                "gemma4-e2b-it-litert",
+                "Gemma 4 E2B - Fast",
+                "Fast local text, image, and audio understanding.",
             ),
-            OnboardingChoice(
-                id = "gemma4-e4b-it-litert",
-                title = "Gemma 4 E4B - Slower but smarter",
-                description = "Higher-quality local answers for devices with more memory.",
+            Triple(
+                "gemma4-e4b-it-litert",
+                "Gemma 4 E4B - Slower but smarter",
+                "Higher-quality local answers for devices with more memory.",
             ),
-            OnboardingChoice(
-                id = "qwen2.5-0.5b-instruct-q4",
-                title = "Qwen2.5 0.5B - Super small",
-                description = "A tiny, quick text model. Not very clever, but easy to run.",
+            Triple(
+                "qwen3.5-0.8b-q4",
+                "Qwen3.5 0.8B - Super small",
+                "A compact, quick text model for lower-memory devices.",
             ),
         )
 
@@ -233,4 +256,17 @@ class OnboardingFeatureActivity : AppCompatActivity() {
             activity.startActivity(Intent(activity, OnboardingFeatureActivity::class.java))
         }
     }
+
+    private fun buildModelChoices(ramGb: Double, recommendedId: String?): List<OnboardingChoice> =
+        MODEL_CHOICE_COPY.mapNotNull { (id, title, description) ->
+            val entry = LocalModelCatalogRepository.findById(id) ?: return@mapNotNull null
+            val enabled = ramGb >= entry.minRamGb
+            val ramLabel = String.format(Locale.US, "%.0f", entry.minRamGb)
+            OnboardingChoice(
+                id = id,
+                title = if (id == recommendedId) "$title - Recommended" else title,
+                description = "$description Requires $ramLabel GB RAM.",
+                enabled = enabled,
+            )
+        }
 }

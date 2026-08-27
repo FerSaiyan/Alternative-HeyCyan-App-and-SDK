@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
+import com.fersaiyan.cyanbridge.ui.notes.NotesListActivity
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -150,6 +151,25 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 PrivacyCard()
+
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text("CyanBridge notes", fontWeight = FontWeight.Bold)
+                        Text(
+                            "Meeting summaries are saved locally as structured Markdown notes.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Button(
+                            onClick = {
+                                startActivity(Intent(this@KnowledgeIntegrationsActivity, NotesListActivity::class.java))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Open notes") }
+                    }
+                }
 
                 ImportCard(
                     title = "ChatGPT",

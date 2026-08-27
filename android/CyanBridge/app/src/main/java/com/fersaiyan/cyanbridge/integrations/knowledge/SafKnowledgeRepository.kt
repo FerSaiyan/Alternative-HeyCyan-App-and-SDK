@@ -234,9 +234,11 @@ object SafKnowledgeRepository {
         .take(80)
         .ifBlank { "CyanBridge Vault" }
 
-    private fun sanitizeFileTitle(title: String): String = title.trim().ifBlank { "CyanBridge note" }
+    internal fun sanitizeFileTitle(title: String): String = title.trim().ifBlank { "CyanBridge note" }
         .replace(Regex("[\\/:*?\"<>|]"), "-")
+        .trim('.', ' ')
         .take(100)
+        .ifBlank { "CyanBridge note" }
 
     private fun readText(resolver: ContentResolver, uri: Uri): String? = runCatching {
         resolver.openInputStream(uri)?.use { input ->

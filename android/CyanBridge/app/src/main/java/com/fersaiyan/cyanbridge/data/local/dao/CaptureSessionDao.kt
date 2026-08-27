@@ -18,6 +18,8 @@ interface CaptureSessionDao {
     @Query("SELECT * FROM capture_sessions WHERE audioPath = :audioPath LIMIT 1")
     suspend fun getByAudioPath(audioPath: String): CaptureSession?
 
+    @Query("DELETE FROM capture_sessions WHERE id = :sessionId")
+    suspend fun deleteById(sessionId: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(session: CaptureSession): Long

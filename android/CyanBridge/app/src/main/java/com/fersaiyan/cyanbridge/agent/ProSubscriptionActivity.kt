@@ -206,7 +206,7 @@ class ProSubscriptionActivity : AppCompatActivity() {
         billing = PlayBillingManager(
             context = this,
             onPurchasesUpdated = { purchases ->
-                handlePurchases(purchases)
+                handlePurchases(purchases, applyActivationRouting = true)
             },
             onError = { msg ->
                 lastBillingError = msg
@@ -761,12 +761,15 @@ class ProSubscriptionActivity : AppCompatActivity() {
     private fun refreshPurchaseStatusFromStore() {
         billing?.queryActivePurchases { result, purchases ->
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                handlePurchases(purchases)
+                handlePurchases(purchases, applyActivationRouting = false)
             }
         }
     }
 
-    private fun handlePurchases(purchases: List<Purchase>) {
+    private fun handlePurchases(
+        purchases: List<Purchase>,
+        applyActivationRouting: Boolean,
+    ) {
         val active = purchases.firstOrNull { p ->
             p.purchaseState == Purchase.PurchaseState.PURCHASED &&
                 p.products.any { PlaySubscriptionCatalog.planForProductId(it).isNotBlank() }
@@ -779,7 +782,12 @@ class ProSubscriptionActivity : AppCompatActivity() {
                     PlaySubscriptionCatalog.planForProductId(productId).ifBlank { null }
                 }
             if (plan != null) {
-                applyLocalSubscription(plan, active.purchaseToken, source = "play_billing")
+                applyLocalSubscription(
+                    plan = plan,
+                    purchaseToken = active.purchaseToken,
+                    source = "play_billing",
+                    applyActivationRouting = applyActivationRouting,
+                )
             }
 
             // Optional server verification path (if endpoint is configured).
@@ -816,7 +824,12 @@ class ProSubscriptionActivity : AppCompatActivity() {
         }
     }
 
-    private fun applyLocalSubscription(plan: String, purchaseToken: String, source: String) {
+    private fun applyLocalSubscription(
+        plan: String,
+        purchaseToken: String,
+        source: String,
+        applyActivationRouting: Boolean,
+    ) {
         val now = System.currentTimeMillis()
         ProSubscriptionPrefs.setPlan(this, plan)
         ProSubscriptionPrefs.setSubscribed(this, true)
@@ -840,7 +853,11 @@ class ProSubscriptionActivity : AppCompatActivity() {
             ProSubscriptionPrefs.setLastVerifiedAt(this, now)
         }
 
-        val routeAction = ProSubscriptionRoutingPolicy.applyAfterActivation(this)
+        val routeAction = if (applyActivationRouting) {
+            ProSubscriptionRoutingPolicy.applyAfterActivation(this)
+        } else {
+            ProSubscriptionRoutingPolicy.Action.NO_CHANGE
+        }
         val routeNote = ProSubscriptionRoutingPolicy.actionNote(routeAction)
 
         val planName = when (plan) {

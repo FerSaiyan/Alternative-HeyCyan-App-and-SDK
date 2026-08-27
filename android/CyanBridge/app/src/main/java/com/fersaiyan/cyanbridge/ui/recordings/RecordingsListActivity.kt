@@ -115,12 +115,13 @@ class RecordingsListActivity : AppCompatActivity() {
                     },
                     onOpenSyncedMediaItem = ::openSyncedMediaItem,
                     onPlay = { item -> sessions.firstOrNull { it.id == item.id }?.let(::onPlayClicked) },
-                    onTranscribe = { item -> sessions.firstOrNull { it.id == item.id }?.let(::onTranscribeClicked) },
-                    onViewTranscript = { item -> sessions.firstOrNull { it.id == item.id }?.let(::onViewTranscriptionClicked) },
-                    onStopMeetingCapture = { MeetingCaptureService.stop(this) },
-                    onDismissTranscript = { transcriptDialog = null },
-                    onDestinationSelected = ::navigateTo,
-                )
+                     onTranscribe = { item -> sessions.firstOrNull { it.id == item.id }?.let(::onTranscribeClicked) },
+                     onViewTranscript = { item -> sessions.firstOrNull { it.id == item.id }?.let(::onViewTranscriptionClicked) },
+                     onStopMeetingCapture = { MeetingCaptureService.stop(this) },
+                     onDeleteItems = ::deleteMeetingCaptures,
+                     onDismissTranscript = { transcriptDialog = null },
+                     onDestinationSelected = ::navigateTo,
+                 )
             }
         }
     }
@@ -407,6 +408,37 @@ class RecordingsListActivity : AppCompatActivity() {
                     text
                 },
             )
+        }
+    }
+
+    private suspend fun deleteMeetingCaptures(items: List<RecordingItem>): Set<Long> {
+        val targets = items.mapNotNull { item ->
+            sessions.firstOrNull { session -> session.id == item.id }
+        }
+        if (targets.any { it.id == currentlyPlayingId }) {
+            stopPlayback()
+        }
+
+        return withContext(Dispatchers.IO) {
+            targets.mapNotNull { session ->
+                runCatching {
+                    if (!MyApplication.repository.deleteCaptureSession(session.id)) {
+                        error("Capture session ${session.id} was not found")
+                    }
+
+                    val audioFile = File(session.audioPath)
+                    if (audioFile.exists() && !audioFile.delete()) {
+                        Log.w("RecordingsListActivity", "Could not remove audio file ${audioFile.absolutePath}")
+                    }
+                    session.id
+                }.onFailure { throwable ->
+                    Log.e(
+                        "RecordingsListActivity",
+                        "Failed to delete capture session ${session.id}",
+                        throwable,
+                    )
+                }.getOrNull()
+            }.toSet()
         }
     }
 

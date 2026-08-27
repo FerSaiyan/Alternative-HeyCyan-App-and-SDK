@@ -8,7 +8,7 @@ class ImageQuestionContractsTest {
     @Test
     fun detailedBlePreviewIsDefaultAndFallbackRequiresAnExplicitChoice() {
         assertEquals(ImageQuestionSource.FAST_PREVIEW, ImageQuestionSourcePolicy.defaultSource())
-        assertEquals(ImageThumbnailQuality.DETAILED, ImageQuestionSourcePolicy.defaultThumbnailQuality())
+        assertEquals(ImageThumbnailQuality.CLEARER, ImageQuestionSourcePolicy.defaultThumbnailQuality())
         assertEquals(
             ImageSourceResolution.AWAITING_EXPLICIT_FALLBACK_CHOICE,
             ImageQuestionSourcePolicy.onHighQualityFailure(),

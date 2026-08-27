@@ -43,10 +43,10 @@ object LocalModelCatalogRepository {
             quantization = "MIXED (2/4/8-bit)",
             contextSizeDefault = 4096,
             promptTemplateId = "gemma_it",
-            minRamGb = 8.0,
+            minRamGb = 6.0,
             minStorageGb = 4.5,
             shortDescription = "Gemma 4 LiteRT-LM package with multimodal support and optional MTP acceleration when packaged with a drafter.",
-            tags = listOf("litert", "gemma4", "multimodal", "offline"),
+            tags = listOf("litert", "gemma4", "multimodal", "offline", "starter"),
             gatedDownload = false,
             licenseTermsNote = "Use under Gemma model license terms.",
             enabled = true,
@@ -111,7 +111,7 @@ object LocalModelCatalogRepository {
             quantization = "NPU AOT (QNN/INT4)",
             contextSizeDefault = 4096,
             promptTemplateId = "gemma_it",
-            minRamGb = 8.0,
+            minRamGb = 6.0,
             minStorageGb = 4.0,
             shortDescription = "Snapdragon NPU Ahead-of-Time (AOT) compiled package. Coming soon for supported Snapdragon devices.",
             tags = listOf("npu", "gemma4", "coming_soon"),
@@ -128,4 +128,12 @@ object LocalModelCatalogRepository {
         if (id.isNullOrBlank()) return null
         return curatedModels.firstOrNull { it.id == id }
     }
+
+    fun recommendedStarterForRam(ramGb: Double): LocalModelCatalogEntry? =
+        curatedModels.firstOrNull { entry ->
+            entry.enabled &&
+                !entry.comingSoon &&
+                "starter" in entry.tags &&
+                ramGb >= entry.minRamGb
+        }
 }

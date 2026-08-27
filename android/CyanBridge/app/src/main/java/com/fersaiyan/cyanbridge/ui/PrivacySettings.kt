@@ -14,8 +14,8 @@ object PrivacySettings {
     private const val KEY_TRANSCRIPT_STORAGE_ENABLED = "transcript_storage_enabled"
     private const val KEY_REDACTION_ENABLED = "redaction_enabled"
 
-    /** Privacy-first default: OFF */
-    const val DEFAULT_TRANSCRIPT_STORAGE_ENABLED = false
+    /** Keep transcripts unless the user explicitly opts out. */
+    const val DEFAULT_TRANSCRIPT_STORAGE_ENABLED = true
 
     /** Privacy-first default: ON */
     const val DEFAULT_REDACTION_ENABLED = true

@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.data.repository
 
+import androidx.room.withTransaction
 import com.fersaiyan.cyanbridge.data.local.AppDatabase
 import com.fersaiyan.cyanbridge.data.local.entity.CaptureSession
 import com.fersaiyan.cyanbridge.data.local.entity.Chat
@@ -60,6 +61,12 @@ class CyanBridgeRepository(private val db: AppDatabase) {
 
     suspend fun getCaptureSessionByAudioPath(audioPath: String): CaptureSession? =
         db.captureSessionDao().getByAudioPath(audioPath)
+
+    suspend fun deleteCaptureSession(captureSessionId: Long): Boolean = db.withTransaction {
+        db.transcriptionDao().deleteByCaptureSessionId(captureSessionId)
+        db.captureTranscriptDao().deleteForSession(captureSessionId)
+        db.captureSessionDao().deleteById(captureSessionId) > 0
+    }
 
     // Chapter 6: Transcriptions
     suspend fun getTranscriptionByCaptureSessionId(captureSessionId: Long): TranscriptionRecord? = db.transcriptionDao().getByCaptureSessionId(captureSessionId)

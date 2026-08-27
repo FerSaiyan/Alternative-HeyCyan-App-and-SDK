@@ -30,12 +30,15 @@ class DeviceBindScreenTest {
                             advertisedName = "Smart Glasses",
                             rssi = -54,
                             detectedClass = DeviceClass.HEY_CYAN,
+                            selectedClass = null,
+                            userOverridden = false,
                         ),
                     ),
                     isScanning = false,
                     connectingDevice = null,
                     selectedClass = DeviceClass.HEY_CYAN,
                     onScan = {},
+                    onPairMetaGlasses = {},
                     onSelectDevice = {},
                     onSelectedClassChange = {},
                     onConfirmConnection = {},
@@ -48,7 +51,32 @@ class DeviceBindScreenTest {
         composeRule.onNodeWithText("Smart Glasses").assertExists()
         composeRule.onNodeWithText("Signal: -54 dBm").assertExists()
         composeRule.onAllNodesWithText(mac).assertCountEquals(0)
-        composeRule.onAllNodesWithText("Pair Meta Glasses").assertCountEquals(0)
+        composeRule.onNodeWithText("Pair Meta Glasses").assertExists()
+    }
+
+    @Test
+    fun pairMetaButtonLaunchesDedicatedFlow() {
+        var clicked = false
+        composeRule.setContent {
+            CyanBridgeTheme {
+                DeviceBindScreen(
+                    devices = emptyList(),
+                    isScanning = false,
+                    connectingDevice = null,
+                    selectedClass = DeviceClass.HEY_CYAN,
+                    onScan = {},
+                    onPairMetaGlasses = { clicked = true },
+                    onSelectDevice = {},
+                    onSelectedClassChange = {},
+                    onConfirmConnection = {},
+                    onDismissConnection = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Pair Meta Glasses").performClick()
+        composeRule.runOnIdle { assertTrue(clicked) }
     }
 
     @Test
@@ -60,6 +88,8 @@ class DeviceBindScreenTest {
             advertisedName = "Smart Glasses",
             rssi = -50,
             detectedClass = DeviceClass.UNKNOWN,
+            selectedClass = null,
+            userOverridden = false,
         )
         composeRule.setContent {
             CyanBridgeTheme {
@@ -69,6 +99,7 @@ class DeviceBindScreenTest {
                     connectingDevice = device,
                     selectedClass = DeviceClass.HEY_CYAN,
                     onScan = {},
+                    onPairMetaGlasses = {},
                     onSelectDevice = {},
                     onSelectedClassChange = { selected = it },
                     onConfirmConnection = { confirmed = true },

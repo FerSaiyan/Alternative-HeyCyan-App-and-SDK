@@ -65,7 +65,6 @@ import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
 import com.fersaiyan.cyanbridge.shared.glasses.WifiAdbDebugUiState
-import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import com.fersaiyan.cyanbridge.shared.ui.localizedOtaSourceDescription
 import com.fersaiyan.cyanbridge.shared.ui.localizedOtaSourceLabel
@@ -202,11 +201,13 @@ fun GlassesDashboardScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            item {
-                NativePluginShortcutSection(
-                    shortcut = state.nativePluginShortcut,
-                    onAction = onAction,
-                )
+            if (state.nativePluginShortcut != null) {
+                item {
+                    NativePluginShortcutSection(
+                        shortcut = state.nativePluginShortcut,
+                        onAction = onAction,
+                    )
+                }
             }
             if (state.showHeyCyanControls || state.showEyevueControls || state.showTuneBudsControls) {
                 item { CoreGlassesControls(state, onAction) }
@@ -320,40 +321,9 @@ private fun WifiAdbDebugSection(
 
 @Composable
 private fun NativePluginShortcutSection(
-    shortcut: NativePluginShortcutUiState?,
+    shortcut: NativePluginShortcutUiState,
     onAction: (GlassesDashboardAction) -> Unit,
 ) {
-    if (shortcut == null) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("native_plugin_shortcut_empty"),
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = stringResource(Res.string.dashboard_shortcut_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = stringResource(Res.string.dashboard_shortcut_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedButton(
-                    onClick = { onAction(GlassesDashboardAction.Navigate(AppDestination.PLUGINS)) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(Res.string.dashboard_choose_plugin))
-                }
-            }
-        }
-        return
-    }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1045,6 +1015,7 @@ private fun AdvancedControls(
     onAction: (GlassesDashboardAction) -> Unit,
     onRequestOtaFirmware: () -> Unit,
 ) {
+    var pendingDetailedQuality by remember { mutableStateOf<Int?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (state.showAdvancedDeviceInfo) {
             Column(modifier = Modifier.testTag("advanced_device_info")) {
@@ -1116,7 +1087,11 @@ private fun AdvancedControls(
                                 FilterChip(
                                     selected = state.imageThumbnailQualitySdkValue == sdkValue,
                                     onClick = {
-                                        onAction(GlassesDashboardAction.SelectImageThumbnailQuality(sdkValue))
+                                        if (sdkValue == 5) {
+                                            pendingDetailedQuality = sdkValue
+                                        } else {
+                                            onAction(GlassesDashboardAction.SelectImageThumbnailQuality(sdkValue))
+                                        }
                                     },
                                     label = { Text(label) },
                                     modifier = Modifier
@@ -1127,6 +1102,26 @@ private fun AdvancedControls(
                         }
                     }
             }
+        }
+        pendingDetailedQuality?.let { sdkValue ->
+            AlertDialog(
+                onDismissRequest = { pendingDetailedQuality = null },
+                icon = { Icon(imageVector = Icons.Outlined.WarningAmber, contentDescription = null) },
+                title = { Text(stringResource(Res.string.dashboard_quality_detailed_warning_title)) },
+                text = { Text(stringResource(Res.string.dashboard_quality_detailed_warning_body)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val value = pendingDetailedQuality
+                        pendingDetailedQuality = null
+                        if (value != null) onAction(GlassesDashboardAction.SelectImageThumbnailQuality(value))
+                    }) { Text(stringResource(Res.string.dashboard_quality_detailed_warning_continue)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDetailedQuality = null }) {
+                        Text(stringResource(Res.string.dashboard_quality_detailed_warning_cancel))
+                    }
+                },
+            )
         }
         if (state.showAdvancedDeveloperTools) {
             HorizontalDivider()

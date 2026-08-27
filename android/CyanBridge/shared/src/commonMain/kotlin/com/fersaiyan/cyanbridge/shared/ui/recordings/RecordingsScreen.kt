@@ -20,13 +20,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Image as ImageIcon
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -35,6 +42,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,7 +55,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -87,20 +98,92 @@ fun RecordingsScreen(
     onTranscribe: (RecordingItem) -> Unit,
     onViewTranscript: (RecordingItem) -> Unit,
     onStopMeetingCapture: () -> Unit,
+    onDeleteItems: suspend (List<RecordingItem>) -> Set<Long> = { emptySet() },
     onDismissTranscript: () -> Unit,
     onDestinationSelected: (AppDestination) -> Unit = {},
 ) {
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedSessionIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var pendingDelete by remember { mutableStateOf<List<RecordingItem>?>(null) }
+    var isDeleting by remember { mutableStateOf(false) }
+    var deletionFeedback by remember { mutableStateOf<RecordingDeletionFeedback?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val selectableSessionIds = sessions
+        .filter { it.id != transcribingSessionId }
+        .map { it.id }
+        .toSet()
+    val selectedSessions = sessions.filter { it.id in selectedSessionIds }
+    val allSelectableSessionsSelected =
+        selectableSessionIds.isNotEmpty() && selectedSessionIds.containsAll(selectableSessionIds)
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                 title = { Text(stringResource(Res.string.recordings_title)) },
+                title = {
+                    if (selectionMode) {
+                        Text(stringResource(Res.string.recordings_selected, selectedSessions.size))
+                    } else {
+                        Text(stringResource(Res.string.recordings_title))
+                    }
+                },
+                navigationIcon = {
+                    if (selectionMode) {
+                        IconButton(
+                            onClick = {
+                                selectionMode = false
+                                selectedSessionIds = emptySet()
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = stringResource(Res.string.recordings_cancel_selection),
+                            )
+                        }
+                    }
+                },
                 actions = {
-                    IconButton(onClick = onOpenSyncedMedia) {
-                        Icon(
-                            imageVector = Icons.Outlined.ImageIcon,
-                             contentDescription = stringResource(Res.string.recordings_open_synced_media),
-                        )
+                    if (selectionMode) {
+                        IconButton(
+                            onClick = {
+                                selectedSessionIds = if (allSelectableSessionsSelected) {
+                                    emptySet()
+                                } else {
+                                    selectableSessionIds
+                                }
+                            },
+                            enabled = !isDeleting,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = stringResource(
+                                    if (allSelectableSessionsSelected) {
+                                        Res.string.recordings_deselect_all
+                                    } else {
+                                        Res.string.recordings_select_all
+                                    },
+                                ),
+                            )
+                        }
+                        IconButton(
+                            onClick = { pendingDelete = selectedSessions },
+                            enabled = selectedSessions.isNotEmpty() && !isDeleting,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Delete,
+                                contentDescription = stringResource(Res.string.recordings_delete_selected),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = onOpenSyncedMedia) {
+                            Icon(
+                                imageVector = Icons.Outlined.ImageIcon,
+                                contentDescription = stringResource(Res.string.recordings_open_synced_media),
+                            )
+                        }
                     }
                 },
             )
@@ -201,10 +284,21 @@ fun RecordingsScreen(
                 }
             } else {
                 item {
-                    Text(
-                         text = stringResource(Res.string.recordings_meeting_captures),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.recordings_meeting_captures),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        if (!selectionMode) {
+                            TextButton(onClick = { selectionMode = true }) {
+                                Text(stringResource(Res.string.recordings_select))
+                            }
+                        }
+                    }
                 }
                 items(sessions, key = { it.id }) { session ->
                     RecordingCard(
@@ -216,10 +310,112 @@ fun RecordingsScreen(
                         onPlay = { onPlay(session) },
                         onTranscribe = { onTranscribe(session) },
                         onViewTranscript = { onViewTranscript(session) },
+                        selectionMode = selectionMode,
+                        isSelected = selectedSessionIds.contains(session.id),
+                        isDeleting = isDeleting,
+                        onToggleSelection = {
+                            if (session.id != transcribingSessionId && !isDeleting) {
+                                selectedSessionIds = if (selectedSessionIds.contains(session.id)) {
+                                    selectedSessionIds - session.id
+                                } else {
+                                    selectedSessionIds + session.id
+                                }
+                            }
+                        },
+                        onDelete = { pendingDelete = listOf(session) },
                     )
                 }
             }
         }
+    }
+
+    deletionFeedback?.let { feedback ->
+        val message = when {
+            feedback.deletedCount == feedback.requestedCount && feedback.requestedCount == 1 -> {
+                stringResource(Res.string.recordings_deleted)
+            }
+            feedback.deletedCount == feedback.requestedCount -> {
+                stringResource(Res.string.recordings_deleted_multiple, feedback.deletedCount)
+            }
+            feedback.deletedCount > 0 -> {
+                stringResource(
+                    Res.string.recordings_deleted_partial,
+                    feedback.deletedCount,
+                    feedback.requestedCount,
+                )
+            }
+            else -> stringResource(Res.string.recordings_delete_failed)
+        }
+        LaunchedEffect(feedback) {
+            snackbarHostState.showSnackbar(message)
+            deletionFeedback = null
+        }
+    }
+
+    pendingDelete?.let { items ->
+        val multiple = items.size > 1
+        AlertDialog(
+            onDismissRequest = { if (!isDeleting) pendingDelete = null },
+            title = {
+                Text(
+                    stringResource(
+                        if (multiple) {
+                            Res.string.recordings_delete_multiple_title
+                        } else {
+                            Res.string.recordings_delete_title
+                        },
+                    ),
+                )
+            },
+            text = {
+                Text(
+                    stringResource(
+                        if (multiple) {
+                            Res.string.recordings_delete_multiple_message
+                        } else {
+                            Res.string.recordings_delete_message
+                        },
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (isDeleting) return@TextButton
+                        pendingDelete = null
+                        isDeleting = true
+                        coroutineScope.launch {
+                            val requestedIds = items.map { it.id }.toSet()
+                            val deletedIds = try {
+                                onDeleteItems(items).intersect(requestedIds)
+                            } catch (_: Throwable) {
+                                emptySet()
+                            }
+                            selectedSessionIds -= deletedIds
+                            if (selectedSessionIds.isEmpty()) {
+                                selectionMode = false
+                            }
+                            isDeleting = false
+                            deletionFeedback = RecordingDeletionFeedback(
+                                deletedCount = deletedIds.size,
+                                requestedCount = requestedIds.size,
+                            )
+                        }
+                    },
+                    enabled = !isDeleting,
+                ) {
+                    Text(stringResource(Res.string.action_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingDelete = null },
+                    enabled = !isDeleting,
+                ) {
+                    Text(stringResource(Res.string.action_cancel))
+                }
+            },
+        )
     }
 
     transcriptionProgress?.let { progress ->
@@ -335,13 +531,34 @@ private fun RecordingCard(
     onPlay: () -> Unit,
     onTranscribe: () -> Unit,
     onViewTranscript: () -> Unit,
+    selectionMode: Boolean,
+    isSelected: Boolean,
+    isDeleting: Boolean,
+    onToggleSelection: () -> Unit,
+    onDelete: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                enabled = selectionMode && !isDeleting && !isTranscribing,
+                onClick = onToggleSelection,
+            ),
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (selectionMode) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelection() },
+                        enabled = !isTranscribing && !isDeleting,
+                    )
+                }
                 IconButton(onClick = onPlay) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
@@ -371,6 +588,37 @@ private fun RecordingCard(
                         )
                     }
                 }
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        enabled = !isDeleting,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.MoreVert,
+                            contentDescription = stringResource(Res.string.recordings_more_actions, title),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.recordings_delete_capture)) },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
+                            enabled = !isTranscribing && !isDeleting,
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                        )
+                    }
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(
@@ -395,6 +643,11 @@ private fun RecordingCard(
         }
     }
 }
+
+private data class RecordingDeletionFeedback(
+    val deletedCount: Int,
+    val requestedCount: Int,
+)
 
 @Composable
 private fun TranscriptionProgressDialog(state: TranscriptionProgressUiState) {

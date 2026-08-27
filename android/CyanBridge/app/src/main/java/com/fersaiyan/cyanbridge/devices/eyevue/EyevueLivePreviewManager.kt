@@ -12,18 +12,21 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.rtsp.RtspMediaSource
 import com.fersaiyan.cyanbridge.ota.LivePreviewState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -49,30 +52,28 @@ class EyevueLivePreviewManager(
     private var job: Job? = null
     private var player: ExoPlayer? = null
     private var playerListener: Player.Listener? = null
+    private var playbackFailure: CompletableDeferred<Throwable>? = null
     private var onSessionFinished: () -> Unit = {}
     private var finishedNotified = true
 
     val uiState: StateFlow<LivePreviewState> = _uiState.asStateFlow()
     val isActive: Boolean get() = job?.isActive == true
 
-    fun start(
-        profile: EyevueMediaProfile,
-        onSessionFinished: () -> Unit,
-    ) {
+    fun start(onSessionFinished: () -> Unit) {
         if (isActive) return
         this.onSessionFinished = onSessionFinished
         finishedNotified = false
-        job = scope.launch { run(profile) }
+        job = scope.launch { run() }
     }
 
     fun stop() {
-        job?.cancel()
-        job = null
-        releasePlayer()
-        eyevueManager.stopLive()
-        transport.disconnect()
-        resetState()
-        notifyFinished()
+        val activeJob = job
+        if (activeJob?.isActive == true) {
+            activeJob.cancel()
+        } else {
+            resetState()
+            notifyFinished()
+        }
     }
 
     fun release() {
@@ -82,12 +83,17 @@ class EyevueLivePreviewManager(
 
     fun getPlayer(): ExoPlayer? = player
 
-    private suspend fun run(profile: EyevueMediaProfile) {
+    private suspend fun run() {
+        var failed = false
+        var liveCommandAttempted = false
         try {
             if (!eyeVueConnected()) throw IOException("Eyevue BLE is not connected")
+            val project = eyevueManager.awaitProject()
+                ?: throw IOException("Eyevue did not report its project/model")
+            val profile = EyevueMediaProfile.fromProject(project)
             updateState("Starting live mode", "Sending Eyevue 0x67 command", scanning = true)
-            eyevueManager.startLive(profile.mode == EyevueWifiMode.AP)
-            val ssid = eyevueManager.awaitWifiSsid(profile.mode == EyevueWifiMode.P2P)
+            liveCommandAttempted = true
+            val ssid = eyevueManager.startLiveAndAwaitSsid(profile.mode == EyevueWifiMode.AP)
                 ?: throw IOException("Eyevue did not report the live Wi-Fi SSID")
 
             updateState("Connecting Wi-Fi", "Joining $ssid", scanning = true)
@@ -98,17 +104,19 @@ class EyevueLivePreviewManager(
                 baseIp = profile.baseIp,
             ).getOrElse { throw it }
 
-            if (!profile.isTSeries) {
+            profile.liveControlUrl?.let { controlUrl ->
                 updateState("Starting stream", "Requesting Eyevue HTTP live endpoint", scanning = true)
-                requestLiveEndpoint(profile.baseIp)
+                requestLiveEndpoint(controlUrl)
             }
 
-            val streamUrl = if (profile.isTSeries) {
-                "rtsp://${profile.baseIp}/h264"
-            } else {
-                "rtsp://${profile.baseIp}/xxx.mov"
-            }
-            play(streamUrl)
+            val streamUrl = profile.liveStreamUrl
+            val streamFailure = CompletableDeferred<Throwable>()
+            playbackFailure = streamFailure
+            val ready = withTimeoutOrNull(20_000L) {
+                playUntilReady(streamUrl, streamFailure)
+                true
+            } == true
+            if (!ready) throw IOException("Timed out waiting for the Eyevue RTSP stream")
             _uiState.value = LivePreviewState(
                 stateLabel = "Playing",
                 detail = streamUrl,
@@ -117,71 +125,86 @@ class EyevueLivePreviewManager(
                 canStart = false,
                 canStop = true,
             )
-            awaitCancellation()
+            throw streamFailure.await()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
+            failed = true
             Log.e(TAG, "Eyevue live preview failed", error)
             updateState("Error", error.message ?: "Eyevue live preview failed", scanning = false)
         } finally {
-            releasePlayer()
-            eyevueManager.stopLive()
-            transport.disconnect()
-            notifyFinished()
+            withContext(NonCancellable) {
+                releasePlayer()
+                if (liveCommandAttempted && eyevueManager.isConnected()) {
+                    eyevueManager.stopLiveBlocking()
+                }
+                transport.disconnect()
+                if (!failed) resetState()
+                job = null
+                notifyFinished()
+            }
         }
     }
 
     private fun eyeVueConnected(): Boolean = eyevueManager.isConnected()
 
-    private suspend fun requestLiveEndpoint(baseIp: String) = withContext(Dispatchers.IO) {
-        val url = "http://$baseIp/?custom=1&cmd=3001&par=1"
-        CLIENT.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("Eyevue live HTTP request failed: ${response.code}")
+    private suspend fun requestLiveEndpoint(url: String) = withContext(Dispatchers.IO) {
+        var lastError: IOException? = null
+        repeat(5) { attempt ->
+            try {
+                CLIENT.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
+                    if (response.isSuccessful) return@withContext
+                    lastError = IOException("Eyevue live HTTP request failed: ${response.code}")
+                }
+            } catch (error: IOException) {
+                lastError = error
+            }
+            if (attempt < 4) delay(500L)
         }
+        throw lastError ?: IOException("Eyevue live HTTP request failed")
     }
 
     @OptIn(UnstableApi::class)
-    private suspend fun play(streamUrl: String) {
+    private suspend fun playUntilReady(
+        streamUrl: String,
+        streamFailure: CompletableDeferred<Throwable>,
+    ) {
         val mediaSource = RtspMediaSource.Factory()
             .setForceUseRtpTcp(true)
             .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
         suspendCancellableCoroutine<Unit> { continuation ->
             val exoPlayer = ExoPlayer.Builder(context).build()
             val listener = object : Player.Listener {
-                private var completed = false
+                private var ready = false
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (completed) return
-                    if (playbackState == Player.STATE_READY) {
-                        completed = true
-                        exoPlayer.removeListener(this)
-                        player = exoPlayer
-                        playerListener = this
+                    if (playbackState == Player.STATE_READY && !ready) {
+                        ready = true
                         if (continuation.isActive) continuation.resume(Unit)
                     } else if (playbackState == Player.STATE_ENDED) {
-                        completed = true
-                        exoPlayer.release()
+                        val error = IOException("Eyevue RTSP stream ended")
                         if (continuation.isActive) {
-                            continuation.resumeWith(Result.failure(IOException("Eyevue RTSP stream ended")))
+                            continuation.resumeWith(Result.failure(error))
+                        } else {
+                            streamFailure.complete(error)
                         }
                     }
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
-                    if (completed) return
-                    completed = true
-                    exoPlayer.release()
+                    val failure = IOException("Eyevue RTSP error: ${error.errorCodeName}", error)
                     if (continuation.isActive) {
-                        continuation.resumeWith(
-                            Result.failure(IOException("Eyevue RTSP error: ${error.errorCodeName}", error)),
-                        )
+                        continuation.resumeWith(Result.failure(failure))
+                    } else {
+                        streamFailure.complete(failure)
                     }
                 }
             }
+            player = exoPlayer
+            playerListener = listener
             exoPlayer.addListener(listener)
             continuation.invokeOnCancellation {
-                exoPlayer.removeListener(listener)
-                exoPlayer.release()
+                if (player === exoPlayer) releasePlayer()
             }
             exoPlayer.setMediaSource(mediaSource)
             exoPlayer.playWhenReady = true
@@ -190,6 +213,8 @@ class EyevueLivePreviewManager(
     }
 
     private fun releasePlayer() {
+        playbackFailure?.cancel()
+        playbackFailure = null
         playerListener?.let { listener -> player?.removeListener(listener) }
         playerListener = null
         player?.release()

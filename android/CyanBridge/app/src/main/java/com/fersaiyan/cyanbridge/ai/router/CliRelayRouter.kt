@@ -138,6 +138,8 @@ object CliRelayClient {
 
         retry {
             val messagesArray = JSONArray()
+            val systemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(context)
+            messagesArray.put(JSONObject().put("role", "system").put("content", systemPrompt))
             for (m in messages) {
                 messagesArray.put(JSONObject().put("role", m["role"]).put("content", m["content"]))
             }
@@ -149,6 +151,7 @@ object CliRelayClient {
                     .put("chatId", chatId)
                     .put("prompt", prompt)
                     .put("messages", messagesArray)
+                    .put("system_prompt", systemPrompt)
                     .apply {
                         val model = modelOverride?.trim().orEmpty()
                         if (model.isNotBlank()) put("model", model)
@@ -194,6 +197,7 @@ object CliRelayClient {
                 JSONObject()
                     .put("backend", (backendOverride ?: AiProviderPrefs.getRelayBackend(context)).wire)
                     .put("prompt", prompt)
+                    .put("system_prompt", ProSubscriptionAiPrefs.getSystemPrompt(context))
                     .apply {
                         val model = modelOverride?.trim().orEmpty()
                         if (model.isNotBlank()) put("model", model)
@@ -241,7 +245,8 @@ object CliRelayClient {
             JSONObject()
                 .put("backend", (backendOverride ?: AiProviderPrefs.getRelayBackend(context)).wire)
                 .put("filename", file.name)
-                .put("imageBase64", imageBase64)
+                    .put("imageBase64", imageBase64)
+                    .put("system_prompt", ProSubscriptionAiPrefs.getSystemPrompt(context))
                 .apply {
                     val requestPrompt = prompt?.trim().orEmpty()
                     if (requestPrompt.isNotBlank()) put("prompt", requestPrompt)
@@ -269,7 +274,8 @@ object CliRelayClient {
             endpoint(context, "/audio-query"),
             JSONObject()
                 .put("filename", file.name)
-                .put("audioBase64", Base64.encodeToString(file.readBytes(), Base64.NO_WRAP))
+                    .put("audioBase64", Base64.encodeToString(file.readBytes(), Base64.NO_WRAP))
+                    .put("system_prompt", ProSubscriptionAiPrefs.getSystemPrompt(context))
                 .apply {
                     val requestPrompt = prompt?.trim().orEmpty()
                     if (requestPrompt.isNotBlank()) put("prompt", requestPrompt)
@@ -326,7 +332,10 @@ object CliRelayClient {
         val body = BufferedReader(InputStreamReader(stream ?: conn.inputStream)).use { it.readText() }
         conn.disconnect()
         if (code !in 200..299) {
-            throw IllegalStateException("Relay HTTP $code: $body")
+            val message = runCatching { JSONObject(body).optString("message").trim() }
+                .getOrNull()
+                .orEmpty()
+            throw IllegalStateException(message.ifBlank { "Relay HTTP $code" })
         }
         return JSONObject(body)
     }

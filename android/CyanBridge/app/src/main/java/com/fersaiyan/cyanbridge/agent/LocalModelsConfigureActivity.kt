@@ -172,7 +172,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
     private fun refreshComposeState() {
         val selected = selectedModel()
         val snapshot = deviceSnapshot ?: DeviceCapabilityService.snapshot(this).also { deviceSnapshot = it }
-        val ramGb = snapshot.totalRamBytes / GIB
+        val ramGb = DeviceCapabilityService.totalRamGb(snapshot.totalRamBytes)
         val freeGb = snapshot.freeStorageBytes / GIB
         val mtpSupport = mtpSupportFor(selected)
         val mtpStatus = mtpStatusFor(selected, mtpSupport)

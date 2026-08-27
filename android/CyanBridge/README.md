@@ -50,7 +50,7 @@ JAVA_HOME=/opt/android-studio/jbr ./gradlew connectedDebugAndroidTest
 
 ## Privacy defaults (MVP)
 
-- Transcript storage: OFF by default.
+- Transcript storage: ON by default; users can opt out in Settings.
 - Name redaction in exports: ON by default.
 - Full transcript in exports: OFF by default.
 
