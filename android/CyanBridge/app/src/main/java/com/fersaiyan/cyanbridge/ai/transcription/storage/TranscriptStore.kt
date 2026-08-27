@@ -3,7 +3,7 @@ package com.fersaiyan.cyanbridge.ai.transcription.storage
 /**
  * Transcript persistence abstraction.
  *
- * Implementations must respect privacy defaults (transcript storage OFF by default).
+ * Implementations must respect the user's transcript-storage preference.
  */
 interface TranscriptStore {
     suspend fun maybePersist(

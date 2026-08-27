@@ -518,7 +518,7 @@ private fun loadSharedSettings(preferences: PlatformPreferences): SettingsUiStat
     syncDerived = preferences.getBoolean("sync_derived", false),
     ocrRetentionDays = preferences.getInt("ocr_retention_days", 7),
     vaultLocked = preferences.getBoolean("vault_locked", false),
-    transcriptStorageEnabled = preferences.getBoolean("transcript_storage", false),
+    transcriptStorageEnabled = preferences.getBoolean("transcript_storage", true),
     redactNamesEnabled = preferences.getBoolean("redact_names", true),
     includeFullTranscriptionInExports = preferences.getBoolean("full_transcript_exports", false),
 )

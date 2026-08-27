@@ -80,7 +80,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="Persist transcript to DB (OFF by default)" />
+            android:text="Persist transcript to DB (ON by default)" />
 
         <View
             android:layout_width="match_parent"

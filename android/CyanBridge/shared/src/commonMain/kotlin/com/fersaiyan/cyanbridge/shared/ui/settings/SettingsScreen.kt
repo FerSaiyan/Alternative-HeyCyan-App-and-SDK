@@ -46,7 +46,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -64,8 +63,6 @@ import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 import com.fersaiyan.cyanbridge.shared.ui.localizedDestinationLabel
-import com.fersaiyan.cyanbridge.shared.ui.localizedMemoryModeDescription
-import com.fersaiyan.cyanbridge.shared.ui.localizedMemoryModeTitle
 import com.fersaiyan.cyanbridge.shared.ui.localizedProviderLabel
 
 data class SettingsUiState(
@@ -86,7 +83,7 @@ data class SettingsUiState(
     val ocrRetentionDays: Int = 7,
     val vaultLocked: Boolean = false,
     val vaultRequiresPassphrase: Boolean = false,
-    val transcriptStorageEnabled: Boolean = false,
+    val transcriptStorageEnabled: Boolean = true,
     val redactNamesEnabled: Boolean = true,
     val includeFullTranscriptionInExports: Boolean = false,
     val meetingRecording: Boolean = false,
@@ -560,80 +557,6 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
 @Composable
 private fun MemoryPrivacyContent(state: SettingsUiState, actions: SettingsScreenActions) {
     Text(
-        text = stringResource(Res.string.settings_current_mode, localizedMemoryModeTitle(state.memoryMode)),
-        style = MaterialTheme.typography.bodyMedium,
-    )
-    Text(
-        text = state.memoryModeAvailability.ifBlank { localizedMemoryModeDescription(state.memoryMode) },
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    if (state.memorySyncStatus.isNotBlank()) {
-        Text(
-            text = state.memorySyncStatus,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    if (state.memoryCloudStatus.isNotBlank()) {
-        Text(
-            text = state.memoryCloudStatus,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    MemoryPrivacyMode.entries.forEach { mode ->
-        val requiresPro = mode != MemoryPrivacyMode.PRIVATE_LOCAL
-        val enabled = state.isProSubscribed || !requiresPro
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .alpha(if (enabled) 1f else 0.5f)
-                .clickable(enabled = enabled) { actions.setMemoryMode(mode) },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RadioButton(
-                selected = state.memoryMode == mode,
-                onClick = { if (enabled) actions.setMemoryMode(mode) },
-                enabled = enabled,
-            )
-            Column {
-                 Text(localizedMemoryModeTitle(mode), style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    text = if (enabled) {
-                        localizedMemoryModeDescription(mode)
-                    } else {
-                        stringResource(Res.string.settings_requires_pro)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-    HorizontalDivider()
-    Text(stringResource(Res.string.settings_sync_eligibility), style = MaterialTheme.typography.labelLarge)
-    SwitchRow(stringResource(Res.string.settings_explicit_facts), state.syncExplicit) {
-        actions.setMemorySync(MemorySourceType.EXPLICIT_USER_FACT, it)
-    }
-    SwitchRow(stringResource(Res.string.settings_daily_facts), state.syncDaily) {
-        actions.setMemorySync(MemorySourceType.AUTO_DAILY_FACT, it)
-    }
-    SwitchRow(stringResource(Res.string.settings_screen_ocr), state.syncOcr) {
-        actions.setMemorySync(MemorySourceType.SCREEN_OCR, it)
-    }
-    SwitchRow(stringResource(Res.string.settings_derived_summaries), state.syncDerived) {
-        actions.setMemorySync(MemorySourceType.DERIVED_SUMMARY, it)
-    }
-    NumberSettingRow(
-        label = stringResource(Res.string.settings_screen_ocr_retention),
-        value = state.ocrRetentionDays,
-        onValueChanged = actions::setOcrRetentionDays,
-        validRange = 1..365,
-    )
-    ActionButton(stringResource(Res.string.settings_delete_passive_ocr), actions::deletePassiveCapture, destructive = true)
-    HorizontalDivider()
-    Text(
         text = buildString {
             append(
                 stringResource(
@@ -659,6 +582,14 @@ private fun MemoryPrivacyContent(state: SettingsUiState, actions: SettingsScreen
     ActionButton(stringResource(Res.string.settings_set_vault_passphrase), actions::setVaultPassphrase)
     ActionButton(stringResource(Res.string.settings_clear_vault_passphrase), actions::clearVaultPassphrase)
     ActionButton(stringResource(Res.string.settings_reset_memory_vault), actions::resetVault, destructive = true)
+    HorizontalDivider()
+    NumberSettingRow(
+        label = stringResource(Res.string.settings_screen_ocr_retention),
+        value = state.ocrRetentionDays,
+        onValueChanged = actions::setOcrRetentionDays,
+        validRange = 1..365,
+    )
+    ActionButton(stringResource(Res.string.settings_delete_passive_ocr), actions::deletePassiveCapture, destructive = true)
 }
 
 @Composable

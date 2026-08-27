@@ -17,7 +17,7 @@ class SettingsScreenTest {
         assertEquals(false, state.isProSubscribed)
         assertEquals(MemoryPrivacyMode.PRIVATE_LOCAL, state.memoryMode)
         assertEquals(true, state.redactNamesEnabled)
-        assertEquals(false, state.transcriptStorageEnabled)
+        assertEquals(true, state.transcriptStorageEnabled)
     }
 
     @Test
