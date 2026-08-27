@@ -53,6 +53,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.asImageBitmap
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class RecordingsListActivity : AppCompatActivity() {
 
@@ -327,7 +330,7 @@ class RecordingsListActivity : AppCompatActivity() {
                 when (result) {
                     is TranscriptionResult.Success -> {
                         ephemeralTranscripts[session.id] = result.text
-                        withContext(Dispatchers.IO) {
+                        val noteSaved = withContext(Dispatchers.IO) {
                             runCatching {
                                 TranscriptCandidateFactsAppender.appendFromTranscript(
                                     context = applicationContext,
@@ -335,8 +338,28 @@ class RecordingsListActivity : AppCompatActivity() {
                                     transcript = result.text,
                                 )
                             }
+                            runCatching {
+                                MyApplication.notesRepository.createFromTranscript(
+                                    transcript = result.text,
+                                    hintTitle = "Audio ${SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault()).format(Date(session.startedAt))}",
+                                    deviceClass = session.deviceClass,
+                                    durationSec = session.durationSec,
+                                    tagsCsv = "audio, transcription",
+                                    storeTranscript = PrivacyPrefs.isTranscriptStorageEnabled(applicationContext),
+                                )
+                            }.onFailure { error ->
+                                Log.e("RecordingsListActivity", "Could not save transcription to Notes", error)
+                            }.isSuccess
                         }
-                        Toast.makeText(this@RecordingsListActivity, "Transcription complete", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            this@RecordingsListActivity,
+                            if (noteSaved) {
+                                "Transcription complete. Saved to Notes in the Chats tab."
+                            } else {
+                                "Transcription complete, but the note could not be saved."
+                            },
+                            Toast.LENGTH_LONG,
+                        ).show()
                     }
 
                     is TranscriptionResult.Failure -> {

@@ -117,6 +117,8 @@ class ChatThreadScreenTest {
 
         composeRule.onNodeWithTag("chat_composer").assertExists()
         composeRule.onNodeWithTag("chat_bottom_controls").assertExists()
+        composeRule.onNodeWithText("New Chat").assertExists()
+        composeRule.onNodeWithText("Notes & Chats").assertExists()
         composeRule.onNodeWithText("Recording voice note").assertExists()
         composeRule.onNodeWithContentDescription("Stop audio recording").assertExists()
         composeRule.onNodeWithContentDescription("Chats list").assertExists()

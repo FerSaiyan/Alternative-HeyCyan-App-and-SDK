@@ -40,17 +40,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.text.KeyboardOptions
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.navigation.icon
@@ -80,7 +74,6 @@ data class SettingsUiState(
     val syncDaily: Boolean = true,
     val syncOcr: Boolean = false,
     val syncDerived: Boolean = false,
-    val ocrRetentionDays: Int = 7,
     val vaultLocked: Boolean = false,
     val vaultRequiresPassphrase: Boolean = false,
     val transcriptStorageEnabled: Boolean = true,
@@ -103,7 +96,6 @@ interface SettingsScreenActions {
     fun resetDefaultImageQuestion()
     fun setMemoryMode(mode: MemoryPrivacyMode)
     fun setMemorySync(source: MemorySourceType, enabled: Boolean)
-    fun setOcrRetentionDays(value: Int)
     fun deletePassiveCapture()
     fun lockVault()
     fun unlockVault()
@@ -115,6 +107,8 @@ interface SettingsScreenActions {
     fun setIncludeFullTranscriptionEnabled(enabled: Boolean)
     fun exportLocalData()
     fun importLocalData()
+    fun importChatGptData()
+    fun importClaudeData()
     fun clearLocalData()
     fun sendDebugLogs()
     fun stopMeetingCapture()
@@ -583,12 +577,6 @@ private fun MemoryPrivacyContent(state: SettingsUiState, actions: SettingsScreen
     ActionButton(stringResource(Res.string.settings_clear_vault_passphrase), actions::clearVaultPassphrase)
     ActionButton(stringResource(Res.string.settings_reset_memory_vault), actions::resetVault, destructive = true)
     HorizontalDivider()
-    NumberSettingRow(
-        label = stringResource(Res.string.settings_screen_ocr_retention),
-        value = state.ocrRetentionDays,
-        onValueChanged = actions::setOcrRetentionDays,
-        validRange = 1..365,
-    )
     ActionButton(stringResource(Res.string.settings_delete_passive_ocr), actions::deletePassiveCapture, destructive = true)
 }
 
@@ -620,6 +608,10 @@ private fun DataContent(actions: SettingsScreenActions) {
     )
     ActionButton(stringResource(Res.string.settings_export_local_data), actions::exportLocalData)
     ActionButton(stringResource(Res.string.settings_import_local_data), actions::importLocalData)
+    HorizontalDivider()
+    Text("Import AI conversation history", style = MaterialTheme.typography.titleSmall)
+    ActionButton("Import ChatGPT data", actions::importChatGptData)
+    ActionButton("Import Claude data", actions::importClaudeData)
     ActionButton(stringResource(Res.string.settings_clear_local_data), actions::clearLocalData, destructive = true)
 }
 
@@ -699,41 +691,6 @@ private fun SwitchRow(
             onCheckedChange = onCheckedChange,
             enabled = enabled,
         )
-    }
-}
-
-@Composable
-private fun NumberSettingRow(
-    label: String,
-    value: Int,
-    onValueChanged: (Int) -> Unit,
-    validRange: IntRange,
-    enabled: Boolean = true,
-) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
-    val parsed = text.toIntOrNull()
-    val valid = parsed != null && parsed in validRange
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        OutlinedTextField(
-            value = text,
-            onValueChange = { next ->
-                text = next
-                next.toIntOrNull()?.takeIf { it in validRange }?.let(onValueChanged)
-            },
-            modifier = Modifier.width(132.dp),
-            enabled = enabled,
-            singleLine = true,
-            isError = text.isNotBlank() && !valid,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        )
-        if (text.isNotBlank() && !valid) {
-            Text(
-                text = stringResource(Res.string.settings_range_error, validRange.first, validRange.last),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
     }
 }
 

@@ -42,7 +42,7 @@
     <string name="compose_restore_default_prompt">Restore default prompt</string>
     <string name="compose_max_tokens_per_bullet">Max tokens per bullet</string>
     <string name="compose_shared_memory_privacy">Shared memory privacy</string>
-    <string name="compose_shared_memory_description">OCR sync, retention, deletion, and vault controls are shared across AutoDiary, Visual Diary, and Local Agent. Manage them in Settings &gt; Memory Privacy.</string>
+    <string name="compose_shared_memory_description">OCR sync, deletion, and vault controls are shared across AutoDiary, Visual Diary, and Local Agent. Manage them in Settings &gt; Memory Privacy.</string>
     <string name="compose_errand_enabled">Errand Brain enabled</string>
     <string name="compose_auto_create_tasks_voice">Auto-create tasks from voice</string>
     <string name="compose_voice_commands">Voice commands</string>
@@ -97,7 +97,7 @@
     <string name="compose_scene_description_prompt">Scene description prompt</string>
     <string name="compose_stop_visual_diary">Stop visual diary</string>
     <string name="compose_shared_memory">Shared memory</string>
-    <string name="compose_visual_shared_memory_description">Visual Diary appends notes to shared daily memory. Privacy, retention, and vault controls are managed in Settings &gt; Memory Privacy.</string>
+    <string name="compose_visual_shared_memory_description">Visual Diary appends notes to shared daily memory. Privacy and vault controls are managed in Settings &gt; Memory Privacy.</string>
     <string name="compose_walking_ask_title">Walking Aid — Ask</string>
     <string name="compose_walking_recent_images">Recent images</string>
     <string name="compose_walking_thumbnail">Thumbnail</string>

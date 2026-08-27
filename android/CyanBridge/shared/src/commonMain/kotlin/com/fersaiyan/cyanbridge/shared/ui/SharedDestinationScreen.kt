@@ -487,7 +487,6 @@ private class SharedSettingsScreenActions(
             else -> state
         }
     }
-    override fun setOcrRetentionDays(value: Int) = update { it.copy(ocrRetentionDays = value.coerceIn(1, 3650)) }
     override fun deletePassiveCapture() = Unit
     override fun lockVault() = update { it.copy(vaultLocked = true) }
     override fun unlockVault() = update { it.copy(vaultLocked = false) }
@@ -499,6 +498,8 @@ private class SharedSettingsScreenActions(
     override fun setIncludeFullTranscriptionEnabled(enabled: Boolean) = update { it.copy(includeFullTranscriptionInExports = enabled) }
     override fun exportLocalData() = Unit
     override fun importLocalData() = Unit
+    override fun importChatGptData() = Unit
+    override fun importClaudeData() = Unit
     override fun clearLocalData() = Unit
     override fun sendDebugLogs() = Unit
     override fun stopMeetingCapture() = Unit
@@ -516,7 +517,6 @@ private fun loadSharedSettings(preferences: PlatformPreferences): SettingsUiStat
     syncDaily = preferences.getBoolean("sync_daily", true),
     syncOcr = preferences.getBoolean("sync_ocr", false),
     syncDerived = preferences.getBoolean("sync_derived", false),
-    ocrRetentionDays = preferences.getInt("ocr_retention_days", 7),
     vaultLocked = preferences.getBoolean("vault_locked", false),
     transcriptStorageEnabled = preferences.getBoolean("transcript_storage", true),
     redactNamesEnabled = preferences.getBoolean("redact_names", true),
@@ -530,7 +530,6 @@ private fun saveSharedSettings(preferences: PlatformPreferences, state: Settings
     preferences.putBoolean("sync_daily", state.syncDaily)
     preferences.putBoolean("sync_ocr", state.syncOcr)
     preferences.putBoolean("sync_derived", state.syncDerived)
-    preferences.putInt("ocr_retention_days", state.ocrRetentionDays)
     preferences.putBoolean("vault_locked", state.vaultLocked)
     preferences.putBoolean("transcript_storage", state.transcriptStorageEnabled)
     preferences.putBoolean("redact_names", state.redactNamesEnabled)

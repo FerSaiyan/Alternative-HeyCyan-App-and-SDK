@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,12 +45,15 @@ import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.daily.DailyFactsReminderScheduler
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyBulletsSettings
 import com.fersaiyan.cyanbridge.localagent.tasker.TaskerAgentBridge
+import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
+import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultService
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
 import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
 import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
 import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
+import kotlinx.coroutines.launch
 
 class AutoDiarySettingsActivity : AppCompatActivity() {
     private var autoDiaryEnabled by mutableStateOf(false)
@@ -119,11 +123,13 @@ fun AutoDiarySettingsScreen(
     onOpenConfirmedDailyFacts: () -> Unit,
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     var reminder by remember { mutableStateOf(LocalAgentPrefs.isDailyFactsReminderEnabled(context)) }
     var autoSaveFacts by remember { mutableStateOf(com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.isAutoSaveDailyFactsEnabled(context)) }
     var extractFacts by remember { mutableStateOf(com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.isExtractUserFactCandidatesEnabled(context)) }
     var maxTokens by remember { mutableIntStateOf(DailyBulletsSettings.getMaxTokensPerBullet(context)) }
+    var retentionDays by remember { mutableIntStateOf(MemoryModeManager.getScreenOcrRetentionDays(context)) }
     var prompt by remember { mutableStateOf(DailyBulletsSettings.getBulletPrompt(context)) }
 
     Scaffold(
@@ -182,6 +188,16 @@ fun AutoDiarySettingsScreen(
             OutlinedButton(onClick = onOpenCaptures, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.compose_view_screen_captures))
             }
+            NumberSetting(
+                label = "Screen OCR retention (days)",
+                value = retentionDays,
+                range = 1..365,
+                onValueChanged = { days ->
+                    retentionDays = days
+                    MemoryModeManager.setScreenOcrRetentionDays(context, days)
+                    coroutineScope.launch { MemoryVaultService.enforceScreenOcrRetention(context) }
+                },
+            )
             Text(stringResource(R.string.compose_daily_processing), style = MaterialTheme.typography.titleMedium)
             SwitchSetting(stringResource(R.string.compose_daily_facts_reminder), reminder) {
                 reminder = it

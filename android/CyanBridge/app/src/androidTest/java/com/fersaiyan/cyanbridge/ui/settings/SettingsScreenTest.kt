@@ -4,9 +4,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsScreen
@@ -56,7 +58,7 @@ class SettingsScreenTest {
         }
 
         composeRule.onNodeWithTag("settings_appearance").performClick()
-        composeRule.onNodeWithTag("settings_section_AI").performClick()
+        composeRule.onNodeWithText("Custom AI provider").performClick()
         composeRule.onNodeWithText("Configure Local Agent planning, phone-control safety, and local models from its Native Plugins card.")
             .assertTextContains("Native Plugins")
 
@@ -64,5 +66,11 @@ class SettingsScreenTest {
             assertEquals(1, appearanceOpens)
             assertEquals(setOf(SettingsSection.AI_AUTOMATION), expanded)
         }
+
+        composeRule.onNodeWithText("Memory Privacy").performClick()
+        composeRule.onAllNodesWithText("Screen OCR retention (days)").assertCountEquals(0)
+        composeRule.onNodeWithText("Data").performClick()
+        composeRule.onNodeWithText("Import ChatGPT data").assertExists()
+        composeRule.onNodeWithText("Import Claude data").assertExists()
     }
 }

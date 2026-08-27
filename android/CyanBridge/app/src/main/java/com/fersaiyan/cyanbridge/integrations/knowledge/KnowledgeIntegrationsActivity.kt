@@ -85,10 +85,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
         val obsidianWritable = obsidianVault?.let {
             SafKnowledgeRepository.hasPersistedTreePermission(this, it.permissionTreeUri, writable = true)
         } == true
-        val inboxTree = KnowledgeIntegrationPrefs.importInboxTree(this)
-        val inboxReadable = inboxTree?.let {
-            SafKnowledgeRepository.hasPersistedTreePermission(this, it, writable = false)
-        } == true
         val autoSync = KnowledgeIntegrationPrefs.autoSyncEnabled(this)
         val lastSummary = KnowledgeIntegrationPrefs.lastSummary(this)
 
@@ -106,36 +102,17 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
             }
         }
 
-        val chatGptImport = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            uri?.let { importFile(it, KnowledgeSource.CHATGPT) }
-        }
-        val claudeImport = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            uri?.let { importFile(it, KnowledgeSource.CLAUDE) }
-        }
         val existingVaultPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             uri?.let(::connectExistingVault)
         }
         val createVaultParentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             uri?.let(::createVaultUnderParent)
         }
-        val inboxPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-            uri?.let { selected ->
-                if (SafKnowledgeRepository.persistTreePermission(this, selected, writable = false)) {
-                    KnowledgeIntegrationPrefs.setImportInboxTree(this, selected)
-                    status = "Import folder connected with read-only scoped access."
-                    refreshKey++
-                    KnowledgeSyncWorker.schedule(this)
-                    syncAllNow()
-                } else {
-                    status = "Could not retain read access to that import folder. Choose it again and grant access."
-                }
-            }
-        }
 
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Notes & AI imports") },
+                    title = { Text("Notes & Obsidian") },
                     navigationIcon = {
                         TextButton(onClick = { finish() }) { Text("Back") }
                     },
@@ -150,8 +127,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                PrivacyCard()
-
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -159,7 +134,7 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                     ) {
                         Text("CyanBridge notes", fontWeight = FontWeight.Bold)
                         Text(
-                            "Meeting summaries are saved locally as structured Markdown notes.",
+                            "Meeting summaries and transcribed recordings are available from Notes in the Chats tab.",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Button(
@@ -170,20 +145,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                         ) { Text("Open notes") }
                     }
                 }
-
-                ImportCard(
-                    title = "ChatGPT",
-                    body = "Import an official ChatGPT data export (.zip or conversations.json). CyanBridge reads it locally and never logs in to your ChatGPT account.",
-                    button = "Import ChatGPT export",
-                    enabled = !busy,
-                ) { chatGptImport.launch(arrayOf("application/zip", "application/json", "text/json", "application/octet-stream")) }
-
-                ImportCard(
-                    title = "Claude",
-                    body = "Import a Claude data export locally. User turns and assistant turns stay distinct so assistant output is never promoted to a confirmed personal fact.",
-                    button = "Import Claude export",
-                    enabled = !busy,
-                ) { claudeImport.launch(arrayOf("application/zip", "application/json", "text/json", "application/octet-stream")) }
 
                 ObsidianVaultCard(
                     vault = obsidianVault,
@@ -199,18 +160,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                     )
                 }
 
-                ConnectionCard(
-                    title = "Automatic import inbox",
-                    connected = inboxTree != null && inboxReadable,
-                    body = if (inboxTree != null && !inboxReadable) {
-                        "The stored folder permission is no longer available. Reconnect the folder to resume automatic imports."
-                    } else {
-                        "Optional bridge folder for .zip, .json, .md, or .txt files. A desktop/browser companion, Syncthing, FolderSync, or another user-controlled tool can drop new snapshots here; CyanBridge periodically re-indexes it without provider credentials."
-                    },
-                    connectLabel = if (inboxTree == null) "Choose import folder" else "Reconnect import folder",
-                    onConnect = { inboxPicker.launch(inboxTree) },
-                )
-
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -222,8 +171,8 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Periodic local sync", fontWeight = FontWeight.SemiBold)
-                                Text("Every 12 hours when enabled; no provider login is required.", style = MaterialTheme.typography.bodySmall)
+                                Text("Periodic Obsidian sync", fontWeight = FontWeight.SemiBold)
+                                Text("Refresh the connected vault every 12 hours.", style = MaterialTheme.typography.bodySmall)
                             }
                             Switch(
                                 checked = autoSync,
@@ -235,8 +184,8 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                             )
                         }
                         Button(
-                            onClick = ::syncAllNow,
-                            enabled = !busy && ((obsidianVault != null && obsidianWritable) || (inboxTree != null && inboxReadable)),
+                            onClick = ::syncObsidianNow,
+                            enabled = !busy && obsidianVault != null && obsidianWritable,
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text(if (busy) "Working…" else "Sync now") }
                     }
@@ -252,19 +201,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                     }
                 }
                 Spacer(Modifier.height(20.dp))
-            }
-        }
-    }
-
-    @Composable
-    private fun PrivacyCard() {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Inbound-only private knowledge", fontWeight = FontWeight.Bold)
-                Text(
-                    "These integrations pull data into CyanBridge; they do not upload CyanBridge chats, memories, imported notes, or vault content to ChatGPT or Claude. Imported knowledge is automatically added to AI prompt context only when the on-device Local Models provider is selected.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
             }
         }
     }
@@ -342,43 +278,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                         enabled = !busy,
                     ) { Text("Disconnect vault") }
                 }
-            }
-        }
-    }
-
-    @Composable
-    private fun ImportCard(
-        title: String,
-        body: String,
-        button: String,
-        enabled: Boolean,
-        onClick: () -> Unit,
-    ) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(title, fontWeight = FontWeight.SemiBold)
-                Text(body, style = MaterialTheme.typography.bodyMedium)
-                Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text(button) }
-            }
-        }
-    }
-
-    @Composable
-    private fun ConnectionCard(
-        title: String,
-        connected: Boolean,
-        body: String,
-        connectLabel: String,
-        onConnect: () -> Unit,
-    ) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(title, fontWeight = FontWeight.SemiBold)
-                    Text(if (connected) "Connected" else "Not connected", style = MaterialTheme.typography.labelMedium)
-                }
-                Text(body, style = MaterialTheme.typography.bodyMedium)
-                OutlinedButton(onClick = onConnect, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(connectLabel) }
             }
         }
     }
@@ -500,7 +399,7 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
         resetNoteEditor()
         status = "Obsidian vault connected with scoped read/write access."
         refreshKey++
-        syncAllNow()
+        syncObsidianNow()
     }
 
     private fun createVaultUnderParent(parent: Uri) {
@@ -535,38 +434,20 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                 status = "Could not create vault: ${it.message ?: "unknown error"}"
             }
             busy = false
-            if (result.isSuccess) syncAllNow()
+            if (result.isSuccess) syncObsidianNow()
         }
     }
 
-    private fun importFile(uri: Uri, source: KnowledgeSource) {
-        runCatching {
-            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
+    private fun syncObsidianNow() {
         lifecycleScope.launch {
             busy = true
-            status = "Importing ${source.label}…"
-            val result = runCatching {
-                KnowledgeImportCoordinator.importSelectedFile(this@KnowledgeIntegrationsActivity, uri, source)
-            }
+            status = "Syncing Obsidian vault…"
+            val result = runCatching { KnowledgeImportCoordinator.syncObsidian(this@KnowledgeIntegrationsActivity) }
             status = result.fold(
-                onSuccess = { items -> items.joinToString(" · ") { it.summary() }.ifBlank { "No conversations found." } },
-                onFailure = { "Import failed: ${it.message ?: "unknown error"}" },
-            )
-            busy = false
-            refreshKey++
-        }
-    }
-
-    private fun syncAllNow() {
-        lifecycleScope.launch {
-            busy = true
-            status = "Syncing local knowledge…"
-            val result = runCatching { KnowledgeImportCoordinator.syncAll(this@KnowledgeIntegrationsActivity) }
-            status = result.fold(
-                onSuccess = { items -> items.joinToString(" · ") { it.summary() }.ifBlank { "Nothing connected yet." } },
+                onSuccess = { item -> item?.summary() ?: "No Obsidian vault connected." },
                 onFailure = { "Sync failed: ${it.message ?: "unknown error"}" },
             )
+            KnowledgeIntegrationPrefs.recordSync(this@KnowledgeIntegrationsActivity, status)
             busy = false
             refreshKey++
         }

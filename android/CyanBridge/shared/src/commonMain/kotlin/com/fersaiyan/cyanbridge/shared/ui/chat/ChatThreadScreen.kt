@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -36,7 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -77,6 +78,7 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.chat_empty_title
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_local_model_required
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_list
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_message
+import com.fersaiyan.cyanbridge.shared.generated.resources.notes_and_chats
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_record_audio
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_stop_audio_recording
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_stop_generation
@@ -119,7 +121,7 @@ fun ChatThreadScreen(
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
                     Text(
                         text = state.thread?.title ?: stringResource(Res.string.action_new_chat),
@@ -128,11 +130,14 @@ fun ChatThreadScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onOpenChatList) {
+                    TextButton(onClick = onOpenChatList) {
                         Icon(
                             imageVector = AppIcon.Back.imageVector(),
-                             contentDescription = stringResource(Res.string.chat_list),
+                            contentDescription = stringResource(Res.string.chat_list),
+                            modifier = Modifier.size(20.dp),
                         )
+                        Spacer(Modifier.size(4.dp))
+                        Text(stringResource(Res.string.notes_and_chats))
                     }
                 },
                 actions = {

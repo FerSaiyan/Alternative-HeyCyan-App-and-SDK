@@ -49,7 +49,7 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.chat_delete_title
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_no_chats
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_recent_conversations
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_start_with_add
-import com.fersaiyan.cyanbridge.shared.generated.resources.nav_chats
+import com.fersaiyan.cyanbridge.shared.generated.resources.notes_and_chats
 import com.fersaiyan.cyanbridge.shared.ui.localizedDestinationLabel
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
@@ -72,8 +72,9 @@ fun ChatListScreen(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                 title = { Text(stringResource(Res.string.nav_chats)) },
+                 title = { Text(stringResource(Res.string.notes_and_chats)) },
                 actions = {
+                    PlatformKnowledgeIntegrationsTopBarAction()
                     IconButton(onClick = onChatAppearance) {
                         Icon(
                             imageVector = AppIcon.Appearance.imageVector(),

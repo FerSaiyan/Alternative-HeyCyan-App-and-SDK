@@ -15,7 +15,8 @@
     <string name="action_share">Share</string>
     <string name="action_refresh">Refresh</string>
     <string name="action_deselect_all">Deselect all</string>
-    <string name="action_new_chat">New chat</string>
+    <string name="action_new_chat">New Chat</string>
+    <string name="notes_and_chats">Notes &amp; Chats</string>
     <string name="action_start">Start</string>
     <string name="action_stop">Stop</string>
     <string name="action_send">Send</string>

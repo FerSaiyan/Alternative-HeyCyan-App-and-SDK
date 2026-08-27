@@ -1101,20 +1101,6 @@
                             android:text="Derived summaries sync-eligible"
                             android:textColor="@color/text_primary" />
 
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:id="@+id/til_memory_ocr_retention_days"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:hint="Screen OCR retention (days)">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/edit_memory_ocr_retention_days"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="number" />
-                        </com.google.android.material.textfield.TextInputLayout>
-
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_memory_delete_passive_capture"
                             android:layout_width="match_parent"

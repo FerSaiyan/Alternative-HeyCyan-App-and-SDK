@@ -33,6 +33,8 @@ import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivit
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
+import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeImportCoordinator
+import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeSource
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
 import com.fersaiyan.cyanbridge.shared.chat.ChatRole
 import com.fersaiyan.cyanbridge.chat.ChatStore
@@ -42,7 +44,6 @@ import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
 import com.fersaiyan.cyanbridge.shared.settings.MemorySourceType
 import com.fersaiyan.cyanbridge.memoryvault.MemorySyncPreparationService
 import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultBootstrap
-import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultService
 import com.fersaiyan.cyanbridge.memoryvault.VaultLockStateManager
 import com.fersaiyan.cyanbridge.privacy.LocalDataBackupManager
 import com.fersaiyan.cyanbridge.privacy.LocalDataClearer
@@ -91,6 +92,18 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         uri?.let(::importLocalDataFromUri)
+    }
+
+    private val chatGptDataImportLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        uri?.let { importAiData(it, KnowledgeSource.CHATGPT) }
+    }
+
+    private val claudeDataImportLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        uri?.let { importAiData(it, KnowledgeSource.CLAUDE) }
     }
 
     private val meetingStateReceiver = object : BroadcastReceiver() {
@@ -212,7 +225,6 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             syncDaily = MemoryModeManager.isSourceSyncEnabled(this, MemorySourceType.AUTO_DAILY_FACT),
             syncOcr = MemoryModeManager.isSourceSyncEnabled(this, MemorySourceType.SCREEN_OCR),
             syncDerived = MemoryModeManager.isSourceSyncEnabled(this, MemorySourceType.DERIVED_SUMMARY),
-            ocrRetentionDays = MemoryModeManager.getScreenOcrRetentionDays(this),
             vaultLocked = VaultLockStateManager.isLocked(this),
             vaultRequiresPassphrase = VaultLockStateManager.requiresPassphrase(this),
             transcriptStorageEnabled = PrivacyPrefs.isTranscriptStorageEnabled(this),
@@ -314,14 +326,6 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
 
     override fun resetDefaultImageQuestion() {
         ImageQuestionPreferences.resetDefaultQuestion(this)
-        refreshSettingsUi()
-    }
-
-    override fun setOcrRetentionDays(value: Int) {
-        MemoryModeManager.setScreenOcrRetentionDays(this, value)
-        lifecycleScope.launch(Dispatchers.IO) {
-            MemoryVaultService.enforceScreenOcrRetention(this@SettingsActivity)
-        }
         refreshSettingsUi()
     }
 
@@ -429,6 +433,14 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             .show()
     }
 
+    override fun importChatGptData() {
+        chatGptDataImportLauncher.launch(AI_IMPORT_MIME_TYPES)
+    }
+
+    override fun importClaudeData() {
+        claudeDataImportLauncher.launch(AI_IMPORT_MIME_TYPES)
+    }
+
     override fun clearLocalData() {
         AlertDialog.Builder(this)
             .setTitle("Clear local data?")
@@ -500,6 +512,25 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
                         Toast.makeText(this@SettingsActivity, "Import failed: ${error.message}", Toast.LENGTH_LONG).show()
                     }
                 }
+        }
+    }
+
+    private fun importAiData(uri: Uri, source: KnowledgeSource) {
+        runCatching {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        Toast.makeText(this, "Importing ${source.label} data...", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val result = runCatching {
+                KnowledgeImportCoordinator.importSelectedFile(this@SettingsActivity, uri, source)
+            }
+            val message = result.fold(
+                onSuccess = { items ->
+                    items.joinToString(" · ") { it.summary() }.ifBlank { "No conversations found." }
+                },
+                onFailure = { error -> "${source.label} import failed: ${error.message ?: "unknown error"}" },
+            )
+            Toast.makeText(this@SettingsActivity, message, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -639,5 +670,14 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             SettingsSection.SUPPORT -> "support"
         }
         return "section_expanded_$legacyCardName"
+    }
+
+    private companion object {
+        val AI_IMPORT_MIME_TYPES = arrayOf(
+            "application/zip",
+            "application/json",
+            "text/json",
+            "application/octet-stream",
+        )
     }
 }

@@ -34,7 +34,6 @@ fun ChatAppearanceMenuDialog(
         title = { Text(stringResource(Res.string.chat_appearance)) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                PlatformKnowledgeIntegrationsMenuItem(onDismissRequest)
                 ChatAppearanceMenuItem(
                      label = stringResource(Res.string.chat_change_user_bubble),
                     action = ChatAppearanceMenuAction.CHANGE_USER_BUBBLE_COLOR,

@@ -71,12 +71,10 @@ class SettingsScreenTest {
         val original = SettingsUiState(
             isProSubscribed = true,
             proPlan = "Max",
-            ocrRetentionDays = 12,
         )
         val updated = original.copy(memoryMode = MemoryPrivacyMode.ENCRYPTED_SYNC)
         assertEquals(true, updated.isProSubscribed)
         assertEquals("Max", updated.proPlan)
-        assertEquals(12, updated.ocrRetentionDays)
         assertEquals(MemoryPrivacyMode.ENCRYPTED_SYNC, updated.memoryMode)
     }
 }
