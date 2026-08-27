@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.shared.glasses
 enum class MetaPairingIssueAction {
     INSTALL_META_AI,
     OPEN_PAIRING,
+    REQUEST_ACCESS,
 }
 
 data class MetaPairingIssue(
@@ -16,13 +17,20 @@ fun resolveMetaPairingIssue(
     metaAiInstalled: Boolean,
     lastError: String?,
     setupGuidance: String?,
+    metaAccessRequired: Boolean = false,
 ): MetaPairingIssue? {
     val error = lastError?.takeIf { it.isNotBlank() } ?: return null
     val normalized = error.lowercase()
     return when {
+        metaAccessRequired -> MetaPairingIssue(
+            title = "Meta access required",
+            message = "Meta Ray-Ban access is currently limited to CyanBridge early testers. Your Meta account has not been registered yet. Submit the email associated with your Meta account at:\n\nhttps://cyanbridge.vercel.app/beta\n\nAfter you are invited to the Meta release channel, restart CyanBridge and try pairing again.",
+            primaryLabel = "Request access",
+            action = MetaPairingIssueAction.REQUEST_ACCESS,
+        )
         !metaAiInstalled || ("meta ai" in normalized && "not installed" in normalized) -> MetaPairingIssue(
             title = "Meta AI is required",
-            message = "Install or update Meta AI, pair your glasses there, and then return to CyanBridge. If this still fails, use Send logs so the developer can inspect the DAT state.",
+            message = "Meta AI is required for Meta Ray-Ban glasses. Please install or update Meta AI and try again.",
             primaryLabel = "Install Meta AI",
             action = MetaPairingIssueAction.INSTALL_META_AI,
         )
@@ -38,13 +46,20 @@ fun resolveMetaPairingIssue(
             primaryLabel = "Try again",
             action = MetaPairingIssueAction.OPEN_PAIRING,
         )
-        "release channel" in normalized || "eligible" in normalized ||
+        "release channel" in normalized ||
             "registeredsnapps" in normalized || "issessionverified" in normalized -> MetaPairingIssue(
-            title = "Meta authorization is incomplete",
-            message = setupGuidance
-                ?: "Meta knows about the app registration, but the glasses are not eligible for this CyanBridge build yet. Confirm the correct Meta account, release channel or Developer Mode, then try again.",
-            primaryLabel = "Try again",
-            action = MetaPairingIssueAction.OPEN_PAIRING,
+            title = "Meta access required",
+            message = "Your Meta account is not currently enabled for CyanBridge Meta access. Request access at:\n\nhttps://cyanbridge.vercel.app/beta",
+            primaryLabel = "Request access",
+            action = MetaPairingIssueAction.REQUEST_ACCESS,
+        )
+        ("meta dat registration is unavailable" in normalized ||
+            "meta wearables is currently unavailable" in normalized) &&
+            "developer mode" !in normalized -> MetaPairingIssue(
+            title = "Meta Wearables unavailable",
+            message = "Meta Wearables is currently unavailable for this account. This may happen if your account has not been added to the CyanBridge Meta testing channel. Request access at:\n\nhttps://cyanbridge.vercel.app/beta",
+            primaryLabel = "Request access",
+            action = MetaPairingIssueAction.REQUEST_ACCESS,
         )
         "permission" in normalized || "denied" in normalized -> MetaPairingIssue(
             title = "Permission needed",

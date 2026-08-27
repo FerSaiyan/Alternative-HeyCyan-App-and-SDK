@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaAccessState
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -33,7 +34,7 @@ class MetaPairingScreenTest {
 
         composeRule.onNodeWithText("Meta pairing reliability notice").assertIsDisplayed()
         composeRule.onNodeWithText(
-            "Some users are experiencing issues with reliable Meta Glasses pairing, if you encounter an issue and get stuckz please send the logs with an available email for the dev to better understand and fix the issue, since I'm having difficulties reproducing the error on my device",
+            "Some users are experiencing issues with reliable Meta Glasses pairing. If you encounter an issue and get stuck, please send the logs with an available email for the developer to better understand and fix the issue, since I am having difficulties reproducing the error on my device.",
         ).assertIsDisplayed()
         composeRule.onNodeWithText("Send logs").performClick()
         composeRule.runOnIdle { assertTrue(diagnosticsClicked) }
@@ -143,5 +144,33 @@ class MetaPairingScreenTest {
         composeRule.onNodeWithText("We could not finish Meta pairing").assertIsDisplayed()
         composeRule.onNodeWithText("Try again").performClick()
         composeRule.runOnIdle { assertTrue(retryClicked) }
+    }
+
+    @Test
+    fun releaseChannelGateOpensAccessRequest() {
+        var requestAccessClicked = false
+        composeRule.setContent {
+            CyanBridgeTheme {
+                MetaPairingScreen(
+                    state = MetaPairingScreenState(
+                        androidCameraGranted = true,
+                        nearbyDevicesGranted = true,
+                        initialized = true,
+                        metaAccessState = MetaAccessState.NEEDS_META_INVITE,
+                    ),
+                    onBack = {},
+                    onOpenMetaAi = {},
+                    onPrimaryAction = {},
+                    onRetryPairing = {},
+                    onSendDiagnostics = {},
+                    onRequestAccess = { requestAccessClicked = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Continue").performClick()
+        composeRule.onNodeWithText("Meta access required").assertIsDisplayed()
+        composeRule.onNodeWithText("Request access").performClick()
+        composeRule.runOnIdle { assertTrue(requestAccessClicked) }
     }
 }

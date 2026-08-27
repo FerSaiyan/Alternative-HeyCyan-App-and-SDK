@@ -9,6 +9,31 @@ internal data class MetaDatReadiness(
     val developerConfiguration: Boolean,
 )
 
+enum class MetaAccessState {
+    UNKNOWN,
+    NEEDS_META_INVITE,
+    READY,
+    FAILED,
+}
+
+internal fun resolveMetaAccessState(
+    initialized: Boolean,
+    registrationState: MetaRaybanManager.RegistrationState,
+    availableDeviceCount: Int,
+    readiness: MetaDatReadiness,
+    lastError: String?,
+): MetaAccessState = when {
+    !lastError.isNullOrBlank() -> MetaAccessState.FAILED
+    !initialized -> MetaAccessState.UNKNOWN
+    registrationState != MetaRaybanManager.RegistrationState.UNAVAILABLE -> MetaAccessState.READY
+    !readiness.developerConfiguration &&
+        availableDeviceCount == 0 &&
+        readiness.metaAiInstalled &&
+        readiness.bluetoothPermissionGranted &&
+        readiness.bluetoothEnabled -> MetaAccessState.NEEDS_META_INVITE
+    else -> MetaAccessState.FAILED
+}
+
 internal fun metaDatSetupGuidance(
     registrationState: MetaRaybanManager.RegistrationState,
     availableDeviceCount: Int,
@@ -25,7 +50,7 @@ internal fun metaDatSetupGuidance(
         "Open Meta AI, confirm the glasses are linked to this account and Developer Mode is enabled for this device, then tap Register again."
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
         !readiness.developerConfiguration ->
-        "This CyanBridge release uses Meta production registration, which is gated by the Meta Wearables release channel. Confirm this Meta account is authorized for the CyanBridge release channel and that the glasses are linked and connected in Meta AI, then retry registration."
+        "Your Meta account is not currently enabled for CyanBridge Meta access. Request access at https://cyanbridge.vercel.app/beta, then restart CyanBridge after accepting Meta's invitation."
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
         readiness.bondedMetaDeviceCount == 0 ->
         "DAT cannot see a linked Meta wearable yet. Confirm the glasses are paired and connected inside Meta AI, then return to CyanBridge. Do not pair them from CyanBridge's Bluetooth device list."

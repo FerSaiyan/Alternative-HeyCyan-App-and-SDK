@@ -55,6 +55,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaAccessState
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
 import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
@@ -78,6 +79,7 @@ data class MetaPairingScreenState(
     val guidance: String? = null,
     val lastError: String? = null,
     val metaAiInstalled: Boolean = true,
+    val metaAccessState: MetaAccessState = MetaAccessState.UNKNOWN,
 ) {
     val androidPermissionsGranted: Boolean
         get() = androidCameraGranted && nearbyDevicesGranted
@@ -94,6 +96,7 @@ data class MetaPairingScreenState(
             !androidPermissionsGranted -> "Grant required permissions"
             !initialized -> "Initialize Meta connection"
             !metaAiInstalled -> "Install Meta AI"
+            metaAccessState == MetaAccessState.NEEDS_META_INVITE -> "Request Meta access"
             !isRegistered -> "Register CyanBridge in Meta AI"
             availableDeviceCount == 0 -> "Refresh glasses connection"
             !glassesCameraGranted -> "Grant glasses camera access"
@@ -105,6 +108,10 @@ internal fun inferredMetaPairingError(state: MetaPairingScreenState): String? {
     state.lastError?.takeIf { it.isNotBlank() }?.let { return it }
     if (!state.metaAiInstalled) return "Meta AI app is not installed"
     if (!state.initialized) return null
+
+    if (state.metaAccessState == MetaAccessState.NEEDS_META_INVITE) {
+        return "Meta DAT registration is unavailable for this account or app release channel"
+    }
 
     if (state.isRegistered && state.availableDeviceCount == 0) {
         return "No DAT device was discovered after Meta registration"
@@ -169,6 +176,7 @@ class MetaPairingActivity : AppCompatActivity() {
                     onPrimaryAction = ::performPrimaryAction,
                     onRetryPairing = ::retryPairing,
                     onSendDiagnostics = ::showDiagnostics,
+                    onRequestAccess = ::openBetaAccess,
                 )
             }
         }
@@ -195,6 +203,7 @@ class MetaPairingActivity : AppCompatActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { manager.isInitialized.collect { refreshState() } }
                 launch { manager.registrationState.collect { refreshState() } }
+                launch { manager.metaAccessState.collect { refreshState() } }
                 launch { manager.availableDeviceCount.collect { refreshState() } }
                 launch { manager.selectedDeviceName.collect { refreshState() } }
                 launch { manager.lastError.collect { refreshState(checkGlassesCamera = false) } }
@@ -213,6 +222,7 @@ class MetaPairingActivity : AppCompatActivity() {
             guidance = manager.registrationGuidance(),
             lastError = manager.lastError.value,
             metaAiInstalled = manager.isMetaAiInstalled(),
+            metaAccessState = manager.metaAccessState.value,
         )
         if (checkGlassesCamera && screenState.initialized && screenState.isRegistered) {
             checkGlassesCameraPermission()
@@ -250,6 +260,7 @@ class MetaPairingActivity : AppCompatActivity() {
                 androidPermissionLauncher.launch(requiredAndroidPermissions())
             !screenState.initialized -> initializeDat()
             !screenState.metaAiInstalled -> openMetaAi()
+            screenState.metaAccessState == MetaAccessState.NEEDS_META_INVITE -> openBetaAccess()
             !screenState.isRegistered -> manager.startRegistration(this)
             screenState.availableDeviceCount == 0 -> {
                 manager.refreshRegistrationState()
@@ -277,6 +288,7 @@ class MetaPairingActivity : AppCompatActivity() {
                 androidPermissionLauncher.launch(requiredAndroidPermissions())
             !screenState.initialized -> initializeDat()
             !screenState.metaAiInstalled -> openMetaAi()
+            screenState.metaAccessState == MetaAccessState.NEEDS_META_INVITE -> openBetaAccess()
             !screenState.isRegistered -> manager.startRegistration(this)
             screenState.availableDeviceCount == 0 -> {
                 manager.refreshRegistrationState()
@@ -337,6 +349,14 @@ class MetaPairingActivity : AppCompatActivity() {
         }
     }
 
+    private fun openBetaAccess() {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(META_BETA_ACCESS_URL)))
+        }.onFailure {
+            screenState = screenState.copy(lastError = "Could not open the Meta access request page")
+        }
+    }
+
     private fun showDiagnostics() {
         DebugLogSupport.showSupportOptionsDialog(
             activity = this,
@@ -351,6 +371,7 @@ class MetaPairingActivity : AppCompatActivity() {
     private companion object {
         const val META_AI_PACKAGE = "com.facebook.stella"
         const val META_AI_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.facebook.stella"
+        const val META_BETA_ACCESS_URL = "https://cyanbridge.vercel.app/beta"
     }
 }
 
@@ -363,6 +384,7 @@ fun MetaPairingScreen(
     onPrimaryAction: () -> Unit,
     onRetryPairing: () -> Unit,
     onSendDiagnostics: () -> Unit,
+    onRequestAccess: () -> Unit = {},
 ) {
     var showInitialPairingNotice by androidx.compose.runtime.remember {
         mutableStateOf(true)
@@ -372,6 +394,7 @@ fun MetaPairingScreen(
         metaAiInstalled = state.metaAiInstalled,
         lastError = inferredError,
         setupGuidance = state.guidance,
+        metaAccessRequired = state.metaAccessState == MetaAccessState.NEEDS_META_INVITE,
     )
     var showPairingIssue by androidx.compose.runtime.remember(inferredError, state.guidance, state.metaAiInstalled) {
         mutableStateOf(pairingIssue != null)
@@ -384,7 +407,7 @@ fun MetaPairingScreen(
             title = { Text("Meta pairing reliability notice") },
             text = {
                 Text(
-                    "Some users are experiencing issues with reliable Meta Glasses pairing, if you encounter an issue and get stuckz please send the logs with an available email for the dev to better understand and fix the issue, since I'm having difficulties reproducing the error on my device",
+                    "Some users are experiencing issues with reliable Meta Glasses pairing. If you encounter an issue and get stuck, please send the logs with an available email for the developer to better understand and fix the issue, since I am having difficulties reproducing the error on my device.",
                 )
             },
             confirmButton = {
@@ -416,6 +439,7 @@ fun MetaPairingScreen(
                         when (pairingIssue.action) {
                             MetaPairingIssueAction.INSTALL_META_AI -> onOpenMetaAi()
                             MetaPairingIssueAction.OPEN_PAIRING -> onRetryPairing()
+                            MetaPairingIssueAction.REQUEST_ACCESS -> onRequestAccess()
                         }
                     },
                 ) {

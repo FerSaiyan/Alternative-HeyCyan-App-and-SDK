@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.ui
 
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaAccessState
 import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
 import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import org.junit.Assert.assertEquals
@@ -120,6 +121,33 @@ class MetaPairingScreenStateTest {
         )
 
         assertEquals(null, inferredMetaPairingError(state))
+    }
+
+    @Test
+    fun productionReleaseChannelGateRequestsMetaAccess() {
+        val state = MetaPairingScreenState(
+            androidCameraGranted = true,
+            nearbyDevicesGranted = true,
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
+            availableDeviceCount = 0,
+            metaAccessState = MetaAccessState.NEEDS_META_INVITE,
+        )
+
+        assertEquals("Request Meta access", state.primaryLabel)
+        assertEquals(
+            "Meta DAT registration is unavailable for this account or app release channel",
+            inferredMetaPairingError(state),
+        )
+        val issue = resolveMetaPairingIssue(
+            metaAiInstalled = true,
+            lastError = inferredMetaPairingError(state),
+            setupGuidance = null,
+            metaAccessRequired = true,
+        )
+        assertEquals("Meta access required", issue?.title)
+        assertEquals("Request access", issue?.primaryLabel)
+        assertEquals(MetaPairingIssueAction.REQUEST_ACCESS, issue?.action)
     }
 
     @Test
