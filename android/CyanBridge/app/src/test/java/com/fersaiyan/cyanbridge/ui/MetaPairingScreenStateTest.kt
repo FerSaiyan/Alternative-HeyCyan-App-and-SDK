@@ -55,6 +55,19 @@ class MetaPairingScreenStateTest {
     }
 
     @Test
+    fun noEligibleDatDeviceHasFriendlyRetryAction() {
+        val issue = resolveMetaPairingIssue(
+            metaAiInstalled = true,
+            lastError = "createSession: No eligible device found",
+            setupGuidance = "Registration is complete, but DAT has not exposed a device yet.",
+        )
+
+        assertEquals("Meta glasses are not ready", issue?.title)
+        assertEquals("Try again", issue?.primaryLabel)
+        assertEquals(MetaPairingIssueAction.OPEN_PAIRING, issue?.action)
+    }
+
+    @Test
     fun unknownMetaErrorHasFriendlyRetryAction() {
         val issue = resolveMetaPairingIssue(
             metaAiInstalled = true,
@@ -65,6 +78,48 @@ class MetaPairingScreenStateTest {
         assertEquals("We could not finish Meta pairing", issue?.title)
         assertEquals("Try again", issue?.primaryLabel)
         assertEquals(MetaPairingIssueAction.OPEN_PAIRING, issue?.action)
+    }
+
+    @Test
+    fun registeredWithoutDatDeviceIsSurfacedAsPairingFailure() {
+        val state = MetaPairingScreenState(
+            androidCameraGranted = true,
+            nearbyDevicesGranted = true,
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.REGISTERED,
+            availableDeviceCount = 0,
+        )
+
+        assertEquals(
+            "No DAT device was discovered after Meta registration",
+            inferredMetaPairingError(state),
+        )
+    }
+
+    @Test
+    fun unavailableDatWithDiscoveryGuidanceIsSurfacedAsPairingFailure() {
+        val state = MetaPairingScreenState(
+            androidCameraGranted = true,
+            nearbyDevicesGranted = true,
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
+            guidance = "DAT cannot see a linked Meta wearable yet.",
+        )
+
+        assertEquals("DAT cannot see a linked Meta wearable", inferredMetaPairingError(state))
+    }
+
+    @Test
+    fun availableRegistrationDoesNotCreateSyntheticError() {
+        val state = MetaPairingScreenState(
+            androidCameraGranted = true,
+            nearbyDevicesGranted = true,
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.AVAILABLE,
+            availableDeviceCount = 1,
+        )
+
+        assertEquals(null, inferredMetaPairingError(state))
     }
 
     @Test
