@@ -483,6 +483,10 @@
     <string name="dashboard_quality_fine">정밀하게</string>
     <string name="dashboard_quality_clearer">더 선명하게</string>
     <string name="dashboard_quality_detailed">상세하게</string>
+    <string name="dashboard_quality_detailed_warning_title">Use Detailed quality?</string>
+    <string name="dashboard_quality_detailed_warning_body">Detailed uses Wi-Fi instead of Bluetooth and takes longer (up to 30 seconds) to transfer the full-resolution image.</string>
+    <string name="dashboard_quality_detailed_warning_continue">Continue</string>
+    <string name="dashboard_quality_detailed_warning_cancel">Cancel</string>
     <string name="dashboard_test_image">AI 이미지 설명 테스트</string>
     <string name="dashboard_ai_wake_word_route">호출어 동작</string>
     <string name="dashboard_ai_wake_word_route_description">HeyCyan 및 Eyevue 안경에서 AI 호출어가 감지되면 시작할 기능:</string>

@@ -41,6 +41,7 @@ import com.oudmon.ble.base.scan.BleScannerHelper
 import com.oudmon.ble.base.scan.ScanRecord
 import com.oudmon.ble.base.scan.ScanWrapperCallback
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
@@ -50,6 +51,13 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
+
+internal fun consumerProtocolProbeOrder(scanHint: DeviceClass): List<DeviceClass> = when (scanHint) {
+    DeviceClass.EYEVUE -> listOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.HEY_CYAN)
+    DeviceClass.TUNEBUDS -> listOf(DeviceClass.TUNEBUDS, DeviceClass.EYEVUE, DeviceClass.HEY_CYAN)
+    DeviceClass.HEY_CYAN -> listOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS)
+    else -> listOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.HEY_CYAN)
+}
 
 class DeviceBindActivity : BaseActivity() {
     private var scanSize = 0
@@ -80,6 +88,7 @@ class DeviceBindActivity : BaseActivity() {
                     connectingDevice = connectingDevice?.toShared(),
                     selectedClass = selectedDeviceClass,
                     onScan = ::startScan,
+                    onPairMetaGlasses = ::openMetaPairing,
                     onSelectDevice = { sharedDevice ->
                         val device = deviceList.firstOrNull {
                             it.macAddress.equals(sharedDevice.macAddress, ignoreCase = true)
@@ -208,38 +217,56 @@ class DeviceBindActivity : BaseActivity() {
         protocolDetectionActive = true
         Toast.makeText(this, "Detecting glasses protocol…", Toast.LENGTH_SHORT).show()
         protocolDetectionJob = lifecycleScope.launch {
-            val detectedClass = detectConsumerProtocol(device)
-            if (detectedClass == null) {
-                protocolDetectionActive = false
+            try {
+                val detectedClass = detectConsumerProtocol(device)
+                if (detectedClass == null) {
+                    Toast.makeText(
+                        this@DeviceBindActivity,
+                        "Could not identify a compatible glasses protocol. Check that the glasses are available and try again.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+
+                saveSelectedProfile(device, detectedClass, userOverridden = false)
+                applyMaximumCaptureDefaults(detectedClass)
                 Toast.makeText(
                     this@DeviceBindActivity,
-                    "Could not identify a compatible glasses protocol. Check that the glasses are available and try again.",
+                    "Connected as ${detectedClass.displayName()}",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                finish()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                Log.e(TAG, "Consumer protocol detection failed", error)
+                Toast.makeText(
+                    this@DeviceBindActivity,
+                    error.message ?: "Could not identify the glasses protocol.",
                     Toast.LENGTH_LONG,
                 ).show()
-                return@launch
+            } finally {
+                protocolDetectionActive = false
             }
-
-            saveSelectedProfile(device, detectedClass, userOverridden = false)
-            applyMaximumCaptureDefaults(detectedClass)
-            protocolDetectionActive = false
-            Toast.makeText(
-                this@DeviceBindActivity,
-                "Connected as ${detectedClass.displayName()}",
-                Toast.LENGTH_SHORT,
-            ).show()
-            finish()
         }
     }
 
     private suspend fun detectConsumerProtocol(device: ScannedDevice): DeviceClass? {
-        val order = protocolProbeOrder(device.detectedClass)
+        val order = consumerProtocolProbeOrder(device.detectedClass)
         Log.i(TAG, "Consumer protocol probe order=$order scanHint=${device.detectedClass}")
         for (candidate in order) {
-            val responded = when (candidate) {
-                DeviceClass.EYEVUE -> probeEyevue(device)
-                DeviceClass.TUNEBUDS -> probeTuneBuds(device)
-                DeviceClass.HEY_CYAN -> probeHeyCyan(device)
-                else -> false
+            val responded = try {
+                when (candidate) {
+                    DeviceClass.EYEVUE -> probeEyevue(device)
+                    DeviceClass.TUNEBUDS -> probeTuneBuds(device)
+                    DeviceClass.HEY_CYAN -> probeHeyCyan(device)
+                    else -> false
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                Log.w(TAG, "Consumer protocol probe failed for $candidate", error)
+                false
             }
             if (responded) {
                 Log.i(TAG, "Consumer glasses protocol confirmed: $candidate")
@@ -250,15 +277,6 @@ class DeviceBindActivity : BaseActivity() {
         return null
     }
 
-    private fun protocolProbeOrder(scanHint: DeviceClass): List<DeviceClass> = when (scanHint) {
-        DeviceClass.EYEVUE -> listOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.HEY_CYAN)
-        DeviceClass.TUNEBUDS -> listOf(DeviceClass.TUNEBUDS, DeviceClass.EYEVUE, DeviceClass.HEY_CYAN)
-        // HeyCyan's vendor connector does not expose a clean probe-only disconnect. Its strong
-        // advertising-name heuristics therefore go straight to a battery-response confirmation.
-        DeviceClass.HEY_CYAN -> listOf(DeviceClass.HEY_CYAN)
-        else -> listOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.HEY_CYAN)
-    }
-
     private suspend fun probeEyevue(device: ScannedDevice): Boolean {
         val manager = EyevueManager.getInstance(this)
         manager.disconnect()
@@ -266,15 +284,19 @@ class DeviceBindActivity : BaseActivity() {
         val response = withTimeoutOrNull(EYEVUE_PROBE_TIMEOUT_MS) {
             manager.state
                 .filter { state ->
-                    state.batteryPercent != null ||
-                        state.storageCount != null ||
-                        !state.customer.isNullOrBlank() ||
-                        !state.project.isNullOrBlank()
+                    state.protocolState == "ERROR" ||
+                        (state.protocolState == "CONNECTED" && (
+                            state.batteryPercent != null ||
+                                state.storageCount != null ||
+                                !state.customer.isNullOrBlank() ||
+                                !state.project.isNullOrBlank()
+                            ))
                 }
                 .first()
         }
-        if (response == null) manager.disconnect()
-        return response != null
+        val identified = response?.protocolState == "CONNECTED"
+        if (!identified) manager.disconnect()
+        return identified
     }
 
     private suspend fun probeTuneBuds(device: ScannedDevice): Boolean {
@@ -284,20 +306,25 @@ class DeviceBindActivity : BaseActivity() {
         val response = withTimeoutOrNull(TUNEBUDS_PROBE_TIMEOUT_MS) {
             manager.state
                 .filter { state ->
-                    state.batteryPercent != null ||
-                        !state.firmwareVersion.isNullOrBlank() ||
-                        !state.model.isNullOrBlank() ||
-                        state.storage != null
+                    state.protocolState == "ERROR" ||
+                        (state.protocolState == "CONNECTED" && (
+                            state.batteryPercent != null ||
+                                !state.firmwareVersion.isNullOrBlank() ||
+                                !state.model.isNullOrBlank() ||
+                                state.storage != null
+                            ))
                 }
                 .first()
         }
-        if (response == null) manager.disconnect()
-        return response != null
+        val identified = response?.protocolState == "CONNECTED"
+        if (!identified) manager.disconnect()
+        return identified
     }
 
     private suspend fun probeHeyCyan(device: ScannedDevice): Boolean {
         val batteryResponse = CompletableDeferred<Boolean>()
         val handler = LargeDataHandler.getInstance()
+        var identified = false
         runCatching { handler.removeBatteryCallBack(HEY_CYAN_PROBE_CALLBACK) }
         handler.addBatteryCallBack(HEY_CYAN_PROBE_CALLBACK) { _, response ->
             if (response != null && !batteryResponse.isCompleted) batteryResponse.complete(true)
@@ -310,9 +337,14 @@ class DeviceBindActivity : BaseActivity() {
             } == true
             if (!connected) return false
             handler.syncBattery()
-            withTimeoutOrNull(HEY_CYAN_RESPONSE_TIMEOUT_MS) { batteryResponse.await() } == true
+            identified = withTimeoutOrNull(HEY_CYAN_RESPONSE_TIMEOUT_MS) { batteryResponse.await() } == true
+            identified
         } finally {
             runCatching { handler.removeBatteryCallBack(HEY_CYAN_PROBE_CALLBACK) }
+            if (!identified) {
+                runCatching { BleOperateManager.getInstance().disconnect() }
+                delay(250L)
+            }
         }
     }
 
@@ -594,7 +626,7 @@ class DeviceBindActivity : BaseActivity() {
         const val META_DAT_PROFILE_ID = "META_DAT"
         const val DEVICE_LIST_PUBLISH_INTERVAL_MS = 1_000L
         const val HEY_CYAN_PROBE_CALLBACK = "device_bind_protocol_probe"
-        const val EYEVUE_PROBE_TIMEOUT_MS = 6_000L
+        const val EYEVUE_PROBE_TIMEOUT_MS = 30_000L
         const val TUNEBUDS_PROBE_TIMEOUT_MS = 12_000L
         const val HEY_CYAN_CONNECT_TIMEOUT_MS = 6_000L
         const val HEY_CYAN_RESPONSE_TIMEOUT_MS = 4_000L

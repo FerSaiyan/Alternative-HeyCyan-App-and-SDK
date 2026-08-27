@@ -497,6 +497,10 @@
     <string name="dashboard_quality_fine">Fein</string>
     <string name="dashboard_quality_clearer">Klarer</string>
     <string name="dashboard_quality_detailed">Detailliert</string>
+    <string name="dashboard_quality_detailed_warning_title">Use Detailed quality?</string>
+    <string name="dashboard_quality_detailed_warning_body">Detailed uses Wi-Fi instead of Bluetooth and takes longer (up to 30 seconds) to transfer the full-resolution image.</string>
+    <string name="dashboard_quality_detailed_warning_continue">Continue</string>
+    <string name="dashboard_quality_detailed_warning_cancel">Cancel</string>
     <string name="dashboard_test_image">KI-Bildbeschreibung testen</string>
     <string name="dashboard_ai_wake_word_route">Aktion des Aktivierungsworts</string>
     <string name="dashboard_ai_wake_word_route_description">Bei HeyCyan- und Eyevue-Brillen startet die KI-Aktivierung durch das Aktivierungswort:</string>

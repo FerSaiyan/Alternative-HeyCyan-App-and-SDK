@@ -168,6 +168,7 @@ class EyevueWifiTransport(
 
                     override fun onLost(network: Network) {
                         if (boundNetwork == network) {
+                            runCatching { connectivityManager.bindProcessToNetwork(null) }
                             boundNetwork = null
                             if (continuation.isActive) {
                                 continuation.resumeWithException(IOException("Eyevue AP network was lost"))
@@ -322,16 +323,16 @@ class EyevueWifiTransport(
         }
 
     private fun hasWifiPermission(): Boolean {
-        val nearbyGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.NEARBY_WIFI_DEVICES,
             ) == PackageManager.PERMISSION_GRANTED
-        val locationGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+        } else {
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.ACCESS_FINE_LOCATION,
             ) == PackageManager.PERMISSION_GRANTED
-        return nearbyGranted && locationGranted
+        }
     }
 }

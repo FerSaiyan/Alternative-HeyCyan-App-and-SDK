@@ -71,6 +71,7 @@ object GlassesManagerGating {
                 base.add(Action.STATUS_STORAGE)
                 base.add(Action.ADVANCED_CONTROLS)
                 base.add(Action.ADVANCED_DEVICE_INFO)
+                base.add(Action.ADVANCED_IMAGE_QUALITY)
             }
             else -> {}
         }

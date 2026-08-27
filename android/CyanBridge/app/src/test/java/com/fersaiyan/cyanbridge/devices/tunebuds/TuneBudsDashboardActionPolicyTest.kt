@@ -29,6 +29,8 @@ class TuneBudsDashboardActionPolicyTest {
             GlassesDashboardAction.RequestBattery,
             GlassesDashboardAction.RequestVersion,
             GlassesDashboardAction.SyncTime,
+            GlassesDashboardAction.SelectImageThumbnailQuality(4),
+            GlassesDashboardAction.SelectImageThumbnailQuality(5),
         )
 
         actions.forEach { action -> assertTrue(action.toString(), action.isSupportedForTuneBudsDashboard()) }
@@ -38,7 +40,6 @@ class TuneBudsDashboardActionPolicyTest {
     fun unvalidatedTuneBudsActionsCannotReachVendorHandlers() {
         val actions = listOf(
             GlassesDashboardAction.SetAiWakeWordRoute(AiWakeWordRoute.IMAGE_QUESTION),
-            GlassesDashboardAction.SelectImageThumbnailQuality(5),
             GlassesDashboardAction.RefreshRecordingSettings,
             GlassesDashboardAction.SetWearingDetection(true),
             GlassesDashboardAction.SetVideoRecordingDuration(60),

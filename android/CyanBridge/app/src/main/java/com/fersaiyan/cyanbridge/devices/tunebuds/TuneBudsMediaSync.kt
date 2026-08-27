@@ -221,6 +221,8 @@ class TuneBudsMediaSync(
         parseManifest(getText(normalizeBaseUrl(baseUrl) + "media.config"))
     }
 
+    suspend fun downloadSingle(baseUrl: String, item: TuneBudsMediaItem): File = download(normalizeBaseUrl(baseUrl), item) { _, _, _ -> }
+
     fun parseManifest(body: String): List<TuneBudsMediaItem> {
         val trimmed = body.trim()
         val names = runCatching {

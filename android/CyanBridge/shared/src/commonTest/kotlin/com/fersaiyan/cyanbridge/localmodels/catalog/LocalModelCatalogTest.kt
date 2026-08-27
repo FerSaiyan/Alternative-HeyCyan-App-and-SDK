@@ -37,4 +37,16 @@ class LocalModelCatalogTest {
         assertEquals(0.35, qwen?.minStorageGb)
         assertTrue(LocalModelCatalogRepository.curatedModels.none { it.id.startsWith("qwen2.5") })
     }
+
+    @Test
+    fun ramFloorsAndStarterRecommendationsMatchSupportedDevices() {
+        assertEquals(6.0, LocalModelCatalogRepository.findById("gemma4-e2b-it-litert")?.minRamGb)
+        assertEquals(8.0, LocalModelCatalogRepository.findById("gemma4-e4b-it-litert")?.minRamGb)
+        assertEquals(4.0, LocalModelCatalogRepository.findById("qwen3.5-0.8b-q4")?.minRamGb)
+
+        assertEquals("gemma4-e2b-it-litert", LocalModelCatalogRepository.recommendedStarterForRam(8.0)?.id)
+        assertEquals("gemma4-e2b-it-litert", LocalModelCatalogRepository.recommendedStarterForRam(6.0)?.id)
+        assertEquals("qwen3.5-0.8b-q4", LocalModelCatalogRepository.recommendedStarterForRam(4.0)?.id)
+        assertNull(LocalModelCatalogRepository.recommendedStarterForRam(3.0))
+    }
 }

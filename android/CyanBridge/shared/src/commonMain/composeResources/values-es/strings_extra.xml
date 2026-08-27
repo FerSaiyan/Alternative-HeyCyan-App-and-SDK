@@ -483,6 +483,10 @@
     <string name="dashboard_quality_fine">Fina</string>
     <string name="dashboard_quality_clearer">Mas clara</string>
     <string name="dashboard_quality_detailed">Detallada</string>
+    <string name="dashboard_quality_detailed_warning_title">Use Detailed quality?</string>
+    <string name="dashboard_quality_detailed_warning_body">Detailed uses Wi-Fi instead of Bluetooth and takes longer (up to 30 seconds) to transfer the full-resolution image.</string>
+    <string name="dashboard_quality_detailed_warning_continue">Continue</string>
+    <string name="dashboard_quality_detailed_warning_cancel">Cancel</string>
     <string name="dashboard_test_image">Probar descripción de imagen con IA</string>
     <string name="dashboard_ai_wake_word_route">Acción de la palabra de activación</string>
     <string name="dashboard_ai_wake_word_route_description">En gafas HeyCyan y Eyevue, la activación por palabra de activación inicia:</string>

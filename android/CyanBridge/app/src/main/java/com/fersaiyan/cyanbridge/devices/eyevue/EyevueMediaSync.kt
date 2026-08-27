@@ -52,6 +52,18 @@ data class EyevueMediaProfile(
 
     val isTSeries: Boolean
         get() = mode == EyevueWifiMode.AP && baseIp == "192.168.169.1"
+
+    val liveControlUrl: String?
+        get() = if (isTSeries) null else "http://$baseIp/?custom=1&cmd=3001&par=1"
+
+    val liveStreamUrl: String
+        get() = if (isTSeries) "rtsp://$baseIp/h264" else "rtsp://$baseIp/xxx.mov"
+}
+
+object EyevueLivePreviewPolicy {
+    const val MIN_ANDROID_SDK = 29
+
+    fun isSupported(androidSdk: Int): Boolean = androidSdk >= MIN_ANDROID_SDK
 }
 
 data class EyevueMediaItem(

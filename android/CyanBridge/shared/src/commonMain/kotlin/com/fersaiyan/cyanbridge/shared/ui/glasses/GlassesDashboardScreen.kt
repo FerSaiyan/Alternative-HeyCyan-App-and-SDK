@@ -1015,6 +1015,7 @@ private fun AdvancedControls(
     onAction: (GlassesDashboardAction) -> Unit,
     onRequestOtaFirmware: () -> Unit,
 ) {
+    var pendingDetailedQuality by remember { mutableStateOf<Int?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (state.showAdvancedDeviceInfo) {
             Column(modifier = Modifier.testTag("advanced_device_info")) {
@@ -1086,7 +1087,11 @@ private fun AdvancedControls(
                                 FilterChip(
                                     selected = state.imageThumbnailQualitySdkValue == sdkValue,
                                     onClick = {
-                                        onAction(GlassesDashboardAction.SelectImageThumbnailQuality(sdkValue))
+                                        if (sdkValue == 5) {
+                                            pendingDetailedQuality = sdkValue
+                                        } else {
+                                            onAction(GlassesDashboardAction.SelectImageThumbnailQuality(sdkValue))
+                                        }
                                     },
                                     label = { Text(label) },
                                     modifier = Modifier
@@ -1097,6 +1102,26 @@ private fun AdvancedControls(
                         }
                     }
             }
+        }
+        pendingDetailedQuality?.let { sdkValue ->
+            AlertDialog(
+                onDismissRequest = { pendingDetailedQuality = null },
+                icon = { Icon(imageVector = Icons.Outlined.WarningAmber, contentDescription = null) },
+                title = { Text(stringResource(Res.string.dashboard_quality_detailed_warning_title)) },
+                text = { Text(stringResource(Res.string.dashboard_quality_detailed_warning_body)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val value = pendingDetailedQuality
+                        pendingDetailedQuality = null
+                        if (value != null) onAction(GlassesDashboardAction.SelectImageThumbnailQuality(value))
+                    }) { Text(stringResource(Res.string.dashboard_quality_detailed_warning_continue)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDetailedQuality = null }) {
+                        Text(stringResource(Res.string.dashboard_quality_detailed_warning_cancel))
+                    }
+                },
+            )
         }
         if (state.showAdvancedDeveloperTools) {
             HorizontalDivider()
