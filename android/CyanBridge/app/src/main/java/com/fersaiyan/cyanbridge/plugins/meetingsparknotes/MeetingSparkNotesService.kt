@@ -60,7 +60,7 @@ class MeetingSparkNotesService : Service() {
             ACTION_START -> startMeetingCapture()
             ACTION_STOP -> stopMeetingCapture()
             ACTION_SUMMARIZE -> summarizeCurrentMeeting()
-            null -> if (MeetingSparkNotesPreferences.isEnabled(this)) startMeetingCapture() else stopSelf()
+            else -> stopSelf()
         }
         return START_NOT_STICKY
     }
@@ -246,6 +246,10 @@ class MeetingSparkNotesService : Service() {
             context.startService(
                 Intent(context, MeetingSparkNotesService::class.java).setAction(ACTION_STOP),
             )
+        }
+
+        fun deactivate(context: Context) {
+            context.stopService(Intent(context, MeetingSparkNotesService::class.java))
         }
 
         fun summarize(context: Context) {

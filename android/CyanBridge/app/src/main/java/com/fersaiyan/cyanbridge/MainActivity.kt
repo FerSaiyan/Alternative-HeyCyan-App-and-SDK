@@ -920,7 +920,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs.isBridgeConfigured(this) ||
                 AutoAudioCapturePrefs.isEnabled(this) ||
                 setOf(
-                    NativePluginIds.MEETING_SPARK_NOTES,
                     NativePluginIds.LIVE_CAPTION_RELAY,
                     NativePluginIds.HANDS_FREE_TRANSLATOR,
                     NativePluginIds.ERRAND_BRAIN,
@@ -972,9 +971,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        if (CommunityPluginPrefs.isNativePluginEnabled(this, NativePluginIds.MEETING_SPARK_NOTES)) {
-            MeetingSparkNotesService.start(this)
-        }
         if (CommunityPluginPrefs.isNativePluginEnabled(this, NativePluginIds.LIVE_CAPTION_RELAY)) {
             LiveCaptionRelayService.start(this)
         }

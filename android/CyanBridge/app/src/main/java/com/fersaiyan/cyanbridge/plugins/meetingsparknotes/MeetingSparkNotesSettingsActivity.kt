@@ -45,7 +45,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
@@ -63,10 +62,7 @@ class MeetingSparkNotesSettingsActivity : AppCompatActivity() {
         setThemedComposeContent(composeView) {
             MeetingSparkNotesSettingsScreen(
                 onBack = ::finish,
-                onStartService = {
-                    PluginVoicePermissions.ensure(this) { MeetingSparkNotesService.start(this) }
-                },
-                onStopService = { MeetingSparkNotesService.stop(this) },
+                onDeactivate = { MeetingSparkNotesService.deactivate(this) },
                 onSummarize = { MeetingSparkNotesService.summarize(this) },
             )
         }
@@ -77,8 +73,7 @@ class MeetingSparkNotesSettingsActivity : AppCompatActivity() {
 @Composable
 fun MeetingSparkNotesSettingsScreen(
     onBack: () -> Unit,
-    onStartService: () -> Unit,
-    onStopService: () -> Unit,
+    onDeactivate: () -> Unit,
     onSummarize: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -139,11 +134,7 @@ fun MeetingSparkNotesSettingsScreen(
                                     NativePluginIds.MEETING_SPARK_NOTES,
                                     newValue,
                                 )
-                                if (newValue) {
-                                    onStartService()
-                                } else {
-                                    onStopService()
-                                }
+                                if (!newValue) onDeactivate()
                             },
                         )
                     }

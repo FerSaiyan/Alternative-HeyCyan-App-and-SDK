@@ -429,7 +429,7 @@ class CommunityPluginsActivity : AppCompatActivity() {
             }
             NativePluginIds.MEETING_SPARK_NOTES -> {
                 MeetingSparkNotesPreferences.setEnabled(this, enabled)
-                if (enabled) MeetingSparkNotesService.start(this) else MeetingSparkNotesService.stop(this)
+                if (!enabled) MeetingSparkNotesService.deactivate(this)
             }
             NativePluginIds.LIVE_CAPTION_RELAY -> {
                 LiveCaptionRelayPreferences.setEnabled(this, enabled)
@@ -723,7 +723,6 @@ class CommunityPluginsActivity : AppCompatActivity() {
         private val taskerDownloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         private val VOICE_PLUGIN_IDS = setOf(
-            NativePluginIds.MEETING_SPARK_NOTES,
             NativePluginIds.LIVE_CAPTION_RELAY,
             NativePluginIds.HANDS_FREE_TRANSLATOR,
             NativePluginIds.ERRAND_BRAIN,
