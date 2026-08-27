@@ -44,6 +44,7 @@
         <package android:name="com.google.android.googlequicksearchbox" />
         <package android:name="com.google.android.apps.bard" />
         <package android:name="com.openai.chatgpt" />
+        <package android:name="com.anthropic.claude" />
     </queries>
 
     <application
@@ -87,6 +88,7 @@
         <service android:name=".devices.meizumyvu.MeizuMyvuConnectionService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <activity android:name=".ui.ChatListActivity" android:exported="false" android:label="Chats" />
         <activity android:name=".ui.ChatThreadActivity" android:exported="false" android:label="Chat" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".integrations.knowledge.KnowledgeIntegrationsActivity" android:exported="false" android:label="Notes &amp; AI imports" />
         <activity android:name=".ui.SettingsActivity" android:exported="false" android:label="Settings" />
         <activity android:name=".ai.image.ExternalAssistantAutomationSetupActivity" android:exported="false" android:label="Gemini / ChatGPT automation setup" />
         <activity android:name=".ui.appearance.AppearanceActivity" android:exported="false" android:label="Appearance" />
