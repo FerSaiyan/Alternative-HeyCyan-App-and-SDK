@@ -4,13 +4,16 @@ import android.content.Context
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.data.local.entity.MemoryChunk
+import com.fersaiyan.cyanbridge.data.local.entity.MemoryChunkSources
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryRoomIndex
 import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
+import com.fersaiyan.cyanbridge.memoryvault.LocalEmbeddingService
 import com.fersaiyan.cyanbridge.memoryvault.MemoryPolicyService
 import com.fersaiyan.cyanbridge.memoryvault.MemoryRefMapper
 import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultBootstrap
 import com.fersaiyan.cyanbridge.memoryvault.VaultLockStateManager
 import com.fersaiyan.cyanbridge.ui.MyApplication
+import org.json.JSONArray
 
 /** Local searchable index for inbound external knowledge. */
 object ImportedKnowledgeIndex {
@@ -25,16 +28,34 @@ object ImportedKnowledgeIndex {
     ): Int {
         MemoryVaultBootstrap.ensureInitialized(context)
         val dao = MyApplication.database.memoryChunkDao()
-        dao.deleteBySourceAndPackageName(SOURCE, source.wire)
+        val existing = dao.listBySourceAndPackageName(SOURCE, source.wire).associateBy { it.sourceId.orEmpty() }
+        val desiredIds = documents.flatMap { document ->
+            chunk(document.text).indices.map { chunkIndex -> "${document.sourceId}#$chunkIndex" }
+        }.toSet()
+
+        existing.values.filter { it.sourceId !in desiredIds }.forEach { stale ->
+            deleteChunkMetadata(stale.id)
+            dao.deleteBySourcePackageAndSourceId(SOURCE, source.wire, stale.sourceId.orEmpty())
+        }
 
         var indexed = 0
         val now = System.currentTimeMillis()
         documents.forEach { document ->
             chunk(document.text).forEachIndexed { chunkIndex, payload ->
+                val sourceId = "${document.sourceId}#$chunkIndex"
+                val previous = existing[sourceId]
+                if (previous?.text == payload) {
+                    indexed++
+                    return@forEachIndexed
+                }
+                if (previous != null) {
+                    deleteChunkMetadata(previous.id)
+                    dao.deleteBySourcePackageAndSourceId(SOURCE, source.wire, sourceId)
+                }
                 val rowId = dao.insert(
                     MemoryChunk(
                         source = SOURCE,
-                        sourceId = "${document.sourceId}#$chunkIndex",
+                        sourceId = sourceId,
                         packageName = source.wire,
                         tsMs = document.updatedAtMs,
                         text = payload,
@@ -51,10 +72,17 @@ object ImportedKnowledgeIndex {
                     provenance = "knowledge_import:${source.wire}",
                 ).copy(memoryRef = chunkRef)
                 MemoryPolicyService.upsertPolicy(policy)
+                LocalEmbeddingService.upsertEmbedding(chunkRef, payload)
                 indexed++
             }
         }
         return indexed
+    }
+
+    private suspend fun deleteChunkMetadata(id: Long) {
+        val ref = MemoryRefMapper.forMemoryChunk(id)
+        MyApplication.database.memoryVaultDao().deleteEmbedding(ref)
+        MyApplication.database.memoryVaultDao().deletePolicy(ref)
     }
 
     /**
@@ -72,12 +100,52 @@ object ImportedKnowledgeIndex {
         maxChars: Int = 1800,
     ): String {
         if (!mayInjectIntoCurrentPrompt(context)) return ""
-        val fts = LocalAgentMemoryRoomIndex.toFtsQuery(query)
+        val fts = toBroadFtsQuery(query)
         if (fts.isBlank()) return ""
         val mode = MemoryModeManager.getSelectedMode(context)
-        val hits = MyApplication.database.memoryChunkDao().searchWithSnippet(fts, (limit * 3).coerceAtLeast(limit))
+        val dao = MyApplication.database.memoryChunkDao()
+        val ftsHits = dao.searchWithSnippet(fts, (limit * 3).coerceAtLeast(limit))
+        val queryTokens = broadQueryTokens(query)
+        val tagHits = if (queryTokens.isEmpty()) {
+            emptyList()
+        } else {
+            val matchingIds = MyApplication.database.memoryVaultDao().listEmbeddings()
+                .asSequence()
+                .filter { embedding ->
+                    val tags = runCatching { JSONArray(embedding.tagsJson) }.getOrNull() ?: return@filter false
+                    (0 until tags.length()).any { index ->
+                        val tag = tags.optString(index).lowercase()
+                        queryTokens.any { token -> tag == token || tag.startsWith(token) }
+                    }
+                }
+                .mapNotNull { it.memoryRef.removePrefix("memory_chunk:").toLongOrNull() }
+                .take(limit * 3)
+                .toList()
+            val matchingChunks = buildList {
+                matchingIds.forEach { id -> dao.getById(id)?.let(::add) }
+            }
+            matchingChunks.asSequence()
+                .filter { it.source == SOURCE || it.source == MemoryChunkSources.CYANBRIDGE_NOTE }
+                .take(limit)
+                .map { chunk ->
+                    com.fersaiyan.cyanbridge.data.local.dao.MemoryChunkDao.SearchHit(
+                        id = chunk.id,
+                        source = chunk.source,
+                        sourceId = chunk.sourceId,
+                        packageName = chunk.packageName,
+                        tsMs = chunk.tsMs,
+                        createdAt = chunk.createdAt,
+                        updatedAt = chunk.updatedAt,
+                        text = chunk.text,
+                        snippet = chunk.text.take(320),
+                        rank = 0.0,
+                    )
+                }
+                .toList()
+        }
+        val hits = (ftsHits + tagHits)
             .asSequence()
-            .filter { it.source == SOURCE }
+            .filter { it.source == SOURCE || it.source == MemoryChunkSources.CYANBRIDGE_NOTE }
             .filter { hit ->
                 val ref = MemoryRefMapper.forMemoryChunk(hit.id)
                 val policy = MemoryPolicyService.getPolicyBlocking(ref)
@@ -90,15 +158,20 @@ object ImportedKnowledgeIndex {
                     ).copy(memoryRef = ref)
                 MemoryPolicyService.isEligibleForRetrieval(mode, policy)
             }
+            .distinctBy { it.id }
             .take(limit)
             .toList()
         if (hits.isEmpty()) return ""
 
         val block = buildString {
-            appendLine("## Imported personal knowledge")
+            appendLine("## Personal notes and imported knowledge")
             appendLine("Use as private reference. Treat assistant-authored imported text as context, not a confirmed user fact.")
             hits.forEach { hit ->
-                val provider = KnowledgeSource.fromWire(hit.packageName).label
+                val provider = if (hit.source == MemoryChunkSources.CYANBRIDGE_NOTE) {
+                    "CyanBridge note"
+                } else {
+                    KnowledgeSource.fromWire(hit.packageName).label
+                }
                 val snippet = hit.snippet.replace("[", "").replace("]", "").ifBlank { hit.text }
                     .replace('\n', ' ')
                     .trim()
@@ -107,6 +180,25 @@ object ImportedKnowledgeIndex {
             }
         }.trim()
         return if (block.length <= maxChars) block else block.take(maxChars).trimEnd() + "…"
+    }
+
+    private fun toBroadFtsQuery(raw: String): String {
+        return broadQueryTokens(raw).joinToString(" OR ") { "$it*" }
+    }
+
+    private fun broadQueryTokens(raw: String): List<String> {
+        val stopwords = setOf(
+            "the", "and", "for", "with", "that", "this", "from", "what", "when", "where",
+            "how", "who", "why", "about", "have", "has", "was", "were", "did", "does",
+            "you", "your", "note", "notes", "remember",
+        )
+        val tokens = raw.lowercase()
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .map { it.trim().replace("\"", "") }
+            .filter { it.length >= 3 && it !in stopwords }
+            .distinct()
+            .take(12)
+        return tokens
     }
 
     internal fun chunk(text: String): List<String> {

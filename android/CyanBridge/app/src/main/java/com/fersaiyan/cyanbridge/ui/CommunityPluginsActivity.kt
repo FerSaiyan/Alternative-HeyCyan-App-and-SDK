@@ -206,6 +206,7 @@ class CommunityPluginsActivity : AppCompatActivity() {
         val cameraUnavailableReason = when (selectedClass) {
             DeviceClass.MEIZU_MYVU -> "Unavailable for Meizu MYVU: device has no camera."
             DeviceClass.GENERIC_AUDIO -> "Unavailable for Earbuds / Audio-only glasses: device has no camera."
+            DeviceClass.MOYOUNG_W620 -> "Unavailable for MoYoung / W620: direct camera capture is not validated yet."
             else -> null
         }
 

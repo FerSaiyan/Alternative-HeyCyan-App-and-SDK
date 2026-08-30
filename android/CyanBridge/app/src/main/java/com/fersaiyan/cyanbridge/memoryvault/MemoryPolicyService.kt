@@ -95,7 +95,7 @@ object MemoryPolicyService {
         val ref = memoryRef.lowercase(Locale.US)
         return when {
             ref.contains("screen_captures/") || ref.startsWith("memory_chunk:") -> MemorySourceType.SCREEN_OCR
-            ref.contains("daily_summaries/") -> MemorySourceType.DERIVED_SUMMARY
+            ref.contains("daily_summaries/") || ref.contains("daily_bullets/") -> MemorySourceType.DERIVED_SUMMARY
             ref.contains("user_facts") -> MemorySourceType.EXPLICIT_USER_FACT
             ref.contains("daily_facts") -> MemorySourceType.AUTO_DAILY_FACT
             ref.contains("import") -> MemorySourceType.IMPORTED_TEXT

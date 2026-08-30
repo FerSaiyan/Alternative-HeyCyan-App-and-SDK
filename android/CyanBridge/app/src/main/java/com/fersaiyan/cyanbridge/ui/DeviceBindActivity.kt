@@ -25,6 +25,7 @@ import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsProtocol
 import com.fersaiyan.cyanbridge.devices.ScannedDevice
@@ -53,10 +54,11 @@ import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 
 internal fun consumerProtocolProbeOrder(scanHint: DeviceClass): List<DeviceClass> = when (scanHint) {
-    DeviceClass.EYEVUE -> listOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.HEY_CYAN)
-    DeviceClass.TUNEBUDS -> listOf(DeviceClass.TUNEBUDS, DeviceClass.EYEVUE, DeviceClass.HEY_CYAN)
-    DeviceClass.HEY_CYAN -> listOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS)
-    else -> listOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.HEY_CYAN)
+    DeviceClass.MOYOUNG_W620 -> listOf(DeviceClass.MOYOUNG_W620, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.HEY_CYAN)
+    DeviceClass.EYEVUE -> listOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MOYOUNG_W620, DeviceClass.HEY_CYAN)
+    DeviceClass.TUNEBUDS -> listOf(DeviceClass.TUNEBUDS, DeviceClass.EYEVUE, DeviceClass.MOYOUNG_W620, DeviceClass.HEY_CYAN)
+    DeviceClass.HEY_CYAN -> listOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MOYOUNG_W620)
+    else -> listOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MOYOUNG_W620, DeviceClass.HEY_CYAN)
 }
 
 class DeviceBindActivity : BaseActivity() {
@@ -199,6 +201,13 @@ class DeviceBindActivity : BaseActivity() {
                 finish()
             }
 
+            DeviceClass.MOYOUNG_W620 -> {
+                saveSelectedProfile(device, DeviceClass.MOYOUNG_W620, userOverridden = true)
+                MoyoungW620Manager.getInstance(this).connect(device.macAddress, device.advertisedName)
+                Toast.makeText(this, "Connecting as MoYoung / W620.", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+
             DeviceClass.HEY_CYAN,
             DeviceClass.EYEVUE,
             DeviceClass.TUNEBUDS,
@@ -259,6 +268,7 @@ class DeviceBindActivity : BaseActivity() {
                 when (candidate) {
                     DeviceClass.EYEVUE -> probeEyevue(device)
                     DeviceClass.TUNEBUDS -> probeTuneBuds(device)
+                    DeviceClass.MOYOUNG_W620 -> probeMoyoungW620(device)
                     DeviceClass.HEY_CYAN -> probeHeyCyan(device)
                     else -> false
                 }
@@ -321,6 +331,12 @@ class DeviceBindActivity : BaseActivity() {
         return identified
     }
 
+    private suspend fun probeMoyoungW620(device: ScannedDevice): Boolean =
+        MoyoungW620Manager.getInstance(this).probe(
+            address = device.macAddress,
+            deviceName = device.advertisedName,
+        )
+
     private suspend fun probeHeyCyan(device: ScannedDevice): Boolean {
         val batteryResponse = CompletableDeferred<Boolean>()
         val handler = LargeDataHandler.getInstance()
@@ -370,6 +386,8 @@ class DeviceBindActivity : BaseActivity() {
                 TuneBudsManager.getInstance(this).refreshStatus()
             }
 
+            DeviceClass.MOYOUNG_W620 -> Unit
+
             else -> Unit
         }
     }
@@ -410,6 +428,7 @@ class DeviceBindActivity : BaseActivity() {
         DeviceClass.HEY_CYAN,
         DeviceClass.EYEVUE,
         DeviceClass.TUNEBUDS,
+        DeviceClass.MOYOUNG_W620,
         DeviceClass.UNKNOWN,
         -> DeviceClass.HEY_CYAN
         else -> detected
@@ -475,6 +494,7 @@ class DeviceBindActivity : BaseActivity() {
                     existing.advertisedName,
                     existing.serviceUuids,
                     manufacturerCompanyIds,
+                    existing.connectionAddress,
                 ),
             )
             publishDevices(
@@ -486,6 +506,7 @@ class DeviceBindActivity : BaseActivity() {
             sanitizedName,
             scanRecord?.serviceUuids.orEmpty(),
             manufacturerCompanyIds,
+            connectionAddress ?: mac,
         )
         if (sanitizedName == null && detectedClass == DeviceClass.UNKNOWN) return
 

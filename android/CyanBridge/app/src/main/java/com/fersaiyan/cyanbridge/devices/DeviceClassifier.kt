@@ -18,12 +18,15 @@ object DeviceClassifier {
         UUID.fromString("00000bd3-0000-1000-8000-00805f9b34fb")
     private val MYVU_GATT_SERVICE_UUID: UUID =
         UUID.fromString("00000bd1-0000-1000-8000-00805f9b34fb")
+    private val MOYOUNG_SERVICE_UUID: UUID =
+        UUID.fromString("0000fea8-0000-1000-8000-00805f9b34fb")
     private val TUNEBUDS_COMPANY_IDS = setOf(0x475A, 0x455A, 0x535A, 0x4D5A)
 
     fun guessDeviceClass(
         advertisedName: String?,
         serviceUuids: List<ParcelUuid> = emptyList(),
         manufacturerCompanyIds: Set<Int> = emptySet(),
+        macAddress: String? = null,
     ): DeviceClass {
         val name = advertisedName?.trim().orEmpty()
         val lower = name.lowercase()
@@ -34,14 +37,28 @@ object DeviceClassifier {
             return DeviceClass.EYEVUE
         }
 
-        if (manufacturerCompanyIds.any(TUNEBUDS_COMPANY_IDS::contains) ||
-            serviceUuids.any { it.uuid == TUNEBUDS_BLE_SERVICE_UUID }
-        ) {
+        if (serviceUuids.any { it.uuid == TUNEBUDS_BLE_SERVICE_UUID }) {
             return DeviceClass.TUNEBUDS
         }
 
         if (serviceUuids.any { it.uuid == MYVU_ADVERTISED_SERVICE_UUID || it.uuid == MYVU_GATT_SERVICE_UUID }) {
             return DeviceClass.MEIZU_MYVU
+        }
+
+        if (serviceUuids.any { it.uuid == MOYOUNG_SERVICE_UUID }) {
+            return DeviceClass.MOYOUNG_W620
+        }
+
+        if (manufacturerCompanyIds.any(TUNEBUDS_COMPANY_IDS::contains)) {
+            return DeviceClass.TUNEBUDS
+        }
+
+        if (lower.contains("w620") || lower.contains("moyoung") || lower.contains("da echo")) {
+            return DeviceClass.MOYOUNG_W620
+        }
+
+        if (macAddress?.uppercase()?.startsWith("DB:3E:33") == true) {
+            return DeviceClass.MOYOUNG_W620
         }
 
         if (name.isEmpty()) return DeviceClass.UNKNOWN

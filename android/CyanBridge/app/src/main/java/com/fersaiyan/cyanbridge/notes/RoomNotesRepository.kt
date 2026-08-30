@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.notes
 
+import android.content.Context
 import com.fersaiyan.cyanbridge.data.local.dao.NoteDao
 import com.fersaiyan.cyanbridge.data.local.entity.Note
 import com.fersaiyan.cyanbridge.shared.notes.SummarizationRequest
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.Flow
 class RoomNotesRepository(
     private val noteDao: NoteDao,
     private val summarizationService: SummarizationService,
+    private val context: Context? = null,
 ) : NotesRepository {
 
     override fun getAllNotes(): Flow<List<Note>> = noteDao.getAllNotes()
@@ -49,6 +51,10 @@ class RoomNotesRepository(
             tags = tagsCsv,
         )
 
-        return noteDao.insertNote(note)
+        val id = noteDao.insertNote(note)
+        context?.let { appContext ->
+            runCatching { NoteKnowledgeIndex.index(appContext, note.copy(id = id)) }
+        }
+        return id
     }
 }

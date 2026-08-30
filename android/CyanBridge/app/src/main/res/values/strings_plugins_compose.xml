@@ -30,6 +30,7 @@
     <string name="compose_blacklist_apps">Blacklist apps</string>
     <string name="compose_view_screen_captures">View screen captures</string>
     <string name="compose_daily_processing">Daily processing</string>
+    <string name="compose_nightly_enrichment_description" formatted="false">OCR bullets, note tags, and daily summaries are prepared overnight while charging. Processing starts at 80% battery and pauses below 75%. Review reminders appear only after a non-empty batch is ready.</string>
     <string name="compose_daily_facts_reminder">Daily facts reminder</string>
     <string name="compose_auto_save_daily_facts">Auto-save daily facts</string>
     <string name="compose_extract_user_fact_candidates">Extract user fact candidates</string>

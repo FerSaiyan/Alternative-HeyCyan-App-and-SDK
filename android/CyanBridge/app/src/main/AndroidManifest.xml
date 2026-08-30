@@ -37,6 +37,7 @@
 
     <!-- Narrow package visibility replaces QUERY_ALL_PACKAGES. -->
     <queries>
+        <package android:name="com.glasssutdio.wear" />
         <package android:name="net.dinglisch.android.taskerm" />
         <package android:name="com.joaomgcd.autoinput" />
         <package android:name="com.facebook.stella" />

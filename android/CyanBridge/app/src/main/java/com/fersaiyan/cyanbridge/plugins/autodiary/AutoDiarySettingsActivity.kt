@@ -212,11 +212,10 @@ fun AutoDiarySettingsScreen(
                 extractFacts = it
                 com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.setExtractUserFactCandidatesEnabled(context, it)
             }
-            NumberSetting(
-                label = stringResource(R.string.compose_daily_summary_refresh_hours),
-                value = LocalAgentPrefs.getDailySummaryAutoRefreshHours(context),
-                range = 1..24,
-                onValueChanged = { LocalAgentPrefs.setDailySummaryAutoRefreshHours(context, it) },
+            Text(
+                stringResource(R.string.compose_nightly_enrichment_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedButton(onClick = onOpenSummary, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.compose_open_daily_summary))

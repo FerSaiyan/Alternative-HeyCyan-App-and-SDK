@@ -12,9 +12,13 @@ object LocalEmbeddingService {
     private const val DIM = 64
     private const val MODEL_VERSION = "local_hash_v1"
 
-    suspend fun upsertEmbedding(memoryRef: String, text: String) = withContext(Dispatchers.IO) {
+    suspend fun upsertEmbedding(
+        memoryRef: String,
+        text: String,
+        tags: List<String> = extractTags(text),
+        modelVersion: String = MODEL_VERSION,
+    ) = withContext(Dispatchers.IO) {
         val vector = embed(text)
-        val tags = extractTags(text)
         val arr = JSONArray()
         vector.forEach { arr.put(it) }
         val tagArr = JSONArray()
@@ -25,7 +29,7 @@ object LocalEmbeddingService {
                 memoryRef = memoryRef,
                 embeddingJson = arr.toString(),
                 tagsJson = tagArr.toString(),
-                modelVersion = MODEL_VERSION,
+                modelVersion = modelVersion,
                 updatedAt = System.currentTimeMillis(),
             )
         )

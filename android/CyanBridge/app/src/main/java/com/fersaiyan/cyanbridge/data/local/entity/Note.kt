@@ -32,4 +32,12 @@ data class Note(
 
     /** CSV tags for MVP */
     val tags: String? = null,
+
+    /** AI-generated tags are separate so user-authored tags are never overwritten. */
+    val generatedTags: String? = null,
+
+    /** Checkpoint metadata used to enrich only notes whose searchable content changed. */
+    val taggedContentHash: String? = null,
+    val taggingModelVersion: String? = null,
+    val taggedAt: Long? = null,
 )

@@ -27,6 +27,7 @@ class LocalMultimodalTranscriptionProvider(
     override val name: String = "local_multimodal_litert"
 
     override suspend fun transcribe(audioFile: File, mimeType: String, language: String?): String {
+        // RAG profile NONE: transcription must depend only on the supplied audio.
         Log.i(TAG, "transcribe file=${audioFile.absolutePath} size=${audioFile.length()} mimeType=$mimeType")
         requireMultimodalLiteRtModel()
 

@@ -12,6 +12,7 @@ object KnowledgeIntegrationPrefs {
     private const val KEY_AUTO_SYNC = "auto_sync"
     private const val KEY_LAST_SYNC = "last_sync_ms"
     private const val KEY_LAST_SUMMARY = "last_summary"
+    private const val KEY_ALLOW_CLOUD_ENRICHMENT = "allow_cloud_enrichment"
 
     data class ObsidianVaultAccess(
         val permissionTreeUri: Uri,
@@ -72,6 +73,13 @@ object KnowledgeIntegrationPrefs {
 
     fun setAutoSyncEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_AUTO_SYNC, enabled).apply()
+    }
+
+    fun allowCloudEnrichment(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ALLOW_CLOUD_ENRICHMENT, false)
+
+    fun setAllowCloudEnrichment(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ALLOW_CLOUD_ENRICHMENT, enabled).apply()
     }
 
     fun lastSyncMs(context: Context): Long = prefs(context).getLong(KEY_LAST_SYNC, 0L)

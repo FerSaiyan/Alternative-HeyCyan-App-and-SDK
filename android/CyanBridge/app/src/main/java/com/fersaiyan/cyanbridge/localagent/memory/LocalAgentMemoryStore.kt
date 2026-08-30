@@ -45,6 +45,12 @@ object LocalAgentMemoryStore {
         return dir
     }
 
+    private fun dailyBulletsDir(context: Context): File {
+        val dir = File(baseDir(context), "daily_bullets")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
     private fun userFactsCandidatesDir(context: Context): File {
         val dir = File(baseDir(context), "user_facts_candidates")
         if (!dir.exists()) dir.mkdirs()
@@ -91,6 +97,10 @@ object LocalAgentMemoryStore {
 
     fun dailySummaryFileForDate(context: Context, date: String): File {
         return File(dailySummariesDir(context), "${date.trim()}.md")
+    }
+
+    fun dailyBulletsFileForDate(context: Context, date: String): File {
+        return File(dailyBulletsDir(context), "${date.trim()}.jsonl")
     }
 
     fun dailySummaryFileForDay(context: Context, tsMs: Long): File {

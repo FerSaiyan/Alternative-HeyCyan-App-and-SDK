@@ -25,10 +25,13 @@ object LocalAgentMemorySearch {
         topFacts: Int = DEFAULT_TOP_FACTS,
         topSummaryLines: Int = DEFAULT_TOP_SUMMARY_LINES,
         maxChars: Int = 1400,
+        ragProfile: RagProfile = RagProfile.FULL,
     ): String {
+        if (ragProfile == RagProfile.NONE) return ""
         return runCatching {
             runBlocking(Dispatchers.IO) {
-                val importedAllowed = ImportedKnowledgeIndex.mayInjectIntoCurrentPrompt(context)
+                val importedAllowed = ragProfile == RagProfile.FULL &&
+                    ImportedKnowledgeIndex.mayInjectIntoCurrentPrompt(context)
                 // Reserve explicit room for imported RAG when it is eligible. Without this split,
                 // the legacy memory block can consume maxChars before imported context is appended.
                 val importedBudget = if (importedAllowed) (maxChars * 0.36f).toInt().coerceAtLeast(420) else 0

@@ -129,6 +129,26 @@ class GlassesManagerGatingTest {
     }
 
     @Test
+    fun moyoungW620_showsOnlyValidatedStatusCapabilities() {
+        val model = GlassesManagerGating.uiModel(
+            DeviceProfile(
+                macAddress = "DB:3E:33:4C:9D:A2",
+                advertisedName = "W620",
+                detectedClass = DeviceClass.MOYOUNG_W620,
+                selectedClass = DeviceClass.MOYOUNG_W620,
+                userOverridden = false,
+            ),
+        )
+
+        assertTrue(model.isVisible(GlassesManagerGating.Action.STATUS_BATTERY))
+        assertTrue(model.isVisible(GlassesManagerGating.Action.STATUS_STORAGE))
+        assertFalse(model.isVisible(GlassesManagerGating.Action.HEY_CYAN_EXTRAS))
+        assertFalse(model.isVisible(GlassesManagerGating.Action.EYEVUE_CONTROLS))
+        assertFalse(model.isVisible(GlassesManagerGating.Action.TUNEBUDS_CONTROLS))
+        assertFalse(model.isVisible(GlassesManagerGating.Action.ADVANCED_CONTROLS))
+    }
+
+    @Test
     fun genericAudio_hidesHeyCyanExtras() {
         val profile = DeviceProfile(
             macAddress = "10:20:30:40:50:60",

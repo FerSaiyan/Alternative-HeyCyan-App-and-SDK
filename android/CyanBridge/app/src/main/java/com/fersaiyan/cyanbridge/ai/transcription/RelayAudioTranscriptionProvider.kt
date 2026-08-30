@@ -10,6 +10,7 @@ class RelayAudioTranscriptionProvider(
     override val name: String = "relay_audio",
 ) : TranscriptionProvider {
     override suspend fun transcribe(audioFile: File, mimeType: String, language: String?): String {
+        // RAG profile NONE: transcription must depend only on the supplied audio.
         val languageHint = language?.trim()?.takeIf(String::isNotEmpty)
         val prompt = buildString {
             append("Transcribe this audio accurately. Return only the plain transcript without markdown or commentary.")

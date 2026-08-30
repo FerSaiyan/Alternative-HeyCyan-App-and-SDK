@@ -15,6 +15,7 @@ class AiSummarizationService(
 ) : SummarizationService {
 
     override suspend fun summarize(request: SummarizationRequest): StructuredSummary {
+        // RAG profile NONE: meeting notes summarize only this transcript.
         val transcript = request.transcript.trim()
         if (transcript.isBlank()) {
             return StructuredSummary(

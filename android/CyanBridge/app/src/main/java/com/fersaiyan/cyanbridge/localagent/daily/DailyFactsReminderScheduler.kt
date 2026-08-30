@@ -5,7 +5,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import java.util.Calendar
 
 object DailyFactsReminderScheduler {
 
@@ -16,27 +15,9 @@ object DailyFactsReminderScheduler {
     }
 
     fun schedule(context: Context) {
-        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-        val pi = pendingIntent(context)
-
-        val cal = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 21)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-            if (timeInMillis <= System.currentTimeMillis()) {
-                add(Calendar.DAY_OF_YEAR, 1)
-            }
-        }
-
-        // Inexact repeating avoids Android 12+ exact alarm restrictions.
-        am.setInexactRepeating(
-            AlarmManager.RTC_WAKEUP,
-            cal.timeInMillis,
-            AlarmManager.INTERVAL_DAY,
-            pi,
-        )
+        // Review notifications are emitted only after the nightly batch reaches READY.
+        // Cancel the legacy unconditional 21:00 alarm during upgrades.
+        cancel(context)
     }
 
     fun cancel(context: Context) {

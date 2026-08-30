@@ -154,6 +154,7 @@ class HandsFreeTranslatorService : Service() {
         targetLanguage: String,
         autoDetect: Boolean,
     ): TranslationEntry? {
+        // RAG profile NONE: translation uses only the current phrase and language settings.
         val customPrompt = HandsFreeTranslatorPreferences.getCustomPrompt(this)
         val prompt = buildString {
             append("Translate the following speech. ")

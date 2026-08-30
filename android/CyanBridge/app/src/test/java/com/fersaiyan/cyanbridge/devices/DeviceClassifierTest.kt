@@ -61,6 +61,24 @@ class DeviceClassifierTest {
     }
 
     @Test
+    fun moyoungW620_detectedByServiceThenNameThenReportedMacPrefix() {
+        assertEquals(
+            DeviceClass.MOYOUNG_W620,
+            DeviceClassifier.guessDeviceClass(
+                null,
+                listOf(ParcelUuid.fromString("0000fea8-0000-1000-8000-00805f9b34fb")),
+                manufacturerCompanyIds = setOf(0x475A),
+            ),
+        )
+        assertEquals(DeviceClass.MOYOUNG_W620, DeviceClassifier.guessDeviceClass("W620"))
+        assertEquals(DeviceClass.MOYOUNG_W620, DeviceClassifier.guessDeviceClass("MoYoung Glasses"))
+        assertEquals(
+            DeviceClass.MOYOUNG_W620,
+            DeviceClassifier.guessDeviceClass(null, macAddress = "DB:3E:33:4C:9D:A2"),
+        )
+    }
+
+    @Test
     fun genericAudio_detectedByName() {
         assertEquals(DeviceClass.GENERIC_AUDIO, DeviceClassifier.guessDeviceClass("AirPods Pro"))
         assertEquals(DeviceClass.GENERIC_AUDIO, DeviceClassifier.guessDeviceClass("BT Headset"))

@@ -23,41 +23,41 @@ class HeyCyanP2pPolicyTest {
     @Test
     fun `builds the official wifi direct name`() {
         assertEquals(
-            "W620_DB3E334C9DA2",
-            HeyCyanP2pPolicy.officialWifiDirectName("W620", "DB:3E:33:4C:9D:A2"),
+            "M01_C4E3BFC3A402",
+            HeyCyanP2pPolicy.officialWifiDirectName("M01", "C4:E3:BF:C3:A4:02"),
         )
     }
 
     @Test
     fun `normalizes underscored names like the official receiver`() {
         assertEquals(
-            "W620_DB3E334C9DA2",
-            HeyCyanP2pPolicy.officialWifiDirectName("Hey_Cyan_W620", "DB:3E:33:4C:9D:A2"),
+            "M01_C4E3BFC3A402",
+            HeyCyanP2pPolicy.officialWifiDirectName("Hey_Cyan_M01", "C4:E3:BF:C3:A4:02"),
         )
-        assertNull(HeyCyanP2pPolicy.officialWifiDirectName("W620", null))
+        assertNull(HeyCyanP2pPolicy.officialWifiDirectName("M01", null))
     }
 
     @Test
     fun `matches official exact name and mac suffix fallback`() {
         assertTrue(
             HeyCyanP2pPolicy.matchesOfficialPeer(
-                "W620_DB3E334C9DA2",
-                "W620",
-                "DB:3E:33:4C:9D:A2",
+                "M01_C4E3BFC3A402",
+                "M01",
+                "C4:E3:BF:C3:A4:02",
             ),
         )
         assertTrue(
             HeyCyanP2pPolicy.matchesOfficialPeer(
-                "M01_DB3E334C9DA2",
-                "W620",
-                "DB:3E:33:4C:9D:A2",
+                "M01_C4E3BFC3A402",
+                "A03",
+                "C4:E3:BF:C3:A4:02",
             ),
         )
         assertFalse(
             HeyCyanP2pPolicy.matchesOfficialPeer(
                 "[TV] Samsung 4 Series",
-                "W620",
-                "DB:3E:33:4C:9D:A2",
+                "M01",
+                "C4:E3:BF:C3:A4:02",
             ),
         )
     }

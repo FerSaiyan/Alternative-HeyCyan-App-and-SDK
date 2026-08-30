@@ -21,6 +21,7 @@ import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.analytics.ProductAnalyticsLifecycle
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.localagent.daily.DailyFactsReminderScheduler
+import com.fersaiyan.cyanbridge.localagent.daily.NightlyEnrichmentScheduler
 import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiaryService
 import com.fersaiyan.cyanbridge.plugins.localagent.LocalAgentPlugin
 import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
@@ -77,6 +78,7 @@ class MyApplication : Application(){
             context = this,
             enabled = LocalAgentPrefs.isDailyFactsReminderEnabled(this),
         )
+        runCatching { NightlyEnrichmentScheduler.schedule(this) }
         LocalAgentPlugin.syncNativePluginState(this)
 
         // Auto audio capture (glasses recording loop)
@@ -287,6 +289,7 @@ class MyApplication : Application(){
                     com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_4_5,
                     com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_5_6,
                     com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_6_7,
+                    com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_7_8,
                 )
                 .addCallback(
                     object : androidx.room.RoomDatabase.Callback() {
@@ -318,6 +321,7 @@ class MyApplication : Application(){
             com.fersaiyan.cyanbridge.notes.RoomNotesRepository(
                 noteDao = database.noteDao(),
                 summarizationService = summarizationService,
+                context = CONTEXT,
             )
         }
 

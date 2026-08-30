@@ -42,10 +42,11 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * User-facing pairing intentionally groups the closely-related consumer camera-glasses protocols.
  * HEY_CYAN is used as the UI sentinel for this automatic family; Android resolves and persists the
- * actual HEY_CYAN / EYEVUE / TUNEBUDS protocol after the user confirms the device.
+ * actual HEY_CYAN / EYEVUE / TUNEBUDS / MOYOUNG_W620 protocol after confirmation.
  */
 private val pairingChoices = listOf(
     DeviceClass.HEY_CYAN,
+    DeviceClass.MOYOUNG_W620,
     DeviceClass.META_RAYBAN,
     DeviceClass.MEIZU_MYVU,
     DeviceClass.GENERIC_AUDIO,

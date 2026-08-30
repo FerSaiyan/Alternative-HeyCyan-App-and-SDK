@@ -448,9 +448,9 @@ If the cloud OTA API continues to return “No upgraded version” for a long ti
   - Then compare **state machines** (when they retry, when they reset, when they treat an error as fatal).
 - Always capture and reason from **logcat** before changing code; use the tag set above and keep logs alongside any code changes you make for traceability.
 
-## CyanBridge Vercel Relay Server (cyanbridge.vercel.app)
+## CyanBridge Vercel Relay (cyanbridge.vercel.app)
 
-The CyanBridge app uses a **Vercel-hosted Next.js server** instead of the Termux phone server for:
+The CyanBridge app uses a Vercel-hosted Next.js server for:
 - Subscription management (Asaas recurring credit card)
 - AI model proxying (OpenRouter)
 - User authentication and quota tracking
@@ -479,6 +479,8 @@ The CyanBridge app uses a **Vercel-hosted Next.js server** instead of the Termux
 | `/auth/register` | POST | User registration |
 | `/auth/me` | GET | User info by Bearer token |
 | `/transcribe` | POST | Audio transcription proxy |
+| `/logs/submit` | POST | Stores an Android diagnostic report and sends an email notification |
+| `/api/admin/debug-logs` | GET | Admin-only JSON for the newest 50 diagnostic reports |
 
 ### Subscription plans (USD)
 
@@ -511,7 +513,15 @@ The CyanBridge app uses a **Vercel-hosted Next.js server** instead of the Termux
 - API key stored in Vercel env vars
 - All chat/voice/image queries proxied through `/chat`, `/voice-query`, `/image-query`
 
-### Key source files (`Carelens_website/` path)
+### Server source
+
+The server is maintained in a separate repository at:
+
+`/home/fertroll10/Documents/CyanBridgeLabs/Cyanbridge_website`
+
+Do not add Flask, Termux, or staged Vercel wrappers under `android/CyanBridge`.
+
+### Key source files
 
 - `lib/relay-kv.ts` — RelayUser KV storage layer
 - `lib/billing-catalog.ts` — canonical provider-aware plan and price catalog
@@ -523,6 +533,8 @@ The CyanBridge app uses a **Vercel-hosted Next.js server** instead of the Termux
 - `app/api/pro/verify/route.ts` — Subscription verification
 - `app/api/chat/route.ts` — AI chat proxy (OpenRouter)
 - `app/api/webhooks/asaas/route.ts` — Webhook handler
+- `app/logs/submit/route.ts` — Android diagnostic-log ingestion
+- `lib/debug-log-store.ts` — recent-log Supabase PostgreSQL storage and retention
 
 ## Agent guardrails / lessons learned
 

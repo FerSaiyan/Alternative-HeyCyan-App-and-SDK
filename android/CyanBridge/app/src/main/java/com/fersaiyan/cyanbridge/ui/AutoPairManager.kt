@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.hjq.permissions.Permission
@@ -93,8 +94,15 @@ object AutoPairManager {
                         continue
                     }
                 }
-                if (connected && selectedClass != DeviceClass.MEIZU_MYVU) {
-                    if (selectedClass == DeviceClass.HEY_CYAN) scheduleHeyCyanMaximumDurations()
+                if (selectedClass == DeviceClass.MOYOUNG_W620) {
+                    if (MoyoungW620Manager.getInstance(appContext).isConnected()) {
+                        backoffMs = 5_000L
+                        delay(20_000L)
+                        continue
+                    }
+                }
+                if (connected && selectedClass == DeviceClass.HEY_CYAN) {
+                    scheduleHeyCyanMaximumDurations()
                     backoffMs = 5_000L
                     delay(20_000L)
                     continue
@@ -141,6 +149,14 @@ object AutoPairManager {
             TuneBudsManager.getInstance(context).connect(mac)
             return
         }
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MOYOUNG_W620) {
+            if (suppressAutoReconnect) {
+                Log.d(TAG, "Skipping MoYoung reconnect ($reason): suppressed")
+                return
+            }
+            MoyoungW620Manager.getInstance(context).connect(mac)
+            return
+        }
         if (DeviceProfileStore.isMetaSelected(context) || DeviceProfileStore.isMeizuMyvuSelected(context)) {
             Log.d(TAG, "Skipping vendor reconnect for selected non-HeyCyan glasses ($reason)")
             return
@@ -181,7 +197,9 @@ object AutoPairManager {
         return name.contains("HeyCyan", ignoreCase = true) ||
             name.contains("Cyan", ignoreCase = true) ||
             name.startsWith("O_") ||
-            name.startsWith("Q_")
+            name.startsWith("Q_") ||
+            name.contains("W620", ignoreCase = true) ||
+            name.contains("MoYoung", ignoreCase = true)
     }
 
     private fun getTargetMac(context: Context): String? {
@@ -191,6 +209,12 @@ object AutoPairManager {
         if (profile?.selectedClass == DeviceClass.EYEVUE) {
             profile.macAddress.takeIf { it.isNotBlank() }?.let {
                 connectEyevueWithMaximumDuration(context, it, profile.advertisedName)
+            }
+            return null
+        }
+        if (profile?.selectedClass == DeviceClass.MOYOUNG_W620) {
+            profile.macAddress.takeIf { it.isNotBlank() }?.let {
+                MoyoungW620Manager.getInstance(context).connect(it, profile.advertisedName)
             }
             return null
         }
@@ -275,6 +299,12 @@ object AutoPairManager {
             TuneBudsManager.getInstance(context).connect(address, profile.advertisedName)
             return true
         }
+        if (profile?.selectedClass == DeviceClass.MOYOUNG_W620) {
+            val address = profile.macAddress.takeIf { it.isNotBlank() } ?: return false
+            Log.i(TAG, "Auto-pair ($reason): MoYoung BLE $address")
+            MoyoungW620Manager.getInstance(context).connect(address, profile.advertisedName)
+            return true
+        }
 
         val mac = getTargetMac(context)
         if (mac.isNullOrBlank()) {
@@ -320,6 +350,10 @@ object AutoPairManager {
         }
         if (DeviceProfileStore.selectedClass(context) == DeviceClass.TUNEBUDS) {
             TuneBudsManager.getInstance(context).connect(mac)
+            return true
+        }
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MOYOUNG_W620) {
+            MoyoungW620Manager.getInstance(context).connect(mac)
             return true
         }
 

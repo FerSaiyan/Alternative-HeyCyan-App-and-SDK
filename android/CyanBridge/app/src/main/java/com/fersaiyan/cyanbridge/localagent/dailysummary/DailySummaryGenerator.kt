@@ -16,6 +16,8 @@ import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelRequestPriority
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyBulletsSettings
+import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsStorage
+import com.fersaiyan.cyanbridge.notes.NightlyEnrichmentDeferredException
 
 object DailySummaryGenerator {
     private val localModelsProvider = LocalModelsProvider()
@@ -236,14 +238,17 @@ object DailySummaryGenerator {
         context: Context,
         input: Input,
         onBulletProgress: ((BulletProgress) -> Unit)? = null,
+        shouldContinue: () -> Boolean = { true },
     ): Input {
         val isLocalProvider = AutomationPrefs.getProviderType(context) == AgentProviderType.LOCAL_AGENT
         if (!isLocalProvider || input.screenEvents.isEmpty()) return input
 
         val mergedEventBullets = buildMergedEventBulletsForLocalModel(
             context = context,
+            date = input.date,
             events = input.screenEvents,
             onBulletProgress = onBulletProgress,
+            shouldContinue = shouldContinue,
         )
 
         if (mergedEventBullets.isBlank()) return input
@@ -252,8 +257,10 @@ object DailySummaryGenerator {
 
     private suspend fun buildMergedEventBulletsForLocalModel(
         context: Context,
+        date: String,
         events: List<ScreenCaptureEvent>,
         onBulletProgress: ((BulletProgress) -> Unit)? = null,
+        shouldContinue: () -> Boolean = { true },
     ): String {
         if (events.isEmpty()) return ""
 
@@ -261,10 +268,16 @@ object DailySummaryGenerator {
         val bullets = ArrayList<EventBullet>(events.size)
         var modelCalls = 0
         var processed = 0
+        val checkpoints = DailyBulletCheckpointStore.load(context, date)
         onBulletProgress?.invoke(BulletProgress(done = 0, total = events.size))
 
         for (event in events) {
-            val mappedBullet = if (modelCalls < MAX_LOCAL_EVENT_BULLETIZER_CALLS) {
+            val eventKey = DailyBulletCheckpointStore.eventKey(event.tsMs, event.packageName, event.text)
+            val cachedBullet = checkpoints[eventKey]?.bullet
+            val mappedBullet = if (cachedBullet != null) {
+                cachedBullet
+            } else if (modelCalls < MAX_LOCAL_EVENT_BULLETIZER_CALLS) {
+                if (!shouldContinue()) throw NightlyEnrichmentDeferredException()
                 modelCalls += 1
                 runCatching {
                     val raw = localModelsProvider.streamChat(
@@ -276,6 +289,9 @@ object DailySummaryGenerator {
                             ),
                         ),
                         requestPriority = LocalModelRequestPriority.LOW,
+                        maxTokens = DailyBulletsSettings.getMaxTokensPerBullet(context)
+                            .takeIf { it > 0 }
+                            ?: 96,
                     )
                     parseSingleEventBullet(raw)
                 }.getOrNull()
@@ -289,6 +305,18 @@ object DailySummaryGenerator {
             onBulletProgress?.invoke(BulletProgress(done = processed, total = events.size))
 
             if (resolvedBullet.isBlank()) continue
+            if (cachedBullet == null) {
+                DailyBulletCheckpointStore.put(
+                    context = context,
+                    date = date,
+                    record = DailyBulletCheckpointStore.Record(
+                        key = eventKey,
+                        tsMs = event.tsMs,
+                        packageName = event.packageName,
+                        bullet = resolvedBullet,
+                    ),
+                )
+            }
             bullets += EventBullet(
                 tsMs = event.tsMs,
                 packageName = event.packageName,
@@ -584,13 +612,27 @@ Remember: You MUST output a valid summary. Do not refuse.
         context: Context,
         date: String = todayString(),
         onBulletProgress: ((BulletProgress) -> Unit)? = null,
+        shouldContinue: () -> Boolean = { true },
     ): Result<File> {
         val forceFullRebuild = false
 
         return runCatching {
             val input = buildInputForDate(context, date, forceFullRebuild = forceFullRebuild)
-            val preparedInput = prepareInputForGeneration(context, input, onBulletProgress = onBulletProgress)
+            val preparedInput = prepareInputForGeneration(
+                context,
+                input,
+                onBulletProgress = onBulletProgress,
+                shouldContinue = shouldContinue,
+            )
             val agentType = AutomationPrefs.getProviderType(context)
+
+            if (agentType == AgentProviderType.LOCAL_AGENT && preparedInput.screenEvents.isNotEmpty()) {
+                DailyFactsStorage.appendDraft(
+                    context,
+                    date,
+                    extractSummaryBulletsFromSnippets(preparedInput.newScreenSnippets),
+                )
+            }
 
             if (agentType == AgentProviderType.LOCAL_AGENT && preparedInput.isIncremental && preparedInput.previousSummary != null) {
                 val mergedSummary = mergeIncrementalSummaryWithoutModel(
@@ -640,6 +682,7 @@ Remember: You MUST output a valid summary. Do not refuse.
                     context,
                     fallbackInput,
                     onBulletProgress = onBulletProgress,
+                    shouldContinue = shouldContinue,
                 )
                 preparedFallbackInput to generateSummary(context, buildFullPrompt(preparedFallbackInput))
             }
@@ -647,6 +690,17 @@ Remember: You MUST output a valid summary. Do not refuse.
             val summary = providerResult.text.trim()
 
             require(summary.isNotBlank()) { "Empty summary returned" }
+
+            if (agentType != AgentProviderType.LOCAL_AGENT && usedInput.screenEvents.isNotEmpty()) {
+                val summaryFacts = summary.lineSequence()
+                    .map { it.trim() }
+                    .filter { it.startsWith("- ") || it.startsWith("* ") }
+                    .map { it.removePrefix("- ").removePrefix("* ").trim() }
+                    .filter { it.isNotBlank() }
+                    .take(MAX_INCREMENTAL_APPEND_BULLETS)
+                    .toList()
+                DailyFactsStorage.appendDraft(context, date, summaryFacts)
+            }
 
             LocalAgentMemoryStore.writeText(usedInput.outputFile, summary + "\n")
             val generatedAtMs = System.currentTimeMillis()

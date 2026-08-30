@@ -86,6 +86,7 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
             SafKnowledgeRepository.hasPersistedTreePermission(this, it.permissionTreeUri, writable = true)
         } == true
         val autoSync = KnowledgeIntegrationPrefs.autoSyncEnabled(this)
+        val cloudEnrichment = KnowledgeIntegrationPrefs.allowCloudEnrichment(this)
         val lastSummary = KnowledgeIntegrationPrefs.lastSummary(this)
 
         LaunchedEffect(refreshKey, obsidianVault?.permissionTreeUri, obsidianVault?.rootDocumentId, obsidianWritable) {
@@ -179,6 +180,29 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                                 onCheckedChange = { enabled ->
                                     KnowledgeIntegrationPrefs.setAutoSyncEnabled(this@KnowledgeIntegrationsActivity, enabled)
                                     KnowledgeSyncWorker.schedule(this@KnowledgeIntegrationsActivity)
+                                    refreshKey++
+                                },
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Allow cloud note enrichment", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "When the selected provider is Pro, note text may be sent to the relay overnight to generate tags. Off keeps unattended enrichment local.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            Switch(
+                                checked = cloudEnrichment,
+                                onCheckedChange = { enabled ->
+                                    KnowledgeIntegrationPrefs.setAllowCloudEnrichment(
+                                        this@KnowledgeIntegrationsActivity,
+                                        enabled,
+                                    )
                                     refreshKey++
                                 },
                             )

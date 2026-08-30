@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.fersaiyan.cyanbridge.MainActivity
@@ -44,12 +43,13 @@ import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsReviewProtocol.R
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsStorage
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsReviewThreadStore
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.OcrDailyFactsSeeder
+import com.fersaiyan.cyanbridge.localagent.daily.NightlyEnrichmentPrefs
 import com.fersaiyan.cyanbridge.localagent.userfacts.CandidateUserFactsStorage
 import com.fersaiyan.cyanbridge.localagent.userfacts.UserFactsStorage
 import com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryAutoUpdater
-import com.fersaiyan.cyanbridge.localagent.dailysummary.DailySummaryPrefs
 import com.fersaiyan.cyanbridge.localagent.dailysummary.DailySummaryRegenerateWorker
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemorySearch
+import com.fersaiyan.cyanbridge.localagent.memory.RagProfile
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelRequestPriority
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
@@ -1443,27 +1443,6 @@ class ChatThreadActivity : AppCompatActivity() {
         return compact.take(48)
     }
 
-    private fun maybeQueueDailySummaryIfDue(date: String) {
-        runCatching {
-            // Only queue if we have at least one capture for the day.
-            val captureUpdatedAt = LocalAgentMemoryStore.screenCaptureLastUpdatedAtMs(this, date)
-            if (captureUpdatedAt <= 0L) return
-
-            val lastGenerated = DailySummaryPrefs.getLastGeneratedAtMs(this, date)
-            val intervalHours = AutomationPrefs.getDailySummaryAutoRefreshHours(this)
-            val intervalMs = intervalHours * 60L * 60L * 1000L
-            val due = lastGenerated <= 0L ||
-                (System.currentTimeMillis() - lastGenerated) >= intervalMs
-            if (!due) return
-
-            WorkManager.getInstance(this).enqueueUniqueWork(
-                DailySummaryRegenerateWorker.uniqueWorkName(date),
-                ExistingWorkPolicy.KEEP,
-                DailySummaryRegenerateWorker.buildRequest(date),
-            )
-        }
-    }
-
     private suspend fun buildRelayMessages(chatId: String, lastUserPrompt: String): List<Map<String, String>> {
         if (!isDailyFactsReview) {
             val selectedLocalModel = if (isLocalModelsProviderSelected()) {
@@ -1492,13 +1471,11 @@ class ChatThreadActivity : AppCompatActivity() {
             val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                 .format(java.util.Date(System.currentTimeMillis()))
 
-            // Keep daily summary reasonably fresh without blocking chat response/title generation.
-            maybeQueueDailySummaryIfDue(today)
-
             val relevantMemory = LocalAgentMemorySearch.buildRelevantMemoryBlock(
                 context = this,
                 queryText = lastUserPrompt,
                 date = today,
+                ragProfile = RagProfile.FULL,
             )
 
             val extra = if (relevantMemory.isBlank()) {
@@ -1585,6 +1562,8 @@ class ChatThreadActivity : AppCompatActivity() {
     private suspend fun ensureDailyFactsDraftHydratedFromOcrIfNeeded(date: String) {
         if (!isDailyFactsReview || dailyFactsSeededFromOcr) return
         dailyFactsSeededFromOcr = true
+        // READY batches already contain processed bullets. Do not contaminate them with raw OCR.
+        if (NightlyEnrichmentPrefs.isReady(this, date)) return
 
         val retentionDays = MemoryModeManager.getScreenOcrRetentionDays(this)
         val lookback = dailyFactsLookbackDays.coerceIn(1, retentionDays.coerceAtLeast(1))
@@ -2402,6 +2381,9 @@ class ChatThreadActivity : AppCompatActivity() {
                 val draftCount = state?.draft?.size ?: 0
                 val confirmedCount = state?.confirmed?.size ?: 0
                 val candidateCount = candidateUserFacts.size
+                if (draftCount == 0 && candidateCount == 0) {
+                    NightlyEnrichmentPrefs.markReviewed(this@ChatThreadActivity, date)
+                }
                 if (draftCount >= 0 && confirmedCount >= 0 && candidateCount >= 0) {
                     "Queue integrity: ok · pending $draftCount · confirmed $confirmedCount · user candidates $candidateCount"
                 } else {

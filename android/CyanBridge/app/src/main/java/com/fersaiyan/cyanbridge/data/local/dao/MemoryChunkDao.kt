@@ -34,11 +34,29 @@ interface MemoryChunkDao {
     @Query("DELETE FROM memory_chunks WHERE source = :source AND packageName = :packageName")
     suspend fun deleteBySourceAndPackageName(source: String, packageName: String): Int
 
+    @Query("SELECT * FROM memory_chunks WHERE source = :source AND sourceId = :sourceId")
+    suspend fun listBySourceAndSourceId(source: String, sourceId: String): List<MemoryChunk>
+
+    @Query("DELETE FROM memory_chunks WHERE source = :source AND sourceId = :sourceId")
+    suspend fun deleteBySourceAndSourceId(source: String, sourceId: String): Int
+
+    @Query("SELECT * FROM memory_chunks WHERE source = :source AND packageName = :packageName")
+    suspend fun listBySourceAndPackageName(source: String, packageName: String): List<MemoryChunk>
+
+    @Query("DELETE FROM memory_chunks WHERE source = :source AND packageName = :packageName AND sourceId = :sourceId")
+    suspend fun deleteBySourcePackageAndSourceId(source: String, packageName: String, sourceId: String): Int
+
     @Query("DELETE FROM memory_chunks WHERE source = :source AND tsMs < :beforeTs")
     suspend fun deleteSourceOlderThan(source: String, beforeTs: Long): Int
 
     @Query("SELECT id, source, sourceId, packageName, tsMs FROM memory_chunks")
     suspend fun listChunkRefs(): List<ChunkRef>
+
+    @Query("SELECT * FROM memory_chunks WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): MemoryChunk?
+
+    @Query("SELECT * FROM memory_chunks WHERE source = :source ORDER BY updatedAt DESC")
+    suspend fun listBySource(source: String): List<MemoryChunk>
 
     // --- FTS search (FTS5 virtual table created via SQL migration/callback) ---
 

@@ -13,7 +13,11 @@ class ScannedDevice(
     var serviceUuids: List<ParcelUuid> = emptyList(),
 ) {
     var connectionAddress: String = macAddress
-    var detectedClass: DeviceClass = DeviceClassifier.guessDeviceClass(advertisedName, serviceUuids)
+    var detectedClass: DeviceClass = DeviceClassifier.guessDeviceClass(
+        advertisedName,
+        serviceUuids,
+        macAddress = macAddress,
+    )
         private set
 
     /**

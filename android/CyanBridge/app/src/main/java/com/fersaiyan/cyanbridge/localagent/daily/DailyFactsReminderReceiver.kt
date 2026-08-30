@@ -9,8 +9,6 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
-import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.ui.ChatThreadActivity
 
 class DailyFactsReminderReceiver : BroadcastReceiver() {
@@ -18,32 +16,28 @@ class DailyFactsReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action != ACTION_REMIND) return
 
+        val date = intent.getStringExtra(EXTRA_DATE)?.trim().orEmpty()
+        val count = intent.getIntExtra(EXTRA_COUNT, 0)
+        if (date.isBlank() || count <= 0 || !NightlyEnrichmentPrefs.isReady(context, date)) return
         ensureChannel(context)
-
-        // Open a new chat to review daily facts with the agent.
-        LocalAgentMemoryStore.ensureSeedFiles(context)
-
-        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-            .format(java.util.Date(System.currentTimeMillis()))
-        val retentionDays = MemoryModeManager.getScreenOcrRetentionDays(context)
 
         val openIntent = Intent(context, ChatThreadActivity::class.java)
             .putExtra(ChatThreadActivity.EXTRA_CREATE_THREAD_TITLE, "Daily facts review")
             .putExtra(ChatThreadActivity.EXTRA_DAILY_FACTS_REVIEW, true)
             .putExtra(ChatThreadActivity.EXTRA_DAILY_FACTS_DATE, date)
-            .putExtra(ChatThreadActivity.EXTRA_DAILY_FACTS_LOOKBACK_DAYS, retentionDays)
+            .putExtra(ChatThreadActivity.EXTRA_DAILY_FACTS_LOOKBACK_DAYS, 1)
 
         val openPi = PendingIntent.getActivity(
             context,
-            0,
+            date.hashCode(),
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Daily facts")
-            .setContentText("Quick check: verify today’s facts for your Local Agent memory")
+            .setContentTitle("Yesterday's facts are ready")
+            .setContentText("Review $count processed memory candidate${if (count == 1) "" else "s"}")
             .setContentIntent(openPi)
             .setAutoCancel(true)
             .build()
@@ -67,6 +61,8 @@ class DailyFactsReminderReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION_REMIND = "com.fersaiyan.cyanbridge.action.DAILY_FACTS_REMIND"
+        const val EXTRA_DATE = "daily_facts_date"
+        const val EXTRA_COUNT = "daily_facts_count"
 
         private const val CHANNEL_ID = "daily_facts"
         private const val NOTIF_ID = 44102

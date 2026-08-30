@@ -6,6 +6,9 @@ plugins {
 }
 
 configurations.configureEach {
+    // Full protobuf includes GeneratedMessageLite and is required by the MoYoung SDK's
+    // GeneratedMessage classes. Do not package Meta DAT's duplicate javalite runtime.
+    exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
     resolutionStrategy {
         force 'androidx.core:core:1.15.0'
         force 'androidx.core:core-ktx:1.15.0'
@@ -166,6 +169,8 @@ dependencies {
     implementation("com.heycyan.core:core-connectivity:${coreConnectivityVersion}")
     implementation project(":shared")
     implementation files("libs/glasses_sdk_20250723_v01.aar")
+    implementation files("libs/moyoung_glasses_sdk_0.0.7_20260624.aar")
+    implementation "com.google.protobuf:protobuf-java:4.29.3"
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation("androidx.core:core:1.15.0")

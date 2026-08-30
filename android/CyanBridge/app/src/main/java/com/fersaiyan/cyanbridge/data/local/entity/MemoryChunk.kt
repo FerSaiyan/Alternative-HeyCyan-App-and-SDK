@@ -45,4 +45,5 @@ data class MemoryChunk(
 
 object MemoryChunkSources {
     const val SCREEN_CAPTURE = "screen_capture"
+    const val CYANBRIDGE_NOTE = "cyanbridge_note"
 }

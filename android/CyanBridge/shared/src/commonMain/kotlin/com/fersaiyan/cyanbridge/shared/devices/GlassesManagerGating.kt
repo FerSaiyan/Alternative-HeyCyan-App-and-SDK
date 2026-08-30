@@ -73,6 +73,10 @@ object GlassesManagerGating {
                 base.add(Action.ADVANCED_DEVICE_INFO)
                 base.add(Action.ADVANCED_IMAGE_QUALITY)
             }
+            DeviceClass.MOYOUNG_W620 -> {
+                base.add(Action.STATUS_BATTERY)
+                base.add(Action.STATUS_STORAGE)
+            }
             else -> {}
         }
         return base

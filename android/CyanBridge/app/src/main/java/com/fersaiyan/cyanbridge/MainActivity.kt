@@ -27,6 +27,7 @@ import com.fersaiyan.cyanbridge.media.GlassesMediaPrefs
 import com.fersaiyan.cyanbridge.media.SyncedMediaFolder
 import com.fersaiyan.cyanbridge.media.VendorAlbumDownloader
 import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
+import com.fersaiyan.cyanbridge.media.OfficialHeyCyanApp
 import com.fersaiyan.cyanbridge.ota.FirmwareClient
 import com.fersaiyan.cyanbridge.ota.InstalledFirmwareVersions
 import com.fersaiyan.cyanbridge.ota.FirmwareResult
@@ -106,6 +107,8 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaType
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueWifiTransport
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
+import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
+import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungWifiCredentials
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLocalHotspot
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaSync
@@ -247,6 +250,7 @@ import com.fersaiyan.cyanbridge.tasker.TaskerIntegrationManager
 import com.fersaiyan.cyanbridge.localagent.context.LocalAgentContextBuilder
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsStorage
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemorySearch
+import com.fersaiyan.cyanbridge.localagent.memory.RagProfile
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.localagent.userfacts.CandidateUserFactsStorage
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
@@ -446,6 +450,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var tuneBudsMediaJob: Job? = null
     private var tuneBudsMediaHotspot: TuneBudsLocalHotspot? = null
     private var tuneBudsMediaCancelled = false
+    private var moyoungMediaJob: Job? = null
+    private var moyoungMediaCancelled = false
     private var wifiAdbDebugSessionLease: GlassesSessionLease? = null
     private val otaManager by lazy { OtaManager(this) }
     private var otaPreparationJob: Job? = null
@@ -592,6 +598,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val eyevueAiPhotoInProgress = AtomicBoolean(false)
     private var tuneBudsManager: TuneBudsManager? = null
     private var tuneBudsUiJob: Job? = null
+    private var moyoungW620Manager: MoyoungW620Manager? = null
+    private var moyoungW620UiJob: Job? = null
     private val tuneBudsAiPhotoInProgress = AtomicBoolean(false)
 
     private val metaAndroidPermissionLauncher =
@@ -811,6 +819,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             tuneBudsMediaHotspot?.stop()
             tuneBudsMediaJob?.cancel()
         }
+        if (moyoungMediaJob?.isActive == true) {
+            moyoungMediaCancelled = true
+            moyoungW620Manager?.stopMediaSync()
+            moyoungMediaJob?.cancel()
+        }
         otaPreparationJob?.cancel()
         otaPreparationJob = null
         otaManager.cancel()
@@ -820,7 +833,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (!otaManager.isActive) {
             releaseExclusiveGlassesSession(otaSessionLease)
         }
-        if (isEyevueSelected() && GlassesSessionCoordinator.currentSession() == GlassesSession.MEDIA_SYNC) {
+        if (isMoyoungW620Selected() && GlassesSessionCoordinator.currentSession() == GlassesSession.MEDIA_SYNC) {
+            moyoungW620Manager?.stopMediaSync()
+            releaseExclusiveGlassesSession(mediaSessionLease)
+            mediaSessionLease = null
+        } else if (isEyevueSelected() && GlassesSessionCoordinator.currentSession() == GlassesSession.MEDIA_SYNC) {
             getOrCreateEyevueManager().finishTransfer()
             eyevueMediaTransport?.disconnect()
             releaseExclusiveGlassesSession(mediaSessionLease)
@@ -1242,6 +1259,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
+    private fun getOrCreateMoyoungW620Manager(): MoyoungW620Manager =
+        moyoungW620Manager ?: MoyoungW620Manager.getInstance(this).also { manager ->
+            moyoungW620Manager = manager
+            if (moyoungW620UiJob == null) {
+                moyoungW620UiJob = lifecycleScope.launch {
+                    manager.state.collect { moyoung ->
+                        if (!isMoyoungW620Selected()) return@collect
+                        val counts = listOfNotNull(
+                            moyoung.photoCount?.let { "$it photos" },
+                            moyoung.videoCount?.let { "$it videos" },
+                            moyoung.audioCount?.let { "$it audio" },
+                        ).joinToString(" / ").ifBlank { "--" }
+                        binding.statusText.text = moyoung.connectionLabel
+                        binding.storageText.text = counts
+                        updateBatteryText(moyoung.batteryPercent)
+                        updateDashboardState { state ->
+                            state.copy(
+                                connectionLabel = moyoung.connectionLabel,
+                                batteryPercent = moyoung.batteryPercent,
+                                storageLabel = counts,
+                                transfer = state.transfer.copy(countsLabel = counts),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
     private fun getOrCreateEyevueLivePreviewManager(): EyevueLivePreviewManager =
         eyevueLivePreviewManager ?: EyevueLivePreviewManager(
             context = this,
@@ -1571,7 +1616,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         when (action) {
             is GlassesDashboardAction.Navigate -> navigateToDestination(action.destination)
             GlassesDashboardAction.Scan -> {
-                if (isEyevueSelected()) {
+                if (isMoyoungW620Selected()) {
+                    startKtxActivity<DeviceBindActivity>()
+                } else if (isEyevueSelected()) {
                     startKtxActivity<DeviceBindActivity>()
                 } else if (isTuneBudsSelected()) {
                     startKtxActivity<DeviceBindActivity>()
@@ -1584,7 +1631,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
             GlassesDashboardAction.Reconnect -> {
-                if (isEyevueSelected()) {
+                if (isMoyoungW620Selected()) {
+                    DeviceProfileStore.loadLastSelected(this)?.let { profile ->
+                        getOrCreateMoyoungW620Manager().connect(profile.macAddress, profile.advertisedName)
+                    } ?: startKtxActivity<DeviceBindActivity>()
+                } else if (isEyevueSelected()) {
                     DeviceProfileStore.loadLastSelected(this)?.let { profile ->
                         getOrCreateEyevueManager().connect(profile.macAddress, profile.advertisedName)
                     } ?: startKtxActivity<DeviceBindActivity>()
@@ -1603,7 +1654,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
             GlassesDashboardAction.Disconnect -> {
-                if (isEyevueSelected()) {
+                if (isMoyoungW620Selected()) {
+                    AutoPairManager.setAutoReconnectSuppressed(true, reason = "user_disconnect_button")
+                    getOrCreateMoyoungW620Manager().disconnect()
+                } else if (isEyevueSelected()) {
                     getOrCreateEyevueManager().disconnect()
                 } else if (isTuneBudsSelected()) {
                     AutoPairManager.setAutoReconnectSuppressed(true, reason = "user_disconnect_button")
@@ -1680,6 +1734,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 getOrCreateEyevueManager().requestMediaCount()
             } else if (isTuneBudsSelected()) {
                 getOrCreateTuneBudsManager().requestMediaCount()
+            } else if (isMoyoungW620Selected()) {
+                getOrCreateMoyoungW620Manager().requestMediaCount()
             } else {
                 binding.btnMediaCount.performClick()
             }
@@ -1687,6 +1743,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 startEyevueMediaSync()
             } else if (isTuneBudsSelected()) {
                 startTuneBudsMediaSync()
+            } else if (isMoyoungW620Selected()) {
+                startMoyoungW620MediaSync()
             } else {
                 binding.btnDataDownload.performClick()
             }
@@ -1694,6 +1752,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 stopEyevueMediaSync()
             } else if (isTuneBudsSelected()) {
                 stopTuneBudsMediaSync()
+            } else if (isMoyoungW620Selected()) {
+                stopMoyoungW620MediaSync()
             } else {
                 binding.btnTransferStop.performClick()
             }
@@ -1711,6 +1771,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 getOrCreateEyevueManager().requestBattery()
             } else if (isTuneBudsSelected()) {
                 getOrCreateTuneBudsManager().requestBattery()
+            } else if (isMoyoungW620Selected()) {
+                getOrCreateMoyoungW620Manager().requestBattery()
             } else {
                 binding.btnBattery.performClick()
             }
@@ -2492,7 +2554,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
                 binding.btnDataDownload -> {
                     ensureGlassesTransportPermissions("Wi-Fi media sync") {
-                        showDownloadFlowPicker()
+                        if (isMoyoungW620Selected()) {
+                            startMoyoungW620MediaSync()
+                        } else {
+                            showOfficialHeyCyanWarningOrContinue()
+                        }
                     }
                 }
                 binding.btnTransferStop -> {
@@ -4028,17 +4094,24 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return if (hits.isNotEmpty()) hits else clean.take(minOf(maxItems, 2))
     }
 
-    private fun buildCompactMemoryAwareSystemPrompt(queryText: String, date: String): String {
+    private fun buildCompactMemoryAwareSystemPrompt(
+        queryText: String,
+        date: String,
+        ragProfile: RagProfile,
+    ): String {
+        if (ragProfile == RagProfile.NONE) return ""
+        val light = ragProfile == RagProfile.LIGHT
         val extraSections = mutableListOf<LocalAgentContextBuilder.Section>()
 
         val retrieval = LocalAgentMemorySearch.buildRelevantMemoryBlock(
             context = this,
             queryText = queryText,
             date = date,
-            lookbackDaysFacts = 5,
-            topFacts = 4,
-            topSummaryLines = 3,
-            maxChars = 900,
+            lookbackDaysFacts = if (light) 3 else 5,
+            topFacts = if (light) 2 else 4,
+            topSummaryLines = if (light) 1 else 3,
+            maxChars = if (light) 500 else 900,
+            ragProfile = ragProfile,
         )
         if (retrieval.isNotBlank()) {
             extraSections += LocalAgentContextBuilder.Section(
@@ -4053,7 +4126,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             LocalAgentMemoryStore.dailyFactsFileForDate(this, date),
         )
         val relevantDraft = if (MemoryPolicyService.isMemoryRefSearchEligible(this, draftRef)) {
-            selectRelevantMemoryItems(draftFacts, queryText, maxItems = 4)
+            selectRelevantMemoryItems(draftFacts, queryText, maxItems = if (light) 1 else 4)
         } else {
             emptyList()
         }
@@ -4070,7 +4143,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             LocalAgentMemoryStore.userFactsCandidatesFileForDate(this, date),
         )
         val relevantCandidates = if (MemoryPolicyService.isMemoryRefSearchEligible(this, candidateRef)) {
-            selectRelevantMemoryItems(candidateFacts, queryText, maxItems = 3)
+            selectRelevantMemoryItems(candidateFacts, queryText, maxItems = if (light) 1 else 3)
         } else {
             emptyList()
         }
@@ -4082,11 +4155,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         val builder = LocalAgentContextBuilder(
-            maxAgentPersonaChars = QUERY_MAX_AGENT_PERSONA_CHARS,
-            maxUserFactsChars = QUERY_MAX_USER_FACTS_CHARS,
-            maxConfirmedDailyFactsChars = QUERY_MAX_CONFIRMED_FACTS_CHARS,
-            maxDailySummaryChars = QUERY_MAX_DAILY_SUMMARY_CHARS,
-            maxTotalChars = QUERY_MAX_TOTAL_CONTEXT_CHARS,
+            maxAgentPersonaChars = if (light) 300 else QUERY_MAX_AGENT_PERSONA_CHARS,
+            maxUserFactsChars = if (light) 400 else QUERY_MAX_USER_FACTS_CHARS,
+            maxConfirmedDailyFactsChars = if (light) 350 else QUERY_MAX_CONFIRMED_FACTS_CHARS,
+            maxDailySummaryChars = if (light) 300 else QUERY_MAX_DAILY_SUMMARY_CHARS,
+            maxTotalChars = if (light) 1_800 else QUERY_MAX_TOTAL_CONTEXT_CHARS,
         )
 
         return builder.buildSystemMessage(
@@ -4096,9 +4169,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
     }
 
-    private suspend fun runMemoryAwareChosenProviderQuery(
+    private suspend fun runChosenProviderQuery(
         userPrompt: String,
         providerType: AgentProviderType,
+        ragProfile: RagProfile,
         imagePaths: List<String> = emptyList(),
         audioPath: String? = null,
         onToken: ((String) -> Unit)? = null,
@@ -4106,8 +4180,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val date = todayDateString()
         val languageTag = recognitionLanguageTag()
         val systemPrompt = buildString {
-            append(buildCompactMemoryAwareSystemPrompt(queryText = userPrompt, date = date))
-            append("\n\n")
+            val memoryContext = buildCompactMemoryAwareSystemPrompt(
+                queryText = userPrompt,
+                date = date,
+                ragProfile = ragProfile,
+            )
+            if (memoryContext.isNotBlank()) {
+                append(memoryContext)
+                append("\n\n")
+            }
             append(ImageQuestionDefaults.responseLanguageInstruction(languageTag))
         }
 
@@ -4176,13 +4257,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
     }
 
-    private fun triggerMemoryAwareImageQuery(
+    private fun triggerChosenProviderImageQuery(
         imagePath: String,
         providerType: AgentProviderType,
         resolvedPrompt: ResolvedImageQuestionPrompt,
         onReplySpoken: (() -> Unit)? = null,
     ) {
-        Log.i("AIHijack", "Running memory-aware image query for chosen provider $providerType: $imagePath")
+        Log.i("AIHijack", "Running image query with RAG disabled for chosen provider $providerType: $imagePath")
 
         val onSpeechCompleted: () -> Unit = {
             finishAiQuestionForegroundWork()
@@ -4234,9 +4315,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                     AgentProviderType.LOCAL_AGENT -> {
                         var receivedModelText = false
-                        runMemoryAwareChosenProviderQuery(
+                        runChosenProviderQuery(
                             userPrompt = resolvedPrompt.forRoute(ImageQuestionRoute.LOCAL_GEMMA),
                             providerType = AgentProviderType.LOCAL_AGENT,
+                            ragProfile = RagProfile.NONE,
                             imagePaths = listOf(imagePath),
                             onToken = { fragment ->
                                 receivedModelText = true
@@ -5644,9 +5726,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         when (routing.intent) {
                             AssistantIntent.ANSWER_QUESTION -> {
                                 val reply = if (memoryAwareChosenProvider) {
-                                    runMemoryAwareChosenProviderQuery(
+                                    runChosenProviderQuery(
                                         userPrompt = prompt,
                                         providerType = selectedProvider,
+                                        ragProfile = RagProfile.LIGHT,
                                     )
                                 } else {
                                     val modelOverride = if (selectedProvider == AgentProviderType.PRO_SUBSCRIPTION) {
@@ -6124,7 +6207,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             GlassesAssistantRoute.PHONE_ASSISTANT -> null
         }
         if (internalProvider != null) {
-            triggerMemoryAwareImageQuery(
+            triggerChosenProviderImageQuery(
                 imagePath = imagePath,
                 providerType = internalProvider,
                 resolvedPrompt = resolvedPrompt,
@@ -6355,6 +6438,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun isTuneBudsSelected(): Boolean =
         DeviceProfileStore.selectedClass(this) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.TUNEBUDS
 
+    private fun isMoyoungW620Selected(): Boolean = DeviceProfileStore.isMoyoungW620Selected(this)
+
     private fun isHeyCyanSelected(): Boolean =
         DeviceProfileStore.selectedClass(this) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.HEY_CYAN
 
@@ -6449,6 +6534,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (isTuneBudsSelected()) {
                 getOrCreateTuneBudsManager().takeIf { it.isConnected() }?.requestBattery()
             }
+            if (isMoyoungW620Selected()) {
+                getOrCreateMoyoungW620Manager().takeIf { it.isConnected() }?.requestBattery()
+            }
         }
 
         if (!showStorage) {
@@ -6475,6 +6563,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         if (model.isVisible(GlassesManagerGating.Action.TUNEBUDS_CONTROLS)) {
             getOrCreateTuneBudsManager().takeIf { it.isConnected() }?.refreshStatus()
+        }
+        if (isMoyoungW620Selected()) {
+            getOrCreateMoyoungW620Manager().takeIf { it.isConnected() }?.requestMediaCount()
         }
     }
 
@@ -7238,6 +7329,42 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         showDownloadFlowPicker = true
     }
 
+    private fun showOfficialHeyCyanWarningOrContinue() {
+        val selectedClass = DeviceProfileStore.selectedClass(this)
+        if (!OfficialHeyCyanApp.shouldWarn(this, selectedClass)) {
+            showDownloadFlowPicker()
+            return
+        }
+
+        val suppressCheckbox = android.widget.CheckBox(this).apply {
+            text = "Don't remind me again"
+            val horizontalPadding = (24 * resources.displayMetrics.density).toInt()
+            setPadding(horizontalPadding, 0, horizontalPadding, 0)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("HeyCyan may interrupt sync")
+            .setMessage(
+                "The official HeyCyan app is installed. Android cannot tell CyanBridge reliably " +
+                    "whether HeyCyan is currently using the glasses. If it is, the two apps may " +
+                    "compete for Bluetooth or Wi-Fi and interrupt media sync.\n\n" +
+                    "For the most reliable sync, open App info, force-stop HeyCyan, then return " +
+                    "to CyanBridge. CyanBridge cannot force-stop another app.",
+            )
+            .setView(suppressCheckbox)
+            .setNegativeButton("Cancel", null)
+            .setNeutralButton("Open App info") { _, _ ->
+                runCatching { startActivity(OfficialHeyCyanApp.appInfoIntent()) }
+                    .onFailure {
+                        Toast.makeText(this, "Could not open HeyCyan App info.", Toast.LENGTH_LONG).show()
+                    }
+            }
+            .setPositiveButton("Continue") { _, _ ->
+                if (suppressCheckbox.isChecked) OfficialHeyCyanApp.suppressWarning(this)
+                showDownloadFlowPicker()
+            }
+            .show()
+    }
+
     private enum class MediaDownloadPurpose {
         FULL_SYNC,
         IMAGE_QUESTION,
@@ -7494,6 +7621,172 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         tuneBudsMediaHotspot?.stop()
         getOrCreateTuneBudsManager().finishTransfer()
         tuneBudsMediaJob?.cancel()
+        setTransferUiVisible(false)
+        releaseExclusiveGlassesSession(mediaSessionLease)
+        mediaSessionLease = null
+    }
+
+    private fun startMoyoungW620MediaSync() {
+        if (moyoungMediaJob?.isActive == true) return
+        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
+            ensureGlassesTransportPermissions("MoYoung media sync") {
+                startMoyoungW620MediaSync()
+            }
+            return
+        }
+
+        val manager = getOrCreateMoyoungW620Manager()
+        if (!manager.isConnected()) {
+            Toast.makeText(this, "Connect MoYoung / W620 glasses first.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (GlassesSessionCoordinator.currentSession() != null) {
+            Toast.makeText(this, "Another glasses session is already active.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        showMoyoungWifiCredentialsDialog(manager)
+    }
+
+    private fun showMoyoungWifiCredentialsDialog(manager: MoyoungW620Manager) {
+        val prefs = getSharedPreferences("moyoung_w620", Context.MODE_PRIVATE)
+        val ssidInput = android.widget.EditText(this).apply {
+            hint = "Glasses Wi-Fi name (SSID)"
+            setText(prefs.getString("file_wifi_ssid", "Glass-01"))
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        val passwordInput = android.widget.EditText(this).apply {
+            hint = "Glasses Wi-Fi password"
+            setText(prefs.getString("file_wifi_password", "12345678"))
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val padding = (24 * resources.displayMetrics.density).toInt()
+        val fields = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(padding, 0, padding, 0)
+            addView(ssidInput)
+            addView(passwordInput)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("W620 Wi-Fi credentials")
+            .setMessage(
+                "Confirm the access-point details for these glasses. Glass-01 / 12345678 " +
+                    "are upstream example defaults and may not match every W620.",
+            )
+            .setView(fields)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Start sync") { _, _ ->
+                val credentials = MoyoungWifiCredentials(
+                    ssid = ssidInput.text.toString().trim(),
+                    password = passwordInput.text.toString(),
+                )
+                if (credentials.ssid.isBlank()) {
+                    Toast.makeText(this, "Enter the glasses Wi-Fi name.", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                prefs.edit()
+                    .putString("file_wifi_ssid", credentials.ssid)
+                    .putString("file_wifi_password", credentials.password)
+                    .apply()
+                beginMoyoungW620MediaSync(manager, credentials)
+            }
+            .show()
+    }
+
+    private fun beginMoyoungW620MediaSync(
+        manager: MoyoungW620Manager,
+        wifiCredentials: MoyoungWifiCredentials,
+    ) {
+        if (moyoungMediaJob?.isActive == true) return
+
+        val lease = acquireExclusiveGlassesSession(GlassesSession.MEDIA_SYNC) ?: return
+        mediaSessionLease = lease
+        moyoungMediaCancelled = false
+        resetTransferUiState()
+        setTransferUiVisible(true)
+        setTransferFlowLabel(GlassesSyncFlow.CUSTOM)
+        setTransferDetail("Starting MoYoung / W620 media sync...")
+
+        val temporaryDirectory = File(cacheDir, "moyoung_media_${System.currentTimeMillis()}")
+        moyoungMediaJob = lifecycleScope.launch(Dispatchers.IO) {
+            var result: Result<Int>? = null
+            try {
+                result = runCatching {
+                    val files = manager.downloadMedia(
+                        targetDirectory = temporaryDirectory,
+                        wifiCredentials = wifiCredentials,
+                    ) { current, total ->
+                        runOnUiThread {
+                            if (!moyoungMediaCancelled) {
+                                setTransferDetail(
+                                    if (total > 0) "Downloading from W620: $current / $total"
+                                    else "Downloading from W620...",
+                                )
+                            }
+                        }
+                    }
+                    val items = files.mapNotNull { file ->
+                        val type = when (file.extension.lowercase()) {
+                            "jpg", "jpeg", "png", "heic" -> VendorMediaType.PHOTO
+                            "mp4", "mov", "m4v" -> VendorMediaType.VIDEO
+                            "opus", "ogg", "wav" -> VendorMediaType.AUDIO
+                            else -> null
+                        } ?: return@mapNotNull null
+                        file to VendorMediaItem(file.name, type)
+                    }
+                    withContext(Dispatchers.Main) {
+                        transferTotalJpg = items.count { it.second.type == VendorMediaType.PHOTO }
+                        transferTotalMp4 = items.count { it.second.type == VendorMediaType.VIDEO }
+                        transferTotalOpus = items.count { it.second.type == VendorMediaType.AUDIO }
+                        renderTransferProgress()
+                    }
+                    var imported = 0
+                    items.forEach { (file, item) ->
+                        if (importVendorMediaFile(file, item)) imported++
+                        withContext(Dispatchers.Main) {
+                            when (item.type) {
+                                VendorMediaType.PHOTO -> transferDoneJpg++
+                                VendorMediaType.VIDEO -> transferDoneMp4++
+                                VendorMediaType.AUDIO -> transferDoneOpus++
+                            }
+                            renderTransferProgress()
+                        }
+                    }
+                    imported
+                }
+            } finally {
+                manager.stopMediaSync()
+                temporaryDirectory.deleteRecursively()
+                withContext(Dispatchers.Main) {
+                    val completed = result?.getOrNull()
+                    val failure = result?.exceptionOrNull()
+                    val cancelled = moyoungMediaCancelled
+                    moyoungMediaJob = null
+                    setTransferUiVisible(false)
+                    releaseExclusiveGlassesSession(lease)
+                    mediaSessionLease = null
+                    if (!cancelled) {
+                        if (failure != null) {
+                            Log.e("MoyoungW620", "Media sync failed", failure)
+                        }
+                        Toast.makeText(
+                            this@MainActivity,
+                            completed?.let { "MoYoung / W620 sync complete: $it files" }
+                                ?: "MoYoung / W620 sync failed: ${failure?.message ?: "unknown error"}",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun stopMoyoungW620MediaSync() {
+        if (moyoungMediaJob?.isActive != true) return
+        moyoungMediaCancelled = true
+        getOrCreateMoyoungW620Manager().stopMediaSync()
+        moyoungMediaJob?.cancel()
         setTransferUiVisible(false)
         releaseExclusiveGlassesSession(mediaSessionLease)
         mediaSessionLease = null
