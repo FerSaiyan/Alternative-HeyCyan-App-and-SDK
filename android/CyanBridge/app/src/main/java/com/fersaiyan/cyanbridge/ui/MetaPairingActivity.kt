@@ -53,6 +53,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaAccessState
@@ -80,6 +81,7 @@ data class MetaPairingScreenState(
     val lastError: String? = null,
     val metaAiInstalled: Boolean = true,
     val metaAccessState: MetaAccessState = MetaAccessState.UNKNOWN,
+    val debugMockEnabled: Boolean = false,
 ) {
     val androidPermissionsGranted: Boolean
         get() = androidCameraGranted && nearbyDevicesGranted
@@ -93,6 +95,7 @@ data class MetaPairingScreenState(
 
     val primaryLabel: String
         get() = when {
+            debugMockEnabled -> "Test AI image question (mock)"
             !androidPermissionsGranted -> "Grant required permissions"
             !initialized -> "Initialize Meta connection"
             !metaAiInstalled -> "Install Meta AI"
@@ -105,6 +108,7 @@ data class MetaPairingScreenState(
 }
 
 internal fun inferredMetaPairingError(state: MetaPairingScreenState): String? {
+    if (state.debugMockEnabled) return null // Mock bypasses Meta AI requirement for testing
     state.lastError?.takeIf { it.isNotBlank() }?.let { return it }
     if (!state.metaAiInstalled) return "Meta AI app is not installed"
     if (!state.initialized) return null
@@ -177,6 +181,8 @@ class MetaPairingActivity : AppCompatActivity() {
                     onRetryPairing = ::retryPairing,
                     onSendDiagnostics = ::showDiagnostics,
                     onRequestAccess = ::openBetaAccess,
+                    onRefreshInvite = ::refreshInviteStatus,
+                    onToggleMock = { enabled -> manager.setDebugMockEnabled(enabled); refreshState() },
                 )
             }
         }
@@ -207,6 +213,7 @@ class MetaPairingActivity : AppCompatActivity() {
                 launch { manager.availableDeviceCount.collect { refreshState() } }
                 launch { manager.selectedDeviceName.collect { refreshState() } }
                 launch { manager.lastError.collect { refreshState(checkGlassesCamera = false) } }
+                launch { manager.debugMockEnabled.collect { refreshState(checkGlassesCamera = false) } }
             }
         }
     }
@@ -223,6 +230,7 @@ class MetaPairingActivity : AppCompatActivity() {
             lastError = manager.lastError.value,
             metaAiInstalled = manager.isMetaAiInstalled(),
             metaAccessState = manager.metaAccessState.value,
+            debugMockEnabled = manager.debugMockEnabled.value,
         )
         if (checkGlassesCamera && screenState.initialized && screenState.isRegistered) {
             checkGlassesCameraPermission()
@@ -236,6 +244,10 @@ class MetaPairingActivity : AppCompatActivity() {
     }
 
     private fun checkGlassesCameraPermission() {
+        if (manager.debugMockEnabled.value) {
+            screenState = screenState.copy(glassesCameraGranted = true)
+            return
+        }
         if (checkingGlassesCameraPermission) return
         checkingGlassesCameraPermission = true
         manager.checkCameraPermission(
@@ -256,6 +268,16 @@ class MetaPairingActivity : AppCompatActivity() {
 
     private fun performPrimaryAction() {
         when {
+            screenState.debugMockEnabled -> {
+                // Mock bypasses Meta AI install/registration for testing
+                startActivity(
+                    Intent(this, MainActivity::class.java).apply {
+                        putExtra(MainActivity.EXTRA_START_META_IMAGE_QUESTION, true)
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    },
+                )
+                return
+            }
             !screenState.androidPermissionsGranted ->
                 androidPermissionLauncher.launch(requiredAndroidPermissions())
             !screenState.initialized -> initializeDat()
@@ -263,11 +285,13 @@ class MetaPairingActivity : AppCompatActivity() {
             screenState.metaAccessState == MetaAccessState.NEEDS_META_INVITE -> openBetaAccess()
             !screenState.isRegistered -> manager.startRegistration(this)
             screenState.availableDeviceCount == 0 -> {
+                // Invited + registered but no glasses — refresh rather than restart
                 manager.refreshRegistrationState()
                 refreshState()
                 Toast.makeText(
                     this,
-                    "Keep Meta AI open and the glasses powered, unfolded, and nearby.",
+                    if (screenState.isRegistered) "You're registered — pair glasses in Meta AI, then Refresh again."
+                    else "Keep Meta AI open and the glasses powered, unfolded, and nearby.",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -291,6 +315,7 @@ class MetaPairingActivity : AppCompatActivity() {
             screenState.metaAccessState == MetaAccessState.NEEDS_META_INVITE -> openBetaAccess()
             !screenState.isRegistered -> manager.startRegistration(this)
             screenState.availableDeviceCount == 0 -> {
+                // Distinguish invited-no-device from not-invited; both benefit from a quick refresh without restart
                 manager.refreshRegistrationState()
                 refreshState()
             }
@@ -298,6 +323,12 @@ class MetaPairingActivity : AppCompatActivity() {
                 glassesCameraPermissionLauncher.launch(Permission.CAMERA)
             else -> refreshState()
         }
+    }
+
+    private fun refreshInviteStatus() {
+        manager.refreshRegistrationState()
+        refreshState()
+        Toast.makeText(this, "Refreshed Meta registration — ${screenState.registrationState.name}", Toast.LENGTH_SHORT).show()
     }
 
     private fun handleRegistrationCallback(callbackIntent: Intent) {
@@ -385,6 +416,8 @@ fun MetaPairingScreen(
     onRetryPairing: () -> Unit,
     onSendDiagnostics: () -> Unit,
     onRequestAccess: () -> Unit = {},
+    onRefreshInvite: () -> Unit = {},
+    onToggleMock: (Boolean) -> Unit = {},
 ) {
     var showInitialPairingNotice by androidx.compose.runtime.remember {
         mutableStateOf(true)
@@ -557,11 +590,49 @@ fun MetaPairingScreen(
                 ) {
                     Text(state.primaryLabel)
                 }
+                if (state.isRegistered && state.availableDeviceCount == 0 && !state.debugMockEnabled) {
+                    OutlinedButton(
+                        onClick = onRefreshInvite,
+                        modifier = Modifier.fillMaxWidth().testTag("meta_pairing_refresh"),
+                    ) {
+                        Text("Check again (Refresh)")
+                    }
+                }
                 OutlinedButton(
                     onClick = onSendDiagnostics,
                     modifier = Modifier.fillMaxWidth().testTag("meta_pairing_diagnostics"),
                 ) {
                     Text("Send Meta diagnostics")
+                }
+            }
+            if (BuildConfig.DEBUG) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Debug: Mock Ray-Ban", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Test pairing flow without physical glasses. Simulates registered + device + camera.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            androidx.compose.material3.Switch(
+                                checked = state.debugMockEnabled,
+                                onCheckedChange = onToggleMock,
+                                modifier = Modifier.testTag("meta_mock_switch"),
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -151,6 +151,95 @@ class MetaRaybanManager private constructor(context: Context) {
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
+    // Debug-only mock device simulation for testing without physical glasses
+    private val _debugMockEnabled = MutableStateFlow(false)
+    val debugMockEnabled: StateFlow<Boolean> = _debugMockEnabled.asStateFlow()
+
+    fun isDebugMockEnabled(): Boolean = _debugMockEnabled.value
+
+    fun setDebugMockEnabled(enabled: Boolean) {
+        _debugMockEnabled.value = enabled
+        if (enabled) {
+            // Simulate fully-ready DAT without hardware: invited + registered + device present
+            _isInitialized.value = true
+            _registrationState.value = RegistrationState.REGISTERED
+            _availableDeviceCount.value = 1
+            _selectedDeviceName.value = "Mock Ray-Ban (Debug)"
+            _selectedDeviceIsDisplayCapable.value = false
+            _lastError.value = null
+            recordInfo("debugMock", "Enabled debug mock Ray-Ban — bypasses DAT hardware requirement")
+            updateMetaAccessState()
+            // Try real MockDeviceKit as well if available — best-effort, never fails the mock
+            tryEnableRealMockDevice()
+        } else {
+            recordInfo("debugMock", "Disabled debug mock — restoring DAT state")
+            _selectedDeviceName.value = null
+            _availableDeviceCount.value = 0
+            // Force refresh from real DAT if initialized
+            if (_isInitialized.value) {
+                refreshRegistrationState()
+                // Reset to UNAVAILABLE until DAT reports again
+                _registrationState.value = try {
+                    Wearables.registrationState.value.toManagerState()
+                } catch (_: Throwable) { RegistrationState.UNAVAILABLE }
+                _availableDeviceCount.value = try { Wearables.devices.value.size } catch (_: Throwable) { 0 }
+                updateMetaAccessState()
+            }
+            tryDisableRealMockDevice()
+        }
+    }
+
+    /** Best-effort: if mwdat-mockdevice is on classpath, enable it for deeper DAT simulation. */
+    private fun tryEnableRealMockDevice() {
+        if (!BuildConfig.DEBUG) return
+        try {
+            val mockKitClass = Class.forName("com.meta.wearable.dat.mockdevice.MockDeviceKit")
+            val companion = mockKitClass.getDeclaredField("Companion").get(null) ?: return
+            val getInstance = companion.javaClass.methods.firstOrNull { it.name == "getInstance" } ?: return
+            val mockKit = getInstance.invoke(companion, context) ?: return
+            val configClass = Class.forName("com.meta.wearable.dat.mockdevice.api.MockDeviceKitConfig")
+            val config = configClass.getConstructor(Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType).newInstance(true, true)
+            val enable = mockKit.javaClass.methods.firstOrNull { it.name == "enable" } ?: return
+            enable.invoke(mockKit, config)
+            recordInfo("debugMock", "Real MockDeviceKit enabled (initiallyRegistered=true)")
+            // Pair a fake Ray-Ban if possible — suspend function, fire-and-forget
+            scope.launch {
+                try {
+                    val glassesModelClass = Class.forName("com.meta.wearable.dat.mockdevice.api.GlassesModel")
+                    val rayban = glassesModelClass.getField("RAYBAN_META").get(null) ?: return@launch
+                    // pairGlasses is suspend — invoke via Kotlin coroutine reflection helper
+                    val pairMethod = mockKit.javaClass.methods.firstOrNull { it.name.startsWith("pairGlasses") } ?: return@launch
+                    // Suspend methods have extra Continuation param; we call via coroutine bridge if possible
+                    // Try direct invoke first (some builds expose non-suspend overload)
+                    try {
+                        pairMethod.invoke(mockKit, rayban)
+                        recordInfo("debugMock", "Mock Ray-Ban paired via MockDeviceKit")
+                    } catch (_: Throwable) {
+                        // Suspend variant — not critical for UI flow simulation
+                        recordInfo("debugMock", "MockDeviceKit paired pending (suspend variant)")
+                    }
+                } catch (e: Throwable) {
+                    recordWarning("debugMock", "MockDeviceKit pair failed: ${e.message}")
+                }
+            }
+        } catch (e: Throwable) {
+            recordWarning("debugMock", "Real MockDeviceKit not available: ${e.message}")
+        }
+    }
+
+    private fun tryDisableRealMockDevice() {
+        if (!BuildConfig.DEBUG) return
+        try {
+            val mockKitClass = Class.forName("com.meta.wearable.dat.mockdevice.MockDeviceKit")
+            val companion = mockKitClass.getDeclaredField("Companion").get(null) ?: return
+            val getInstance = companion.javaClass.methods.firstOrNull { it.name == "getInstance" } ?: return
+            val mockKit = getInstance.invoke(companion, context) ?: return
+            val disable = mockKit.javaClass.methods.firstOrNull { it.name == "disable" } ?: return
+            disable.invoke(mockKit)
+            recordInfo("debugMock", "Real MockDeviceKit disabled")
+        } catch (_: Throwable) { /* ignore */ }
+    }
+
     fun initialize() {
         if (_isInitialized.value) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -175,6 +264,7 @@ class MetaRaybanManager private constructor(context: Context) {
 
         registrationJob = scope.launch {
             Wearables.registrationState.collect { state ->
+                if (_debugMockEnabled.value) return@collect
                 val nextState = state.toManagerState()
                 val previousState = _registrationState.value
                 _registrationState.value = nextState
@@ -191,6 +281,7 @@ class MetaRaybanManager private constructor(context: Context) {
         }
         devicesJob = scope.launch {
             Wearables.devices.collect { identifiers ->
+                if (_debugMockEnabled.value) return@collect
                 updateDevices(identifiers.map { it.toString() }.toSet())
             }
         }
@@ -307,6 +398,11 @@ class MetaRaybanManager private constructor(context: Context) {
     }
 
     fun refreshRegistrationState() {
+        if (_debugMockEnabled.value) {
+            // Don't overwrite mock simulation
+            updateMetaAccessState()
+            return
+        }
         if (_isInitialized.value) {
             _registrationState.value = Wearables.registrationState.value.toManagerState()
             updateMetaAccessState()
@@ -344,6 +440,20 @@ class MetaRaybanManager private constructor(context: Context) {
     }
 
     fun startSession(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        // Debug mock bypasses DAT hardware
+        if (_debugMockEnabled.value) {
+            if (_deviceSessionState.value == DeviceSessionState.STARTED) { onSuccess(); return }
+            val lease = GlassesSessionCoordinator.tryAcquireLease(GlassesSession.META_CAMERA)
+            if (lease == null && metaCameraLease == null) {
+                onError(reportFailure("startSession", "Another glasses transport is currently active"))
+                return
+            }
+            if (lease != null) metaCameraLease = lease
+            _deviceSessionState.value = DeviceSessionState.STARTED
+            recordInfo("startSession", "Debug mock session STARTED")
+            onSuccess()
+            return
+        }
         if (!requireInitialized(onError)) return
         if (_registrationState.value != RegistrationState.REGISTERED) {
             onError(reportFailure("startSession", "Meta AI registration is required"))
@@ -463,6 +573,26 @@ class MetaRaybanManager private constructor(context: Context) {
         onSuccess: () -> Unit,
         onError: (String) -> Unit,
     ) {
+        if (_debugMockEnabled.value) {
+            if (_deviceSessionState.value != DeviceSessionState.STARTED) {
+                onError(reportFailure("startStreaming", "Start a Meta device session first"))
+                return
+            }
+            if (_streamState.value == StreamState.STREAMING) { onSuccess(); return }
+            clearError()
+            recordInfo("startStreaming", "Debug mock stream STREAMING")
+            streamFrameHandler = onFrame
+            _streamState.value = StreamState.STREAMING
+            _isStreaming.value = true
+            // Deliver a fake frame so UI shows something
+            videoJob?.cancel()
+            videoJob = scope.launch(Dispatchers.Default) {
+                val fake = createDebugMockBitmap()
+                withContext(Dispatchers.Main.immediate) { onFrame(fake) }
+            }
+            onSuccess()
+            return
+        }
         if (!requireInitialized(onError)) return
         val currentSession = session
         if (currentSession == null || _deviceSessionState.value != DeviceSessionState.STARTED) {
@@ -567,7 +697,66 @@ class MetaRaybanManager private constructor(context: Context) {
         _streamState.value = StreamState.STOPPED
     }
 
+    private fun createDebugMockBitmap(): Bitmap {
+        // 640x480 gray bitmap with "MOCK" text approximation (simple checker)
+        val w = 640
+        val h = 480
+        val pixels = IntArray(w * h) { idx ->
+            val x = idx % w
+            val y = idx / w
+            if ((x / 40 + y / 40) % 2 == 0) 0xFF808080.toInt() else 0xFFB0B0B0.toInt()
+        }
+        return Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888)
+    }
+
+    private fun createDebugMockPhoto(): CapturedPhoto {
+        val bmp = createDebugMockBitmap()
+        val out = ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        bmp.recycle()
+        val bytes = out.toByteArray()
+        // Persist to MediaStore for gallery consistency
+        return runCatching {
+            // Use same MediaStore logic as real persistPhoto but inline to avoid duplication
+            val displayName = "Mock_Meta_${System.currentTimeMillis()}.jpg"
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/CyanBridge")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            }
+            val uri = context.contentResolver.insert(collection, values)
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri).use { o -> o?.write(bytes) }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+                }
+            }
+            CapturedPhoto(bytes = bytes, mimeType = "image/jpeg", uri = uri)
+        }.getOrElse { CapturedPhoto(bytes = bytes, mimeType = "image/jpeg", uri = null) }
+    }
+
     fun capturePhoto(onSuccess: (CapturedPhoto) -> Unit, onError: (String) -> Unit) {
+        if (_debugMockEnabled.value) {
+            if (_streamState.value != StreamState.STREAMING) {
+                onError(reportFailure("capturePhoto", "Camera stream is not active"))
+                return
+            }
+            scope.launch {
+                val photo = createDebugMockPhoto()
+                _lastCapturedPhoto.value = photo
+                recordInfo("capturePhoto", "Debug mock photo mime=${photo.mimeType}, bytes=${photo.bytes.size}")
+                onSuccess(photo)
+            }
+            return
+        }
         if (!requireInitialized(onError)) return
         val currentStream = stream
         if (currentStream == null || _streamState.value != StreamState.STREAMING) {
@@ -868,6 +1057,7 @@ class MetaRaybanManager private constructor(context: Context) {
             diagnosticEvents.joinToString(separator = "\n")
         }
         return buildString {
+            appendLine("debugMockEnabled=${_debugMockEnabled.value}")
             appendLine("initialized=${_isInitialized.value}")
             appendLine("sdkDeveloperMode=${runCatching { Wearables.isDevMode }.getOrDefault(false)}")
             appendLine("developerConfiguration=${readiness.developerConfiguration}")

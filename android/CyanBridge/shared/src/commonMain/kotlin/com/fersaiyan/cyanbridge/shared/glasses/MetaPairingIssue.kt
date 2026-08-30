@@ -61,6 +61,13 @@ fun resolveMetaPairingIssue(
             primaryLabel = "Request access",
             action = MetaPairingIssueAction.REQUEST_ACCESS,
         )
+        "no dat device was discovered after meta registration" in normalized -> MetaPairingIssue(
+            title = "No Meta glasses paired",
+            message = setupGuidance
+                ?: "You're registered for Meta access, but no Ray-Ban is paired in Meta AI. Pair your glasses in Meta AI first, keep them powered, unfolded, and connected there, then tap Refresh. If DAT still cannot see them, use Send logs.",
+            primaryLabel = "Open Meta AI",
+            action = MetaPairingIssueAction.OPEN_PAIRING,
+        )
         "permission" in normalized || "denied" in normalized -> MetaPairingIssue(
             title = "Permission needed",
             message = setupGuidance

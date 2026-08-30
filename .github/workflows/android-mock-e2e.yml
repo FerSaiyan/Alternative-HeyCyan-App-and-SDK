@@ -1,0 +1,84 @@
+name: Android mock DAT E2E
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/android-mock-e2e.yml
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/devices/metarayban/**
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ui/MetaPairingActivity.kt
+      - android/CyanBridge/shared/src/commonMain/kotlin/com/fersaiyan/cyanbridge/shared/glasses/MetaPairingIssue.kt
+      - android/CyanBridge/app/src/androidTest/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mock-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mock-e2e:
+    name: Mock DAT flow (emulator, no Meta AI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Verify Meta SDK credential
+        env:
+          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "${META_GITHUB_TOKEN:-}" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
+            echo "No GitHub token for Meta DAT packages"
+            exit 1
+          fi
+          # Expose as GITHUB_TOKEN for gradle maven auth
+          echo "META_GITHUB_TOKEN=${META_GITHUB_TOKEN:-$GITHUB_TOKEN}" >> $GITHUB_ENV
+          echo "GITHUB_TOKEN=${META_GITHUB_TOKEN:-$GITHUB_TOKEN}" >> $GITHUB_ENV
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Run mock DAT instrumented tests on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            export META_GITHUB_TOKEN="$META_GITHUB_TOKEN"
+            export GITHUB_TOKEN="$GITHUB_TOKEN"
+            cd android/CyanBridge
+            # Unit + portability first (fast failure)
+            ./gradlew --no-daemon --stacktrace :shared:portabilityTest :app:testDebugUnitTest
+            # Instrumented mock flow — covers MetaPairingMockFlowTest + existing MetaPairingScreenTest
+            ./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.ui.MetaPairingMockFlowTest -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.ui.MetaPairingScreenTest
+        env:
+          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

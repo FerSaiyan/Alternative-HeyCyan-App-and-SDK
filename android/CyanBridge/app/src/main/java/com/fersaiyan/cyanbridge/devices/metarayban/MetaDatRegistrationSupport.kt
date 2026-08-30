@@ -39,26 +39,30 @@ internal fun metaDatSetupGuidance(
     availableDeviceCount: Int,
     readiness: MetaDatReadiness,
 ): String? = when {
+    // Invited + registered — show success even if Meta AI temporarily not detected (mock or background)
+    registrationState == MetaRaybanManager.RegistrationState.REGISTERED && availableDeviceCount > 0 ->
+        null
+    registrationState == MetaRaybanManager.RegistrationState.REGISTERED && availableDeviceCount == 0 ->
+        "You're registered for Meta access, but no Ray-Ban is paired in Meta AI. Pair your glasses in Meta AI first, keep them powered, unfolded, and connected there, then tap Refresh."
+    registrationState == MetaRaybanManager.RegistrationState.AVAILABLE ->
+        "Meta glasses detected. Tap Register to authorize CyanBridge in Meta AI."
     !readiness.metaAiInstalled ->
         "Install or update Meta AI, pair the glasses there, then return to CyanBridge."
     !readiness.bluetoothPermissionGranted ->
         "Grant Nearby devices/Bluetooth permission so DAT can access the Meta wearable connection."
     !readiness.bluetoothEnabled ->
         "Turn on Bluetooth, open Meta AI, and confirm the glasses are connected there."
+    // No bonded Meta wearable at all — most actionable before generic invite hint
+    registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
+        readiness.bondedMetaDeviceCount == 0 ->
+        "No Ray-Ban found in Meta AI. Pair your glasses in Meta AI first, then return to CyanBridge. Don't pair from CyanBridge's Bluetooth list."
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
         readiness.developerConfiguration ->
         "Open Meta AI, confirm the glasses are linked to this account and Developer Mode is enabled for this device, then tap Register again."
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
         !readiness.developerConfiguration ->
-        "Your Meta account is not currently enabled for CyanBridge Meta access. Request access at https://cyanbridge.vercel.app/beta, then restart CyanBridge after accepting Meta's invitation."
-    registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
-        readiness.bondedMetaDeviceCount == 0 ->
-        "DAT cannot see a linked Meta wearable yet. Confirm the glasses are paired and connected inside Meta AI, then return to CyanBridge. Do not pair them from CyanBridge's Bluetooth device list."
+        "Your Meta account is not currently enabled for CyanBridge Meta access. Request access at https://cyanbridge.vercel.app/beta. If you're already invited, pair your glasses in Meta AI and tap Register."
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE ->
         "Meta DAT registration is unavailable. Confirm the glasses are linked and connected in Meta AI, then retry registration."
-    registrationState == MetaRaybanManager.RegistrationState.AVAILABLE ->
-        "Meta glasses detected. Tap Register to authorize CyanBridge in Meta AI."
-    registrationState == MetaRaybanManager.RegistrationState.REGISTERED && availableDeviceCount == 0 ->
-        "Registration is complete, but DAT has not exposed a device yet. Keep the glasses powered, unfolded and connected in Meta AI; if this persists, send Meta diagnostics."
     else -> null
 }
