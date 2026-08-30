@@ -231,44 +231,24 @@ class GlassesDashboardScreenTest {
 
         composeRule.onNodeWithTag("glasses_assistant_controls").assertExists()
         composeRule.onNodeWithText("Test voice").assertExists()
-        // Meta now exposes gated registration buttons directly in dashboard (Register when canRegister)
-        composeRule.onNodeWithText("Register").assertExists()
+        // Pairing is via Scan → Pair Meta Glasses; dashboard is read-only status only
+        composeRule.onAllNodesWithText("Register").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Open pairing").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Unregister").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Open Meta AI").assertCountEquals(0)
         composeRule.onNodeWithTag("meta_rayban_registration_status").assertExists()
         composeRule.onAllNodesWithText("Video").assertCountEquals(0)
         composeRule.onAllNodesWithText("Sync data over Wi-Fi").assertCountEquals(0)
-        // Meta-specific AI question entry is primary inside Meta card
-        composeRule.onNodeWithTag("meta_test_image_ai").assertExists()
+        // Video stream reserved for Gemini Live; photo via Test image AI (assistant controls)
+        composeRule.onAllNodesWithText("Start session").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Start stream").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Capture photo").assertCountEquals(0)
         composeRule.onNodeWithTag("meta_rayban_controls").assertIsDisplayed()
+        composeRule.onNodeWithText("Scan → Pair Meta Glasses for setup. Use Test image AI / Test voice for photos. Video stream is reserved for future Gemini Live.").assertExists()
     }
 
     @Test
-    fun metaRegisteredShowsPairingAndUnregister() {
-        var action: GlassesDashboardAction? = null
-        composeRule.setContent {
-            CyanBridgeTheme {
-                GlassesDashboardScreen(
-                    state = GlassesDashboardUiState(
-                        showMetaRaybanControls = true,
-                        metaRayban = MetaRaybanUiState(
-                            registrationLabel = "REGISTERED",
-                            canRegister = false,
-                            canUnregister = true,
-                        ),
-                    ),
-                    onAction = { action = it },
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("Open pairing").assertIsDisplayed()
-        composeRule.onNodeWithText("Unregister").assertIsDisplayed()
-        composeRule.onNodeWithText("Unregister").performClick()
-        composeRule.runOnIdle { assertEquals(GlassesDashboardAction.MetaUnregister, action) }
-    }
-
-    @Test
-    fun metaNotInstalledShowsOpenMetaAiButton() {
-        var action: GlassesDashboardAction? = null
+    fun metaDashboardIsReadOnlyNoDirectPairingCta() {
         composeRule.setContent {
             CyanBridgeTheme {
                 GlassesDashboardScreen(
@@ -276,14 +256,14 @@ class GlassesDashboardScreenTest {
                         showMetaRaybanControls = true,
                         metaRayban = MetaRaybanUiState(metaAiInstalled = false),
                     ),
-                    onAction = { action = it },
+                    onAction = {},
                 )
             }
         }
 
-        composeRule.onNodeWithTag("meta_open_meta_ai").assertIsDisplayed()
-        composeRule.onNodeWithText("Open Meta AI").performClick()
-        composeRule.runOnIdle { assertEquals(GlassesDashboardAction.MetaOpenMetaAi, action) }
+        // No direct CTA - pairing via Scan, errors show Details dialog with Send diagnostics
+        composeRule.onAllNodesWithText("Register").assertCountEquals(0)
+        composeRule.onNodeWithTag("meta_rayban_controls").assertIsDisplayed()
     }
 
     @Test

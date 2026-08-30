@@ -865,99 +865,20 @@ private fun MetaRaybanControls(
                 modifier = Modifier.testTag("meta_rayban_setup_guidance"),
             )
         }
-        // Registration / pairing - adapted gated buttons for Meta (all states actionable from dashboard)
-        if (!state.metaAiInstalled) {
-            ActionButton(
-                label = stringResource(Res.string.meta_rayban_open_meta_ai),
-                onClick = { onAction(GlassesDashboardAction.MetaOpenMetaAi) },
-                style = ActionButtonStyle.Primary,
-                modifier = Modifier.fillMaxWidth().testTag("meta_open_meta_ai"),
-            )
-        } else if (state.canRegister) {
-            ActionRow(
-                primaryLabel = stringResource(Res.string.meta_rayban_register),
-                onPrimary = { onAction(GlassesDashboardAction.MetaRegister) },
-                primaryEnabled = true,
-                primaryStyle = ActionButtonStyle.Primary,
-                secondaryLabel = stringResource(Res.string.dashboard_open_pairing),
-                onSecondary = { onAction(GlassesDashboardAction.MetaOpenPairing) },
-                secondaryEnabled = true,
-            )
-        } else {
-            ActionRow(
-                primaryLabel = stringResource(Res.string.dashboard_open_pairing),
-                onPrimary = { onAction(GlassesDashboardAction.MetaOpenPairing) },
-                primaryStyle = ActionButtonStyle.Primary,
-                secondaryLabel = stringResource(Res.string.meta_rayban_unregister),
-                onSecondary = { onAction(GlassesDashboardAction.MetaUnregister) },
-                secondaryEnabled = state.canUnregister,
-            )
-        }
-        OutlinedButton(
-            onClick = { onAction(GlassesDashboardAction.MetaSendDiagnostics) },
-            modifier = Modifier.fillMaxWidth().testTag("meta_send_diagnostics"),
-        ) {
-            Text(stringResource(Res.string.meta_rayban_send_diagnostics))
-        }
+        // All pairing flows live in DeviceBindScreen (Scan → Pair Meta Glasses) → MetaPairingActivity.
+        // Keep dashboard read-only: errors surface via the AlertDialog above (with Details → Send diagnostics).
+        // Camera is consumed via Test image AI / Test voice in GlassesAssistantControls (capturePhotoOnce),
+        // not via manual session/stream controls (stream is only for future Gemini Live, not yet implemented).
         Text(
             text = stringResource(Res.string.meta_rayban_registration_status, state.registrationLabel),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.testTag("meta_rayban_registration_status"),
         )
-        MetaControlRow(
-            status = stringResource(Res.string.meta_rayban_session_status, state.sessionLabel),
-            startLabel = stringResource(Res.string.meta_rayban_start_session),
-            onStart = { onAction(GlassesDashboardAction.MetaStartSession) },
-            startEnabled = state.canStartSession,
-            stopLabel = stringResource(Res.string.meta_rayban_stop_session),
-            onStop = { onAction(GlassesDashboardAction.MetaStopSession) },
-            stopEnabled = state.canStopSession,
+        Text(
+            text = stringResource(Res.string.dashboard_meta_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        MetaControlRow(
-            status = stringResource(Res.string.meta_rayban_stream_status, state.streamLabel),
-            startLabel = stringResource(Res.string.meta_rayban_start_stream),
-            onStart = { onAction(GlassesDashboardAction.MetaStartStream) },
-            startEnabled = state.canStartStream,
-            stopLabel = stringResource(Res.string.meta_rayban_stop_stream),
-            onStop = { onAction(GlassesDashboardAction.MetaStopStream) },
-            stopEnabled = state.canStopStream,
-        )
-        ActionRow(
-            primaryLabel = stringResource(Res.string.meta_rayban_capture_photo),
-            onPrimary = { onAction(GlassesDashboardAction.MetaCapturePhoto) },
-            primaryEnabled = state.canCapturePhoto,
-            primaryStyle = ActionButtonStyle.Primary,
-            secondaryLabel = stringResource(Res.string.meta_rayban_view_last_photo),
-            onSecondary = { onAction(GlassesDashboardAction.MetaViewPhoto) },
-            secondaryEnabled = state.hasCapturedPhoto,
-        )
-        // Unified AI question entry for Meta - uses same DAT capturePhotoOnce path as generic TestImageQuestion
-        ActionButton(
-            label = stringResource(Res.string.dashboard_test_image),
-            onClick = { onAction(GlassesDashboardAction.TestImageQuestion) },
-            style = ActionButtonStyle.Primary,
-            modifier = Modifier.fillMaxWidth().testTag("meta_test_image_ai"),
-        )
-        if (state.displayCapable) {
-            MetaControlRow(
-                status = stringResource(
-                    Res.string.meta_rayban_display_status,
-                    stringResource(
-                        if (state.displayActive) {
-                            Res.string.meta_rayban_active
-                        } else {
-                            Res.string.meta_rayban_inactive
-                        },
-                    ),
-                ),
-                startLabel = stringResource(Res.string.meta_rayban_start_display),
-                onStart = { onAction(GlassesDashboardAction.MetaStartDisplay) },
-                startEnabled = !state.displayActive,
-                stopLabel = stringResource(Res.string.meta_rayban_stop_display),
-                onStop = { onAction(GlassesDashboardAction.MetaStopDisplay) },
-                stopEnabled = state.displayActive,
-            )
-        }
     }
 }
 

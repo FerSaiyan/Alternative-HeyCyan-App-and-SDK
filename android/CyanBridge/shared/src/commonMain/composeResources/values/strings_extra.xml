@@ -497,6 +497,7 @@
     <string name="dashboard_quality_detailed_warning_continue">Continue</string>
     <string name="dashboard_quality_detailed_warning_cancel">Cancel</string>
     <string name="dashboard_test_image">Test image AI description</string>
+    <string name="dashboard_meta_hint">Scan → Pair Meta Glasses for setup. Use Test image AI / Test voice for photos. Video stream is reserved for future Gemini Live.</string>
     <string name="dashboard_ai_wake_word_route">Wake-word action</string>
     <string name="dashboard_ai_wake_word_route_description">For HeyCyan and Eyevue glasses, the AI wake-word activation starts:</string>
     <string name="dashboard_ai_wake_word_voice">Voice question</string>
