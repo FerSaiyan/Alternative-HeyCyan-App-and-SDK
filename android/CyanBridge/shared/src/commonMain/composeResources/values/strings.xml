@@ -18,6 +18,7 @@
     <string name="device_bind_details">%1$s - Signal %2$d</string>
     <string name="device_bind_detected">Detected: %1$s</string>
     <string name="device_bind_select_type">Select glasses type</string>
+    <string name="device_class_moyoung_w620">MoYoung / W620</string>
     <string name="vision_profile_title">Vision profile</string>
     <string name="vision_profile_description">Image descriptions use: %1$s</string>
     <string name="vision_instructions_title">Additional vision instructions</string>
@@ -89,6 +90,8 @@
     <string name="meta_rayban_display_status">Display: %1$s</string>
     <string name="meta_rayban_register">Register</string>
     <string name="meta_rayban_unregister">Unregister</string>
+    <string name="meta_rayban_open_meta_ai">Open Meta AI</string>
+    <string name="dashboard_open_pairing">Open pairing</string>
     <string name="meta_rayban_start_session">Start session</string>
     <string name="meta_rayban_stop_session">Stop session</string>
     <string name="meta_rayban_start_stream">Start stream</string>

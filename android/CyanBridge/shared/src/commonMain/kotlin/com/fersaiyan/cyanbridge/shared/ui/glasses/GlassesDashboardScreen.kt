@@ -842,7 +842,10 @@ private fun MetaRaybanControls(
         )
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier = Modifier.testTag("meta_rayban_controls"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         SectionTitle(stringResource(Res.string.meta_rayban_title), accented = true)
         Text(
             text = stringResource(
@@ -852,6 +855,7 @@ private fun MetaRaybanControls(
             ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("meta_rayban_device_summary"),
         )
         state.setupGuidance?.takeIf { it.isNotBlank() }?.let { guidance ->
             Text(
@@ -861,9 +865,37 @@ private fun MetaRaybanControls(
                 modifier = Modifier.testTag("meta_rayban_setup_guidance"),
             )
         }
+        // Registration / pairing - adapted gated buttons for Meta (all states actionable from dashboard)
+        if (!state.metaAiInstalled) {
+            ActionButton(
+                label = stringResource(Res.string.meta_rayban_open_meta_ai),
+                onClick = { onAction(GlassesDashboardAction.MetaOpenMetaAi) },
+                style = ActionButtonStyle.Primary,
+                modifier = Modifier.fillMaxWidth().testTag("meta_open_meta_ai"),
+            )
+        } else if (state.canRegister) {
+            ActionRow(
+                primaryLabel = stringResource(Res.string.meta_rayban_register),
+                onPrimary = { onAction(GlassesDashboardAction.MetaRegister) },
+                primaryEnabled = true,
+                primaryStyle = ActionButtonStyle.Primary,
+                secondaryLabel = stringResource(Res.string.dashboard_open_pairing),
+                onSecondary = { onAction(GlassesDashboardAction.MetaOpenPairing) },
+                secondaryEnabled = true,
+            )
+        } else {
+            ActionRow(
+                primaryLabel = stringResource(Res.string.dashboard_open_pairing),
+                onPrimary = { onAction(GlassesDashboardAction.MetaOpenPairing) },
+                primaryStyle = ActionButtonStyle.Primary,
+                secondaryLabel = stringResource(Res.string.meta_rayban_unregister),
+                onSecondary = { onAction(GlassesDashboardAction.MetaUnregister) },
+                secondaryEnabled = state.canUnregister,
+            )
+        }
         OutlinedButton(
             onClick = { onAction(GlassesDashboardAction.MetaSendDiagnostics) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("meta_send_diagnostics"),
         ) {
             Text(stringResource(Res.string.meta_rayban_send_diagnostics))
         }
@@ -898,6 +930,13 @@ private fun MetaRaybanControls(
             secondaryLabel = stringResource(Res.string.meta_rayban_view_last_photo),
             onSecondary = { onAction(GlassesDashboardAction.MetaViewPhoto) },
             secondaryEnabled = state.hasCapturedPhoto,
+        )
+        // Unified AI question entry for Meta - uses same DAT capturePhotoOnce path as generic TestImageQuestion
+        ActionButton(
+            label = stringResource(Res.string.dashboard_test_image),
+            onClick = { onAction(GlassesDashboardAction.TestImageQuestion) },
+            style = ActionButtonStyle.Primary,
+            modifier = Modifier.fillMaxWidth().testTag("meta_test_image_ai"),
         )
         if (state.displayCapable) {
             MetaControlRow(

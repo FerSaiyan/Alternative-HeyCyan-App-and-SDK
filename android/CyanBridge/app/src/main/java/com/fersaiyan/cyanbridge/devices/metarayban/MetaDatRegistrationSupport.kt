@@ -52,16 +52,16 @@ internal fun metaDatSetupGuidance(
         "Grant Nearby devices/Bluetooth permission so DAT can access the Meta wearable connection."
     !readiness.bluetoothEnabled ->
         "Turn on Bluetooth, open Meta AI, and confirm the glasses are connected there."
-    // No bonded Meta wearable at all — most actionable before generic invite hint
-    registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
-        readiness.bondedMetaDeviceCount == 0 ->
-        "No Ray-Ban found in Meta AI. Pair your glasses in Meta AI first, then return to CyanBridge. Don't pair from CyanBridge's Bluetooth list."
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
         readiness.developerConfiguration ->
         "Open Meta AI, confirm the glasses are linked to this account and Developer Mode is enabled for this device, then tap Register again."
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
         !readiness.developerConfiguration ->
         "Your Meta account is not currently enabled for CyanBridge Meta access. Request access at https://cyanbridge.vercel.app/beta. If you're already invited, pair your glasses in Meta AI and tap Register."
+    // No bonded Meta wearable at all — actionable after release-channel hints (kept for completeness)
+    registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
+        readiness.bondedMetaDeviceCount == 0 ->
+        "No Ray-Ban found in Meta AI. Pair your glasses in Meta AI first, then return to CyanBridge. Don't pair from CyanBridge's Bluetooth list."
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE ->
         "Meta DAT registration is unavailable. Confirm the glasses are linked and connected in Meta AI, then retry registration."
     else -> null

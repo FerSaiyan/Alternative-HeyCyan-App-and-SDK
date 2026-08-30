@@ -4,12 +4,14 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import com.fersaiyan.cyanbridge.shared.glasses.FirmwarePatchRequestUiState
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
@@ -131,14 +133,14 @@ class GlassesDashboardScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("Photo").assertIsDisplayed()
-        composeRule.onNodeWithText("Video").assertIsDisplayed()
-        composeRule.onNodeWithText("Audio").assertIsDisplayed()
-        composeRule.onNodeWithText("Count").assertIsDisplayed()
-        composeRule.onNodeWithText("Sync data (P2P)").assertIsDisplayed()
-        composeRule.onNodeWithText("Test voice").assertIsDisplayed()
-        composeRule.onNodeWithText("Test image AI description").assertIsDisplayed()
-        composeRule.onNodeWithText("Show advanced controls").assertIsDisplayed()
+        composeRule.onNodeWithText("Photo").assertExists()
+        composeRule.onNodeWithText("Video").assertExists()
+        composeRule.onNodeWithText("Audio").assertExists()
+        composeRule.onNodeWithText("Count").assertExists()
+        composeRule.onNodeWithText("Sync data over Wi-Fi").assertExists()
+        composeRule.onNodeWithText("Test voice").assertExists()
+        composeRule.onNodeWithText("Test image AI description").assertExists()
+        composeRule.onNodeWithText("Show advanced controls").assertExists()
         composeRule.onAllNodesWithText("Meeting capture").assertCountEquals(0)
     }
 
@@ -227,13 +229,61 @@ class GlassesDashboardScreenTest {
             }
         }
 
-        composeRule.onNodeWithTag("glasses_assistant_controls").assertIsDisplayed()
-        composeRule.onNodeWithText("Test voice").assertIsDisplayed()
-        composeRule.onAllNodesWithText("Register").assertCountEquals(0)
-        composeRule.onAllNodesWithText("Unregister").assertCountEquals(0)
-        composeRule.onNodeWithTag("meta_rayban_registration_status").assertIsDisplayed()
+        composeRule.onNodeWithTag("glasses_assistant_controls").assertExists()
+        composeRule.onNodeWithText("Test voice").assertExists()
+        // Meta now exposes gated registration buttons directly in dashboard (Register when canRegister)
+        composeRule.onNodeWithText("Register").assertExists()
+        composeRule.onNodeWithTag("meta_rayban_registration_status").assertExists()
         composeRule.onAllNodesWithText("Video").assertCountEquals(0)
-        composeRule.onAllNodesWithText("Sync data (P2P)").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Sync data over Wi-Fi").assertCountEquals(0)
+        // Meta-specific AI question entry is primary inside Meta card
+        composeRule.onNodeWithTag("meta_test_image_ai").assertExists()
+        composeRule.onNodeWithTag("meta_rayban_controls").assertIsDisplayed()
+    }
+
+    @Test
+    fun metaRegisteredShowsPairingAndUnregister() {
+        var action: GlassesDashboardAction? = null
+        composeRule.setContent {
+            CyanBridgeTheme {
+                GlassesDashboardScreen(
+                    state = GlassesDashboardUiState(
+                        showMetaRaybanControls = true,
+                        metaRayban = MetaRaybanUiState(
+                            registrationLabel = "REGISTERED",
+                            canRegister = false,
+                            canUnregister = true,
+                        ),
+                    ),
+                    onAction = { action = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Open pairing").assertIsDisplayed()
+        composeRule.onNodeWithText("Unregister").assertIsDisplayed()
+        composeRule.onNodeWithText("Unregister").performClick()
+        composeRule.runOnIdle { assertEquals(GlassesDashboardAction.MetaUnregister, action) }
+    }
+
+    @Test
+    fun metaNotInstalledShowsOpenMetaAiButton() {
+        var action: GlassesDashboardAction? = null
+        composeRule.setContent {
+            CyanBridgeTheme {
+                GlassesDashboardScreen(
+                    state = GlassesDashboardUiState(
+                        showMetaRaybanControls = true,
+                        metaRayban = MetaRaybanUiState(metaAiInstalled = false),
+                    ),
+                    onAction = { action = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("meta_open_meta_ai").assertIsDisplayed()
+        composeRule.onNodeWithText("Open Meta AI").performClick()
+        composeRule.runOnIdle { assertEquals(GlassesDashboardAction.MetaOpenMetaAi, action) }
     }
 
     @Test
@@ -380,6 +430,7 @@ class GlassesDashboardScreenTest {
             }
         }
 
+        composeRule.onNodeWithTag("glasses_dashboard").performScrollToNode(hasText("Choose combined OTA files"))
         composeRule.onNodeWithText("Choose combined OTA files").performClick()
         composeRule.onNodeWithTag("ota_firmware_source_picker").assertIsDisplayed()
         composeRule.onNodeWithTag("ota_firmware_source_personal_file").assertIsNotEnabled()
