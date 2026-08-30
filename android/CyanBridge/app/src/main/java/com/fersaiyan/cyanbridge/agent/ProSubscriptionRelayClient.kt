@@ -290,6 +290,24 @@ object ProSubscriptionRelayClient {
         )
     }
 
+    fun verifyAccountEmailCode(context: Context, code: String): Result<AccountInfo> = runCatching {
+        val apiToken = ProSubscriptionServerPrefs.getApiToken(context).trim().ifBlank {
+            fetchAccountInfo(context).getOrThrow().apiToken.trim()
+        }
+        check(apiToken.isNotBlank()) { "Server account token unavailable" }
+        val normalized = code.trim().uppercase().replace(Regex("[\\s-]"), "")
+        require(normalized.matches(Regex("^[0-9]{6}$"))) { "Enter the 6-digit code from your email." }
+        val payload = requestPostJson(
+            context = context,
+            url = endpoint(context, "/api/auth/relay/verify-code"),
+            body = JSONObject().put("code", normalized),
+        )
+        check(payload.optBoolean("ok", false)) { payload.optString("message", "Invalid code.") }
+        val account = fetchAccountInfo(context).getOrThrow()
+        check(account.emailVerified) { "Email not verified yet." }
+        account
+    }
+
     fun cancelSubscription(context: Context): Result<CancelResult> = runCatching {
         val serverToken = ProSubscriptionServerPrefs.getApiToken(context).trim().ifBlank {
             fetchAccountInfo(context).getOrThrow().apiToken.trim()
