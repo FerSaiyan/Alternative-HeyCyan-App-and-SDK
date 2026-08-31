@@ -128,4 +128,8 @@ Ultima versao: %2$s</string>
     <string name="compose_local_agent_clear_history">Limpar histórico</string>
     <string name="compose_local_agent_history_cleared">Histórico do Local Agent limpo</string>
     <string name="compose_local_agent_used_path">Usou um caminho de navegação de baixo risco salvo</string>
+    <string name="relay_quota_exhausted">Sua cota mensal de IA para o plano %1$s esgotou. Aguarde até reiniciar ou faça upgrade nas configurações.</string>
+    <string name="relay_subscription_required">É necessária uma assinatura ativa. Verifique sua assinatura Pro nas configurações.</string>
+    <string name="relay_authentication_required">Falha na autenticação. Faça login novamente.</string>
+    <string name="relay_error_generic">Erro do relay: %1$s</string>
 </resources>

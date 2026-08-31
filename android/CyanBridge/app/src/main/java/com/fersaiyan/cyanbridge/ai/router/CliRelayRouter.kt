@@ -322,6 +322,16 @@ object CliRelayClient {
         conn.readTimeout = READ_TIMEOUT_MS
         conn.doOutput = true
         conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        // Send app language so relay can return localized quota/subscription messages.
+        runCatching {
+            val lang = try {
+                com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences.selected(context).languageTag
+            } catch (_: Exception) { "" }
+            val tag = lang.ifBlank {
+                try { com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences.get(context).appLanguageTag } catch (_: Exception) { "" }
+            }.ifBlank { java.util.Locale.getDefault().toLanguageTag() }
+            if (tag.isNotBlank()) conn.setRequestProperty("Accept-Language", tag)
+        }
         val serverToken = ProSubscriptionServerPrefs.getApiToken(context)
         if (serverToken.isNotBlank()) {
             conn.setRequestProperty("Authorization", "Bearer $serverToken")
@@ -332,10 +342,16 @@ object CliRelayClient {
         val body = BufferedReader(InputStreamReader(stream ?: conn.inputStream)).use { it.readText() }
         conn.disconnect()
         if (code !in 200..299) {
-            val message = runCatching { JSONObject(body).optString("message").trim() }
-                .getOrNull()
-                .orEmpty()
-            throw IllegalStateException(message.ifBlank { "Relay HTTP $code" })
+            val error = runCatching { JSONObject(body).optString("error").trim() }.getOrNull().orEmpty()
+            val message = runCatching { JSONObject(body).optString("message").trim() }.getOrNull().orEmpty()
+            val combined = when {
+                error.isNotBlank() && message.isNotBlank() -> "$error: $message"
+                error.isNotBlank() -> "$error (HTTP $code)"
+                message.isNotBlank() -> message
+                else -> "Relay HTTP $code"
+            }
+            // Preserve quota info if present for future use (not thrown but included in message)
+            throw IllegalStateException(combined)
         }
         return JSONObject(body)
     }
@@ -748,7 +764,7 @@ object AiAssistantRouter {
                         modelOverride = if (mediaReplies.isEmpty()) modelOverride else mediaModelOverride,
                     )
                 }
-                result.getOrElse { "Relay unavailable (${it.message})." }
+                result.getOrElse { RelayErrorLocalizer.localizedMessage(context, it) }
             }
 
             AiProviderType.LOCAL_MODELS -> {
@@ -780,7 +796,7 @@ object AiAssistantRouter {
                     null
                 }
                 val result = CliRelayClient.voiceQuery(context, prompt, modelOverride = modelOverride)
-                result.getOrElse { "Relay unavailable (${it.message})." }
+                result.getOrElse { RelayErrorLocalizer.localizedMessage(context, it) }
             }
 
             AiProviderType.LOCAL_MODELS -> {

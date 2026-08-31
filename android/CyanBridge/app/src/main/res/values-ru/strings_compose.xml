@@ -128,4 +128,8 @@
     <string name="compose_local_agent_clear_history">Очистить историю</string>
     <string name="compose_local_agent_history_cleared">История Local Agent очищена</string>
     <string name="compose_local_agent_used_path">Использован сохраненный безопасный путь навигации</string>
+    <string name="relay_quota_exhausted">Месячная квота ИИ для плана %1$s исчерпана. Дождитесь сброса или обновите подписку в настройках.</string>
+    <string name="relay_subscription_required">Требуется активная подписка. Проверьте Pro-подписку в настройках.</string>
+    <string name="relay_authentication_required">Ошибка аутентификации. Пожалуйста, войдите снова.</string>
+    <string name="relay_error_generic">Ошибка ретранслятора: %1$s</string>
 </resources>

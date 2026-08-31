@@ -128,4 +128,8 @@ Ultima version: %2$s</string>
     <string name="compose_local_agent_clear_history">Borrar historial</string>
     <string name="compose_local_agent_history_cleared">Historial de Local Agent borrado</string>
     <string name="compose_local_agent_used_path">Se uso una ruta de navegacion de bajo riesgo guardada</string>
+    <string name="relay_quota_exhausted">Tu cuota mensual de IA para el plan %1$s se ha agotado. Espera a que se reinicie o mejora tu suscripción en ajustes.</string>
+    <string name="relay_subscription_required">Se requiere una suscripción activa. Revisa tu suscripción Pro en ajustes.</string>
+    <string name="relay_authentication_required">Fallo de autenticación. Inicia sesión de nuevo.</string>
+    <string name="relay_error_generic">Error del relay: %1$s</string>
 </resources>

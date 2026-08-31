@@ -128,4 +128,8 @@
     <string name="compose_local_agent_clear_history">清除历史记录</string>
     <string name="compose_local_agent_history_cleared">Local Agent 历史记录已清除</string>
     <string name="compose_local_agent_used_path">使用了保存的低风险导航路径</string>
+    <string name="relay_quota_exhausted">计划 %1$s 的每月 AI 配额已用完。请等待重置或在设置中升级订阅。</string>
+    <string name="relay_subscription_required">需要有效的订阅。请在设置中检查您的 Pro 订阅。</string>
+    <string name="relay_authentication_required">身份验证失败。请重新登录。</string>
+    <string name="relay_error_generic">中继错误：%1$s</string>
 </resources>

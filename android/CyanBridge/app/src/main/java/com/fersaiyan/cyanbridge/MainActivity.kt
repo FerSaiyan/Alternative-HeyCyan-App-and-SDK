@@ -210,6 +210,7 @@ import com.fersaiyan.cyanbridge.ai.router.AssistantSpeechPolicy
 import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoute
 import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
+import com.fersaiyan.cyanbridge.ai.router.RelayErrorLocalizer
 import com.fersaiyan.cyanbridge.ai.router.MediaInferenceRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
@@ -4206,7 +4207,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     messages = messages,
                     modelOverride = ProSubscriptionAiPrefs.getRequestsModel(this),
                 ).getOrElse {
-                    "Pro endpoint error: ${it.message ?: "unknown error"}"
+                    RelayErrorLocalizer.localizedMessage(this, it)
                 }
             }
 
@@ -4233,7 +4234,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     chatId = "glasses_${System.currentTimeMillis()}",
                     prompt = userPrompt,
                     messages = messages,
-                ).getOrElse { "Endpoint unavailable: ${it.message ?: "unknown error"}" }
+                ).getOrElse { RelayErrorLocalizer.localizedMessage(this, it) }
             }
         }.trim()
     }
@@ -4291,12 +4292,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         )
 
                         if (visionResult.isFailure) {
-                            val errorMsg = visionResult.exceptionOrNull()?.message ?: "unknown error"
-                            Log.e("AIHijack", "Image query failed: $errorMsg")
+                            val throwable = visionResult.exceptionOrNull() ?: Exception("unknown error")
+                            val localized = RelayErrorLocalizer.localizedMessage(this@MainActivity, throwable)
+                            val isQuota = RelayErrorLocalizer.isQuotaError(throwable)
+                            Log.e("AIHijack", "Image query failed: ${throwable.message}")
                             runOnUiThread {
-                                Toast.makeText(this@MainActivity, "Vision error: ${errorMsg.take(80)}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this@MainActivity, if (isQuota) localized else "Vision error: ${throwable.message?.take(80) ?: "unknown error"}", Toast.LENGTH_LONG).show()
                             }
-                            "I couldn't analyze the image. Please try again."
+                            if (isQuota) localized else "I couldn't analyze the image. Please try again."
                         } else {
                             val visionReply = visionResult.getOrNull()?.trim() ?: ""
                             if (visionReply.isBlank()) {
@@ -4343,12 +4346,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             prompt = resolvedPrompt.forRoute(ImageQuestionRoute.TASKER_GEMINI),
                         )
                         if (visionResult.isFailure) {
-                            val errorMsg = visionResult.exceptionOrNull()?.message ?: "unknown error"
-                            Log.e("AIHijack", "Image query failed: $errorMsg")
+                            val throwable = visionResult.exceptionOrNull() ?: Exception("unknown error")
+                            val localized = RelayErrorLocalizer.localizedMessage(this@MainActivity, throwable)
+                            val isQuota = RelayErrorLocalizer.isQuotaError(throwable)
+                            Log.e("AIHijack", "Image query failed: ${throwable.message}")
                             runOnUiThread {
-                                Toast.makeText(this@MainActivity, "Vision error: ${errorMsg.take(80)}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this@MainActivity, if (isQuota) localized else "Vision error: ${throwable.message?.take(80) ?: "unknown error"}", Toast.LENGTH_LONG).show()
                             }
-                            "I couldn't analyze the image. Please try again."
+                            if (isQuota) localized else "I couldn't analyze the image. Please try again."
                         } else {
                             val visionReply = visionResult.getOrNull()?.trim() ?: ""
                             if (visionReply.isBlank()) {
@@ -5742,7 +5747,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                         context = this@MainActivity,
                                         prompt = prompt,
                                         modelOverride = modelOverride,
-                                    ).getOrElse { "Relay unavailable: ${it.message ?: "unknown error"}" }
+                                    ).getOrElse { RelayErrorLocalizer.localizedMessage(this@MainActivity, it) }
                                 }
 
                                 runOnUiThread {

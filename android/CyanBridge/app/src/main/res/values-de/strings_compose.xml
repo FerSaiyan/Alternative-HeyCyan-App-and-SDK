@@ -128,4 +128,8 @@ Neueste Version: %2$s</string>
     <string name="compose_local_agent_clear_history">Verlauf löschen</string>
     <string name="compose_local_agent_history_cleared">Local-Agent-Verlauf gelöscht</string>
     <string name="compose_local_agent_used_path">Gespeicherten risikoarmen Navigationspfad verwendet</string>
+    <string name="relay_quota_exhausted">Ihr monatliches KI-Kontingent für den Tarif %1$s ist erschöpft. Bitte warten Sie bis zum Reset oder upgraden Sie Ihr Abonnement in den Einstellungen.</string>
+    <string name="relay_subscription_required">Ein aktives Abonnement ist erforderlich. Bitte überprüfen Sie Ihr Pro-Abonnement in den Einstellungen.</string>
+    <string name="relay_authentication_required">Authentifizierung fehlgeschlagen. Bitte melden Sie sich erneut an.</string>
+    <string name="relay_error_generic">Relay-Fehler: %1$s</string>
 </resources>

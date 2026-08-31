@@ -128,4 +128,8 @@
     <string name="compose_local_agent_clear_history">기록 삭제</string>
     <string name="compose_local_agent_history_cleared">Local Agent 기록이 삭제됨</string>
     <string name="compose_local_agent_used_path">저장된 저위험 탐색 경로를 사용함</string>
+    <string name="relay_quota_exhausted">플랜 %1$s의 월간 AI 할당량이 소진되었습니다. 초기화될 때까지 기다리거나 설정에서 구독을 업그레이드하세요.</string>
+    <string name="relay_subscription_required">활성 구독이 필요합니다. 설정에서 Pro 구독을 확인하세요.</string>
+    <string name="relay_authentication_required">인증 실패. 다시 로그인해 주세요.</string>
+    <string name="relay_error_generic">릴레이 오류: %1$s</string>
 </resources>

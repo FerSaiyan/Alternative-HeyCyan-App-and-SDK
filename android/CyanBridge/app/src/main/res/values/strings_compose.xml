@@ -128,4 +128,8 @@ Latest version: %2$s</string>
     <string name="compose_local_agent_clear_history">Clear history</string>
     <string name="compose_local_agent_history_cleared">Local Agent history cleared</string>
     <string name="compose_local_agent_used_path">Used a saved low-risk navigation path</string>
+    <string name="relay_quota_exhausted">Your monthly AI quota for the %1$s plan is exhausted. Please wait until it resets or upgrade your plan in settings.</string>
+    <string name="relay_subscription_required">An active subscription is required. Please check your Pro subscription in settings.</string>
+    <string name="relay_authentication_required">Authentication failed. Please sign in again.</string>
+    <string name="relay_error_generic">Relay error: %1$s</string>
 </resources>

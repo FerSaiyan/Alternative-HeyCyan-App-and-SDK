@@ -128,4 +128,8 @@ Derniere version : %2$s</string>
     <string name="compose_local_agent_clear_history">Effacer l historique</string>
     <string name="compose_local_agent_history_cleared">Historique de Local Agent efface</string>
     <string name="compose_local_agent_used_path">Chemin de navigation a faible risque enregistre utilise</string>
+    <string name="relay_quota_exhausted">Votre quota mensuel d\'IA pour le forfait %1$s est épuisé. Veuillez attendre la réinitialisation ou mettre à niveau dans les paramètres.</string>
+    <string name="relay_subscription_required">Un abonnement actif est requis. Vérifiez votre abonnement Pro dans les paramètres.</string>
+    <string name="relay_authentication_required">Échec de l\'authentification. Veuillez vous reconnecter.</string>
+    <string name="relay_error_generic">Erreur du relay : %1$s</string>
 </resources>

@@ -128,4 +128,8 @@ Ultima versione: %2$s</string>
     <string name="compose_local_agent_clear_history">Cancella cronologia</string>
     <string name="compose_local_agent_history_cleared">Cronologia di Local Agent cancellata</string>
     <string name="compose_local_agent_used_path">Usato un percorso di navigazione a basso rischio salvato</string>
+    <string name="relay_quota_exhausted">La tua quota mensile IA per il piano %1$s è esaurita. Attendi il reset o effettua l\'upgrade nelle impostazioni.</string>
+    <string name="relay_subscription_required">È richiesto un abbonamento attivo. Controlla il tuo abbonamento Pro nelle impostazioni.</string>
+    <string name="relay_authentication_required">Autenticazione fallita. Accedi di nuovo.</string>
+    <string name="relay_error_generic">Errore relay: %1$s</string>
 </resources>
