@@ -40,6 +40,8 @@ object VersionUpdateChecker {
     private const val KEY_LAST_CHECK_TIME = "last_version_check_time"
     private const val KEY_REMINDED_VERSION = "reminded_version"
     private const val CHECK_INTERVAL_HOURS = 6
+    private const val PLAY_STORE_FALLBACK_URL = "https://play.google.com/store/apps/details?id=com.fersaiyan.cyanbridge"
+    private const val GITHUB_FALLBACK_URL = "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases"
 
     fun checkForUpdates(context: Context) {
         val prefs = context.getSharedPreferences("version_check", Context.MODE_PRIVATE)
@@ -67,10 +69,16 @@ object VersionUpdateChecker {
                     val json = org.json.JSONObject(response)
                     val latestVersion = json.optString("version", "")
                     val downloadUrl = json.optString("download_url", "")
+                    val playStoreUrl = json.optString("play_store_url", "").ifBlank {
+                        json.optString("playStoreUrl", "")
+                    }.ifBlank { downloadUrl }
+                    val githubUrl = json.optString("github_url", "").ifBlank {
+                        json.optString("githubUrl", "")
+                    }
 
                     withContext(Dispatchers.Main) {
                         if (latestVersion.isNotBlank()) {
-                            checkAndShowUpdateDialog(context, latestVersion, downloadUrl)
+                            checkAndShowUpdateDialog(context, latestVersion, playStoreUrl, githubUrl)
                         }
                     }
                 }
@@ -81,7 +89,12 @@ object VersionUpdateChecker {
         }
     }
 
-    private fun checkAndShowUpdateDialog(context: Context, latestVersion: String, downloadUrl: String) {
+    private fun checkAndShowUpdateDialog(
+        context: Context,
+        latestVersion: String,
+        playStoreUrl: String,
+        githubUrl: String,
+    ) {
         val prefs = context.getSharedPreferences("version_check", Context.MODE_PRIVATE)
         val currentVersion = try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
@@ -92,11 +105,16 @@ object VersionUpdateChecker {
         val remindedVersion = prefs.getString(KEY_REMINDED_VERSION, "") ?: ""
 
         if (latestVersion != currentVersion && latestVersion != remindedVersion) {
-            showUpdateDialog(context, latestVersion, downloadUrl)
+            showUpdateDialog(context, latestVersion, playStoreUrl, githubUrl)
         }
     }
 
-    fun showUpdateDialog(context: Context, latestVersion: String, downloadUrl: String) {
+    fun showUpdateDialog(
+        context: Context,
+        latestVersion: String,
+        playStoreUrl: String,
+        githubUrl: String = "",
+    ) {
         val activity = context as? Activity ?: return
         if (activity.isFinishing || activity.isDestroyed) return
         val currentVersion = try {
@@ -115,19 +133,27 @@ object VersionUpdateChecker {
                         VersionUpdateDialogContent(
                             currentVersion = currentVersion,
                             latestVersion = latestVersion,
+                            onPlayStore = {
+                                val target = playStoreUrl.ifBlank {
+                                    "https://play.google.com/store/apps/details?id=com.fersaiyan.cyanbridge"
+                                }
+                                openPlayStore(context, target)
+                                dialog.dismiss()
+                            },
                             onDownload = {
                                 try {
-                                    val url = downloadUrl.ifBlank {
-                                        "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases"
+                                    val url = githubUrl.ifBlank {
+                                        playStoreUrl.ifBlank {
+                                            "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases"
+                                        }
                                     }
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    })
                                 } catch (_: Exception) {
                                     Toast.makeText(context, context.getString(R.string.compose_update_open_link_failed), Toast.LENGTH_SHORT).show()
                                 }
                                 dialog.dismiss()
-                            },
-                            onPlayStore = {
-                                Toast.makeText(context, context.getString(R.string.compose_update_play_store_coming), Toast.LENGTH_SHORT).show()
                             },
                             onLater = {
                                 prefs.edit().putString(KEY_REMINDED_VERSION, latestVersion).apply()
@@ -144,12 +170,41 @@ object VersionUpdateChecker {
         dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
+    private fun openPlayStore(context: Context, url: String) {
+        // Prefer the Play Store app via market://, fall back to https.
+        val httpsUrl = if (url.startsWith("http")) url else PLAY_STORE_FALLBACK_URL
+        val marketUrl = when {
+            httpsUrl.contains("play.google.com/store/apps/details") -> {
+                val id = Uri.parse(httpsUrl).getQueryParameter("id") ?: "com.fersaiyan.cyanbridge"
+                "market://details?id=$id"
+            }
+            httpsUrl.startsWith("market://") -> httpsUrl
+            else -> null
+        }
+        // Try market:// first, then https://
+        if (marketUrl != null) {
+            try {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(marketUrl)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+                return
+            } catch (_: Exception) { /* fall through to https */ }
+        }
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(httpsUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (_: Exception) {
+            Toast.makeText(context, context.getString(R.string.compose_update_open_link_failed), Toast.LENGTH_SHORT).show()
+        }
+    }
+
     @Composable
     private fun VersionUpdateDialogContent(
         currentVersion: String,
         latestVersion: String,
-        onDownload: () -> Unit,
         onPlayStore: () -> Unit,
+        onDownload: () -> Unit,
         onLater: () -> Unit,
     ) {
         Card(modifier = Modifier.padding(24.dp).fillMaxWidth()) {
@@ -162,11 +217,11 @@ object VersionUpdateChecker {
                     stringResource(R.string.compose_update_version_summary, currentVersion, latestVersion),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                FilledTonalButton(onClick = onDownload, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.compose_update_download_github))
-                }
-                OutlinedButton(onClick = onPlayStore, modifier = Modifier.fillMaxWidth()) {
+                FilledTonalButton(onClick = onPlayStore, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.compose_update_get_play_store))
+                }
+                OutlinedButton(onClick = onDownload, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.compose_update_download_github))
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     OutlinedButton(onClick = onLater) { Text(stringResource(R.string.compose_update_later)) }
@@ -190,10 +245,16 @@ object VersionUpdateChecker {
                     val json = org.json.JSONObject(response)
                     val latestVersion = json.optString("version", "")
                     val downloadUrl = json.optString("download_url", "")
+                    val playStoreUrl = json.optString("play_store_url", "").ifBlank {
+                        json.optString("playStoreUrl", "")
+                    }.ifBlank { downloadUrl }
+                    val githubUrl = json.optString("github_url", "").ifBlank {
+                        json.optString("githubUrl", "")
+                    }
 
                     withContext(Dispatchers.Main) {
                         if (latestVersion.isNotBlank()) {
-                            showUpdateDialog(context, latestVersion, downloadUrl)
+                            showUpdateDialog(context, latestVersion, playStoreUrl, githubUrl)
                         } else {
                              Toast.makeText(context, context.getString(R.string.compose_update_check_failed), Toast.LENGTH_SHORT).show()
                         }
