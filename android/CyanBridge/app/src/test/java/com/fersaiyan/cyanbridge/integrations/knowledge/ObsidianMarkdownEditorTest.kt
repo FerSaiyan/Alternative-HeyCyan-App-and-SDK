@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.integrations.knowledge
 
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import com.fersaiyan.cyanbridge.shared.ui.notes.MarkdownEditorActions
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -106,7 +106,6 @@ private fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> Un
     var pendingDelete by remember { mutableStateOf<ChatThreadSummary?>(null) }
     var selectedThreadId by remember { mutableStateOf<String?>(null) }
     var selectedTab by remember { mutableStateOf(NotesChatsTab.CHATS) }
-    var showCreateNoteDialog by remember { mutableStateOf(false) }
 
     fun refreshChats() {
         scope.launch {
@@ -151,7 +150,6 @@ private fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> Un
         threads = threads,
         pendingDelete = pendingDelete,
         notes = notes,
-        showCreateNoteDialog = showCreateNoteDialog,
         formatTimestamp = formatTimestamp,
         onOpenThread = { selectedThreadId = it.id },
         onRequestDelete = { pendingDelete = it },
@@ -187,9 +185,7 @@ private fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> Un
             }
         },
         onOpenNote = {},
-        onShowCreateNoteDialog = { showCreateNoteDialog = true },
-        onDismissCreateNoteDialog = { showCreateNoteDialog = false },
-        onCreateNoteFromTranscript = { _, _ -> showCreateNoteDialog = false },
+        onNewNote = {},
         onChatAppearance = {},
         onOpenNotesSettings = {},
         onDestinationSelected = onDestinationSelected,

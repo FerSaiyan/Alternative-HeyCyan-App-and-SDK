@@ -66,4 +66,31 @@ class RoomNotesRepositoryTest {
         assertTrue(body.contains("## Open questions"))
         assertTrue(body.contains("## Timeline highlights"))
     }
+
+    @Test
+    fun `user markdown notes can be created and edited without summarization`() = runBlocking {
+        val repo: NotesRepository = RoomNotesRepository(
+            noteDao = db.noteDao(),
+            summarizationService = FakeSummarizationService(fixedTitle = "Unused"),
+        )
+
+        val id = repo.saveMarkdownNote(
+            title = "Project ideas",
+            markdown = "# Project ideas\n\n- Build the prototype",
+            tagsCsv = "projects, prototype",
+        )
+        repo.saveMarkdownNote(
+            id = id,
+            title = "Project plan",
+            markdown = "# Project plan\n\n- [x] Build the prototype",
+            tagsCsv = "projects",
+        )
+
+        val note = repo.getNoteById(id)
+        assertNotNull(note)
+        assertEquals("Project plan", note!!.title)
+        assertTrue(note.summary.contains("- [x]"))
+        assertEquals("projects", note.tags)
+        assertEquals(null, note.transcript)
+    }
 }

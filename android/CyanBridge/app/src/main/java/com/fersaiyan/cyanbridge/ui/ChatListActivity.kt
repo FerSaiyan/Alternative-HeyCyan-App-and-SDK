@@ -24,8 +24,12 @@ import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.data.local.entity.Note
 import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationsActivity
+import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationPrefs
+import com.fersaiyan.cyanbridge.integrations.knowledge.ObsidianMarkdownCodec
+import com.fersaiyan.cyanbridge.integrations.knowledge.SafKnowledgeRepository
 import com.fersaiyan.cyanbridge.shared.chat.ChatAppearanceMenuAction
 import com.fersaiyan.cyanbridge.shared.notes.NoteSummary
+import com.fersaiyan.cyanbridge.shared.notes.NoteSource
 import com.fersaiyan.cyanbridge.shared.ui.chat.ChatAppearanceMenuDialog
 import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsScreen
 import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsTab
@@ -33,7 +37,7 @@ import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.chat.ChatAppearancePrefs
-import com.fersaiyan.cyanbridge.ui.notes.NoteDetailActivity
+import com.fersaiyan.cyanbridge.ui.notes.NoteEditorActivity
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
@@ -55,7 +59,7 @@ class ChatListActivity : AppCompatActivity() {
     private var pendingDelete by mutableStateOf<ChatThreadSummary?>(null)
     private var chatAppearanceMenuVisible by mutableStateOf(false)
     private var selectedTab by mutableStateOf(NotesChatsTab.CHATS)
-    private var showCreateNoteDialog by mutableStateOf(false)
+    private var obsidianNotes by mutableStateOf<List<NoteSummary>>(emptyList())
     private val uiScope = MainScope()
     private var notesJob: Job? = null
 
@@ -89,8 +93,21 @@ class ChatListActivity : AppCompatActivity() {
                     onTabSelected = { selectedTab = it },
                     threads = threads,
                     pendingDelete = pendingDelete,
-                    notes = notes.map { NoteSummary(it.id, it.title, it.summary, it.createdAt) },
-                    showCreateNoteDialog = showCreateNoteDialog,
+                    notes = (
+                        notes.map {
+                            NoteSummary(
+                                id = it.id,
+                                title = it.title,
+                                summary = it.summary,
+                                createdAt = it.createdAt,
+                                source = if (it.transcript != null || it.durationSec != null || it.deviceClass != null) {
+                                    NoteSource.MEETING
+                                } else {
+                                    NoteSource.APP
+                                },
+                            )
+                        } + obsidianNotes
+                    ).sortedByDescending { it.createdAt },
                     formatTimestamp = { millis ->
                         DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
                             .format(Date(millis))
@@ -110,15 +127,18 @@ class ChatListActivity : AppCompatActivity() {
                         }
                     },
                     onOpenNote = { note ->
-                        startActivity(
-                            Intent(this, NoteDetailActivity::class.java).apply {
-                                putExtra(NoteDetailActivity.EXTRA_NOTE_ID, note.id)
-                            },
-                        )
+                        startActivity(Intent(this, NoteEditorActivity::class.java).apply {
+                            if (note.source == NoteSource.OBSIDIAN) {
+                                putExtra(NoteEditorActivity.EXTRA_OBSIDIAN_URI, note.externalId)
+                                putExtra(NoteEditorActivity.EXTRA_OBSIDIAN_NAME, note.title)
+                            } else {
+                                putExtra(NoteEditorActivity.EXTRA_NOTE_ID, note.id)
+                            }
+                        })
                     },
-                    onShowCreateNoteDialog = { showCreateNoteDialog = true },
-                    onDismissCreateNoteDialog = { showCreateNoteDialog = false },
-                    onCreateNoteFromTranscript = ::createNoteFromTranscript,
+                    onNewNote = {
+                        startActivity(Intent(this, NoteEditorActivity::class.java))
+                    },
                     onChatAppearance = ::showChatAppearanceMenu,
                     onOpenNotesSettings = {
                         startActivity(Intent(this, KnowledgeIntegrationsActivity::class.java))
@@ -160,32 +180,36 @@ class ChatListActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshList()
+        refreshObsidianNotes()
     }
 
-    private fun createNoteFromTranscript(title: String, transcript: String) {
-        val clean = transcript.trim()
-        if (clean.isBlank()) {
-            Toast.makeText(this, "Transcript is empty", Toast.LENGTH_SHORT).show()
+    private fun refreshObsidianNotes() {
+        val vault = KnowledgeIntegrationPrefs.obsidianVault(this)
+        if (vault == null || !SafKnowledgeRepository.hasPersistedTreePermission(this, vault.permissionTreeUri, writable = false)) {
+            obsidianNotes = emptyList()
             return
         }
         uiScope.launch {
-            try {
-                val id = MyApplication.notesRepository.createFromTranscript(
-                    transcript = clean,
-                    hintTitle = title.trim().takeIf { it.isNotBlank() },
-                    deviceClass = null,
-                    durationSec = null,
-                    tagsCsv = null,
-                    storeTranscript = true,
-                )
-                showCreateNoteDialog = false
-                startActivity(
-                    Intent(this@ChatListActivity, NoteDetailActivity::class.java).apply {
-                        putExtra(NoteDetailActivity.EXTRA_NOTE_ID, id)
-                    },
-                )
-            } catch (t: Throwable) {
-                Toast.makeText(this@ChatListActivity, "Failed to create note: ${t.message}", Toast.LENGTH_LONG).show()
+            obsidianNotes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                SafKnowledgeRepository.listObsidianNotes(
+                    context = this@ChatListActivity,
+                    treeUri = vault.permissionTreeUri,
+                    rootDocumentId = vault.rootDocumentId,
+                ).mapNotNull { entry ->
+                    runCatching {
+                        val markdown = SafKnowledgeRepository.readObsidianNote(this@ChatListActivity, entry.uri)
+                        val draft = ObsidianMarkdownCodec.parse(entry.name, markdown)
+                        val externalId = entry.uri.toString()
+                        NoteSummary(
+                            id = externalId.hashCode().toLong(),
+                            title = draft.title,
+                            summary = draft.body,
+                            createdAt = entry.lastModified.takeIf { it > 0 } ?: 0L,
+                            source = NoteSource.OBSIDIAN,
+                            externalId = externalId,
+                        )
+                    }.getOrNull()
+                }
             }
         }
     }

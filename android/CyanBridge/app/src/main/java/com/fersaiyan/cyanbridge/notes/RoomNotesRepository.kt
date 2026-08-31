@@ -24,6 +24,42 @@ class RoomNotesRepository(
 
     override suspend fun getNoteById(id: Long): Note? = noteDao.getNoteById(id)
 
+    override suspend fun saveMarkdownNote(
+        id: Long?,
+        title: String,
+        markdown: String,
+        tagsCsv: String?,
+    ): Long {
+        val now = System.currentTimeMillis()
+        val existing = id?.let { noteDao.getNoteById(it) }
+        val note = if (existing == null) {
+            Note(
+                title = title.trim().ifBlank { "Untitled note" },
+                summary = markdown.trimEnd(),
+                createdAt = now,
+                updatedAt = now,
+                tags = tagsCsv?.trim()?.takeIf { it.isNotBlank() },
+            )
+        } else {
+            existing.copy(
+                title = title.trim().ifBlank { existing.title },
+                summary = markdown.trimEnd(),
+                updatedAt = now,
+                tags = tagsCsv?.trim()?.takeIf { it.isNotBlank() },
+            )
+        }
+        val savedId = if (existing == null) {
+            noteDao.insertNote(note)
+        } else {
+            noteDao.updateNote(note)
+            note.id
+        }
+        context?.let { appContext ->
+            runCatching { NoteKnowledgeIndex.index(appContext, note.copy(id = savedId)) }
+        }
+        return savedId
+    }
+
     override suspend fun createFromTranscript(
         transcript: String,
         hintTitle: String?,

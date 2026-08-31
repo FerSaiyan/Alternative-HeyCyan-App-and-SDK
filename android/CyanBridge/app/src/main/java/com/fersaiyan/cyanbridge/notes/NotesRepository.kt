@@ -10,6 +10,13 @@ interface NotesRepository {
     fun getAllNotes(): Flow<List<Note>>
     suspend fun getNoteById(id: Long): Note?
 
+    suspend fun saveMarkdownNote(
+        id: Long? = null,
+        title: String,
+        markdown: String,
+        tagsCsv: String? = null,
+    ): Long
+
     suspend fun createFromTranscript(
         transcript: String,
         hintTitle: String? = null,

@@ -6,10 +6,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsScreen
 import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsTab
+import com.fersaiyan.cyanbridge.shared.notes.NoteSource
+import com.fersaiyan.cyanbridge.shared.notes.NoteSummary
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -22,6 +25,7 @@ class NotesChatsScreenTest {
     @Test
     fun switchesTabsAndKeepsPrimaryControlsAtLeast48Dp() {
         var selectedTab by mutableStateOf(NotesChatsTab.CHATS)
+        var newNoteClicks = 0
         composeRule.setContent {
             CyanBridgeTheme {
                 NotesChatsScreen(
@@ -29,8 +33,11 @@ class NotesChatsScreenTest {
                     onTabSelected = { selectedTab = it },
                     threads = emptyList(),
                     pendingDelete = null,
-                    notes = emptyList(),
-                    showCreateNoteDialog = false,
+                    notes = listOf(
+                        NoteSummary(1L, "App note", "Body", 1L, NoteSource.APP),
+                        NoteSummary(2L, "Meeting note", "Summary", 2L, NoteSource.MEETING),
+                        NoteSummary(3L, "Vault note", "Markdown", 3L, NoteSource.OBSIDIAN, "content://note"),
+                    ),
                     formatTimestamp = { "now" },
                     onOpenThread = {},
                     onRequestDelete = {},
@@ -38,9 +45,7 @@ class NotesChatsScreenTest {
                     onDismissDelete = {},
                     onNewChat = {},
                     onOpenNote = {},
-                    onShowCreateNoteDialog = {},
-                    onDismissCreateNoteDialog = {},
-                    onCreateNoteFromTranscript = { _, _ -> },
+                    onNewNote = { newNoteClicks++ },
                     onChatAppearance = {},
                     onOpenNotesSettings = {},
                     onDestinationSelected = {},
@@ -51,6 +56,10 @@ class NotesChatsScreenTest {
         composeRule.onNodeWithTag("notes_chats_tab_chats").assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithTag("notes_chats_tab_notes").assertHeightIsAtLeast(48.dp).performClick()
         composeRule.runOnIdle { assertEquals(NotesChatsTab.NOTES, selectedTab) }
-        composeRule.onNodeWithTag("notes_chats_primary_action").assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithText("Created in CyanBridge").assertExists()
+        composeRule.onNodeWithText("Meeting or transcript summary").assertExists()
+        composeRule.onNodeWithText("Stored in Obsidian").assertExists()
+        composeRule.onNodeWithTag("notes_chats_primary_action").assertHeightIsAtLeast(48.dp).performClick()
+        composeRule.runOnIdle { assertEquals(1, newNoteClicks) }
     }
 }

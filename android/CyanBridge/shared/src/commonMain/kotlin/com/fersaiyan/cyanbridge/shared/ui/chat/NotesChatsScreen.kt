@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,7 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -40,10 +38,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -58,6 +52,7 @@ import com.fersaiyan.cyanbridge.shared.icons.imageVector
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.navigation.icon
 import com.fersaiyan.cyanbridge.shared.notes.NoteSummary
+import com.fersaiyan.cyanbridge.shared.notes.NoteSource
 import com.fersaiyan.cyanbridge.shared.ui.localizedDestinationLabel
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
@@ -75,7 +70,6 @@ fun NotesChatsScreen(
     threads: List<ChatThreadSummary>,
     pendingDelete: ChatThreadSummary?,
     notes: List<NoteSummary>,
-    showCreateNoteDialog: Boolean,
     formatTimestamp: (Long) -> String,
     onOpenThread: (ChatThreadSummary) -> Unit,
     onRequestDelete: (ChatThreadSummary) -> Unit,
@@ -83,9 +77,7 @@ fun NotesChatsScreen(
     onDismissDelete: () -> Unit,
     onNewChat: () -> Unit,
     onOpenNote: (NoteSummary) -> Unit,
-    onShowCreateNoteDialog: () -> Unit,
-    onDismissCreateNoteDialog: () -> Unit,
-    onCreateNoteFromTranscript: (String, String) -> Unit,
+    onNewNote: () -> Unit,
     onChatAppearance: () -> Unit,
     onOpenNotesSettings: () -> Unit,
     onDestinationSelected: (AppDestination) -> Unit,
@@ -147,7 +139,7 @@ fun NotesChatsScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = if (selectedTab == NotesChatsTab.CHATS) onNewChat else onShowCreateNoteDialog,
+                onClick = if (selectedTab == NotesChatsTab.CHATS) onNewChat else onNewNote,
                 modifier = Modifier.testTag("notes_chats_primary_action"),
                 shape = MaterialTheme.shapes.extraLarge,
             ) {
@@ -184,16 +176,6 @@ fun NotesChatsScreen(
                             .heightIn(min = 48.dp)
                             .testTag("notes_chats_tab_${tab.name.lowercase()}"),
                     ) {
-                        Icon(
-                            imageVector = if (tab == NotesChatsTab.CHATS) {
-                                AppIcon.Chat.imageVector()
-                            } else {
-                                AppIcon.Notes.imageVector()
-                            },
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.size(8.dp))
                         Text(
                             stringResource(
                                 if (tab == NotesChatsTab.CHATS) {
@@ -253,12 +235,6 @@ fun NotesChatsScreen(
         )
     }
 
-    if (showCreateNoteDialog) {
-        CreateNoteDialog(
-            onDismissRequest = onDismissCreateNoteDialog,
-            onCreate = onCreateNoteFromTranscript,
-        )
-    }
 }
 
 @Composable
@@ -318,7 +294,7 @@ private fun NotesContent(
         contentPadding = PaddingValues(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(notes, key = { it.id }) { note ->
+        items(notes, key = { "${it.source}:${it.id}:${it.externalId.orEmpty()}" }) { note ->
             Card(
                 onClick = { onOpenNote(note) },
                 modifier = Modifier
@@ -334,6 +310,24 @@ private fun NotesContent(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    Surface(
+                        modifier = Modifier.padding(top = 8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        shape = MaterialTheme.shapes.large,
+                    ) {
+                        Text(
+                            text = stringResource(
+                                when (note.source) {
+                                    NoteSource.APP -> Res.string.notes_source_app
+                                    NoteSource.MEETING -> Res.string.notes_source_meeting
+                                    NoteSource.OBSIDIAN -> Res.string.notes_source_obsidian
+                                },
+                            ),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                     if (note.summary.isNotBlank()) {
                         Text(
                             text = note.summary,
@@ -459,55 +453,4 @@ private fun DialogIcon(
             )
         }
     }
-}
-
-@Composable
-private fun CreateNoteDialog(
-    onDismissRequest: () -> Unit,
-    onCreate: (String, String) -> Unit,
-) {
-    var title by remember { mutableStateOf("") }
-    var transcript by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        icon = {
-            DialogIcon(
-                icon = AppIcon.Notes,
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-        },
-        title = { Text(stringResource(Res.string.local_agent_new_note_from_transcript)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(Res.string.notes_title_hint)) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = transcript,
-                    onValueChange = { transcript = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(Res.string.local_agent_paste_transcript)) },
-                    minLines = 5,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onCreate(title, transcript) },
-                enabled = transcript.isNotBlank(),
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text(stringResource(Res.string.notes_create)) }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismissRequest,
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text(stringResource(Res.string.action_cancel)) }
-        },
-    )
 }

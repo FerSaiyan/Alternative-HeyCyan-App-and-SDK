@@ -91,7 +91,6 @@ import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesServi
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidPreferences
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidImageCapture
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidService
-// import com.fersaiyan.cyanbridge.ui.notes.NotesListActivity
 import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListActivity
 import com.fersaiyan.cyanbridge.ui.BluetoothUtils
 import com.fersaiyan.cyanbridge.ui.BluetoothEvent

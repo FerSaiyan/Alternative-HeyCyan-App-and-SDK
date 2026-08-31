@@ -111,26 +111,23 @@ object SafKnowledgeRepository {
             .toList()
     }
 
-    fun listManagedObsidianNotes(
+    fun listObsidianNotes(
         context: Context,
         treeUri: Uri,
         rootDocumentId: String? = null,
-        limit: Int = 30,
-    ): List<SafEntry> {
-        val resolver = context.contentResolver
-        val rootId = resolveRootId(treeUri, rootDocumentId)
-        val managedDir = findManagedNotesDirectory(resolver, treeUri, rootId) ?: return emptyList()
-        return queryChildren(resolver, treeUri, managedDir.documentId, MANAGED_NOTES_DIR)
-            .asSequence()
-            .filterNot { it.isDirectory }
-            .filter { it.name.endsWith(".md", ignoreCase = true) }
-            .sortedByDescending { it.lastModified }
-            .take(limit)
-            .toList()
-    }
+    ): List<SafEntry> = listTree(
+        context.contentResolver,
+        treeUri,
+        resolveRootId(treeUri, rootDocumentId),
+    ).asSequence()
+        .filterNot { it.isDirectory }
+        .filter { it.name.endsWith(".md", ignoreCase = true) }
+        .filterNot { it.relativePath.split('/').any { part -> part == ".obsidian" || part.startsWith(".") } }
+        .sortedByDescending { it.lastModified }
+        .toList()
 
-    fun readManagedObsidianNote(context: Context, entry: SafEntry): String =
-        readText(context.contentResolver, entry.uri) ?: error("Could not read ${entry.name}.")
+    fun readObsidianNote(context: Context, uri: Uri): String =
+        readText(context.contentResolver, uri) ?: error("Could not read this Obsidian note.")
 
     fun scanImportInbox(context: Context, treeUri: Uri): List<SafEntry> =
         listTree(context.contentResolver, treeUri, DocumentsContract.getTreeDocumentId(treeUri))

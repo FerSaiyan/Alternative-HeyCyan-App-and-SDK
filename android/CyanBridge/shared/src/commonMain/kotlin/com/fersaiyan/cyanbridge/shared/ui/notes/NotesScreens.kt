@@ -1,36 +1,24 @@
 package com.fersaiyan.cyanbridge.shared.ui.notes
 
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.spring
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -38,147 +26,35 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import com.fersaiyan.cyanbridge.shared.notes.NoteSummary
-import com.fersaiyan.cyanbridge.shared.generated.resources.*
+import com.fersaiyan.cyanbridge.shared.generated.resources.Res
+import com.fersaiyan.cyanbridge.shared.generated.resources.action_back
+import com.fersaiyan.cyanbridge.shared.generated.resources.action_copy
+import com.fersaiyan.cyanbridge.shared.generated.resources.action_share
+import com.fersaiyan.cyanbridge.shared.generated.resources.notes_body
+import com.fersaiyan.cyanbridge.shared.generated.resources.notes_editor_help
+import com.fersaiyan.cyanbridge.shared.generated.resources.notes_save
+import com.fersaiyan.cyanbridge.shared.generated.resources.notes_tags
+import com.fersaiyan.cyanbridge.shared.generated.resources.notes_title
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalResourceApi::class)
 @Composable
-fun NotesListScreen(
-    notes: List<NoteSummary>,
-    showCreateDialog: Boolean,
-    formatTimestamp: (Long) -> String,
-    onOpenNote: (NoteSummary) -> Unit,
-    onShowCreateDialog: () -> Unit,
-    onDismissCreateDialog: () -> Unit,
-    onCreateFromTranscript: (title: String, transcript: String) -> Unit,
-    onBack: () -> Unit,
-) {
-    Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(Res.string.local_agent_notes)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(Res.string.action_back))
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onShowCreateDialog,
-                shape = MaterialTheme.shapes.extraLarge,
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = stringResource(Res.string.local_agent_new_note))
-            }
-        },
-    ) { innerPadding ->
-        if (notes.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .consumeWindowInsets(innerPadding)
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Surface(
-                    modifier = Modifier.size(88.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Outlined.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp),
-                        )
-                    }
-                }
-                Text(
-                    text = stringResource(Res.string.local_agent_no_notes),
-                    modifier = Modifier.padding(top = 20.dp),
-                    style = MaterialTheme.typography.headlineSmall,
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    text = stringResource(Res.string.local_agent_no_notes_description),
-                    modifier = Modifier.padding(top = 8.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .consumeWindowInsets(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(notes, key = { it.id }) { note ->
-                    Card(
-                        onClick = { onOpenNote(note) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .animateContentSize(animationSpec = spring()),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(note.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                text = formatTimestamp(note.createdAt),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = note.summary,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 3,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (showCreateDialog) {
-        CreateNoteDialog(
-            onDismiss = onDismissCreateDialog,
-            onCreate = onCreateFromTranscript,
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun NoteDetailScreen(
+fun MarkdownNoteEditorScreen(
+    screenTitle: String,
     title: String,
-    summary: String,
+    tags: String,
+    body: TextFieldValue,
+    sourceLabel: String,
+    isSaving: Boolean,
+    onTitleChange: (String) -> Unit,
+    onTagsChange: (String) -> Unit,
+    onBodyChange: (TextFieldValue) -> Unit,
+    onSave: () -> Unit,
     onCopy: () -> Unit,
     onShare: () -> Unit,
     onBack: () -> Unit,
@@ -187,10 +63,25 @@ fun NoteDetailScreen(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = { Text(title) },
+                title = { Text(screenTitle) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(Res.string.action_back))
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = stringResource(Res.string.action_back),
+                        )
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = onSave,
+                        enabled = !isSaving && body.text.isNotBlank(),
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text(if (isSaving) "Saving..." else stringResource(Res.string.notes_save))
                     }
                 },
             )
@@ -201,88 +92,138 @@ fun NoteDetailScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding)
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Card(
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                shape = MaterialTheme.shapes.large,
+            ) {
+                Text(
+                    text = sourceLabel,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            OutlinedTextField(
+                value = title,
+                onValueChange = onTitleChange,
+                label = { Text(stringResource(Res.string.notes_title)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = tags,
+                onValueChange = onTagsChange,
+                label = { Text(stringResource(Res.string.notes_tags)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            MarkdownToolbar(
+                enabled = !isSaving,
+                value = body,
+                onValueChange = onBodyChange,
+            )
+            OutlinedTextField(
+                value = body,
+                onValueChange = onBodyChange,
+                label = { Text(stringResource(Res.string.notes_body)) },
+                supportingText = { Text(stringResource(Res.string.notes_editor_help)) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            ) {
-                SelectionContainer(modifier = Modifier.fillMaxSize()) {
-                    Text(
-                        text = summary,
-                        modifier = Modifier.padding(20.dp),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
-            }
+                minLines = 8,
+            )
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(onClick = onCopy) { Text(stringResource(Res.string.local_agent_copy)) }
-                Spacer(Modifier.width(8.dp))
-                TextButton(onClick = onShare) { Text(stringResource(Res.string.action_share)) }
+                TextButton(
+                    onClick = onCopy,
+                    enabled = body.text.isNotBlank(),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(Res.string.action_copy)) }
+                TextButton(
+                    onClick = onShare,
+                    enabled = body.text.isNotBlank(),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(Res.string.action_share)) }
             }
         }
     }
 }
 
 @Composable
-private fun CreateNoteDialog(
-    onDismiss: () -> Unit,
-    onCreate: (title: String, transcript: String) -> Unit,
+private fun MarkdownToolbar(
+    enabled: Boolean,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
 ) {
-    var title by remember { mutableStateOf("") }
-    var transcript by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Surface(
-                modifier = Modifier.size(56.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(28.dp),
-                    )
-                }
-            }
-        },
-        title = { Text(stringResource(Res.string.local_agent_new_note_from_transcript)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text(stringResource(Res.string.local_agent_title_optional)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = transcript,
-                    onValueChange = { transcript = it },
-                    label = { Text(stringResource(Res.string.local_agent_paste_transcript)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 5,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onCreate(title, transcript) }) { Text(stringResource(Res.string.local_agent_create)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.action_cancel)) }
-        },
-    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        EditorToolButton("H1", enabled) { onValueChange(MarkdownEditorActions.prefixCurrentLine(value, "# ")) }
+        EditorToolButton("List", enabled) { onValueChange(MarkdownEditorActions.prefixCurrentLine(value, "- ")) }
+        EditorToolButton("Task", enabled) { onValueChange(MarkdownEditorActions.prefixCurrentLine(value, "- [ ] ")) }
+        EditorToolButton("1.", enabled) { onValueChange(MarkdownEditorActions.prefixCurrentLine(value, "1. ")) }
+        EditorToolButton("Bold", enabled) { onValueChange(MarkdownEditorActions.wrap(value, "**", "**", "bold")) }
+        EditorToolButton("Italic", enabled) { onValueChange(MarkdownEditorActions.wrap(value, "_", "_", "italic")) }
+        EditorToolButton("Code", enabled) { onValueChange(MarkdownEditorActions.wrap(value, "`", "`", "code")) }
+        EditorToolButton("Quote", enabled) { onValueChange(MarkdownEditorActions.prefixCurrentLine(value, "> ")) }
+        EditorToolButton("Link", enabled) { onValueChange(MarkdownEditorActions.wrap(value, "[", "](https://)", "link text")) }
+        EditorToolButton("#tag", enabled) { onValueChange(MarkdownEditorActions.insert(value, "#tag")) }
+        EditorToolButton("[[Wiki]]", enabled) { onValueChange(MarkdownEditorActions.wrap(value, "[[", "]]", "note")) }
+    }
+}
+
+@Composable
+private fun EditorToolButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.heightIn(min = 48.dp),
+    ) { Text(label) }
+}
+
+object MarkdownEditorActions {
+    fun wrap(
+        value: TextFieldValue,
+        prefix: String,
+        suffix: String = prefix,
+        placeholder: String,
+    ): TextFieldValue {
+        val start = minOf(value.selection.start, value.selection.end).coerceIn(0, value.text.length)
+        val end = maxOf(value.selection.start, value.selection.end).coerceIn(start, value.text.length)
+        val selected = value.text.substring(start, end)
+        val replacementText = selected.ifBlank { placeholder }
+        val replacement = prefix + replacementText + suffix
+        val newText = value.text.replaceRange(start, end, replacement)
+        val selection = if (selected.isBlank()) {
+            TextRange(start + prefix.length, start + prefix.length + placeholder.length)
+        } else {
+            TextRange(start + replacement.length)
+        }
+        return TextFieldValue(newText, selection)
+    }
+
+    fun insert(value: TextFieldValue, insertion: String): TextFieldValue {
+        val start = minOf(value.selection.start, value.selection.end).coerceIn(0, value.text.length)
+        val end = maxOf(value.selection.start, value.selection.end).coerceIn(start, value.text.length)
+        val newText = value.text.replaceRange(start, end, insertion)
+        return TextFieldValue(newText, TextRange(start + insertion.length))
+    }
+
+    fun prefixCurrentLine(value: TextFieldValue, prefix: String): TextFieldValue {
+        val cursor = minOf(value.selection.start, value.selection.end).coerceIn(0, value.text.length)
+        val lineStart = value.text.lastIndexOf('\n', (cursor - 1).coerceAtLeast(0))
+            .let { if (it < 0) 0 else it + 1 }
+        val newText = value.text.replaceRange(lineStart, lineStart, prefix)
+        val newStart = (value.selection.start + prefix.length).coerceAtMost(newText.length)
+        val newEnd = (value.selection.end + prefix.length).coerceAtMost(newText.length)
+        return TextFieldValue(newText, TextRange(newStart, newEnd))
+    }
 }

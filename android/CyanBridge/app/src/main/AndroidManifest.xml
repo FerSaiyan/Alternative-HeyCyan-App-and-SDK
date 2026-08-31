@@ -89,7 +89,7 @@
         <service android:name=".devices.meizumyvu.MeizuMyvuConnectionService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <activity android:name=".ui.ChatListActivity" android:exported="false" android:label="Chats" />
         <activity android:name=".ui.ChatThreadActivity" android:exported="false" android:label="Chat" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".integrations.knowledge.KnowledgeIntegrationsActivity" android:exported="false" android:label="Notes &amp; Obsidian" />
+        <activity android:name=".integrations.knowledge.KnowledgeIntegrationsActivity" android:exported="false" android:label="Obsidian sync" />
         <activity android:name=".ui.SettingsActivity" android:exported="false" android:label="Settings" />
         <activity android:name=".ai.image.ExternalAssistantAutomationSetupActivity" android:exported="false" android:label="Gemini / ChatGPT automation setup" />
         <activity android:name=".ui.appearance.AppearanceActivity" android:exported="false" android:label="Appearance" />
@@ -106,8 +106,7 @@
         <activity android:name=".ui.localagent.ScreenCapturesActivity" android:exported="false" android:label="Screen captures" />
         <activity android:name=".ui.localagent.DailySummaryActivity" android:exported="false" android:label="Daily summary" />
         <activity android:name=".ui.debug.TranscriptionDebugActivity" android:exported="false" android:label="Transcription Debug" />
-        <activity android:name=".ui.notes.NotesListActivity" android:exported="false" android:label="Notes" />
-        <activity android:name=".ui.notes.NoteDetailActivity" android:exported="false" android:label="Note" />
+        <activity android:name=".ui.notes.NoteEditorActivity" android:exported="false" android:label="Note editor" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".ui.recordings.RecordingsListActivity" android:exported="false" android:label="@string/nav_transcriptions_recordings" />
         <activity android:name=".ui.recordings.SyncedMediaGalleryActivity" android:exported="false" android:label="Synced photos and videos" />
         <activity android:name=".agent.ProSubscriptionActivity" android:exported="true" android:label="Pro Subscription">

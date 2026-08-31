@@ -1,13 +1,11 @@
 package com.fersaiyan.cyanbridge.integrations.knowledge
 
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,26 +28,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.notes.NotesListActivity
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class KnowledgeIntegrationsActivity : AppCompatActivity() {
     private var status by mutableStateOf("Ready")
@@ -57,13 +49,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
     private var refreshKey by mutableStateOf(0)
 
     private var newVaultName by mutableStateOf("CyanBridge Vault")
-    private var managedNotes by mutableStateOf<List<SafKnowledgeRepository.SafEntry>>(emptyList())
-    private var editingNoteUri by mutableStateOf<Uri?>(null)
-    private var editingNoteName by mutableStateOf<String?>(null)
-    private var noteCreatedAt by mutableStateOf<String?>(null)
-    private var noteTitle by mutableStateOf("")
-    private var noteTags by mutableStateOf("")
-    private var noteBody by mutableStateOf(TextFieldValue(""))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,20 +74,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
         val cloudEnrichment = KnowledgeIntegrationPrefs.allowCloudEnrichment(this)
         val lastSummary = KnowledgeIntegrationPrefs.lastSummary(this)
 
-        LaunchedEffect(refreshKey, obsidianVault?.permissionTreeUri, obsidianVault?.rootDocumentId, obsidianWritable) {
-            managedNotes = if (obsidianVault != null && obsidianWritable) {
-                withContext(Dispatchers.IO) {
-                    SafKnowledgeRepository.listManagedObsidianNotes(
-                        context = this@KnowledgeIntegrationsActivity,
-                        treeUri = obsidianVault.permissionTreeUri,
-                        rootDocumentId = obsidianVault.rootDocumentId,
-                    )
-                }
-            } else {
-                emptyList()
-            }
-        }
-
         val existingVaultPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             uri?.let(::connectExistingVault)
         }
@@ -113,7 +84,7 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Notes & Obsidian") },
+                    title = { Text("Obsidian sync") },
                     navigationIcon = {
                         TextButton(onClick = { finish() }) { Text("Back") }
                     },
@@ -128,38 +99,12 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Text("CyanBridge notes", fontWeight = FontWeight.Bold)
-                        Text(
-                            "Meeting summaries and transcribed recordings are available from Notes in the Chats tab.",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Button(
-                            onClick = {
-                                startActivity(Intent(this@KnowledgeIntegrationsActivity, NotesListActivity::class.java))
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Open notes") }
-                    }
-                }
-
                 ObsidianVaultCard(
                     vault = obsidianVault,
                     hasWritablePermission = obsidianWritable,
                     onChooseExisting = { existingVaultPicker.launch(obsidianVault?.permissionTreeUri) },
                     onCreateNew = { createVaultParentPicker.launch(null) },
                 )
-
-                if (obsidianVault != null && obsidianWritable) {
-                    ObsidianNoteEditor(
-                        onSave = { saveObsidianNote(obsidianVault) },
-                        onNew = ::resetNoteEditor,
-                    )
-                }
 
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
@@ -294,8 +239,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                                 rootDocumentId = null,
                                 displayName = null,
                             )
-                            resetNoteEditor()
-                            managedNotes = emptyList()
                             status = "Obsidian vault disconnected. Existing Markdown files were not deleted."
                             refreshKey++
                         },
@@ -304,109 +247,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                 }
             }
         }
-    }
-
-    @Composable
-    private fun ObsidianNoteEditor(
-        onSave: () -> Unit,
-        onNew: () -> Unit,
-    ) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            if (editingNoteUri == null) "New Markdown note" else "Editing Markdown note",
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        editingNoteName?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                    }
-                    if (editingNoteUri != null || noteBody.text.isNotBlank() || noteTitle.isNotBlank()) {
-                        TextButton(onClick = onNew, enabled = !busy) { Text("New") }
-                    }
-                }
-                Text(
-                    "CyanBridge manages notes in the vault's CyanBridge/ folder. Other vault notes remain searchable but are not overwritten by this editor.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-
-                if (managedNotes.isNotEmpty()) {
-                    Text("Recent CyanBridge notes", fontWeight = FontWeight.Medium)
-                    managedNotes.take(8).forEach { entry ->
-                        TextButton(
-                            onClick = { loadManagedNote(entry) },
-                            enabled = !busy,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Edit ${entry.name}", modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = noteTitle,
-                    onValueChange = { noteTitle = it },
-                    label = { Text("Title") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = noteTags,
-                    onValueChange = { noteTags = it },
-                    label = { Text("Tags") },
-                    supportingText = { Text("Comma- or space-separated; # is optional. Saved as Obsidian YAML tags.") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-
-                Text("Markdown toolbar", fontWeight = FontWeight.Medium)
-                MarkdownToolbar()
-
-                OutlinedTextField(
-                    value = noteBody,
-                    onValueChange = { noteBody = it },
-                    label = { Text("Markdown note") },
-                    supportingText = { Text("Supports headings, lists, tasks, links, wiki links, tags, quotes, code, bold and italic Markdown.") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 10,
-                    maxLines = 24,
-                )
-                Button(
-                    onClick = onSave,
-                    enabled = !busy && noteBody.text.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(if (editingNoteUri == null) "Create note in Obsidian" else "Update note in Obsidian") }
-            }
-        }
-    }
-
-    @Composable
-    private fun MarkdownToolbar() {
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            ToolButton("H1") { noteBody = MarkdownEditorActions.prefixCurrentLine(noteBody, "# ") }
-            ToolButton("• List") { noteBody = MarkdownEditorActions.prefixCurrentLine(noteBody, "- ") }
-            ToolButton("☐ Task") { noteBody = MarkdownEditorActions.prefixCurrentLine(noteBody, "- [ ] ") }
-            ToolButton("1. List") { noteBody = MarkdownEditorActions.prefixCurrentLine(noteBody, "1. ") }
-            ToolButton("Bold") { noteBody = MarkdownEditorActions.wrap(noteBody, "**", "**", "bold") }
-            ToolButton("Italic") { noteBody = MarkdownEditorActions.wrap(noteBody, "_", "_", "italic") }
-            ToolButton("Code") { noteBody = MarkdownEditorActions.wrap(noteBody, "`", "`", "code") }
-            ToolButton("Quote") { noteBody = MarkdownEditorActions.prefixCurrentLine(noteBody, "> ") }
-            ToolButton("Link") { noteBody = MarkdownEditorActions.wrap(noteBody, "[", "](https://)", "link text") }
-            ToolButton("#tag") { noteBody = MarkdownEditorActions.insert(noteBody, "#tag") }
-            ToolButton("[[Wiki]]") { noteBody = MarkdownEditorActions.wrap(noteBody, "[[", "]]", "note") }
-        }
-    }
-
-    @Composable
-    private fun ToolButton(label: String, onClick: () -> Unit) {
-        OutlinedButton(onClick = onClick, enabled = !busy) { Text(label) }
     }
 
     private fun connectExistingVault(selected: Uri) {
@@ -420,7 +260,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
             rootDocumentId = null,
             displayName = selected.lastPathSegment?.substringAfterLast(':')?.takeIf { it.isNotBlank() },
         )
-        resetNoteEditor()
         status = "Obsidian vault connected with scoped read/write access."
         refreshKey++
         syncObsidianNow()
@@ -450,7 +289,6 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
                     rootDocumentId = created.rootDocumentId,
                     displayName = created.displayName,
                 )
-                resetNoteEditor()
                 status = "Created '${created.displayName}'. You can open this folder as a vault in Obsidian, or use it directly from CyanBridge."
                 refreshKey++
                 KnowledgeSyncWorker.schedule(this@KnowledgeIntegrationsActivity)
@@ -477,78 +315,4 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadManagedNote(entry: SafKnowledgeRepository.SafEntry) {
-        lifecycleScope.launch {
-            busy = true
-            status = "Opening ${entry.name}…"
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    SafKnowledgeRepository.readManagedObsidianNote(this@KnowledgeIntegrationsActivity, entry)
-                }
-            }.map { markdown -> ObsidianMarkdownCodec.parse(entry.name, markdown) }
-            result.onSuccess { draft ->
-                editingNoteUri = entry.uri
-                editingNoteName = entry.name
-                noteCreatedAt = draft.createdAt
-                noteTitle = draft.title
-                noteTags = draft.tags
-                noteBody = TextFieldValue(draft.body)
-                status = "Editing ${entry.name}."
-            }.onFailure {
-                status = "Could not open note: ${it.message ?: "unknown error"}"
-            }
-            busy = false
-        }
-    }
-
-    private fun resetNoteEditor() {
-        editingNoteUri = null
-        editingNoteName = null
-        noteCreatedAt = null
-        noteTitle = ""
-        noteTags = ""
-        noteBody = TextFieldValue("")
-    }
-
-    private fun saveObsidianNote(vault: KnowledgeIntegrationPrefs.ObsidianVaultAccess) {
-        lifecycleScope.launch {
-            busy = true
-            status = if (editingNoteUri == null) "Creating note in Obsidian…" else "Updating note in Obsidian…"
-            val now = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
-            val title = noteTitle.trim().ifBlank { "CyanBridge note ${now.substringBefore(' ')}" }
-            val draft = ObsidianManagedDraft(
-                title = title,
-                tags = noteTags,
-                body = noteBody.text,
-                createdAt = noteCreatedAt,
-            )
-            val markdown = ObsidianMarkdownCodec.render(draft, now)
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    val saved = SafKnowledgeRepository.saveObsidianNote(
-                        context = this@KnowledgeIntegrationsActivity,
-                        treeUri = vault.permissionTreeUri,
-                        rootDocumentId = vault.rootDocumentId,
-                        title = title,
-                        markdown = markdown,
-                        existingUri = editingNoteUri,
-                    )
-                    KnowledgeImportCoordinator.syncObsidian(this@KnowledgeIntegrationsActivity)
-                    saved
-                }
-            }
-            result.onSuccess { savedUri ->
-                editingNoteUri = savedUri
-                editingNoteName = if (title.endsWith(".md", true)) title else "$title.md"
-                noteCreatedAt = noteCreatedAt ?: now
-                noteTitle = title
-                noteTags = ObsidianMarkdownCodec.normalizeTags(noteTags).joinToString(", ")
-                status = "Saved as plaintext Markdown in the Obsidian vault and re-indexed locally."
-                refreshKey++
-            }.onFailure {
-                status = "Could not save note: ${it.message ?: "unknown error"}"
-            }
-            busy = false
-        }
-    }
 }
