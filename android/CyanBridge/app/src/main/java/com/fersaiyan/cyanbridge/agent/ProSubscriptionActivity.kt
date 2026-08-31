@@ -13,6 +13,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -31,7 +32,11 @@ import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.pro.ProSubscriptionScreen
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
+import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import kotlin.concurrent.thread
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -60,6 +65,9 @@ class ProSubscriptionActivity : AppCompatActivity() {
     private var changePlanRequested = false
     private var pendingEmailVerification = ""
     private var emailVerificationRefreshInFlight = false
+    private var restoreExistingSubscriptionPending = false
+    private var restoreNotFoundEmail by mutableStateOf<String?>(null)
+    private var restoreLogsSending by mutableStateOf(false)
     private var composeState by mutableStateOf(ProSubscriptionUiState())
     private lateinit var composeView: ComposeView
 
@@ -148,6 +156,8 @@ class ProSubscriptionActivity : AppCompatActivity() {
             CyanBridgeTheme(appearance) {
                 ProSubscriptionScreen(
                     state = composeState,
+                    restoreNotFoundEmail = restoreNotFoundEmail,
+                    restoreLogsSending = restoreLogsSending,
                     onPlanSelected = ::selectPlanFromCompose,
                     onStartFreeTrial = { btnSubscribe.performClick() },
                     onSubscribeWithGooglePlay = {
@@ -162,6 +172,9 @@ class ProSubscriptionActivity : AppCompatActivity() {
                         )
                     },
                     onCheckoutUnavailable = { showCheckoutUnavailableMessage() },
+                    onRestoreExistingSubscription = ::restoreExistingProSubscription,
+                    onDismissRestoreNotFound = { restoreNotFoundEmail = null },
+                    onSendRestoreFailureLogs = ::sendRestoreFailureLogs,
                     onDonate = { btnDonate.performClick() },
                     onCancelSubscription = { btnUnsubscribe.performClick() },
                     onBack = ::finish,
@@ -439,6 +452,106 @@ class ProSubscriptionActivity : AppCompatActivity() {
         )
     }
 
+    private fun restoreExistingProSubscription() {
+        if (maybeRedirectToSettingsIfActive(showToast = true)) return
+        restoreExistingSubscriptionPending = true
+        promptForAccountEmail(
+            title = "Restore Pro access",
+            message = "Enter the email used for your existing Pro subscription. We will verify it and link this app to that account without starting a checkout.",
+        ) { email ->
+            verifyRestoredProAccount(email)
+        }
+    }
+
+    private fun verifyRestoredProAccount(email: String) {
+        Toast.makeText(this, "Checking for an active Pro subscription...", Toast.LENGTH_SHORT).show()
+        thread {
+            val result = runCatching {
+                val account = ProSubscriptionRelayClient.fetchAccountInfo(this).getOrThrow()
+                check(account.emailVerified && account.email.equals(email, ignoreCase = true)) {
+                    "The verified relay account does not match that email."
+                }
+                ProSubscriptionVerifier.verifyNow(
+                    context = this,
+                    strictForTesting = shouldForceStrictVerification(),
+                    applyActivationRouting = true,
+                )
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                restoreExistingSubscriptionPending = false
+                result.onSuccess { verified ->
+                    updateStatusDisplay()
+                    if (verified.active) {
+                        setResult(RESULT_OK)
+                        Toast.makeText(
+                            this,
+                            "Pro restored. Your ${verified.plan} plan is active.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        openProSettingsAfterSubscribe()
+                    } else {
+                        val message = "Email verified, but no active Pro subscription was found for this account."
+                        tvStatus.text = message
+                        refreshComposeState()
+                        restoreNotFoundEmail = email
+                    }
+                }.onFailure { error ->
+                    val message = ProSubscriptionRelayClient.relayUnavailableHint(error)
+                        ?: error.message
+                        ?: "Unable to restore Pro access."
+                    tvStatus.text = message
+                    refreshComposeState()
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun sendRestoreFailureLogs() {
+        val email = restoreNotFoundEmail ?: return
+        if (restoreLogsSending) return
+        restoreLogsSending = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            val localStatus = ProSubscriptionVerifier.localStatus(this@ProSubscriptionActivity)
+            val result = DebugLogSupport.sendLogsToServer(
+                context = this@ProSubscriptionActivity,
+                issueType = "pro_subscription_restore_failed",
+                description = "User tried to recover an existing Pro subscription for $email, but no active subscription was found after email verification.",
+                logs = DebugLogSupport.collectLogcat(),
+                deviceInfo = DebugLogSupport.buildDeviceInfo(
+                    context = this@ProSubscriptionActivity,
+                    extraInfo = linkedMapOf(
+                        "Pro recovery email" to email,
+                        "Recovery result" to "No active subscription found",
+                        "Local subscription active" to localStatus.active.toString(),
+                        "Local subscription plan" to localStatus.plan,
+                        "Local subscription provider" to ProSubscriptionPrefs.getProvider(this@ProSubscriptionActivity),
+                    ),
+                ),
+                contactEmail = email,
+                requestMetadata = "Pro recovery failed for verified email: $email",
+            )
+            withContext(Dispatchers.Main) {
+                restoreLogsSending = false
+                if (isFinishing || isDestroyed) return@withContext
+                result.onSuccess { logId ->
+                    restoreNotFoundEmail = null
+                    Toast.makeText(
+                        this@ProSubscriptionActivity,
+                        "Logs sent to the developer. Reference: $logId",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }.onFailure { error ->
+                    val message = ProSubscriptionRelayClient.relayUnavailableHint(error)
+                        ?: error.message
+                        ?: "Unable to send logs."
+                    Toast.makeText(this@ProSubscriptionActivity, message, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
     private fun promptForAccountEmail(
         title: String,
         message: String,
@@ -675,7 +788,11 @@ class ProSubscriptionActivity : AppCompatActivity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (ProSubscriptionServerPrefs.isAccountEmailVerified(this, email)) {
                     pendingEmailVerification = ""
-                    Toast.makeText(this, "Email verified. Choose your plan to continue.", Toast.LENGTH_LONG).show()
+                    if (restoreExistingSubscriptionPending) {
+                        verifyRestoredProAccount(email)
+                    } else {
+                        Toast.makeText(this, "Email verified. Choose your plan to continue.", Toast.LENGTH_LONG).show()
+                    }
                 } else if (lastResult?.isFailure == true) {
                     Toast.makeText(
                         this,

@@ -268,6 +268,12 @@
     <string name="pro_checkout_choices">Checkout choices</string>
     <string name="pro_checkout_choices_description">Use lower-cost web checkout with Asaas or Paddle, or use the easier in-app Google Play checkout.</string>
     <string name="pro_donate_asaas">Donate via Asaas</string>
+    <string name="pro_already_pro">I'm already Pro!</string>
+    <string name="pro_restore_not_found_title">Pro subscription not found</string>
+    <string name="pro_restore_not_found_message">We couldn't find an active Pro subscription for %1$s. Check that you entered the same email used for your purchase, or send logs to the developer for manual review.</string>
+    <string name="pro_send_logs_to_developer">Send logs to developer</string>
+    <string name="pro_sending_logs">Sending logs...</string>
+    <string name="pro_check_email">Check email</string>
     <string name="pro_cancel_subscription">Cancel subscription</string>
     <string name="pro_cancel_description">You retain access through the current billing period after cancellation.</string>
     <string name="pro_back">Back</string>

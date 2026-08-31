@@ -468,11 +468,16 @@ private fun SharedProSubscriptionDestination(
 
     ProSubscriptionScreen(
         state = state,
+        restoreNotFoundEmail = null,
+        restoreLogsSending = false,
         onPlanSelected = { plan -> state = state.copy(selectedPlan = plan) },
         onStartFreeTrial = { reportUnavailableAction(ProSubscriptionAction.SUBSCRIBE) },
         onSubscribeWithGooglePlay = { reportUnavailableAction(ProSubscriptionAction.SUBSCRIBE) },
         onSubscribeOnWebsite = { reportUnavailableAction(ProSubscriptionAction.SUBSCRIBE) },
         onCheckoutUnavailable = { reportUnavailableAction(ProSubscriptionAction.SUBSCRIBE) },
+        onRestoreExistingSubscription = { reportUnavailableAction(ProSubscriptionAction.SUBSCRIBE) },
+        onDismissRestoreNotFound = {},
+        onSendRestoreFailureLogs = {},
         onDonate = { reportUnavailableAction(ProSubscriptionAction.DONATE) },
         onCancelSubscription = {
             state = state.copy(

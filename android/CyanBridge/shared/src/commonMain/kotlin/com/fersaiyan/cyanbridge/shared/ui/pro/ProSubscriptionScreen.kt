@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.billing.BillingProvider
@@ -76,11 +79,16 @@ private fun planLabels(state: ProSubscriptionUiState) = buildList {
 @Composable
 fun ProSubscriptionScreen(
     state: ProSubscriptionUiState,
+    restoreNotFoundEmail: String?,
+    restoreLogsSending: Boolean,
     onPlanSelected: (String) -> Unit,
     onStartFreeTrial: () -> Unit,
     onSubscribeWithGooglePlay: () -> Unit,
     onSubscribeOnWebsite: (BillingProvider) -> Unit,
     onCheckoutUnavailable: () -> Unit,
+    onRestoreExistingSubscription: () -> Unit,
+    onDismissRestoreNotFound: () -> Unit,
+    onSendRestoreFailureLogs: () -> Unit,
     onDonate: () -> Unit,
     onCancelSubscription: () -> Unit,
     onBack: () -> Unit,
@@ -95,7 +103,8 @@ fun ProSubscriptionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .consumeWindowInsets(innerPadding),
+                .consumeWindowInsets(innerPadding)
+                .testTag("pro_subscription_list"),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -137,7 +146,23 @@ fun ProSubscriptionScreen(
                 }
             }
             item {
-                OutlinedButton(onClick = onDonate, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = onRestoreExistingSubscription,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("restore_existing_pro"),
+                ) {
+                    Text(stringResource(Res.string.pro_already_pro))
+                }
+            }
+            item {
+                OutlinedButton(
+                    onClick = onDonate,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                ) {
                      Text(stringResource(Res.string.pro_donate_asaas))
                 }
             }
@@ -218,6 +243,52 @@ fun ProSubscriptionScreen(
             onWebProviderSelected = { provider ->
                 showCheckoutChoices = false
                 onSubscribeOnWebsite(provider)
+            },
+        )
+    }
+
+    if (restoreNotFoundEmail != null) {
+        AlertDialog(
+            onDismissRequest = onDismissRestoreNotFound,
+            icon = {
+                DialogIconBadge {
+                    Icon(Icons.Outlined.WarningAmber, contentDescription = null)
+                }
+            },
+            title = { Text(stringResource(Res.string.pro_restore_not_found_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        Res.string.pro_restore_not_found_message,
+                        restoreNotFoundEmail,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = onSendRestoreFailureLogs,
+                    enabled = !restoreLogsSending,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(
+                        stringResource(
+                            if (restoreLogsSending) {
+                                Res.string.pro_sending_logs
+                            } else {
+                                Res.string.pro_send_logs_to_developer
+                            },
+                        ),
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = onDismissRestoreNotFound,
+                    enabled = !restoreLogsSending,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(Res.string.pro_check_email))
+                }
             },
         )
     }
