@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.shared.ui.plugins
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Download
@@ -29,12 +32,14 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -98,7 +103,7 @@ fun CommunityPluginsScreen(
                 actions = {
                     IconButton(onClick = onRefresh, enabled = !isRefreshing) {
                         if (isRefreshing) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 3.dp)
                         } else {
                             Icon(Icons.Outlined.Refresh, contentDescription = stringResource(Res.string.plugins_refresh))
                         }
@@ -107,7 +112,10 @@ fun CommunityPluginsScreen(
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 0.dp,
+            ) {
                 AppDestination.entries.forEach { destination ->
                     NavigationBarItem(
                         selected = destination == AppDestination.PLUGINS,
@@ -119,6 +127,11 @@ fun CommunityPluginsScreen(
                             )
                         },
                         label = { Text(localizedDestinationLabel(destination)) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                        ),
                     )
                 }
             }
@@ -140,11 +153,18 @@ fun CommunityPluginsScreen(
         ) {
             item { PluginHero() }
             item {
-                Text(
-                    text = stringResource(Res.string.plugins_future_notice),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Text(
+                        text = stringResource(Res.string.plugins_future_notice),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
 
             if (taskerIntegrations.isNotEmpty()) {
@@ -160,7 +180,9 @@ fun CommunityPluginsScreen(
                     item {
                         OutlinedButton(
                             onClick = watchTutorial,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
                         ) {
                             Icon(Icons.Outlined.PlayCircle, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
@@ -239,6 +261,22 @@ fun CommunityPluginsScreen(
     plugins.firstOrNull { it.title == detailsPluginTitle }?.let { plugin ->
         AlertDialog(
             onDismissRequest = { detailsPluginTitle = null },
+            icon = {
+                Surface(
+                    modifier = Modifier.size(56.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = CircleShape,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.Download,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+            },
             title = { Text(plugin.title) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -264,14 +302,15 @@ private fun PluginHero() {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        shape = MaterialTheme.shapes.extraLarge,
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = stringResource(Res.string.plugins_hero_title),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Text(
@@ -293,6 +332,8 @@ private fun TaskerIntegrationCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("tasker_plugin_card_${plugin.id}"),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -328,10 +369,12 @@ private fun TaskerIntegrationCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = onDownload,
                     enabled = !plugin.downloadUrl.isNullOrBlank() || !plugin.taskerNetLink.isNullOrBlank(),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp),
                 ) {
                     Icon(Icons.Outlined.Download, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
@@ -339,7 +382,9 @@ private fun TaskerIntegrationCard(
                 }
                 OutlinedButton(
                     onClick = onOpenSettings,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp),
                 ) {
                     Icon(Icons.Outlined.Settings, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
@@ -360,6 +405,8 @@ private fun NativePluginCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("native_plugin_card_${plugin.id}"),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -434,6 +481,7 @@ private fun PeriodFilter(
                     selected = window == selectedWindow,
                     onClick = { onWindowSelected(window) },
                     label = { Text(localizedPluginTimeWindow(window)) },
+                    modifier = Modifier.heightIn(min = 48.dp),
                 )
             }
         }
@@ -444,9 +492,9 @@ private fun PeriodFilter(
 private fun PluginSectionLabel(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelLarge,
+        style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.onSurface,
     )
 }
 
@@ -460,7 +508,17 @@ private fun PluginCard(
     onSelect: () -> Unit,
     onOpenPlugin: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            },
+        ),
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -518,7 +576,12 @@ private fun PluginCard(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            OutlinedButton(onClick = onSelect, modifier = Modifier.fillMaxWidth()) {
+            FilledTonalButton(
+                onClick = onSelect,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp),
+            ) {
                 Text(
                     if (selected) {
                         stringResource(Res.string.plugin_selected)
@@ -529,12 +592,22 @@ private fun PluginCard(
             }
             when {
                 !plugin.taskerNetLink.isNullOrBlank() -> {
-                    TextButton(onClick = onOpenPlugin, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = onOpenPlugin,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    ) {
                         Text(stringResource(Res.string.plugins_open_tasker))
                     }
                 }
                 !plugin.downloadUrl.isNullOrBlank() -> {
-                    TextButton(onClick = onOpenPlugin, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = onOpenPlugin,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    ) {
                         Text(stringResource(Res.string.plugins_download))
                     }
                 }

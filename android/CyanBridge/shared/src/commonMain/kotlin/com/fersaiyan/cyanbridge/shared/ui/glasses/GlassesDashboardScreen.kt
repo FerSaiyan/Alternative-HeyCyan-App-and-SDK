@@ -1,7 +1,15 @@
 package com.fersaiyan.cyanbridge.shared.ui.glasses
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,22 +19,27 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Card
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -89,6 +102,7 @@ fun GlassesDashboardScreen(
                 showWifiAdbConfirmation = false
                 wifiAdbRiskAcknowledged = false
             },
+            icon = { WarningDialogIcon() },
             title = { Text(stringResource(Res.string.dashboard_privileged_adb_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -106,7 +120,9 @@ fun GlassesDashboardScreen(
             confirmButton = {
                 TextButton(
                     enabled = wifiAdbRiskAcknowledged,
-                    modifier = Modifier.testTag("wifi_adb_confirm_start"),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("wifi_adb_confirm_start"),
                     onClick = {
                         showWifiAdbConfirmation = false
                         wifiAdbRiskAcknowledged = false
@@ -116,6 +132,7 @@ fun GlassesDashboardScreen(
             },
             dismissButton = {
                 TextButton(
+                    modifier = Modifier.heightIn(min = 48.dp),
                     onClick = {
                         showWifiAdbConfirmation = false
                         wifiAdbRiskAcknowledged = false
@@ -186,20 +203,33 @@ fun GlassesDashboardScreen(
                 }
             }
             item {
-                SectionTitle(stringResource(Res.string.dashboard_connection))
-                ActionRow(
-                    primaryLabel = stringResource(Res.string.dashboard_scan),
-                    onPrimary = { onAction(GlassesDashboardAction.Scan) },
-                    secondaryLabel = stringResource(Res.string.dashboard_reconnect),
-                    onSecondary = { onAction(GlassesDashboardAction.Reconnect) },
-                )
-                Spacer(Modifier.height(8.dp))
-                ActionButton(
-                    label = stringResource(Res.string.dashboard_disconnect),
-                    onClick = { onAction(GlassesDashboardAction.Disconnect) },
-                    style = ActionButtonStyle.Destructive,
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                )
+                    shape = MaterialTheme.shapes.extraLarge,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        SectionTitle(stringResource(Res.string.dashboard_connection))
+                        ActionRow(
+                            primaryLabel = stringResource(Res.string.dashboard_scan),
+                            onPrimary = { onAction(GlassesDashboardAction.Scan) },
+                            primaryStyle = ActionButtonStyle.Primary,
+                            secondaryLabel = stringResource(Res.string.dashboard_reconnect),
+                            onSecondary = { onAction(GlassesDashboardAction.Reconnect) },
+                        )
+                        ActionButton(
+                            label = stringResource(Res.string.dashboard_disconnect),
+                            onClick = { onAction(GlassesDashboardAction.Disconnect) },
+                            style = ActionButtonStyle.Destructive,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
             if (state.nativePluginShortcut != null) {
                 item {
@@ -231,33 +261,80 @@ fun GlassesDashboardScreen(
             }
             if (state.showAdvancedControls) {
                 item {
-                    TextButton(
-                        onClick = { onAction(GlassesDashboardAction.ToggleAdvanced) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("advanced_controls_toggle"),
-                    ) {
-                        Text(
-                            if (state.advancedExpanded) {
-                                stringResource(Res.string.dashboard_hide_advanced)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (state.advancedExpanded) {
+                                MaterialTheme.colorScheme.surfaceVariant
                             } else {
-                                stringResource(Res.string.dashboard_show_advanced)
+                                MaterialTheme.colorScheme.surface
                             },
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Icon(
-                            imageVector = if (state.advancedExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                            contentDescription = null,
-                        )
-                    }
-                }
-                if (state.advancedExpanded) {
-                    item {
-                        AdvancedControls(
-                            state = state,
-                            onAction = onAction,
-                            onRequestOtaFirmware = { showOtaFirmwareSourcePicker = true },
-                        )
+                        ),
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            TextButton(
+                                onClick = { onAction(GlassesDashboardAction.ToggleAdvanced) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 56.dp)
+                                    .testTag("advanced_controls_toggle"),
+                            ) {
+                                Text(
+                                    if (state.advancedExpanded) {
+                                        stringResource(Res.string.dashboard_hide_advanced)
+                                    } else {
+                                        stringResource(Res.string.dashboard_show_advanced)
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Surface(
+                                    modifier = Modifier.size(40.dp),
+                                    color = if (state.advancedExpanded) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.secondaryContainer
+                                    },
+                                    contentColor = if (state.advancedExpanded) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                    },
+                                    shape = MaterialTheme.shapes.large,
+                                ) {
+                                    Icon(
+                                        imageVector = if (state.advancedExpanded) {
+                                            Icons.Outlined.ExpandLess
+                                        } else {
+                                            Icons.Outlined.ExpandMore
+                                        },
+                                        contentDescription = null,
+                                        modifier = Modifier.padding(8.dp),
+                                    )
+                                }
+                            }
+                            AnimatedVisibility(
+                                visible = state.advancedExpanded,
+                                enter = fadeIn(animationSpec = spring()) + expandVertically(
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                ),
+                                exit = fadeOut(animationSpec = spring()) + shrinkVertically(
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                ),
+                            ) {
+                                Column {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                    Column(modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)) {
+                                        AdvancedControls(
+                                            state = state,
+                                            onAction = onAction,
+                                            onRequestOtaFirmware = { showOtaFirmwareSourcePicker = true },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -275,6 +352,10 @@ private fun WifiAdbDebugSection(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("wifi_adb_debug_section"),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -282,7 +363,7 @@ private fun WifiAdbDebugSection(
         ) {
             SectionTitle(stringResource(Res.string.dashboard_developer_tools), accented = true)
             Text(stringResource(Res.string.dashboard_adb_wifi), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(Res.string.dashboard_status, state.stateLabel), style = MaterialTheme.typography.bodyMedium)
+            StatusPill(stringResource(Res.string.dashboard_status, state.stateLabel))
             if (state.detail.isNotBlank()) {
                 Text(
                     state.detail,
@@ -328,6 +409,10 @@ private fun NativePluginShortcutSection(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("native_plugin_shortcut_${shortcut.id}"),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -359,7 +444,7 @@ private fun NativePluginShortcutSection(
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
-                    shape = MaterialTheme.shapes.small,
+                    shape = MaterialTheme.shapes.large,
                 ) {
                     Text(
                         text = stringResource(
@@ -401,62 +486,127 @@ private fun NativePluginShortcutSection(
 
 @Composable
 private fun MeetingBanner(label: String, onStop: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
         Row(
-            modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 8.dp, bottom = 10.dp),
+            modifier = Modifier.padding(start = 20.dp, top = 12.dp, end = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = label,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.SemiBold,
             )
-            TextButton(onClick = onStop) { Text(stringResource(Res.string.dashboard_stop), color = MaterialTheme.colorScheme.error) }
+            TextButton(
+                onClick = onStop,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(stringResource(Res.string.dashboard_stop))
+            }
         }
     }
 }
 
 @Composable
 private fun StatusCard(state: GlassesDashboardUiState) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
                 text = stringResource(Res.string.dashboard_glasses_status),
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
                 fontWeight = FontWeight.Bold,
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(state.connectionLabel, style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        text = stringResource(Res.string.dashboard_class, state.deviceClassLabel),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (state.showBattery || state.showStorage) {
-                    Column(horizontalAlignment = Alignment.End) {
-                        if (state.showBattery) {
-                            Text(
-                                text = state.batteryPercent?.let { stringResource(Res.string.dashboard_battery, it) }
-                                    ?: stringResource(Res.string.dashboard_battery_unknown),
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                        }
-                        if (state.showStorage) {
-                            Text(
-                                text = stringResource(Res.string.dashboard_storage, state.storageLabel),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+            BoxWithConstraints {
+                val hasMetrics = state.showBattery || state.showStorage
+                if (hasMetrics && maxWidth < 300.dp) {
+                    Column {
+                        StatusIdentity(state)
+                        Spacer(Modifier.height(8.dp))
+                        StatusMetrics(state, Alignment.Start)
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        StatusIdentity(state, Modifier.weight(1f))
+                        if (hasMetrics) StatusMetrics(state, Alignment.End)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusIdentity(
+    state: GlassesDashboardUiState,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.testTag("dashboard_status_identity"),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            state.connectionLabel,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+        )
+        Surface(
+            color = MaterialTheme.colorScheme.secondary,
+            contentColor = MaterialTheme.colorScheme.onSecondary,
+            shape = MaterialTheme.shapes.large,
+        ) {
+            Text(
+                text = stringResource(Res.string.dashboard_class, state.deviceClassLabel),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusMetrics(
+    state: GlassesDashboardUiState,
+    horizontalAlignment: Alignment.Horizontal,
+) {
+    Surface(
+        modifier = Modifier.testTag("dashboard_status_metrics"),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalAlignment = horizontalAlignment,
+        ) {
+            if (state.showBattery) {
+                Text(
+                    text = state.batteryPercent?.let { stringResource(Res.string.dashboard_battery, it) }
+                        ?: stringResource(Res.string.dashboard_battery_unknown),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+            }
+            if (state.showStorage) {
+                Text(
+                    text = stringResource(Res.string.dashboard_storage, state.storageLabel),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -467,34 +617,57 @@ private fun TransferCard(
     state: GlassesDashboardUiState,
     onStop: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(stringResource(Res.string.dashboard_sync_progress), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             Text(
-                text = stringResource(Res.string.dashboard_flow, state.transfer.flowLabel),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
+                stringResource(Res.string.dashboard_sync_progress),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
             )
+            StatusPill(stringResource(Res.string.dashboard_flow, state.transfer.flowLabel), tertiary = true)
             Text(state.transfer.countsLabel, style = MaterialTheme.typography.bodySmall)
             state.transfer.progress?.let { progress ->
                 LinearProgressIndicator(
                     progress = { progress.coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(percent = 50)),
                 )
-            } ?: LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } ?: LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(percent = 50)),
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = state.transfer.detail,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-                TextButton(onClick = onStop) { Text(stringResource(Res.string.dashboard_stop_sync), color = MaterialTheme.colorScheme.error) }
+                TextButton(
+                    onClick = onStop,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(
+                        stringResource(Res.string.dashboard_stop_sync),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         }
     }
@@ -675,7 +848,9 @@ private fun GlassesAssistantControls(
         }
         OutlinedButton(
             onClick = { onAction(GlassesDashboardAction.OpenExternalImageAutomationDiagnostics) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp),
         ) {
             Text(stringResource(Res.string.dashboard_gemini_chatgpt_setup))
         }
@@ -693,6 +868,7 @@ private fun AiWakeWordRouteControls(
         AlertDialog(
             onDismissRequest = { showHeyCyanImageWarning = false },
             modifier = Modifier.testTag("ai_wake_word_image_warning"),
+            icon = { WarningDialogIcon() },
             title = {
                 Text(stringResource(Res.string.dashboard_ai_wake_word_image_warning_title))
             },
@@ -709,7 +885,9 @@ private fun AiWakeWordRouteControls(
                             ),
                         )
                     },
-                    modifier = Modifier.testTag("ai_wake_word_image_warning_confirm"),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("ai_wake_word_image_warning_confirm"),
                 ) {
                     Text(stringResource(Res.string.dashboard_ai_wake_word_image_warning_confirm))
                 }
@@ -717,7 +895,9 @@ private fun AiWakeWordRouteControls(
             dismissButton = {
                 TextButton(
                     onClick = { showHeyCyanImageWarning = false },
-                    modifier = Modifier.testTag("ai_wake_word_image_warning_cancel"),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("ai_wake_word_image_warning_cancel"),
                 ) {
                     Text(stringResource(Res.string.action_cancel))
                 }
@@ -753,6 +933,7 @@ private fun AiWakeWordRouteControls(
                 label = { Text(stringResource(Res.string.dashboard_ai_wake_word_voice)) },
                 modifier = Modifier
                     .weight(1f)
+                    .heightIn(min = 48.dp)
                     .testTag("ai_wake_word_route_voice_question"),
             )
             FilterChip(
@@ -774,6 +955,7 @@ private fun AiWakeWordRouteControls(
                 label = { Text(stringResource(Res.string.dashboard_ai_wake_word_image)) },
                 modifier = Modifier
                     .weight(1f)
+                    .heightIn(min = 48.dp)
                     .testTag("ai_wake_word_route_image_question"),
             )
         }
@@ -792,7 +974,7 @@ private fun AssistantModeChip(
         selected = selectedMode == mode,
         onClick = { onAction(GlassesDashboardAction.SelectAssistantMode(mode)) },
         label = { Text(label) },
-        modifier = modifier,
+        modifier = modifier.heightIn(min = 48.dp),
     )
 }
 
@@ -810,11 +992,12 @@ private fun MetaRaybanControls(
     if (pairingIssue != null && showPairingIssue) {
         AlertDialog(
             onDismissRequest = { showPairingIssue = false },
-            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            icon = { WarningDialogIcon() },
             title = { Text(pairingIssue.title) },
             text = { Text(pairingIssue.message) },
             confirmButton = {
                 TextButton(
+                    modifier = Modifier.heightIn(min = 48.dp),
                     onClick = {
                         showPairingIssue = false
                         onAction(
@@ -831,6 +1014,7 @@ private fun MetaRaybanControls(
             },
             dismissButton = {
                 TextButton(
+                    modifier = Modifier.heightIn(min = 48.dp),
                     onClick = {
                         showPairingIssue = false
                         onAction(GlassesDashboardAction.MetaSendDiagnostics)
@@ -1057,6 +1241,7 @@ private fun AdvancedControls(
                                     label = { Text(label) },
                                     modifier = Modifier
                                         .weight(1f)
+                                        .heightIn(min = 48.dp)
                                         .testTag("ai_image_thumbnail_quality_$sdkValue"),
                                 )
                             }
@@ -1067,18 +1252,34 @@ private fun AdvancedControls(
         pendingDetailedQuality?.let { sdkValue ->
             AlertDialog(
                 onDismissRequest = { pendingDetailedQuality = null },
-                icon = { Icon(imageVector = Icons.Outlined.WarningAmber, contentDescription = null) },
+                icon = { WarningDialogIcon() },
                 title = { Text(stringResource(Res.string.dashboard_quality_detailed_warning_title)) },
-                text = { Text(stringResource(Res.string.dashboard_quality_detailed_warning_body)) },
+                text = {
+                    Text(
+                        stringResource(
+                            if (state.showEyevueControls) {
+                                Res.string.dashboard_quality_detailed_warning_body_eyevue
+                            } else {
+                                Res.string.dashboard_quality_detailed_warning_body
+                            },
+                        ),
+                    )
+                },
                 confirmButton = {
-                    TextButton(onClick = {
-                        val value = pendingDetailedQuality
-                        pendingDetailedQuality = null
-                        if (value != null) onAction(GlassesDashboardAction.SelectImageThumbnailQuality(value))
-                    }) { Text(stringResource(Res.string.dashboard_quality_detailed_warning_continue)) }
+                    TextButton(
+                        onClick = {
+                            val value = pendingDetailedQuality
+                            pendingDetailedQuality = null
+                            if (value != null) onAction(GlassesDashboardAction.SelectImageThumbnailQuality(value))
+                        },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) { Text(stringResource(Res.string.dashboard_quality_detailed_warning_continue)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { pendingDetailedQuality = null }) {
+                    TextButton(
+                        onClick = { pendingDetailedQuality = null },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
                         Text(stringResource(Res.string.dashboard_quality_detailed_warning_cancel))
                     }
                 },
@@ -1090,19 +1291,27 @@ private fun AdvancedControls(
                 SectionTitle(stringResource(Res.string.dashboard_developer_tools))
                 TextButton(
                     onClick = { onAction(GlassesDashboardAction.AddDeviceListener) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
                 ) { Text(stringResource(Res.string.dashboard_register_listener)) }
                 TextButton(
                     onClick = { onAction(GlassesDashboardAction.StartClassicBluetoothScan) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
                 ) { Text(stringResource(Res.string.dashboard_classic_scan)) }
                 TextButton(
                     onClick = { onAction(GlassesDashboardAction.DumpOtaInfo) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
                 ) { Text(stringResource(Res.string.dashboard_dump_ota)) }
                 TextButton(
                     onClick = { onAction(GlassesDashboardAction.TestPullOta) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
                 ) { Text(stringResource(Res.string.dashboard_test_pull_ota)) }
             }
         }
@@ -1141,6 +1350,7 @@ private fun OtaFirmwareSourcePickerDialog(
     AlertDialog(
         onDismissRequest = onDismissRequest,
         modifier = Modifier.testTag("ota_firmware_source_picker"),
+        icon = { WarningDialogIcon() },
         title = { Text(stringResource(Res.string.dashboard_ota_choose_source)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1160,6 +1370,7 @@ private fun OtaFirmwareSourcePickerDialog(
                         onClick = { onSourceSelected(source) },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 64.dp)
                             .testTag("ota_firmware_source_${source.name.lowercase()}"),
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
@@ -1176,7 +1387,10 @@ private fun OtaFirmwareSourcePickerDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismissRequest) { Text(stringResource(Res.string.action_cancel)) }
+            TextButton(
+                onClick = onDismissRequest,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(Res.string.action_cancel)) }
         },
     )
 }
@@ -1199,6 +1413,7 @@ private fun FirmwarePatchRequestDialog(
     AlertDialog(
         onDismissRequest = onDismissRequest,
         modifier = Modifier.testTag("firmware_patch_request_dialog"),
+        icon = { WarningDialogIcon() },
         title = { Text(stringResource(Res.string.dashboard_request_patch)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1248,7 +1463,9 @@ private fun FirmwarePatchRequestDialog(
             TextButton(
                 enabled = validEmail && !request.isSubmitting,
                 onClick = { onSubmit(contactEmail.trim()) },
-                modifier = Modifier.testTag("firmware_patch_request_send"),
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("firmware_patch_request_send"),
             ) {
                 Text(
                     if (request.isSubmitting) {
@@ -1263,7 +1480,9 @@ private fun FirmwarePatchRequestDialog(
             TextButton(
                 enabled = !request.isSubmitting,
                 onClick = onDismissRequest,
-                modifier = Modifier.testTag("firmware_patch_request_cancel"),
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("firmware_patch_request_cancel"),
             ) { Text(stringResource(Res.string.action_cancel)) }
         },
     )
@@ -1287,10 +1506,10 @@ private fun ActionButton(
     enabled: Boolean = true,
 ) {
     when (style) {
-        ActionButtonStyle.Primary -> FilledTonalButton(
+        ActionButtonStyle.Primary -> Button(
             onClick = onClick,
             enabled = enabled,
-            modifier = modifier,
+            modifier = modifier.heightIn(min = 48.dp),
         ) {
             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -1298,7 +1517,7 @@ private fun ActionButton(
         ActionButtonStyle.Neutral -> OutlinedButton(
             onClick = onClick,
             enabled = enabled,
-            modifier = modifier,
+            modifier = modifier.heightIn(min = 48.dp),
         ) {
             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -1306,7 +1525,7 @@ private fun ActionButton(
         ActionButtonStyle.Destructive -> OutlinedButton(
             onClick = onClick,
             enabled = enabled,
-            modifier = modifier,
+            modifier = modifier.heightIn(min = 48.dp),
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = MaterialTheme.colorScheme.error,
                 disabledContentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.38f),
@@ -1363,6 +1582,46 @@ private fun SectionTitle(text: String, accented: Boolean = false) {
     )
 }
 
+@Composable
+private fun StatusPill(text: String, tertiary: Boolean = false) {
+    Surface(
+        color = if (tertiary) {
+            MaterialTheme.colorScheme.tertiary
+        } else {
+            MaterialTheme.colorScheme.primaryContainer
+        },
+        contentColor = if (tertiary) {
+            MaterialTheme.colorScheme.onTertiary
+        } else {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        },
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun WarningDialogIcon() {
+    Surface(
+        modifier = Modifier.size(48.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.WarningAmber,
+            contentDescription = null,
+            modifier = Modifier.padding(12.dp),
+        )
+    }
+}
+
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 private fun OtaProgressSection(ota: OtaSectionUiState) {
@@ -1385,9 +1644,17 @@ private fun OtaProgressSection(ota: OtaSectionUiState) {
         ota.progress?.let { progress ->
             LinearProgressIndicator(
                 progress = { progress.coerceIn(0, 100) / 100f },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(percent = 50)),
             )
-        } ?: LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        } ?: LinearProgressIndicator(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(percent = 50)),
+        )
         if (ota.detail.isNotBlank()) {
             Text(
                 text = ota.detail,

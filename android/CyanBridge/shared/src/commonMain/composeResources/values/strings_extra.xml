@@ -17,6 +17,13 @@
     <string name="action_deselect_all">Deselect all</string>
     <string name="action_new_chat">New Chat</string>
     <string name="notes_and_chats">Notes &amp; Chats</string>
+    <string name="notes_chats_tab_chats">Chats</string>
+    <string name="notes_chats_tab_notes">Notes</string>
+    <string name="notes_obsidian_settings">Notes &amp; Obsidian settings</string>
+    <string name="notes_open_settings">Open Notes settings</string>
+    <string name="notes_no_notes_hint">Your notes live here. Create one with the add button.</string>
+    <string name="notes_create">Create note</string>
+    <string name="notes_title_hint">Optional title</string>
     <string name="action_start">Start</string>
     <string name="action_stop">Stop</string>
     <string name="action_send">Send</string>
@@ -494,6 +501,7 @@
     <string name="dashboard_quality_detailed">Detailed</string>
     <string name="dashboard_quality_detailed_warning_title">Use Detailed quality?</string>
     <string name="dashboard_quality_detailed_warning_body">Detailed uses Wi-Fi instead of Bluetooth and takes longer (up to 30 seconds) to transfer the full-resolution image.</string>
+    <string name="dashboard_quality_detailed_warning_body_eyevue">Detailed requests Eyevue's higher-quality image over Bluetooth. It may take longer than the thumbnail modes.</string>
     <string name="dashboard_quality_detailed_warning_continue">Continue</string>
     <string name="dashboard_quality_detailed_warning_cancel">Cancel</string>
     <string name="dashboard_test_image">Test image AI description</string>

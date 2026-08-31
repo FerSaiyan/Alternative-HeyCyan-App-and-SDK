@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
@@ -30,6 +33,7 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -50,6 +54,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,9 +66,11 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.fersaiyan.cyanbridge.shared.recordings.MeetingRecordingUiState
@@ -189,7 +196,10 @@ fun RecordingsScreen(
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 0.dp,
+            ) {
                 AppDestination.entries.forEach { destination ->
                     NavigationBarItem(
                         selected = destination == AppDestination.MEDIA,
@@ -200,7 +210,12 @@ fun RecordingsScreen(
                                 contentDescription = null,
                             )
                         },
-                         label = { Text(localizedDestinationLabel(destination)) },
+                        label = { Text(localizedDestinationLabel(destination)) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                        ),
                     )
                 }
             }
@@ -225,8 +240,8 @@ fun RecordingsScreen(
             if (recentSyncedMedia.isNotEmpty()) {
                 item {
                     Text(
-                         text = stringResource(Res.string.recordings_recent_synced_photos),
-                        style = MaterialTheme.typography.titleSmall,
+                        text = stringResource(Res.string.recordings_recent_synced_photos),
+                        style = MaterialTheme.typography.titleMedium,
                     )
                 }
                 item {
@@ -256,7 +271,9 @@ fun RecordingsScreen(
             item {
                 OutlinedButton(
                     onClick = onOpenSyncedMedia,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.ImageIcon,
@@ -264,7 +281,7 @@ fun RecordingsScreen(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))
-                     Text(stringResource(Res.string.recordings_open_synced_media))
+                    Text(stringResource(Res.string.recordings_open_synced_media))
                 }
             }
             if (isLoading) {
@@ -291,10 +308,13 @@ fun RecordingsScreen(
                         Text(
                             text = stringResource(Res.string.recordings_meeting_captures),
                             modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.titleMedium,
                         )
                         if (!selectionMode) {
-                            TextButton(onClick = { selectionMode = true }) {
+                            TextButton(
+                                onClick = { selectionMode = true },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) {
                                 Text(stringResource(Res.string.recordings_select))
                             }
                         }
@@ -356,6 +376,22 @@ fun RecordingsScreen(
         val multiple = items.size > 1
         AlertDialog(
             onDismissRequest = { if (!isDeleting) pendingDelete = null },
+            icon = {
+                Surface(
+                    modifier = Modifier.size(56.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+            },
             title = {
                 Text(
                     stringResource(
@@ -443,12 +479,12 @@ private fun MeetingRecordingBanner(
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.extraLarge,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, top = 10.dp, end = 8.dp, bottom = 10.dp),
+                .padding(start = 20.dp, top = 14.dp, end = 12.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -458,7 +494,10 @@ private fun MeetingRecordingBanner(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            TextButton(onClick = onStop) {
+            TextButton(
+                onClick = onStop,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
                 Icon(
                     imageVector = Icons.Outlined.Stop,
                     contentDescription = null,
@@ -483,6 +522,8 @@ private fun SyncedMediaPreview(
             .aspectRatio(1f)
             .testTag("recent_synced_media_${item.id}")
             .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (thumbnail != null) {
@@ -505,17 +546,42 @@ private fun SyncedMediaPreview(
 
 @Composable
 private fun EmptyRecordingsState() {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-             Text(stringResource(Res.string.recordings_no_recordings), style = MaterialTheme.typography.titleMedium)
+            Surface(
+                modifier = Modifier.size(64.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Outlined.ImageIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
             Text(
-                 text = stringResource(Res.string.recordings_no_recordings_description),
+                stringResource(Res.string.recordings_no_recordings),
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = stringResource(Res.string.recordings_no_recordings_description),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
             )
         }
     }
@@ -546,6 +612,14 @@ private fun RecordingCard(
                 enabled = selectionMode && !isDeleting && !isTranscribing,
                 onClick = onToggleSelection,
             ),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            },
+        ),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -624,9 +698,10 @@ private fun RecordingCard(
                 FilledTonalButton(
                     onClick = onTranscribe,
                     enabled = !isTranscribing,
+                    modifier = Modifier.heightIn(min = 48.dp),
                 ) {
                     if (isTranscribing) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 3.dp)
                         Spacer(Modifier.width(8.dp))
                          Text(stringResource(Res.string.recordings_transcribing))
                     } else {
@@ -636,6 +711,7 @@ private fun RecordingCard(
                 OutlinedButton(
                     onClick = onViewTranscript,
                     enabled = !isTranscribing,
+                    modifier = Modifier.heightIn(min = 48.dp),
                 ) {
                      Text(stringResource(Res.string.recordings_view_transcript))
                 }
@@ -653,7 +729,10 @@ private data class RecordingDeletionFeedback(
 private fun TranscriptionProgressDialog(state: TranscriptionProgressUiState) {
     val progress = state.progress
     Dialog(onDismissRequest = {}) {
-        Card {
+        Card(
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        ) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -665,11 +744,19 @@ private fun TranscriptionProgressDialog(state: TranscriptionProgressUiState) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (progress == null) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp),
+                        strokeCap = StrokeCap.Round,
+                    )
                 } else {
                     LinearProgressIndicator(
                         progress = { progress / 100f },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp),
+                        strokeCap = StrokeCap.Round,
                     )
                 }
             }

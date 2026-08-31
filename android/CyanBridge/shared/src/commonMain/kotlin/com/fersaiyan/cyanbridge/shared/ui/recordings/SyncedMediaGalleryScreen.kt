@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
@@ -46,9 +47,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Alignment.Companion
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -77,25 +76,29 @@ fun SyncedMediaGalleryScreen(
         ModalBottomSheet(
             onDismissRequest = { selectedItems = emptySet() },
             sheetState = rememberBottomSheetScaffoldState().bottomSheetState,
+            shape = MaterialTheme.shapes.extraLarge,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {
-            Column {
+            Column(modifier = Modifier.padding(bottom = 16.dp)) {
                 Text(
-                     text = stringResource(Res.string.media_selected, selectedItems.size),
+                    text = stringResource(Res.string.media_selected, selectedItems.size),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    style = MaterialTheme.typography.titleMedium,
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    style = MaterialTheme.typography.titleLarge,
                 )
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 8.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = MaterialTheme.shapes.extraLarge,
                 ) {
                     Column(
                         modifier = Modifier.padding(8.dp),
                     ) {
                         DropdownMenuItem(
-                             text = { Text(stringResource(Res.string.media_share), style = MaterialTheme.typography.bodyLarge) },
+                            text = { Text(stringResource(Res.string.media_share), style = MaterialTheme.typography.bodyLarge) },
                             onClick = {
                                 onShareItems(selectedItems.toList())
                                 selectedItems = emptySet()
@@ -109,7 +112,7 @@ fun SyncedMediaGalleryScreen(
                             },
                         )
                         DropdownMenuItem(
-                             text = { Text(stringResource(Res.string.media_delete), style = MaterialTheme.typography.bodyLarge) },
+                            text = { Text(stringResource(Res.string.media_delete), style = MaterialTheme.typography.bodyLarge) },
                             onClick = {
                                 onDeleteItems(selectedItems.toList())
                                 selectedItems = emptySet()
@@ -124,7 +127,7 @@ fun SyncedMediaGalleryScreen(
                             },
                             trailingIcon = {
                                 Text(
-                                     stringResource(Res.string.media_delete),
+                                    stringResource(Res.string.media_delete),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.error,
                                 )
@@ -142,9 +145,9 @@ fun SyncedMediaGalleryScreen(
             TopAppBar(
                 title = {
                     if (selectedItems.isEmpty()) {
-                         Text(stringResource(Res.string.media_title))
+                        Text(stringResource(Res.string.media_title))
                     } else {
-                         Text(stringResource(Res.string.media_selected, selectedItems.size))
+                        Text(stringResource(Res.string.media_selected, selectedItems.size))
                     }
                 },
                 navigationIcon = {
@@ -157,7 +160,7 @@ fun SyncedMediaGalleryScreen(
                     }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                             contentDescription = stringResource(Res.string.media_back),
+                            contentDescription = stringResource(Res.string.media_back),
                         )
                     }
                 },
@@ -166,14 +169,14 @@ fun SyncedMediaGalleryScreen(
                         IconButton(onClick = onRefresh) {
                             Icon(
                                 imageVector = Icons.Outlined.Refresh,
-                                 contentDescription = stringResource(Res.string.media_refresh),
+                                contentDescription = stringResource(Res.string.media_refresh),
                             )
                         }
                     } else {
                         IconButton(onClick = { selectedItems = emptySet() }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                 contentDescription = stringResource(Res.string.media_deselect_all),
+                                contentDescription = stringResource(Res.string.media_deselect_all),
                             )
                         }
                     }
@@ -188,12 +191,20 @@ fun SyncedMediaGalleryScreen(
                 .consumeWindowInsets(innerPadding),
         ) {
             if (selectedItems.isEmpty()) {
-                Text(
-                    text = folderHint,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Text(
+                        text = folderHint,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
             when {
                 isLoading -> {
@@ -201,9 +212,12 @@ fun SyncedMediaGalleryScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                        contentAlignment = Companion.Center,
+                        contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator()
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(48.dp),
+                            strokeWidth = 4.dp,
+                        )
                     }
                 }
                 mediaItems.isEmpty() -> {
@@ -212,25 +226,52 @@ fun SyncedMediaGalleryScreen(
                             .fillMaxWidth()
                             .weight(1f)
                             .padding(32.dp),
-                        contentAlignment = Companion.Center,
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                             text = stringResource(Res.string.media_empty),
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            shape = MaterialTheme.shapes.extraLarge,
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(64.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    shape = CircleShape,
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.ImageIcon,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(28.dp),
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = stringResource(Res.string.media_empty),
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                            }
+                        }
                     }
                 }
                 else -> {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 112.dp),
+                        columns = GridCells.Adaptive(minSize = 120.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                        contentPadding = PaddingValues(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         items(mediaItems, key = { "${it.id}-${it.isVideo}" }) { item ->
                             var thumbnail by remember(item.contentUriString) {
@@ -283,7 +324,7 @@ private fun SyncedMediaTile(
                 onLongClick = onLongClick,
             ),
         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.large,
         tonalElevation = if (isSelected) 4.dp else 0.dp,
     ) {
         Box {
@@ -304,13 +345,16 @@ private fun SyncedMediaTile(
             }
             if (item.isVideo) {
                 Surface(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .align(Alignment.BottomStart),
                     color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
                     contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shape = MaterialTheme.shapes.large,
+                    shape = CircleShape,
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.PlayArrow,
-                         contentDescription = stringResource(Res.string.media_video),
+                        contentDescription = stringResource(Res.string.media_video),
                         modifier = Modifier.padding(8.dp),
                     )
                 }
@@ -328,18 +372,18 @@ private fun SyncedMediaTile(
                 ) {
                     Surface(
                         color = MaterialTheme.colorScheme.primary,
-                        shape = MaterialTheme.shapes.small,
-                        modifier = Modifier.size(24.dp),
+                        shape = CircleShape,
+                        modifier = Modifier.size(32.dp),
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(4.dp),
-                            contentAlignment = Companion.Center,
+                                .padding(7.dp),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Check,
-                                 contentDescription = stringResource(Res.string.media_selected_content_description),
+                                contentDescription = stringResource(Res.string.media_selected_content_description),
                                 modifier = Modifier.fillMaxSize(),
                                 tint = MaterialTheme.colorScheme.onPrimary,
                             )

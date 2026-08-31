@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -73,19 +75,24 @@ fun PublishPluginScreen(
             )
         },
         bottomBar = {
-            Surface(modifier = Modifier.imePadding(), tonalElevation = 3.dp) {
+            Surface(
+                modifier = Modifier.imePadding(),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 0.dp,
+            ) {
                 Button(
                     onClick = onSubmit,
                     enabled = !state.isSubmitting,
                     modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .heightIn(min = 56.dp)
                         .testTag("publish_plugin_submit"),
                 ) {
                     if (state.isSubmitting) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
+                            strokeWidth = 3.dp,
                             color = MaterialTheme.colorScheme.onPrimary,
                         )
                         Spacer(Modifier.width(8.dp))
@@ -106,49 +113,59 @@ fun PublishPluginScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                 text = stringResource(Res.string.publish_share_body),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = MaterialTheme.shapes.extraLarge,
+            ) {
+                Text(
+                    text = stringResource(Res.string.publish_share_body),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Text(
-                         text = stringResource(Res.string.publish_details),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        text = stringResource(Res.string.publish_details),
+                        style = MaterialTheme.typography.titleLarge,
                     )
                     PluginTextField(
                         value = state.title,
                         onValueChange = onTitleChanged,
-                         label = stringResource(Res.string.publish_title_field),
+                        label = stringResource(Res.string.publish_title_field),
                         error = state.titleError,
                         tag = "publish_plugin_title",
                     )
                     PluginTextField(
                         value = state.author,
                         onValueChange = onAuthorChanged,
-                         label = stringResource(Res.string.publish_author_field),
+                        label = stringResource(Res.string.publish_author_field),
                         error = state.authorError,
                         tag = "publish_plugin_author",
                     )
                     PluginTextField(
                         value = state.description,
                         onValueChange = onDescriptionChanged,
-                         label = stringResource(Res.string.publish_description_field),
+                        label = stringResource(Res.string.publish_description_field),
                         error = state.descriptionError,
                         tag = "publish_plugin_description",
                         minLines = 3,
                     )
                     Text(
-                         text = stringResource(Res.string.publish_description_hint),
+                        text = stringResource(Res.string.publish_description_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                     Text(stringResource(Res.string.publish_category), style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(Res.string.publish_category), style = MaterialTheme.typography.titleSmall)
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -157,33 +174,38 @@ fun PublishPluginScreen(
                             FilterChip(
                                 selected = state.category == category,
                                 onClick = { onCategorySelected(category) },
-                                 label = { Text(localizedPluginCategory(category)) },
-                                modifier = Modifier.testTag("publish_plugin_category_$category"),
+                                label = { Text(localizedPluginCategory(category)) },
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("publish_plugin_category_$category"),
                             )
                         }
                     }
                 }
             }
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Text(
-                         text = stringResource(Res.string.publish_download_link),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        text = stringResource(Res.string.publish_download_link),
+                        style = MaterialTheme.typography.titleLarge,
                     )
                     PluginTextField(
                         value = state.taskerNetLink,
                         onValueChange = onTaskerNetLinkChanged,
-                         label = stringResource(Res.string.publish_taskernet_link),
+                        label = stringResource(Res.string.publish_taskernet_link),
                         error = state.taskerNetLinkError,
                         tag = "publish_plugin_link",
                         keyboardType = KeyboardType.Uri,
                     )
                     Text(
-                         text = stringResource(Res.string.publish_taskernet_hint),
+                        text = stringResource(Res.string.publish_taskernet_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -191,19 +213,22 @@ fun PublishPluginScreen(
             }
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Text(
-                         text = stringResource(Res.string.publish_how_it_works),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        text = stringResource(Res.string.publish_how_it_works),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
                     )
                     Text(
-                         text = stringResource(Res.string.publish_steps),
+                        text = stringResource(Res.string.publish_steps),
                         style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
                     )
                 }
             }
@@ -232,5 +257,6 @@ private fun PluginTextField(
         isError = error != null,
         supportingText = error?.let { { Text(it) } },
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        shape = MaterialTheme.shapes.large,
     )
 }

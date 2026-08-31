@@ -1,5 +1,13 @@
 package com.fersaiyan.cyanbridge.shared.ui.localmodels
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,14 +23,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -46,6 +60,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -83,7 +98,11 @@ fun LocalModelsConfigureScreen(
             )
         },
         bottomBar = {
-            if (state.download.isInFlight || state.download.message.isNotBlank()) {
+            AnimatedVisibility(
+                visible = state.download.isInFlight || state.download.message.isNotBlank(),
+                enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
+                exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
+            ) {
                 Surface(tonalElevation = 6.dp, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
                     Box(Modifier.fillMaxWidth().padding(16.dp)) {
                         DownloadProgressCard(state.download, onAction)
@@ -102,8 +121,8 @@ fun LocalModelsConfigureScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                ScreenCard("Current model") {
-                    Text(state.engineStatus, style = MaterialTheme.typography.bodyMedium)
+                ScreenCard("Current model", hero = true) {
+                    Text(state.engineStatus, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     if (state.deviceSummary.isNotBlank()) SupportingText(state.deviceSummary)
                     SupportingText(state.selectedModelStatus)
                     if (state.installedModels.isNotEmpty()) {
@@ -187,7 +206,7 @@ fun LocalModelsConfigureScreen(
                             onAction(LocalModelsAction.UpdateText(LocalModelTextField.SYSTEM_PROMPT, it))
                         },
                     )
-                    FilledTonalButton(
+                    Button(
                         onClick = { onAction(LocalModelsAction.SaveGenerationSettings) },
                         enabled = state.selectedInstalledModelId != null,
                         modifier = Modifier.fillMaxWidth(),
@@ -385,6 +404,7 @@ fun LocalModelsConfigureScreen(
                         onClick = { onAction(LocalModelsAction.RemoveSelectedModel) },
                         enabled = state.selectedInstalledModelId != null,
                         modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) { Text("Remove selected model") }
                 }
             }
@@ -395,23 +415,56 @@ fun LocalModelsConfigureScreen(
     if (showUnsavedChangesDialog) {
         AlertDialog(
             onDismissRequest = { showUnsavedChangesDialog = false },
+            icon = {
+                DialogIconBadge {
+                    Icon(Icons.Outlined.WarningAmber, contentDescription = null)
+                }
+            },
             title = { Text("Unsaved changes") },
             text = { Text("Leave without saving your local-model changes?") },
             dismissButton = {
                 TextButton(onClick = { showUnsavedChangesDialog = false }) { Text("Keep editing") }
             },
             confirmButton = {
-                TextButton(onClick = { onAction(LocalModelsAction.DiscardChangesAndBack) }) { Text("Discard") }
+                TextButton(
+                    onClick = { onAction(LocalModelsAction.DiscardChangesAndBack) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Discard") }
             },
         )
     }
 }
 
 @Composable
-private fun ScreenCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+private fun ScreenCard(
+    title: String,
+    hero: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (hero) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+            contentColor = if (hero) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+        ),
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        Column(modifier = Modifier.padding(if (hero) 24.dp else 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (hero) {
+                Surface(
+                    modifier = Modifier.size(52.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Icon(Icons.Outlined.AutoAwesome, contentDescription = null, modifier = Modifier.padding(13.dp))
+                }
+            }
+            Text(
+                title,
+                style = if (hero) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
             content()
         }
     }
@@ -425,7 +478,15 @@ private fun ExpandableCard(
     onToggle: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+        colors = CardDefaults.cardColors(
+            containerColor = if (expanded) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
+        ),
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(16.dp),
@@ -441,13 +502,19 @@ private fun ExpandableCard(
                     contentDescription = if (expanded) "Collapse" else "Expand",
                 )
             }
-            if (expanded) {
-                HorizontalDivider()
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    content = content,
-                )
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
+                exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
+            ) {
+                Column {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        content = content,
+                    )
+                }
             }
         }
     }
@@ -478,8 +545,12 @@ private fun ChoiceField(
                 Icon(Icons.Outlined.ExpandMore, contentDescription = null)
             }
         }
-        if (expanded && enabled) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+        AnimatedVisibility(
+            visible = expanded && enabled,
+            enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
+            exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
+        ) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
                 Column {
                     options.forEachIndexed { index, option ->
                         Text(
@@ -539,7 +610,7 @@ private fun ActionRow(
     secondaryEnabled: Boolean = enabled,
 ) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilledTonalButton(onClick = onPrimary, enabled = enabled, modifier = Modifier.weight(1f)) { Text(primaryLabel) }
+        Button(onClick = onPrimary, enabled = enabled, modifier = Modifier.weight(1f)) { Text(primaryLabel) }
         OutlinedButton(onClick = onSecondary, enabled = secondaryEnabled, modifier = Modifier.weight(1f)) { Text(secondaryLabel) }
     }
 }
@@ -556,9 +627,25 @@ private fun DownloadProgressCard(state: LocalModelDownloadUiState, onAction: (Lo
         Text(state.message.ifBlank { "Model download" }, style = MaterialTheme.typography.bodyMedium)
         if (state.isInFlight) {
             val progress = state.progressPercent
-            if (progress == null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            else LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
-            TextButton(onClick = { onAction(LocalModelsAction.CancelDownload) }) { Text("Cancel download") }
+            val progressModifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp))
+            if (progress == null) LinearProgressIndicator(modifier = progressModifier)
+            else LinearProgressIndicator(progress = { progress / 100f }, modifier = progressModifier)
+            TextButton(
+                onClick = { onAction(LocalModelsAction.CancelDownload) },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) { Text("Cancel download") }
         }
+    }
+}
+
+@Composable
+private fun DialogIconBadge(content: @Composable () -> Unit) {
+    Surface(
+        modifier = Modifier.size(48.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
     }
 }

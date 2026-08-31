@@ -1,23 +1,13 @@
 package com.fersaiyan.cyanbridge.shared.ui.chat
 
-import android.content.Intent
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
 
+/**
+ * Legacy Notes entry — now owned by NotesChatsScreen's expressive
+ * segmented control + cog (Notes tab → Notes & Obsidian settings).
+ * Kept as no-op so legacy ChatListScreen no longer mixes vault
+ * concerns with chats; the unified screen routes to the same
+ * activity via its dedicated cog action.
+ */
 @Composable
-actual fun PlatformKnowledgeIntegrationsTopBarAction() {
-    val context = LocalContext.current
-    TextButton(
-        onClick = {
-            val intent = Intent().setClassName(
-                context.packageName,
-                "com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationsActivity",
-            )
-            context.startActivity(intent)
-        },
-    ) {
-        Text("Notes")
-    }
-}
+actual fun PlatformKnowledgeIntegrationsTopBarAction() = Unit

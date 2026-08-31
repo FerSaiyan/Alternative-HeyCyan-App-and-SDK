@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.ui.chat
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,17 +24,20 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -54,6 +59,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.chat.ChatAttachmentsUiState
@@ -207,26 +213,31 @@ private fun ChatThreadStatus(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize(animationSpec = spring())
             .padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         modelBadge?.let { label ->
             StatusSurface(label)
         }
         dailySummaryProgress?.let { progress ->
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                shape = MaterialTheme.shapes.extraLarge,
             ) {
                 Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(progress.label, style = MaterialTheme.typography.labelMedium)
                     LinearProgressIndicator(
                         progress = { progress.progress },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surface,
                     )
                 }
             }
@@ -242,7 +253,7 @@ private fun StatusSurface(label: String) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.extraLarge,
     ) {
         Text(
             text = label,
@@ -330,19 +341,28 @@ private fun EmptyConversation(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            imageVector = AppIcon.Chat.imageVector(),
-            contentDescription = null,
-            modifier = Modifier.size(48.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.height(16.dp))
-         Text(stringResource(Res.string.chat_empty_title), style = MaterialTheme.typography.titleLarge)
+        Surface(
+            modifier = Modifier.size(88.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = AppIcon.Chat.imageVector(),
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(stringResource(Res.string.chat_empty_title), style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
         Text(
-             text = stringResource(Res.string.chat_empty_body),
+            text = stringResource(Res.string.chat_empty_body),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -354,17 +374,23 @@ private fun ChatMessageBubble(
     assistantBubbleColor: Int?,
 ) {
     val isUser = message.role == ChatRole.USER
+    val hasCustomColor = if (isUser) userBubbleColor != null else assistantBubbleColor != null
     val background = when {
         isUser && userBubbleColor != null -> Color(userBubbleColor)
         !isUser && assistantBubbleColor != null -> Color(assistantBubbleColor)
-        isUser -> MaterialTheme.colorScheme.primary
+        isUser -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
-    val contentColor = if (background.luminance() > 0.6f) Color.Black else Color.White
+    val contentColor = when {
+        hasCustomColor && background.luminance() > 0.6f -> Color.Black
+        hasCustomColor -> Color.White
+        isUser -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     val shape = if (isUser) {
-        RoundedCornerShape(topStart = 20.dp, topEnd = 4.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
+        RoundedCornerShape(topStart = 24.dp, topEnd = 6.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
     } else {
-        RoundedCornerShape(topStart = 4.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
+        RoundedCornerShape(topStart = 6.dp, topEnd = 24.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -374,7 +400,9 @@ private fun ChatMessageBubble(
             horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
         ) {
             Surface(
-                modifier = Modifier.widthIn(max = maxBubbleWidth),
+                modifier = Modifier
+                    .widthIn(max = maxBubbleWidth)
+                    .animateContentSize(animationSpec = spring()),
                 color = background,
                 contentColor = contentColor,
                 shape = shape,
@@ -394,7 +422,7 @@ private fun ThinkingIndicator() {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(topStart = 6.dp, topEnd = 24.dp, bottomStart = 24.dp, bottomEnd = 24.dp),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -405,7 +433,7 @@ private fun ThinkingIndicator() {
                 modifier = Modifier.size(18.dp),
                 strokeWidth = 2.dp,
             )
-             Text(stringResource(Res.string.chat_thinking), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(Res.string.chat_thinking), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -423,17 +451,22 @@ private fun ChatComposer(
     modifier: Modifier = Modifier,
 ) {
     val inputLabel = if (composer.primaryAction == ChatComposerPrimaryAction.CONFIGURE_LOCAL_MODEL) {
-         stringResource(Res.string.chat_local_model_required)
+        stringResource(Res.string.chat_local_model_required)
     } else {
-         stringResource(Res.string.chat_message)
+        stringResource(Res.string.chat_message)
     }
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        tonalElevation = 3.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(28.dp),
+        tonalElevation = 2.dp,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .animateContentSize(animationSpec = spring())
                 .padding(12.dp)
                 .testTag("chat_composer"),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -452,7 +485,7 @@ private fun ChatComposer(
                     IconButton(onClick = onClearAttachments) {
                         Icon(
                             imageVector = AppIcon.Close.imageVector(),
-                             contentDescription = stringResource(Res.string.chat_clear_attachments),
+                            contentDescription = stringResource(Res.string.chat_clear_attachments),
                         )
                     }
                 }
@@ -478,22 +511,24 @@ private fun ChatComposer(
                 },
                 minLines = 1,
                 maxLines = 4,
+                shape = RoundedCornerShape(24.dp),
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(
+                FilledTonalIconButton(
                     onClick = onAttachImage,
                     enabled = composer.isMediaEnabled,
                     modifier = Modifier.size(48.dp),
                 ) {
                     Icon(
                         imageVector = AppIcon.Attachment.imageVector(),
-                 contentDescription = stringResource(Res.string.chat_attach_image),
+                        contentDescription = stringResource(Res.string.chat_attach_image),
                     )
                 }
-                FilledIconButton(
+                FilledTonalIconButton(
                     onClick = onRecordAudio,
                     enabled = composer.isMediaEnabled,
                     modifier = Modifier.size(48.dp),
@@ -505,15 +540,16 @@ private fun ChatComposer(
                             AppIcon.Microphone.imageVector()
                         },
                         contentDescription = if (attachments.isRecording) {
-                             stringResource(Res.string.chat_stop_audio_recording)
+                            stringResource(Res.string.chat_stop_audio_recording)
                         } else {
                             stringResource(Res.string.chat_record_audio)
                         },
                     )
                 }
+                Spacer(Modifier.weight(1f))
                 FilledIconButton(
                     onClick = onPrimaryAction,
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(56.dp),
                 ) {
                     Icon(
                         imageVector = when (composer.primaryAction) {
@@ -522,9 +558,9 @@ private fun ChatComposer(
                             ChatComposerPrimaryAction.CONFIGURE_LOCAL_MODEL -> AppIcon.Model.imageVector()
                         },
                         contentDescription = when (composer.primaryAction) {
-                             ChatComposerPrimaryAction.SEND -> stringResource(Res.string.action_send)
-                             ChatComposerPrimaryAction.STOP_GENERATION -> stringResource(Res.string.chat_stop_generation)
-                             ChatComposerPrimaryAction.CONFIGURE_LOCAL_MODEL -> stringResource(Res.string.chat_configure_local_model)
+                            ChatComposerPrimaryAction.SEND -> stringResource(Res.string.action_send)
+                            ChatComposerPrimaryAction.STOP_GENERATION -> stringResource(Res.string.chat_stop_generation)
+                            ChatComposerPrimaryAction.CONFIGURE_LOCAL_MODEL -> stringResource(Res.string.chat_configure_local_model)
                         },
                     )
                 }
@@ -535,7 +571,10 @@ private fun ChatComposer(
 
 @Composable
 private fun ChatNavigationBar(onDestinationSelected: (AppDestination) -> Unit) {
-    NavigationBar {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 0.dp,
+    ) {
         AppDestination.entries.forEach { destination ->
             NavigationBarItem(
                 selected = destination == AppDestination.CHATS,
@@ -546,7 +585,12 @@ private fun ChatNavigationBar(onDestinationSelected: (AppDestination) -> Unit) {
                         contentDescription = null,
                     )
                 },
-                 label = { Text(localizedDestinationLabel(destination)) },
+                label = { Text(localizedDestinationLabel(destination)) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                    indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                ),
             )
         }
     }

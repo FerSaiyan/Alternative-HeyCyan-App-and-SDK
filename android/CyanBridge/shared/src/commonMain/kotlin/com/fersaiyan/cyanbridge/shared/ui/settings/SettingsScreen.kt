@@ -1,5 +1,13 @@
 package com.fersaiyan.cyanbridge.shared.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,6 +19,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -39,6 +48,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -125,10 +136,21 @@ fun SettingsScreen(
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
-            TopAppBar(title = { Text(stringResource(Res.string.settings_title)) })
+            TopAppBar(
+                title = {
+                    Text(
+                        text = stringResource(Res.string.settings_title),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
+            )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 0.dp,
+            ) {
                 AppDestination.entries.forEach { destination ->
                     NavigationBarItem(
                         selected = destination == AppDestination.SETTINGS,
@@ -140,6 +162,13 @@ fun SettingsScreen(
                             )
                         },
                         label = { Text(localizedDestinationLabel(destination)) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                 }
             }
@@ -156,7 +185,7 @@ fun SettingsScreen(
                 end = 16.dp,
                 bottom = 24.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
                 ProSubscriptionCard(
@@ -174,11 +203,17 @@ fun SettingsScreen(
                 }
             }
             item {
-                Text(
-                    text = stringResource(Res.string.settings_intro),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = MaterialTheme.shapes.extraLarge,
+                ) {
+                    Text(
+                        text = stringResource(Res.string.settings_intro),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
             }
             item {
                 QuickActionCard(
@@ -267,12 +302,12 @@ private fun MeetingRecordingBanner(
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.extraLarge,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -286,7 +321,12 @@ private fun MeetingRecordingBanner(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            TextButton(onClick = onStop) { Text(stringResource(Res.string.action_stop)) }
+            TextButton(
+                onClick = onStop,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(stringResource(Res.string.action_stop))
+            }
         }
     }
 }
@@ -306,28 +346,29 @@ private fun ProSubscriptionCard(
             containerColor = MaterialTheme.colorScheme.tertiaryContainer,
             contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
         ),
+        shape = MaterialTheme.shapes.extraLarge,
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(56.dp),
                     color = MaterialTheme.colorScheme.tertiary,
                     contentColor = MaterialTheme.colorScheme.onTertiary,
-                    shape = MaterialTheme.shapes.small,
+                    shape = MaterialTheme.shapes.large,
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.AutoAwesome,
                         contentDescription = null,
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(14.dp),
                     )
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(16.dp))
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -346,13 +387,13 @@ private fun ProSubscriptionCard(
                                 },
                             ),
                             modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                         )
                         Surface(
                             color = MaterialTheme.colorScheme.tertiary,
                             contentColor = MaterialTheme.colorScheme.onTertiary,
-                            shape = MaterialTheme.shapes.small,
+                            shape = MaterialTheme.shapes.large,
                         ) {
                             Text(
                                 text = stringResource(
@@ -377,7 +418,9 @@ private fun ProSubscriptionCard(
             }
             Button(
                 onClick = onClick,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.tertiary,
                     contentColor = MaterialTheme.colorScheme.onTertiary,
@@ -401,19 +444,22 @@ private fun QuickActionCard(
     onClick: () -> Unit,
     testTag: String,
 ) {
-    Card(
+    OutlinedCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(testTag)
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = MaterialTheme.shapes.extraLarge,
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 88.dp)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
@@ -436,11 +482,26 @@ private fun SettingsSectionCard(
     onToggle: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (expanded) {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            },
+        ),
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 64.dp)
                     .testTag("settings_section_$title")
                     .clickable(onClick = onToggle),
                 verticalAlignment = Alignment.CenterVertically,
@@ -448,23 +509,47 @@ private fun SettingsSectionCard(
                 Text(
                     text = title,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
                 )
-                Icon(
-                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                    contentDescription = if (expanded) {
-                        stringResource(Res.string.local_models_collapse, title)
+                Surface(
+                    modifier = Modifier.size(40.dp),
+                    color = if (expanded) {
+                        MaterialTheme.colorScheme.primary
                     } else {
-                        stringResource(Res.string.local_models_expand, title)
+                        MaterialTheme.colorScheme.secondaryContainer
                     },
-                )
+                    contentColor = if (expanded) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    },
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = if (expanded) {
+                            stringResource(Res.string.local_models_collapse, title)
+                        } else {
+                            stringResource(Res.string.local_models_expand, title)
+                        },
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
             }
-            if (expanded) {
-                Spacer(Modifier.height(12.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    content()
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
+                exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
+            ) {
+                Column {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(
+                        modifier = Modifier.padding(top = 16.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        content()
+                    }
                 }
             }
         }
@@ -483,6 +568,7 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .clickable { actions.setProviderType(type) },
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -539,7 +625,9 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
         maxLines = 6,
     )
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp),
         horizontalArrangement = Arrangement.End,
     ) {
         TextButton(onClick = actions::resetDefaultImageQuestion) {
@@ -704,7 +792,9 @@ private fun ActionButton(
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp),
     ) {
         Text(
             text = label,

@@ -9,11 +9,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.icons.AppIcon
 import com.fersaiyan.cyanbridge.shared.icons.imageVector
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
@@ -25,13 +28,26 @@ fun CyanBridgeNavShell(
     onNavigate: (AppDestination) -> Unit,
     content: @Composable (AppDestination) -> Unit,
 ) {
+    val navigationColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.safeDrawing,
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 0.dp,
+            ) {
                 AppDestination.entries.forEach { destination ->
+                    val selected = destination == currentDestination
                     NavigationBarItem(
-                        selected = destination == currentDestination,
+                        selected = selected,
                         onClick = { onNavigate(destination) },
                         icon = {
                             Icon(
@@ -39,7 +55,20 @@ fun CyanBridgeNavShell(
                                 contentDescription = null,
                             )
                         },
-                        label = { Text(localizedDestinationLabel(destination)) },
+                        label = {
+                            Text(
+                                text = localizedDestinationLabel(destination),
+                                style = if (selected) {
+                                    MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                } else {
+                                    MaterialTheme.typography.labelMedium
+                                },
+                                maxLines = 1,
+                            )
+                        },
+                        colors = navigationColors,
                     )
                 }
             }
@@ -50,6 +79,7 @@ fun CyanBridgeNavShell(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding),
+            color = MaterialTheme.colorScheme.background,
         ) {
             content(currentDestination)
         }

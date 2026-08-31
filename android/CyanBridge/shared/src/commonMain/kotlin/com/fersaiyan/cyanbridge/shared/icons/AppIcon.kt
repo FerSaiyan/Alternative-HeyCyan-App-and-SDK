@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.shared.icons
 enum class AppIcon {
     Glasses,
     Chat,
+    Notes,
     Recordings,
     Settings,
     Plugins,

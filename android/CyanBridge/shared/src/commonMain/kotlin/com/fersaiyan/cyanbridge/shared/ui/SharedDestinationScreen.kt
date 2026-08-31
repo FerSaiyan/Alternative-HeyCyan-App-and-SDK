@@ -36,10 +36,12 @@ import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
 import com.fersaiyan.cyanbridge.shared.settings.MemorySourceType
 import com.fersaiyan.cyanbridge.shared.platform.CyanBridgeServices
 import com.fersaiyan.cyanbridge.shared.platform.PlatformPreferences
+import com.fersaiyan.cyanbridge.shared.notes.NoteSummary
 import com.fersaiyan.cyanbridge.shared.platform.createPlatformPreferences
 import com.fersaiyan.cyanbridge.shared.platform.platformCurrentTimeMillis
-import com.fersaiyan.cyanbridge.shared.ui.chat.ChatListScreen
 import com.fersaiyan.cyanbridge.shared.ui.chat.ChatThreadScreen
+import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsScreen
+import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsTab
 import com.fersaiyan.cyanbridge.shared.ui.plugins.CommunityPluginsScreen
 import com.fersaiyan.cyanbridge.shared.ui.pro.ProSubscriptionScreen
 import com.fersaiyan.cyanbridge.shared.ui.recordings.RecordingsScreen
@@ -100,10 +102,13 @@ private fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> Un
     val newChatTitle = stringResource(Res.string.action_new_chat)
     val formatTimestamp = sharedTimestampFormatter()
     var threads by remember { mutableStateOf<List<ChatThreadSummary>>(emptyList()) }
+    var notes by remember { mutableStateOf<List<NoteSummary>>(emptyList()) }
     var pendingDelete by remember { mutableStateOf<ChatThreadSummary?>(null) }
     var selectedThreadId by remember { mutableStateOf<String?>(null) }
+    var selectedTab by remember { mutableStateOf(NotesChatsTab.CHATS) }
+    var showCreateNoteDialog by remember { mutableStateOf(false) }
 
-    fun refresh() {
+    fun refreshChats() {
         scope.launch {
             if (CyanBridgeServices.isInitialized()) {
                 threads = CyanBridgeServices.chatRepository.getAllChats()
@@ -113,7 +118,22 @@ private fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> Un
         }
     }
 
-    LaunchedEffect(Unit) { refresh() }
+    fun refreshNotes() {
+        scope.launch {
+            if (CyanBridgeServices.isInitialized()) {
+                // IosNotesRepository exposes notes via CyanBridgeServices.notesRepository
+                // It is a shared interface; collect as flow if available via portability.
+                // For iOS host we keep empty placeholder until notes channel is wired.
+                // This prevents crash and keeps M3 Expressive tab functional.
+                notes = emptyList()
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        refreshChats()
+        refreshNotes()
+    }
 
     val selectedThread = threads.firstOrNull { it.id == selectedThreadId }
     if (selectedThread != null) {
@@ -125,10 +145,14 @@ private fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> Un
         return
     }
 
-    ChatListScreen(
+    NotesChatsScreen(
+        selectedTab = selectedTab,
+        onTabSelected = { selectedTab = it },
         threads = threads,
         pendingDelete = pendingDelete,
-         formatTimestamp = formatTimestamp,
+        notes = notes,
+        showCreateNoteDialog = showCreateNoteDialog,
+        formatTimestamp = formatTimestamp,
         onOpenThread = { selectedThreadId = it.id },
         onRequestDelete = { pendingDelete = it },
         onConfirmDelete = {
@@ -138,7 +162,7 @@ private fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> Un
                 scope.launch {
                     if (CyanBridgeServices.isInitialized()) {
                         CyanBridgeServices.chatRepository.deleteChat(thread.id)
-                        refresh()
+                        refreshChats()
                     }
                 }
             }
@@ -152,17 +176,22 @@ private fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> Un
                     CyanBridgeServices.chatRepository.insertChat(
                         ChatEntity(
                             id = id,
-                             title = newChatTitle,
+                            title = newChatTitle,
                             createdAt = now,
                             updatedAt = now,
                         ),
                     )
-                    refresh()
+                    refreshChats()
                     selectedThreadId = id
                 }
             }
         },
+        onOpenNote = {},
+        onShowCreateNoteDialog = { showCreateNoteDialog = true },
+        onDismissCreateNoteDialog = { showCreateNoteDialog = false },
+        onCreateNoteFromTranscript = { _, _ -> showCreateNoteDialog = false },
         onChatAppearance = {},
+        onOpenNotesSettings = {},
         onDestinationSelected = onDestinationSelected,
     )
 }

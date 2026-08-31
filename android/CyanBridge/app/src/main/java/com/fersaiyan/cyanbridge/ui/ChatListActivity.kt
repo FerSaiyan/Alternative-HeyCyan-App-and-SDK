@@ -22,25 +22,42 @@ import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsReviewThreadStor
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
+import com.fersaiyan.cyanbridge.data.local.entity.Note
+import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationsActivity
 import com.fersaiyan.cyanbridge.shared.chat.ChatAppearanceMenuAction
-import com.fersaiyan.cyanbridge.ui.chat.ChatAppearancePrefs
+import com.fersaiyan.cyanbridge.shared.notes.NoteSummary
 import com.fersaiyan.cyanbridge.shared.ui.chat.ChatAppearanceMenuDialog
+import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsScreen
+import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsTab
+import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.shared.ui.chat.ChatListScreen
+import com.fersaiyan.cyanbridge.ui.chat.ChatAppearancePrefs
+import com.fersaiyan.cyanbridge.ui.notes.NoteDetailActivity
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.chat.ChatThreadSummary
+import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 class ChatListActivity : AppCompatActivity() {
     private var threads by mutableStateOf<List<ChatThreadSummary>>(emptyList())
+    private var notes by mutableStateOf<List<Note>>(emptyList())
     private var pendingDelete by mutableStateOf<ChatThreadSummary?>(null)
     private var chatAppearanceMenuVisible by mutableStateOf(false)
+    private var selectedTab by mutableStateOf(NotesChatsTab.CHATS)
+    private var showCreateNoteDialog by mutableStateOf(false)
+    private val uiScope = MainScope()
+    private var notesJob: Job? = null
 
     private val pickWallpaperLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -60,14 +77,23 @@ class ChatListActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val appearancePreferences = AppearancePreferences(this)
+        // Restore last selected tab if provided via intent (deep link from notes)
+        intent.getStringExtra(EXTRA_INITIAL_TAB)?.let { raw ->
+            selectedTab = runCatching { NotesChatsTab.valueOf(raw) }.getOrDefault(NotesChatsTab.CHATS)
+        }
         setContent {
             val appearance by rememberAppearanceSettings(appearancePreferences)
             CyanBridgeTheme(appearance) {
-                ChatListScreen(
+                NotesChatsScreen(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it },
                     threads = threads,
                     pendingDelete = pendingDelete,
+                    notes = notes.map { NoteSummary(it.id, it.title, it.summary, it.createdAt) },
+                    showCreateNoteDialog = showCreateNoteDialog,
                     formatTimestamp = { millis ->
-                        SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(millis))
+                        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+                            .format(Date(millis))
                     },
                     onOpenThread = { startActivity(buildOpenChatIntent(it.id)) },
                     onRequestDelete = { pendingDelete = it },
@@ -83,7 +109,20 @@ class ChatListActivity : AppCompatActivity() {
                             showNewChatTypePicker()
                         }
                     },
+                    onOpenNote = { note ->
+                        startActivity(
+                            Intent(this, NoteDetailActivity::class.java).apply {
+                                putExtra(NoteDetailActivity.EXTRA_NOTE_ID, note.id)
+                            },
+                        )
+                    },
+                    onShowCreateNoteDialog = { showCreateNoteDialog = true },
+                    onDismissCreateNoteDialog = { showCreateNoteDialog = false },
+                    onCreateNoteFromTranscript = ::createNoteFromTranscript,
                     onChatAppearance = ::showChatAppearanceMenu,
+                    onOpenNotesSettings = {
+                        startActivity(Intent(this, KnowledgeIntegrationsActivity::class.java))
+                    },
                     onDestinationSelected = ::navigateTo,
                 )
                 if (chatAppearanceMenuVisible) {
@@ -97,9 +136,58 @@ class ChatListActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        notesJob?.cancel()
+        notesJob = uiScope.launch {
+            MyApplication.notesRepository.getAllNotes().collect { collected ->
+                notes = collected
+            }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        notesJob?.cancel()
+        notesJob = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        uiScope.cancel()
+    }
+
     override fun onResume() {
         super.onResume()
         refreshList()
+    }
+
+    private fun createNoteFromTranscript(title: String, transcript: String) {
+        val clean = transcript.trim()
+        if (clean.isBlank()) {
+            Toast.makeText(this, "Transcript is empty", Toast.LENGTH_SHORT).show()
+            return
+        }
+        uiScope.launch {
+            try {
+                val id = MyApplication.notesRepository.createFromTranscript(
+                    transcript = clean,
+                    hintTitle = title.trim().takeIf { it.isNotBlank() },
+                    deviceClass = null,
+                    durationSec = null,
+                    tagsCsv = null,
+                    storeTranscript = true,
+                )
+                showCreateNoteDialog = false
+                startActivity(
+                    Intent(this@ChatListActivity, NoteDetailActivity::class.java).apply {
+                        putExtra(NoteDetailActivity.EXTRA_NOTE_ID, id)
+                    },
+                )
+            } catch (t: Throwable) {
+                Toast.makeText(this@ChatListActivity, "Failed to create note: ${t.message}", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun deleteChat(thread: ChatThreadSummary) {
@@ -358,5 +446,9 @@ class ChatListActivity : AppCompatActivity() {
                 onPick(options[which].second)
             }
             .show()
+    }
+
+    companion object {
+        const val EXTRA_INITIAL_TAB = "initial_tab"
     }
 }

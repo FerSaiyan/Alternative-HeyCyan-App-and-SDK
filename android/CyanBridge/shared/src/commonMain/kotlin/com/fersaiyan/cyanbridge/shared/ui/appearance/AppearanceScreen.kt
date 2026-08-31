@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.icons.AppIcon
 import com.fersaiyan.cyanbridge.shared.icons.imageVector
@@ -172,7 +174,9 @@ fun AppearanceScreen(
             item {
                 OutlinedButton(
                     onClick = onReset,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
                 ) {
                     Text(stringResource(Res.string.appearance_reset))
                 }
@@ -186,18 +190,19 @@ private fun SettingsSection(
     title: String,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             Column(
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier.padding(8.dp),
                 content = content,
             )
         }
@@ -214,8 +219,13 @@ private fun SelectionRow(
         modifier = Modifier
             .fillMaxWidth()
             .semantics { this.selected = selected }
+            .clip(MaterialTheme.shapes.large)
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+            )
             .clickable(role = Role.RadioButton, onClick = onClick)
-            .padding(vertical = 8.dp),
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = null)
@@ -223,6 +233,11 @@ private fun SelectionRow(
             text = label,
             modifier = Modifier.padding(start = 8.dp),
             style = MaterialTheme.typography.bodyLarge,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
         )
     }
 }
@@ -239,8 +254,13 @@ private fun AccentRow(
         modifier = Modifier
             .fillMaxWidth()
             .semantics { this.selected = selected }
+            .clip(MaterialTheme.shapes.large)
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+            )
             .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
-            .padding(vertical = 8.dp),
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -254,7 +274,11 @@ private fun AccentRow(
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 12.dp),
-            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = when {
+                !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                selected -> MaterialTheme.colorScheme.onSecondaryContainer
+                else -> MaterialTheme.colorScheme.onSurface
+            },
             style = MaterialTheme.typography.bodyLarge,
         )
         RadioButton(
@@ -276,8 +300,10 @@ private fun SwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
             .clickable(enabled = enabled, role = Role.Switch) { onCheckedChange(!checked) }
-            .padding(vertical = 8.dp),
+            .heightIn(min = 64.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
@@ -295,6 +321,7 @@ private fun SwitchRow(
             checked = checked,
             enabled = enabled,
             onCheckedChange = null,
+            modifier = Modifier.padding(start = 12.dp),
         )
     }
 }
@@ -304,13 +331,14 @@ private fun SwitchRow(
 private fun PreviewCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(stringResource(Res.string.appearance_live_preview), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.appearance_live_preview), style = MaterialTheme.typography.titleLarge)
             Text(
                 stringResource(Res.string.appearance_preview_description),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -323,25 +351,43 @@ private fun PreviewCard() {
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shape = MaterialTheme.shapes.small,
+                    shape = MaterialTheme.shapes.large,
                 ) {
-                    Text(stringResource(Res.string.appearance_primary), modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp))
+                    Text(
+                        stringResource(Res.string.appearance_primary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 14.dp),
+                        textAlign = TextAlign.Center,
+                    )
                 }
                 Surface(
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    shape = MaterialTheme.shapes.small,
+                    shape = MaterialTheme.shapes.large,
                 ) {
-                    Text(stringResource(Res.string.appearance_secondary), modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp))
+                    Text(
+                        stringResource(Res.string.appearance_secondary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 14.dp),
+                        textAlign = TextAlign.Center,
+                    )
                 }
                 Surface(
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    shape = MaterialTheme.shapes.small,
+                    shape = MaterialTheme.shapes.large,
                 ) {
-                    Text(stringResource(Res.string.appearance_tertiary), modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp))
+                    Text(
+                        stringResource(Res.string.appearance_tertiary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 14.dp),
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
         }

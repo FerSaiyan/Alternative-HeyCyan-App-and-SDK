@@ -1,5 +1,12 @@
 package com.fersaiyan.cyanbridge.shared.ui.debug
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,24 +15,34 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -66,17 +83,15 @@ fun TranscriptionDebugScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+             item { DiagnosticsHero() }
             item {
-                Text(
-                     stringResource(Res.string.diagnostics_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                         Text(stringResource(Res.string.diagnostics_provider), style = MaterialTheme.typography.titleSmall)
+                Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                         Text(
+                             stringResource(Res.string.diagnostics_provider),
+                             style = MaterialTheme.typography.titleLarge,
+                             fontWeight = FontWeight.Bold,
+                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = !useHttp, onClick = { onUseHttpChange(false) })
                              Text(stringResource(Res.string.diagnostics_fake))
@@ -104,12 +119,14 @@ fun TranscriptionDebugScreen(
                              Text(stringResource(Res.string.diagnostics_persist), modifier = Modifier.weight(1f))
                             Switch(checked = transcriptStorageEnabled, onCheckedChange = onStorageEnabledChange)
                         }
-                         TextButton(onClick = onSaveEndpoint) { Text(stringResource(Res.string.diagnostics_save_endpoint)) }
+                         FilledTonalButton(onClick = onSaveEndpoint, modifier = Modifier.fillMaxWidth()) {
+                             Text(stringResource(Res.string.diagnostics_save_endpoint))
+                         }
                     }
                 }
             }
             item {
-                FilledTonalButton(onClick = onLoadLatest, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onLoadLatest, modifier = Modifier.fillMaxWidth()) {
                      Text(stringResource(Res.string.diagnostics_load_latest))
                 }
             }
@@ -117,7 +134,7 @@ fun TranscriptionDebugScreen(
                 Text(latestSessionInfo, style = MaterialTheme.typography.bodySmall)
             }
             item {
-                FilledTonalButton(
+                Button(
                     onClick = onTranscribe,
                     enabled = !isTranscribing,
                     modifier = Modifier.fillMaxWidth(),
@@ -131,25 +148,75 @@ fun TranscriptionDebugScreen(
                      )
                  }
             }
-            if (isTranscribing || progressText.isNotBlank()) {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        LinearProgressIndicator(progress = { progress.coerceIn(0, 100) / 100f }, modifier = Modifier.fillMaxWidth())
+            item {
+                AnimatedVisibility(
+                    visible = isTranscribing || progressText.isNotBlank(),
+                    enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
+                    exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
+                ) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().animateContentSize(animationSpec = spring()),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        shape = MaterialTheme.shapes.extraLarge,
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LinearProgressIndicator(
+                                progress = { progress.coerceIn(0, 100) / 100f },
+                                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp)),
+                            )
                         Text(progressText, style = MaterialTheme.typography.bodySmall)
                         if (persistedText.isNotBlank()) Text(persistedText, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
             if (output.isNotBlank()) {
                 item {
-                     Text(stringResource(Res.string.diagnostics_transcript_output), style = MaterialTheme.typography.titleSmall)
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        SelectionContainer(modifier = Modifier.padding(16.dp)) {
+                     Text(stringResource(Res.string.diagnostics_transcript_output), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+                        SelectionContainer(modifier = Modifier.padding(20.dp)) {
                             Text(output, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalResourceApi::class)
+@Composable
+private fun DiagnosticsHero() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(52.dp),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = MaterialTheme.shapes.large,
+            ) {
+                androidx.compose.material3.Icon(
+                    Icons.Outlined.Settings,
+                    contentDescription = null,
+                    modifier = Modifier.padding(13.dp),
+                )
+            }
+            Text(
+                stringResource(Res.string.diagnostics_title),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(stringResource(Res.string.diagnostics_description), style = MaterialTheme.typography.bodyLarge)
         }
     }
 }

@@ -8,15 +8,20 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.DevicesOther
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -25,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -35,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
@@ -87,7 +94,10 @@ fun DeviceBindScreen(
             TopAppBar(
                 title = { Text(stringResource(Res.string.device_bind_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.size(48.dp),
+                    ) {
                         Icon(
                             Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = stringResource(Res.string.action_back),
@@ -95,7 +105,10 @@ fun DeviceBindScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onScan) {
+                    IconButton(
+                        onClick = onScan,
+                        modifier = Modifier.size(48.dp),
+                    ) {
                         Icon(
                             Icons.Outlined.Refresh,
                             contentDescription = stringResource(Res.string.device_bind_scan),
@@ -114,7 +127,12 @@ fun DeviceBindScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
-                FilledTonalButton(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = onScan,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
+                ) {
                     Text(
                         if (isScanning) {
                             stringResource(Res.string.device_bind_scanning)
@@ -127,29 +145,46 @@ fun DeviceBindScreen(
             item {
                 OutlinedButton(
                     onClick = onPairMetaGlasses,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
                 ) {
                     Text(stringResource(Res.string.device_bind_pair_meta))
                 }
             }
             if (devices.isEmpty()) {
                 item {
-                    Text(
-                        text = if (isScanning) {
-                            stringResource(Res.string.device_bind_looking)
-                        } else {
-                            stringResource(Res.string.device_bind_empty)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 24.dp),
-                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        shape = MaterialTheme.shapes.extraLarge,
+                    ) {
+                        Text(
+                            text = if (isScanning) {
+                                stringResource(Res.string.device_bind_looking)
+                            } else {
+                                stringResource(Res.string.device_bind_empty)
+                            },
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                        )
+                    }
                 }
             } else {
                 items(devices, key = { it.macAddress }) { device ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                    ) {
                         Row(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 88.dp)
+                                .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
@@ -160,13 +195,22 @@ fun DeviceBindScreen(
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                 )
-                                Text(
-                                    text = stringResource(Res.string.device_bind_signal, device.rssi),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    shape = MaterialTheme.shapes.large,
+                                ) {
+                                    Text(
+                                        text = stringResource(Res.string.device_bind_signal, device.rssi),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                }
                             }
-                            OutlinedButton(onClick = { onSelectDevice(device) }) {
+                            FilledTonalButton(
+                                onClick = { onSelectDevice(device) },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) {
                                 Text(stringResource(Res.string.action_connect))
                             }
                         }
@@ -183,6 +227,7 @@ fun DeviceBindScreen(
                     showManualProtocolPicker = false
                     onDismissConnection()
                 },
+                icon = { BindDialogIcon(Icons.Outlined.DevicesOther) },
                 title = { Text(stringResource(Res.string.device_bind_select_type)) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -209,13 +254,15 @@ fun DeviceBindScreen(
                                         Text(localizedDeviceClass(type))
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp),
                             )
                         }
                     }
                 },
                 confirmButton = {
-                    TextButton(
+                    FilledTonalButton(
                         onClick = {
                             if (selectedClass == DeviceClass.HEY_CYAN) {
                                 val hint = device.effectiveSelectedClass()
@@ -232,6 +279,7 @@ fun DeviceBindScreen(
                                 onConfirmConnection()
                             }
                         },
+                        modifier = Modifier.heightIn(min = 48.dp),
                     ) {
                         Text(stringResource(Res.string.action_connect))
                     }
@@ -242,6 +290,7 @@ fun DeviceBindScreen(
                             showManualProtocolPicker = false
                             onDismissConnection()
                         },
+                        modifier = Modifier.heightIn(min = 48.dp),
                     ) {
                         Text(stringResource(Res.string.action_cancel))
                     }
@@ -250,6 +299,7 @@ fun DeviceBindScreen(
         } else {
             AlertDialog(
                 onDismissRequest = { showManualProtocolPicker = false },
+                icon = { BindDialogIcon(Icons.Outlined.DevicesOther) },
                 title = { Text(stringResource(Res.string.device_bind_manual_protocol_title)) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -269,27 +319,49 @@ fun DeviceBindScreen(
                                 selected = manualSelection == type,
                                 onClick = { manualSelection = type },
                                 label = { Text(localizedDeviceClass(type)) },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp),
                             )
                         }
                     }
                 },
                 confirmButton = {
-                    TextButton(
+                    FilledTonalButton(
                         onClick = {
                             showManualProtocolPicker = false
                             onConfirmManualProtocol(manualSelection)
                         },
+                        modifier = Modifier.heightIn(min = 48.dp),
                     ) {
                         Text(stringResource(Res.string.action_connect))
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showManualProtocolPicker = false }) {
+                    TextButton(
+                        onClick = { showManualProtocolPicker = false },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
                         Text(stringResource(Res.string.action_cancel))
                     }
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun BindDialogIcon(imageVector: ImageVector) {
+    Surface(
+        modifier = Modifier.size(48.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = null,
+            modifier = Modifier.padding(12.dp),
+        )
     }
 }

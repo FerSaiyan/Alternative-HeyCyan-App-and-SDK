@@ -3,10 +3,16 @@ package com.fersaiyan.cyanbridge.shared.ui.glasses
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,14 +37,29 @@ fun GlassesSyncFlowPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismissRequest,
+        icon = {
+            Surface(
+                modifier = Modifier.size(48.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = MaterialTheme.shapes.large,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.SwapHoriz,
+                    contentDescription = null,
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
+        },
         title = { Text(stringResource(Res.string.sync_flow_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 GlassesSyncFlow.entries.forEach { flow ->
                     OutlinedButton(
                         onClick = { onFlowSelected(flow) },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 72.dp)
                             .testTag("sync_flow_${flow.name}"),
                     ) {
                         Column(
@@ -59,7 +80,10 @@ fun GlassesSyncFlowPickerDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismissRequest) {
+            TextButton(
+                onClick = onDismissRequest,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
                 Text(stringResource(Res.string.action_cancel))
             }
         },

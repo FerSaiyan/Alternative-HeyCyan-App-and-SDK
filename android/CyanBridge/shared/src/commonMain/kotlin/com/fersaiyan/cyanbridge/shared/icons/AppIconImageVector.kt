@@ -10,6 +10,7 @@ import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DevicesOther
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.LibraryMusic
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 fun AppIcon.imageVector(): ImageVector = when (this) {
     AppIcon.Glasses -> Icons.Outlined.DevicesOther
     AppIcon.Chat -> Icons.Outlined.ChatBubbleOutline
+    AppIcon.Notes -> Icons.Outlined.Description
     AppIcon.Recordings -> Icons.Outlined.LibraryMusic
     AppIcon.Settings -> Icons.Outlined.Settings
     AppIcon.Plugins -> Icons.Outlined.Extension

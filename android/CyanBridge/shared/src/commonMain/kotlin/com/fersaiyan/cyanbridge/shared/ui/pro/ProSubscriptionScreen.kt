@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,17 +15,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -91,16 +99,14 @@ fun ProSubscriptionScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item { ProHero() }
             item {
-                Text(
-                     stringResource(Res.string.pro_intro),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            }
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                         Text(stringResource(Res.string.pro_choose_plan), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                ) {
+                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                         Text(stringResource(Res.string.pro_choose_plan), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         planLabels(state).forEach { (id, label) ->
                             FilterChip(
                                 selected = state.selectedPlan == id,
@@ -118,8 +124,8 @@ fun ProSubscriptionScreen(
              item { BenefitCard(stringResource(Res.string.pro_benefit_priority), stringResource(Res.string.pro_benefit_priority_description)) }
             if (state.webCheckoutAvailable) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+                        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                              Text(stringResource(Res.string.pro_checkout_choices), style = MaterialTheme.typography.titleSmall)
                             Text(
                                  stringResource(Res.string.pro_checkout_choices_description),
@@ -137,16 +143,26 @@ fun ProSubscriptionScreen(
             }
             if (state.isSubscribed) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
+                        shape = MaterialTheme.shapes.extraLarge,
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                              Text(stringResource(Res.string.pro_cancel_subscription), style = MaterialTheme.typography.titleSmall)
                             Text(
                                  stringResource(Res.string.pro_cancel_description),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
                             )
-                            TextButton(onClick = onCancelSubscription) {
-                                 Text(stringResource(Res.string.pro_cancel_subscription), color = MaterialTheme.colorScheme.error)
+                            TextButton(
+                                onClick = onCancelSubscription,
+                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            ) {
+                                 Text(stringResource(Res.string.pro_cancel_subscription))
                             }
                         }
                     }
@@ -163,7 +179,7 @@ fun ProSubscriptionScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                      OutlinedButton(onClick = onBack) { Text(stringResource(Res.string.pro_back)) }
                     Spacer(Modifier.width(8.dp))
-                    FilledTonalButton(
+                    Button(
                         onClick = {
                             if (state.selectedPlan == "free_trial") {
                                 onStartFreeTrial()
@@ -229,6 +245,11 @@ private fun CheckoutChoiceDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = {
+            DialogIconBadge {
+                Icon(Icons.Outlined.AutoAwesome, contentDescription = null)
+            }
+        },
          title = { Text(stringResource(Res.string.pro_choose_checkout_title)) },
         text = {
             Column(
@@ -258,7 +279,7 @@ private fun CheckoutChoiceDialog(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    FilledTonalButton(
+                    Button(
                         onClick = { onWebProviderSelected(webProvider) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -370,14 +391,63 @@ private fun formatUsd(amount: Double): String {
 
 @Composable
 private fun BenefitCard(title: String, description: String) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+@OptIn(ExperimentalResourceApi::class)
+@Composable
+private fun ProHero() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ),
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(56.dp),
+                color = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary,
+                shape = MaterialTheme.shapes.large,
+            ) {
+                Icon(
+                    Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    modifier = Modifier.padding(14.dp),
+                )
+            }
+            Text(
+                stringResource(Res.string.pro_subscription_title),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(stringResource(Res.string.pro_intro), style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+@Composable
+private fun DialogIconBadge(content: @Composable () -> Unit) {
+    Surface(
+        modifier = Modifier.size(48.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
     }
 }

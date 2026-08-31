@@ -1,7 +1,11 @@
 package com.fersaiyan.cyanbridge.shared.ui.pro
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,11 +14,20 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
@@ -24,6 +37,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.billing.BillingCatalog
@@ -92,20 +107,23 @@ fun ProSubscriptionSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                 ProSettingsCard(stringResource(Res.string.pro_plan)) {
-                    Text(state.planStatus)
+                 ProSettingsCard(stringResource(Res.string.pro_plan), hero = true) {
+                    Text(state.planStatus, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(state.plan, style = MaterialTheme.typography.bodySmall)
                     Text(state.expires, style = MaterialTheme.typography.bodySmall)
                     Text(state.verified, style = MaterialTheme.typography.bodySmall)
-                    ActionButtons(
-                         primaryLabel = stringResource(Res.string.pro_refresh),
-                        onPrimary = onRefreshPlan,
-                         secondaryLabel = stringResource(Res.string.pro_change_plan),
-                        onSecondary = { showChangePlanDialog = true },
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(onClick = onRefreshPlan, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(Res.string.pro_refresh))
+                        }
+                        Button(onClick = { showChangePlanDialog = true }, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(Res.string.pro_change_plan))
+                        }
+                    }
                     OutlinedButton(
                         onClick = { showCancelDialog = true },
                         modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) {
                          Text(stringResource(Res.string.pro_cancel_subscription))
                     }
@@ -147,7 +165,7 @@ fun ProSubscriptionSettingsScreen(
                     state.quotaProgress?.let { percent ->
                         LinearProgressIndicator(
                             progress = { percent.coerceIn(0, 100) / 100f },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp)),
                         )
                     }
                 }
@@ -211,6 +229,11 @@ fun ProSubscriptionSettingsScreen(
     if (showChangePlanDialog) {
         AlertDialog(
             onDismissRequest = { showChangePlanDialog = false },
+            icon = {
+                DialogIconBadge {
+                    androidx.compose.material3.Icon(Icons.Outlined.AutoAwesome, contentDescription = null)
+                }
+            },
              title = { Text(stringResource(Res.string.pro_change_plan)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -241,6 +264,11 @@ fun ProSubscriptionSettingsScreen(
         val isFreeTrial = state.plan.removePrefix("Plan: ").trim() == "free_trial"
         AlertDialog(
             onDismissRequest = { showCancelDialog = false },
+            icon = {
+                DialogIconBadge(destructive = true) {
+                    androidx.compose.material3.Icon(Icons.Outlined.WarningAmber, contentDescription = null)
+                }
+            },
              title = { Text(stringResource(Res.string.pro_cancel_question)) },
             text = {
                 Text(
@@ -257,7 +285,8 @@ fun ProSubscriptionSettingsScreen(
                         showCancelDialog = false
                         onCancelSubscription()
                     },
-                 ) { Text(stringResource(Res.string.pro_yes_cancel)) }
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                  ) { Text(stringResource(Res.string.pro_yes_cancel)) }
             },
             dismissButton = {
                  TextButton(onClick = { showCancelDialog = false }) { Text(stringResource(Res.string.pro_keep_subscription)) }
@@ -293,13 +322,52 @@ private fun PlanChoice(
 }
 
 @Composable
-private fun ProSettingsCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun ProSettingsCard(
+    title: String,
+    hero: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+        colors = CardDefaults.cardColors(
+            containerColor = if (hero) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+            contentColor = if (hero) {
+                MaterialTheme.colorScheme.onTertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+        ),
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(if (hero) 24.dp else 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            if (hero) {
+                Surface(
+                    modifier = Modifier.size(52.dp),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    androidx.compose.material3.Icon(
+                        Icons.Outlined.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.padding(13.dp),
+                    )
+                }
+            }
+            Text(
+                title,
+                style = if (hero) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
             content()
         }
     }
@@ -374,5 +442,20 @@ private fun ModelChoice(
             },
              confirmButton = { TextButton(onClick = { showChoices = false }) { Text(stringResource(Res.string.pro_close)) } },
         )
+    }
+}
+
+@Composable
+private fun DialogIconBadge(
+    destructive: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.size(48.dp),
+        color = if (destructive) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = if (destructive) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
     }
 }
