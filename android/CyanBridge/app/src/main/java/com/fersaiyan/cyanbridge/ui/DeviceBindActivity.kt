@@ -102,6 +102,7 @@ class DeviceBindActivity : BaseActivity() {
                     },
                     onSelectedClassChange = { selectedDeviceClass = it },
                     onConfirmConnection = ::confirmConnection,
+                    onConfirmManualProtocol = ::confirmManualConsumerProtocol,
                     onDismissConnection = { connectingDevice = null },
                     onBack = ::finish,
                 )
@@ -180,6 +181,28 @@ class DeviceBindActivity : BaseActivity() {
             return
         }
 
+        // HEY_CYAN is now a sentinel for the manual consumer picker. If we somehow
+        // reach here with HEY_CYAN (e.g. direct call without the second dialog),
+        // fall back to an explicit HeyCyan manual connect rather than auto probing.
+        if (selectedDeviceClass == DeviceClass.HEY_CYAN ||
+            selectedDeviceClass == DeviceClass.EYEVUE ||
+            selectedDeviceClass == DeviceClass.TUNEBUDS ||
+            selectedDeviceClass == DeviceClass.MOYOUNG_W620 ||
+            selectedDeviceClass == DeviceClass.UNKNOWN
+        ) {
+            // Should normally be handled via confirmManualConsumerProtocol after the
+            // second picker. Keep a safe fallback to HeyCyan so we never auto-probe.
+            val fallback = when (selectedDeviceClass) {
+                DeviceClass.EYEVUE,
+                DeviceClass.TUNEBUDS,
+                DeviceClass.MOYOUNG_W620,
+                -> selectedDeviceClass
+                else -> DeviceClass.HEY_CYAN
+            }
+            confirmManualConsumerProtocol(fallback)
+            return
+        }
+
         connectingDevice = null
         stopScan()
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
@@ -201,25 +224,80 @@ class DeviceBindActivity : BaseActivity() {
                 finish()
             }
 
-            DeviceClass.MOYOUNG_W620 -> {
-                saveSelectedProfile(device, DeviceClass.MOYOUNG_W620, userOverridden = true)
-                MoyoungW620Manager.getInstance(this).connect(device.macAddress, device.advertisedName)
-                Toast.makeText(this, "Connecting as MoYoung / W620.", Toast.LENGTH_SHORT).show()
-                finish()
+            else -> {
+                // Should not happen; pairingChoices only exposes the above plus the
+                // HEY_CYAN sentinel handled above.
+                Toast.makeText(this, "Unknown device type.", Toast.LENGTH_SHORT).show()
             }
-
-            DeviceClass.HEY_CYAN,
-            DeviceClass.EYEVUE,
-            DeviceClass.TUNEBUDS,
-            DeviceClass.UNKNOWN,
-            -> detectAndConnectConsumerGlasses(device)
         }
     }
 
     /**
-     * The UI deliberately exposes one HeyCyan / EyeVue / TuneBuds choice. We use scan metadata as
-     * a probe-order hint, but only persist the concrete protocol after that protocol responds to
-     * its own battery/storage/version-style request.
+     * Manual consumer-glasses path: the user explicitly chose HeyCyan / EyeVue /
+     * TuneBuds / MoYoung in the second picker. Persist that exact class
+     * (userOverridden = true) so re-pairing is not required to change it, apply
+     * maximum capture defaults, and connect via the concrete manager.
+     * Restored from the pre-auto-detection manual flow (commit ab5b683^) and
+     * extended to include MoYoung / W620.
+     */
+    private fun confirmManualConsumerProtocol(concreteClass: DeviceClass) {
+        val device = connectingDevice ?: return
+        if (!hasBluetooth(this)) {
+            Toast.makeText(this, "Bluetooth permission is required to connect", Toast.LENGTH_SHORT).show()
+            requestBluetoothPermission(this, PermissionCallback())
+            return
+        }
+        val normalized = when (concreteClass) {
+            DeviceClass.HEY_CYAN,
+            DeviceClass.EYEVUE,
+            DeviceClass.TUNEBUDS,
+            DeviceClass.MOYOUNG_W620,
+            -> concreteClass
+            else -> DeviceClass.HEY_CYAN
+        }
+        connectingDevice = null
+        stopScan()
+        AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
+        saveSelectedProfile(device, normalized, userOverridden = true)
+        // Apply device-specific maximum capture defaults (HeyCyan video/audio,
+        // EyeVue recording duration). TuneBuds/MoYoung have no writable duration.
+        lifecycleScope.launch { applyMaximumCaptureDefaults(normalized) }
+        when (normalized) {
+            DeviceClass.HEY_CYAN -> {
+                BleOperateManager.getInstance().connectDirectly(device.macAddress)
+                Toast.makeText(this@DeviceBindActivity, "Connecting as HeyCyan.", Toast.LENGTH_SHORT).show()
+                // HeyCyan connection completion is observed via BluetoothEvent;
+                // finish now to return to dashboard where AutoPair/status will follow.
+                finish()
+            }
+
+            DeviceClass.EYEVUE -> {
+                EyevueManager.getInstance(this).connect(device.macAddress, device.advertisedName)
+                Toast.makeText(this@DeviceBindActivity, "Connecting to EyeVue.", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+
+            DeviceClass.TUNEBUDS -> {
+                TuneBudsManager.getInstance(this).connect(device.connectionAddress, device.advertisedName)
+                Toast.makeText(this@DeviceBindActivity, "Connecting to TuneBuds.", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+
+            DeviceClass.MOYOUNG_W620 -> {
+                MoyoungW620Manager.getInstance(this).connect(device.macAddress, device.advertisedName)
+                Toast.makeText(this@DeviceBindActivity, "Connecting as MoYoung / W620.", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+
+            else -> Unit
+        }
+    }
+
+    /**
+     * Legacy auto-detection path kept for fallback only. The normal UI now uses
+     * manual selection via confirmManualConsumerProtocol. This probe sequence is
+     * no longer invoked from the pairing dialog; it is retained only if
+     * confirmConnection is reached with an unknown class and for diagnostic use.
      */
     private fun detectAndConnectConsumerGlasses(device: ScannedDevice) {
         if (protocolDetectionJob?.isActive == true) return

@@ -109,8 +109,8 @@ class DeviceBindScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("HeyCyan / EyeVue / TuneBuds").assertExists()
-        composeRule.onNodeWithText("Protocol is detected automatically after connecting").assertExists()
+        composeRule.onNodeWithText("HeyCyan / EyeVue / TuneBuds / MoYoung").assertExists()
+        composeRule.onNodeWithText("Choose the protocol manually on the next screen").assertExists()
         composeRule.onNodeWithText("Meta Ray-Ban").performClick()
         composeRule.runOnIdle { assertEquals(DeviceClass.META_RAYBAN, selected) }
 

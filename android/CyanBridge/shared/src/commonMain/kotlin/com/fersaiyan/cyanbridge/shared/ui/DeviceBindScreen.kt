@@ -29,6 +29,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -40,16 +44,23 @@ import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * User-facing pairing intentionally groups the closely-related consumer camera-glasses protocols.
- * HEY_CYAN is used as the UI sentinel for this automatic family; Android resolves and persists the
- * actual HEY_CYAN / EYEVUE / TUNEBUDS / MOYOUNG_W620 protocol after confirmation.
+ * User-facing pairing groups the closely-related consumer camera-glasses protocols.
+ * HEY_CYAN is the UI sentinel for HeyCyan / EyeVue / TuneBuds / MoYoung. Tapping it
+ * opens a second manual picker with the four concrete protocols; no automatic probing
+ * is performed. The concrete choice is persisted as the selected class.
  */
 private val pairingChoices = listOf(
     DeviceClass.HEY_CYAN,
-    DeviceClass.MOYOUNG_W620,
     DeviceClass.META_RAYBAN,
     DeviceClass.MEIZU_MYVU,
     DeviceClass.GENERIC_AUDIO,
+)
+
+private val consumerProtocolChoices = listOf(
+    DeviceClass.HEY_CYAN,
+    DeviceClass.EYEVUE,
+    DeviceClass.TUNEBUDS,
+    DeviceClass.MOYOUNG_W620,
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalResourceApi::class)
@@ -64,9 +75,12 @@ fun DeviceBindScreen(
     onSelectDevice: (ScannedDevice) -> Unit,
     onSelectedClassChange: (DeviceClass) -> Unit,
     onConfirmConnection: () -> Unit,
+    onConfirmManualProtocol: (DeviceClass) -> Unit = {},
     onDismissConnection: () -> Unit,
     onBack: () -> Unit,
 ) {
+    var showManualProtocolPicker by remember { mutableStateOf(false) }
+    var manualSelection by remember { mutableStateOf(DeviceClass.HEY_CYAN) }
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
@@ -163,49 +177,119 @@ fun DeviceBindScreen(
     }
 
     connectingDevice?.let { device ->
-        AlertDialog(
-            onDismissRequest = onDismissConnection,
-            title = { Text(stringResource(Res.string.device_bind_select_type)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = device.advertisedName
-                            ?.takeIf { it.isNotBlank() }
-                            ?: stringResource(Res.string.device_bind_unnamed_device),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    pairingChoices.forEach { type ->
-                        FilterChip(
-                            selected = selectedClass == type,
-                            onClick = { onSelectedClassChange(type) },
-                            label = {
-                                if (type == DeviceClass.HEY_CYAN) {
-                                    Column {
-                                        Text(stringResource(Res.string.device_bind_auto_camera_glasses))
-                                        Text(
-                                            stringResource(Res.string.device_bind_auto_camera_glasses_hint),
-                                            style = MaterialTheme.typography.labelSmall,
-                                        )
-                                    }
-                                } else {
-                                    Text(localizedDeviceClass(type))
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
+        if (!showManualProtocolPicker) {
+            AlertDialog(
+                onDismissRequest = {
+                    showManualProtocolPicker = false
+                    onDismissConnection()
+                },
+                title = { Text(stringResource(Res.string.device_bind_select_type)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = device.advertisedName
+                                ?.takeIf { it.isNotBlank() }
+                                ?: stringResource(Res.string.device_bind_unnamed_device),
+                            style = MaterialTheme.typography.bodyMedium,
                         )
+                        pairingChoices.forEach { type ->
+                            FilterChip(
+                                selected = selectedClass == type,
+                                onClick = { onSelectedClassChange(type) },
+                                label = {
+                                    if (type == DeviceClass.HEY_CYAN) {
+                                        Column {
+                                            Text(stringResource(Res.string.device_bind_auto_camera_glasses))
+                                            Text(
+                                                stringResource(Res.string.device_bind_auto_camera_glasses_hint),
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        }
+                                    } else {
+                                        Text(localizedDeviceClass(type))
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = onConfirmConnection) {
-                    Text(stringResource(Res.string.action_connect))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismissConnection) {
-                    Text(stringResource(Res.string.action_cancel))
-                }
-            },
-        )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (selectedClass == DeviceClass.HEY_CYAN) {
+                                val hint = device.effectiveSelectedClass()
+                                manualSelection = when (hint) {
+                                    DeviceClass.EYEVUE,
+                                    DeviceClass.TUNEBUDS,
+                                    DeviceClass.MOYOUNG_W620,
+                                    DeviceClass.HEY_CYAN,
+                                    -> hint
+                                    else -> DeviceClass.HEY_CYAN
+                                }
+                                showManualProtocolPicker = true
+                            } else {
+                                onConfirmConnection()
+                            }
+                        },
+                    ) {
+                        Text(stringResource(Res.string.action_connect))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showManualProtocolPicker = false
+                            onDismissConnection()
+                        },
+                    ) {
+                        Text(stringResource(Res.string.action_cancel))
+                    }
+                },
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { showManualProtocolPicker = false },
+                title = { Text(stringResource(Res.string.device_bind_manual_protocol_title)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = stringResource(Res.string.device_bind_manual_protocol_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = device.advertisedName
+                                ?.takeIf { it.isNotBlank() }
+                                ?: stringResource(Res.string.device_bind_unnamed_device),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        consumerProtocolChoices.forEach { type ->
+                            FilterChip(
+                                selected = manualSelection == type,
+                                onClick = { manualSelection = type },
+                                label = { Text(localizedDeviceClass(type)) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showManualProtocolPicker = false
+                            onConfirmManualProtocol(manualSelection)
+                        },
+                    ) {
+                        Text(stringResource(Res.string.action_connect))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showManualProtocolPicker = false }) {
+                        Text(stringResource(Res.string.action_cancel))
+                    }
+                },
+            )
+        }
     }
 }
