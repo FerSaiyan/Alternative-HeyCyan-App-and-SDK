@@ -359,9 +359,9 @@ internal fun normalizeLatex(input: String): String {
     replacements.forEach { (source, target) -> out = out.replace(source, target) }
     out = out.replace("\\left", "").replace("\\right", "")
 
-    val fraction = Regex("\\\\frac\\{([^{}]+)}\\{([^{}]+)}")
+    val fraction = Regex("\\\\frac\\{([^{}]+)\\}\\{([^{}]+)\\}")
     repeat(4) { out = fraction.replace(out) { match -> "(${match.groupValues[1]})/(${match.groupValues[2]})" } }
-    val sqrt = Regex("\\\\sqrt\\{([^{}]+)}")
+    val sqrt = Regex("\\\\sqrt\\{([^{}]+)\\}")
     out = sqrt.replace(out) { match -> "√(${match.groupValues[1]})" }
 
     val superscript = mapOf(
@@ -380,8 +380,8 @@ internal fun normalizeLatex(input: String): String {
         val converted = value.map { table[it] ?: return null }
         return converted.joinToString("")
     }
-    out = Regex("\\^\\{([^{}]+)}").replace(out) { m -> convertScript(m.groupValues[1], superscript) ?: "^(${m.groupValues[1]})" }
-    out = Regex("_\\{([^{}]+)}").replace(out) { m -> convertScript(m.groupValues[1], subscript) ?: "_(${m.groupValues[1]})" }
+    out = Regex("\\^\\{([^{}]+)\\}").replace(out) { m -> convertScript(m.groupValues[1], superscript) ?: "^(${m.groupValues[1]})" }
+    out = Regex("_\\{([^{}]+)\\}").replace(out) { m -> convertScript(m.groupValues[1], subscript) ?: "_(${m.groupValues[1]})" }
     out = Regex("\\^([0-9n+-])").replace(out) { m -> superscript[m.groupValues[1][0]]?.toString() ?: m.value }
     out = Regex("_([0-9aehijklmnoprstuvx+-])").replace(out) { m -> subscript[m.groupValues[1][0]]?.toString() ?: m.value }
     return out
