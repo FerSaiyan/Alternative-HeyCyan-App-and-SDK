@@ -196,6 +196,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
 import com.fersaiyan.cyanbridge.ai.router.AssistantSetupDestination
@@ -4348,7 +4349,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         val isLive = chosenQuestionsModel.equals("google/gemini-3.1-flash-live-preview", ignoreCase = true) ||
                             chosenQuestionsModel.equals("live", ignoreCase = true) ||
                             chosenQuestionsModel.equals("auto", ignoreCase = true)
+                        val isProActive = ProSubscriptionPrefs.isActiveLocally(this@MainActivity)
                         var liveReply: String? = null
+                        var liveFailure: Exception? = null
                         if (isLive) {
                             try {
                                 val relayClient = com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this@MainActivity)
@@ -4359,11 +4362,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                     imageJpegBase64 = base64,
                                 ).trim().takeIf { it.isNotBlank() }
                             } catch (e: Exception) {
-                                Log.e("AIHijack", "Live relay failed, falling back to CliRelay: ${e.message}", e)
+                                liveFailure = e
+                                Log.e("AIHijack", "Live relay failed: ${e.message}", e)
                             }
                         }
                         if (liveReply != null) {
                             liveReply
+                        } else if (isLive && !isProActive) {
+                            val message = "Free Gemini Live is temporarily unavailable. Please try again."
+                            runOnUiThread {
+                                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                            }
+                            Log.w("AIHijack", "Free Gemini Live request failed without paid-relay fallback", liveFailure)
+                            message
                         } else {
                             // Use user's chosen vision model (Live if they kept default, or other like Gemini 3.7 Flash/Gemma if they changed it)
                             val visionResult = CliRelayClient.imageQuery(
