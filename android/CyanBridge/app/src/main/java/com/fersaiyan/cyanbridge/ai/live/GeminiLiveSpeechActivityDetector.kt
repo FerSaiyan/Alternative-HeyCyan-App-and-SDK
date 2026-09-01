@@ -24,8 +24,8 @@ class GeminiLiveSpeechActivityDetector(
         if (wasActive) onChanged(false)
     }
 
-    fun offerPcm16Le(bytes: ByteArray, length: Int = bytes.size) {
-        if (length < 2) return
+    fun offerPcm16Le(bytes: ByteArray, length: Int = bytes.size): Boolean {
+        if (length < 2) return active
         var sum = 0L
         var samples = 0
         var index = 0
@@ -38,7 +38,7 @@ class GeminiLiveSpeechActivityDetector(
             samples++
             index += 2
         }
-        if (samples == 0) return
+        if (samples == 0) return active
         val meanAbs = (sum / samples).toInt()
         val speechLike = meanAbs >= startThreshold
 
@@ -53,7 +53,7 @@ class GeminiLiveSpeechActivityDetector(
             } else {
                 activeChunks = 0
             }
-            return
+            return active
         }
 
         if (speechLike) {
@@ -67,5 +67,6 @@ class GeminiLiveSpeechActivityDetector(
                 onChanged(false)
             }
         }
+        return active
     }
 }

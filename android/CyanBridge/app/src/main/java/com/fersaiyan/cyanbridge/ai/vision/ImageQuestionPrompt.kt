@@ -27,6 +27,20 @@ data class ResolvedImageQuestionPrompt(
 }
 
 object ImageQuestionDefaults {
+    fun initializingLiveCueForLanguage(languageTag: String): String = when (
+        Locale.forLanguageTag(languageTag).language.lowercase(Locale.ROOT)
+    ) {
+        "pt" -> "Inicializando o Live."
+        "es" -> "Inicializando Live."
+        "de" -> "Live wird initialisiert."
+        "fr" -> "Initialisation de Live."
+        "it" -> "Inizializzazione di Live."
+        "zh" -> "正在初始化实时模式。"
+        "ko" -> "라이브를 초기화하고 있습니다."
+        "ru" -> "Инициализация Live."
+        else -> "Initializing Live."
+    }
+
     fun listeningCueForLanguage(languageTag: String): String = when (
         Locale.forLanguageTag(languageTag).language.lowercase(Locale.ROOT)
     ) {

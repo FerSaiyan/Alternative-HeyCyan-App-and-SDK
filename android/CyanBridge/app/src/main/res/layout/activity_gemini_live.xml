@@ -10,7 +10,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Gemini Live (voice and vision, preview)"
+        android:text="Gemini Live"
         android:textColor="@color/text_primary"
         android:textSize="22sp"
         android:textStyle="bold" />
@@ -70,7 +70,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
-        android:text="Preview: live audio and each glasses AI-photo thumbnail are sent directly to Google. Keep this screen open while listening."
+        android:text="The microphone remains available for follow-up questions. Free sessions use the secure CyanBridge Live proxy; paid Pro sessions connect with a constrained token."
         android:textColor="@color/text_secondary"
         android:textSize="13sp" />
 </LinearLayout>

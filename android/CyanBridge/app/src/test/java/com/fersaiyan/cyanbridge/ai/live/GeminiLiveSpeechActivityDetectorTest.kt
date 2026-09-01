@@ -1,6 +1,8 @@
 package com.fersaiyan.cyanbridge.ai.live
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GeminiLiveSpeechActivityDetectorTest {
@@ -14,9 +16,9 @@ class GeminiLiveSpeechActivityDetectorTest {
             onChanged = changes::add,
         )
 
-        detector.offerPcm16Le(chunk(2_000))
+        assertFalse(detector.offerPcm16Le(chunk(2_000)))
         assertEquals(emptyList<Boolean>(), changes)
-        detector.offerPcm16Le(chunk(2_000))
+        assertTrue(detector.offerPcm16Le(chunk(2_000)))
         assertEquals(listOf(true), changes)
 
         detector.offerPcm16Le(chunk(0))

@@ -2,9 +2,11 @@ package com.fersaiyan.cyanbridge.ai.live
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import java.time.Instant
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -17,6 +19,7 @@ data class LiveTokenConfig(
     val websocketUrl: String,
     val expiresAtMs: Long,
     val reservationId: String,
+    val authorizationHeader: String? = null,
     /** Optional API key for direct Live websocket auth (free-tier requires x-goog-api-key alongside Token). */
     val apiKey: String? = null,
 )
@@ -30,10 +33,32 @@ class DefaultGeminiLiveTokenProvider(
     private val http: OkHttpClient = OkHttpClient(),
 ) : GeminiLiveTokenProvider {
     override suspend fun requestToken(language: String, imagePrompt: String): LiveTokenConfig {
-        val authToken = ProSubscriptionServerPrefs.getApiToken(appContext).trim()
+        val authToken = ProSubscriptionRelayClient.fetchAccountInfo(appContext)
+            .getOrThrow()
+            .apiToken
+            .trim()
         check(authToken.isNotBlank()) { "Sign in to CyanBridge before starting Gemini Live" }
         val base = AiProviderPrefs.getRelayBaseUrl(appContext).trim().trimEnd('/')
         check(base.startsWith("https://")) { "Gemini Live requires a secure relay URL" }
+        val paidPlan = ProSubscriptionPrefs.isActiveLocally(appContext) &&
+            ProSubscriptionPrefs.getPlan(appContext).lowercase() in setOf("cheap", "standard", "max")
+        if (!paidPlan) {
+            val websocketUrl = base.toHttpUrl().newBuilder()
+                .scheme("wss")
+                .addPathSegments("api/pro/live/free")
+                .addQueryParameter("language", language)
+                .addQueryParameter("image_prompt", imagePrompt.take(400))
+                .build()
+                .toString()
+            return LiveTokenConfig(
+                token = "",
+                model = "models/gemini-3.1-flash-live-preview",
+                websocketUrl = websocketUrl,
+                expiresAtMs = System.currentTimeMillis() + 13 * 60 * 1000L,
+                reservationId = "free-proxy",
+                authorizationHeader = "Bearer $authToken",
+            )
+        }
         val body = JSONObject()
             .put("language", language)
             .put("image_prompt", imagePrompt)
@@ -63,6 +88,7 @@ class DefaultGeminiLiveTokenProvider(
                 websocketUrl = json.getString("websocket_url"),
                 expiresAtMs = expiresAt,
                 reservationId = json.getString("reservation_id"),
+                authorizationHeader = "Token ${json.getString("token")}",
                 apiKey = debugApiKey,
             )
         }
@@ -120,6 +146,7 @@ class DirectGeminiApiKeyLiveTokenProvider(
                 websocketUrl = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent",
                 expiresAtMs = expiresAt,
                 reservationId = "direct",
+                authorizationHeader = "Token $name",
                 apiKey = apiKey,
             )
         }

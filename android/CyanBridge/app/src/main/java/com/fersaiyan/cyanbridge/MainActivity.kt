@@ -211,6 +211,7 @@ import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoute
 import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
 import com.fersaiyan.cyanbridge.ai.router.RelayErrorLocalizer
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveActivity
 import com.fersaiyan.cyanbridge.ai.router.MediaInferenceRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
@@ -4229,28 +4230,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         return when (providerType) {
             AgentProviderType.PRO_SUBSCRIPTION -> {
-                // This Pro branch is called only by the glasses AI voice-question flow.
-                // Chats, Spark Notes, meetings, transcription, and translation use separate paths.
                 val chosenQuestionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this).trim()
-                val isProActive = ProSubscriptionPrefs.isActiveLocally(this)
-                val useLive = ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
-                    isProActive = isProActive,
-                    questionsModel = chosenQuestionsModel,
-                )
-                if (useLive) {
-                    try {
-                        return com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this)
-                            .sendAudioAndGetText(
-                                pcm16 = shortArrayOf(),
-                                prompt = userPrompt,
-                            )
-                    } catch (e: Exception) {
-                        Log.e("AIHijack", "Gemini Live relay failed for AI voice question: ${e.message}", e)
-                        if (!isProActive) {
-                            return "Free Gemini Live is temporarily unavailable. Please try again."
-                        }
-                    }
-                }
                 CliRelayClient.chat(
                     context = this,
                     chatId = "glasses_${System.currentTimeMillis()}",
@@ -4309,6 +4289,54 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
     }
 
+    private fun shouldUseGeminiLiveQuestions(providerType: AgentProviderType): Boolean {
+        if (providerType != AgentProviderType.PRO_SUBSCRIPTION) return false
+        return ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
+            isProActive = ProSubscriptionPrefs.isActiveLocally(this),
+            questionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this),
+        )
+    }
+
+    private fun launchGeminiLiveQuestion(
+        prompt: String,
+        imagePath: String? = null,
+        onLaunched: (() -> Unit)? = null,
+    ) {
+        val languageTag = recognitionLanguageTag()
+        val launch: () -> Unit = {
+            try {
+                startActivity(
+                    Intent(this, GeminiLiveActivity::class.java)
+                        .putExtra(GeminiLiveActivity.EXTRA_AUTO_START, true)
+                        .putExtra(GeminiLiveActivity.EXTRA_INITIAL_PROMPT, prompt)
+                        .apply {
+                            imagePath?.takeIf { it.isNotBlank() }?.let {
+                                putExtra(GeminiLiveActivity.EXTRA_INITIAL_IMAGE_PATH, it)
+                            }
+                        },
+                )
+                Log.i(
+                    "GeminiLive",
+                    "Started continuous Live question session initialImage=${!imagePath.isNullOrBlank()}",
+                )
+            } catch (error: Exception) {
+                Log.e("GeminiLive", "Could not open continuous Live session", error)
+                Toast.makeText(this, "Could not start Gemini Live.", Toast.LENGTH_LONG).show()
+            } finally {
+                onLaunched?.invoke()
+            }
+        }
+        runOnUiThread {
+            speak(
+                text = ImageQuestionDefaults.initializingLiveCueForLanguage(languageTag),
+                languageTag = languageTag,
+                utteranceId = "initializing_live_${System.nanoTime()}",
+                streamType = null,
+                onDone = launch,
+            )
+        }
+    }
+
     private fun triggerChosenProviderImageQuery(
         imagePath: String,
         providerType: AgentProviderType,
@@ -4316,6 +4344,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         onReplySpoken: (() -> Unit)? = null,
     ) {
         Log.i("AIHijack", "Running image query with RAG disabled for chosen provider $providerType: $imagePath")
+
+        if (shouldUseGeminiLiveQuestions(providerType)) {
+            launchGeminiLiveQuestion(
+                prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
+                imagePath = imagePath,
+                onLaunched = {
+                    imageQueryInProgress.set(false)
+                    finishAiQuestionForegroundWork()
+                },
+            )
+            return
+        }
 
         val onSpeechCompleted: () -> Unit = {
             finishAiQuestionForegroundWork()
@@ -5797,6 +5837,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                         when (routing.intent) {
                             AssistantIntent.ANSWER_QUESTION -> {
+                                if (
+                                    memoryAwareChosenProvider &&
+                                    shouldUseGeminiLiveQuestions(selectedProvider)
+                                ) {
+                                    withContext(Dispatchers.Main) {
+                                        stopSco()
+                                        finishVoiceQueryWork()
+                                        launchGeminiLiveQuestion(prompt = prompt)
+                                    }
+                                    return@launch
+                                }
                                 val reply = if (memoryAwareChosenProvider) {
                                     runChosenProviderQuery(
                                         userPrompt = prompt,
