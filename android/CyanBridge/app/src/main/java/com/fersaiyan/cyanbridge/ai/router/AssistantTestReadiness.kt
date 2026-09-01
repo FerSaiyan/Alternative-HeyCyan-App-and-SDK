@@ -33,7 +33,7 @@ object AssistantTestReadiness {
         kind: AssistantTestKind,
     ): AssistantSetupIssue? = when (route) {
         GlassesAssistantRoute.LOCAL -> localIssue(context, kind)
-        GlassesAssistantRoute.PRO -> proIssue(context)
+        GlassesAssistantRoute.PRO -> proIssue(context, kind)
         GlassesAssistantRoute.PHONE_ASSISTANT,
         GlassesAssistantRoute.TASKER_EXTERNAL_UI -> null
     }
@@ -72,8 +72,11 @@ object AssistantTestReadiness {
         return null
     }
 
-    private fun proIssue(context: Context): AssistantSetupIssue? {
+    private fun proIssue(context: Context, kind: AssistantTestKind? = null): AssistantSetupIssue? {
         if (ProSubscriptionVerifier.localStatus(context).active) return null
+        // Free users selecting Pro for AI image/voice go via Free Gemini Live relay (server holds key, no token to phone)
+        // Do not block those; only block non-multimodal Pro usage if needed. For now VOICE/IMAGE are the only kinds checked.
+        if (kind == AssistantTestKind.IMAGE || kind == AssistantTestKind.VOICE) return null
         return AssistantSetupIssue(
             title = "Pro subscription required",
             message = "The selected Pro provider has no active subscription. Choose Local Models instead or activate a Pro plan.",

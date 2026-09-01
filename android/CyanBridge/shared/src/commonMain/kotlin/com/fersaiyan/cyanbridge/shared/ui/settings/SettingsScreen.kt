@@ -576,7 +576,11 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
                 selected = state.providerType == type,
                 onClick = { actions.setProviderType(type) },
             )
-            Text(localizedProviderLabel(type), style = MaterialTheme.typography.bodyMedium)
+            val baseLabel = localizedProviderLabel(type)
+            val label = if (type == AgentProviderType.PRO_SUBSCRIPTION && !state.isProSubscribed) {
+                "$baseLabel (Free Gemini Live)"
+            } else baseLabel
+            Text(label, style = MaterialTheme.typography.bodyMedium)
         }
     }
     if (state.taskerIntegrationsAvailable) {
