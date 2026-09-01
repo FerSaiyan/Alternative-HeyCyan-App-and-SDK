@@ -56,6 +56,8 @@ data class GlassesDashboardUiState(
     val firmwarePatchRequest: FirmwarePatchRequestUiState? = null,
     val livePreview: LivePreviewUiState = LivePreviewUiState(),
     val wifiAdbDebug: WifiAdbDebugUiState = WifiAdbDebugUiState(),
+    val showTransportPermissionDialog: Boolean = false,
+    val transportPermissionFeature: String? = null,
 )
 
 data class GlassesTransferUiState(
@@ -274,4 +276,6 @@ sealed interface GlassesDashboardAction {
     data object MeizuShowTestTeleprompter : GlassesDashboardAction
     data object MeizuSyncClock : GlassesDashboardAction
     data object MeizuSetComfortBrightness : GlassesDashboardAction
+    data object DismissTransportPermissionDialog : GlassesDashboardAction
+    data object RequestTransportPermission : GlassesDashboardAction
 }

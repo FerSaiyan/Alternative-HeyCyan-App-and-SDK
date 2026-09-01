@@ -522,6 +522,10 @@
     <string name="dashboard_quality_detailed_warning_cancel">Cancel</string>
     <string name="dashboard_test_image">Test image AI description</string>
     <string name="dashboard_meta_hint">Scan → Pair Meta Glasses for setup. Use Test image AI / Test voice for photos. Video stream is reserved for future Gemini Live.</string>
+    <string name="dashboard_transport_permission_title">Wi-Fi &amp; Location permission needed</string>
+    <string name="dashboard_transport_permission_body">%1$s needs Wi-Fi Direct and Nearby devices / Location to create a local hotspot and reach the glasses. On Android 13+ this is Nearby devices, on older versions it is Location. Your photos stay on the local link and are not uploaded for this permission. Grant to continue, or cancel.</string>
+    <string name="dashboard_transport_permission_feature_default">This feature</string>
+    <string name="dashboard_transport_permission_confirm">Grant permission</string>
     <string name="dashboard_ai_wake_word_route">Wake-word action</string>
     <string name="dashboard_ai_wake_word_route_description">For HeyCyan and Eyevue glasses, the AI wake-word activation starts:</string>
     <string name="dashboard_ai_wake_word_voice">Voice question</string>

@@ -601,6 +601,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var moyoungW620Manager: MoyoungW620Manager? = null
     private var moyoungW620UiJob: Job? = null
     private val tuneBudsAiPhotoInProgress = AtomicBoolean(false)
+    private var pendingTransportPermissionAction: (() -> Unit)? = null
 
     private val metaAndroidPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -1434,32 +1435,66 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 return@ensureBluetoothPermission
             }
 
-            requestWifiP2pPermission(this, object : OnPermissionCallback {
-                override fun onGranted(permissions: MutableList<String>, all: Boolean) {
-                    if (all) {
-                        onGranted()
-                    } else {
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Nearby devices or Location permission is required for $feature",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }
-                }
+            // Show Material 3 Expressive dialog first (permission rationale) instead of silent Toast.
+            // The dialog explains Wi-Fi Direct + Nearby devices/Location need for TuneBuds Detailed
+            // (and similar Wi-Fi flows) and offers Grant/Cancel.
+            pendingTransportPermissionAction = onGranted
+            updateDashboardState { state ->
+                state.copy(
+                    showTransportPermissionDialog = true,
+                    transportPermissionFeature = feature,
+                )
+            }
+        }
+    }
 
-                override fun onDenied(permissions: MutableList<String>, never: Boolean) {
-                    super.onDenied(permissions, never)
+    private fun requestPendingTransportPermission() {
+        val onGranted = pendingTransportPermissionAction ?: return
+        pendingTransportPermissionAction = null
+        // Keep dialog visible state reset; request callback will handle success/denial UI.
+        updateDashboardState { state -> state.copy(showTransportPermissionDialog = false) }
+        requestWifiP2pPermission(this, object : OnPermissionCallback {
+            override fun onGranted(permissions: MutableList<String>, all: Boolean) {
+                if (all) {
+                    onGranted()
+                } else {
+                    // User granted via system sheet but not all - surface via dialog state + toast fallback
+                    updateDashboardState { state ->
+                        state.copy(
+                            showTransportPermissionDialog = true,
+                            transportPermissionFeature = dashboardState.transportPermissionFeature,
+                        )
+                    }
                     Toast.makeText(
                         this@MainActivity,
-                        "Nearby devices or Location permission is required for $feature",
+                        "Nearby devices or Location permission is required",
                         Toast.LENGTH_LONG,
                     ).show()
-                    if (never) {
-                        XXPermissions.startPermissionActivity(this@MainActivity, permissions)
+                }
+            }
+
+            override fun onDenied(permissions: MutableList<String>, never: Boolean) {
+                super.onDenied(permissions, never)
+                updateDashboardState { state -> state.copy(showTransportPermissionDialog = false) }
+                Toast.makeText(
+                    this@MainActivity,
+                    "Nearby devices or Location permission is required",
+                    Toast.LENGTH_LONG,
+                ).show()
+                if (never) {
+                    XXPermissions.startPermissionActivity(this@MainActivity, permissions)
+                } else {
+                    // Re-show rationale dialog so user can retry, instead of failing silently
+                    pendingTransportPermissionAction = onGranted
+                    updateDashboardState { state ->
+                        state.copy(
+                            showTransportPermissionDialog = true,
+                            transportPermissionFeature = state.transportPermissionFeature,
+                        )
                     }
                 }
-            })
-        }
+            }
+        })
     }
 
     private fun updateDashboardState(
@@ -1903,6 +1938,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             } else {
                 Log.i("Dashboard", "SetWearingDetection (no-op in temp branch)")
             }
+            GlassesDashboardAction.DismissTransportPermissionDialog -> {
+                pendingTransportPermissionAction = null
+                updateDashboardState { state -> state.copy(showTransportPermissionDialog = false) }
+            }
+            GlassesDashboardAction.RequestTransportPermission -> requestPendingTransportPermission()
         }
     }
 

@@ -172,6 +172,36 @@ fun GlassesDashboardScreen(
         )
     }
 
+    if (state.showTransportPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { onAction(GlassesDashboardAction.DismissTransportPermissionDialog) },
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = { Text(stringResource(Res.string.dashboard_transport_permission_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        Res.string.dashboard_transport_permission_body,
+                        state.transportPermissionFeature ?: stringResource(Res.string.dashboard_transport_permission_feature_default),
+                    ),
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { onAction(GlassesDashboardAction.RequestTransportPermission) },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("transport_permission_confirm"),
+                ) { Text(stringResource(Res.string.dashboard_transport_permission_confirm)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { onAction(GlassesDashboardAction.DismissTransportPermissionDialog) },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("transport_permission_dismiss"),
+                ) { Text(stringResource(Res.string.action_cancel)) }
+            },
+            shape = MaterialTheme.shapes.extraLarge,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        )
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = { TopAppBar(title = { Text(stringResource(Res.string.dashboard_title)) }) },
