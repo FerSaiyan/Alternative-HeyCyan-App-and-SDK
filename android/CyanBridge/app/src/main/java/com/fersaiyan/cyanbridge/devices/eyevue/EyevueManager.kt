@@ -134,9 +134,9 @@ class EyevueManager private constructor(context: Context) {
         "take photo",
     )
 
-    suspend fun capturePhotoForAi(timeoutMs: Long = 12_000L): ByteArray? = coroutineScope {
+    suspend fun capturePhotoForAi(highQuality: Boolean = true, timeoutMs: Long = 12_000L): ByteArray? = coroutineScope {
         val photo = async(start = CoroutineStart.UNDISPATCHED) { client.photos.first() }
-        takePhoto(highQuality = true)
+        takePhoto(highQuality = highQuality)
         withTimeoutOrNull(timeoutMs) { photo.await() }.also {
             if (it == null) photo.cancel()
         }

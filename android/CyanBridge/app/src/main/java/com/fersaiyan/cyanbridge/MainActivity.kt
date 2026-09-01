@@ -4677,10 +4677,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         beginAiQuestionForegroundWork("Capturing image from Eyevue glasses")
         pendingImageQuestionOfferSpokenQuestion = false
         startParallelAudioQuestionIfEligible(offerSpokenQuestion)
+        // Respect thumbnail quality: 0..4 => 0x30 BLE thumb, 5 => 0x31 BLE high (both AA15, no WiFi)
+        val highQuality = pendingImageThumbnailQuality == ImageThumbnailQuality.DETAILED
         val startedAt = System.currentTimeMillis()
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val imageBytes = manager.capturePhotoForAi()
+                val imageBytes = manager.capturePhotoForAi(highQuality = highQuality)
                     ?: throw IOException("Eyevue photo transfer timed out")
                 val imageFile = File(cacheDir, "Eyevue_AI_${System.currentTimeMillis()}.jpg")
                 imageFile.writeBytes(imageBytes)

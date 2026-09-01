@@ -1243,40 +1243,64 @@ private fun AdvancedControls(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                listOf(
-                    stringResource(Res.string.dashboard_quality_instant),
-                    stringResource(Res.string.dashboard_quality_quick),
-                    stringResource(Res.string.dashboard_quality_smooth),
-                    stringResource(Res.string.dashboard_quality_fine),
-                    stringResource(Res.string.dashboard_quality_clearer),
-                    stringResource(Res.string.dashboard_quality_detailed),
-                )
-                    .chunked(3)
-                    .forEachIndexed { rowIndex, labels ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            labels.forEachIndexed { columnIndex, label ->
-                                val sdkValue = rowIndex * 3 + columnIndex
-                                FilterChip(
-                                    selected = state.imageThumbnailQualitySdkValue == sdkValue,
-                                    onClick = {
-                                        if (sdkValue == 5) {
-                                            pendingDetailedQuality = sdkValue
-                                        } else {
-                                            onAction(GlassesDashboardAction.SelectImageThumbnailQuality(sdkValue))
-                                        }
-                                    },
-                                    label = { Text(label) },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 48.dp)
-                                        .testTag("ai_image_thumbnail_quality_$sdkValue"),
-                                )
+                if (state.showTuneBudsControls) {
+                    // TuneBuds: only 2 real modes - BLE one-size (0..4) vs WiFi high (5)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        val fastSelected = state.imageThumbnailQualitySdkValue != 5
+                        FilterChip(
+                            selected = fastSelected,
+                            onClick = {
+                                onAction(GlassesDashboardAction.SelectImageThumbnailQuality(4))
+                            },
+                            label = { Text(stringResource(Res.string.dashboard_quality_clearer) + " (BLE)") },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("ai_image_thumbnail_quality_4"),
+                        )
+                        FilterChip(
+                            selected = !fastSelected,
+                            onClick = { pendingDetailedQuality = 5 },
+                            label = { Text(stringResource(Res.string.dashboard_quality_detailed) + " (WiFi)") },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("ai_image_thumbnail_quality_5"),
+                        )
+                    }
+                } else {
+                    listOf(
+                        stringResource(Res.string.dashboard_quality_instant),
+                        stringResource(Res.string.dashboard_quality_quick),
+                        stringResource(Res.string.dashboard_quality_smooth),
+                        stringResource(Res.string.dashboard_quality_fine),
+                        stringResource(Res.string.dashboard_quality_clearer),
+                        stringResource(Res.string.dashboard_quality_detailed),
+                    )
+                        .chunked(3)
+                        .forEachIndexed { rowIndex, labels ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                labels.forEachIndexed { columnIndex, label ->
+                                    val sdkValue = rowIndex * 3 + columnIndex
+                                    FilterChip(
+                                        selected = state.imageThumbnailQualitySdkValue == sdkValue,
+                                        onClick = {
+                                            if (sdkValue == 5) {
+                                                pendingDetailedQuality = sdkValue
+                                            } else {
+                                                onAction(GlassesDashboardAction.SelectImageThumbnailQuality(sdkValue))
+                                            }
+                                        },
+                                        label = { Text(label) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 48.dp)
+                                            .testTag("ai_image_thumbnail_quality_$sdkValue"),
+                                    )
+                                }
                             }
                         }
-                    }
+                }
             }
         }
         pendingDetailedQuality?.let { sdkValue ->
