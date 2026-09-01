@@ -11,7 +11,7 @@ on:
       - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/plugins/meetingsparknotes/**
       - android/CyanBridge/app/src/androidTest/assets/audio/**
       - android/CyanBridge/app/src/androidTest/java/com/fersaiyan/cyanbridge/hil/audio/**
-      - android/CyanBridge/tools/hil/start_emulator_audio.sh
+      - tools/hil/start_emulator_audio.sh
 
 permissions:
   contents: read
