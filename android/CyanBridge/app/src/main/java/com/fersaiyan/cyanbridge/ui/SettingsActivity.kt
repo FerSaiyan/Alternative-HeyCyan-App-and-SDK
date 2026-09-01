@@ -205,6 +205,11 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
 
     private fun refreshSettingsUi() {
         MemoryVaultBootstrap.ensureInitialized(this)
+        // Update Pro radio button to show "(Free Gemini Live)" for unsubscribed users
+        findViewById<com.google.android.material.radiobutton.MaterialRadioButton>(R.id.rb_provider_pro_subscription)?.let { rb ->
+            val isProActive = ProSubscriptionPrefs.isActiveLocally(this)
+            rb.text = if (isProActive) "Pro" else "Pro (Free Gemini Live)"
+        }
         val meeting = MeetingCapturePrefs.getState(this)
         val memoryMode = MemoryModeManager.getSelectedMode(this)
         val providerType = AutomationPrefs.getProviderType(this)

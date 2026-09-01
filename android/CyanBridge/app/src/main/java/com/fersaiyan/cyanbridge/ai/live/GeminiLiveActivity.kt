@@ -31,6 +31,8 @@ import kotlinx.coroutines.withContext
  */
 class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     private lateinit var client: GeminiLiveClient
+    private lateinit var relayClient: GeminiLiveRelayClient
+    private var useRelayForFreeTier = false
     private lateinit var visionController: GeminiLiveVisionController
     private lateinit var status: TextView
     private lateinit var elapsed: TextView
@@ -70,6 +72,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         startButton = findViewById(R.id.gemini_live_start)
         stopButton = findViewById(R.id.gemini_live_stop)
         client = GeminiLiveClient(this, this)
+        relayClient = GeminiLiveRelayClient(this)
         visionController = GeminiLiveVisionController(this, client) { message ->
             runOnUiThread {
                 visionStatus = message
@@ -113,21 +116,22 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     }
 
     private fun explainAndRequestMicrophone() {
-        if (!hasPaidPlan()) {
-            Toast.makeText(
-                this,
-                "Gemini Live requires an active paid Pro plan and network access.",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
+        // Pro → ephemeral token + GCP Vertex paid direct WS (no key to phone).
+        // Free → server relay (phone → Vercel holds GEMINI_API_KEY → Google, no token to phone).
+        val isPro = hasPaidPlan()
+        useRelayForFreeTier = !isPro
+        val message = if (isPro) {
+            "Gemini Live (Pro) uses an ephemeral token + GCP Vertex paid route. Your microphone streams " +
+                "directly to Google with a short-lived token (no API key on device). Glasses vision is streamed live."
+        } else {
+            "Gemini Live (Free) routes through CyanBridge server — your audio goes to Vercel first, " +
+                "Vercel (holding the API key) talks to Google and returns the answer. No token or API key leaves the server. " +
+                "Quality is HTTP relay; upgrade to Pro for direct low-latency ephemeral token + Vertex."
         }
         AlertDialog.Builder(this)
-            .setTitle("Gemini Live")
+            .setTitle(if (isPro) "Gemini Live — Pro (direct)" else "Gemini Live — Free (relay)")
             .setMessage(
-                "Gemini Live is an optional model mode. When you start it, microphone audio is sent " +
-                    "to Google in real time. Compatible streaming glasses can contribute sampled visual " +
-                    "context while you speak; photo-only glasses use occasional stills instead. Other " +
-                    "Pro models are unaffected.",
+                message + " Compatible streaming glasses contribute visual context. Other Pro models are unaffected.",
             )
             .setPositiveButton("Continue") { _, _ ->
                 if (hasPermission(Manifest.permission.RECORD_AUDIO)) startLive()
@@ -144,9 +148,18 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
             settings = ImageQuestionPreferences.get(this),
             userQuestion = null,
         ).forRoute(ImageQuestionRoute.PRO_RELAY)
-        visionStatus = "Glasses vision: preparing"
+        visionStatus = if (useRelayForFreeTier) "Glasses vision: relay (server holds key)" else "Glasses vision: preparing"
         renderIndicators()
 
+        if (useRelayForFreeTier) {
+            // Free tier: no ephemeral token. Server relay holds GEMINI_API_KEY/GCP Vertex.
+            // Direct WS is Pro-only. Here we keep Live WS idle and rely on push-to-talk relay.
+            status.text = "Free relay ready — tap glasses button to send audio via server"
+            // Do not start direct WS; relay uses HTTP POST per utterance.
+            return
+        }
+
+        // Pro: ephemeral token + GCP Vertex paid direct WS (bidiGenerateContentSetup).
         // Streaming-capable glasses can negotiate/start their camera while the relay token and
         // Gemini WebSocket setup happen. HeyCyan's opportunistic mode performs no capture here;
         // its audible still is triggered only after a real user-speech window starts.
@@ -155,6 +168,47 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     }
 
     private fun captureHardwareImageQuestion() {
+        // Free tier uses relay (no WS listening), so allow capture even without liveListening
+        if (useRelayForFreeTier) {
+            if (!hardwareImageCaptureInProgress.compareAndSet(false, true)) return
+            status.text = "Receiving glasses AI photo (relay)"
+            lifecycleScope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { GeminiLiveGlassesImageCapture().captureFromHardwareButton() }
+                }
+                result
+                    .onSuccess { image ->
+                        // Free relay: send image via HTTP relay (server holds GEMINI_API_KEY)
+                        val base64 = android.util.Base64.encodeToString(image, android.util.Base64.NO_WRAP)
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            runCatching {
+                                relayClient.sendAudioAndGetText(
+                                    pcm16 = shortArrayOf(), // no audio, image only
+                                    prompt = "Describe this image for the free relay user.",
+                                    imageJpegBase64 = base64,
+                                )
+                            }.onSuccess { text ->
+                                runOnUiThread {
+                                    status.text = text.take(200)
+                                    visionStatus = "Glasses vision: relay image answered"
+                                    renderIndicators()
+                                }
+                            }.onFailure { e ->
+                                runOnUiThread { Toast.makeText(this@GeminiLiveActivity, e.message ?: "Relay failed", Toast.LENGTH_LONG).show() }
+                            }
+                        }
+                    }
+                    .onFailure { error ->
+                        Toast.makeText(
+                            this@GeminiLiveActivity,
+                            error.message ?: "Glasses image capture failed",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                hardwareImageCaptureInProgress.set(false)
+            }
+            return
+        }
         if (!liveListening) return
         if (!hardwareImageCaptureInProgress.compareAndSet(false, true)) return
         status.text = "Receiving glasses AI photo"

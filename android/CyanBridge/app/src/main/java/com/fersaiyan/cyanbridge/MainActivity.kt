@@ -4228,14 +4228,51 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         return when (providerType) {
             AgentProviderType.PRO_SUBSCRIPTION -> {
-                CliRelayClient.chat(
-                    context = this,
-                    chatId = "glasses_${System.currentTimeMillis()}",
-                    prompt = userPrompt,
-                    messages = messages,
-                    modelOverride = ProSubscriptionAiPrefs.getRequestsModel(this),
-                ).getOrElse {
-                    RelayErrorLocalizer.localizedMessage(this, it)
+                val isMultimodal = imagePaths.isNotEmpty() || !audioPath.isNullOrBlank()
+                if (isMultimodal) {
+                    // Pro radio (and Free Gemini Live) always goes to Gemini Live for multimodal
+                    // Free -> relay (server holds key, no token), Pro -> token+Vertex (server will handle, phone never gets key for free)
+                    try {
+                        val relayClient = com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this)
+                        // For chat-style multimodal, convert image/audio to base64 and use relay
+                        val imageBase64 = imagePaths.firstOrNull()?.let { path ->
+                            runCatching { android.util.Base64.encodeToString(java.io.File(path).readBytes(), android.util.Base64.NO_WRAP) }.getOrNull()
+                        }
+                        val pcmForRelay = audioPath?.let { path ->
+                            runCatching {
+                                val bytes = java.io.File(path).readBytes()
+                                // Assume wav, convert to pcm16 short array for relay (simple)
+                                ShortArray(bytes.size / 2) { i -> ((bytes[i*2].toInt() and 0xff) or ((bytes[i*2+1].toInt() shl 8))).toShort() }
+                            }.getOrNull()
+                        } ?: shortArrayOf()
+                        relayClient.sendAudioAndGetText(
+                            pcm16 = pcmForRelay,
+                            prompt = userPrompt,
+                            imageJpegBase64 = imageBase64,
+                        )
+                    } catch (e: Exception) {
+                        Log.e("AIHijack", "Live relay failed for multimodal, falling back to CliRelay: ${e.message}", e)
+                        CliRelayClient.chat(
+                            context = this,
+                            chatId = "glasses_${System.currentTimeMillis()}",
+                            prompt = userPrompt,
+                            messages = messages,
+                            modelOverride = ProSubscriptionAiPrefs.getRequestsModel(this),
+                        ).getOrElse { RelayErrorLocalizer.localizedMessage(this, it) }
+                    }
+                } else {
+                    // Chats (text-only) and transcriptions keep using local models even when Pro is selected
+                    runCatching {
+                        val modelIssue = validateSelectedLocalMediaModel(mediaRequested = false)
+                        if (modelIssue != null) return@runCatching modelIssue
+                        LocalModelsProvider().streamChat(
+                            context = this,
+                            messages = messages,
+                            imagePaths = emptyList(),
+                            audioPath = null,
+                            onToken = onToken,
+                        )
+                    }.getOrElse { "Local Models error: ${it.message ?: "unknown error"}" }
                 }
             }
 
@@ -4312,34 +4349,53 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             try {
                 val finalReply = when (providerType) {
                     AgentProviderType.PRO_SUBSCRIPTION -> {
-                        val visionResult = CliRelayClient.imageQuery(
-                            context = this@MainActivity,
-                            imagePath = imagePath,
-                            prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
-                            modelOverride = ProSubscriptionAiPrefs.getQuestionsModel(this@MainActivity),
-                        )
-
-                        if (visionResult.isFailure) {
-                            val throwable = visionResult.exceptionOrNull() ?: Exception("unknown error")
-                            val localized = RelayErrorLocalizer.localizedMessage(this@MainActivity, throwable)
-                            val isQuota = RelayErrorLocalizer.isQuotaError(throwable)
-                            Log.e("AIHijack", "Image query failed: ${throwable.message}")
-                            runOnUiThread {
-                                Toast.makeText(this@MainActivity, if (isQuota) localized else "Vision error: ${throwable.message?.take(80) ?: "unknown error"}", Toast.LENGTH_LONG).show()
-                            }
-                            if (isQuota) localized else "I couldn't analyze the image. Please try again."
+                        // Pro (and Free Gemini Live when Pro is selected but unsubscribed) always go to Gemini Live for multimodal
+                        // Server holds GEMINI_API_KEY (free via relay, Pro via token+Vertex). Phone never gets token for free.
+                        // Use suspend relay client directly (inside coroutine, no runCatching wrapper for suspend)
+                        var liveReply: String? = null
+                        try {
+                            val relayClient = com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this@MainActivity)
+                            val base64 = android.util.Base64.encodeToString(java.io.File(imagePath).readBytes(), android.util.Base64.NO_WRAP)
+                            liveReply = relayClient.sendAudioAndGetText(
+                                pcm16 = shortArrayOf(),
+                                prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
+                                imageJpegBase64 = base64,
+                            ).trim().takeIf { it.isNotBlank() }
+                        } catch (e: Exception) {
+                            Log.e("AIHijack", "Live relay failed, falling back to CliRelay: ${e.message}", e)
+                        }
+                        if (liveReply != null) {
+                            liveReply
                         } else {
-                            val visionReply = visionResult.getOrNull()?.trim() ?: ""
-                            if (visionReply.isBlank()) {
-                                "I couldn't analyze that image right now. Please try again."
-                            } else if (looksLikeVisionFailed(visionReply)) {
-                                Log.w("AIHijack", "Vision relay couldn't process image. Reply: ${visionReply.take(100)}")
+                            // Fallback to original CliRelay if Live fails (preserves existing behavior)
+                            val visionResult = CliRelayClient.imageQuery(
+                                context = this@MainActivity,
+                                imagePath = imagePath,
+                                prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
+                                modelOverride = ProSubscriptionAiPrefs.getQuestionsModel(this@MainActivity),
+                            )
+                            if (visionResult.isFailure) {
+                                val throwable = visionResult.exceptionOrNull() ?: Exception("unknown error")
+                                val localized = RelayErrorLocalizer.localizedMessage(this@MainActivity, throwable)
+                                val isQuota = RelayErrorLocalizer.isQuotaError(throwable)
+                                Log.e("AIHijack", "Image query failed: ${throwable.message}")
                                 runOnUiThread {
-                                    Toast.makeText(this@MainActivity, "Vision model couldn't process image", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(this@MainActivity, if (isQuota) localized else "Vision error: ${throwable.message?.take(80) ?: "unknown error"}", Toast.LENGTH_LONG).show()
                                 }
-                                "I couldn't analyze the image. Please try again."
+                                if (isQuota) localized else "I couldn't analyze the image. Please try again."
                             } else {
-                                visionReply
+                                val visionReply = visionResult.getOrNull()?.trim() ?: ""
+                                if (visionReply.isBlank()) {
+                                    "I couldn't analyze that image right now. Please try again."
+                                } else if (looksLikeVisionFailed(visionReply)) {
+                                    Log.w("AIHijack", "Vision relay couldn't process image. Reply: ${visionReply.take(100)}")
+                                    runOnUiThread {
+                                        Toast.makeText(this@MainActivity, "Vision model couldn't process image", Toast.LENGTH_LONG).show()
+                                    }
+                                    "I couldn't analyze the image. Please try again."
+                                } else {
+                                    visionReply
+                                }
                             }
                         }
                     }

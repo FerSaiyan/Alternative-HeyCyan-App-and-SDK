@@ -269,10 +269,12 @@ class GeminiLiveClient(
             if (reconnectAttempt == 0) GeminiLiveState.CONNECTING else GeminiLiveState.RECONNECTING,
             "Connecting to Google",
         )
-        val request = Request.Builder()
-            .url(config.websocketUrl)
-            .header("Authorization", "Token ${config.token}")
-            .build()
+        val builder = Request.Builder().url(config.websocketUrl)
+        if (config.token.isNotBlank()) builder.header("Authorization", "Token ${config.token}")
+        // Free-tier Live requires x-goog-api-key alongside the ephemeral token (or alone).
+        // DefaultGeminiLiveTokenProvider populates apiKey from debug prefs; Direct provider always does.
+        config.apiKey?.takeIf { it.isNotBlank() }?.let { builder.header("x-goog-api-key", it) }
+        val request = builder.build()
         socket = http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (!active.get()) {
