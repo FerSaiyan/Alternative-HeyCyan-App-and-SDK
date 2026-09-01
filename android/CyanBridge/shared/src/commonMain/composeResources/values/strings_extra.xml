@@ -303,9 +303,9 @@
     <string name="pro_account">Account</string>
     <string name="pro_refresh_account">Refresh account</string>
     <string name="pro_model_routing">AI model routing</string>
-    <string name="pro_requests">Requests</string>
-    <string name="pro_questions">Questions</string>
-    <string name="pro_tasks">Tasks</string>
+    <string name="pro_requests">Chats</string>
+    <string name="pro_questions">Photo &amp; voice questions</string>
+    <string name="pro_tasks">Background tasks</string>
     <string name="pro_system_prompt">Assistant instructions</string>
     <string name="pro_reset_system_prompt">Reset assistant instructions</string>
     <string name="pro_refresh_models">Refresh models</string>

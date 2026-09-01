@@ -302,7 +302,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Requests model"
+                        android:text="Chats model"
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
 
@@ -316,7 +316,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="AI questions model"
+                        android:text="Photo &amp; voice questions model"
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
 
@@ -330,7 +330,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Tasks model"
+                        android:text="Background tasks model"
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
 
