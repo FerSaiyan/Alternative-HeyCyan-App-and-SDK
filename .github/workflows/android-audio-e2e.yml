@@ -1,0 +1,69 @@
+name: Android audio emulator E2E
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/android-audio-e2e.yml
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ai/live/**
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ai/transcription/**
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/plugins/handsfreetranslator/**
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/plugins/meetingsparknotes/**
+      - android/CyanBridge/app/src/androidTest/assets/audio/**
+      - android/CyanBridge/app/src/androidTest/java/com/fersaiyan/cyanbridge/hil/audio/**
+      - android/CyanBridge/tools/hil/start_emulator_audio.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audio-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audio-e2e:
+    name: Audio fixtures (emulator, no glasses, hermetic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Run audio harness on emulator (audio enabled)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim
+          disable-animations: true
+          # Note: intentionally no -noaudio / -no-audio so AudioRecord + SpeechRecognizer surface.
+          script: |
+            set -euo pipefail
+            cd android/CyanBridge
+            ./gradlew --no-daemon --stacktrace :shared:portabilityTest :app:testDebugUnitTest
+            ./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest \
+              -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest

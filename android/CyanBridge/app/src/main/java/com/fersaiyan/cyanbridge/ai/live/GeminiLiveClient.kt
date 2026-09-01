@@ -49,6 +49,7 @@ import org.json.JSONObject
 class GeminiLiveClient(
     context: Context,
     private val listener: Listener,
+    private val tokenProvider: GeminiLiveTokenProvider? = null,
 ) {
     interface Listener {
         fun onStateChanged(state: GeminiLiveState, detail: String = "")
@@ -59,6 +60,7 @@ class GeminiLiveClient(
         fun onSetupComplete() = Unit
     }
 
+    @Deprecated("Use LiveTokenConfig")
     private data class TokenConfig(
         val token: String,
         val model: String,
@@ -84,7 +86,10 @@ class GeminiLiveClient(
     }
 
     private var state = GeminiLiveState.IDLE
-    private var tokenConfig: TokenConfig? = null
+    private var tokenConfig: LiveTokenConfig? = null
+    private val effectiveTokenProvider: GeminiLiveTokenProvider by lazy {
+        tokenProvider ?: DefaultGeminiLiveTokenProvider(appContext, http)
+    }
     private var socket: WebSocket? = null
     private var recorder: AudioRecord? = null
     private var recorderJob: Job? = null
@@ -216,38 +221,8 @@ class GeminiLiveClient(
         if (sendRealtimeBlob("video", "image/jpeg", jpegBytes)) visualInputCount++
     }
 
-    private fun requestToken(language: String, imagePrompt: String): TokenConfig {
-        val authToken = ProSubscriptionServerPrefs.getApiToken(appContext).trim()
-        check(authToken.isNotBlank()) { "Sign in to CyanBridge before starting Gemini Live" }
-        val base = AiProviderPrefs.getRelayBaseUrl(appContext).trim().trimEnd('/')
-        check(base.startsWith("https://")) { "Gemini Live requires a secure relay URL" }
-        val body = JSONObject()
-            .put("language", language)
-            .put("image_prompt", imagePrompt)
-            .put("system_prompt", ProSubscriptionAiPrefs.getSystemPrompt(appContext))
-            .toString()
-            .toRequestBody("application/json; charset=utf-8".toMediaType())
-        val request = Request.Builder()
-            .url("$base/api/pro/live/token")
-            .header("Authorization", "Bearer $authToken")
-            .post(body)
-            .build()
-        http.newCall(request).execute().use { response ->
-            val raw = response.body?.string().orEmpty()
-            val json = JSONObject(raw.ifBlank { "{}" })
-            if (!response.isSuccessful) {
-                throw IllegalStateException(json.optString("error", "Gemini Live token request failed"))
-            }
-            val expiresAt = java.time.Instant.parse(json.getString("expire_time")).toEpochMilli()
-            return TokenConfig(
-                token = json.getString("token"),
-                model = json.getString("model"),
-                websocketUrl = json.getString("websocket_url"),
-                expiresAtMs = expiresAt,
-                reservationId = json.getString("reservation_id"),
-            )
-        }
-    }
+    private fun requestToken(language: String, imagePrompt: String): LiveTokenConfig =
+        kotlinx.coroutines.runBlocking { effectiveTokenProvider.requestToken(language, imagePrompt) }
 
     private fun releaseRelayReservation(
         reservationId: String,
@@ -335,7 +310,7 @@ class GeminiLiveClient(
         })
     }
 
-    private fun sendSetup(webSocket: WebSocket, config: TokenConfig) {
+    private fun sendSetup(webSocket: WebSocket, config: LiveTokenConfig) {
         val resumption = JSONObject().apply {
             sessionResumptionHandle?.takeIf { it.isNotBlank() }?.let { put("handle", it) }
         }
