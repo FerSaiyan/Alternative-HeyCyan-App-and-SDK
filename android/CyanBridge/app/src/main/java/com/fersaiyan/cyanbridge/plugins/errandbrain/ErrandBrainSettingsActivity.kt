@@ -45,7 +45,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
@@ -63,10 +62,7 @@ class ErrandBrainSettingsActivity : AppCompatActivity() {
         setThemedComposeContent(composeView) {
             ErrandBrainSettingsScreen(
                 onBack = ::finish,
-                onStartService = {
-                    PluginVoicePermissions.ensure(this) { ErrandBrainService.start(this) }
-                },
-                onStopService = { ErrandBrainService.stop(this) },
+                onDeactivate = { ErrandBrainService.stop(this) },
             )
         }
     }
@@ -76,8 +72,7 @@ class ErrandBrainSettingsActivity : AppCompatActivity() {
 @Composable
 fun ErrandBrainSettingsScreen(
     onBack: () -> Unit,
-    onStartService: () -> Unit,
-    onStopService: () -> Unit,
+    onDeactivate: () -> Unit,
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -140,11 +135,7 @@ fun ErrandBrainSettingsScreen(
                                     NativePluginIds.ERRAND_BRAIN,
                                     newValue,
                                 )
-                                if (newValue) {
-                                    onStartService()
-                                } else {
-                                    onStopService()
-                                }
+                                if (!newValue) onDeactivate()
                             },
                         )
                     }

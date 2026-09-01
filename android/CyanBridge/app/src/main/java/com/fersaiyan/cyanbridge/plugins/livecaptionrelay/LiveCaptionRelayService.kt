@@ -38,7 +38,8 @@ class LiveCaptionRelayService : Service() {
         when (intent?.action) {
             ACTION_START -> startCaptioning()
             ACTION_STOP -> stopCaptioning()
-            null -> if (LiveCaptionRelayPreferences.isEnabled(this)) startCaptioning() else stopSelf()
+            null -> stopSelf()
+            else -> stopSelf()
         }
         return START_NOT_STICKY
     }

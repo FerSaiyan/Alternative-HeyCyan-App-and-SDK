@@ -44,7 +44,8 @@ class HandsFreeTranslatorService : Service() {
             ACTION_START -> startTranslation()
             ACTION_STOP -> stopTranslation()
             ACTION_TRANSLATE_PHRASE -> intent.getStringExtra(EXTRA_PHRASE)?.let(::translatePhrase)
-            null -> if (HandsFreeTranslatorPreferences.isEnabled(this)) startTranslation() else stopSelf()
+            null -> stopSelf()
+            else -> stopSelf()
         }
         return START_NOT_STICKY
     }

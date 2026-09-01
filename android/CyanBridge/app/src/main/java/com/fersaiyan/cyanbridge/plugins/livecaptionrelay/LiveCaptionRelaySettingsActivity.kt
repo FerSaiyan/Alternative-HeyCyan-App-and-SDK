@@ -45,7 +45,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
@@ -63,10 +62,7 @@ class LiveCaptionRelaySettingsActivity : AppCompatActivity() {
         setThemedComposeContent(composeView) {
             LiveCaptionRelaySettingsScreen(
                 onBack = ::finish,
-                onStartService = {
-                    PluginVoicePermissions.ensure(this) { LiveCaptionRelayService.start(this) }
-                },
-                onStopService = { LiveCaptionRelayService.stop(this) },
+                onDeactivate = { LiveCaptionRelayService.stop(this) },
             )
         }
     }
@@ -76,8 +72,7 @@ class LiveCaptionRelaySettingsActivity : AppCompatActivity() {
 @Composable
 fun LiveCaptionRelaySettingsScreen(
     onBack: () -> Unit,
-    onStartService: () -> Unit,
-    onStopService: () -> Unit,
+    onDeactivate: () -> Unit,
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -137,11 +132,7 @@ fun LiveCaptionRelaySettingsScreen(
                                     NativePluginIds.LIVE_CAPTION_RELAY,
                                     newValue,
                                 )
-                                if (newValue) {
-                                    onStartService()
-                                } else {
-                                    onStopService()
-                                }
+                                if (!newValue) onDeactivate()
                             },
                         )
                     }

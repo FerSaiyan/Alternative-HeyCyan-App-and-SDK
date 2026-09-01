@@ -941,12 +941,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val voicePluginEnabled =
             com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs.isBridgeConfigured(this) ||
                 AutoAudioCapturePrefs.isEnabled(this) ||
-                setOf(
-                    NativePluginIds.LIVE_CAPTION_RELAY,
-                    NativePluginIds.HANDS_FREE_TRANSLATOR,
-                    NativePluginIds.ERRAND_BRAIN,
-                    NativePluginIds.AUTO_AUDIO,
-                ).any { CommunityPluginPrefs.isNativePluginEnabled(this, it) }
+                CommunityPluginPrefs.isNativePluginEnabled(this, NativePluginIds.AUTO_AUDIO)
 
         if (voicePluginEnabled && !PluginVoicePermissions.hasRequiredPermissions(this)) {
             enabledFeaturePermissionRequestActive = true
@@ -993,15 +988,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        if (CommunityPluginPrefs.isNativePluginEnabled(this, NativePluginIds.LIVE_CAPTION_RELAY)) {
-            LiveCaptionRelayService.start(this)
-        }
-        if (CommunityPluginPrefs.isNativePluginEnabled(this, NativePluginIds.HANDS_FREE_TRANSLATOR)) {
-            HandsFreeTranslatorService.start(this)
-        }
-        if (CommunityPluginPrefs.isNativePluginEnabled(this, NativePluginIds.ERRAND_BRAIN)) {
-            ErrandBrainService.start(this)
-        }
+        // Mic plugins (Live Caption Relay, Hands-Free Translator, Errand Brain) are user-controlled via
+        // the glasses-tab shortcut START/STOP and must not auto-start when merely enabled in Plugins.
+        // See fix for Meeting Spark Notes (afef09b) - same pattern keeps microphone off until explicit START.
         if (com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs.isBridgeConfigured(this)) {
             (application as? MyApplication)?.startStudioBridge()
         }

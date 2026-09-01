@@ -45,7 +45,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
@@ -63,10 +62,7 @@ class HandsFreeTranslatorSettingsActivity : AppCompatActivity() {
         setThemedComposeContent(composeView) {
             HandsFreeTranslatorSettingsScreen(
                 onBack = ::finish,
-                onStartService = {
-                    PluginVoicePermissions.ensure(this) { HandsFreeTranslatorService.start(this) }
-                },
-                onStopService = { HandsFreeTranslatorService.stop(this) },
+                onDeactivate = { HandsFreeTranslatorService.stop(this) },
             )
         }
     }
@@ -76,8 +72,7 @@ class HandsFreeTranslatorSettingsActivity : AppCompatActivity() {
 @Composable
 fun HandsFreeTranslatorSettingsScreen(
     onBack: () -> Unit,
-    onStartService: () -> Unit,
-    onStopService: () -> Unit,
+    onDeactivate: () -> Unit,
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -138,11 +133,7 @@ fun HandsFreeTranslatorSettingsScreen(
                                     NativePluginIds.HANDS_FREE_TRANSLATOR,
                                     newValue,
                                 )
-                                if (newValue) {
-                                    onStartService()
-                                } else {
-                                    onStopService()
-                                }
+                                if (!newValue) onDeactivate()
                             },
                         )
                     }

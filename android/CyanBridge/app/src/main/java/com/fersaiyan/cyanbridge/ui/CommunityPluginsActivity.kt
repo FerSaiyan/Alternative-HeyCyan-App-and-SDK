@@ -434,15 +434,15 @@ class CommunityPluginsActivity : AppCompatActivity() {
             }
             NativePluginIds.LIVE_CAPTION_RELAY -> {
                 LiveCaptionRelayPreferences.setEnabled(this, enabled)
-                if (enabled) LiveCaptionRelayService.start(this) else LiveCaptionRelayService.stop(this)
+                if (!enabled) LiveCaptionRelayService.stop(this)
             }
             NativePluginIds.HANDS_FREE_TRANSLATOR -> {
                 HandsFreeTranslatorPreferences.setEnabled(this, enabled)
-                if (enabled) HandsFreeTranslatorService.start(this) else HandsFreeTranslatorService.stop(this)
+                if (!enabled) HandsFreeTranslatorService.stop(this)
             }
             NativePluginIds.ERRAND_BRAIN -> {
                 ErrandBrainPreferences.setEnabled(this, enabled)
-                if (enabled) ErrandBrainService.start(this) else ErrandBrainService.stop(this)
+                if (!enabled) ErrandBrainService.stop(this)
             }
             NativePluginIds.AUTO_AUDIO -> {
                 AutoAudioCapturePrefs.setEnabled(this, enabled)
@@ -724,9 +724,6 @@ class CommunityPluginsActivity : AppCompatActivity() {
         private val taskerDownloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         private val VOICE_PLUGIN_IDS = setOf(
-            NativePluginIds.LIVE_CAPTION_RELAY,
-            NativePluginIds.HANDS_FREE_TRANSLATOR,
-            NativePluginIds.ERRAND_BRAIN,
             NativePluginIds.AUTO_AUDIO,
         )
 

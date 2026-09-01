@@ -50,7 +50,8 @@ class ErrandBrainService : Service() {
                     addReminder(title, reminderTime)
                 }
             }
-            null -> if (ErrandBrainPreferences.isEnabled(this)) startListening() else stopSelf()
+            null -> stopSelf()
+            else -> stopSelf()
         }
         return START_NOT_STICKY
     }
