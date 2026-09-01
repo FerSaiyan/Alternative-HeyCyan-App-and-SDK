@@ -9,7 +9,9 @@ import kotlin.math.abs
 class GeminiLiveSpeechActivityDetector(
     private val startThreshold: Int = 900,
     private val activeChunksToStart: Int = 2,
-    private val silentChunksToStop: Int = 12,
+    // 15 x 40 ms chunks leaves more than Gemini's 500 ms server-VAD silence window
+    // in the transmitted tail before local gating suppresses subsequent silence.
+    private val silentChunksToStop: Int = 15,
     private val onChanged: (Boolean) -> Unit,
 ) {
     private var active = false
