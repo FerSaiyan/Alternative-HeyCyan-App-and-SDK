@@ -56,14 +56,36 @@ object TestAudioAssets {
     }
 
     fun wavToPcm16Shorts(wavBytes: ByteArray): ShortArray {
-        // WAV header is 44 bytes; PCM16 LE follows.
+        // Parse WAV properly: find "data" chunk instead of assuming 44-byte header (ffmpeg may add extra fmt/List chunks).
         if (wavBytes.size <= 44) return ShortArray(0)
-        val pcm = wavBytes.copyOfRange(44, wavBytes.size)
+        var dataOffset = -1
+        var dataSize = -1
+        var i = 12
+        while (i + 8 <= wavBytes.size) {
+            val chunkId = String(wavBytes.copyOfRange(i, i + 4), Charsets.US_ASCII)
+            val chunkSize = (wavBytes[i + 4].toInt() and 0xFF) or
+                ((wavBytes[i + 5].toInt() and 0xFF) shl 8) or
+                ((wavBytes[i + 6].toInt() and 0xFF) shl 16) or
+                ((wavBytes[i + 7].toInt() and 0xFF) shl 24)
+            if (chunkId == "data") {
+                dataOffset = i + 8
+                dataSize = chunkSize
+                break
+            }
+            i += 8 + chunkSize + (chunkSize % 2)
+        }
+        if (dataOffset == -1) {
+            // Fallback to 44
+            dataOffset = 44
+            dataSize = wavBytes.size - 44
+        }
+        val end = (dataOffset + dataSize).coerceAtMost(wavBytes.size)
+        val pcm = wavBytes.copyOfRange(dataOffset, end)
         val shorts = ShortArray(pcm.size / 2)
-        for (i in shorts.indices) {
-            val lo = pcm[i * 2].toInt() and 0xFF
-            val hi = pcm[i * 2 + 1].toInt()
-            shorts[i] = ((hi shl 8) or lo).toShort()
+        for (idx in shorts.indices) {
+            val lo = pcm[idx * 2].toInt() and 0xFF
+            val hi = pcm[idx * 2 + 1].toInt()
+            shorts[idx] = ((hi shl 8) or lo).toShort()
         }
         return shorts
     }

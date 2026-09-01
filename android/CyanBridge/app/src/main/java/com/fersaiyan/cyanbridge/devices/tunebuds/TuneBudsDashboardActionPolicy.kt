@@ -66,5 +66,7 @@ internal fun GlassesDashboardAction.isSupportedForTuneBudsDashboard(): Boolean =
     GlassesDashboardAction.MeizuSendTestNotification,
     GlassesDashboardAction.MeizuShowTestTeleprompter,
     GlassesDashboardAction.MeizuSyncClock,
-    GlassesDashboardAction.MeizuSetComfortBrightness -> false
+    GlassesDashboardAction.MeizuSetComfortBrightness,
+    GlassesDashboardAction.DismissTransportPermissionDialog,
+    GlassesDashboardAction.RequestTransportPermission -> false
 }
