@@ -4229,33 +4229,25 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         return when (providerType) {
             AgentProviderType.PRO_SUBSCRIPTION -> {
-                // Pro subscribers with Pro selected use Pro models for chats (not local).
-                // Only multimodal (image/voice) respects the QuestionsModel choice: default Live, but user can pick another vision model.
-                val isMultimodal = imagePaths.isNotEmpty() || !audioPath.isNullOrBlank()
-                if (isMultimodal) {
-                    val chosenQuestionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this).trim()
-                    val isLive = chosenQuestionsModel.equals("google/gemini-3.1-flash-live-preview", ignoreCase = true) ||
-                        chosenQuestionsModel.equals("live", ignoreCase = true) ||
-                        chosenQuestionsModel.equals("auto", ignoreCase = true)
-                    if (isLive) {
-                        try {
-                            val relayClient = com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this)
-                            val imageBase64 = imagePaths.firstOrNull()?.let { path ->
-                                runCatching { android.util.Base64.encodeToString(java.io.File(path).readBytes(), android.util.Base64.NO_WRAP) }.getOrNull()
-                            }
-                            val pcmForRelay = audioPath?.let { path ->
-                                runCatching {
-                                    val bytes = java.io.File(path).readBytes()
-                                    ShortArray(bytes.size / 2) { i -> ((bytes[i*2].toInt() and 0xff) or ((bytes[i*2+1].toInt() shl 8))).toShort() }
-                                }.getOrNull()
-                            } ?: shortArrayOf()
-                            return relayClient.sendAudioAndGetText(
-                                pcm16 = pcmForRelay,
+                // This Pro branch is called only by the glasses AI voice-question flow.
+                // Chats, Spark Notes, meetings, transcription, and translation use separate paths.
+                val chosenQuestionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this).trim()
+                val isProActive = ProSubscriptionPrefs.isActiveLocally(this)
+                val useLive = ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
+                    isProActive = isProActive,
+                    questionsModel = chosenQuestionsModel,
+                )
+                if (useLive) {
+                    try {
+                        return com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this)
+                            .sendAudioAndGetText(
+                                pcm16 = shortArrayOf(),
                                 prompt = userPrompt,
-                                imageJpegBase64 = imageBase64,
                             )
-                        } catch (e: Exception) {
-                            Log.e("AIHijack", "Live relay failed for multimodal, falling back to CliRelay: ${e.message}", e)
+                    } catch (e: Exception) {
+                        Log.e("AIHijack", "Gemini Live relay failed for AI voice question: ${e.message}", e)
+                        if (!isProActive) {
+                            return "Free Gemini Live is temporarily unavailable. Please try again."
                         }
                     }
                 }
@@ -4264,7 +4256,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     chatId = "glasses_${System.currentTimeMillis()}",
                     prompt = userPrompt,
                     messages = messages,
-                    modelOverride = if (isMultimodal) ProSubscriptionAiPrefs.getQuestionsModel(this) else ProSubscriptionAiPrefs.getRequestsModel(this),
+                    modelOverride = chosenQuestionsModel,
                 ).getOrElse {
                     RelayErrorLocalizer.localizedMessage(this, it)
                 }
@@ -4346,10 +4338,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         // Pro defaults to Gemini Live for multimodal (image/voice) until user changes it in Pro settings
                         // Free (Pro selected but unsubscribed) also goes via relay (no token to phone)
                         val chosenQuestionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this@MainActivity).trim()
-                        val isLive = chosenQuestionsModel.equals("google/gemini-3.1-flash-live-preview", ignoreCase = true) ||
-                            chosenQuestionsModel.equals("live", ignoreCase = true) ||
-                            chosenQuestionsModel.equals("auto", ignoreCase = true)
                         val isProActive = ProSubscriptionPrefs.isActiveLocally(this@MainActivity)
+                        val isLive = ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
+                            isProActive = isProActive,
+                            questionsModel = chosenQuestionsModel,
+                        )
                         var liveReply: String? = null
                         var liveFailure: Exception? = null
                         if (isLive) {
