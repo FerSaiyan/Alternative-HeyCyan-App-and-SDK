@@ -33,4 +33,24 @@ class MediaInferenceRoutingPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun explicitProSelectionKeepsFreeGeminiLiveRoute() {
+        assertEquals(
+            AgentProviderType.PRO_SUBSCRIPTION,
+            MediaInferenceRoutingPolicy.resolve(
+                preferred = AgentProviderType.PRO_SUBSCRIPTION,
+                localMediaAvailable = false,
+                proAvailable = false,
+            ),
+        )
+        assertEquals(
+            AgentProviderType.PRO_SUBSCRIPTION,
+            MediaInferenceRoutingPolicy.resolve(
+                preferred = AgentProviderType.PRO_SUBSCRIPTION,
+                localMediaAvailable = true,
+                proAvailable = false,
+            ),
+        )
+    }
 }

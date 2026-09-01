@@ -30,11 +30,9 @@ object MediaInferenceRoutingPolicy {
                 proAvailable -> AgentProviderType.PRO_SUBSCRIPTION
                 else -> AgentProviderType.TASKER
             }
-            AgentProviderType.PRO_SUBSCRIPTION -> when {
-                proAvailable -> AgentProviderType.PRO_SUBSCRIPTION
-                localMediaAvailable -> AgentProviderType.LOCAL_AGENT
-                else -> AgentProviderType.TASKER
-            }
+            // Explicit Pro selection also represents Free Gemini Live for image and voice
+            // questions. Subscription status controls direct Pro access, not this route.
+            AgentProviderType.PRO_SUBSCRIPTION -> AgentProviderType.PRO_SUBSCRIPTION
             AgentProviderType.TASKER -> when {
                 taskerUsesLocalModels && localMediaAvailable -> {
                     AgentProviderType.LOCAL_AGENT

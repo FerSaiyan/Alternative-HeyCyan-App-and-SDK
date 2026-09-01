@@ -5133,33 +5133,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             } else {
                 cancelParallelAudioQuestion()
             }
-            val externalAutomation = usesExternalImageAutomation()
-            fun offerFollowUp() {
-                lifecycleScope.launch {
-                    delay(500L)
-                    val spokenQuestion = captureOptionalImageQuestionFromBluetoothMic(
-                        timeoutMs = IMAGE_QUESTION_INITIAL_LISTENING_TIMEOUT_MS,
-                    )
-                    if (!spokenQuestion.isNullOrBlank()) {
-                        triggerAssistantImageQuery(
-                            imagePath = imagePath,
-                            userQuestion = spokenQuestion,
-                            source = source,
-                            onReplySpoken = ::offerFollowUp,
-                        )
-                    }
-                }
-            }
             triggerAssistantImageQuery(
                 imagePath = imagePath,
                 userQuestion = initialQuestion,
                 source = source,
-                onReplySpoken = if (externalAutomation) null else ::offerFollowUp,
+                onReplySpoken = null,
             )
-
-            // The default assistant owns external response playback; CyanBridge follow-ups are
-            // only offered for Local and Pro responses that CyanBridge itself speaks.
-            if (externalAutomation) return@launch
         }
     }
 

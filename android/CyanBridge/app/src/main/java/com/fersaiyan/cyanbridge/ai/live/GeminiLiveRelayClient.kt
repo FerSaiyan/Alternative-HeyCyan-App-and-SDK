@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.ai.live
 import android.content.Context
 import android.util.Base64
 import android.util.Log
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import kotlinx.coroutines.Dispatchers
@@ -33,8 +34,6 @@ class GeminiLiveRelayClient(
         prompt: String = "Respond helpfully in the user's language.",
         imageJpegBase64: String? = null,
     ): String = withContext(Dispatchers.IO) {
-        val authToken = ProSubscriptionServerPrefs.getApiToken(appContext).trim()
-        check(authToken.isNotBlank()) { "Sign in to CyanBridge before using Gemini Live relay" }
         val base = AiProviderPrefs.getRelayBaseUrl(appContext).trim().trimEnd('/')
         check(base.startsWith("https://")) { "Relay requires https" }
 
@@ -42,29 +41,47 @@ class GeminiLiveRelayClient(
         val wavBase64 = pcmToWavBase64(pcm16, sampleRateHz)
 
         val body = JSONObject().apply {
-            put("audio_base64", wavBase64)
-            put("mime_type", "audio/wav")
+            if (pcm16.isNotEmpty()) {
+                put("audio_base64", wavBase64)
+                put("mime_type", "audio/wav")
+            }
             put("prompt", prompt)
             if (imageJpegBase64 != null) put("image_base64", imageJpegBase64)
         }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
 
-        val req = Request.Builder()
-            .url("$base/api/pro/live/relay")
-            .header("Authorization", "Bearer $authToken")
-            .post(body)
-            .build()
-
-        http.newCall(req).execute().use { resp ->
-            val raw = resp.body?.string().orEmpty()
-            val json = JSONObject(raw.ifBlank { "{}" })
-            if (!resp.isSuccessful) {
-                throw IllegalStateException(json.optString("error", "Relay failed: $raw"))
-            }
-            val text = json.optString("text", "").trim()
-            if (text.isBlank()) throw IllegalStateException("Empty relay reply")
-            Log.d("GeminiLiveRelay", "relay text ${text.take(120)}")
-            return@withContext text
+        var authToken = ProSubscriptionServerPrefs.getApiToken(appContext).trim()
+        if (authToken.isBlank()) {
+            authToken = ProSubscriptionRelayClient.fetchAccountInfo(appContext)
+                .getOrThrow().apiToken.trim()
         }
+        check(authToken.isNotBlank()) { "Sign in to CyanBridge before using Gemini Live relay" }
+
+        repeat(2) { attempt ->
+            val req = Request.Builder()
+                .url("$base/api/pro/live/relay")
+                .header("Authorization", "Bearer $authToken")
+                .post(body)
+                .build()
+
+            http.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                val json = JSONObject(raw.ifBlank { "{}" })
+                if (resp.code == 401 && attempt == 0) {
+                    authToken = ProSubscriptionRelayClient.fetchAccountInfo(appContext)
+                        .getOrThrow().apiToken.trim()
+                    check(authToken.isNotBlank()) { "Sign in to CyanBridge before using Gemini Live relay" }
+                    return@use
+                }
+                if (!resp.isSuccessful) {
+                    throw IllegalStateException(json.optString("error", "Relay failed: $raw"))
+                }
+                val text = json.optString("text", "").trim()
+                if (text.isBlank()) throw IllegalStateException("Empty relay reply")
+                Log.d("GeminiLiveRelay", "relay text ${text.take(120)}")
+                return@withContext text
+            }
+        }
+        error("Gemini Live relay authentication failed")
     }
 
     private fun pcmToWavBase64(pcm: ShortArray, sampleRateHz: Int): String {
