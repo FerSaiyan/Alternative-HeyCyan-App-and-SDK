@@ -4228,51 +4228,44 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         return when (providerType) {
             AgentProviderType.PRO_SUBSCRIPTION -> {
+                // Pro subscribers with Pro selected use Pro models for chats (not local).
+                // Only multimodal (image/voice) respects the QuestionsModel choice: default Live, but user can pick another vision model.
                 val isMultimodal = imagePaths.isNotEmpty() || !audioPath.isNullOrBlank()
                 if (isMultimodal) {
-                    // Pro radio (and Free Gemini Live) always goes to Gemini Live for multimodal
-                    // Free -> relay (server holds key, no token), Pro -> token+Vertex (server will handle, phone never gets key for free)
-                    try {
-                        val relayClient = com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this)
-                        // For chat-style multimodal, convert image/audio to base64 and use relay
-                        val imageBase64 = imagePaths.firstOrNull()?.let { path ->
-                            runCatching { android.util.Base64.encodeToString(java.io.File(path).readBytes(), android.util.Base64.NO_WRAP) }.getOrNull()
+                    val chosenQuestionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this).trim()
+                    val isLive = chosenQuestionsModel.equals("google/gemini-3.1-flash-live-preview", ignoreCase = true) ||
+                        chosenQuestionsModel.equals("live", ignoreCase = true) ||
+                        chosenQuestionsModel.equals("auto", ignoreCase = true)
+                    if (isLive) {
+                        try {
+                            val relayClient = com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this)
+                            val imageBase64 = imagePaths.firstOrNull()?.let { path ->
+                                runCatching { android.util.Base64.encodeToString(java.io.File(path).readBytes(), android.util.Base64.NO_WRAP) }.getOrNull()
+                            }
+                            val pcmForRelay = audioPath?.let { path ->
+                                runCatching {
+                                    val bytes = java.io.File(path).readBytes()
+                                    ShortArray(bytes.size / 2) { i -> ((bytes[i*2].toInt() and 0xff) or ((bytes[i*2+1].toInt() shl 8))).toShort() }
+                                }.getOrNull()
+                            } ?: shortArrayOf()
+                            return relayClient.sendAudioAndGetText(
+                                pcm16 = pcmForRelay,
+                                prompt = userPrompt,
+                                imageJpegBase64 = imageBase64,
+                            )
+                        } catch (e: Exception) {
+                            Log.e("AIHijack", "Live relay failed for multimodal, falling back to CliRelay: ${e.message}", e)
                         }
-                        val pcmForRelay = audioPath?.let { path ->
-                            runCatching {
-                                val bytes = java.io.File(path).readBytes()
-                                // Assume wav, convert to pcm16 short array for relay (simple)
-                                ShortArray(bytes.size / 2) { i -> ((bytes[i*2].toInt() and 0xff) or ((bytes[i*2+1].toInt() shl 8))).toShort() }
-                            }.getOrNull()
-                        } ?: shortArrayOf()
-                        relayClient.sendAudioAndGetText(
-                            pcm16 = pcmForRelay,
-                            prompt = userPrompt,
-                            imageJpegBase64 = imageBase64,
-                        )
-                    } catch (e: Exception) {
-                        Log.e("AIHijack", "Live relay failed for multimodal, falling back to CliRelay: ${e.message}", e)
-                        CliRelayClient.chat(
-                            context = this,
-                            chatId = "glasses_${System.currentTimeMillis()}",
-                            prompt = userPrompt,
-                            messages = messages,
-                            modelOverride = ProSubscriptionAiPrefs.getRequestsModel(this),
-                        ).getOrElse { RelayErrorLocalizer.localizedMessage(this, it) }
                     }
-                } else {
-                    // Chats (text-only) and transcriptions keep using local models even when Pro is selected
-                    runCatching {
-                        val modelIssue = validateSelectedLocalMediaModel(mediaRequested = false)
-                        if (modelIssue != null) return@runCatching modelIssue
-                        LocalModelsProvider().streamChat(
-                            context = this,
-                            messages = messages,
-                            imagePaths = emptyList(),
-                            audioPath = null,
-                            onToken = onToken,
-                        )
-                    }.getOrElse { "Local Models error: ${it.message ?: "unknown error"}" }
+                }
+                CliRelayClient.chat(
+                    context = this,
+                    chatId = "glasses_${System.currentTimeMillis()}",
+                    prompt = userPrompt,
+                    messages = messages,
+                    modelOverride = if (isMultimodal) ProSubscriptionAiPrefs.getQuestionsModel(this) else ProSubscriptionAiPrefs.getRequestsModel(this),
+                ).getOrElse {
+                    RelayErrorLocalizer.localizedMessage(this, it)
                 }
             }
 
@@ -4349,25 +4342,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             try {
                 val finalReply = when (providerType) {
                     AgentProviderType.PRO_SUBSCRIPTION -> {
-                        // Pro (and Free Gemini Live when Pro is selected but unsubscribed) always go to Gemini Live for multimodal
-                        // Server holds GEMINI_API_KEY (free via relay, Pro via token+Vertex). Phone never gets token for free.
-                        // Use suspend relay client directly (inside coroutine, no runCatching wrapper for suspend)
+                        // Pro defaults to Gemini Live for multimodal (image/voice) until user changes it in Pro settings
+                        // Free (Pro selected but unsubscribed) also goes via relay (no token to phone)
+                        val chosenQuestionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this@MainActivity).trim()
+                        val isLive = chosenQuestionsModel.equals("google/gemini-3.1-flash-live-preview", ignoreCase = true) ||
+                            chosenQuestionsModel.equals("live", ignoreCase = true) ||
+                            chosenQuestionsModel.equals("auto", ignoreCase = true)
                         var liveReply: String? = null
-                        try {
-                            val relayClient = com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this@MainActivity)
-                            val base64 = android.util.Base64.encodeToString(java.io.File(imagePath).readBytes(), android.util.Base64.NO_WRAP)
-                            liveReply = relayClient.sendAudioAndGetText(
-                                pcm16 = shortArrayOf(),
-                                prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
-                                imageJpegBase64 = base64,
-                            ).trim().takeIf { it.isNotBlank() }
-                        } catch (e: Exception) {
-                            Log.e("AIHijack", "Live relay failed, falling back to CliRelay: ${e.message}", e)
+                        if (isLive) {
+                            try {
+                                val relayClient = com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this@MainActivity)
+                                val base64 = android.util.Base64.encodeToString(java.io.File(imagePath).readBytes(), android.util.Base64.NO_WRAP)
+                                liveReply = relayClient.sendAudioAndGetText(
+                                    pcm16 = shortArrayOf(),
+                                    prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
+                                    imageJpegBase64 = base64,
+                                ).trim().takeIf { it.isNotBlank() }
+                            } catch (e: Exception) {
+                                Log.e("AIHijack", "Live relay failed, falling back to CliRelay: ${e.message}", e)
+                            }
                         }
                         if (liveReply != null) {
                             liveReply
                         } else {
-                            // Fallback to original CliRelay if Live fails (preserves existing behavior)
+                            // Use user's chosen vision model (Live if they kept default, or other like Gemini 3.7 Flash/Gemma if they changed it)
                             val visionResult = CliRelayClient.imageQuery(
                                 context = this@MainActivity,
                                 imagePath = imagePath,

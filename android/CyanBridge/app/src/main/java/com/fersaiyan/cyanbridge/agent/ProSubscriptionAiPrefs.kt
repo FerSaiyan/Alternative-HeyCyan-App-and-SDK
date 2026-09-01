@@ -38,8 +38,16 @@ object ProSubscriptionAiPrefs {
         prefs(context).edit().putString(KEY_REQUESTS_MODEL, normalizeModel(model)).apply()
     }
 
-    fun getQuestionsModel(context: Context): String =
-        normalizeModel(prefs(context).getString(KEY_QUESTIONS_MODEL, DEFAULT_MODEL))
+    private const val LIVE_MODEL = "google/gemini-3.1-flash-live-preview"
+
+    fun getQuestionsModel(context: Context): String {
+        val stored = prefs(context).getString(KEY_QUESTIONS_MODEL, null)
+        // Default for multimodal (image/voice) is Gemini Live until user changes it manually in Pro settings
+        if (stored == null) return LIVE_MODEL
+        val normalized = normalizeModel(stored)
+        // Treat "auto" (legacy default) as Live for new installs, but respect explicit user choice of other vision models
+        return if (normalized.equals(DEFAULT_MODEL, ignoreCase = true)) LIVE_MODEL else normalized
+    }
 
     fun setQuestionsModel(context: Context, model: String) {
         prefs(context).edit().putString(KEY_QUESTIONS_MODEL, normalizeModel(model)).apply()

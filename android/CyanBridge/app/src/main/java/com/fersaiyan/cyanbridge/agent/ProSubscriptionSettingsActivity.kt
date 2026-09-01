@@ -147,6 +147,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
 
         val modelIdToLabel = linkedMapOf(
             "openrouter/free" to "Cheap models router (1x)",
+            "google/gemini-3.1-flash-live-preview" to "Gemini 3.1 Flash Live (36x)",
             "google/gemma-4-26b-a4b-it" to "Gemma 4 26B Vision (2x)",
             "deepseek/deepseek-v4-flash" to "DeepSeek V4 Flash (2x)",
         )
