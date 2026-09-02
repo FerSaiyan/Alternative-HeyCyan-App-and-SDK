@@ -33,8 +33,10 @@ class GeminiLiveVisionController(
     private val captureInProgress = AtomicBoolean(false)
     private val encodingInProgress = AtomicBoolean(false)
 
+    @Volatile
     private var active = false
     private var userSpeaking = false
+    @Volatile
     private var lastAutomaticStillMs = 0L
     private var lastVideoFrameSentMs = 0L
     private var metaFramePendingForSpeechWindow = false
@@ -81,6 +83,7 @@ class GeminiLiveVisionController(
         metaFramePendingForSpeechWindow = false
         stillJob?.cancel()
         stillJob = null
+        client.cancelDeferredVisualContext()
         frameJob?.cancel()
         frameJob = null
         captureInProgress.set(false)
@@ -102,6 +105,9 @@ class GeminiLiveVisionController(
     }
 
     fun onSpeechActivity(speaking: Boolean) {
+        if (speaking && active && capabilities.mode == GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL) {
+            maybeCaptureAutomaticStill()
+        }
         scope.launch {
             if (!active) return@launch
             val changedToSpeaking = speaking && !userSpeaking
@@ -124,9 +130,18 @@ class GeminiLiveVisionController(
                         maybeSendLatestMetaFrame()
                     }
                 }
-                GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> maybeCaptureAutomaticStill()
+                GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> Unit
                 else -> Unit
             }
+        }
+    }
+
+    fun onServerDetectedUserInterruption() {
+        if (!active) return
+        when (capabilities.mode) {
+            GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> maybeCaptureAutomaticStill()
+            GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES -> onSpeechActivity(true)
+            else -> Unit
         }
     }
 
@@ -154,24 +169,30 @@ class GeminiLiveVisionController(
         // cooldown on the attempt, not on successful transfer, so a BLE/thumbnail failure cannot
         // make the next utterance immediately trigger another shutter.
         lastAutomaticStillMs = now
-        onStatus("Glasses vision: capturing a fresh still while you speak")
+        client.deferAudioForVisualContext()
         stillJob = scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    GeminiLiveGlassesImageCapture(appContext).capture(
-                        ImageQuestionPreferences.thumbnailQuality(appContext),
-                    )
+            try {
+                onStatus("Glasses vision: capturing a fresh still while you speak")
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        GeminiLiveGlassesImageCapture(appContext).capture(
+                            ImageQuestionPreferences.thumbnailQuality(appContext),
+                        )
+                    }
                 }
-            }
-            result.onSuccess { jpeg ->
-                if (active) {
-                    client.sendVideoFrame(jpeg)
-                    onStatus("Glasses vision: fresh still sent")
+                result.onSuccess { jpeg ->
+                    if (active) {
+                        client.sendVideoFrame(jpeg)
+                        onStatus("Glasses vision: fresh still sent")
+                    }
+                }.onFailure { error ->
+                    if (active) onStatus("Glasses vision: ${error.message ?: "automatic still unavailable"}")
                 }
-            }.onFailure { error ->
-                if (active) onStatus("Glasses vision: ${error.message ?: "automatic still unavailable"}")
+            } finally {
+                captureInProgress.set(false)
+                if (active) client.releaseAudioAfterVisualContext()
+                else client.cancelDeferredVisualContext()
             }
-            captureInProgress.set(false)
         }
     }
 

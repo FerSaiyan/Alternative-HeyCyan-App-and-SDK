@@ -5332,7 +5332,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             lower.contains("openrouter_image_failed")
     }
 
+    private data class CapturedImageQuestion(
+        val text: String?,
+        val heardSpeech: Boolean,
+    )
+
     private suspend fun captureOptionalImageQuestionFromBluetoothMic(timeoutMs: Long): String? {
+        val first = captureOptionalImageQuestionFromBluetoothMicOnce(timeoutMs)
+        if (first.text == null && first.heardSpeech) {
+            Log.i("ImageQuestionAudio", "Speech was heard without a recognition result; retrying once")
+            return captureOptionalImageQuestionFromBluetoothMicOnce(timeoutMs).text
+        }
+        return first.text
+    }
+
+    private suspend fun captureOptionalImageQuestionFromBluetoothMicOnce(timeoutMs: Long): CapturedImageQuestion {
         return withContext(Dispatchers.Main) {
             suspendCancellableCoroutine { cont ->
                 val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
@@ -5377,7 +5391,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         playImageQuestionTone(android.media.ToneGenerator.TONE_PROP_BEEP2)
                         cleanup()
                         if (cont.isActive) {
-                            cont.resume(cleaned)
+                            cont.resume(CapturedImageQuestion(cleaned, heardSpeech))
                         }
                     }
                 }
@@ -5401,9 +5415,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, recognitionLanguageTag())
                         // Once speech begins, wait for Android's end-of-speech signal rather
                         // than imposing a fixed recording deadline.
-                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2_000L)
-                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2_000L)
-                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500L)
+                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2_000)
+                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2_000)
+                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500)
                     }
 
                     recognizer?.setRecognitionListener(object : RecognitionListener {

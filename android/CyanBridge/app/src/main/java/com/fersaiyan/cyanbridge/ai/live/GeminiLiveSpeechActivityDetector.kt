@@ -7,10 +7,11 @@ import kotlin.math.abs
  * Gemini remains responsible for transcription and server-side VAD/turn taking.
  */
 class GeminiLiveSpeechActivityDetector(
-    private val startThreshold: Int = 900,
+    // VOICE_COMMUNICATION processing can substantially attenuate Bluetooth microphone PCM.
+    // This detector only schedules visual refreshes; Gemini's audio path is never gated by it.
+    private val startThreshold: Int = 100,
     private val activeChunksToStart: Int = 2,
-    // 15 x 40 ms chunks leaves more than Gemini's 500 ms server-VAD silence window
-    // in the transmitted tail before local gating suppresses subsequent silence.
+    // 15 x 40 ms chunks identifies a tail longer than Gemini's 500 ms server-VAD window.
     private val silentChunksToStop: Int = 15,
     private val onChanged: (Boolean) -> Unit,
 ) {

@@ -83,6 +83,11 @@ class GeminiLiveClient(
     private val setupComplete = AtomicBoolean(false)
     private val speechActive = AtomicBoolean(false)
     private val modelSpeaking = AtomicBoolean(false)
+    private val audioDelayLock = Any()
+    private val delayedAudio = ArrayDeque<ByteArray>()
+    private var audioDeferredForVisualContext = false
+    private var visualAudioHoldStarted = false
+    private var heldVisualSilenceChunks = 0
     private val speechDetector = GeminiLiveSpeechActivityDetector { speaking ->
         if (modelSpeaking.get()) {
             speechActive.set(false)
@@ -156,6 +161,7 @@ class GeminiLiveClient(
         setupComplete.set(false)
         speechActive.set(false)
         modelSpeaking.set(false)
+        clearDelayedAudio()
         speechDetector.reset()
         setState(GeminiLiveState.REQUESTING_TOKEN, "Requesting secure Live session")
         scope.launch {
@@ -175,6 +181,7 @@ class GeminiLiveClient(
         active.set(false)
         setupComplete.set(false)
         modelSpeaking.set(false)
+        clearDelayedAudio()
         reconnectJob?.cancel()
         reconnectJob = null
         sessionResumptionJob?.cancel()
@@ -252,6 +259,38 @@ class GeminiLiveClient(
         if (sendRealtimeBlob("video", "image/jpeg", jpegBytes)) visualInputCount++
     }
 
+    /** Prevents trailing silence from finalizing a turn before its fresh image is sent. */
+    fun deferAudioForVisualContext() {
+        synchronized(audioDelayLock) {
+            if (!active.get() || !setupComplete.get()) return
+            if (!audioDeferredForVisualContext) {
+                audioDeferredForVisualContext = true
+                visualAudioHoldStarted = false
+                heldVisualSilenceChunks = 0
+                Log.i(TAG, "Deferring Live turn completion until fresh visual context is ready")
+            }
+        }
+    }
+
+    /** Sends the image first, then releases the held turn tail in socket order. */
+    fun releaseAudioAfterVisualContext() {
+        synchronized(audioDelayLock) {
+            if (!audioDeferredForVisualContext) return
+            audioDeferredForVisualContext = false
+            visualAudioHoldStarted = false
+            heldVisualSilenceChunks = 0
+            if (!active.get() || !setupComplete.get()) {
+                delayedAudio.clear()
+                return
+            }
+            val chunks = delayedAudio.size
+            while (delayedAudio.isNotEmpty()) sendAudioPacket(delayedAudio.removeFirst())
+            Log.i(TAG, "Released deferred Live audio chunks=$chunks after visual context")
+        }
+    }
+
+    fun cancelDeferredVisualContext() = clearDelayedAudio()
+
     private fun requestToken(language: String, imagePrompt: String): LiveTokenConfig =
         kotlinx.coroutines.runBlocking { effectiveTokenProvider.requestToken(language, imagePrompt) }
 
@@ -295,6 +334,7 @@ class GeminiLiveClient(
         }
 
         setupComplete.set(false)
+        clearDelayedAudio()
         socket?.cancel()
         setState(
             if (reconnectAttempt == 0) GeminiLiveState.CONNECTING else GeminiLiveState.RECONNECTING,
@@ -320,7 +360,6 @@ class GeminiLiveClient(
                 reconnectAttempt = 0
                 sendSetup(webSocket, config)
                 scheduleSessionResumption(webSocket)
-                startPlayback()
                 setState(GeminiLiveState.CONNECTING, "Connected; waiting for Gemini setup")
             }
 
@@ -447,6 +486,7 @@ class GeminiLiveClient(
         if (!captureEnabled.compareAndSet(false, true)) return
         requestAudioFocus()
         configureAudioRoute()
+        startPlayback()
         val minBuffer = AudioRecord.getMinBufferSize(
             INPUT_SAMPLE_RATE_HZ,
             AudioFormat.CHANNEL_IN_MONO,
@@ -496,6 +536,8 @@ class GeminiLiveClient(
         }
         recorder = null
 
+        flushDelayedAudio()
+
         // With automatic VAD enabled, Gemini asks clients to explicitly flush cached audio when
         // a stream is actually paused (background/audio-focus). This is not used as per-turn VAD.
         if (wasCapturing && active.get() && setupComplete.get() && socket != null) {
@@ -521,7 +563,53 @@ class GeminiLiveClient(
         // The local detector schedules visual refreshes only. Gemini's server-side VAD must
         // receive the continuous stream so quiet speech and natural pauses are not discarded.
         speechDetector.offerPcm16Le(bytes)
-        sendAudioPacket(bytes)
+        synchronized(audioDelayLock) {
+            val speaking = speechActive.get()
+            if (audioDeferredForVisualContext && visualAudioHoldStarted && speaking) {
+                repeat(heldVisualSilenceChunks.coerceAtMost(delayedAudio.size)) {
+                    delayedAudio.removeLast()
+                }
+                heldVisualSilenceChunks = 0
+                visualAudioHoldStarted = false
+            }
+
+            if (!audioDeferredForVisualContext || !visualAudioHoldStarted || speaking) {
+                delayedAudio.addLast(bytes.copyOf())
+            }
+            if (audioDeferredForVisualContext && !speaking && !visualAudioHoldStarted) {
+                visualAudioHoldStarted = true
+                // The detector changes state on the fifteenth silent chunk. Those chunks are
+                // already inside the delayed tail, so retain exactly that tail and no more.
+                heldVisualSilenceChunks = VISUAL_TRAILING_SILENCE_CHUNKS.coerceAtMost(delayedAudio.size)
+            }
+            val canStream = !audioDeferredForVisualContext ||
+                (!visualAudioHoldStarted && speaking)
+            if (canStream && delayedAudio.size > AUDIO_DELAY_CHUNKS) {
+                sendAudioPacket(delayedAudio.removeFirst())
+            }
+        }
+    }
+
+    private fun flushDelayedAudio() {
+        synchronized(audioDelayLock) {
+            audioDeferredForVisualContext = false
+            visualAudioHoldStarted = false
+            heldVisualSilenceChunks = 0
+            if (active.get() && setupComplete.get()) {
+                while (delayedAudio.isNotEmpty()) sendAudioPacket(delayedAudio.removeFirst())
+            } else {
+                delayedAudio.clear()
+            }
+        }
+    }
+
+    private fun clearDelayedAudio() {
+        synchronized(audioDelayLock) {
+            audioDeferredForVisualContext = false
+            visualAudioHoldStarted = false
+            heldVisualSilenceChunks = 0
+            delayedAudio.clear()
+        }
     }
 
     private fun sendAudioPacket(bytes: ByteArray) {
@@ -729,6 +817,10 @@ class GeminiLiveClient(
         const val INPUT_SAMPLE_RATE_HZ = 16_000
         const val OUTPUT_SAMPLE_RATE_HZ = 24_000
         const val INPUT_CHUNK_BYTES = 1_280 // 40 ms PCM16 mono at 16 kHz; halves WS message rate vs 20 ms.
+        // Keep more than the detector's 600 ms trailing-silence window. During a still transfer,
+        // speech streams normally while this tail is held back from Gemini's 500 ms server VAD.
+        const val AUDIO_DELAY_CHUNKS = 16
+        const val VISUAL_TRAILING_SILENCE_CHUNKS = 15
         const val SESSION_RESUMPTION_RECONNECT_MS = 9 * 60 * 1000L
         const val MAX_VISUAL_INPUTS_PER_SESSION = 540 // At most 1 FPS over the 9-minute resumption window.
     }

@@ -229,6 +229,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     }
 
     override fun onInterrupted() {
+        visionController.onServerDetectedUserInterruption()
         runOnUiThread { status.text = "Gemini was interrupted. Listening for you." }
     }
 
