@@ -74,7 +74,26 @@ class DefaultGeminiLiveTokenProvider(
             val raw = response.body?.string().orEmpty()
             val json = JSONObject(raw.ifBlank { "{}" })
             if (!response.isSuccessful) {
-                throw IllegalStateException(json.optString("error", "Gemini Live token request failed"))
+                val error = json.optString("error", "Gemini Live token request failed")
+                // Surface quota details for live_quota_exhausted so the UI can show remaining vs required.
+                if (error == "live_quota_exhausted" || raw.contains("live_quota_exhausted")) {
+                    val quota = json.optJSONObject("quota")
+                    val plan = quota?.optString("plan") ?: json.optString("plan").takeIf { it.isNotBlank() } ?: ""
+                    val remaining = quota?.optInt("remaining", -1)?.takeIf { it >= 0 }?.toString()
+                        ?: json.optString("remaining", "")
+                    val required = json.optInt("required_reference_tokens", -1).takeIf { it >= 0 }?.toString()
+                        ?: json.optString("required", "")
+                    val detail = buildString {
+                        append(error)
+                        if (plan.isNotBlank()) append(" plan $plan")
+                        if (remaining?.isNotBlank() == true) append(" remaining $remaining")
+                        if (required?.isNotBlank() == true) append(" required $required")
+                        // Fall back to raw quota dump for debugging if fields are missing
+                        if (plan.isBlank() && quota != null) append(" quota $quota")
+                    }
+                    throw IllegalStateException(detail)
+                }
+                throw IllegalStateException(error)
             }
             val expiresAt = Instant.parse(json.getString("expire_time")).toEpochMilli()
             // Debug override for end-to-end testing with a direct Gemini API key.
