@@ -43,13 +43,13 @@ class DefaultGeminiLiveTokenProvider(
         val paidPlan = ProSubscriptionPrefs.isActiveLocally(appContext) &&
             ProSubscriptionPrefs.getPlan(appContext).lowercase() in setOf("cheap", "standard", "max")
         if (!paidPlan) {
-            val websocketUrl = base.toHttpUrl().newBuilder()
-                .scheme("wss")
+            val httpUrl = base.toHttpUrl().newBuilder()
                 .addPathSegments("api/pro/live/free")
                 .addQueryParameter("language", language)
                 .addQueryParameter("image_prompt", imagePrompt.take(400))
                 .build()
                 .toString()
+            val websocketUrl = httpUrl.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
             return LiveTokenConfig(
                 token = "",
                 model = "models/gemini-3.1-flash-live-preview",
