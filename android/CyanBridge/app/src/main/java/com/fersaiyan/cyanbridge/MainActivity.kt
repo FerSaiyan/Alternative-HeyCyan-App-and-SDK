@@ -4643,14 +4643,24 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         "[$sourceTag] Requesting BLE AI capture at ${pendingImageThumbnailQuality.label} " +
                             "(${pendingImageThumbnailQuality.sdkValue})",
                     )
-                    // Match the vendor AI-chat path so the selected clarity controls the
-                    // generated thumbnail instead of forcing the Home quick-preview mode.
+                    // Match the official AI-chat sequence: configure the quality-aware vision
+                    // mode first, then use the normal shutter command to take the fresh photo.
                     LargeDataHandler.getInstance().glassesControl(
                         byteArrayOf(0x02, 0x01, 0x06, thumbnailSize, thumbnailSize),
                     ) { _, response ->
                         Log.i(
                             "ImageQuestionTransfer",
-                            "[$sourceTag] AI capture command response dataType=${response.dataType} " +
+                            "[$sourceTag] AI vision command response dataType=${response.dataType} " +
+                                "error=${response.errorCode}",
+                        )
+                    }
+                    delay(250)
+                    LargeDataHandler.getInstance().glassesControl(
+                        byteArrayOf(0x02, 0x01, 0x01),
+                    ) { _, response ->
+                        Log.i(
+                            "ImageQuestionTransfer",
+                            "[$sourceTag] AI shutter command response dataType=${response.dataType} " +
                                 "error=${response.errorCode}",
                         )
                     }
@@ -4753,12 +4763,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         beginAiQuestionForegroundWork("Capturing image from Eyevue glasses")
         pendingImageQuestionOfferSpokenQuestion = false
         startParallelAudioQuestionIfEligible(offerSpokenQuestion)
-        // Respect thumbnail quality: 0..4 => 0x30 BLE thumb, 5 => 0x31 BLE high (both AA15, no WiFi)
-        val highQuality = pendingImageThumbnailQuality == ImageThumbnailQuality.DETAILED
         val startedAt = System.currentTimeMillis()
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val imageBytes = manager.capturePhotoForAi(highQuality = highQuality)
+                // Eyevue's AI-photo path streams over AA15 only for the 0x31 command.
+                val imageBytes = manager.capturePhotoForAi()
                     ?: throw IOException("Eyevue photo transfer timed out")
                 val imageFile = File(cacheDir, "Eyevue_AI_${System.currentTimeMillis()}.jpg")
                 imageFile.writeBytes(imageBytes)

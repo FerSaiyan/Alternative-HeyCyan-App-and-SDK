@@ -26,9 +26,7 @@ class GeminiLiveGlassesImageCapture(context: Context) {
         DeviceClass.EYEVUE -> {
             val manager = EyevueManager.getInstance(appContext)
             check(manager.isConnected()) { "Eyevue glasses are not connected" }
-            checkNotNull(
-                manager.capturePhotoForAi(highQuality = quality == ImageThumbnailQuality.DETAILED),
-            ) { "Eyevue photo transfer timed out" }
+            checkNotNull(manager.capturePhotoForAi()) { "Eyevue photo transfer timed out" }
         }
         DeviceClass.TUNEBUDS -> {
             val manager = TuneBudsManager.getInstance(appContext)
@@ -43,9 +41,13 @@ class GeminiLiveGlassesImageCapture(context: Context) {
         val permit = GlassesSessionCoordinator.tryAcquireBackgroundCommand()
             ?: throw IllegalStateException("Glasses are busy with another operation")
         try {
-            // Matches the existing Glasses-tab AI image flow: command 0x06 selects thumbnail fidelity.
+            // Match the official AI-chat flow: configure fidelity, then trigger the shutter.
             LargeDataHandler.getInstance().glassesControl(
                 byteArrayOf(0x02, 0x01, 0x06, quality.sdkValue.toByte(), quality.sdkValue.toByte()),
+            ) { _, _ -> }
+            delay(250)
+            LargeDataHandler.getInstance().glassesControl(
+                byteArrayOf(0x02, 0x01, 0x01),
             ) { _, _ -> }
             delay(CAPTURE_SETTLE_MS)
             return receiveThumbnail()
