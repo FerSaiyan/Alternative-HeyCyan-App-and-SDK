@@ -1,15 +1,13 @@
 package com.fersaiyan.cyanbridge.devices.tunebuds
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.pm.PackageManager
 import android.net.wifi.SoftApConfiguration
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -122,13 +120,7 @@ class TuneBudsLocalHotspot(context: Context) {
     }
 
     private fun hasWifiPermission(): Boolean {
-        val nearbyGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES) ==
-            PackageManager.PERMISSION_GRANTED
-        val locationGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-        return nearbyGranted && locationGranted
+        return hasWifiP2pPermission(context)
     }
 }
 

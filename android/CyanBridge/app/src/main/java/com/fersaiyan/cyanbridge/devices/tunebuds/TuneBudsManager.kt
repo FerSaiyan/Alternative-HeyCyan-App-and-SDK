@@ -71,6 +71,8 @@ class TuneBudsManager private constructor(context: Context) {
         private const val REQUEST_TIMEOUT_MS = 10_000L
         private const val CAMERA_CLOSE_RETRY_MS = 1_000L
         private const val CAMERA_CLOSE_MAX_ATTEMPTS = 15
+        private const val FILE_MANAGER_RETRY_MS = 1_000L
+        private const val FILE_MANAGER_MAX_ATTEMPTS = 30
 
         @Volatile
         private var instance: TuneBudsManager? = null
@@ -168,6 +170,8 @@ class TuneBudsManager private constructor(context: Context) {
 
     suspend fun takePhotoBlocking() {
         requireSuccess(request(TuneBudsProtocol.CMD_CAMERA_ON, byteArrayOf(0)))
+        delay(2_500L)
+        stopCameraSubsystem()
     }
 
     suspend fun capturePhotoForAi(timeoutMs: Long = 15_000L): ByteArray? = coroutineScope {
@@ -280,7 +284,23 @@ class TuneBudsManager private constructor(context: Context) {
                     ),
                 ),
             )
-            requireSuccess(request(TuneBudsProtocol.CMD_FILE_MANAGER))
+            var fileManagerAttempt = 1
+            while (true) {
+                val response = request(TuneBudsProtocol.CMD_FILE_MANAGER)
+                when (val status = TuneBudsProtocol.parseStatus(response.payload)) {
+                    0 -> break
+                    1, 3 -> {
+                        if (fileManagerAttempt >= FILE_MANAGER_MAX_ATTEMPTS) {
+                            throw IOException("TuneBuds file manager remained busy for ${FILE_MANAGER_MAX_ATTEMPTS}s")
+                        }
+                        Log.i(TAG, "TuneBuds file manager busy status=$status attempt=$fileManagerAttempt")
+                        fileManagerAttempt++
+                        delay(FILE_MANAGER_RETRY_MS)
+                    }
+                    null -> throw IOException("TuneBuds file manager returned no status")
+                    else -> throw IOException("TuneBuds file manager failed with status $status")
+                }
+            }
             withTimeoutOrNull(timeoutMs) { endpoint.await() }
         } finally {
             endpoint.cancel()
@@ -552,11 +572,15 @@ class TuneBudsManager private constructor(context: Context) {
         val status = payload[0].toInt() and 0xFF
         synchronized(aiPictureBuffer) {
             when (status) {
-                1 -> if (payload.size > 1) aiPictureBuffer.write(payload, 1, payload.size - 1)
+                1 -> {
+                    if (payload.size > 1) aiPictureBuffer.write(payload, 1, payload.size - 1)
+                    Log.d(TAG, "TuneBuds AI photo chunk bytes=${payload.size - 1} total=${aiPictureBuffer.size()}")
+                }
                 0 -> {
                     if (payload.size > 1) aiPictureBuffer.write(payload, 1, payload.size - 1)
                     val image = aiPictureBuffer.toByteArray()
                     aiPictureBuffer.reset()
+                    Log.i(TAG, "TuneBuds AI photo completed bytes=${image.size}")
                     if (image.isNotEmpty()) _aiPhotos.tryEmit(image)
                 }
                 else -> {

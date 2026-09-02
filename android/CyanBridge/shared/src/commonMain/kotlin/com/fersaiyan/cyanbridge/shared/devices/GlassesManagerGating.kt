@@ -61,7 +61,11 @@ object GlassesManagerGating {
                 base.add(Action.EYEVUE_CONTROLS)
                 base.add(Action.STATUS_BATTERY)
                 base.add(Action.STATUS_STORAGE)
-                base.addAll(heyCyanAdvancedActions)
+                // Eyevue AI capture currently has one verified path: 0x31 high-quality over
+                // AA15. Its 0x30 mode does not return the AI-photo stream, so exposing six
+                // quality choices would be misleading. Re-enable this gate if additional
+                // Eyevue quality commands are identified and validated in the future.
+                base.addAll(heyCyanAdvancedActions - Action.ADVANCED_IMAGE_QUALITY)
                 base.add(Action.CAPTURE_SETTINGS)
                 base.add(Action.AI_WAKE_WORD_ROUTING)
             }

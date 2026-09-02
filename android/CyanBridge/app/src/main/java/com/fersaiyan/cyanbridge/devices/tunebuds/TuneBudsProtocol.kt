@@ -352,7 +352,10 @@ class TuneBudsFrameDecoder {
     private fun acceptPhysicalFrame(frame: ByteArray, type: TuneBudsFrameType): TuneBudsFrame? {
         val sequence = frame[0].toInt() and 0x0F
         expectedSequence?.let { expected ->
-            require(sequence == expected) { "TuneBuds frame sequence mismatch: expected=$expected actual=$sequence" }
+            // The official AB Mate decoder reports transport-sequence gaps but still consumes
+            // the frame. AI envelopes share the RFCOMM stream but bypass this decoder, so
+            // rejecting the next command frame would drop valid photo chunks or responses.
+            if (sequence != expected) malformedFrameCount++
         }
         expectedSequence = (sequence + 1) and 0x0F
 

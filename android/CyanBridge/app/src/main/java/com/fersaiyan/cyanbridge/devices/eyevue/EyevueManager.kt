@@ -136,6 +136,9 @@ class EyevueManager private constructor(context: Context) {
 
     suspend fun capturePhotoForAi(timeoutMs: Long = 12_000L): ByteArray? = coroutineScope {
         val photo = async(start = CoroutineStart.UNDISPATCHED) { client.photos.first() }
+        // 0x31 is the only Eyevue command currently verified to return an AI image over AA15.
+        // 0x30 timed out without a photo stream in hardware tests, so all AI captures use the
+        // same working quality for now. Revisit this when other Eyevue quality modes are known.
         takePhoto(highQuality = true)
         withTimeoutOrNull(timeoutMs) { photo.await() }.also {
             if (it == null) photo.cancel()

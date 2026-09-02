@@ -29,6 +29,8 @@ class TuneBudsDashboardActionPolicyTest {
             GlassesDashboardAction.RequestBattery,
             GlassesDashboardAction.RequestVersion,
             GlassesDashboardAction.SyncTime,
+            GlassesDashboardAction.RequestTransportPermission,
+            GlassesDashboardAction.DismissTransportPermissionDialog,
             GlassesDashboardAction.SelectImageThumbnailQuality(4),
             GlassesDashboardAction.SelectImageThumbnailQuality(5),
             GlassesDashboardAction.SetGeminiLiveImageDelay(10),

@@ -97,6 +97,31 @@ Use `ContextCompat.registerReceiver()`.
 - Android 13+: `NEARBY_WIFI_DEVICES` is required for Wi-Fi Direct discovery.
 - Location permission is also commonly required for peer discovery on many builds.
 
+## TuneBuds AI Photo Transfer Notes
+
+TuneBuds uses its independent AB Mate Classic Bluetooth RFCOMM protocol, not the HeyCyan vendor AAR. Detailed image capture also uses a phone local-only hotspot and therefore needs the Wi-Fi transport permission flow.
+
+Hardware testing on 2026-09-02 found that the Detailed permission rationale appeared but could not launch Android's permission sheet because `TuneBudsDashboardActionPolicy` rejected `RequestTransportPermission` and `DismissTransportPermissionDialog`. This was an action-gating bug, not a crash or ANR. Keep both actions in the TuneBuds allowlist while Detailed capture is exposed.
+
+The same test produced an incomplete 4,084-byte Clearer image and then lost the next `0xE1` response. The cause matched the decompiled official AB Mate stack:
+
+- `PacketParser` removes `55 AA ... A5 5A` AI envelopes from the shared RFCOMM stream.
+- `ResponseHandler` logs top-level sequence gaps but still processes structurally valid command frames.
+- CyanBridge must not discard a valid frame solely because its transport sequence skipped. Doing so can lose `0xE3` JPEG chunks and subsequent responses.
+- Logical fragment indexes and command/type/total metadata should remain strict.
+
+Relevant decompiled references are `TuneBudsOfficialApp/tunebuds-jadx-clean/sources/com/topstep/aibuds/earphone/PacketParser.java`, `com/bluetrum/devicemanager/ResponseHandler.java`, `ResponseMerger.java`, `models/AIPicPackage.java`, and `com/topstep/aibuds/earphone/AiPhotoSourceAbMate.java`. The full investigation is recorded in `android/TUNEBUDS_REVERSE_ENGINEERING.md`. Hardware verification of the patched BLE and Wi-Fi paths is still pending.
+
+The first patched retest validated Clearer with a 192x144, 8,597-byte JPEG in 4,872 ms. Detailed exposed a second permission bug: Android 13+ successfully granted `NEARBY_WIFI_DEVICES`, but `TuneBudsLocalHotspot` separately required ungranted fine location and stopped before calling `startLocalOnlyHotspot`. Keep its permission check aligned with `PermissionUtil.hasWifiP2pPermission()`: Nearby Wi-Fi on Android 13+, fine location only on older releases. Detailed endpoint/HTTP validation is still pending.
+
+After correcting that gate, the phone hotspot started, but the glasses returned status `1` to `0xE7` on two attempts. The official `startPullFileInternal` maps `0xE7` statuses `1` and `3` to file-transfer `ERROR_BUSY`. Detailed had captured through `0xE1` but never closed the camera before requesting file-manager mode. Ensure recording-mode capture finishes with the `0xE2` busy-saving retry loop before sending hotspot credentials and `0xE7`; an arbitrary save delay alone does not release the camera subsystem.
+
+The next run still returned `0xE7` busy after `0xE2` reached closed state. It also showed that failing immediately tears down `swlan0` within roughly one second, before the glasses can associate. Keep the hotspot alive and retry only `0xE7` statuses `1` and `3` during startup; do not weaken handling for unknown statuses or accept transfer readiness without the `0xE7` endpoint notification.
+
+Hardware validation of that retry succeeded end to end. Three busy responses preceded hotspot association and endpoint `http://10.230.84.141:80/files/`; CyanBridge then downloaded `20250102155119977.JPG`, a valid 1,616x1,216, 350,372-byte JPEG. Total Detailed capture/transfer time was 11,672 ms. Trace: `/tmp/opencode/tunebuds-detailed-e7-busy-retry-retest-20260902.log`.
+
+The same APK passed a Clearer regression with a valid 192x144, 10,221-byte JPEG in 4,349 ms while tolerating three transport-sequence warnings before completion. Trace: `/tmp/opencode/tunebuds-clearer-final-regression-20260902.log`.
+
 ## Error handling notes
 
 - `loadData[6] == 0x09` with error 255 is common and not necessarily fatal.

@@ -1724,7 +1724,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
             is GlassesDashboardAction.SelectImageThumbnailQuality -> {
-                if (!isHeyCyanOrEyevueSelected() && !isTuneBudsSelected()) return
+                if (!isHeyCyanSelected() && !isTuneBudsSelected()) return
                 val quality = ImageQuestionPreferences.setThumbnailQuality(this, action.sdkValue)
                 pendingImageThumbnailQuality = quality
                 updateDashboardState { state ->
@@ -4882,10 +4882,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             var tempDir: File? = null
             try {
                 Log.i("AIHijack", "[$sourceTag] TuneBuds Detailed requested – using Wi-Fi high-quality path")
-                // 1. Trigger glasses camera in recording mode (0) – saves JPEG to flash
+                // Trigger a recording-mode capture and wait for the camera subsystem to finish saving.
                 withContext(Dispatchers.IO) { manager.takePhotoBlocking() }
-                Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds takePhoto (0) sent, waiting for save")
-                kotlinx.coroutines.delay(2500)
+                Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds photo saved and camera closed")
 
                 hotspot = TuneBudsLocalHotspot(this@MainActivity)
                 tempDir = File(cacheDir, "tunebuds_ai_high_${System.currentTimeMillis()}").apply { mkdirs() }

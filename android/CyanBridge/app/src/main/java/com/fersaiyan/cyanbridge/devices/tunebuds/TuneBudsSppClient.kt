@@ -165,7 +165,15 @@ class TuneBudsSppClient(context: Context) {
                     val count = connectedSocket.inputStream.read(buffer)
                     if (count < 0) throw IOException("TuneBuds RFCOMM stream closed")
                     if (count == 0) continue
-                    for (frame in decoder.append(buffer.copyOf(count))) {
+                    val malformedBefore = decoder.malformedFrameCount
+                    val frames = decoder.append(buffer.copyOf(count))
+                    if (decoder.malformedFrameCount > malformedBefore) {
+                        Log.w(
+                            TAG,
+                            "Accepted TuneBuds data after ${decoder.malformedFrameCount - malformedBefore} frame warning(s)",
+                        )
+                    }
+                    for (frame in frames) {
                         _frames.emit(frame)
                     }
                 }

@@ -28,6 +28,8 @@ internal fun GlassesDashboardAction.isSupportedForTuneBudsDashboard(): Boolean =
     GlassesDashboardAction.RequestBattery,
     GlassesDashboardAction.RequestVersion,
     GlassesDashboardAction.SyncTime,
+    GlassesDashboardAction.DismissTransportPermissionDialog,
+    GlassesDashboardAction.RequestTransportPermission,
     is GlassesDashboardAction.SelectImageThumbnailQuality,
     is GlassesDashboardAction.SetGeminiLiveImageDelay -> true
 
@@ -67,7 +69,5 @@ internal fun GlassesDashboardAction.isSupportedForTuneBudsDashboard(): Boolean =
     GlassesDashboardAction.MeizuSendTestNotification,
     GlassesDashboardAction.MeizuShowTestTeleprompter,
     GlassesDashboardAction.MeizuSyncClock,
-    GlassesDashboardAction.MeizuSetComfortBrightness,
-    GlassesDashboardAction.DismissTransportPermissionDialog,
-    GlassesDashboardAction.RequestTransportPermission -> false
+    GlassesDashboardAction.MeizuSetComfortBrightness -> false
 }

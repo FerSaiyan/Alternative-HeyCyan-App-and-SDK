@@ -84,13 +84,13 @@ Outbound sequence numbers increment for every fragment, not every logical comman
 
 Reassembly requires:
 
-- Consecutive frame sequence values modulo 16.
+- Frame sequence values normally advance modulo 16.
 - First fragment index zero.
 - Stable command ID, command type, and total fragment count.
 - Consecutive fragment indexes.
 - Exactly the payload length declared by byte 4.
 
-The decompiled vendor merger contains a suspicious combined `&&` consistency check that would accept some mismatched fragment metadata. CyanBridge should implement the intended strict checks rather than reproduce that apparent bug.
+The decompiled vendor merger contains a suspicious combined `&&` consistency check that would accept some mismatched fragment metadata. CyanBridge keeps strict command/type/fragment checks. Transport sequence gaps are different: the official `ResponseHandler` logs a gap and still passes the physical frame to `ResponseMerger`. CyanBridge must do the same because AI envelopes bypass the normal command decoder and can leave its expected transport sequence stale.
 
 The vendor queues response-bearing requests one at a time, matches responses by command ID, and uses a default 10-second timeout. Command `0x27` is a container whose response payload consists of repeated device-info TLVs (`type`, one-byte length, value).
 
@@ -258,7 +258,7 @@ This camera OTA path is distinct from the bundled earphone BLE OTA service (`996
 Implement the smallest isolated vertical slice first:
 
 1. Add a TuneBuds/AB Mate device class and classify by the four manufacturer company IDs. Use service UUID `FDB3` only as a secondary signal because it may not be advertised.
-2. Add `devices/tunebuds/TuneBudsProtocol.kt` containing pure frame encoding, strict stream decoding, TLV helpers, command builders, and response models.
+2. Add `devices/tunebuds/TuneBudsProtocol.kt` containing pure frame encoding, strict fragment reassembly, tolerant top-level transport sequence handling, TLV helpers, command builders, and response models.
 3. Add unit tests for frame fragmentation/reassembly, modulo-16 sequencing, malformed lengths/metadata, time encoding, Wi-Fi TLV encoding, media/storage parsing, and RTSP quality tiers.
 4. Add `TuneBudsSppClient.kt` for bonding, serialized RFCOMM writes, stream decoding, and the initial `0x27` max-packet query. Keep GATT as a future transport option only if another model is observed with `BLE_CONNECTION=true`.
 5. Add `TuneBudsManager.kt` for connection state, command/response correlation, battery/device info, camera controls, media count, and storage state.
@@ -281,6 +281,32 @@ The remaining exposed controls were then exercised on hardware. One photo and tw
 Non-destructive media sync also completed end-to-end. The Samsung phone created local-hotspot interface `swlan0` at `10.71.31.72`; the glasses joined as `10.71.31.247`, CyanBridge downloaded all five files through the device-reported HTTP base URL, imported them into `DCIM/CyanBridge`, sent camera-subsystem cleanup, and stopped the hotspot. A post-sync count still reported `1` image, `2` videos, and `2` audio files, confirming that CyanBridge did not delete the originals. Imported containers were verified as baseline JPEG (`1600x1200`), ISO MP4 v2, and standard Ogg/Opus (mono, 16 kHz).
 
 The capability probe is now implemented as a read-only extension of the startup and manual refresh sequence. CyanBridge requests the official AB Mate `0x27` fields for device ability, detection, audio support, display configuration, resolution, volume support/current volume, recording limits, Opus, AI chat, and app-list support, then requests camera co-processor type with `0xE0`. Returned values are retained internally for capability decisions but are not rendered in the TuneBuds device-info panel. This does not enable display, teleprompter, RTSP, brightness, volume writes, or recording-limit writes; those remain unexposed until the `E1749` responses are captured and interpreted on hardware.
+
+## AI Image Quality Retest (2026-09-02)
+
+The dashboard currently exposes two TuneBuds choices:
+
+- `Clearer (BLE)` sends camera command `0xE1` with AI mode `0x01` and assembles `0xE3` notifications.
+- `Detailed (WiFi)` takes a recording-mode photo, creates a phone local-only hotspot, starts the `0xE7` file manager, and downloads the newest photo over HTTP.
+
+Hardware log `/tmp/opencode/tunebuds-image-quality-retest-20260902.log` identified two independent CyanBridge defects:
+
+- Detailed displayed CyanBridge's transport-permission rationale, but every `RequestTransportPermission` and `DismissTransportPermissionDialog` action was rejected by `TuneBudsDashboardActionPolicy`. Android's permission sheet therefore never opened, the rationale could not close normally, and the UI appeared stuck. The app process did not crash or ANR. Both dialog actions are now explicitly allowed for TuneBuds.
+- The first Clearer attempt assembled only 4,084 bytes. The bytes were a terminal portion of a JPEG (Huffman-table tail, SOS marker, and scan data) without SOI/DQT/SOF headers, so Android correctly rejected it as incomplete. A second immediate attempt timed out waiting for the `0xE1` response.
+
+The BLE loss matched an important difference from the official decoder. `com.topstep.aibuds.earphone.PacketParser` removes `55 AA ... A5 5A` AI envelopes before passing command frames to `com.bluetrum.devicemanager.ResponseHandler`. Its `ResponseHandler` reports a transport sequence mismatch but still calls `ResponseMerger.merge(...)`. CyanBridge previously threw on that mismatch and discarded the physical frame. This can remove complete `0xE3` JPEG chunks and later command responses whenever an intervening AI envelope advances or otherwise disrupts the observed sequence.
+
+CyanBridge now retains strict logical-fragment index and metadata validation but accepts a structurally valid frame after a top-level sequence gap, matching the official app. It increments `malformedFrameCount` and emits a `TuneBudsSpp` warning for diagnostics. `TuneBudsManager` also logs each AI-photo chunk and the final assembled byte count. Unit coverage verifies that a valid `0xE3` notification survives a skipped transport sequence. Hardware validation of the corrected full JPEG and the Detailed hotspot transfer remains pending.
+
+The first patched hardware retest confirmed the BLE fix: Clearer assembled a valid 192x144, 8,597-byte JPEG in 4,872 ms. The log showed three tolerated transport-sequence warnings and all `0xE3` chunks through the 8,597-byte completion. Detailed reached camera capture after Android granted `NEARBY_WIFI_DEVICES`, then failed before hotspot creation because `TuneBudsLocalHotspot` incorrectly required both Nearby Wi-Fi and `ACCESS_FINE_LOCATION`. Android 13+ uses Nearby Wi-Fi for this flow; location is the pre-Android-13 requirement. The hotspot now delegates to the same API-aware `hasWifiP2pPermission()` used by the UI preflight. Wi-Fi endpoint and HTTP transfer verification remains pending.
+
+The next retest confirmed that permission correction: Samsung created `swlan0` hotspots `AndroidShare_4095` and `AndroidShare_7675`. Both attempts then received `0xE7` response status `1`. The decompiled `startPullFileInternal` maps `0xE7` statuses `1` and `3` to `WKFileTransferException.ERROR_BUSY` (`10`). CyanBridge's Detailed path had sent recording-mode capture `0xE1`, waited 2.5 seconds, and started the file manager without closing the camera subsystem. `takePhotoBlocking()` now waits 2.5 seconds and runs the existing hardware-validated `0xE2` close loop, which retries status `1` (`REP_BUSY_SAVING`) until status `0`, before hotspot/Wi-Fi setup begins.
+
+A further hardware run proved that a successful `0xE2` close does not make `0xE7` immediately ready: the photo closed at `18:32:47.939`, the hotspot started at `18:32:48.259`, and `0xE7` still returned busy at `18:32:48.847`. Because CyanBridge treated that transient response as terminal, it destroyed the hotspot before the glasses could associate. `startFileManager()` now keeps the hotspot alive and retries only documented busy statuses `1` and `3` once per second for up to 30 seconds. Other statuses remain terminal, and successful startup still requires the authoritative `0xE7` endpoint notification.
+
+Hardware validation of the retry completed the Detailed path end to end. The glasses returned `0xE7` busy three times, associated to `AndroidShare_8747`, received DHCP address `10.230.84.141`, and notified endpoint `http://10.230.84.141:80/files/`. CyanBridge fetched a 20-photo manifest and downloaded newest file `20250102155119977.JPG`. The validated JPEG was 1,616x1,216, 350,372 bytes, and the complete capture/transfer took 11,672 ms. Trace: `/tmp/opencode/tunebuds-detailed-e7-busy-retry-retest-20260902.log`.
+
+The same APK passed the final Clearer regression immediately afterward: a valid 192x144, 10,221-byte JPEG completed over RFCOMM in 4,349 ms. Three transport-sequence warnings occurred before completion and were tolerated without losing any `0xE3` data; a fourth warning followed during subsequent protocol traffic. Trace: `/tmp/opencode/tunebuds-clearer-final-regression-20260902.log`.
 
 ## Runtime Validation Still Required
 

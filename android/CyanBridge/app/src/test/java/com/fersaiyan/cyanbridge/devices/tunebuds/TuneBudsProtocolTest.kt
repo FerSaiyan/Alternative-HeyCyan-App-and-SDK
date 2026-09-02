@@ -86,6 +86,30 @@ class TuneBudsProtocolTest {
     }
 
     @Test
+    fun decoderKeepsCommandFrameAfterTransportSequenceGap() {
+        val decoder = TuneBudsFrameDecoder()
+        val first = TuneBudsProtocol.encode(
+            command = TuneBudsProtocol.CMD_WORK_STATE,
+            payload = byteArrayOf(1),
+            type = TuneBudsFrameType.NOTIFICATION,
+            initialSequence = 0,
+        ).frames.single()
+        val afterSkippedEnvelope = TuneBudsProtocol.encode(
+            command = TuneBudsProtocol.CMD_AI_PICTURE,
+            payload = byteArrayOf(0, 0xFF.toByte(), 0xD9.toByte()),
+            type = TuneBudsFrameType.NOTIFICATION,
+            initialSequence = 2,
+        ).frames.single()
+
+        val frames = decoder.append(first + afterSkippedEnvelope)
+
+        assertEquals(2, frames.size)
+        assertEquals(TuneBudsProtocol.CMD_AI_PICTURE, frames.last().command)
+        assertArrayEquals(byteArrayOf(0, 0xFF.toByte(), 0xD9.toByte()), frames.last().payload)
+        assertEquals(1, decoder.malformedFrameCount)
+    }
+
+    @Test
     fun payloadHelpersMatchVendorLittleEndianFormats() {
         val info = TuneBudsProtocol.parseDeviceInfo(
             byteArrayOf(
