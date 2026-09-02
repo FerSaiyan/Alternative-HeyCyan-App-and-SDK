@@ -4309,10 +4309,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun shouldUseGeminiLiveQuestions(providerType: AgentProviderType): Boolean {
         if (providerType != AgentProviderType.PRO_SUBSCRIPTION) return false
-        return ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
-            isProActive = ProSubscriptionPrefs.isActiveLocally(this),
-            questionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this),
+        val isProActive = ProSubscriptionPrefs.isActiveLocally(this)
+        val questionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this)
+        val result = ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
+            isProActive = isProActive,
+            questionsModel = questionsModel,
         )
+        Log.i("GeminiLive", "shouldUseGeminiLiveQuestions isProActive=$isProActive questionsModel=$questionsModel result=$result")
+        return result
     }
 
     private fun launchGeminiLiveQuestion(
