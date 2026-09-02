@@ -1,7 +1,12 @@
 package com.fersaiyan.cyanbridge.ai.live
 
+import android.content.Context
 import android.graphics.BitmapFactory
 import com.fersaiyan.cyanbridge.ai.image.ImageThumbnailQuality
+import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
+import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSessionCoordinator
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.communication.LargeDataHandler
@@ -10,9 +15,30 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
 
-/** Reuses the glasses AI-image command and the user's configured BLE thumbnail quality. */
-class GeminiLiveGlassesImageCapture {
-    suspend fun capture(quality: ImageThumbnailQuality): ByteArray {
+/** Reuses each selected glasses family's low-latency AI-image path. */
+class GeminiLiveGlassesImageCapture(context: Context) {
+    private val appContext = context.applicationContext
+
+    suspend fun capture(quality: ImageThumbnailQuality): ByteArray = when (
+        DeviceProfileStore.selectedClass(appContext)
+    ) {
+        DeviceClass.HEY_CYAN -> captureHeyCyan(quality)
+        DeviceClass.EYEVUE -> {
+            val manager = EyevueManager.getInstance(appContext)
+            check(manager.isConnected()) { "Eyevue glasses are not connected" }
+            checkNotNull(
+                manager.capturePhotoForAi(highQuality = quality == ImageThumbnailQuality.DETAILED),
+            ) { "Eyevue photo transfer timed out" }
+        }
+        DeviceClass.TUNEBUDS -> {
+            val manager = TuneBudsManager.getInstance(appContext)
+            check(manager.isConnected()) { "TuneBuds glasses are not connected" }
+            checkNotNull(manager.capturePhotoForAi()) { "TuneBuds photo transfer timed out" }
+        }
+        else -> error("Selected glasses do not support automatic Live images")
+    }
+
+    private suspend fun captureHeyCyan(quality: ImageThumbnailQuality): ByteArray {
         check(BleOperateManager.getInstance().isConnected) { "Glasses are not connected" }
         val permit = GlassesSessionCoordinator.tryAcquireBackgroundCommand()
             ?: throw IllegalStateException("Glasses are busy with another operation")

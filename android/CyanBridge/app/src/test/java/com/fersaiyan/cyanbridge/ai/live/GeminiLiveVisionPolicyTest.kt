@@ -20,6 +20,7 @@ class GeminiLiveVisionPolicyTest {
                 nowMs = 2_000L,
                 lastFrameSentMs = 1_000L,
                 encodingInProgress = false,
+                refreshIntervalMs = 1_000L,
             ),
         )
         assertFalse(
@@ -29,6 +30,7 @@ class GeminiLiveVisionPolicyTest {
                 nowMs = 3_000L,
                 lastFrameSentMs = 1_000L,
                 encodingInProgress = false,
+                refreshIntervalMs = 1_000L,
             ),
         )
     }
@@ -45,6 +47,7 @@ class GeminiLiveVisionPolicyTest {
                 nowMs = 1_000L,
                 lastAutomaticStillMs = 0L,
                 captureInProgress = false,
+                refreshIntervalMs = 10_000L,
             ),
         )
         assertFalse(
@@ -53,6 +56,7 @@ class GeminiLiveVisionPolicyTest {
                 nowMs = 10_000L,
                 lastAutomaticStillMs = 1_000L,
                 captureInProgress = false,
+                refreshIntervalMs = 10_000L,
             ),
         )
         assertTrue(
@@ -61,7 +65,43 @@ class GeminiLiveVisionPolicyTest {
                 nowMs = 21_000L,
                 lastAutomaticStillMs = 1_000L,
                 captureInProgress = false,
+                refreshIntervalMs = 10_000L,
             ),
+        )
+    }
+
+    @Test
+    fun `only first disables automatic stills and live frames`() {
+        assertFalse(
+            GeminiLiveVisionPolicy.shouldCaptureAutomaticStill(
+                capabilities = GeminiLiveVisionPolicy.forDevice(DeviceClass.HEY_CYAN),
+                nowMs = 20_000L,
+                lastAutomaticStillMs = 1_000L,
+                captureInProgress = false,
+                refreshIntervalMs = null,
+            ),
+        )
+        assertFalse(
+            GeminiLiveVisionPolicy.shouldSendVideoFrame(
+                capabilities = GeminiLiveVisionPolicy.forDevice(DeviceClass.META_RAYBAN),
+                userSpeaking = true,
+                nowMs = 20_000L,
+                lastFrameSentMs = 1_000L,
+                encodingInProgress = false,
+                refreshIntervalMs = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `Eyevue and TuneBuds use speech gated stills`() {
+        assertEquals(
+            GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL,
+            GeminiLiveVisionPolicy.forDevice(DeviceClass.EYEVUE).mode,
+        )
+        assertEquals(
+            GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL,
+            GeminiLiveVisionPolicy.forDevice(DeviceClass.TUNEBUDS).mode,
         )
     }
 

@@ -28,6 +28,8 @@ class GlassesDashboardPresentationTest {
         assertFalse(state.wifiAdbDebug.canStop)
         assertEquals(4, state.imageThumbnailQualitySdkValue)
         assertEquals("Clearer", state.imageThumbnailQualityLabel)
+        assertFalse(state.showGeminiLiveImageDelay)
+        assertEquals(0, state.geminiLiveImageDelaySeconds)
         assertNull(state.wearingDetectionEnabled)
         assertEquals(emptyList(), state.videoRecordingDurationOptionsSeconds)
         assertEquals(emptyList(), state.audioRecordingDurationOptionsSeconds)
@@ -45,6 +47,13 @@ class GlassesDashboardPresentationTest {
         val action = GlassesDashboardAction.SelectImageThumbnailQuality(4)
 
         assertEquals(4, action.sdkValue)
+    }
+
+    @Test
+    fun geminiLiveImageDelayActionKeepsTheSelectedCadence() {
+        val action = GlassesDashboardAction.SetGeminiLiveImageDelay(10)
+
+        assertEquals(10, action.seconds)
     }
 
     @Test

@@ -31,6 +31,7 @@ class TuneBudsDashboardActionPolicyTest {
             GlassesDashboardAction.SyncTime,
             GlassesDashboardAction.SelectImageThumbnailQuality(4),
             GlassesDashboardAction.SelectImageThumbnailQuality(5),
+            GlassesDashboardAction.SetGeminiLiveImageDelay(10),
         )
 
         actions.forEach { action -> assertTrue(action.toString(), action.isSupportedForTuneBudsDashboard()) }

@@ -169,11 +169,12 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         status.text = "Receiving glasses AI photo"
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { GeminiLiveGlassesImageCapture().captureFromHardwareButton() }
+                runCatching { GeminiLiveGlassesImageCapture(this@GeminiLiveActivity).captureFromHardwareButton() }
             }
             result
                 .onSuccess { image ->
                     client.sendImage(image)
+                    visionController.onVisualContextSent()
                     visionStatus = "Glasses vision: manual AI-photo sent"
                     status.text = "Image sent to Gemini Live"
                     renderIndicators()
@@ -263,7 +264,10 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         initialImagePath?.let { path ->
             lifecycleScope.launch(Dispatchers.IO) {
                 val image = runCatching { File(path).readBytes() }.getOrNull()
-                if (image != null && image.isNotEmpty()) client.sendImage(image)
+                if (image != null && image.isNotEmpty()) {
+                    client.sendImage(image)
+                    visionController.onVisualContextSent()
+                }
                 initialPrompt?.let(client::sendTextTurn)
             }
         } ?: initialPrompt?.let(client::sendTextTurn)

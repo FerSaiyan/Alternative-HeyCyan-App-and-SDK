@@ -37,6 +37,7 @@ class GeminiLiveVisionController(
     private var userSpeaking = false
     private var lastAutomaticStillMs = 0L
     private var lastVideoFrameSentMs = 0L
+    private var metaFramePendingForSpeechWindow = false
     private var latestMetaFrame: Bitmap? = null
     private var stillJob: Job? = null
     private var frameJob: Job? = null
@@ -50,13 +51,20 @@ class GeminiLiveVisionController(
     val capabilities: GeminiLiveVisionCapabilities
         get() = GeminiLiveVisionPolicy.forDevice(deviceClass)
 
+    private val automaticRefreshIntervalMs: Long?
+        get() = GeminiLiveVisionPreferences.automaticRefreshIntervalMs(appContext)
+
     fun start() {
         if (active) return
         active = true
+        if (automaticRefreshIntervalMs == null) {
+            onStatus("Glasses vision: only the initial image; manual AI-photo button remains available")
+            return
+        }
         when (capabilities.mode) {
             GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES -> startMetaLiveFrames()
             GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> {
-                onStatus("Glasses vision: smart stills during conversation; manual AI-photo button also works")
+                onStatus("Glasses vision: fresh stills on eligible speech turns")
             }
             GeminiLiveVisionCapabilities.Mode.MANUAL_STILL -> {
                 onStatus("Glasses vision: manual still images")
@@ -70,6 +78,7 @@ class GeminiLiveVisionController(
     fun stop() {
         active = false
         userSpeaking = false
+        metaFramePendingForSpeechWindow = false
         stillJob?.cancel()
         stillJob = null
         frameJob?.cancel()
@@ -100,20 +109,43 @@ class GeminiLiveVisionController(
             if (!changedToSpeaking) return@launch
 
             when (capabilities.mode) {
-                GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES -> maybeSendLatestMetaFrame(forceFreshWindow = true)
-                GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> maybeCaptureHeyCyanStill()
+                GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES -> {
+                    val now = System.currentTimeMillis()
+                    val due = GeminiLiveVisionPolicy.shouldSendVideoFrame(
+                        capabilities = capabilities,
+                        userSpeaking = true,
+                        nowMs = now,
+                        lastFrameSentMs = lastVideoFrameSentMs,
+                        encodingInProgress = encodingInProgress.get(),
+                        refreshIntervalMs = automaticRefreshIntervalMs,
+                    )
+                    if (due) {
+                        metaFramePendingForSpeechWindow = true
+                        maybeSendLatestMetaFrame()
+                    }
+                }
+                GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> maybeCaptureAutomaticStill()
                 else -> Unit
             }
         }
     }
 
-    private fun maybeCaptureHeyCyanStill() {
+    fun onVisualContextSent() {
+        scope.launch {
+            val now = System.currentTimeMillis()
+            lastAutomaticStillMs = now
+            lastVideoFrameSentMs = now
+        }
+    }
+
+    private fun maybeCaptureAutomaticStill() {
         val now = System.currentTimeMillis()
         if (!GeminiLiveVisionPolicy.shouldCaptureAutomaticStill(
                 capabilities = capabilities,
                 nowMs = now,
                 lastAutomaticStillMs = lastAutomaticStillMs,
                 captureInProgress = captureInProgress.get(),
+                refreshIntervalMs = automaticRefreshIntervalMs,
             )
         ) return
         if (!captureInProgress.compareAndSet(false, true)) return
@@ -126,7 +158,7 @@ class GeminiLiveVisionController(
         stillJob = scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    GeminiLiveGlassesImageCapture().capture(
+                    GeminiLiveGlassesImageCapture(appContext).capture(
                         ImageQuestionPreferences.thumbnailQuality(appContext),
                     )
                 }
@@ -168,7 +200,7 @@ class GeminiLiveVisionController(
                             onSuccess = {
                                 if (!active) return@startStreaming
                                 startedMetaStream = true
-                                onStatus("Meta camera live: sampled up to 1 FPS while you speak")
+                                onStatus("Meta camera live: one fresh frame on each eligible speech turn")
                             },
                             onError = { message ->
                                 if (active) onStatus("Meta live camera unavailable: $message")
@@ -192,26 +224,28 @@ class GeminiLiveVisionController(
     private fun onMetaFrame(bitmap: Bitmap) {
         if (!active) return
         latestMetaFrame = bitmap
-        maybeSendLatestMetaFrame(forceFreshWindow = false)
+        if (metaFramePendingForSpeechWindow) maybeSendLatestMetaFrame()
     }
 
-    private fun maybeSendLatestMetaFrame(forceFreshWindow: Boolean) {
+    private fun maybeSendLatestMetaFrame() {
         val frame = latestMetaFrame ?: return
         val now = System.currentTimeMillis()
         val due = GeminiLiveVisionPolicy.shouldSendVideoFrame(
             capabilities = capabilities,
             userSpeaking = userSpeaking,
             nowMs = now,
-            lastFrameSentMs = if (forceFreshWindow) 0L else lastVideoFrameSentMs,
+            lastFrameSentMs = lastVideoFrameSentMs,
             encodingInProgress = encodingInProgress.get(),
+            refreshIntervalMs = automaticRefreshIntervalMs,
         )
         if (!due || !encodingInProgress.compareAndSet(false, true)) return
+        metaFramePendingForSpeechWindow = false
+        lastVideoFrameSentMs = now
 
         frameJob = scope.launch {
             val jpeg = withContext(Dispatchers.Default) { frame.toGeminiLiveJpeg() }
             if (active && userSpeaking && jpeg.isNotEmpty()) {
                 client.sendVideoFrame(jpeg)
-                lastVideoFrameSentMs = System.currentTimeMillis()
             }
             encodingInProgress.set(false)
         }

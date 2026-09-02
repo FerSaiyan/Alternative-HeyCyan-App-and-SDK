@@ -212,6 +212,7 @@ import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
 import com.fersaiyan.cyanbridge.ai.router.RelayErrorLocalizer
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveActivity
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveVisionPreferences
 import com.fersaiyan.cyanbridge.ai.router.MediaInferenceRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
@@ -653,6 +654,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         initView()
         refreshImageThumbnailQuality()
+        refreshGeminiLiveImageDelay()
         setupMeetingCaptureUi()
         setupAgentControlsUi()
         setupMetaRaybanUi()
@@ -932,6 +934,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         refreshAiQueryButtonsState()
+        refreshGeminiLiveImageDelay()
         refreshNativePluginShortcutState()
         ensureEnabledBackgroundFeaturePermissions()
         ensureEnabledMetaCameraFeature()
@@ -1581,6 +1584,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (
             action is GlassesDashboardAction.SubmitFirmwarePatchRequest ||
             action is GlassesDashboardAction.SelectImageThumbnailQuality ||
+            action is GlassesDashboardAction.SetGeminiLiveImageDelay ||
             action is GlassesDashboardAction.SetAiWakeWordRoute ||
             action == GlassesDashboardAction.DismissFirmwarePatchRequest ||
             action == GlassesDashboardAction.MetaSendDiagnostics
@@ -1729,6 +1733,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         imageThumbnailQualityLabel = quality.label,
                     )
                 }
+            }
+            is GlassesDashboardAction.SetGeminiLiveImageDelay -> {
+                val seconds = GeminiLiveVisionPreferences.setImageDelaySeconds(this, action.seconds)
+                updateDashboardState { state -> state.copy(geminiLiveImageDelaySeconds = seconds) }
             }
             GlassesDashboardAction.TestVoiceQuestion -> binding.btnTestHijackVoice.performClick()
             GlassesDashboardAction.TestImageQuestion -> binding.btnTestHijackImage.performClick()
@@ -3994,6 +4002,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun refreshGeminiLiveImageDelay() {
+        val seconds = GeminiLiveVisionPreferences.imageDelaySeconds(this)
+        updateDashboardState { state ->
+            state.copy(
+                showGeminiLiveImageDelay = true,
+                geminiLiveImageDelaySeconds = seconds,
+            )
+        }
+    }
+
     private fun refreshAiModeButtons() {
         val activeColor = ContextCompat.getColor(this, R.color.cyan_accent)
         val inactiveColor = ContextCompat.getColor(this, R.color.text_secondary)
@@ -4375,69 +4393,36 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             try {
                 val finalReply = when (providerType) {
                     AgentProviderType.PRO_SUBSCRIPTION -> {
-                        // Pro defaults to Gemini Live for multimodal (image/voice) until user changes it in Pro settings
-                        // Free (Pro selected but unsubscribed) also goes via relay (no token to phone)
-                        val chosenQuestionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this@MainActivity).trim()
-                        val isProActive = ProSubscriptionPrefs.isActiveLocally(this@MainActivity)
-                        val isLive = ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
-                            isProActive = isProActive,
-                            questionsModel = chosenQuestionsModel,
+                        // Continuous Gemini Live selections return before this one-shot query is
+                        // created. Match main for an active Pro user's selected non-Live model.
+                        val questionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this@MainActivity)
+                        val visionResult = CliRelayClient.imageQuery(
+                            context = this@MainActivity,
+                            imagePath = imagePath,
+                            prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
+                            modelOverride = questionsModel,
                         )
-                        var liveReply: String? = null
-                        var liveFailure: Exception? = null
-                        if (isLive) {
-                            try {
-                                val relayClient = com.fersaiyan.cyanbridge.ai.live.GeminiLiveRelayClient(this@MainActivity)
-                                val base64 = android.util.Base64.encodeToString(java.io.File(imagePath).readBytes(), android.util.Base64.NO_WRAP)
-                                liveReply = relayClient.sendAudioAndGetText(
-                                    pcm16 = shortArrayOf(),
-                                    prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
-                                    imageJpegBase64 = base64,
-                                ).trim().takeIf { it.isNotBlank() }
-                            } catch (e: Exception) {
-                                liveFailure = e
-                                Log.e("AIHijack", "Live relay failed: ${e.message}", e)
-                            }
-                        }
-                        if (liveReply != null) {
-                            liveReply
-                        } else if (isLive && !isProActive) {
-                            val message = "Free Gemini Live is temporarily unavailable. Please try again."
+                        if (visionResult.isFailure) {
+                            val throwable = visionResult.exceptionOrNull() ?: Exception("unknown error")
+                            val localized = RelayErrorLocalizer.localizedMessage(this@MainActivity, throwable)
+                            val isQuota = RelayErrorLocalizer.isQuotaError(throwable)
+                            Log.e("AIHijack", "Image query failed: ${throwable.message}")
                             runOnUiThread {
-                                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                                Toast.makeText(this@MainActivity, if (isQuota) localized else "Vision error: ${throwable.message?.take(80) ?: "unknown error"}", Toast.LENGTH_LONG).show()
                             }
-                            Log.w("AIHijack", "Free Gemini Live request failed without paid-relay fallback", liveFailure)
-                            message
+                            if (isQuota) localized else "I couldn't analyze the image. Please try again."
                         } else {
-                            // Use user's chosen vision model (Live if they kept default, or other like Gemini 3.7 Flash/Gemma if they changed it)
-                            val visionResult = CliRelayClient.imageQuery(
-                                context = this@MainActivity,
-                                imagePath = imagePath,
-                                prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
-                                modelOverride = ProSubscriptionAiPrefs.getQuestionsModel(this@MainActivity),
-                            )
-                            if (visionResult.isFailure) {
-                                val throwable = visionResult.exceptionOrNull() ?: Exception("unknown error")
-                                val localized = RelayErrorLocalizer.localizedMessage(this@MainActivity, throwable)
-                                val isQuota = RelayErrorLocalizer.isQuotaError(throwable)
-                                Log.e("AIHijack", "Image query failed: ${throwable.message}")
+                            val visionReply = visionResult.getOrNull()?.trim() ?: ""
+                            if (visionReply.isBlank()) {
+                                "I couldn't analyze that image right now. Please try again."
+                            } else if (looksLikeVisionFailed(visionReply)) {
+                                Log.w("AIHijack", "Vision relay couldn't process image. Reply: ${visionReply.take(100)}")
                                 runOnUiThread {
-                                    Toast.makeText(this@MainActivity, if (isQuota) localized else "Vision error: ${throwable.message?.take(80) ?: "unknown error"}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(this@MainActivity, "Vision model couldn't process image", Toast.LENGTH_LONG).show()
                                 }
-                                if (isQuota) localized else "I couldn't analyze the image. Please try again."
+                                "I couldn't analyze the image. Please try again."
                             } else {
-                                val visionReply = visionResult.getOrNull()?.trim() ?: ""
-                                if (visionReply.isBlank()) {
-                                    "I couldn't analyze that image right now. Please try again."
-                                } else if (looksLikeVisionFailed(visionReply)) {
-                                    Log.w("AIHijack", "Vision relay couldn't process image. Reply: ${visionReply.take(100)}")
-                                    runOnUiThread {
-                                        Toast.makeText(this@MainActivity, "Vision model couldn't process image", Toast.LENGTH_LONG).show()
-                                    }
-                                    "I couldn't analyze the image. Please try again."
-                                } else {
-                                    visionReply
-                                }
+                                visionReply
                             }
                         }
                     }
@@ -5177,12 +5162,32 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             } else {
                 cancelParallelAudioQuestion()
             }
+            val externalAutomation = usesExternalImageAutomation()
+            fun offerFollowUp() {
+                lifecycleScope.launch {
+                    delay(500L)
+                    val spokenQuestion = captureOptionalImageQuestionFromBluetoothMic(
+                        timeoutMs = IMAGE_QUESTION_INITIAL_LISTENING_TIMEOUT_MS,
+                    )
+                    if (!spokenQuestion.isNullOrBlank()) {
+                        triggerAssistantImageQuery(
+                            imagePath = imagePath,
+                            userQuestion = spokenQuestion,
+                            source = source,
+                            onReplySpoken = ::offerFollowUp,
+                        )
+                    }
+                }
+            }
             triggerAssistantImageQuery(
                 imagePath = imagePath,
                 userQuestion = initialQuestion,
                 source = source,
-                onReplySpoken = null,
+                onReplySpoken = if (externalAutomation) null else ::offerFollowUp,
             )
+
+            // External assistant apps own response playback and their own conversation UI.
+            if (externalAutomation) return@launch
         }
     }
 

@@ -11,7 +11,6 @@ data class GeminiLiveVisionCapabilities(
     val mode: Mode,
     val audibleStillCapture: Boolean,
     val maxVideoFps: Double,
-    val minAutomaticStillIntervalMs: Long,
 ) {
     enum class Mode {
         NONE,
@@ -25,9 +24,6 @@ data class GeminiLiveVisionCapabilities(
 }
 
 object GeminiLiveVisionPolicy {
-    const val LIVE_FRAME_INTERVAL_MS = 1_000L
-    const val HEY_CYAN_AUTO_STILL_INTERVAL_MS = 20_000L
-
     fun forDevice(deviceClass: DeviceClass): GeminiLiveVisionCapabilities = when (deviceClass) {
         // CyanBridge already has a Meta DAT camera stream. Gemini receives a sampled view,
         // never the full 24 fps source.
@@ -35,24 +31,28 @@ object GeminiLiveVisionPolicy {
             mode = GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES,
             audibleStillCapture = false,
             maxVideoFps = 1.0,
-            minAutomaticStillIntervalMs = 0L,
         )
 
         // HeyCyan currently exposes individual thumbnail captures. Programmatic capture makes
-        // an audible shutter sound, so do not fire once per short phrase; refresh only when the
-        // previous automatic visual context is old. The physical AI-photo button remains manual.
+        // an audible shutter sound, so refresh only on a new speech window after the configured
+        // cadence. The physical AI-photo button remains manual.
         DeviceClass.HEY_CYAN -> GeminiLiveVisionCapabilities(
             mode = GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL,
             audibleStillCapture = true,
             maxVideoFps = 0.0,
-            minAutomaticStillIntervalMs = HEY_CYAN_AUTO_STILL_INTERVAL_MS,
+        )
+
+        DeviceClass.EYEVUE,
+        DeviceClass.TUNEBUDS -> GeminiLiveVisionCapabilities(
+            mode = GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL,
+            audibleStillCapture = false,
+            maxVideoFps = 0.0,
         )
 
         else -> GeminiLiveVisionCapabilities(
             mode = GeminiLiveVisionCapabilities.Mode.NONE,
             audibleStillCapture = false,
             maxVideoFps = 0.0,
-            minAutomaticStillIntervalMs = Long.MAX_VALUE,
         )
     }
 
@@ -61,11 +61,13 @@ object GeminiLiveVisionPolicy {
         nowMs: Long,
         lastAutomaticStillMs: Long,
         captureInProgress: Boolean,
+        refreshIntervalMs: Long?,
     ): Boolean {
         if (capabilities.mode != GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL) return false
+        if (refreshIntervalMs == null) return false
         if (captureInProgress) return false
         if (lastAutomaticStillMs <= 0L) return true
-        return nowMs - lastAutomaticStillMs >= capabilities.minAutomaticStillIntervalMs
+        return nowMs - lastAutomaticStillMs >= refreshIntervalMs
     }
 
     fun shouldSendVideoFrame(
@@ -74,10 +76,12 @@ object GeminiLiveVisionPolicy {
         nowMs: Long,
         lastFrameSentMs: Long,
         encodingInProgress: Boolean,
+        refreshIntervalMs: Long?,
     ): Boolean {
         if (capabilities.mode != GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES) return false
+        if (refreshIntervalMs == null) return false
         if (!userSpeaking || encodingInProgress) return false
         if (lastFrameSentMs <= 0L) return true
-        return nowMs - lastFrameSentMs >= LIVE_FRAME_INTERVAL_MS
+        return nowMs - lastFrameSentMs >= refreshIntervalMs
     }
 }

@@ -876,6 +876,43 @@ private fun GlassesAssistantControls(
         if (state.showAiWakeWordRouting) {
             AiWakeWordRouteControls(state, onAction)
         }
+        if (state.showGeminiLiveImageDelay) {
+            Text(
+                text = stringResource(Res.string.dashboard_live_image_delay),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = stringResource(Res.string.dashboard_live_image_delay_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            listOf(
+                0 to stringResource(Res.string.dashboard_live_image_only_first),
+                5 to stringResource(Res.string.dashboard_live_image_5_seconds),
+                10 to stringResource(Res.string.dashboard_live_image_10_seconds),
+                15 to stringResource(Res.string.dashboard_live_image_15_seconds),
+            ).chunked(2).forEach { options ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { (seconds, label) ->
+                        FilterChip(
+                            selected = state.geminiLiveImageDelaySeconds == seconds,
+                            onClick = {
+                                onAction(GlassesDashboardAction.SetGeminiLiveImageDelay(seconds))
+                            },
+                            label = { Text(label) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("gemini_live_image_delay_$seconds"),
+                        )
+                    }
+                }
+            }
+        }
         OutlinedButton(
             onClick = { onAction(GlassesDashboardAction.OpenExternalImageAutomationDiagnostics) },
             modifier = Modifier

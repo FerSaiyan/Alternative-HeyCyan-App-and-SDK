@@ -28,7 +28,8 @@ internal fun GlassesDashboardAction.isSupportedForTuneBudsDashboard(): Boolean =
     GlassesDashboardAction.RequestBattery,
     GlassesDashboardAction.RequestVersion,
     GlassesDashboardAction.SyncTime,
-    is GlassesDashboardAction.SelectImageThumbnailQuality -> true
+    is GlassesDashboardAction.SelectImageThumbnailQuality,
+    is GlassesDashboardAction.SetGeminiLiveImageDelay -> true
 
     is GlassesDashboardAction.SetAiWakeWordRoute,
     GlassesDashboardAction.RefreshRecordingSettings,
