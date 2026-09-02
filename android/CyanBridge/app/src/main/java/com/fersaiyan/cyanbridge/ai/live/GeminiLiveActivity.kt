@@ -249,8 +249,9 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     override fun onTranscription(input: Boolean, text: String) {
         // Transcription is intentionally parallel metadata. It is not inserted into the
         // audio -> Gemini -> native-audio critical path.
-        if (!input && text.isNotBlank()) {
-            android.util.Log.d("GeminiLiveActivity", "Gemini transcription: $text")
+        if (text.isNotBlank()) {
+            val direction = if (input) "User" else "Gemini"
+            android.util.Log.d("GeminiLiveActivity", "$direction transcription: $text")
         }
     }
 

@@ -82,11 +82,16 @@ class GeminiLiveClient(
     private val captureEnabled = AtomicBoolean(false)
     private val setupComplete = AtomicBoolean(false)
     private val speechActive = AtomicBoolean(false)
-    private val audioPreRoll = ArrayDeque<ByteArray>()
+    private val modelSpeaking = AtomicBoolean(false)
     private val speechDetector = GeminiLiveSpeechActivityDetector { speaking ->
-        speechActive.set(speaking)
-        Log.d(TAG, "Local speech energy active=$speaking")
-        listener.onUserSpeechActivity(speaking)
+        if (modelSpeaking.get()) {
+            speechActive.set(false)
+            Log.d(TAG, "Ignoring local speech energy during Gemini playback active=$speaking")
+        } else {
+            speechActive.set(speaking)
+            Log.d(TAG, "Local speech energy active=$speaking")
+            listener.onUserSpeechActivity(speaking)
+        }
     }
 
     private var state = GeminiLiveState.IDLE
@@ -150,7 +155,7 @@ class GeminiLiveClient(
         visualInputCount = 0
         setupComplete.set(false)
         speechActive.set(false)
-        audioPreRoll.clear()
+        modelSpeaking.set(false)
         speechDetector.reset()
         setState(GeminiLiveState.REQUESTING_TOKEN, "Requesting secure Live session")
         scope.launch {
@@ -169,6 +174,7 @@ class GeminiLiveClient(
     fun stop() {
         active.set(false)
         setupComplete.set(false)
+        modelSpeaking.set(false)
         reconnectJob?.cancel()
         reconnectJob = null
         sessionResumptionJob?.cancel()
@@ -404,6 +410,7 @@ class GeminiLiveClient(
                 runCatching { track.pause() }
                 runCatching { track.flush() }
             }
+            finishModelPlayback()
             listener.onInterrupted()
         }
 
@@ -423,6 +430,7 @@ class GeminiLiveClient(
         }
 
         if (serverContent.optBoolean("turnComplete", false) && active.get()) {
+            finishModelPlayback()
             setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
         }
     }
@@ -480,7 +488,6 @@ class GeminiLiveClient(
         val wasCapturing = captureEnabled.getAndSet(false)
         speechDetector.reset()
         speechActive.set(false)
-        audioPreRoll.clear()
         recorderJob?.cancel()
         recorderJob = null
         recorder?.let {
@@ -511,16 +518,9 @@ class GeminiLiveClient(
 
     private fun sendPcm(bytes: ByteArray) {
         if (!setupComplete.get() || bytes.isEmpty()) return
-        val wasActive = speechActive.get()
-        val isActive = speechDetector.offerPcm16Le(bytes)
-        if (!isActive) {
-            audioPreRoll.addLast(bytes.copyOf())
-            while (audioPreRoll.size > AUDIO_PRE_ROLL_CHUNKS) audioPreRoll.removeFirst()
-            return
-        }
-        if (!wasActive) {
-            while (audioPreRoll.isNotEmpty()) sendAudioPacket(audioPreRoll.removeFirst())
-        }
+        // The local detector schedules visual refreshes only. Gemini's server-side VAD must
+        // receive the continuous stream so quiet speech and natural pauses are not discarded.
+        speechDetector.offerPcm16Le(bytes)
         sendAudioPacket(bytes)
     }
 
@@ -569,15 +569,32 @@ class GeminiLiveClient(
 
     private fun playPcm(bytes: ByteArray) {
         if (bytes.isEmpty()) return
+        if (modelSpeaking.compareAndSet(false, true)) {
+            val wasUserSpeaking = speechActive.getAndSet(false)
+            speechDetector.reset()
+            if (wasUserSpeaking) listener.onUserSpeechActivity(false)
+        }
         if (playback == null) startPlayback()
         val track = playback ?: return
         if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
             runCatching { track.play() }
         }
-        val written = track.write(bytes, 0, bytes.size, AudioTrack.WRITE_NON_BLOCKING)
-        if (written > 0) {
+        var offset = 0
+        while (offset < bytes.size) {
+            val written = track.write(bytes, offset, bytes.size - offset, AudioTrack.WRITE_BLOCKING)
+            if (written <= 0) {
+                Log.w(TAG, "Live audio playback write failed result=$written remaining=${bytes.size - offset}")
+                break
+            }
+            offset += written
             outputAudioMs += written.toLong() * 1_000L / (OUTPUT_SAMPLE_RATE_HZ * 2L)
         }
+    }
+
+    private fun finishModelPlayback() {
+        if (!modelSpeaking.getAndSet(false)) return
+        speechDetector.reset()
+        speechActive.set(false)
     }
 
     private fun stopPlayback() {
@@ -712,7 +729,6 @@ class GeminiLiveClient(
         const val INPUT_SAMPLE_RATE_HZ = 16_000
         const val OUTPUT_SAMPLE_RATE_HZ = 24_000
         const val INPUT_CHUNK_BYTES = 1_280 // 40 ms PCM16 mono at 16 kHz; halves WS message rate vs 20 ms.
-        const val AUDIO_PRE_ROLL_CHUNKS = 5 // Preserve 200 ms before local speech activation.
         const val SESSION_RESUMPTION_RECONNECT_MS = 9 * 60 * 1000L
         const val MAX_VISUAL_INPUTS_PER_SESSION = 540 // At most 1 FPS over the 9-minute resumption window.
     }
