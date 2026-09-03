@@ -887,29 +887,26 @@ private fun GlassesAssistantControls(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            listOf(
-                0 to stringResource(Res.string.dashboard_live_image_only_first),
-                5 to stringResource(Res.string.dashboard_live_image_5_seconds),
-                10 to stringResource(Res.string.dashboard_live_image_10_seconds),
-                15 to stringResource(Res.string.dashboard_live_image_15_seconds),
-            ).chunked(2).forEach { options ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    options.forEach { (seconds, label) ->
-                        FilterChip(
-                            selected = state.geminiLiveImageDelaySeconds == seconds,
-                            onClick = {
-                                onAction(GlassesDashboardAction.SetGeminiLiveImageDelay(seconds))
-                            },
-                            label = { Text(label) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp)
-                                .testTag("gemini_live_image_delay_$seconds"),
-                        )
-                    }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(
+                    0 to stringResource(Res.string.dashboard_live_image_only_first),
+                    2 to stringResource(Res.string.dashboard_live_image_every_turn),
+                ).forEach { (seconds, label) ->
+                    FilterChip(
+                        selected = state.geminiLiveImageDelaySeconds == seconds ||
+                            (seconds == 2 && state.geminiLiveImageDelaySeconds in listOf(5, 10, 15)),
+                        onClick = {
+                            onAction(GlassesDashboardAction.SetGeminiLiveImageDelay(seconds))
+                        },
+                        label = { Text(label) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("gemini_live_image_delay_$seconds"),
+                    )
                 }
             }
         }

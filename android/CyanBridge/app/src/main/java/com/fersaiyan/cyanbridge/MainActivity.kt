@@ -4319,6 +4319,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return result
     }
 
+    /** Returns true when the *image* question button would route to Gemini Live (voice+vision). */
+    private fun isGeminiLiveRoutedForImageQuestion(): Boolean {
+        val assistantRoute = currentAssistantRoute()
+        if (assistantRoute == GlassesAssistantRoute.PHONE_ASSISTANT) return false
+        val internalProvider = when (assistantRoute) {
+            GlassesAssistantRoute.LOCAL,
+            GlassesAssistantRoute.PRO,
+            GlassesAssistantRoute.TASKER_EXTERNAL_UI -> MediaInferenceRoutingPolicy.resolve(this)
+            GlassesAssistantRoute.PHONE_ASSISTANT -> null
+        } ?: return false
+        return shouldUseGeminiLiveQuestions(internalProvider)
+    }
+
     private fun launchGeminiLiveQuestion(
         prompt: String,
         imagePath: String? = null,
@@ -5150,7 +5163,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         CoroutineScope(Dispatchers.IO).launch {
             var initialQuestion = pendingVoiceImageQuestion
             pendingVoiceImageQuestion = null
-            if (initialQuestion.isNullOrBlank()) {
+            // Live routes skip the legacy SpeechRecognizer Ask windows entirely.
+            // Non-Live (local, tasker, gemini 3.7 flash) keeps the parallel + sequential windows.
+            val isLiveRoute = withContext(Dispatchers.Main) { isGeminiLiveRoutedForImageQuestion() }
+            if (isLiveRoute) {
+                withContext(Dispatchers.Main) { cancelParallelAudioQuestion() }
+                Log.i("ImageQuestion", "Live route: skipping legacy Ask windows, using system image prompt")
+            } else if (initialQuestion.isNullOrBlank()) {
                 val parallelDeferred = activeParallelAudioQuestionDeferred
                 activeParallelAudioQuestionDeferred = null
                 activeParallelAudioQuestionJob = null
@@ -5262,6 +5281,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun startParallelAudioQuestionIfEligible(offerSpokenQuestion: Boolean) {
+        // Gemini Live handles voice continuously after the session is listening.
+        // Skipping the legacy SpeechRecognizer Ask window here keeps local/tasker/
+        // non-Live Pro (e.g. gemini 3.7 flash) parallel behavior unchanged while
+        // Live takes a photo and shows Initializing Live instead.
+        if (isGeminiLiveRoutedForImageQuestion()) {
+            cancelParallelAudioQuestion()
+            pendingImageQuestionOfferSpokenQuestion = false
+            Log.i("ImageQuestionAudio", "Skipping parallel Ask window for Gemini Live route")
+            return
+        }
         cancelParallelAudioQuestion()
         if (
             offerSpokenQuestion &&
