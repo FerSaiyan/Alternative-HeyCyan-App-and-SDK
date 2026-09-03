@@ -14,7 +14,22 @@ enum class ImageQuestionRoute {
     TASKER_GEMINI,
 }
 
-/** A single resolved prompt is deliberately shared by every image-question route. */
+/**
+ * Single source of truth for the default image question
+ * ([ImageQuestionDefaults.questionForLanguage]) and its per-request
+ * composition.
+ *
+ * - Single-shot flows (PRO_RELAY via CliRelayClient.imageQuery,
+ *   LOCAL_GEMMA, TASKER_GEMINI) are strict one-turn requests and append
+ *   "Answer only in X" so the model locks to the app language.
+ * - Gemini Live is continuous and supports 97 languages; its
+ *   systemInstruction must be permissive (default to app language but
+ *   switch when the user asks). For Live callers use [baseQuestion] or
+ *   [ImageQuestionPreferences.get().defaultQuestion] directly and let
+ *   lib/gemini-live.ts buildLiveSystemInstruction handle language
+ *   permissively. Do NOT embed the strict "Answer only in" line into the
+ *   Live systemInstruction.
+ */
 data class ResolvedImageQuestionPrompt(
     val text: String,
 ) {
@@ -93,18 +108,36 @@ object ImageQuestionDefaults {
 }
 
 object ImageQuestionPromptResolver {
+    /**
+     * Strict single-shot prompt: base question + "Answer only in X".
+     * Use for CliRelayClient.imageQuery and local single-turn models.
+     * For Gemini Live systemInstruction use [baseQuestion] instead so
+     * Live can switch to any of its 97 languages on request.
+     */
     fun resolve(
         settings: ImageQuestionSettings,
         userQuestion: String?,
     ): ResolvedImageQuestionPrompt {
         val languageTag = settings.appLanguageTag.ifBlank { "en" }
-        val question = userQuestion?.trim().takeUnless { it.isNullOrBlank() }
-            ?: settings.defaultQuestion.trim().ifBlank {
-                ImageQuestionDefaults.questionForLanguage(languageTag)
-            }
-
+        val question = baseQuestion(settings, userQuestion)
         return ResolvedImageQuestionPrompt(
             text = "$question\n\n${ImageQuestionDefaults.responseLanguageInstruction(languageTag)}",
         )
+    }
+
+    /**
+     * Base question without language lock — single source for Live's
+     * default image question. Live's systemInstruction adds a permissive
+     * language instruction separately (see lib/gemini-live.ts).
+     */
+    fun baseQuestion(
+        settings: ImageQuestionSettings,
+        userQuestion: String?,
+    ): String {
+        val languageTag = settings.appLanguageTag.ifBlank { "en" }
+        return userQuestion?.trim().takeUnless { it.isNullOrBlank() }
+            ?: settings.defaultQuestion.trim().ifBlank {
+                ImageQuestionDefaults.questionForLanguage(languageTag)
+            }
     }
 }

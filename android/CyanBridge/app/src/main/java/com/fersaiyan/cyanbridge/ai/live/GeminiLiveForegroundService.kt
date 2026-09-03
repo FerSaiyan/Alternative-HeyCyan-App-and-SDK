@@ -92,11 +92,13 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                     ?: AppLanguagePreferences.selected(this).languageTag.ifBlank { Locale.getDefault().toLanguageTag() }
                 initialImagePath = intent.getStringExtra(EXTRA_INITIAL_IMAGE_PATH)?.takeIf { it.isNotBlank() }
                 initialPrompt = intent.getStringExtra(EXTRA_INITIAL_PROMPT)?.takeIf { it.isNotBlank() }
+                // Base image question without strict "Answer only in X" - Live's systemInstruction handles language permissively
+                // (97 languages, switch on request). Single-shot paths keep the strict Resolver.
                 val imagePrompt = intent.getStringExtra(EXTRA_IMAGE_PROMPT)?.takeIf { it.isNotBlank() }
-                    ?: ImageQuestionPromptResolver.resolve(
+                    ?: ImageQuestionPromptResolver.baseQuestion(
                         settings = ImageQuestionPreferences.get(this),
                         userQuestion = null,
-                    ).forRoute(ImageQuestionRoute.PRO_RELAY)
+                    )
 
                 // Foreground must be started within ~5s on Android 14+
                 startForegroundWithStatus("Connecting to Gemini Live")

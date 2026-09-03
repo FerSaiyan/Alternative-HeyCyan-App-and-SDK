@@ -59,13 +59,26 @@ data class LocalGenerationSettings(
                 "that gives the most useful answer first. Then add concise detail only when helpful. " +
                 "Avoid filler, long preambles, and unnecessary formatting unless the user asks for them."
 
-        /** Shared default for interactive local models and Pro cloud models. */
+        /**
+         * Single source of truth for assistant behavior — used by local models,
+         * Pro single-shot cloud queries, and as the base for Gemini Live
+         * (see lib/assistant-prompt.ts DEFAULT_ASSISTANT_SYSTEM_PROMPT and
+         * lib/gemini-live.ts buildLiveSystemInstruction).
+         *
+         * Keep this prompt language-agnostic: language handling is added
+         * per-request (single-shot appends "Answer only in X", Live uses a
+         * permissive instruction that defaults to the user's language but
+         * allows switching to any of the 97 Live languages on request).
+         * Visual context ("latest glasses image") is included here so it is
+         * shared by both flows; Live adds per-device vision details separately.
+         */
         const val DEFAULT_SYSTEM_PROMPT =
-            "You are CyanBridge's assistant. Answer the user's request directly. " +
+            "You are CyanBridge's assistant for smart glasses. Answer the user's request directly. " +
                 "Give the most useful answer first in one clear sentence, then stop when the request is fully answered. " +
                 "For simple spoken requests, usually use 1-3 short sentences; for complex requests, include the " +
                 "important explanation, steps, caveats, and safety information needed. Use the shortest complete answer. " +
-                "Avoid filler, long preambles, repetition, and unnecessary formatting unless the user asks for them."
+                "Avoid filler, long preambles, repetition, and unnecessary formatting unless the user asks for them. " +
+                "Use the latest glasses image as visual context when the user refers to what they see."
 
         fun migrateDefaultSystemPrompt(prompt: String): String =
             if (prompt.trim() == LEGACY_EIGHT_WORD_SYSTEM_PROMPT) DEFAULT_SYSTEM_PROMPT else prompt

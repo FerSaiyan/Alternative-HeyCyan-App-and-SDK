@@ -152,10 +152,11 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     private fun startLive() {
         val language = AppLanguagePreferences.selected(this).languageTag
             .ifBlank { Locale.getDefault().toLanguageTag() }
-        val defaultImageQuestion = ImageQuestionPromptResolver.resolve(
+        // Base question without strict language lock - Live's system handles 97-language switching permissively
+        val defaultImageQuestion = ImageQuestionPromptResolver.baseQuestion(
             settings = ImageQuestionPreferences.get(this),
             userQuestion = null,
-        ).forRoute(ImageQuestionRoute.PRO_RELAY)
+        )
         visionStatus = if (useRelayForFreeTier) "Glasses vision: relay (server holds key)" else "Glasses vision: preparing"
         renderIndicators()
         status.text = if (useRelayForFreeTier) "Connecting to CyanBridge Live relay" else "Connecting to Gemini Live"

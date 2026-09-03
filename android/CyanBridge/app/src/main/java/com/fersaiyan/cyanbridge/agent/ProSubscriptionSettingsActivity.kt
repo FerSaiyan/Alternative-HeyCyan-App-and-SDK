@@ -636,12 +636,13 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                     },
                     onStartGeminiLive = {
                         // Notification-driven Live survives lock/screen-off; activity is now optional viewer.
+                        // Use base question (no strict Answer only in X) - Live system handles 97-language switching permissively.
                         val language = AppLanguagePreferences.selected(this@ProSubscriptionSettingsActivity).languageTag
                             .ifBlank { Locale.getDefault().toLanguageTag() }
-                        val imagePrompt = ImageQuestionPromptResolver.resolve(
+                        val imagePrompt = ImageQuestionPromptResolver.baseQuestion(
                             settings = ImageQuestionPreferences.get(this@ProSubscriptionSettingsActivity),
                             userQuestion = null,
-                        ).forRoute(ImageQuestionRoute.PRO_RELAY)
+                        )
                         val isPro = ProSubscriptionPrefs.isActiveLocally(this@ProSubscriptionSettingsActivity) &&
                             ProSubscriptionPrefs.getPlan(this@ProSubscriptionSettingsActivity).lowercase() in setOf("cheap", "standard", "max")
                         GeminiLiveForegroundService.start(
