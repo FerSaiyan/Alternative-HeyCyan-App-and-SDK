@@ -119,6 +119,10 @@ class GeminiLiveClient(
     private var inputAudioMs = 0L
     private var outputAudioMs = 0L
     private var visualInputCount = 0
+    private var lastBilledInputMs = 0L
+    private var lastBilledOutputMs = 0L
+    private var lastBilledImages = 0
+    private var lastUsageTotalTokens = 0
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -158,6 +162,10 @@ class GeminiLiveClient(
         inputAudioMs = 0L
         outputAudioMs = 0L
         visualInputCount = 0
+        lastBilledInputMs = 0L
+        lastBilledOutputMs = 0L
+        lastBilledImages = 0
+        lastUsageTotalTokens = 0
         setupComplete.set(false)
         speechActive.set(false)
         modelSpeaking.set(false)
@@ -434,43 +442,131 @@ class GeminiLiveClient(
             Log.i(TAG, "Gemini Live goAway received; timeLeft=$timeLeft")
         }
 
-        val serverContent = message.optJSONObject("serverContent") ?: return
-        serverContent.optJSONObject("inputTranscription")
-            ?.optString("text")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { listener.onTranscription(true, it) }
-        serverContent.optJSONObject("outputTranscription")
-            ?.optString("text")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { listener.onTranscription(false, it) }
-
-        if (serverContent.optBoolean("interrupted", false)) {
-            playback?.let { track ->
-                runCatching { track.pause() }
-                runCatching { track.flush() }
-            }
-            finishModelPlayback()
-            listener.onInterrupted()
+        // Google-recommended metering: usageMetadata is the billed tokens for this turn
+        // (includes re-billed sliding window). Forward it for server-side quota debit.
+        message.optJSONObject("usageMetadata")?.let { usage ->
+            handleUsageMetadata(usage)
         }
 
-        val parts = serverContent.optJSONObject("modelTurn")?.optJSONArray("parts")
-        if (parts != null) {
-            for (index in 0 until parts.length()) {
-                val encoded = parts.optJSONObject(index)
-                    ?.optJSONObject("inlineData")
-                    ?.optString("data")
-                    .orEmpty()
-                if (encoded.isNotBlank()) {
-                    runCatching { Base64.decode(encoded, Base64.DEFAULT) }
-                        .getOrNull()
-                        ?.let(::playPcm)
+        val serverContent = message.optJSONObject("serverContent")
+        if (serverContent != null) {
+            serverContent.optJSONObject("inputTranscription")
+                ?.optString("text")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { listener.onTranscription(true, it) }
+            serverContent.optJSONObject("outputTranscription")
+                ?.optString("text")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { listener.onTranscription(false, it) }
+
+            if (serverContent.optBoolean("interrupted", false)) {
+                playback?.let { track ->
+                    runCatching { track.pause() }
+                    runCatching { track.flush() }
+                }
+                finishModelPlayback()
+                listener.onInterrupted()
+                // Interrupted still ends a turn — bill the partial turn via usageMetadata if present,
+                // otherwise via audio ms delta.
+                reportTurnUsageIfNeeded()
+            }
+
+            val parts = serverContent.optJSONObject("modelTurn")?.optJSONArray("parts")
+            if (parts != null) {
+                for (index in 0 until parts.length()) {
+                    val encoded = parts.optJSONObject(index)
+                        ?.optJSONObject("inlineData")
+                        ?.optString("data")
+                        .orEmpty()
+                    if (encoded.isNotBlank()) {
+                        runCatching { Base64.decode(encoded, Base64.DEFAULT) }
+                            .getOrNull()
+                            ?.let(::playPcm)
+                    }
                 }
             }
-        }
 
-        if (serverContent.optBoolean("turnComplete", false) && active.get()) {
-            finishModelPlayback()
-            setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
+            if (serverContent.optBoolean("turnComplete", false) && active.get()) {
+                finishModelPlayback()
+                setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
+                reportTurnUsageIfNeeded()
+            }
+        }
+        // If message had only usageMetadata and no serverContent, billing already happened via handleUsageMetadata
+    }
+
+    private fun handleUsageMetadata(usage: JSONObject) {
+        val total = usage.optInt("totalTokenCount", 0)
+        if (total <= 0) {
+            // Fallback to prompt+response if total missing
+            val prompt = usage.optInt("promptTokenCount", 0)
+            val response = usage.optInt("responseTokenCount", 0)
+            if (prompt <= 0 && response <= 0) return
+        }
+        // Avoid double-billing same total within a turn
+        val totalForDedup = usage.optInt("totalTokenCount", usage.optInt("promptTokenCount", 0) + usage.optInt("responseTokenCount", 0))
+        if (totalForDedup == lastUsageTotalTokens && totalForDedup != 0) return
+        lastUsageTotalTokens = totalForDedup
+        reportLiveUsage(usageMetadata = usage, deltaInputMs = 0, deltaOutputMs = 0, deltaImages = 0)
+    }
+
+    private fun reportTurnUsageIfNeeded() {
+        val deltaInput = inputAudioMs - lastBilledInputMs
+        val deltaOutput = outputAudioMs - lastBilledOutputMs
+        val deltaImages = visualInputCount - lastBilledImages
+        if (deltaInput <= 0 && deltaOutput <= 0 && deltaImages <= 0) return
+        // If we just billed via usageMetadata for this turn, lastUsageTotalTokens will have been updated
+        // and delta will be small; we still report delta as fallback but server will deduplicate via max logic.
+        reportLiveUsage(usageMetadata = null, deltaInputMs = deltaInput, deltaOutputMs = deltaOutput, deltaImages = deltaImages)
+        lastBilledInputMs = inputAudioMs
+        lastBilledOutputMs = outputAudioMs
+        lastBilledImages = visualInputCount
+    }
+
+    private fun reportLiveUsage(usageMetadata: JSONObject?, deltaInputMs: Long, deltaOutputMs: Long, deltaImages: Int) {
+        val cfg = tokenConfig ?: return
+        if (cfg.reservationId == "free-proxy" || cfg.reservationId == "direct") return
+        val authToken = ProSubscriptionServerPrefs.getApiToken(appContext).trim()
+        val base = AiProviderPrefs.getRelayBaseUrl(appContext).trim().trimEnd('/')
+        if (authToken.isBlank() || !base.startsWith("https://")) return
+        scope.launch {
+            try {
+                val body = JSONObject().apply {
+                    put("reservation_id", cfg.reservationId)
+                    if (usageMetadata != null) put("usage_metadata", usageMetadata) else {
+                        put("delta_input_audio_ms", deltaInputMs)
+                        put("delta_output_audio_ms", deltaOutputMs)
+                        put("delta_image_count", deltaImages)
+                        put("input_audio_ms", deltaInputMs)
+                        put("output_audio_ms", deltaOutputMs)
+                        put("image_count", deltaImages)
+                    }
+                }.toString().toRequestBody("application/json".toMediaType())
+                val req = Request.Builder()
+                    .url("$base/api/pro/live/usage")
+                    .header("Authorization", "Bearer $authToken")
+                    .post(body)
+                    .build()
+                http.newCall(req).execute().use { resp ->
+                    val raw = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) {
+                        val json = runCatching { JSONObject(raw) }.getOrNull()
+                        val err = json?.optString("error") ?: raw
+                        if (resp.code == 402 && err.contains("live_quota_exhausted")) {
+                            Log.w(TAG, "Live quota exhausted mid-session, stopping")
+                            active.set(false)
+                            setState(GeminiLiveState.ERROR, "Live quota exhausted. Please wait for quota reset or upgrade.")
+                            stop()
+                        } else {
+                            Log.w(TAG, "Live usage report failed code=${resp.code} err=$err")
+                        }
+                    } else {
+                        Log.d(TAG, "Live usage reported ok deltaInput=$deltaInputMs deltaOutput=$deltaOutputMs images=$deltaImages usage=$usageMetadata")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Live usage report exception", e)
+            }
         }
     }
 
