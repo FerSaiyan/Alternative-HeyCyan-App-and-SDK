@@ -4338,25 +4338,43 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         onLaunched: (() -> Unit)? = null,
     ) {
         val languageTag = recognitionLanguageTag()
+        // Foreground service keeps mic+vision alive with screen off/locked.
+        // The dedicated GeminiLiveActivity is now optional debug UI; the image
+        // button path prefers the notification-driven service with a Stop action.
         val launch: () -> Unit = {
             try {
-                startActivity(
-                    Intent(this, GeminiLiveActivity::class.java)
-                        .putExtra(GeminiLiveActivity.EXTRA_AUTO_START, true)
-                        .putExtra(GeminiLiveActivity.EXTRA_INITIAL_PROMPT, prompt)
-                        .apply {
-                            imagePath?.takeIf { it.isNotBlank() }?.let {
-                                putExtra(GeminiLiveActivity.EXTRA_INITIAL_IMAGE_PATH, it)
-                            }
-                        },
+                val isPro = com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs.isActiveLocally(this) &&
+                    com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs.getPlan(this).lowercase() in setOf("cheap", "standard", "max")
+                com.fersaiyan.cyanbridge.ai.live.GeminiLiveForegroundService.start(
+                    context = this,
+                    language = languageTag,
+                    imagePrompt = prompt,
+                    initialImagePath = imagePath,
+                    initialPrompt = prompt,
+                    useRelay = !isPro,
                 )
                 Log.i(
                     "GeminiLive",
-                    "Started continuous Live question session initialImage=${!imagePath.isNullOrBlank()}",
+                    "Started Live foreground service initialImage=${!imagePath.isNullOrBlank()} useRelay=${!isPro}",
                 )
+                // Keep activity launch as fallback for debugging if service is unavailable
+                // (no-op if service already handles it). Not started by default.
             } catch (error: Exception) {
-                Log.e("GeminiLive", "Could not open continuous Live session", error)
+                Log.e("GeminiLive", "Could not start Live foreground service", error)
                 Toast.makeText(this, "Could not start Gemini Live.", Toast.LENGTH_LONG).show()
+                // Fallback to legacy activity path
+                try {
+                    startActivity(
+                        Intent(this, GeminiLiveActivity::class.java)
+                            .putExtra(GeminiLiveActivity.EXTRA_AUTO_START, true)
+                            .putExtra(GeminiLiveActivity.EXTRA_INITIAL_PROMPT, prompt)
+                            .apply {
+                                imagePath?.takeIf { it.isNotBlank() }?.let {
+                                    putExtra(GeminiLiveActivity.EXTRA_INITIAL_IMAGE_PATH, it)
+                                }
+                            },
+                    )
+                } catch (_: Exception) {}
             } finally {
                 onLaunched?.invoke()
             }

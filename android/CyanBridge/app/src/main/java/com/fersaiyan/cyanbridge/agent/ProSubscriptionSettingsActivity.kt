@@ -20,7 +20,13 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveActivity
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveForegroundService
+import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
+import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
+import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionRoute
 import com.fersaiyan.cyanbridge.shared.billing.ProSubscriptionSettingsUiState
+import com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences
+import java.util.Locale
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.pro.ProSubscriptionSettingsScreen
@@ -629,7 +635,24 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                         syncComposeState?.invoke()
                     },
                     onStartGeminiLive = {
-                        startActivity(Intent(this@ProSubscriptionSettingsActivity, GeminiLiveActivity::class.java))
+                        // Notification-driven Live survives lock/screen-off; activity is now optional viewer.
+                        val language = AppLanguagePreferences.selected(this@ProSubscriptionSettingsActivity).languageTag
+                            .ifBlank { Locale.getDefault().toLanguageTag() }
+                        val imagePrompt = ImageQuestionPromptResolver.resolve(
+                            settings = ImageQuestionPreferences.get(this@ProSubscriptionSettingsActivity),
+                            userQuestion = null,
+                        ).forRoute(ImageQuestionRoute.PRO_RELAY)
+                        val isPro = ProSubscriptionPrefs.isActiveLocally(this@ProSubscriptionSettingsActivity) &&
+                            ProSubscriptionPrefs.getPlan(this@ProSubscriptionSettingsActivity).lowercase() in setOf("cheap", "standard", "max")
+                        GeminiLiveForegroundService.start(
+                            context = this@ProSubscriptionSettingsActivity,
+                            language = language,
+                            imagePrompt = imagePrompt,
+                            initialImagePath = null,
+                            initialPrompt = null,
+                            useRelay = !isPro,
+                        )
+                        Toast.makeText(this@ProSubscriptionSettingsActivity, "Gemini Live started — see notification to stop", Toast.LENGTH_SHORT).show()
                     },
                     onCloudSyncChange = {
                         switchCloudSync.isChecked = it

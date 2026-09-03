@@ -30,6 +30,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
@@ -145,6 +146,7 @@
             android:exported="false"
             android:process=":benchmark_mtp_on" />
         <service android:name=".ai.AiQuestionForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|dataSync|microphone" />
+        <service android:name=".ai.live.GeminiLiveForegroundService" android:exported="false" android:foregroundServiceType="microphone|connectedDevice|mediaPlayback|dataSync" />
         <service android:name=".plugins.walkingaid.WalkingAidService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".plugins.meetingsparknotes.MeetingSparkNotesService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.livecaptionrelay.LiveCaptionRelayService" android:exported="false" android:foregroundServiceType="microphone" />
