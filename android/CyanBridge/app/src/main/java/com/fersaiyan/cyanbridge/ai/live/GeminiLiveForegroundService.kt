@@ -303,7 +303,6 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     }
 
     override fun onInterrupted() {
-        visionController?.onServerDetectedUserInterruption()
         currentDetail = "Gemini was interrupted. Listening for you."
         updateNotification()
     }
