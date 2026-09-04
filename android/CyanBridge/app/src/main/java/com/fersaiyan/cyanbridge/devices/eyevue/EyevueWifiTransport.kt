@@ -266,6 +266,11 @@ class EyevueWifiTransport(
     private fun requestP2pPeers() {
         val channel = p2pChannel ?: return
         p2pManager.requestPeers(channel) { peers ->
+            Log.i(
+                TAG,
+                "Eyevue P2P peers target=${p2pTargetSsid.orEmpty()} peers=" +
+                    peers.deviceList.joinToString { "${it.deviceName.orEmpty()}@${it.deviceAddress}" },
+            )
             val target = findTargetPeer(peers)
             if (target == null || p2pConnecting) return@requestPeers
             p2pConnecting = true
@@ -289,8 +294,20 @@ class EyevueWifiTransport(
     private fun findTargetPeer(peers: WifiP2pDeviceList): WifiP2pDevice? {
         val target = p2pTargetSsid?.trim().orEmpty()
         if (target.isBlank()) return null
-        return peers.deviceList.firstOrNull { peer ->
-            peer.deviceName?.contains(target, ignoreCase = true) == true
+        peers.deviceList.firstOrNull { peer ->
+            peer.deviceName?.contains(target, ignoreCase = true) == true ||
+                target.contains(peer.deviceName.orEmpty(), ignoreCase = true)
+        }?.let { return it }
+
+        // The BLE-reported SSID and WifiP2pDevice.deviceName are separate vendor fields and
+        // are not guaranteed to match. Falling back is safe only when discovery exposes one
+        // candidate; never connect to an arbitrary peer when multiple devices are present.
+        return peers.deviceList.singleOrNull()?.also { peer ->
+            Log.w(
+                TAG,
+                "Eyevue P2P SSID '$target' did not match deviceName '${peer.deviceName}'; " +
+                    "using the only discovered peer ${peer.deviceAddress}",
+            )
         }
     }
 
