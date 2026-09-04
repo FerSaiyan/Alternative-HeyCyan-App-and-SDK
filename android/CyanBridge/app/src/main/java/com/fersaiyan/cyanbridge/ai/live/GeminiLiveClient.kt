@@ -90,11 +90,13 @@ class GeminiLiveClient(
     private var visualAudioHoldStarted = false
     private var heldVisualSilenceChunks = 0
     private val speechDetector = GeminiLiveSpeechActivityDetector { speaking ->
+        // Always retain the local energy state. During Gemini playback we suppress the
+        // vision callback to avoid speaker echo triggering a picture, but the state is
+        // still used to confirm that a server-side interruption was backed by local speech.
+        speechActive.set(speaking)
         if (modelSpeaking.get()) {
-            speechActive.set(false)
-            Log.d(TAG, "Ignoring local speech energy during Gemini playback active=$speaking")
+            Log.d(TAG, "Local speech energy during Gemini playback active=$speaking (callback suppressed)")
         } else {
-            speechActive.set(speaking)
             Log.d(TAG, "Local speech energy active=$speaking")
             listener.onUserSpeechActivity(speaking)
         }
@@ -597,11 +599,16 @@ class GeminiLiveClient(
                 ?.let { listener.onTranscription(false, it) }
 
             if (serverContent.optBoolean("interrupted", false)) {
+                // A server interruption alone is not enough to refresh vision: it can be
+                // caused by noise/echo. Require simultaneous local energy evidence so barge-in
+                // speech still gets a fresh image without reintroducing spontaneous captures.
+                val locallyConfirmedSpeech = speechActive.get()
                 playback?.let { track ->
                     runCatching { track.pause() }
                     runCatching { track.flush() }
                 }
                 finishModelPlayback()
+                if (locallyConfirmedSpeech) listener.onUserSpeechActivity(true)
                 listener.onInterrupted()
                 // Interrupted still ends a turn — bill the partial turn via usageMetadata if present,
                 // otherwise via audio ms delta.
