@@ -22,6 +22,8 @@ data class LiveTokenConfig(
     val authorizationHeader: String? = null,
     /** Optional API key for direct Live websocket auth (free-tier requires x-goog-api-key alongside Token). */
     val apiKey: String? = null,
+    /** Exact bidiGenerateContentSetup that was used to mint the token; if present the Live setup should echo it exactly. */
+    val setupJson: String? = null,
 )
 
 interface GeminiLiveTokenProvider {
@@ -101,6 +103,12 @@ class DefaultGeminiLiveTokenProvider(
             // or via SharedPreferences "debug_gemini_api_key". Not used in production relay flow.
             val debugApiKey = appContext.getSharedPreferences("debug", Context.MODE_PRIVATE)
                 .getString("debug_gemini_api_key", null)?.trim()?.takeIf { it.isNotBlank() }
+            // Pro Live via BidiGenerateContent needs x-goog-api-key alongside Token
+            // (free proxy does Token + x-goog-api-key server-side; Pro must send
+            // the same from device to avoid 1008). Server returns api_key for Pro.
+            val serverApiKey = json.optString("api_key", "").trim().takeIf { it.isNotBlank() }
+                ?: json.optString("apiKey", "").trim().takeIf { it.isNotBlank() }
+            val setupJson = json.optJSONObject("setup")?.toString()?.takeIf { it.isNotBlank() && it != "null" }
             return LiveTokenConfig(
                 token = json.getString("token"),
                 model = json.getString("model"),
@@ -108,7 +116,8 @@ class DefaultGeminiLiveTokenProvider(
                 expiresAtMs = expiresAt,
                 reservationId = json.getString("reservation_id"),
                 authorizationHeader = "Token ${json.getString("token")}",
-                apiKey = debugApiKey,
+                apiKey = serverApiKey ?: debugApiKey,
+                setupJson = setupJson,
             )
         }
     }

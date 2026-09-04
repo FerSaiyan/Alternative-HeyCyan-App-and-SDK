@@ -66,8 +66,16 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:gemini-live")
             .apply { setReferenceCounted(false) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Bump from LOW (previous installs) to DEFAULT so the ongoing session is visible
+            // in the status bar on Samsung One UI - user reported no notification with LOW.
+            runCatching {
+                val existing = notificationManager.getNotificationChannel(CHANNEL_ID)
+                if (existing != null && existing.importance != NotificationManager.IMPORTANCE_DEFAULT) {
+                    notificationManager.deleteNotificationChannel(CHANNEL_ID)
+                }
+            }
             notificationManager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Gemini Live", NotificationManager.IMPORTANCE_LOW).apply {
+                NotificationChannel(CHANNEL_ID, "Gemini Live", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "Continuous Gemini Live voice and vision session"
                     setShowBadge(false)
                 }

@@ -4338,6 +4338,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         onLaunched: (() -> Unit)? = null,
     ) {
         val languageTag = recognitionLanguageTag()
+        // Base image question without strict "Answer only in X" - Live systemInstruction handles 97-language switching permissively.
+        // Single-shot paths keep strict Resolver; Live uses baseQuestion as imagePrompt, while initialPrompt is the user's actual turn.
+        val baseImagePrompt = ImageQuestionPromptResolver.baseQuestion(
+            settings = ImageQuestionPreferences.get(this),
+            userQuestion = null,
+        )
+        val initialPrompt = prompt.trim().ifBlank { baseImagePrompt }
         // Foreground service keeps mic+vision alive with screen off/locked.
         // The dedicated GeminiLiveActivity is now optional debug UI; the image
         // button path prefers the notification-driven service with a Stop action.
@@ -4348,9 +4355,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 com.fersaiyan.cyanbridge.ai.live.GeminiLiveForegroundService.start(
                     context = this,
                     language = languageTag,
-                    imagePrompt = prompt,
+                    imagePrompt = baseImagePrompt,
                     initialImagePath = imagePath,
-                    initialPrompt = prompt,
+                    initialPrompt = initialPrompt,
                     useRelay = !isPro,
                 )
                 Log.i(
@@ -4399,8 +4406,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         Log.i("AIHijack", "Running image query with RAG disabled for chosen provider $providerType: $imagePath")
 
         if (shouldUseGeminiLiveQuestions(providerType)) {
+            // Live systemInstruction is permissive (97 languages, switch on request) - use base question
+            // without strict "Answer only in X". Single-shot PRO_RELAY keeps strict via forRoute.
+            val liveBasePrompt = ImageQuestionPromptResolver.baseQuestion(
+                settings = ImageQuestionPreferences.get(this),
+                userQuestion = null,
+            ).ifBlank { resolvedPrompt.text.substringBefore("\n\n") }
             launchGeminiLiveQuestion(
-                prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
+                prompt = liveBasePrompt,
                 imagePath = imagePath,
                 onLaunched = {
                     imageQueryInProgress.set(false)

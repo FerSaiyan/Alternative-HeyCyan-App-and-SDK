@@ -30,6 +30,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -104,6 +105,13 @@ class GeminiLiveClient(
     private val effectiveTokenProvider: GeminiLiveTokenProvider by lazy {
         tokenProvider ?: DefaultGeminiLiveTokenProvider(appContext, http)
     }
+    // Stored for building the Live setup systemInstruction to match the token's bidiGenerateContentSetup.
+    // The token's setup is built server-side via buildLiveSystemInstruction(language, imagePrompt, systemPrompt)
+    // and the Live setup we send must include the same systemInstruction + contextWindowCompression
+    // to avoid 1008 or hanging in CONNECTING (seen when setup omitted these).
+    private var lastLanguage: String = "en"
+    private var lastImagePrompt: String = ""
+    private var lastSystemPrompt: String = ""
     private var socket: WebSocket? = null
     private var recorder: AudioRecord? = null
     private var recorderJob: Job? = null
@@ -171,15 +179,22 @@ class GeminiLiveClient(
         modelSpeaking.set(false)
         clearDelayedAudio()
         speechDetector.reset()
+        // Store for setup to match token's bidiGenerateContentSetup
+        lastLanguage = language.ifBlank { "en" }
+        lastImagePrompt = imagePrompt
+        lastSystemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(appContext)
         setState(GeminiLiveState.REQUESTING_TOKEN, "Requesting secure Live session")
+        Log.i(TAG, "Live start requested language=$language prompt=${imagePrompt.take(80)}")
         scope.launch {
             runCatching { requestToken(language, imagePrompt) }
                 .onSuccess {
                     tokenConfig = it
+                    Log.i(TAG, "Live token ok model=${it.model} reservation=${it.reservationId} url=${it.websocketUrl.take(80)} expires=${it.expiresAtMs} auth=${it.authorizationHeader?.take(20)} apiKey=${if (it.apiKey.isNullOrBlank()) "none" else "present"}")
                     connectOrReconnect()
                 }
                 .onFailure {
                     active.set(false)
+                    Log.e(TAG, "Live token failed", it)
                     setState(GeminiLiveState.ERROR, it.message ?: "Unable to start Gemini Live")
                 }
         }
@@ -382,10 +397,12 @@ class GeminiLiveClient(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                Log.w(TAG, "Gemini Live socket closing code=$code reason=$reason")
                 webSocket.close(code, reason)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                Log.w(TAG, "Gemini Live socket closed code=$code reason=$reason active=${active.get()} setupComplete=${setupComplete.get()}")
                 if (socket === webSocket) socket = null
                 setupComplete.set(false)
                 if (active.get()) scheduleReconnect()
@@ -439,34 +456,80 @@ class GeminiLiveClient(
     }
 
     private fun sendSetup(webSocket: WebSocket, config: LiveTokenConfig) {
-        val resumption = JSONObject().apply {
-            sessionResumptionHandle?.takeIf { it.isNotBlank() }?.let { put("handle", it) }
+        // If the token was minted with an exact bidiGenerateContentSetup (Pro Live), echo it exactly
+        // to avoid hanging in CONNECTING (server waits for matching setup). Free proxy does
+        // upstream.send({setup: provisioningRequest.bidiGenerateContentSetup}) — we do the same for Pro.
+        val serverSetup = config.setupJson?.let { raw ->
+            runCatching { JSONObject(raw) }.getOrNull()
         }
-        val automaticActivityDetection = JSONObject()
-            .put("disabled", false)
-            .put("startOfSpeechSensitivity", "START_SENSITIVITY_HIGH")
-            .put("endOfSpeechSensitivity", "END_SENSITIVITY_LOW")
-            .put("prefixPaddingMs", 40)
-            .put("silenceDurationMs", 500)
-        val realtimeInputConfig = JSONObject()
-            .put("automaticActivityDetection", automaticActivityDetection)
-            .put("activityHandling", "START_OF_ACTIVITY_INTERRUPTS")
-            .put("turnCoverage", "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO")
-        val setup = JSONObject()
-            .put("model", config.model)
-            .put("generationConfig", JSONObject().put("responseModalities", JSONArray().put("AUDIO")))
-            .put("realtimeInputConfig", realtimeInputConfig)
-            .put("inputAudioTranscription", JSONObject())
-            .put("outputAudioTranscription", JSONObject())
-            .put("sessionResumption", resumption)
-        check(webSocket.send(JSONObject().put("setup", setup).toString())) {
+        val setup: JSONObject = if (serverSetup != null) {
+            // Inject sessionResumption handle if present, keep everything else from server
+            val resumption = JSONObject().apply {
+                sessionResumptionHandle?.takeIf { it.isNotBlank() }?.let { put("handle", it) }
+            }
+            // Ensure sessionResumption is updated, keep other fields from server
+            serverSetup.put("sessionResumption", resumption)
+            // Ensure model matches token (in case server setup had different)
+            serverSetup.put("model", config.model)
+            serverSetup
+        } else {
+            val resumption = JSONObject().apply {
+                sessionResumptionHandle?.takeIf { it.isNotBlank() }?.let { put("handle", it) }
+            }
+            val automaticActivityDetection = JSONObject()
+                .put("disabled", false)
+                .put("startOfSpeechSensitivity", "START_SENSITIVITY_HIGH")
+                .put("endOfSpeechSensitivity", "END_SENSITIVITY_LOW")
+                .put("prefixPaddingMs", 40)
+                .put("silenceDurationMs", 500)
+            val realtimeInputConfig = JSONObject()
+                .put("automaticActivityDetection", automaticActivityDetection)
+                .put("activityHandling", "START_OF_ACTIVITY_INTERRUPTS")
+                .put("turnCoverage", "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO")
+            // Build systemInstruction to match token's bidiGenerateContentSetup (see lib/gemini-live.ts buildLiveSystemInstruction)
+            // The token's setup is built server-side with the same language/imagePrompt/systemPrompt, and the Live setup we send
+            // must include the same systemInstruction + contextWindowCompression to avoid hanging in CONNECTING
+            // (seen when setup omitted these and server waited for matching setup).
+            val cleanPrompt = lastImagePrompt.trim().replace(Regex("\\s+"), " ").take(400)
+                .ifBlank { "Describe what you can see and answer the user's question." }
+            val systemPrompt = lastSystemPrompt.ifBlank { ProSubscriptionAiPrefs.getSystemPrompt(appContext) }
+            // Replicate resolveAssistantSystemPrompt + buildLiveSystemInstruction
+            val assistantPrompt = systemPrompt.trim().take(4000).ifBlank {
+                "You are CyanBridge's assistant for smart glasses. Answer the user's request directly. Give the most useful answer first in one clear sentence, then stop when the request is fully answered. For simple spoken requests, usually use 1-3 short sentences; for complex requests, include the important explanation, steps, caveats, and safety information needed. Use the shortest complete answer. Avoid filler, long preambles, repetition, and unnecessary formatting unless the user asks for them. Use the latest glasses image as visual context when the user refers to what they see."
+            }
+            val systemInstructionText = listOf(
+                assistantPrompt,
+                "You are Gemini Live in CyanBridge smart glasses.",
+                "You support 97 languages. Respond in the language the user is currently speaking, defaulting to ${lastLanguage} only when unclear. Switch immediately when the user asks to speak another language.",
+                "Keep spoken answers concise, helpful, and safe for a hands-free conversation.",
+                "Default image question when the user gives no specific question and you have a fresh glasses image: $cleanPrompt"
+            ).joinToString(" ")
+            val systemInstruction = JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstructionText)))
+            val contextWindowCompression = JSONObject()
+                .put("triggerTokens", 25000)
+                .put("slidingWindow", JSONObject().put("targetTokens", 8000))
+            JSONObject()
+                .put("model", config.model)
+                .put("generationConfig", JSONObject().put("responseModalities", JSONArray().put("AUDIO")))
+                .put("realtimeInputConfig", realtimeInputConfig)
+                .put("inputAudioTranscription", JSONObject())
+                .put("outputAudioTranscription", JSONObject())
+                .put("sessionResumption", resumption)
+                .put("contextWindowCompression", contextWindowCompression)
+                .put("systemInstruction", systemInstruction)
+        }
+        val setupJson = JSONObject().put("setup", setup).toString()
+        Log.i(TAG, "Sending Live setup model=${config.model} handle=${sessionResumptionHandle?.take(12)} json=${setupJson.take(2000)}")
+        check(webSocket.send(setupJson)) {
             "Live setup could not be sent"
         }
     }
 
     private fun handleServerMessage(raw: String) {
+        // Verbose log for diagnosing why Live never reaches setupComplete (user reported no listening cue / notification)
+        Log.d(TAG, "Live server message raw=${raw.take(2000)}")
         val message = runCatching { JSONObject(raw) }.getOrElse {
-            Log.w(TAG, "Ignoring malformed Gemini Live message")
+            Log.w(TAG, "Ignoring malformed Gemini Live message raw=${raw.take(500)}")
             return
         }
 
