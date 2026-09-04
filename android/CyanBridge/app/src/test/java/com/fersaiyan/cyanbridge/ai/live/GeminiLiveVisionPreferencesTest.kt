@@ -38,7 +38,7 @@ class GeminiLiveVisionPreferencesTest {
     fun `legacy cadence migrates to every turn`() {
         assertEquals(2, GeminiLiveVisionPreferences.setImageDelaySeconds(context, 10))
         assertEquals(2, GeminiLiveVisionPreferences.imageDelaySeconds(context))
-        assertEquals(2_000L, GeminiLiveVisionPreferences.automaticRefreshIntervalMs(context))
+        assertEquals(0L, GeminiLiveVisionPreferences.automaticRefreshIntervalMs(context))
         assertEquals(2, GeminiLiveVisionPreferences.setImageDelaySeconds(context, 5))
         assertEquals(2, GeminiLiveVisionPreferences.imageDelaySeconds(context))
     }
