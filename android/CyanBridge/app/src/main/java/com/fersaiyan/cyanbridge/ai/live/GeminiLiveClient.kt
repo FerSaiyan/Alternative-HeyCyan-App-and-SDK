@@ -402,9 +402,24 @@ class GeminiLiveClient(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.w(TAG, "Gemini Live socket closed code=$code reason=$reason active=${active.get()} setupComplete=${setupComplete.get()}")
+                val wasSetupComplete = setupComplete.get()
+                Log.w(TAG, "Gemini Live socket closed code=$code reason=$reason active=${active.get()} setupComplete=$wasSetupComplete")
                 if (socket === webSocket) socket = null
                 setupComplete.set(false)
+                if (!wasSetupComplete && active.get() && config.reservationId != "free-proxy" && config.reservationId != "direct") {
+                    active.set(false)
+                    scope.launch {
+                        releaseRelayReservation(
+                            reservationId = config.reservationId,
+                            inputAudioMs = inputAudioMs,
+                            outputAudioMs = outputAudioMs,
+                            imageCount = visualInputCount,
+                        )
+                    }
+                    tokenConfig = null
+                    setState(GeminiLiveState.ERROR, "Gemini Live connection failed ($code). Please try again.")
+                    return
+                }
                 if (active.get()) scheduleReconnect()
             }
 
@@ -431,6 +446,20 @@ class GeminiLiveClient(
                         setState(GeminiLiveState.ERROR, localizedFreeQueueMessage())
                         return
                     }
+                }
+                if (!setupComplete.get() && active.get() && config.reservationId != "free-proxy" && config.reservationId != "direct") {
+                    active.set(false)
+                    scope.launch {
+                        releaseRelayReservation(
+                            reservationId = config.reservationId,
+                            inputAudioMs = inputAudioMs,
+                            outputAudioMs = outputAudioMs,
+                            imageCount = visualInputCount,
+                        )
+                    }
+                    tokenConfig = null
+                    setState(GeminiLiveState.ERROR, "Gemini Live connection failed. Please try again.")
+                    return
                 }
                 if (active.get()) scheduleReconnect()
             }
