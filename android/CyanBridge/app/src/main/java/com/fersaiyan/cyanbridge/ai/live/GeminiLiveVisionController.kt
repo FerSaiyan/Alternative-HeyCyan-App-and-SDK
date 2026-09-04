@@ -105,9 +105,6 @@ class GeminiLiveVisionController(
     }
 
     fun onSpeechActivity(speaking: Boolean) {
-        if (speaking && active && capabilities.mode == GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL) {
-            maybeCaptureAutomaticStill()
-        }
         scope.launch {
             if (!active) return@launch
             val changedToSpeaking = speaking && !userSpeaking
@@ -130,18 +127,9 @@ class GeminiLiveVisionController(
                         maybeSendLatestMetaFrame()
                     }
                 }
-                GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> Unit
+                GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> maybeCaptureAutomaticStill()
                 else -> Unit
             }
-        }
-    }
-
-    fun onServerDetectedUserInterruption() {
-        if (!active) return
-        when (capabilities.mode) {
-            GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL -> maybeCaptureAutomaticStill()
-            GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES -> onSpeechActivity(true)
-            else -> Unit
         }
     }
 
