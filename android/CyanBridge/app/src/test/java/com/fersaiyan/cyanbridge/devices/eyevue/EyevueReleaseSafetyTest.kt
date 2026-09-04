@@ -14,6 +14,16 @@ class EyevueReleaseSafetyTest {
     private val liveSource = File(
         "src/main/java/com/fersaiyan/cyanbridge/devices/eyevue/EyevueLivePreviewManager.kt",
     ).readText()
+    private val mediaSource = File(
+        "src/main/java/com/fersaiyan/cyanbridge/devices/eyevue/EyevueMediaSync.kt",
+    ).readText()
+
+    @Test
+    fun eyevueMediaSyncUsesVerifiedWifiActivationCommand() {
+        assertTrue(mediaSource.contains("manager.startLiveAndAwaitSsid"))
+        assertFalse(mediaSource.contains("manager.awaitWifiSsid("))
+        assertTrue(mediaSource.contains("manager.stopLiveBlocking()"))
+    }
 
     @Test
     fun eyevueLivePreviewIsReleaseEnabledWithoutExtraWifiCommands() {
