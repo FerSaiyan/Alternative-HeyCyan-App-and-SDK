@@ -98,7 +98,7 @@ class DefaultGeminiLiveTokenProvider(
                 throw IllegalStateException(error)
             }
             val expiresAt = Instant.parse(json.getString("expire_time")).toEpochMilli()
-            // Production Pro uses Google\'s client-to-server ephemeral-token flow.
+            // Production Pro uses Google's client-to-server ephemeral-token flow.
             // The server returns a BidiGenerateContentConstrained URL containing only
             // the short-lived access_token. No long-lived Google API key is sent to Android.
             return LiveTokenConfig(
