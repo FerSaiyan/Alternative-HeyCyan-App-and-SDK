@@ -129,10 +129,13 @@ class DirectGeminiApiKeyLiveTokenProvider(
             .put("uses", 1)
             .put("expireTime", expireTime)
             .put("newSessionExpireTime", newSessionExpireTime)
+            .put(
+                "fieldMask",
+                "model,generationConfig,contextWindowCompression,systemInstruction,realtimeInputConfig,inputAudioTranscription,outputAudioTranscription",
+            )
             .put("bidiGenerateContentSetup", JSONObject()
                 .put("model", "models/gemini-3.1-flash-live-preview")
                 .put("generationConfig", JSONObject().put("responseModalities", org.json.JSONArray().put("AUDIO")))
-                .put("sessionResumption", JSONObject())
                 .put("systemInstruction", JSONObject().put("parts", org.json.JSONArray().put(JSONObject().put("text", "You are Gemini Live in CyanBridge smart glasses. Reply in $language."))))
                 .put("realtimeInputConfig", JSONObject()
                     .put("automaticActivityDetection", JSONObject()
