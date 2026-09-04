@@ -1,45 +1,24 @@
 package com.fersaiyan.cyanbridge.shared.ui.onboarding
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.fersaiyan.cyanbridge.shared.generated.resources.Res
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_battery_body
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_battery_disabled
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_battery_enabled
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_battery_headline
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_battery_list
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_battery_title
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_continue
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_disable_battery
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_dont_show_again
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_lock_recents_body
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_lock_recents_title
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_not_now
-import com.fersaiyan.cyanbridge.shared.generated.resources.onboarding_open_app_info
+import com.fersaiyan.cyanbridge.shared.generated.resources.*
+import com.fersaiyan.cyanbridge.shared.icons.AppIcon
+import com.fersaiyan.cyanbridge.shared.icons.imageVector
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalResourceApi::class)
+@OptIn(ExperimentalResourceApi::class)
 @Composable
 fun BatteryOptimizationGuideScreen(
     optimizationIgnored: Boolean,
@@ -50,61 +29,76 @@ fun BatteryOptimizationGuideScreen(
     onRemindLater: () -> Unit,
     onDontShowAgain: () -> Unit,
 ) {
-    Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = { TopAppBar(title = { Text(stringResource(Res.string.onboarding_battery_title)) }) },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Text(stringResource(Res.string.onboarding_battery_headline), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(
-                stringResource(Res.string.onboarding_battery_body),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = if (optimizationIgnored) {
-                        stringResource(Res.string.onboarding_battery_disabled)
-                    } else {
-                        stringResource(Res.string.onboarding_battery_enabled)
-                    },
-                    modifier = Modifier.padding(16.dp),
-                    color = if (optimizationIgnored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+    Scaffold(contentWindowInsets = WindowInsets.safeDrawing) { insets ->
+        Column(Modifier.fillMaxSize().padding(insets)) {
+            Column(Modifier.padding(horizontal = 24.dp, vertical = 18.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("CYANBRIDGE", style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    Text("Setup", style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.height(12.dp))
+                LinearProgressIndicator(progress = { 0.2f }, Modifier.fillMaxWidth().height(6.dp),
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant)
             }
-            FilledTonalButton(onClick = onDisableOptimization, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(Res.string.onboarding_disable_battery))
-            }
-            OutlinedButton(onClick = onOpenOptimizationList, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(Res.string.onboarding_battery_list))
-            }
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(stringResource(Res.string.onboarding_lock_recents_title), style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        stringResource(Res.string.onboarding_lock_recents_body),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedButton(onClick = onOpenAppInfo, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(Res.string.onboarding_open_app_info))
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.size(78.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                    contentAlignment = Alignment.Center) {
+                    Icon(AppIcon.Battery.imageVector(), null, Modifier.size(42.dp), tint = MaterialTheme.colorScheme.primary)
+                }
+                Spacer(Modifier.height(20.dp))
+                Text(stringResource(Res.string.onboarding_battery_headline),
+                    style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(Res.string.onboarding_battery_body), style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(22.dp))
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (optimizationIgnored) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    )) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text(
+                            if (optimizationIgnored) stringResource(Res.string.onboarding_battery_disabled)
+                            else stringResource(Res.string.onboarding_battery_enabled),
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (optimizationIgnored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (!optimizationIgnored) {
+                            Button(onDisableOptimization, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(15.dp)) {
+                                Text(stringResource(Res.string.onboarding_disable_battery))
+                            }
+                        }
                     }
                 }
+                Spacer(Modifier.height(14.dp))
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(stringResource(Res.string.onboarding_lock_recents_title), fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(Res.string.onboarding_lock_recents_body), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onOpenAppInfo) { Text(stringResource(Res.string.onboarding_open_app_info)) }
+                    }
+                }
+                TextButton(onOpenOptimizationList, Modifier.padding(top = 8.dp)) {
+                    Text(stringResource(Res.string.onboarding_battery_list))
+                }
             }
-            Spacer(Modifier.weight(1f))
-            FilledTonalButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.onboarding_continue)) }
-            OutlinedButton(onClick = onRemindLater, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.onboarding_not_now)) }
-            OutlinedButton(onClick = onDontShowAgain, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(Res.string.onboarding_dont_show_again))
+            Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onContinue, Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(16.dp)) {
+                    Text(stringResource(Res.string.onboarding_continue), fontWeight = FontWeight.Bold)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    TextButton(onRemindLater) { Text(stringResource(Res.string.onboarding_not_now)) }
+                    TextButton(onDontShowAgain) { Text(stringResource(Res.string.onboarding_dont_show_again)) }
+                }
             }
         }
     }

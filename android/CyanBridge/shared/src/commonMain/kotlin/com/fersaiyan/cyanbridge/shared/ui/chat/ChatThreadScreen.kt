@@ -127,15 +127,13 @@ fun ChatThreadScreen(
                         overflow = TextOverflow.Ellipsis,
                     )
                 },
-                navigationIcon = {
+                actions = {
                     IconButton(onClick = onOpenChatList) {
                         Icon(
-                            imageVector = AppIcon.Back.imageVector(),
-                             contentDescription = stringResource(Res.string.chat_list),
+                            imageVector = AppIcon.Chat.imageVector(),
+                            contentDescription = stringResource(Res.string.chat_list),
                         )
                     }
-                },
-                actions = {
                     IconButton(onClick = onChatAppearance) {
                         Icon(
                             imageVector = AppIcon.More.imageVector(),

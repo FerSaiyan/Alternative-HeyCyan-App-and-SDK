@@ -67,6 +67,7 @@ class BatteryOptimizationGuideActivity : AppCompatActivity() {
         }
         // After battery optimization, continue to feature onboarding screens
         startActivity(Intent(this, OnboardingFeatureActivity::class.java))
+        overridePendingTransition(R.anim.onboarding_fade_in, R.anim.onboarding_fade_out)
         finish()
     }
 

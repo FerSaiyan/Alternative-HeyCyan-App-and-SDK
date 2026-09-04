@@ -2433,8 +2433,9 @@ class ChatThreadActivity : AppCompatActivity() {
             AppDestination.PLUGINS -> Intent(this, CommunityPluginsActivity::class.java)
             AppDestination.SETTINGS -> Intent(this, SettingsActivity::class.java)
         }
-        target.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        target.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
         startActivity(target)
+        overridePendingTransition(0, 0)
     }
 
     companion object {

@@ -71,10 +71,19 @@
     <string name="onboarding_local_model_title">Choose Your On-Device AI</string>
     <string name="onboarding_local_model_desc">Pick a starter model. CyanBridge will download it in the background while you finish setup.</string>
     <string name="onboarding_local_model_details">Generation settings are selected automatically for the model and GPU acceleration is preferred. You can change or import models later in Local Models.</string>
+    <string name="onboarding_device_ram">This device: %.1f GB RAM</string>
+    <string name="onboarding_ram_warning_title">Limited memory</string>
+    <string name="onboarding_ram_limited">This device has %.1f GB RAM. Only compact local AI models are recommended; larger models may be slow or close unexpectedly.</string>
+    <string name="onboarding_ram_too_low">This device has only %.1f GB RAM. Local AI requires at least 4 GB, so no local model is currently compatible. You can continue and configure a cloud or remote provider later.</string>
 
-    <string name="onboarding_open_source_title">Built in the Open</string>
-    <string name="onboarding_open_source_desc">Review the code, report issues, and help improve CyanBridge for everyone.</string>
-    <string name="onboarding_open_source_details">CyanBridge is open source. Inspect the code to understand its behavior, report bugs or security concerns, suggest improvements, or contribute changes through GitHub.</string>
+    <string name="onboarding_open_source_title">Welcome to CyanBridge</string>
+    <string name="onboarding_open_source_desc">Everything is ready. Connect your glasses, explore the features, and make CyanBridge yours.</string>
+    <string name="onboarding_open_source_details">CyanBridge is an open-source project built by and for the community. You can inspect the code, report issues, suggest ideas, or contribute directly through our GitHub repository.</string>
+    <string name="onboarding_bluetooth_skip_title">Continue without Bluetooth?</string>
+    <string name="onboarding_bluetooth_skip_body">You can grant this permission later. Until then, CyanBridge will not be able to find, pair with, or connect to your glasses.</string>
+    <string name="onboarding_bluetooth_skip_confirm">Continue anyway</string>
+    <string name="onboarding_bluetooth_skip_cancel">Go back</string>
+    <string name="onboarding_find_glasses">Find available glasses</string>
 
     <string name="onboarding_daily_facts_title">Daily Facts &amp; Diary</string>
     <string name="onboarding_daily_facts_desc">AutoDiary can turn selected screen context into private daily facts and summaries.</string>

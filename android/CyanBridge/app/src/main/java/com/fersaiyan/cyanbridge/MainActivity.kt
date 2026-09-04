@@ -2147,18 +2147,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val openChatId = last?.id?.takeIf { lastUserAt > 0L && now - lastUserAt < 30 * 60 * 1000L }
                 startActivity(Intent(this, ChatThreadActivity::class.java).apply {
                     openChatId?.let { putExtra(ChatThreadActivity.EXTRA_CHAT_ID, it) }
-                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
                 })
             }
             AppDestination.MEDIA -> startActivity(Intent(this, RecordingsListActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             })
             AppDestination.PLUGINS -> startActivity(Intent(this, CommunityPluginsActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             })
             AppDestination.SETTINGS -> startActivity(Intent(this, SettingsActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             })
+        }
+        if (destination != AppDestination.GLASSES) {
+            overridePendingTransition(0, 0)
         }
     }
 
