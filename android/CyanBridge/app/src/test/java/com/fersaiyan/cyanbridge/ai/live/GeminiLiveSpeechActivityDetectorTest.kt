@@ -44,6 +44,20 @@ class GeminiLiveSpeechActivityDetectorTest {
         assertEquals(emptyList<Boolean>(), changes)
     }
 
+
+    @Test
+    fun `default detector ignores moderate background noise and reacts to significant speech`() {
+        val changes = mutableListOf<Boolean>()
+        val detector = GeminiLiveSpeechActivityDetector(onChanged = changes::add)
+
+        repeat(10) { detector.offerPcm16Le(chunk(250)) }
+        assertEquals(emptyList<Boolean>(), changes)
+
+        detector.offerPcm16Le(chunk(2_000))
+        detector.offerPcm16Le(chunk(2_000))
+        assertEquals(listOf(true), changes)
+    }
+
     private fun chunk(sample: Int, samples: Int = 640): ByteArray {
         val value = sample.toShort().toInt()
         return ByteArray(samples * 2).also { bytes ->

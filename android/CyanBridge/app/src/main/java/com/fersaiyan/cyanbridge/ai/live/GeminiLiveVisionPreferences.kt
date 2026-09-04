@@ -2,11 +2,11 @@ package com.fersaiyan.cyanbridge.ai.live
 
 import android.content.Context
 
-/** Gemini Live-only visual refresh cadence. Zero keeps the initial image only. */
+/** Gemini Live-only visual refresh mode. Zero keeps the initial image only. */
 object GeminiLiveVisionPreferences {
-    // Simplified to two modes: only the first image, or a fresh image on every
-    // significant speech turn (energy model). The 2 s guard avoids HeyCyan shutter
-    // spam while BLE transfer (~2-4 s) is still in progress.
+    // The UI still persists 2 for backward compatibility with the existing dashboard state,
+    // but it is now a mode sentinel: 0 = only first image, 2 = every significant speech turn.
+    // There is no time-based cooldown in the every-turn mode.
     val delayOptionsSeconds = listOf(0, 2)
     private val legacyDelaySeconds = listOf(5, 10, 15)
 
@@ -33,7 +33,7 @@ object GeminiLiveVisionPreferences {
     }
 
     fun automaticRefreshIntervalMs(context: Context): Long? =
-        imageDelaySeconds(context).takeIf { it > 0 }?.times(1_000L)
+        if (imageDelaySeconds(context) > 0) 0L else null
 
     private const val PREFS_NAME = "gemini_live"
     private const val KEY_IMAGE_DELAY_SECONDS = "live_image_delay"

@@ -7647,6 +7647,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             var result: Result<Int>? = null
             try {
                 val project = manager.awaitProject()
+                    ?: throw IOException("Eyevue did not report its project/model; refusing to guess AP vs P2P")
                 val profile = EyevueMediaProfile.fromProject(project)
                 val sync = EyevueMediaSync(manager, transport, temporaryDirectory)
                 result = sync.sync(
@@ -7693,6 +7694,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             } finally {
                 withContext(Dispatchers.Main) {
                     val completed = result?.getOrNull()
+                    val failureDetail = result?.exceptionOrNull()?.message
                     val cancelled = eyevueMediaCancelled
                     eyevueMediaJob = null
                     eyevueMediaTransport = null
@@ -7708,7 +7710,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         } else {
                             Toast.makeText(
                                 this@MainActivity,
-                                "Eyevue media sync failed. Check the transfer details and retry.",
+                                "Eyevue media sync failed: " + (failureDetail?.take(140) ?: "unknown error"),
                                 Toast.LENGTH_LONG,
                             ).show()
                         }
@@ -7721,8 +7723,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun stopEyevueMediaSync() {
         if (eyevueMediaJob?.isActive != true) return
         eyevueMediaCancelled = true
-        eyevueMediaTransport?.disconnect()
         getOrCreateEyevueManager().finishTransfer()
+        eyevueMediaTransport?.disconnect()
         eyevueMediaJob?.cancel()
         setTransferUiVisible(false)
         releaseExclusiveGlassesSession(mediaSessionLease)
