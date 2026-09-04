@@ -424,11 +424,12 @@ class GeminiLiveClient(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                val wasSetupComplete = setupComplete.get()
                 if (socket === webSocket) socket = null
                 setupComplete.set(false)
                 Log.w(TAG, "Gemini Live socket failed code=${response?.code} msg=${response?.message} err=${t.message}", t)
-                // Free queue: server returns 429 live_free_queued with localized message
-                if (response?.code == 429) {
+                // Free queue: only the CyanBridge free proxy returns localized live_free_queued.
+                if (response?.code == 429 && config.reservationId == "free-proxy") {
                     val raw = try { response.body?.string().orEmpty() } catch (_: Exception) { "" }
                     val isQueued = raw.contains("live_free_queued") || raw.contains("live_rate_limited") || t.message?.contains("429") == true
                     if (isQueued || raw.contains("live_free_queued")) {
@@ -447,7 +448,7 @@ class GeminiLiveClient(
                         return
                     }
                 }
-                if (!setupComplete.get() && active.get() && config.reservationId != "free-proxy" && config.reservationId != "direct") {
+                if (!wasSetupComplete && active.get() && config.reservationId != "free-proxy" && config.reservationId != "direct") {
                     active.set(false)
                     scope.launch {
                         releaseRelayReservation(
