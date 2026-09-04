@@ -20,9 +20,9 @@ data class LiveTokenConfig(
     val expiresAtMs: Long,
     val reservationId: String,
     val authorizationHeader: String? = null,
-    /** Optional API key for direct Live websocket auth (free-tier requires x-goog-api-key alongside Token). */
+    /** Optional API key reserved for explicit local/debug providers. Production Pro never receives one. */
     val apiKey: String? = null,
-    /** Exact bidiGenerateContentSetup that was used to mint the token; if present the Live setup should echo it exactly. */
+    /** Optional setup override retained for provider/test compatibility. */
     val setupJson: String? = null,
 )
 
@@ -98,26 +98,18 @@ class DefaultGeminiLiveTokenProvider(
                 throw IllegalStateException(error)
             }
             val expiresAt = Instant.parse(json.getString("expire_time")).toEpochMilli()
-            // Debug override for end-to-end testing with a direct Gemini API key.
-            // Set via: adb shell am broadcast -a com.fersaiyan.cyanbridge.SET_GEMINI_KEY --es key "AQ...."
-            // or via SharedPreferences "debug_gemini_api_key". Not used in production relay flow.
-            val debugApiKey = appContext.getSharedPreferences("debug", Context.MODE_PRIVATE)
-                .getString("debug_gemini_api_key", null)?.trim()?.takeIf { it.isNotBlank() }
-            // Pro Live via BidiGenerateContent needs x-goog-api-key alongside Token
-            // (free proxy does Token + x-goog-api-key server-side; Pro must send
-            // the same from device to avoid 1008). Server returns api_key for Pro.
-            val serverApiKey = json.optString("api_key", "").trim().takeIf { it.isNotBlank() }
-                ?: json.optString("apiKey", "").trim().takeIf { it.isNotBlank() }
-            val setupJson = json.optJSONObject("setup")?.toString()?.takeIf { it.isNotBlank() && it != "null" }
+            // Production Pro uses Google\'s client-to-server ephemeral-token flow.
+            // The server returns a BidiGenerateContentConstrained URL containing only
+            // the short-lived access_token. No long-lived Google API key is sent to Android.
             return LiveTokenConfig(
                 token = json.getString("token"),
                 model = json.getString("model"),
                 websocketUrl = json.getString("websocket_url"),
                 expiresAtMs = expiresAt,
                 reservationId = json.getString("reservation_id"),
-                authorizationHeader = "Token ${json.getString("token")}",
-                apiKey = serverApiKey ?: debugApiKey,
-                setupJson = setupJson,
+                authorizationHeader = null,
+                apiKey = null,
+                setupJson = null,
             )
         }
     }
@@ -168,14 +160,21 @@ class DirectGeminiApiKeyLiveTokenProvider(
             val name = json.getString("name")
             val exp = json.optString("expireTime", expireTime)
             val expiresAt = java.time.Instant.parse(exp).toEpochMilli()
+            val websocketUrl = "https://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"
+                .toHttpUrl()
+                .newBuilder()
+                .addQueryParameter("access_token", name)
+                .build()
+                .toString()
+                .replaceFirst("https://", "wss://")
             return LiveTokenConfig(
                 token = name,
                 model = "models/gemini-3.1-flash-live-preview",
-                websocketUrl = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent",
+                websocketUrl = websocketUrl,
                 expiresAtMs = expiresAt,
                 reservationId = "direct",
-                authorizationHeader = "Token $name",
-                apiKey = apiKey,
+                authorizationHeader = null,
+                apiKey = null,
             )
         }
     }
