@@ -111,6 +111,32 @@ jobs:
           emulator
           com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#assets_AllThreeFixturesExist,com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#meetingTranscriptionFromSeededAsset_hermetic,com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#handsFreeTranslator_fromAssetTranscript,com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#geminiLive_pcmInjectionDoesNotCrash
 
+      - name: Start storage-sized Walking Aid emulator
+        id: walking_aid_emulator
+        env:
+          CYANBRIDGE_WALKING_AID_AVD: ${{ vars.CYANBRIDGE_WALKING_AID_AVD || 'CyanBridge_Walking_Aid_CI' }}
+          CYANBRIDGE_WALKING_AID_STOP_OTHER_EMULATORS: 'true'
+        run: |
+          serial="$(bash tools/hil/start_walking_aid_emulator.sh)"
+          echo "serial=$serial" >> "$GITHUB_OUTPUT"
+
+      - name: Install branch build on Walking Aid emulator
+        run: bash tools/hil/install.sh '${{ steps.walking_aid_emulator.outputs.serial }}'
+
+      - name: Run Walking Aid real models on emulator
+        env:
+          WALKING_AID_CI_CACHE_DIR: ${{ runner.temp }}/../cyanbridge-model-cache/walking-aid
+        run: bash tools/hil/run_walking_aid_model_ci.sh '${{ steps.walking_aid_emulator.outputs.serial }}'
+
+      - name: Upload Walking Aid model diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: walking-aid-model-results-${{ github.sha }}
+          path: build/hil/results/walking-aid-model-ci/**
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

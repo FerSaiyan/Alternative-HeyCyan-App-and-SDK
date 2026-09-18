@@ -177,6 +177,17 @@ From the repository root:
 python3 tools/hil/validate_tasker_profiles.py
 ```
 
+Walking Aid real YOLO11, YOLO-World, and Depth Anything inference on the emulator:
+
+```bash
+serial="$(bash tools/hil/start_walking_aid_emulator.sh)"
+bash tools/hil/install.sh "$serial"
+bash tools/hil/run_walking_aid_model_ci.sh "$serial"
+```
+
+See `android/CyanBridge/docs/WALKING_AID_MODEL_TEST.md` for model/image provenance,
+checksums, build/install prerequisites, and the 8 GiB AVD storage recommendation.
+
 When a Tasker HIL target is connected:
 
 ```bash
