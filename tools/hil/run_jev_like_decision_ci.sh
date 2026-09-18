@@ -67,7 +67,24 @@ test "$(adb -s "$SERIAL" get-state)" = "device" || fail "emulator $SERIAL not de
 log "emulator serial=$SERIAL"
 
 log "install branch build on $SERIAL"
-bash "$HIL_DIR/install.sh" "$SERIAL" 2>&1 | tee "$RESULTS_DIR/jev-install.log"
+adb -s "$SERIAL" get-state
+adb -s "$SERIAL" shell getprop sys.boot_completed | tr -d '\r'
+adb -s "$SERIAL" shell df /data | head -n 5
+adb -s "$SERIAL" shell dumpsys package com.fersaiyan.cyanbridge | grep -E "versionCode|versionName" | head -n 3 || true
+ls -l "$REPO_ROOT/android/CyanBridge/app/build/outputs/apk/debug/app-debug.apk"
+set +e
+bash -x "$HIL_DIR/install.sh" "$SERIAL" 2>&1 | tee "$RESULTS_DIR/jev-install.log"
+INSTALL_CODE=${PIPESTATUS[0]}
+set -e
+if [ "$INSTALL_CODE" -ne 0 ]; then
+  log "[FAIL] install.sh exit=$INSTALL_CODE, post-failure state:"
+  adb -s "$SERIAL" get-state || true
+  adb -s "$SERIAL" shell df /data | head -n 5 || true
+  adb -s "$SERIAL" shell dumpsys package com.fersaiyan.cyanbridge | grep -E "versionCode|versionName|codePath" | head -n 5 || true
+  log "retrying install once after 15s"
+  sleep 15
+  bash -x "$HIL_DIR/install.sh" "$SERIAL" 2>&1 | tee -a "$RESULTS_DIR/jev-install.log"
+fi
 
 log "step=4/4 emulator instrumentation $EMULATOR_CLASS"
 set +e

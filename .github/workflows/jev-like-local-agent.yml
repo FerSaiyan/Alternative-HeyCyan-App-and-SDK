@@ -133,7 +133,31 @@ jobs:
           fi
 
       - name: Install branch build on local-PC emulator
-        run: bash tools/hil/install.sh '${{ steps.emulator.outputs.serial }}'
+        shell: bash
+        run: |
+          set -euo pipefail
+          serial='${{ steps.emulator.outputs.serial }}'
+          adb="$HOME/Android/Sdk/platform-tools/adb"
+          echo "[JEV_CI] pre-install device state:"
+          "$adb" -s "$serial" get-state
+          "$adb" -s "$serial" shell getprop sys.boot_completed | tr -d '\r'
+          "$adb" -s "$serial" shell df /data | head -n 5
+          "$adb" -s "$serial" shell dumpsys package com.fersaiyan.cyanbridge | grep -E "versionCode|versionName" | head -n 3 || true
+          ls -l android/CyanBridge/app/build/outputs/apk/debug/app-debug.apk
+          ls -l android/CyanBridge/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          set +e
+          bash -x tools/hil/install.sh "$serial"
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "[JEV_CI][FAIL] install.sh exit=$code, dumping post-failure device state:"
+            "$adb" -s "$serial" get-state || true
+            "$adb" -s "$serial" shell df /data | head -n 5 || true
+            "$adb" -s "$serial" shell dumpsys package com.fersaiyan.cyanbridge | grep -E "versionCode|versionName|codePath" | head -n 5 || true
+            echo "[JEV_CI] retrying install once after 15s (transient adbd hiccups are common on shared emulators)"
+            sleep 15
+            bash -x tools/hil/install.sh "$serial"
+          fi
 
       - name: Run Jev-like emulator decision test
         run: >-
