@@ -33,12 +33,22 @@ data class AssistantRoutingDecision(
     val clarification: String? = null,
 )
 
-class AssistantRequestRouter {
+class AssistantRequestRouter(
+    /**
+     * Jev-like fast path. When set, route() tries deterministic checks (blank /
+     * imageAttached) -> decision engine (single-letter, ~1 token) -> legacy
+     * English regex heuristics -> full 256-token JSON completion.
+     * Null keeps the legacy behavior exactly (used by existing tests).
+     */
+    var decisionEngineProvider: (() -> com.fersaiyan.cyanbridge.ai.decision.LocalDecisionEngine?)? = null,
+) {
     suspend fun route(
         context: Context,
         request: AssistantRequest,
         providerType: AgentProviderType,
     ): AssistantRoutingDecision {
+        classifyHeuristicallyDeterministic(request)?.let { return it }
+        tryDecisionEngine(request)?.let { return it }
         classifyHeuristically(request)?.let { return it }
 
         return runCatching {
@@ -58,6 +68,61 @@ class AssistantRequestRouter {
                 confidence = 0.5,
             )
         }
+    }
+
+    /** Deterministic checks kept as primary: blank + explicit image attachment. */
+    internal fun classifyHeuristicallyDeterministic(request: AssistantRequest): AssistantRoutingDecision? {
+        val text = request.text.trim()
+        if (text.isBlank()) {
+            return AssistantRoutingDecision(
+                intent = AssistantIntent.CLARIFY,
+                confidence = 1.0,
+                clarification = "What would you like me to do?",
+            )
+        }
+        if (request.imageAttached) {
+            return AssistantRoutingDecision(
+                intent = AssistantIntent.ANALYZE_IMAGE,
+                confidence = 1.0,
+            )
+        }
+        return null
+    }
+
+    /**
+     * Jev-like single-letter routing. Returns null when no engine is wired or
+     * the engine fails, so route() falls through to legacy paths.
+     */
+    internal suspend fun tryDecisionEngine(request: AssistantRequest): AssistantRoutingDecision? {
+        val provider = decisionEngineProvider ?: return null
+        val engine = runCatching { provider.invoke() }.getOrNull() ?: return null
+        val candidates = com.fersaiyan.cyanbridge.ai.decision.AssistantDecisionOptions.candidates()
+        return try {
+            val decision = engine.choose(request.text.trim(), candidates, debugTag = "assistant-route")
+            mapDecisionToRouting(decision, request.text)
+        } catch (t: Throwable) {
+            android.util.Log.w("AssistantRequestRouter", "Jev-like decision failed, falling back: ${t.message}")
+            null
+        }
+    }
+
+    internal fun mapDecisionToRouting(
+        decision: com.fersaiyan.cyanbridge.ai.decision.LocalDecision,
+        originalText: String,
+    ): AssistantRoutingDecision {
+        val intent = when (decision.index) {
+            0 -> AssistantIntent.ANSWER_QUESTION
+            1 -> AssistantIntent.ANALYZE_IMAGE
+            2 -> AssistantIntent.EXECUTE_UI_TASK
+            else -> AssistantIntent.CLARIFY
+        }
+        val base = AssistantRoutingDecision(
+            intent = intent,
+            confidence = decision.confidence.toDouble().coerceIn(0.0, 1.0),
+            normalizedGoal = if (intent == AssistantIntent.EXECUTE_UI_TASK) originalText.trim() else null,
+            clarification = if (intent == AssistantIntent.CLARIFY) "Please say exactly what you want me to do on the phone." else null,
+        )
+        return enforceConfidencePolicy(base, originalText)
     }
 
     internal fun classifyHeuristically(request: AssistantRequest): AssistantRoutingDecision? {

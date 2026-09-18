@@ -63,6 +63,25 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     private var terminalAnnouncementIssued = false
     private val hardwareHandler: () -> Unit = { captureHardwareImageQuestion() }
 
+    internal val liveControlRouter: GeminiLiveControlRouter by lazy {
+        GeminiLiveControlRouter(
+            engineProvider = {
+                // Production Jev-like engine: single-letter decode via the active provider.
+                com.fersaiyan.cyanbridge.ai.decision.SingleTokenDecisionEngine(
+                    generate = { systemPrompt, userPrompt ->
+                        com.fersaiyan.cyanbridge.ai.router.AgentInferenceRouter.completeDecisionToken(
+                            context = this@GeminiLiveForegroundService,
+                            sessionId = "live-control-${System.currentTimeMillis()}",
+                            systemPrompt = systemPrompt,
+                            userPrompt = userPrompt,
+                            maxTokens = 8,
+                        )
+                    },
+                )
+            },
+        )
+    }
+
     private val powerManager by lazy { getSystemService(Context.POWER_SERVICE) as PowerManager }
     private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
 
@@ -336,11 +355,46 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
 
     override fun onUserSpeechActivity(active: Boolean) {
         visionController?.onSpeechActivity(active)
+        if (!active) {
+            // Speech boundary: classify the accumulated utterance ONCE, never per fragment.
+            val utterance = liveControlRouter.bufferedText()
+            if (utterance.isNotBlank()) {
+                Log.d(TAG, "Live speech ended, classifying utterance chars=${utterance.length}")
+                serviceScope.launch(Dispatchers.IO) {
+                    val action = try {
+                        liveControlRouter.classifyAtUtteranceEnd()
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "Live control classification failed", t)
+                        LiveControlAction.CONTINUE
+                    }
+                    Log.i(TAG, "Live control decision=$action utterance='${utterance.take(200)}'")
+                    when (action) {
+                        LiveControlAction.END_LIVE -> withContext(Dispatchers.Main) { stopLive() }
+                        LiveControlAction.LOCAL_AGENT -> withContext(Dispatchers.Main) {
+                            val goal = liveControlRouter.bufferedText()
+                            liveControlRouter.clear()
+                            stopLive()
+                            try {
+                                com.fersaiyan.cyanbridge.localagent.LocalAgentController.start(
+                                    this@GeminiLiveForegroundService, goal,
+                                )
+                            } catch (t: Throwable) {
+                                Log.w(TAG, "LocalAgent handoff failed", t)
+                            }
+                        }
+                        LiveControlAction.CONTINUE -> Unit
+                    }
+                }
+            }
+        }
     }
 
     override fun onTranscription(input: Boolean, text: String) {
         if (text.isNotBlank()) {
             Log.d(TAG, "${if (input) "User" else "Gemini"} transcription: $text")
+            // Only user (input) speech feeds the control classifier. Never classify here:
+            // fragments are incremental; classification happens at speech=false above.
+            if (input) liveControlRouter.appendTranscript(text)
         }
     }
 

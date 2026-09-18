@@ -56,6 +56,10 @@ class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
             )
         }
 
+        // Jev-like fast path: score enumerated legal actions with ~1 token.
+        // Falls through to JSON generation for NEED_TEXT / open-ended params.
+        tryCandidateDecision(taskState, observation)?.let { return it }
+
         val prompt = LocalAgentUiControlProtocol.buildPrompt(
             LocalAgentUiControlProtocol.StepContext(
                 goal = taskState.goal,
@@ -111,6 +115,69 @@ class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
         )
     }
 
+    private suspend fun tryCandidateDecision(
+        taskState: LocalAgentTaskState,
+        observation: LocalAgentObservation,
+    ): LocalAgentBrainOutput? {
+        val engine = LocalAgentDecisionBridge.engine() ?: return null
+        return try {
+            val built = UiActionCandidateBuilder.build(taskState.goal, observation, taskState.previousActionResult)
+            if (built.candidates.size < 2) return null
+            val screenSummary = observation.screenSnapshot?.toCompressedPromptText(taskState.goal)
+                ?: observation.screenText.orEmpty()
+            val state = com.fersaiyan.cyanbridge.ai.decision.DecisionPromptBuilder.buildUiActionPrompt(
+                goal = taskState.goal,
+                screenSummary = screenSummary,
+                candidates = built.candidates,
+            )
+            android.util.Log.d(TAG, "Jev-like UI candidates=${built.candidates.map { it.label to it.description }} spans=${built.typeSpans}")
+            val decision = engine.choose(state, built.candidates, debugTag = "local-agent-ui")
+            android.util.Log.i(TAG, "Jev-like UI choice=${decision.label} conf=${decision.confidence} raw='${decision.rawOutput.take(200)}'")
+            if (decision.confidence < CANDIDATE_MIN_CONFIDENCE) {
+                android.util.Log.i(TAG, "Jev-like UI confidence below threshold, using JSON planner")
+                return null
+            }
+            val key = built.keys.getOrNull(decision.index) ?: return null
+            mapCandidateKeyToAction(key, taskState, observation, built)?.let { action ->
+                LocalAgentBrainOutput(
+                    actions = listOf(action),
+                    note = "jev-candidate ${decision.label} conf=${decision.confidence}",
+                    isComplete = action is LocalAgentAction.Finish,
+                )
+            }
+        } catch (t: Throwable) {
+            android.util.Log.w(TAG, "Jev-like UI candidate path failed, falling back to JSON: ${t.message}")
+            null
+        }
+    }
+
+    private fun mapCandidateKeyToAction(
+        key: String,
+        taskState: LocalAgentTaskState,
+        observation: LocalAgentObservation,
+        built: UiActionCandidateBuilder.Built,
+    ): LocalAgentAction? {
+        val nodes = observation.screenSnapshot?.nodes.orEmpty()
+        return when (key) {
+            "click_text" -> {
+                // Resolve to the first clickable node's text (same order as builder).
+                val node = nodes.firstOrNull { it.isClickable && (it.text.isNotBlank() || it.contentDescription.isNotBlank()) }
+                    ?: return null
+                LocalAgentAction.ClickText(node.text.ifBlank { node.contentDescription }.trim())
+            }
+            "type_text" -> {
+                val span = built.typeSpans.firstOrNull()?.trim().orEmpty()
+                if (span.isBlank()) return null
+                val hint = nodes.firstOrNull { it.isEditable }?.hintText?.trim()?.takeIf { it.isNotBlank() }
+                LocalAgentAction.TypeText(span, hint)
+            }
+            "scroll" -> LocalAgentAction.Scroll(LocalAgentAction.Direction.DOWN)
+            "press_back" -> LocalAgentAction.GlobalBack
+            "finish" -> LocalAgentAction.Finish("Candidate planner finished: ${taskState.goal.take(120)}")
+            else -> null
+        }
+    }
+
     private fun LocalAgentUiControlProtocol.Action.toLocalAgentAction(): LocalAgentAction {
         return when (this) {
             LocalAgentUiControlProtocol.NoOp -> LocalAgentAction.Wait(250L)
@@ -148,7 +215,10 @@ class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
     }
 
     private companion object {
+        private const val TAG = "LocalAgentBrain"
         private const val MAX_CONSECUTIVE_FAILURES = 5
+        /** Minimum confidence to accept a Jev-like candidate pick; else JSON fallback. */
+        private const val CANDIDATE_MIN_CONFIDENCE = 0.55f
         private const val USER_ANSWER_GROUNDING_PROMPT = """
 
 

@@ -165,6 +165,57 @@ object AgentInferenceRouter {
         }
     }
 
+    /**
+     * Jev-like constrained decode: maxTokens=[maxTokens] with a single-letter
+     * instruction. Replaces the 256-token JSON classification with ~1 output
+     * token. Thinking models may still emit a short preamble (<think>/reasoning
+     * + letter); [com.fersaiyan.cyanbridge.ai.decision.DecisionOutputParser]
+     * tolerates that. Falls back through the same provider chain as [complete].
+     */
+    suspend fun completeDecisionToken(
+        context: Context,
+        sessionId: String,
+        systemPrompt: String,
+        userPrompt: String,
+        maxTokens: Int = 8,
+        providerType: AgentProviderType = AutomationPrefs.getProviderType(context),
+    ): String {
+        val messages = messages(systemPrompt, userPrompt)
+        return when (providerType) {
+            AgentProviderType.LOCAL_AGENT -> localModelsProvider.streamChat(
+                context = context,
+                messages = messages,
+                maxTokens = maxTokens.coerceIn(1, 32),
+            )
+
+            AgentProviderType.PRO_SUBSCRIPTION -> CliRelayClient.chat(
+                context = context,
+                chatId = sessionId,
+                prompt = userPrompt,
+                messages = messages,
+                modelOverride = ProSubscriptionAiPrefs.getTasksModel(context),
+            ).getOrThrow()
+
+            AgentProviderType.TASKER -> when (AiProviderPrefs.getProvider(context)) {
+                AiProviderType.CLI_RELAY -> CliRelayClient.chat(
+                    context = context,
+                    chatId = sessionId,
+                    prompt = userPrompt,
+                    messages = messages,
+                ).getOrThrow()
+
+                AiProviderType.LOCAL_MODELS -> localModelsProvider.streamChat(
+                    context = context,
+                    messages = messages,
+                    maxTokens = maxTokens.coerceIn(1, 32),
+                )
+
+                AiProviderType.MOCK -> throw IllegalStateException("Mock provider cannot score decisions")
+                AiProviderType.COMPANY_BACKEND -> throw IllegalStateException("Company backend is not configured for decisions")
+            }
+        }
+    }
+
     private suspend fun completeText(
         context: Context,
         purpose: AgentInferencePurpose,

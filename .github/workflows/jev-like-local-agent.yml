@@ -1,0 +1,164 @@
+name: Jev-like local agent CI
+
+# Scoped CI for the jev-like-local-agent branch only. Mirrors the local-PC
+# emulator conventions from android-tasker-hil.yml / android-self-hosted.yml
+# (self-hosted homelab runner, start_emulator.sh, install.sh,
+# run_instrumentation.sh, collect_diagnostics.sh) but runs ONLY Jev-like
+# scopes: JVM decision/router/live/candidate unit tests + the
+# JevLikeDecisionEmulatorTest instrumentation class. Full Tasker/email/glasses
+# HIL layers are intentionally not triggered here.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - jev-like-local-agent
+    paths:
+      - .github/workflows/jev-like-local-agent.yml
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ai/decision/**
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ai/router/AssistantRequestRouter.kt
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ai/router/AgentInferenceRouter.kt
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ai/live/GeminiLiveControlRouter.kt
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ai/live/GeminiLiveForegroundService.kt
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/localagent/UiActionCandidateBuilder.kt
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/localagent/LocalAgentBrain.kt
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/localagent/LocalAgentDecisionBridge.kt
+      - android/CyanBridge/app/src/test/java/com/fersaiyan/cyanbridge/ai/decision/**
+      - android/CyanBridge/app/src/test/java/com/fersaiyan/cyanbridge/ai/live/GeminiLiveControlRouterTest.kt
+      - android/CyanBridge/app/src/test/java/com/fersaiyan/cyanbridge/ai/router/AssistantRequestRouterJevTest.kt
+      - android/CyanBridge/app/src/test/java/com/fersaiyan/cyanbridge/localagent/UiActionCandidateBuilderTest.kt
+      - android/CyanBridge/app/src/androidTest/java/com/fersaiyan/cyanbridge/hil/JevLikeDecisionEmulatorTest.kt
+      - tools/hil/run_jev_like_decision_ci.sh
+      - tools/hil/start_emulator.sh
+      - tools/hil/install.sh
+      - tools/hil/run_instrumentation.sh
+      - tools/hil/collect_diagnostics.sh
+  pull_request:
+    branches:
+      - jev-like-local-agent
+    paths:
+      - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ai/decision/**
+      - android/CyanBridge/app/src/test/java/com/fersaiyan/cyanbridge/ai/decision/**
+      - android/CyanBridge/app/src/androidTest/java/com/fersaiyan/cyanbridge/hil/JevLikeDecisionEmulatorTest.kt
+      - tools/hil/run_jev_like_decision_ci.sh
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: jev-like-local-agent-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jev-decision:
+    name: Jev-like JVM + local emulator
+    if: github.repository == 'FerSaiyan/Alternative-HeyCyan-App-and-SDK'
+    runs-on: [self-hosted, linux, x64, homelab]
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
+        with:
+          submodules: recursive
+          lfs: false
+
+      - name: Configure local Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = "Linux"
+          test "$(uname -m)" = "x86_64"
+          command -v python3 >/dev/null
+          test -x /opt/android-studio/jbr/bin/java
+          test -d "$HOME/Android/Sdk/platforms/android-35"
+          test -x "$HOME/Android/Sdk/platform-tools/adb"
+          {
+            printf 'JAVA_HOME=/opt/android-studio/jbr\n'
+            printf 'ANDROID_HOME=%s\n' "$HOME/Android/Sdk"
+            printf 'ANDROID_SDK_ROOT=%s\n' "$HOME/Android/Sdk"
+            printf '%s\n' "$HOME/Android/Sdk/platform-tools" >> "$GITHUB_PATH"
+          } >> "$GITHUB_ENV"
+          /opt/android-studio/jbr/bin/java -version
+          "$HOME/Android/Sdk/platform-tools/adb" version
+
+      - name: Verify Meta SDK credential
+        env:
+          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+        run: test -n "$GITHUB_TOKEN"
+
+      - name: Run Jev-like JVM unit tests (verbose)
+        env:
+          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+        working-directory: android/CyanBridge
+        run: >-
+          ./gradlew --no-daemon --stacktrace --info
+          :app:testDebugUnitTest
+          --tests "com.fersaiyan.cyanbridge.ai.decision.*"
+          --tests "com.fersaiyan.cyanbridge.ai.live.GeminiLiveControlRouterTest"
+          --tests "com.fersaiyan.cyanbridge.ai.router.AssistantRequestRouterJevTest"
+          --tests "com.fersaiyan.cyanbridge.ai.router.AssistantRequestRouterTest"
+          --tests "com.fersaiyan.cyanbridge.localagent.UiActionCandidateBuilderTest"
+          --tests "com.fersaiyan.cyanbridge.localagent.LocalAgentUiControlProtocolTest"
+
+      - name: Assemble debug and instrumentation APKs
+        env:
+          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+        working-directory: android/CyanBridge
+        run: >-
+          ./gradlew --no-daemon --stacktrace
+          -PtestAbi=x86_64
+          :app:assembleDebug
+          :app:assembleDebugAndroidTest
+
+      - name: Find or start local-PC emulator
+        id: emulator
+        shell: bash
+        env:
+          CYANBRIDGE_HIL_EMULATOR_AVD: ${{ vars.CYANBRIDGE_HIL_EMULATOR_AVD || '' }}
+        run: |
+          set +e
+          serial="$(bash tools/hil/start_emulator.sh)"
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ] && [ -n "$serial" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "serial=$serial" >> "$GITHUB_OUTPUT"
+            echo "Local-PC emulator available: $serial"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "No local-PC emulator AVD is available; emulator layer skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Install branch build on local-PC emulator
+        run: bash tools/hil/install.sh '${{ steps.emulator.outputs.serial }}'
+
+      - name: Run Jev-like emulator decision test
+        run: >-
+          bash tools/hil/run_instrumentation.sh
+          '${{ steps.emulator.outputs.serial }}'
+          emulator
+          com.fersaiyan.cyanbridge.hil.JevLikeDecisionEmulatorTest
+
+      - name: Collect Jev-like diagnostics
+        if: failure()
+        env:
+          CYANBRIDGE_HIL_SERIAL: ${{ steps.emulator.outputs.serial }}
+          CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS: ${{ vars.CYANBRIDGE_HIL_UPLOAD_VISUAL_DIAGNOSTICS || 'false' }}
+        run: bash tools/hil/collect_diagnostics.sh '${{ steps.emulator.outputs.serial }}'
+
+      - name: Upload Jev-like test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jev-like-results-${{ github.sha }}
+          path: |
+            build/hil/results/**
+            build/hil/diagnostics-safe/**
+            build/hil/emulator.log
+            android/CyanBridge/app/build/test-results/**
+            android/CyanBridge/app/build/reports/tests/**
+          if-no-files-found: ignore
+          retention-days: 7
