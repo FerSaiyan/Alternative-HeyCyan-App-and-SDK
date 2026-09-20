@@ -27,10 +27,16 @@ class RealDecisionCalibrationEmulatorTest {
         val dataset = File(args.getString("jev_calibration_dataset_path").orEmpty())
         require(dataset.isFile) { "Missing calibration dataset: ${dataset.absolutePath}" }
         val maxCases = args.getString("jev_calibration_max_cases")?.toIntOrNull()
+        val startIndex = args.getString("jev_calibration_start_index")?.toIntOrNull() ?: 0
+        val onlyModel = args.getString("jev_calibration_model")?.takeIf { it.isNotBlank() }
         val cases = dataset.readLines()
             .filter { it.isNotBlank() }
             .map(::JSONObject)
-            .let { allCases -> if (maxCases == null) allCases else allCases.take(maxCases) }
+            .let { allCases ->
+                val windowed = if (startIndex > 0) allCases.drop(startIndex) else allCases
+                if (maxCases == null) windowed else windowed.take(maxCases)
+            }
+        println("JEV_CAL_CASE_WINDOW startIndex=$startIndex cases=${cases.size}")
         val models = listOf(
             ModelSpec(
                 name = "EmbeddingGemma-300M-Q8_0",
@@ -42,7 +48,7 @@ class RealDecisionCalibrationEmulatorTest {
                 file = File(args.getString("jev_embedding_qwen_path").orEmpty()),
                 gemma = false,
             ),
-        )
+        ).filter { spec -> onlyModel == null || spec.name == onlyModel }
         models.forEach { spec ->
             require(spec.file.isFile) { "Missing ${spec.name}: ${spec.file.absolutePath}" }
             println("JEV_CAL_MODEL_START name=${spec.name} bytes=${spec.file.length()} cases=${cases.size}")

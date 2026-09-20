@@ -74,14 +74,20 @@ Thumbs.db
 
 # Local tooling (very large / machine-specific)
 tools/
-# Keep the small opt-in real-model probe under version control. Other local
-# tooling remains ignored.
+# Keep the small opt-in real-model probe and calibration tooling under version
+# control. Other local tooling remains ignored.
 !tools/
 tools/*
 !tools/hil/
 tools/hil/*
 !tools/hil/run_real_embedding_models.sh
 !tools/hil/run_tasker_youtube_hil.sh
+!tools/hil/run_local_agent_calibration.sh
+!tools/benchmarks/
+tools/benchmarks/*
+!tools/benchmarks/generate_local_agent_calibration.py
+!tools/benchmarks/benchmark_needle_mobile_actions.py
+!tools/benchmarks/analyze_local_agent_calibration.py
 
 # Generated analysis and language caches
 **/.kotlin/
