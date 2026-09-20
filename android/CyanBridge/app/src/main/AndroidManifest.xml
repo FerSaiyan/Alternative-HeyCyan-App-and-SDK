@@ -41,6 +41,7 @@
         <package android:name="com.glasssutdio.wear" />
         <package android:name="net.dinglisch.android.taskerm" />
         <package android:name="com.joaomgcd.autoinput" />
+        <package android:name="com.google.android.youtube" />
         <package android:name="com.facebook.stella" />
         <package android:name="com.facebook.stella_debug" />
         <package android:name="com.google.android.googlequicksearchbox" />

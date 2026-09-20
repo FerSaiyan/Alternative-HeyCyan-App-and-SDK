@@ -18,6 +18,8 @@ class SingleTokenDecisionEngine(
     private val generate: suspend (systemPrompt: String, userPrompt: String) -> String,
     private val maxCandidates: Int = 8,
     private val winnerLogit: Float = 3.0f,
+    private val promptBuilder: (String, List<DecisionCandidate>) -> String =
+        DecisionPromptBuilder::buildClassificationPrompt,
 ) : LocalDecisionEngine {
 
     override suspend fun choose(
@@ -26,7 +28,7 @@ class SingleTokenDecisionEngine(
         debugTag: String,
     ): LocalDecision {
         require(candidates.size in 2..maxCandidates) { "Need 2..$maxCandidates candidates" }
-        val userPrompt = DecisionPromptBuilder.buildClassificationPrompt(state, candidates)
+        val userPrompt = promptBuilder(state, candidates)
         val systemPrompt = DecisionPromptBuilder.systemPromptForSingleLetter()
         // JVM-safe logging: android.util.Log crashes plain JUnit ("not mocked").
         // println keeps Linux-PC CI logs precise without requiring Robolectric.

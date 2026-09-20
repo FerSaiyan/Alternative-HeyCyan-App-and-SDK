@@ -56,7 +56,9 @@ object TaskerAgentBridge {
     suspend fun executeAction(
         context: Context,
         actionPayload: String,
-        timeoutMs: Long = 12_000L,
+        // The imported AutoInput action has a 20-second plugin timeout. The bridge must
+        // outlive it so Tasker can return a concrete error instead of leaving overlapping jobs.
+        timeoutMs: Long = 25_000L,
     ): Response = request(
         context = context,
         action = TaskerAgentContract.ACTION_EXECUTE,

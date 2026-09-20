@@ -77,10 +77,13 @@ class GeminiLiveControlRouter(
         return indexToAction(idx, 0.9f)
     }
 
-    private fun actionForDecision(d: LocalDecision): LiveControlAction = when (d.index) {
+    private fun actionForDecision(d: LocalDecision): LiveControlAction {
+        if (d.abstained) return LiveControlAction.CONTINUE
+        return when (d.index) {
         LiveControlOptions.END_LIVE -> if (d.confidence >= endThreshold) LiveControlAction.END_LIVE else LiveControlAction.CONTINUE
         LiveControlOptions.LOCAL_AGENT -> if (d.confidence >= agentThreshold) LiveControlAction.LOCAL_AGENT else LiveControlAction.CONTINUE
         else -> LiveControlAction.CONTINUE
+        }
     }
 
     private fun indexToAction(idx: Int, confidence: Float): LiveControlAction = when (idx) {

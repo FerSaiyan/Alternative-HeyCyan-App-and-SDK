@@ -262,6 +262,9 @@ import com.fersaiyan.cyanbridge.localmodels.tts.StreamingSpeechSessionManager
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
+import com.fersaiyan.cyanbridge.ai.decision.LocalDecisionEngine
+import com.fersaiyan.cyanbridge.ai.decision.SingleTokenDecisionEngine
+import com.fersaiyan.cyanbridge.ai.router.AgentInferenceRouter
 import com.fersaiyan.cyanbridge.memoryvault.MemoryPolicyService
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
@@ -283,7 +286,23 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         StreamingSpeechSessionManager.getInstance(applicationContext)
     }
     private val ttsDoneCallbacks = ConcurrentHashMap<String, () -> Unit>()
-    private val assistantRequestRouter = AssistantRequestRouter()
+    private val assistantDecisionEngines = ConcurrentHashMap<AgentProviderType, LocalDecisionEngine>()
+    private val assistantRequestRouter = AssistantRequestRouter { providerType ->
+        assistantDecisionEngines.computeIfAbsent(providerType) {
+            SingleTokenDecisionEngine(
+                generate = { systemPrompt, userPrompt ->
+                    AgentInferenceRouter.completeDecisionToken(
+                        context = applicationContext,
+                        sessionId = "assistant-decision-${System.currentTimeMillis()}",
+                        systemPrompt = systemPrompt,
+                        userPrompt = userPrompt,
+                        maxTokens = 8,
+                        providerType = providerType,
+                    )
+                },
+            )
+        }
+    }
     private var pendingVoiceImageQuestion: String? = null
     private var pendingImageQuestionOfferSpokenQuestion = false
 

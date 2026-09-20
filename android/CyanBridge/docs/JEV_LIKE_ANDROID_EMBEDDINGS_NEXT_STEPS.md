@@ -1,9 +1,9 @@
 # Jev-like Android embeddings: considerations and next steps
 
 **Status:** handoff document for the `jev-like-local-agent` branch  
-**Date:** 2026-09-18  
-**Scope:** Android-first investigation; emulator/CPU tests only  
-**Constraint:** the workstation RTX 4060 Ti is currently occupied, so do not make the first validation depend on Python/GPU inference.
+**Date:** 2026-09-19  
+**Scope:** Android-first investigation; emulator CPU tests remain the release gate, with separate opt-in host-GPU and emulator-acceleration probes  
+**Constraint:** do not make default CI or correctness conclusions depend on a GPU or downloaded model weights.
 
 ## Executive summary
 
@@ -25,6 +25,254 @@ top choice + margin + explicit abstention
 
 Do not wire an embedding model into production routing until the probe has established its model I/O contract, tokenizer behavior, output dimension, repeatability, and latency.
 
+## Android llama.cpp GPU status
+
+Upstream llama.cpp can use an Android GPU, but GPU support is a **native build
+capability**, not something that `n_gpu_layers` can add to a CPU-only binary.
+The upstream build documentation enables Vulkan with `-DGGML_VULKAN=ON` and
+uses a positive `--n-gpu-layers` value to offload model layers. Upstream also
+documents an OpenCL backend aimed primarily at recent Qualcomm Adreno devices.
+
+The currently bundled `io.github.ljcamargo:llamacpp-kotlin:0.4.0` AAR does not
+contain either backend:
+
+- its CMake file compiles `ggml-cpu` sources and defines `LM_GGML_USE_CPU`;
+- it has no `ggml-vulkan` source directory and does not link `libvulkan`;
+- `LlamaAndroid.startEngine()` returns `gpu=false` and
+  `reasonNoGPU="Currently not supported"`;
+- the packaged x86_64 native library contains CPU backend symbols but no Vulkan,
+  OpenCL, CUDA, or Metal backend registration.
+
+Therefore, setting CyanBridge to GPU with this AAR still executes on CPU.
+`LlamaCppLocalInferenceEngine` now honors the runtime's explicit `gpu=false`
+response and reports an `EngineLoadResult` CPU fallback instead of claiming
+that the requested GPU backend became active. The real bounded probe confirmed:
+
+```text
+requested backend=GPU, n_gpu_layers=-1
+active backend=CPU
+fallback=Currently not supported Fell back to CPU.
+cold decision=6,543 ms, warm decision=142 ms, answer=A
+```
+
+The `Pixel_9a` AVD exposes Vulkan 1.3 as
+`Goldfish GFXStream (SwiftShader Device (Subzero))`. That is software/emulated
+Vulkan, not representative of an Adreno or Mali phone GPU. A valid Android GPU
+experiment requires a replacement AAR built from a pinned upstream llama.cpp
+revision with Vulkan (or device-appropriate OpenCL) included, explicit backend
+discovery, layer-offload logs, CPU fallback, output-parity tests, and physical
+device measurements. Do not infer a phone speedup from this emulator.
+
+Relevant upstream documentation:
+
+- `https://github.com/ggml-org/llama.cpp/blob/master/docs/android.md`
+- `https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md#vulkan`
+- `https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/OPENCL.md`
+
+## Laya real-checkpoint feasibility result
+
+The Laya repository and actual public checkpoint were tested, rather than
+relying only on its published benchmark. Source was inspected at commit
+`1161ff639204388b1e576a7c5d56a0f6df470455`; checkpoint metadata reported
+421,293,830 parameters and an 842,609,210-byte safetensors file. Weights and
+generated artifacts stayed under `/tmp/opencode` and are not part of the app,
+Git history, or CI.
+
+Laya is a ModernBERT-large encoder (28 layers, hidden size 1,024) plus a custom
+marker-position decision head. It performs one non-autoregressive forward pass
+and generates no output tokens. On a four-choice version of the YouTube action
+fixture, the real checkpoint selected `open_youtube`:
+
+| Runtime | Result | Warm latency |
+|---|---|---:|
+| PyTorch CUDA, RTX 4060 Ti | `open_youtube`, probability 0.8781 | 50.5–52.8 ms; P50 51.8 ms |
+| PyTorch CPU, workstation | `open_youtube`, probability 0.8855 | 264–357 ms; P50 268 ms |
+
+The repository's entropy-derived confidence was 0.6369 on GPU and 0.6534 on
+CPU, below a conservative 0.85 auto-action threshold. The top probability and
+the reported confidence are different quantities; CyanBridge must not conflate
+them.
+
+Export findings:
+
+- `torch.export` captured the complete encoder plus custom marker/scorer/action
+  heads as a 1,606-node graph with exact output parity on the fixture.
+- A fixed 128-token/8-option FP32 ONNX graph was 1,686,011,557 bytes, matched
+  PyTorch option logits within `5.96e-6`, and ran at roughly 200–244 ms on host
+  ONNX Runtime CPU.
+- A mixed FP16 ONNX graph was 843,838,297 bytes. Option-logit maximum absolute
+  difference was 0.0117, but the auxiliary action head did not preserve parity.
+- Naive dynamic INT8 reduced the graph to 424,294,646 bytes and roughly 145–156
+  ms, but destroyed decision parity: logits collapsed near uniform and the
+  selected action changed. MatMul-only INT8 also failed parity.
+- Global FP16 conversion initially failed because Laya's forward pass casts
+  pooled features to FP32 while the converted action head expected FP16.
+  Retaining the small action head in FP32 allowed export, but did not fix its
+  output discrepancy.
+
+Conclusion: Laya is a genuine and promising zero-generation decision model,
+and its full custom graph is exportable. It is **not production-ready for this
+Android app** yet: the repository publishes no Android/LiteRT/ONNX artifact,
+the valid FP32 graph is about 1.69 GB, the smaller FP16 graph has an action-head
+parity issue, and generic INT8 quantization invalidates choices. The next useful
+Laya work is calibration-aware quantization or distillation, representative
+multi-fixture parity testing, then a physical Android CPU/GPU runtime probe.
+
+## Needle 3 feasibility result
+
+`Cactus-Compute/needle3` is a more immediately deployable alternative to Laya
+for **bounded UI tool selection**, but the current release is not a replacement
+for a contrastively trained embedding model. The public release was inspected
+at Hugging Face revision `b009f8937124b2d0458f4ed040c10c41fd2a0dfc` and
+GitHub revision `94df9999d58a67ff29f032a41f31307c05554bd6`. The downloaded
+model and probes remain under `/tmp/opencode/needle3` and are not in Git or the
+app.
+
+### What it is
+
+Needle 3 is a 121,021,910-parameter, 20-layer Laddered Simple Attention
+Network. It uses GQA, a Monarch Hadamard MLP, n-gram engram memory, multi-lane
+hyper-connections, int8 activations/KV cache, and Cactus CQ2/CQ4 weight
+quantization. It is not a Laya-style zero-token scorer: it autoregressively
+generates a short reasoning trace and schema-constrained tool-call JSON.
+
+The release is Apache-2.0 and publishes:
+
+- `needle3.cact`: **35,335,380 bytes** in the tested revision (larger than the
+  29 MB currently stated in parts of the documentation);
+- a 242,047,978-byte safetensors training checkpoint;
+- an Android arm64 static library of 1,595,306 bytes and an arm64 CLI of
+  1,159,824 bytes;
+- Android ARMv7 and RISC-V artifacts, plus iOS, desktop, and WebAssembly
+  artifacts;
+- a five-function C ABI: `needle_load`, `needle_init`, `needle_complete`,
+  `needle_embed`, and `needle_reset`.
+
+The native state is process-global and explicitly non-thread-safe. CyanBridge
+would need one serialized, lifecycle-owned engine, just as it does for the
+current local decision model. The model has a 256-token trained KV window and
+reports bounded session memory. It requires neither llama.cpp nor Vulkan.
+
+The repository contains the JAX architecture, training, quantization, export,
+Python bindings, and tests. The optimized C++ engine is distributed as platform
+binaries/static libraries rather than as C++ source in that repository, so a
+production adoption still needs a binary supply-chain and upgrade policy.
+
+### Real host probe
+
+The actual released CQ model and x86-64 engine were run directly, with no pip
+installation. With four threads and correctly scoped sets of three or four
+legal OpenAI-schema actions, the model selected all four expected steps of the
+YouTube fixture:
+
+| State | Expected call | Result | Confidence |
+|---|---|---|---:|
+| Android launcher | `open_youtube` | correct | 1.0000 |
+| YouTube home | `tap_search` | correct | 1.0000 |
+| Focused search field | `type_search_query("Linus Tech Tips")` | correct and argument grounded | 1.0000 |
+| Search results | tap visible LTT result | correct when only the user goal was passed | 1.0000 |
+
+The shared-library warm probe measured:
+
+```text
+model load + tool initialization: 343.9 ms
+five reset warm decisions: 203.9–209.1 ms
+prefill: 574–650 tokens/s
+decode: 191–196 tokens/s
+native CLI peak RAM: about 78.3 MB
+```
+
+This is close to Laya's host CPU P50 of 268 ms while using a roughly 24-times
+smaller deployed model, and unlike Laya it already publishes an Android ARM
+runtime. It is still generated-token inference (the warm fixture emitted about
+32 tokens), not Laya's zero-generation option scoring. Host measurements are
+not substitutes for physical Android ARM latency.
+
+The release publishes no Android x86-64 engine. Both currently attached AVDs
+are x86-64, so the official Android artifact cannot be honestly benchmarked in
+the existing emulator gate. The next runtime probe must use an ARM phone or a
+new supported ARM virtual target; do not treat the Linux host binary as an
+Android result.
+
+### Safety and calibration failures
+
+The initial eight-tool test performed poorly: it produced duplicate and
+irrelevant calls, matching the vendor guidance that the model is strongest with
+five or fewer directly rendered tools. Even with only four well-formed tools,
+the tested base model selected `tap_search` for an unrelated capital-of-France
+question at confidence 1.0000, and selected a visible action for a vague “do
+something useful” prompt at confidence 0.9758. A negated search was correctly
+withheld in `suppressed_calls`, but its reported confidence was still 1.0000.
+
+When a prompt repeated every A-D option and a single enum-classification tool
+was used, the model copied several mentioned options into multiple calls. The
+better contract is one tool per legal action, tool definitions as the candidate
+descriptions, and only the goal/current facts in the user turn. The client must
+reject zero or multiple calls rather than choosing the first silently.
+
+Therefore, the vendor confidence field is an input to policy, not authorization
+to act. CyanBridge would still require:
+
+- deterministic request-intent and package safety checks before Needle;
+- no more than four actionable tools plus an escalation tool;
+- exact name/schema validation and an exactly-one-call requirement;
+- argument grounding and the existing approval policy;
+- a held-out CyanBridge UI fixture suite to calibrate act/confirm/abstain bands;
+- fallback to the current detailed planner whenever any check fails.
+
+Fine-tuning does not update Needle's confidence head; the package intentionally
+returns `confidence=None` for tuned archives. Fine-tuned deployments therefore
+need a separate calibrator. The local build path also exports 4-bit archives;
+the shipped 2-bit post-training flow uses Cactus's platform service.
+
+### Embedding result: do not replace EmbeddingGemma/Qwen yet
+
+The current `needle3.cact` manifest has a confidence head but **no contrastive
+embedding head**. The vendor's porting guide states that `needle_embed` falls
+back to the confidence probe pool and describes it only as a cheap similarity
+signal. It returns a deterministic, unit-normalized 3,072-float vector.
+
+The real probe was fast—roughly 11–20 ms per host embedding—but poorly
+separated for cosine retrieval:
+
+```text
+open youtube ↔ launch the YouTube app: 0.9374
+open youtube ↔ open Spotify:          0.9639
+overall tested pair range:            about 0.90–0.96
+```
+
+On the actual action fixture, `Play the latest Linus Tech Tips video` was
+slightly closer to `Tap the visible YouTube Search control` (0.9435) than to
+`Open the YouTube app to find the requested video` (0.9429). That ordering and
+the tiny margins are unsuitable for the current cosine-plus-margin decision
+engine. Keep EmbeddingGemma/Qwen as the embedding candidates until Needle ships
+a contrastive head and passes retrieval, multilingual, threshold, and
+abstention calibration.
+
+### Recommendation
+
+Prototype Needle as an additional **tool-selection backend**, not as the
+embedding backend and not yet as the sole safety decision-maker. It is the most
+practical Laya alternative found so far because Android ARM artifacts already
+exist and the deployed size is small. A safe trial path is:
+
+```text
+deterministic candidate builder
+  -> top four legal actions + explicit escalation tool
+  -> Needle complete()
+  -> require exactly one known call + grounded arguments + calibrated score
+  -> CyanBridge safety/approval policy
+  -> execute, otherwise detailed planner
+```
+
+Before committing its binary/model to the app, run 100+ branch-specific
+positive, negative, ambiguous, multilingual, multi-action, and adversarial UI
+fixtures on the host, then the same frozen suite on a physical arm64 Android
+device. The Python package enables anonymous event telemetry by default (not
+prompts or outputs); set both `NEEDLE_TELEMETRY=0` and `DO_NOT_TRACK=1` for any
+development tooling. Direct native C-ABI inference does not use that Python
+telemetry module, but the binary should still be audited before release.
+
 ## What is already in this branch
 
 The existing Jev-like implementation is in:
@@ -43,7 +291,22 @@ The existing Jev-like implementation is in:
 
 The scoped emulator workflow already passes on the local homelab runner. It runs JVM tests, assembles x86_64 APKs, installs on the persistent emulator, and runs only `JevLikeDecisionEmulatorTest`.
 
-There is **currently no real embedding implementation** in CyanBridge. `LocalEmbeddingService` is a 64-dimensional token-hash baseline, not a neural embedding model.
+There is **currently no production embedding router** in CyanBridge. `LocalEmbeddingService` is a 64-dimensional token-hash baseline, not a neural embedding model. The opt-in real-model probe below is separate from production routing.
+
+The opt-in real GGUF probe is now implemented in:
+
+- `app/src/main/java/com/fersaiyan/cyanbridge/localmodels/engine/TextEmbeddingEngine.kt`
+- `app/src/main/java/com/fersaiyan/cyanbridge/localmodels/engine/LlamaCppTextEmbeddingEngine.kt`
+- `app/src/main/java/com/fersaiyan/cyanbridge/ai/decision/EmbeddingDecisionEngine.kt`
+- `app/src/test/java/com/fersaiyan/cyanbridge/ai/decision/EmbeddingDecisionEngineTest.kt`
+- `app/src/androidTest/java/com/fersaiyan/cyanbridge/hil/RealEmbeddingModelEmulatorTest.kt`
+- `tools/hil/run_real_embedding_models.sh`
+
+It uses real CPU inference on the emulator, not the hash baseline. The real
+decision fixture applies the documented model-family prompts: EmbeddingGemma's
+`task: classification | query:` prompt on both query and prototypes, and
+Qwen's English `Instruct: ... / Query:` prefix on queries with plain candidate
+passages.
 
 ## Verified runtime findings
 
@@ -68,7 +331,27 @@ Still missing for true Jev zero-token scoring:
 
 The current `LlamaCppLocalInferenceEngine` uses generation, tokenization, and cancellation only. It does not call the embedding API.
 
-**Potential follow-up:** create a separate `LlamaEmbeddingEngine`; do not overload `LocalInferenceEngine.generate()` with embedding semantics. Start with an isolated probe that logs the returned map keys, vector length, norm, and finite-value status.
+`LlamaCppTextEmbeddingEngine` now provides that separate adapter and logs the
+returned keys, vector length, norm, finite-value status, and latency. It does
+not overload `LocalInferenceEngine.generate()`; the remaining production work
+is dependency repair and opt-in wiring.
+
+#### Verified wrapper defect and temporary fix
+
+The first real run crashed before the JUnit assertion with:
+
+```text
+JNI DETECTED ERROR IN APPLICATION: attempt to return an instance of
+java.util.ArrayList from java.util.Map LlamaContext.embedding(...)
+```
+
+The native implementation returns an `ArrayList`, but the published Kotlin declaration says `Map`. A temporary patched AAR was built from the upstream source with the native return type changed to `List` and the public method wrapping it as `{ "embedding" to values }`:
+
+```text
+/tmp/opencode/kotlinllamacpp-fixed/llamaCpp/build/outputs/aar/llamaCpp-release.aar
+```
+
+`LlamaCppTextEmbeddingEngine` now checks the reflected JNI return type and fails clearly if the unpatched AAR is used, instead of allowing ART to abort the app process. The custom AAR is intentionally not committed; a permanent dependency strategy is still required before production use.
 
 ### LiteRT and LiteRT-LM
 
@@ -156,6 +439,13 @@ Add a small, model-independent embedding layer with tests for:
 
 Use synthetic vectors in `androidTest` so these tests run on the existing emulator without GPU, network, or model downloads.
 
+The pure ranking layer is now implemented in `EmbeddingDecisionMath` and the
+JVM suite covers normalization, cosine scoring, deterministic ties, margin
+abstention, dimension mismatch, and non-finite vectors. `EmbeddingDecisionEngine`
+adapts that ranker to the existing bounded `LocalDecisionEngine` contract and
+propagates an explicit `abstained` flag to the assistant, Live, and UI safety
+gates.
+
 ### Phase 2: fake embedder end-to-end emulator test
 
 Introduce a small interface, separate from generation:
@@ -238,6 +528,11 @@ For each sample record:
 
 Do not convert cosine scores directly into calibrated probabilities. Fit thresholds later using a held-out CyanBridge dataset.
 
+The opt-in real probe now exercises the assistant and Live heads with three
+fixtures each. It asserts the expected bounded label and rejects a result when
+the top-two margin is below `0.01`; the production threshold remains unset
+until a held-out dataset is available.
+
 ## Emulator limitations
 
 The emulator can establish:
@@ -286,6 +581,146 @@ JEV_EMBEDDING_MODEL_SHA256
 
 The opt-in workflow must push the files to the emulator, verify checksums, run only the embedding probe class, and upload the `JEV_EMBED` log.
 
+### Local real-model command
+
+After obtaining the two GGUFs outside the repository:
+
+```bash
+JEV_EMBEDDING_LLAMA_RUNTIME_AAR=/tmp/opencode/kotlinllamacpp-fixed/llamaCpp/build/outputs/aar/llamaCpp-release.aar \
+  JAVA_HOME=/opt/android-studio/jbr \
+  ANDROID_HOME="$HOME/Android/Sdk" \
+  bash tools/hil/run_real_embedding_models.sh emulator-5580
+```
+
+The script defaults to:
+
+```text
+/tmp/opencode/jev-embedding-models/embeddinggemma-300M-Q8_0.gguf
+/tmp/opencode/jev-embedding-models/Qwen3-Embedding-0.6B-Q8_0.gguf
+```
+
+It pushes the models to `/data/local/tmp/jev-embedding`, builds x86_64 APKs, installs them, and invokes only `RealEmbeddingModelEmulatorTest`.
+
+### First real emulator result
+
+The latest probe passed **2/2 tests** on `emulator-5580` using CPU inference.
+The host and device SHA-256 values were checked before instrumentation:
+
+```text
+EmbeddingGemma-300M-Q8_0.gguf  b5ce9d77a3fc4b3b39ccb5643c36777911cc4eb46a66962eadfa3f5f60490d63
+Qwen3-Embedding-0.6B-Q8_0.gguf 06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439
+```
+
+Vector-level results:
+
+| Model | Dimension observed | Self cosine | English↔Portuguese | Unrelated | Warm inference samples |
+|---|---:|---:|---:|---:|---:|
+| EmbeddingGemma 300M Q8 | 768 | 1.000 | 0.756 | 0.163 | 45–155 ms |
+| Qwen3-Embedding 0.6B Q8 | 768 observed by current runtime | 1.000 | 0.877 | 0.392 | 173–414 ms |
+
+The Qwen model card advertises up to 1024 dimensions, but this current mobile llama.cpp build returned 768. Treat that as a runtime/model-contract discrepancy to investigate; do not silently assume 768 is the intended production dimension.
+
+Real bounded-decision results (three assistant + three Live fixtures per model):
+
+| Model | Assistant labels | Live labels | Representative top-2 margins |
+|---|---|---|---|
+| EmbeddingGemma 300M Q8 | A, B, C — all expected | A, B, C — all expected | 0.216–0.554 assistant; 0.301–0.445 Live |
+| Qwen3-Embedding 0.6B Q8 | A, B, C — all expected | A, B, C — all expected | 0.162–0.251 assistant; 0.176–0.284 Live |
+
+The earlier raw-prototype run intentionally failed two semantic cases. That was
+corrected by using the models' documented classification/instruction prompts;
+the letter-only decision interface itself did not change.
+
+## Validation boundary: Tasker and real UI tasks
+
+The real embedding validation **did not connect to Tasker and did not execute a
+real UI task**. This is intentional: the scoped command used for this work is
+`tools/hil/run_jev_like_decision_ci.sh`, and that runner explicitly excludes the
+Tasker, AutoInput, network, email, and full local-agent HIL layers.
+
+### Tests actually performed
+
+| Layer | Result | What it covered |
+|---|---|---|
+| Scoped JVM suite | **70 passed, 0 failed** | Decision math, embedding ranking, tie handling, dimension/NaN rejection, abstention safety, parsers, routers, and bounded UI candidates |
+| APK assembly | **Passed** | Debug app and instrumentation APKs, x86_64 emulator ABI |
+| `JevLikeDecisionEmulatorTest` | **5/5 passed** | On-device fake single-letter decisions, Portuguese routing, multilingual Live heuristics, reasoning-token parsing, bounded UI candidates; no model, Tasker, or network |
+| `RealEmbeddingModelEmulatorTest` | **2/2 passed** | Real CPU GGUF inference for EmbeddingGemma and Qwen3; vector validity plus three assistant and three Live ranking fixtures per model |
+| `LocalAiTaskerYouTubeHilTest` | **Skipped** | Invoked on `emulator-5580`; correctly reported `AssumptionViolatedException: Tasker is not installed on the HIL device` |
+| Tasker profile connection | **Not validated** | No Tasker profile import, readiness probe, AutoInput observation, or Tasker action execution occurred |
+| Chrome/YouTube task | **Not run in this session** | No Chrome launch, YouTube search, Linus Tech Tips result selection, or video playback was performed |
+
+The repository contains separate Tasker HIL tests. `TaskerLocalAgentHilTest`
+checks fixture observation/click/type execution, and
+`LocalAiTaskerChromeHilTest` runs a local model through Tasker/AutoInput against
+a deterministic Chrome HIL page. A new gated
+`LocalAiTaskerYouTubeHilTest` plus
+`tools/hil/run_tasker_youtube_hil.sh` now cover the requested YouTube smoke
+path. They were not run here because the current emulator has YouTube/Chrome
+but **does not have Tasker or AutoInput installed**; its invocation skipped
+before any task execution. The new test is a Tasker plumbing test using the
+current local-agent brain; it is not evidence that the embedding decision
+engine is production-wired.
+
+### What is still needed for embedding-backed production decisions
+
+1. **Permanent llama.cpp dependency repair.** The tested path uses the temporary
+   patched AAR documented above. Publish/vendor a corrected wrapper or build it
+   reproducibly before enabling the feature in normal app builds.
+2. **Production engine wiring.** Provide a lifecycle-owned embedder/model
+   provider for `AssistantRequestRouter.decisionEngineProvider` and
+   `LocalAgentDecisionBridge.engineProvider`, with model loading, eviction,
+   CPU/device capability checks, cancellation, and an opt-in feature flag.
+3. **Calibrated safety policy.** Cosine scores and the compatibility softmax are
+   not probabilities. Fit top-score/margin thresholds on a held-out multilingual
+   CyanBridge command set; abstention must clarify or fall back rather than
+   starting phone control.
+4. **Correct UI candidate identity.** Preserve the selected node index in each
+   `click_text` candidate. The current production mapping can resolve every
+   selected click to the first clickable node.
+5. **Embedding model contract.** Resolve why the Qwen GGUF returns 768 values
+   through this mobile runtime while its model card advertises up to 1024, and
+   verify the intended MRL dimension before storing or comparing vectors.
+6. **Model packaging decision.** Either finish the standalone EmbeddingGemma
+   LiteRT `CompiledModel` + SentencePiece path, or explicitly standardize on
+   the repaired GGUF backend. Do not silently mix tokenizer/model contracts.
+7. **End-to-end Tasker HIL.** Run the real local-agent service with Tasker and
+   AutoInput, then prove observation → embedding decision → candidate action →
+   Tasker execution → post-action observation on a deterministic fixture.
+
+### Exact Chrome/YouTube validation still required
+
+Run the new test only on a provisioned Tasker HIL target. It should:
+
+1. verify Tasker and AutoInput packages, enabled accessibility services,
+   imported/current profiles, CyanBridge local-agent readiness, and a selected
+   local model;
+2. start the production `TaskerLocalAgentService` with the goal to open Chrome
+   or YouTube, search for **Linus Tech Tips**, and select a known result;
+3. assert each boundary using `TaskerExecutionBackend.observe()` rather than
+   trusting only an app status string: foreground package, visible search text,
+   selected result, and player state;
+4. capture the Tasker/CyanBridge log and stop/restore the service and preferences
+   in `finally`;
+5. keep this outside default CI because YouTube content, ads, login state,
+   network availability, and playback UI are nondeterministic. A deterministic
+   local HIL web fixture is preferable for the first embedding-backed action
+   test; YouTube can be a later physical/emulator smoke test.
+
+Provisioned-target command:
+
+```bash
+bash tools/hil/sync_tasker_profiles.sh <tasker-target-serial>
+JAVA_HOME=/opt/android-studio/jbr \
+  ANDROID_HOME="$HOME/Android/Sdk" \
+  bash tools/hil/run_tasker_youtube_hil.sh <tasker-target-serial>
+```
+
+The runner requires Tasker, AutoInput, YouTube, an imported/current Tasker
+profile set, a selected local model, and the accessibility services enabled.
+It intentionally runs in `hardware` mode so missing prerequisites fail instead
+of being silently skipped.
+
 Do not download Hugging Face models from CI by default. EmbeddingGemma requires accepting Google’s model license, and large model downloads make the persistent runner flaky.
 
 ## Known Jev branch follow-ups unrelated to embeddings
@@ -300,12 +735,12 @@ Before production routing is enabled, address these existing issues:
 
 ## Recommended next-agent order
 
-1. Add `TextEmbeddingEngine`, `EmbeddingResult`, `EmbeddingRouter`, and pure math tests.
+1. ~~Add `TextEmbeddingEngine`, `EmbeddingResult`, `EmbeddingRouter`, and pure math tests.~~ Done as `TextEmbeddingEngine`, `TextEmbeddingResult`, `EmbeddingDecisionEngine`, and `EmbeddingDecisionMath`.
 2. Add synthetic emulator HIL coverage using a fake embedder.
-3. Add model-path/checksum plumbing for an opt-in Android probe.
+3. ~~Add model-path/checksum plumbing for an opt-in Android probe.~~ Done for the GGUF probe; tokenizer/checksum plumbing remains for a future LiteRT path.
 4. Integrate EmbeddingGemma through standalone LiteRT `CompiledModel` plus SentencePiece.
-5. Run CPU-only emulator correctness tests and capture `JEV_EMBED` logs.
-6. Add Qwen3 GGUF embedding probing through `LlamaAndroid.getEmbedding()`/`embedding()` if a compatible artifact is available.
+5. ~~Run CPU-only emulator correctness tests and capture `JEV_EMBED` logs.~~ Done for both GGUFs.
+6. ~~Add Qwen3 GGUF embedding probing through `LlamaAndroid.getEmbedding()`/`embedding()` if a compatible artifact is available.~~ Done with the patched wrapper AAR; permanent dependency repair remains.
 7. Compare real model routing margins on a held-out multilingual fixture.
 8. Only then wire the best model behind an opt-in front-door router.
 9. Test Qwen3.5-Embedding-0.8B later, preferably on PC or after a verified mobile conversion; do not assume it is multilingual.

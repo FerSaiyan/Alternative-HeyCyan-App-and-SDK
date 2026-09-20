@@ -40,7 +40,7 @@ class AssistantRequestRouter(
      * English regex heuristics -> full 256-token JSON completion.
      * Null keeps the legacy behavior exactly (used by existing tests).
      */
-    var decisionEngineProvider: (() -> com.fersaiyan.cyanbridge.ai.decision.LocalDecisionEngine?)? = null,
+    var decisionEngineProvider: ((AgentProviderType) -> com.fersaiyan.cyanbridge.ai.decision.LocalDecisionEngine?)? = null,
 ) {
     suspend fun route(
         context: Context,
@@ -48,7 +48,7 @@ class AssistantRequestRouter(
         providerType: AgentProviderType,
     ): AssistantRoutingDecision {
         classifyHeuristicallyDeterministic(request)?.let { return it }
-        tryDecisionEngine(request)?.let { return it }
+        tryDecisionEngine(request, providerType)?.let { return it }
         classifyHeuristically(request)?.let { return it }
 
         return runCatching {
@@ -93,9 +93,12 @@ class AssistantRequestRouter(
      * Jev-like single-letter routing. Returns null when no engine is wired or
      * the engine fails, so route() falls through to legacy paths.
      */
-    internal suspend fun tryDecisionEngine(request: AssistantRequest): AssistantRoutingDecision? {
+    internal suspend fun tryDecisionEngine(
+        request: AssistantRequest,
+        providerType: AgentProviderType = AgentProviderType.LOCAL_AGENT,
+    ): AssistantRoutingDecision? {
         val provider = decisionEngineProvider ?: return null
-        val engine = runCatching { provider.invoke() }.getOrNull() ?: return null
+        val engine = runCatching { provider.invoke(providerType) }.getOrNull() ?: return null
         val candidates = com.fersaiyan.cyanbridge.ai.decision.AssistantDecisionOptions.candidates()
         return try {
             val decision = engine.choose(request.text.trim(), candidates, debugTag = "assistant-route")
@@ -110,6 +113,13 @@ class AssistantRequestRouter(
         decision: com.fersaiyan.cyanbridge.ai.decision.LocalDecision,
         originalText: String,
     ): AssistantRoutingDecision {
+        if (decision.abstained) {
+            return AssistantRoutingDecision(
+                intent = AssistantIntent.CLARIFY,
+                confidence = decision.confidence.toDouble().coerceIn(0.0, 1.0),
+                clarification = "I am not confident which action you want. Please be more specific.",
+            )
+        }
         val intent = when (decision.index) {
             0 -> AssistantIntent.ANSWER_QUESTION
             1 -> AssistantIntent.ANALYZE_IMAGE

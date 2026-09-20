@@ -28,6 +28,12 @@ data class LocalDecision(
     val rawOutput: String,
     /** True when we fell back to heuristics because the model path failed. */
     val usedFallback: Boolean = false,
+    /** True when the decision policy rejected the top candidate. */
+    val abstained: Boolean = false,
+    /** Highest raw score from the active decision backend. */
+    val topScore: Float = confidence,
+    /** Difference between the top and second-best raw scores. */
+    val margin: Float = 0f,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -37,7 +43,10 @@ data class LocalDecision(
             confidence == other.confidence &&
             probabilities.contentEquals(other.probabilities) &&
             rawOutput == other.rawOutput &&
-            usedFallback == other.usedFallback
+            usedFallback == other.usedFallback &&
+            abstained == other.abstained &&
+            topScore == other.topScore &&
+            margin == other.margin
     }
 
     override fun hashCode(): Int {
@@ -47,6 +56,9 @@ data class LocalDecision(
         result = 31 * result + probabilities.contentHashCode()
         result = 31 * result + rawOutput.hashCode()
         result = 31 * result + usedFallback.hashCode()
+        result = 31 * result + abstained.hashCode()
+        result = 31 * result + topScore.hashCode()
+        result = 31 * result + margin.hashCode()
         return result
     }
 }

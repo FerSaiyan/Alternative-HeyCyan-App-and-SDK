@@ -63,6 +63,28 @@ object DecisionPromptBuilder {
         }.trim()
     }
 
+    fun buildUiActionStatePrompt(
+        state: String,
+        candidates: List<DecisionCandidate>,
+    ): String {
+        require(candidates.size in 2..8) { "Need 2..8 UI candidates, got ${candidates.size}" }
+        return buildString {
+            appendLine("Choose the ONE next phone action that most directly advances the stated goal.")
+            appendLine("Use only controls relevant to the goal. Do not press Back, scroll, tap headings, or finish unless the current state clearly requires it.")
+            appendLine("Reply with ONLY the action's single capital letter. No explanation or punctuation.")
+            appendLine()
+            appendLine("Available actions:")
+            candidates.forEach { c ->
+                appendLine("${c.label} = ${c.description.trim().take(MAX_CANDIDATE_DESC_CHARS)}")
+            }
+            appendLine()
+            appendLine("Goal and current phone state:")
+            appendLine(state.trim().take(MAX_STATE_CHARS).ifBlank { "(screen unreadable)" })
+            appendLine()
+            append("Next action:")
+        }.trim()
+    }
+
     fun systemPromptForSingleLetter(): String =
         "You are a precise classifier. Always reply with exactly one capital letter (A, B, C, D, E, F, G or H) and nothing else. Never reason out loud."
 }

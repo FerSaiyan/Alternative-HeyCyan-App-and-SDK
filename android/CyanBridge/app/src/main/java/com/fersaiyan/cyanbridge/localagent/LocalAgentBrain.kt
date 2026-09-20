@@ -33,7 +33,9 @@ class NoOpLocalAgentBrain : LocalAgentBrain {
     }
 }
 
-class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
+class RemoteUiControlLocalAgentBrain(
+    private val decisionEngineProvider: (() -> com.fersaiyan.cyanbridge.ai.decision.LocalDecisionEngine?)? = null,
+) : LocalAgentBrain {
 
     override suspend fun next(
         context: Context,
@@ -119,30 +121,54 @@ class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
         taskState: LocalAgentTaskState,
         observation: LocalAgentObservation,
     ): LocalAgentBrainOutput? {
-        val engine = LocalAgentDecisionBridge.engine() ?: return null
+        val engine = runCatching { decisionEngineProvider?.invoke() }.getOrNull()
+            ?: LocalAgentDecisionBridge.engine()
+            ?: return null
         return try {
             val built = UiActionCandidateBuilder.build(taskState.goal, observation, taskState.previousActionResult)
             if (built.candidates.size < 2) return null
+            // An explicit leading "Open/Launch <app>" goal is safe to map deterministically.
+            // Avoid spending a model call on it, and never let a weak classifier prematurely
+            // finish while the requested app is not even in the foreground.
+            built.keys.indexOf("open_app").takeIf { it >= 0 }?.let { openIndex ->
+                val action = mapCandidateKeyToAction(
+                    openIndex,
+                    built.keys[openIndex],
+                    taskState,
+                    observation,
+                    built,
+                ) ?: return null
+                return LocalAgentBrainOutput(
+                    actions = listOf(action),
+                    note = "deterministic explicit app launch",
+                    isComplete = false,
+                )
+            }
             val screenSummary = observation.screenSnapshot?.toCompressedPromptText(taskState.goal)
                 ?: observation.screenText.orEmpty()
-            val state = com.fersaiyan.cyanbridge.ai.decision.DecisionPromptBuilder.buildUiActionPrompt(
-                goal = taskState.goal,
-                screenSummary = screenSummary,
-                candidates = built.candidates,
-            )
+            // SingleTokenDecisionEngine adds the bounded options and letter-only instructions.
+            // Keep this state compact enough for CPU-first Android inference.
+            val state = buildString {
+                appendLine("Phone automation goal: ${taskState.goal.trim().take(500)}")
+                taskState.previousActionResult?.takeIf { it.isNotBlank() }?.let {
+                    appendLine("Previous result: ${it.trim().take(240)}")
+                }
+                appendLine("Current screen:")
+                append(screenSummary.trim().take(1_200))
+            }.trim()
             android.util.Log.d(TAG, "Jev-like UI candidates=${built.candidates.map { it.label to it.description }} spans=${built.typeSpans}")
             val decision = engine.choose(state, built.candidates, debugTag = "local-agent-ui")
             android.util.Log.i(TAG, "Jev-like UI choice=${decision.label} conf=${decision.confidence} raw='${decision.rawOutput.take(200)}'")
-            if (decision.confidence < CANDIDATE_MIN_CONFIDENCE) {
+            if (decision.abstained || decision.confidence < CANDIDATE_MIN_CONFIDENCE) {
                 android.util.Log.i(TAG, "Jev-like UI confidence below threshold, using JSON planner")
                 return null
             }
             val key = built.keys.getOrNull(decision.index) ?: return null
-            mapCandidateKeyToAction(key, taskState, observation, built)?.let { action ->
+            mapCandidateKeyToActions(decision.index, key, taskState, observation, built)?.let { actions ->
                 LocalAgentBrainOutput(
-                    actions = listOf(action),
+                    actions = actions,
                     note = "jev-candidate ${decision.label} conf=${decision.confidence}",
-                    isComplete = action is LocalAgentAction.Finish,
+                    isComplete = actions.lastOrNull() is LocalAgentAction.Finish,
                 )
             }
         } catch (t: Throwable) {
@@ -151,7 +177,8 @@ class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
         }
     }
 
-    private fun mapCandidateKeyToAction(
+    internal fun mapCandidateKeyToAction(
+        candidateIndex: Int,
         key: String,
         taskState: LocalAgentTaskState,
         observation: LocalAgentObservation,
@@ -159,11 +186,15 @@ class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
     ): LocalAgentAction? {
         val nodes = observation.screenSnapshot?.nodes.orEmpty()
         return when (key) {
-            "click_text" -> {
-                // Resolve to the first clickable node's text (same order as builder).
-                val node = nodes.firstOrNull { it.isClickable && (it.text.isNotBlank() || it.contentDescription.isNotBlank()) }
+            "open_app" -> {
+                val appName = UiActionCandidateBuilder.extractTargetApp(taskState.goal) ?: return null
+                LocalAgentAction.OpenApp(appName)
+            }
+            "click_node" -> {
+                val selectedNodeIndex = built.nodeIndices.getOrNull(candidateIndex)
+                val node = nodes.firstOrNull { it.index == selectedNodeIndex }
                     ?: return null
-                LocalAgentAction.ClickText(node.text.ifBlank { node.contentDescription }.trim())
+                LocalAgentAction.ClickCoord(node.bounds.centerX, node.bounds.centerY)
             }
             "type_text" -> {
                 val span = built.typeSpans.firstOrNull()?.trim().orEmpty()
@@ -173,9 +204,35 @@ class RemoteUiControlLocalAgentBrain : LocalAgentBrain {
             }
             "scroll" -> LocalAgentAction.Scroll(LocalAgentAction.Direction.DOWN)
             "press_back" -> LocalAgentAction.GlobalBack
-            "finish" -> LocalAgentAction.Finish("Candidate planner finished: ${taskState.goal.take(120)}")
+            // Null intentionally enters the structured JSON planner. Bounded classification cannot
+            // synthesize open-ended parameters or a grounded user-facing final answer.
+            "detailed_planner" -> null
             else -> null
         }
+    }
+
+    internal fun mapCandidateKeyToActions(
+        candidateIndex: Int,
+        key: String,
+        taskState: LocalAgentTaskState,
+        observation: LocalAgentObservation,
+        built: UiActionCandidateBuilder.Built,
+    ): List<LocalAgentAction>? {
+        val action = mapCandidateKeyToAction(candidateIndex, key, taskState, observation, built)
+            ?: return null
+        if (action !is LocalAgentAction.TypeText) return listOf(action)
+
+        // AutoInput's compact command types into the focused field. Reduced observations do not
+        // preserve focus/editable flags, so focus the exact node represented by this candidate
+        // before typing instead of hoping an unrelated field is already focused.
+        val selectedNodeIndex = built.nodeIndices.getOrNull(candidateIndex)
+        val node = observation.screenSnapshot?.nodes.orEmpty()
+            .firstOrNull { it.index == selectedNodeIndex }
+            ?: return null
+        return listOf(
+            LocalAgentAction.ClickCoord(node.bounds.centerX, node.bounds.centerY),
+            action,
+        )
     }
 
     private fun LocalAgentUiControlProtocol.Action.toLocalAgentAction(): LocalAgentAction {

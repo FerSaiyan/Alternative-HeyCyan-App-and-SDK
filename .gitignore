@@ -74,6 +74,14 @@ Thumbs.db
 
 # Local tooling (very large / machine-specific)
 tools/
+# Keep the small opt-in real-model probe under version control. Other local
+# tooling remains ignored.
+!tools/
+tools/*
+!tools/hil/
+tools/hil/*
+!tools/hil/run_real_embedding_models.sh
+!tools/hil/run_tasker_youtube_hil.sh
 
 # Generated analysis and language caches
 **/.kotlin/

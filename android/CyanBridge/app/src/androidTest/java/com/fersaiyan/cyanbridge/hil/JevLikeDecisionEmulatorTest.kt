@@ -110,7 +110,7 @@ class JevLikeDecisionEmulatorTest {
         val built = UiActionCandidateBuilder.build("Play the latest Linus Tech Tips video", obs)
         println("JEV_HIL ui candidates=${built.candidates.map { "${it.label}=${it.description}" }} spans=${built.typeSpans}")
         assertTrue(built.candidates.size in 2..8)
-        assertTrue(built.candidates.any { it.description.contains("Finish", ignoreCase = true) })
+        assertTrue(built.keys.contains("detailed_planner"))
         val prompt = DecisionPromptBuilder.buildUiActionPrompt("Play LTT video", "YouTube home", built.candidates)
         println("JEV_HIL ui prompt chars=${prompt.length}")
         assertTrue(prompt.contains("ONLY the single letter"))

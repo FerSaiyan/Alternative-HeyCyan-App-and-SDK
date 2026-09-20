@@ -30,6 +30,9 @@ object HilTestSupport {
     val localAiRequired: Boolean
         get() = args.getString("hil_local_ai", "false").toBoolean()
 
+    val youtubeRequired: Boolean
+        get() = args.getString("hil_youtube", "false").toBoolean()
+
     val emailSendRequired: Boolean
         get() = args.getString("hil_email_send", "false").toBoolean()
 

@@ -13,6 +13,9 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
+import com.fersaiyan.cyanbridge.ai.decision.SingleTokenDecisionEngine
+import com.fersaiyan.cyanbridge.ai.decision.DecisionPromptBuilder
+import com.fersaiyan.cyanbridge.ai.router.AgentInferenceRouter
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentActionManager
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalClarifier
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalCoordinator
@@ -43,6 +46,20 @@ class TaskerLocalAgentService : Service() {
     private val cancelRequested = AtomicBoolean(false)
     private var approvalDeferred: CompletableDeferred<Boolean>? = null
     private lateinit var approvalVoiceSession: LocalAgentApprovalVoiceSession
+    private val decisionEngine by lazy {
+        SingleTokenDecisionEngine(
+            generate = { systemPrompt, userPrompt ->
+                AgentInferenceRouter.completeDecisionToken(
+                    context = applicationContext,
+                    sessionId = "local-agent-decision-${System.currentTimeMillis()}",
+                    systemPrompt = systemPrompt,
+                    userPrompt = userPrompt,
+                    maxTokens = 8,
+                )
+            },
+            promptBuilder = DecisionPromptBuilder::buildUiActionStatePrompt,
+        )
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -132,7 +149,7 @@ class TaskerLocalAgentService : Service() {
 
         loopJob = scope.launch {
             val backend: LocalAgentExecutionBackend = TaskerExecutionBackend
-            val brain: LocalAgentBrain = RemoteUiControlLocalAgentBrain()
+            val brain: LocalAgentBrain = RemoteUiControlLocalAgentBrain { decisionEngine }
             var taskState = LocalAgentTaskState(
                 goal = goal,
                 maxSteps = AutomationPrefs.getMaxSteps(applicationContext),
@@ -437,7 +454,7 @@ class TaskerLocalAgentService : Service() {
         private const val CHANNEL_ID = "local_agent_tasker"
         private const val NOTIFICATION_ID = 55244
         private const val OBSERVATION_TIMEOUT_MS = 10_000L
-        private const val EXECUTION_TIMEOUT_MS = 15_000L
+        private const val EXECUTION_TIMEOUT_MS = 30_000L
         private const val BRAIN_TIMEOUT_MS = 60_000L
         private const val APPROVAL_TIMEOUT_MS = 10 * 60_000L
         private const val CLARIFICATION_TIMEOUT_MS = 60_000L

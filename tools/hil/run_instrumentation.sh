@@ -9,6 +9,7 @@ glasses="${CYANBRIDGE_HIL_GLASSES:-false}"
 expect_visual_fact="${CYANBRIDGE_HIL_EXPECT_VISUAL_FACT:-false}"
 local_ai="${CYANBRIDGE_HIL_LOCAL_AI:-false}"
 email_send="${CYANBRIDGE_HIL_EMAIL_SEND:-false}"
+youtube="${CYANBRIDGE_HIL_YOUTUBE:-false}"
 
 if [[ -z "$serial" ]]; then
   serial="$(find_serial any || true)"
@@ -109,6 +110,7 @@ run_one_class() {
       -e hil_expect_visual_fact "$expect_visual_fact"
       -e hil_local_ai "$local_ai"
       -e hil_email_send "$email_send"
+      -e hil_youtube "$youtube"
       -e class "$class_name"
       "$CYANBRIDGE_TEST_PACKAGE/$CYANBRIDGE_TEST_RUNNER"
     )
