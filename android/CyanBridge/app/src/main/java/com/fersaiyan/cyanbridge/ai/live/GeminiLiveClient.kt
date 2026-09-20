@@ -22,6 +22,9 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
+import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
@@ -117,6 +120,7 @@ class GeminiLiveClient(
     private var lastSystemPrompt: String = ""
     private var socket: WebSocket? = null
     private var recorder: AudioRecord? = null
+    @Volatile private var mentraMicActive = false
     private var recorderJob: Job? = null
     private var playback: AudioTrack? = null
     private var reconnectJob: Job? = null
@@ -263,6 +267,13 @@ class GeminiLiveClient(
             bytes[index * 2 + 1] = ((sample.toInt() ushr 8) and 0xff).toByte()
         }
         sendPcm(bytes)
+    }
+
+    /** Direct 16 kHz mono signed little-endian PCM; no second AudioRecord. */
+    fun offerMentraPcm(pcm: ByteArray) {
+        if (mentraMicActive && active.get() && setupComplete.get() &&
+            captureEnabled.get() && pcm.isNotEmpty() && pcm.size % 2 == 0
+        ) sendPcm(pcm)
     }
 
     /** Backward-compatible name for explicit still images. */
@@ -806,6 +817,26 @@ class GeminiLiveClient(
         }
         if (!captureEnabled.compareAndSet(false, true)) return
         requestAudioFocus()
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
+            // SDK PCM is the ONLY input. SCO and a second AudioRecord can duplicate audio
+            // and force output away from Mentra's Bluetooth media profile.
+            val manager = MentraLiveManager.getInstance(appContext)
+            if (!manager.connected || !manager.ready) {
+                captureEnabled.set(false)
+                setState(GeminiLiveState.ERROR, "Mentra Live is not ready")
+                return
+            }
+            startPlayback()
+            mentraMicActive = true
+            manager.setPcmListener(::offerMentraPcm)
+            runCatching { manager.setMicrophoneEnabled(true) }.onFailure { error ->
+                manager.setPcmListener(null)
+                mentraMicActive = false
+                captureEnabled.set(false)
+                setState(GeminiLiveState.ERROR, error.message ?: "Mentra microphone failed")
+            }
+            return
+        }
         configureAudioRoute()
         startPlayback()
         val minBuffer = AudioRecord.getMinBufferSize(
@@ -847,6 +878,16 @@ class GeminiLiveClient(
 
     private fun pauseCapture() {
         val wasCapturing = captureEnabled.getAndSet(false)
+        if (mentraMicActive) {
+            mentraMicActive = false
+            runCatching {
+                MentraLiveManager.getInstance(appContext).apply {
+                    setPcmListener(null)
+                    setMicrophoneEnabled(false)
+                    setOwnAudioPlaying(false)
+                }
+            }
+        }
         speechDetector.reset()
         speechActive.set(false)
         recorderJob?.cancel()
@@ -984,6 +1025,9 @@ class GeminiLiveClient(
             if (wasUserSpeaking) listener.onUserSpeechActivity(false)
         }
         if (playback == null) startPlayback()
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
+            runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(true) }
+        }
         val track = playback ?: return
         if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
             runCatching { track.play() }
@@ -1002,11 +1046,17 @@ class GeminiLiveClient(
 
     private fun finishModelPlayback() {
         if (!modelSpeaking.getAndSet(false)) return
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
+            runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(false) }
+        }
         speechDetector.reset()
         speechActive.set(false)
     }
 
     private fun stopPlayback() {
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
+            runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(false) }
+        }
         playback?.let {
             runCatching { it.pause() }
             runCatching { it.flush() }

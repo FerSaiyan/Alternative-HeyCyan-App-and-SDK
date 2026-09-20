@@ -54,6 +54,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     fun disconnect() {
         pcmListener = null
         sdk.setMicState(enabled = false)
+        sdk.setMicSourcePin(null)
         sdk.disconnect()
     }
 
@@ -63,6 +64,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
 
     fun setMicrophoneEnabled(enabled: Boolean) {
         if (!enabled) pcmListener = null
+        sdk.setMicSourcePin(if (enabled) "glasses" else null)
         sdk.setMicState(enabled = enabled, useGlassesMic = true)
     }
 
