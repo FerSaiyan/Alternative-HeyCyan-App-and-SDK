@@ -6,6 +6,7 @@ import com.fersaiyan.cyanbridge.ai.image.ImageThumbnailQuality
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
+import com.fersaiyan.cyanbridge.devices.mentra.MentraPhotoCapture
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSessionCoordinator
 import com.oudmon.ble.base.bluetooth.BleOperateManager
@@ -23,6 +24,7 @@ class GeminiLiveGlassesImageCapture(context: Context) {
         DeviceProfileStore.selectedClass(appContext)
     ) {
         DeviceClass.HEY_CYAN -> captureHeyCyan(quality)
+        DeviceClass.MENTRA_LIVE -> MentraPhotoCapture(appContext).capture()
         DeviceClass.EYEVUE -> {
             val manager = EyevueManager.getInstance(appContext)
             check(manager.isConnected()) { "Eyevue glasses are not connected" }
