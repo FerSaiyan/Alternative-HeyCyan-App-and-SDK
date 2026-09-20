@@ -11,6 +11,8 @@ enum class GeminiLiveAnnouncement {
     SESSION_ENDED,
     FREE_DAILY_LIMIT_REACHED,
     FREE_BUSY,
+    PRIVATE_SESSION_BUSY,
+    PRIVATE_RATE_LIMITED,
     GENERIC_FAILURE,
 }
 
@@ -30,6 +32,8 @@ object GeminiLiveAnnouncementMessages {
             GeminiLiveAnnouncement.SESSION_ENDED to "Your Live session has ended. Trigger Live again to start a new one.",
             GeminiLiveAnnouncement.FREE_DAILY_LIMIT_REACHED to "You've used your 5 free Live sessions for today. Come back tomorrow, or upgrade to Pro for more access.",
             GeminiLiveAnnouncement.FREE_BUSY to "Live is busy. Please try again in a moment.",
+            GeminiLiveAnnouncement.PRIVATE_SESSION_BUSY to "Another Live session is still active. End it before starting Private Live.",
+            GeminiLiveAnnouncement.PRIVATE_RATE_LIMITED to "Too many Live session starts. Wait a few minutes before trying Private Live again.",
             GeminiLiveAnnouncement.GENERIC_FAILURE to "Gemini Live session failed. Please try again.",
         ),
         "pt" to mapOf(
@@ -41,6 +45,8 @@ object GeminiLiveAnnouncementMessages {
             GeminiLiveAnnouncement.SESSION_ENDED to "Sua sessão do Live terminou. Acione o Live novamente para iniciar outra.",
             GeminiLiveAnnouncement.FREE_DAILY_LIMIT_REACHED to "Você usou suas 5 sessões gratuitas do Live hoje. Volte amanhã ou assine o Pro para ter mais acesso.",
             GeminiLiveAnnouncement.FREE_BUSY to "O Live está ocupado. Tente novamente em instantes.",
+            GeminiLiveAnnouncement.PRIVATE_SESSION_BUSY to "Outra sessão Live ainda está ativa. Encerre-a antes de iniciar o Live Privado.",
+            GeminiLiveAnnouncement.PRIVATE_RATE_LIMITED to "Muitas tentativas de iniciar o Live. Aguarde alguns minutos antes de tentar o Live Privado novamente.",
             GeminiLiveAnnouncement.GENERIC_FAILURE to "A sessão do Gemini Live falhou. Tente novamente.",
         ),
         "es" to mapOf(
