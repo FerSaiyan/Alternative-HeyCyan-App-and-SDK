@@ -63,7 +63,6 @@ object AutoPairManager {
         started = true
 
         val appContext = context.applicationContext
-        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) return
         Log.i(TAG, "AutoPairManager started")
 
         // Immediate attempt on app startup.
@@ -139,6 +138,7 @@ object AutoPairManager {
     }
 
     fun requestConnectToMac(context: Context, mac: String, reason: String) {
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) return
         if (DeviceProfileStore.selectedClass(context) == DeviceClass.EYEVUE) {
             if (suppressAutoReconnect) {
                 Log.d(TAG, "Skipping Eyevue reconnect ($reason): suppressed")
@@ -277,6 +277,7 @@ object AutoPairManager {
      * @return true if we attempted a connection.
      */
     private fun tryConnectOnce(context: Context, reason: String): Boolean {
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) return false
         if (suppressAutoReconnect) {
             Log.d(TAG, "Skipping auto-pair ($reason): suppressed")
             return false
@@ -343,6 +344,7 @@ object AutoPairManager {
     }
 
     private fun tryConnectToMacOnce(context: Context, mac: String, reason: String): Boolean {
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) return false
         if (suppressAutoReconnect) {
             Log.d(TAG, "Skipping auto-pair ($reason): suppressed")
             return false

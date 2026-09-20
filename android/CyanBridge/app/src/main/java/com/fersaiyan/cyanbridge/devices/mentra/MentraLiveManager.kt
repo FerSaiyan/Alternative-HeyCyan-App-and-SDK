@@ -1,6 +1,13 @@
 package com.fersaiyan.cyanbridge.devices.mentra
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.bridge.core.GlassesBridge
+import com.fersaiyan.cyanbridge.bridge.core.GlassesBridgeState
+import com.fersaiyan.cyanbridge.bridge.core.GestureType
+import com.fersaiyan.cyanbridge.bridge.core.InputEvent
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.Flow
+import java.util.concurrent.ConcurrentHashMap
 import com.mentra.bluetoothsdk.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +27,13 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     )
     private val _glasses = MutableStateFlow<GlassesRuntimeState>(sdk.getGlasses())
     val glasses: StateFlow<GlassesRuntimeState> = _glasses
+    private val _bridgeState = MutableStateFlow<GlassesBridgeState>(GlassesBridgeState.Disconnected)
+    val bridgeState: StateFlow<GlassesBridgeState> = _bridgeState
+    private val _inputEvents = MutableSharedFlow<InputEvent>(extraBufferCapacity = 32)
+    val inputEvents: Flow<InputEvent> = _inputEvents
+    private val discovered = ConcurrentHashMap<String, Device>()
+
+    init { GlassesBridge.registerAdapter(MentraLiveAdapter(this)) }
 
     @Volatile private var pcmListener: ((ByteArray) -> Unit)? = null
 
@@ -28,9 +42,25 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
 
     override fun onGlassesChanged(glasses: GlassesRuntimeState) {
         _glasses.value = glasses
+        _bridgeState.value = when {
+            glasses.ready -> GlassesBridgeState.Connected
+            glasses.connected -> GlassesBridgeState.Connecting
+            else -> GlassesBridgeState.Disconnected
+        }
         if (!glasses.connected) {
             pcmListener = null
         }
+    }
+
+    override fun onButtonPress(event: ButtonPressEvent) {
+        val gesture = when (event.pressType.lowercase()) {
+            "long", "long_press", "hold" -> GestureType.LONG_PRESS
+            "double", "double_tap" -> GestureType.DOUBLE_TAP
+            else -> GestureType.SINGLE_TAP
+        }
+        val input = InputEvent.Button(event.buttonId, gesture)
+        _inputEvents.tryEmit(input)
+        GlassesBridge.onInputEvent("mentra_live", input)
     }
 
     override fun onMicPcm(event: MicPcmEvent) {
@@ -43,11 +73,21 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     }
 
     fun scan(onResults: (List<Device>) -> Unit) {
-        sdk.scan(DeviceModel.MENTRA_LIVE, 10_000L, onResults)
+        sdk.scan(DeviceModel.MENTRA_LIVE, 10_000L) { devices ->
+            discovered.clear()
+            devices.forEach { discovered[it.id] = it }
+            onResults(devices)
+        }
     }
+
+    fun discoveredDevices(): List<Device> = discovered.values.toList()
+    fun findDiscovered(id: String): Device? = discovered[id]
+    fun batteryLevel(): Int? = (glasses.value as? GlassesRuntimeState.Connected)?.battery?.level
 
     fun connect(device: Device) {
         require(device.model == DeviceModel.MENTRA_LIVE) { "Not Mentra Live" }
+        GlassesBridge.setActiveAdapter("mentra_live")
+        _bridgeState.value = GlassesBridgeState.Connecting
         sdk.connect(device)
     }
 
@@ -56,6 +96,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
         sdk.setMicState(enabled = false)
         sdk.setMicSourcePin(null)
         sdk.disconnect()
+        _bridgeState.value = GlassesBridgeState.Disconnected
     }
 
     fun setPcmListener(listener: ((ByteArray) -> Unit)?) {
