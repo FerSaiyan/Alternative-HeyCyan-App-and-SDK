@@ -40,7 +40,7 @@ android {
     defaultConfig {
         applicationId = "com.fersaiyan.cyanbridge"
         // Meta DAT declares minSdk 29. Keep the regular build on API 24 if Meta SDK is skipped.
-        minSdk = metaDatEnabled ? 29 : 24
+        minSdk = metaDatEnabled ? 29 : 28
         targetSdk = 36
         versionCode = 31
         versionName = "2.3.0"
@@ -135,6 +135,12 @@ android {
         freeCompilerArgs += ["-Xskip-metadata-version-check"]
     }
 
+    packaging {
+        jniLibs {
+            pickFirsts += ['**/libc++_shared.so']
+        }
+    }
+
     buildFeatures {
         viewBinding = true
         buildConfig = true
@@ -168,6 +174,8 @@ dependencies {
     def coreConnectivityVersion = project.findProperty("heycyanCoreConnectivityVersion") ?: "0.1.0-SNAPSHOT"
     implementation("com.heycyan.core:core-connectivity:${coreConnectivityVersion}")
     implementation project(":shared")
+    // Pin to the paired Mentra Live firmware release; override with -PmentraSdkVersion.
+    implementation "com.mentraglass:bluetooth-sdk:${project.findProperty('mentraSdkVersion') ?: '3.2.0-dev.227'}"
     implementation files("libs/glasses_sdk_20250723_v01.aar")
     implementation files("libs/moyoung_glasses_sdk_0.0.7_20260624.aar")
     implementation "com.google.protobuf:protobuf-java:4.29.3"

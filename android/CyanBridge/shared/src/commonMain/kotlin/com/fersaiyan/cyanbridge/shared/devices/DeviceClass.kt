@@ -6,6 +6,7 @@ enum class DeviceClass {
     TUNEBUDS,
     MOYOUNG_W620,
     META_RAYBAN,
+    MENTRA_LIVE,
     MEIZU_MYVU,
     GENERIC_AUDIO,
     UNKNOWN;
@@ -16,6 +17,7 @@ enum class DeviceClass {
         TUNEBUDS -> "TuneBuds / AB Mate"
         MOYOUNG_W620 -> "MoYoung / W620"
         META_RAYBAN -> "Meta Rayban"
+        MENTRA_LIVE -> "Mentra Live"
         MEIZU_MYVU -> "Meizu MYVU / Star Air"
         GENERIC_AUDIO -> "Earbuds / Audio-only glasses"
         UNKNOWN -> "Unknown"

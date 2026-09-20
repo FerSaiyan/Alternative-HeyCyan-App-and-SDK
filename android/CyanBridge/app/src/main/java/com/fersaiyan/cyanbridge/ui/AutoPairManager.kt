@@ -63,6 +63,7 @@ object AutoPairManager {
         started = true
 
         val appContext = context.applicationContext
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) return
         Log.i(TAG, "AutoPairManager started")
 
         // Immediate attempt on app startup.
@@ -79,6 +80,10 @@ object AutoPairManager {
                 }
 
                 val selectedClass = DeviceProfileStore.selectedClass(appContext)
+                if (selectedClass == DeviceClass.MENTRA_LIVE || selectedClass == DeviceClass.META_RAYBAN) {
+                    delay(20_000L)
+                    continue
+                }
                 val connected = BleOperateManager.getInstance().isConnected
                 if (selectedClass == DeviceClass.EYEVUE) {
                     if (EyevueManager.getInstance(appContext).isConnected()) {
@@ -127,6 +132,7 @@ object AutoPairManager {
             return
         }
         val appContext = context.applicationContext
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) return
         scope.launch {
             tryConnectOnce(appContext, reason)
         }
