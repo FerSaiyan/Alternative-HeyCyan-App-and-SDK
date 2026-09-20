@@ -199,7 +199,13 @@ class GeminiLiveClient(
                 .onFailure {
                     active.set(false)
                     Log.e(TAG, "Live token failed", it)
-                    listener.onAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
+                    val rejection = it as? LiveTokenRequestException
+                    val announcement = when (rejection?.errorCode) {
+                        "live_concurrent_session" -> GeminiLiveAnnouncement.PRIVATE_SESSION_BUSY
+                        "live_rate_limited" -> GeminiLiveAnnouncement.PRIVATE_RATE_LIMITED
+                        else -> GeminiLiveAnnouncement.GENERIC_FAILURE
+                    }
+                    listener.onAnnouncement(announcement)
                     setState(GeminiLiveState.ERROR, it.message ?: "Unable to start Gemini Live")
                 }
         }
@@ -370,9 +376,12 @@ class GeminiLiveClient(
             "Connecting to Google",
         )
         val builder = Request.Builder().url(config.websocketUrl)
+        // A constrained Google URL already carries its ephemeral access_token.
+        // Do not send the same credential in a second Authorization header.
+        // Free/Economy proxies still require their own CyanBridge Bearer header.
         config.authorizationHeader?.takeIf { it.isNotBlank() }?.let {
             builder.header("Authorization", it)
-        } ?: config.token.takeIf { it.isNotBlank() }?.let {
+        } ?: config.token.takeIf { it.isNotBlank() && !config.websocketUrl.contains("access_token=") }?.let {
             builder.header("Authorization", "Token $it")
         }
         // Free-tier Live requires x-goog-api-key alongside the ephemeral token (or alone).
@@ -611,7 +620,8 @@ class GeminiLiveClient(
                 .put("systemInstruction", systemInstruction)
         }
         val setupJson = JSONObject().put("setup", setup).toString()
-        Log.i(TAG, "Sending Live setup model=${config.model} handle=${sessionResumptionHandle?.take(12)} json=${setupJson.take(2000)}")
+        // Do not log the user-provided system instruction or session-resumption handle.
+        Log.i(TAG, "Sending Live setup model=${config.model} serverProvided=${serverSetup != null} resuming=${!sessionResumptionHandle.isNullOrBlank()}")
         check(webSocket.send(setupJson)) {
             "Live setup could not be sent"
         }
