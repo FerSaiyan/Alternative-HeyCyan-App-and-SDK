@@ -221,14 +221,38 @@ object DebugLogSupport {
 
     fun collectLogcat(): String {
         val collected = try {
-            val filter = LOG_TAGS.joinToString(" ") { "$it:*" }
-            val process = Runtime.getRuntime().exec("logcat -d -t 1200 -s $filter")
-            process.inputStream.bufferedReader().use { it.readText() }.take(MAX_LOGCAT_CHARS)
+            // Do not build logcat filter specs from LOG_TAGS. Android's filter syntax uses
+            // ':' as the tag/priority delimiter, while Meta DAT emits tags which themselves
+            // contain colons (for example DAT:CORE:RegistrationManager). Passing those tags
+            // as "tag:*" makes logcat reject the complete command and previously left every
+            // submitted report without log lines. The app can only read its own process logs
+            // on production Android, so a PID-scoped dump is both valid and appropriately
+            // narrow while retaining colon-bearing tags.
+            val process = ProcessBuilder(buildLogcatCommand(android.os.Process.myPid()))
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            val exitCode = process.waitFor()
+            if (exitCode == 0) {
+                output.takeLast(MAX_LOGCAT_CHARS)
+            } else {
+                "Failed to collect logcat (exit=$exitCode): ${output.take(2_000)}"
+            }
         } catch (e: Exception) {
             "Failed to collect logcat: ${e.message}"
         }
         return normalizeCollectedLogs(collected)
     }
+
+    internal fun buildLogcatCommand(pid: Int): List<String> = listOf(
+        "logcat",
+        "-d",
+        "-t",
+        "1200",
+        "--pid=$pid",
+        "-v",
+        "threadtime",
+    )
 
     internal fun normalizeCollectedLogs(logs: String): String =
         logs.trim().ifEmpty {
