@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.ai.live
 
 import android.Manifest
+import android.os.Build
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.View
@@ -42,6 +43,17 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     private lateinit var stopButton: MaterialButton
     private var startedAtMs = 0L
     private var liveListening = false
+    private val responseIdleStop = Runnable {
+        if (liveListening) {
+            android.util.Log.i("GeminiLiveActivity", "Closing after 30 seconds following completed model turn")
+            visionController.stop()
+            client.stop()
+        }
+    }
+
+    private fun cancelResponseIdle() {
+        if (::elapsed.isInitialized) elapsed.removeCallbacks(responseIdleStop)
+    }
     private var hardwareImageButtonRegistered = false
     private var visionStatus = "Glasses vision: waiting"
     private var initialImagePath: String? = null
@@ -74,6 +86,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         indicators = findViewById(R.id.gemini_live_indicators)
         startButton = findViewById(R.id.gemini_live_start)
         stopButton = findViewById(R.id.gemini_live_stop)
+        useRelayForFreeTier = !hasPaidPlan()
         client = GeminiLiveClient(this, this)
         initialImagePath = intent.getStringExtra(EXTRA_INITIAL_IMAGE_PATH)?.takeIf { it.isNotBlank() }
         initialPrompt = intent.getStringExtra(EXTRA_INITIAL_PROMPT)?.takeIf { it.isNotBlank() }
@@ -86,6 +99,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
         startButton.setOnClickListener { explainAndRequestMicrophone() }
         stopButton.setOnClickListener {
+            cancelResponseIdle()
             visionController.stop()
             client.stop()
         }
@@ -110,12 +124,21 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
     override fun onPause() {
         unregisterHardwareImageButton()
+        // With denied notification permission this is a foreground-only session;
+        // never keep the socket alive when the user locks the phone or leaves the preview.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !hasPermission(Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            cancelResponseIdle()
+            client.stop()
+        }
         visionController.stop()
         client.pauseForBackground()
         super.onPause()
     }
 
     override fun onDestroy() {
+        cancelResponseIdle()
         elapsed.removeCallbacks(ticker)
         unregisterHardwareImageButton()
         visionController.close()
@@ -166,6 +189,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
     private fun captureHardwareImageQuestion() {
         if (!liveListening) return
+        cancelResponseIdle()
         if (!hardwareImageCaptureInProgress.compareAndSet(false, true)) return
         status.text = "Receiving glasses AI photo"
         lifecycleScope.launch {
@@ -214,6 +238,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
             }
 
             if (state == GeminiLiveState.STOPPED || state == GeminiLiveState.ERROR) {
+                cancelResponseIdle()
                 visionController.stop()
                 startedAtMs = 0L
                 elapsed.removeCallbacks(ticker)
@@ -245,11 +270,24 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
     override fun onUserSpeechActivity(active: Boolean) {
         visionController.onSpeechActivity(active)
+        if (active) runOnUiThread { cancelResponseIdle() }
+    }
+
+    override fun onModelOutputStarted() {
+        runOnUiThread { cancelResponseIdle() }
+    }
+
+    override fun onModelTurnComplete() {
+        runOnUiThread {
+            cancelResponseIdle()
+            if (liveListening) elapsed.postDelayed(responseIdleStop, 30_000L)
+        }
     }
 
     override fun onTranscription(input: Boolean, text: String) {
         // Transcription is intentionally parallel metadata. It is not inserted into the
         // audio -> Gemini -> native-audio critical path.
+        if (input && text.isNotBlank()) runOnUiThread { cancelResponseIdle() }
         if (text.isNotBlank()) {
             val direction = if (input) "User" else "Gemini"
             android.util.Log.d("GeminiLiveActivity", "$direction transcription: $text")
