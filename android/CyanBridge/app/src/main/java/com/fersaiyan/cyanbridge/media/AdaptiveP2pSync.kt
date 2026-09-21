@@ -104,8 +104,12 @@ internal class AdaptiveP2pSyncSession(
     val profileKey: String,
     val profile: AdaptiveP2pProfile,
     private val clockMs: () -> Long,
-    private val onUpdate: (() -> Unit)? = null,
+    private val onUpdate: (() -> Unit)?,
 ) {
+    /** Preserve existing trailing-lambda call sites that supply only the monotonic clock. */
+    constructor(profileKey: String, profile: AdaptiveP2pProfile, clockMs: () -> Long) :
+        this(profileKey, profile, clockMs, null)
+
     private val startedAtMs = clockMs()
     private val events = ArrayDeque<AdaptiveSyncEvent>()
 
