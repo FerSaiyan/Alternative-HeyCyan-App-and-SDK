@@ -13,9 +13,13 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
+import com.fersaiyan.cyanbridge.ai.decision.EmbeddingDecisionEngine
+import com.fersaiyan.cyanbridge.ai.decision.FallbackDecisionEngine
+import com.fersaiyan.cyanbridge.ai.decision.LocalDecisionEngine
 import com.fersaiyan.cyanbridge.ai.decision.SingleTokenDecisionEngine
 import com.fersaiyan.cyanbridge.ai.decision.DecisionPromptBuilder
 import com.fersaiyan.cyanbridge.ai.router.AgentInferenceRouter
+import com.fersaiyan.cyanbridge.localmodels.engine.LlamaCppTextEmbeddingEngine
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentActionManager
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalClarifier
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalCoordinator
@@ -59,6 +63,53 @@ class TaskerLocalAgentService : Service() {
             },
             promptBuilder = DecisionPromptBuilder::buildUiActionStatePrompt,
         )
+    }
+    private var embeddingEngine: LlamaCppTextEmbeddingEngine? = null
+
+    /**
+     * Opt-in fast path: a lifecycle-owned EmbeddingGemma cosine gate ahead of
+     * the single-token LLM. Disabled by default; requires an HIL-provisioned
+     * GGUF path. Abstentions cascade to the single-token engine, then to the
+     * detailed JSON planner in the brain.
+     */
+    private fun sessionDecisionEngine(): LocalDecisionEngine {
+        val single: LocalDecisionEngine = decisionEngine
+        val gate = newEmbeddingDecisionEngine() ?: return single
+        return FallbackDecisionEngine(gate, single)
+    }
+
+    private fun newEmbeddingDecisionEngine(): LocalDecisionEngine? {
+        if (!AutomationPrefs.isEmbeddingDecisionEnabled(applicationContext)) return null
+        val modelPath = AutomationPrefs.getEmbeddingModelPath(applicationContext)
+        if (modelPath.isBlank()) return null
+        val modelFile = java.io.File(modelPath)
+        if (!modelFile.isFile) {
+            Log.w(TAG, "Embedding gate disabled: missing GGUF at $modelPath")
+            return null
+        }
+        val margin = AutomationPrefs.getEmbeddingMarginThreshold(applicationContext)
+        val embedder = LlamaCppTextEmbeddingEngine(applicationContext, modelFile)
+        embeddingEngine = embedder
+        Log.i(TAG, "Embedding gate enabled model=${modelFile.name} margin>=$margin")
+        // Gemma classification protocol from the calibration benchmark: the
+        // same prefix on query and candidate prototypes. The gate query is
+        // capped well inside the calibration regime: a 687-token state string
+        // aborts the native embedding decode (SIGABRT in librnllama prefill),
+        // while short queries are reliable. Thresholds were fit on short
+        // queries, so over-long inputs would be out-of-calibration anyway.
+        // Probe: abortprobe.{0,1,2} on emulator-5554, 2026-09-20.
+        return EmbeddingDecisionEngine(
+            embedder = embedder,
+            queryText = { "task: classification | query: ${it.take(QUERY_MAX_CHARS)}" },
+            candidateText = { "task: classification | query: ${it.description}" },
+            minimumTopScore = -1f,
+            minimumMargin = margin,
+        )
+    }
+
+    private fun closeEmbeddingEngine() {
+        runCatching { embeddingEngine?.close() }
+        embeddingEngine = null
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -110,6 +161,7 @@ class TaskerLocalAgentService : Service() {
         approvalDeferred?.takeIf { !it.isCompleted }?.complete(false)
         approvalDeferred = null
         if (::approvalVoiceSession.isInitialized) approvalVoiceSession.close()
+        closeEmbeddingEngine()
         scope.cancel()
         super.onDestroy()
     }
@@ -149,7 +201,8 @@ class TaskerLocalAgentService : Service() {
 
         loopJob = scope.launch {
             val backend: LocalAgentExecutionBackend = TaskerExecutionBackend
-            val brain: LocalAgentBrain = RemoteUiControlLocalAgentBrain { decisionEngine }
+            val sessionEngine = sessionDecisionEngine()
+            val brain: LocalAgentBrain = RemoteUiControlLocalAgentBrain { sessionEngine }
             var taskState = LocalAgentTaskState(
                 goal = goal,
                 maxSteps = AutomationPrefs.getMaxSteps(applicationContext),
@@ -396,6 +449,7 @@ class TaskerLocalAgentService : Service() {
         cancelRequested.set(true)
         loopJob?.cancel()
         loopJob = null
+        closeEmbeddingEngine()
         approvalDeferred?.takeIf { !it.isCompleted }?.complete(false)
         approvalDeferred = null
         setStatus("Stopped", reason)
@@ -407,6 +461,7 @@ class TaskerLocalAgentService : Service() {
         setStatus(status, error)
         cancelRequested.set(true)
         loopJob = null
+        closeEmbeddingEngine()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -451,6 +506,7 @@ class TaskerLocalAgentService : Service() {
 
     companion object {
         private const val TAG = "TaskerLocalAgent"
+        private const val QUERY_MAX_CHARS = 1000
         private const val CHANNEL_ID = "local_agent_tasker"
         private const val NOTIFICATION_ID = 55244
         private const val OBSERVATION_TIMEOUT_MS = 10_000L
