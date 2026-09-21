@@ -197,7 +197,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         cancelResponseIdleTimeout("model turn completed")
         if (stopping || !sessionStarted) return
         responseIdleJob = serviceScope.launch {
-            delay(RESPONSE_IDLE_TIMEOUT_MS)
+            delay(GeminiLiveSessionPolicy.POST_RESPONSE_IDLE_MS)
             if (!stopping && sessionStarted) {
                 Log.i(TAG, "Closing Live after 30 seconds without interaction following Gemini response")
                 stopLive()
@@ -464,7 +464,6 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         private const val CHANNEL_ID = "gemini_live"
         private const val NOTIFICATION_ID = 7044
         private const val MAX_WORK_DURATION_MS = 15L * 60L * 1000L
-        private const val RESPONSE_IDLE_TIMEOUT_MS = 30_000L
         private const val ACTION_START = "com.fersaiyan.cyanbridge.action.GEMINI_LIVE_START"
         private const val ACTION_STOP = "com.fersaiyan.cyanbridge.action.GEMINI_LIVE_STOP"
         private const val EXTRA_LANGUAGE = "language"
