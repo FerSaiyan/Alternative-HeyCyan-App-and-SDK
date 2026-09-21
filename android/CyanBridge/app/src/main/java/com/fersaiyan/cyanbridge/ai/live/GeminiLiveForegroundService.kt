@@ -347,22 +347,10 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 return@launch
             }
             if (state == GeminiLiveState.ERROR) {
-                visionController?.stop()
-                startedAtMs = 0L
-                isListening = false
-                tickerJob?.cancel()
-                unregisterHardwareButton()
-                if (state == GeminiLiveState.ERROR) {
-                    if (!terminalAnnouncementIssued) {
-                        terminalAnnouncementIssued = true
-                        speakAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
-                    }
-                    // Keep notification briefly so user sees error, then stop
-                    updateNotification()
-                    delay(10_000L)
-                    stopLive()
-                    return@launch
-                }
+                Log.w(TAG, "Live reached error state: $detail; releasing microphone immediately")
+                // Do not retain an AudioRecord for ten more seconds while presenting an error.
+                stopLive()
+                return@launch
             }
             updateNotification()
         }
