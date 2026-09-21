@@ -124,7 +124,7 @@ class GeminiLiveClient(
     private var reconnectJob: Job? = null
     private var sessionResumptionJob: Job? = null
     private var meteredSessionLimitJob: Job? = null
-    private var meteredConnectionAttempted = false
+    private val meteredConnectionAttempted = AtomicBoolean(false)
     private var sessionResumptionHandle: String? = null
     private var reconnectAttempt = 0
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -178,7 +178,7 @@ class GeminiLiveClient(
         meteredSessionLimitJob?.cancel()
         meteredSessionLimitJob = null
         reconnectAttempt = 0
-        meteredConnectionAttempted = false
+        meteredConnectionAttempted.set(false)
         inputAudioMs = 0L
         outputAudioMs = 0L
         visualInputCount = 0
@@ -363,7 +363,7 @@ class GeminiLiveClient(
     private fun connectOrReconnect() {
         if (!active.get()) return
         val config = tokenConfig ?: return
-        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) && meteredConnectionAttempted) {
+        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) && meteredConnectionAttempted.get()) {
             Log.i(TAG, "Prevented repeat Free/Economy socket connection without new user request")
             return
         }
@@ -401,7 +401,12 @@ class GeminiLiveClient(
             if (langTag.isNotBlank()) builder.header("Accept-Language", langTag)
         }
         val request = builder.build()
-        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) meteredConnectionAttempted = true
+        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) &&
+            !meteredConnectionAttempted.compareAndSet(false, true)
+        ) {
+            Log.i(TAG, "Blocked racing duplicate Free/Economy WebSocket attempt")
+            return
+        }
         socket = http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (!active.get()) {
