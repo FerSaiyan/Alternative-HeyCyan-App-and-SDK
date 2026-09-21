@@ -126,6 +126,11 @@ internal object AdaptiveSyncDiagnosticsPresenter {
             },
             explanation = explanation,
             learnedProfile = learned,
+            trialPlan = "Route order: " + profile.routeOrder().joinToString(" → ") {
+                routeName(it.name)
+            } + ". Server warm-up checks: " + profile.warmupScheduleMs().joinToString(", ") {
+                "${it} ms"
+            } + ". A responding route is retained for the next media-list attempt.",
             stages = stageRows,
             trials = trials,
             isTerminal = succeeded || failed || cancelled,
