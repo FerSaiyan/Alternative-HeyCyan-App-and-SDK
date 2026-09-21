@@ -10866,6 +10866,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             dismissButtonLabel = "Close",
         )
         downloadCancelledByUser = true
+        adaptiveSyncSession?.takeIf { downloadFlowMode == GlassesSyncFlow.CUSTOM }?.mark(
+            AdaptiveSyncCheckpoint.CANCELLED,
+            "user_requested_stop",
+        )
         finishDownloadInitialPhase("cancelled by user")
         setTransferDetail("Stopping sync...")
         if (downloadP2pTeardownInProgress) {
