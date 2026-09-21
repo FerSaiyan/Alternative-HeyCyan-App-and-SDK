@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.ui.glasses
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
@@ -68,6 +69,8 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
+import com.fersaiyan.cyanbridge.shared.glasses.AdaptiveSyncDiagnosticsUiState
+import com.fersaiyan.cyanbridge.shared.glasses.AdaptiveSyncStageStatus
 import com.fersaiyan.cyanbridge.shared.glasses.FirmwarePatchRequestUiState
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
@@ -680,6 +683,7 @@ private fun TransferCard(
                     .height(8.dp)
                     .clip(RoundedCornerShape(percent = 50)),
             )
+            state.transfer.adaptiveDiagnostics?.let { AdaptiveSyncDiagnosticsPanel(it) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = state.transfer.detail,
@@ -697,6 +701,196 @@ private fun TransferCard(
                         stringResource(Res.string.dashboard_stop_sync),
                         color = MaterialTheme.colorScheme.error,
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdaptiveSyncDiagnosticsPanel(diagnostics: AdaptiveSyncDiagnosticsUiState) {
+    var expandedTrials by remember { mutableStateOf(false) }
+    val completed = diagnostics.stages.count { it.status == AdaptiveSyncStageStatus.COMPLETE }
+    Surface(
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.extraLarge,
+        tonalElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Adaptive connection lab",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        diagnostics.headline,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Text(
+                        "$completed/${diagnostics.stages.size} stages",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+            Text(
+                diagnostics.explanation,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("adaptive_sync_explanation"),
+            )
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ) {
+                Text(
+                    diagnostics.learnedProfile,
+                    modifier = Modifier.fillMaxWidth().padding(12.dp).testTag("adaptive_sync_learning"),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.testTag("adaptive_sync_stages"),
+            ) {
+                diagnostics.stages.forEachIndexed { index, stage ->
+                    val active = stage.status == AdaptiveSyncStageStatus.ACTIVE
+                    val complete = stage.status == AdaptiveSyncStageStatus.COMPLETE
+                    val failed = stage.status == AdaptiveSyncStageStatus.FAILED
+                    val background = when {
+                        active -> MaterialTheme.colorScheme.primaryContainer
+                        failed -> MaterialTheme.colorScheme.errorContainer
+                        complete -> MaterialTheme.colorScheme.surfaceContainer
+                        else -> MaterialTheme.colorScheme.surfaceContainerLow
+                    }
+                    val foreground = when {
+                        active -> MaterialTheme.colorScheme.onPrimaryContainer
+                        failed -> MaterialTheme.colorScheme.onErrorContainer
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().testTag("adaptive_sync_stage_$index"),
+                        color = background,
+                        contentColor = foreground,
+                        shape = if (active) MaterialTheme.shapes.extraLarge else MaterialTheme.shapes.large,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = if (active) 12.dp else 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = when {
+                                    active -> MaterialTheme.colorScheme.primary
+                                    failed -> MaterialTheme.colorScheme.error
+                                    complete -> MaterialTheme.colorScheme.tertiary
+                                    else -> MaterialTheme.colorScheme.surfaceVariant
+                                },
+                                contentColor = when {
+                                    active -> MaterialTheme.colorScheme.onPrimary
+                                    failed -> MaterialTheme.colorScheme.onError
+                                    complete -> MaterialTheme.colorScheme.onTertiary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            ) {
+                                Text(
+                                    if (complete) "✓" else if (failed) "!" else "${index + 1}",
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    stage.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                )
+                                Text(
+                                    stage.detail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = foreground,
+                                )
+                            }
+                            if (active) {
+                                Spacer(Modifier.width(8.dp))
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (diagnostics.trials.isNotEmpty()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Connection trials",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    TextButton(
+                        onClick = { expandedTrials = !expandedTrials },
+                        modifier = Modifier.testTag("adaptive_sync_toggle_history"),
+                    ) {
+                        Text(if (expandedTrials) "Show less" else "History (${diagnostics.trials.size})")
+                    }
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.testTag("adaptive_sync_trials"),
+                ) {
+                    diagnostics.trials.take(if (expandedTrials) 8 else 3).forEach { trial ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            val trialColor = when (trial.status) {
+                                AdaptiveSyncStageStatus.COMPLETE -> MaterialTheme.colorScheme.tertiary
+                                AdaptiveSyncStageStatus.FAILED -> MaterialTheme.colorScheme.error
+                                AdaptiveSyncStageStatus.ACTIVE -> MaterialTheme.colorScheme.primary
+                                AdaptiveSyncStageStatus.WAITING -> MaterialTheme.colorScheme.outline
+                            }
+                            Surface(
+                                modifier = Modifier.size(8.dp),
+                                shape = RoundedCornerShape(50),
+                                color = trialColor,
+                            ) {}
+                            Spacer(Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(trial.title, style = MaterialTheme.typography.labelLarge)
+                                Text(
+                                    trial.detail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "+${trial.elapsedMs / 1000}s",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
         }
