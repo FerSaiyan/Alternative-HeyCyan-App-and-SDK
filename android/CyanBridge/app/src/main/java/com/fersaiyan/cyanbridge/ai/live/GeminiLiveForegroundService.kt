@@ -112,8 +112,8 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 return START_NOT_STICKY
             }
             ACTION_START -> {
-                if (sessionStarted) {
-                    Log.i(TAG, "Ignoring duplicate Live start while an existing session is active")
+                if (sessionStarted || stopping) {
+                    Log.i(TAG, "Ignoring duplicate Live start while an existing session is active or stopping")
                     return START_NOT_STICKY
                 }
                 sessionStarted = true
