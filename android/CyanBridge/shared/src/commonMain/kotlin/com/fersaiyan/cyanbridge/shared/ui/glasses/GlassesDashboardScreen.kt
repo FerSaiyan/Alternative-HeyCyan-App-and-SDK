@@ -234,6 +234,15 @@ fun GlassesDashboardScreen(
                         onStop = { onAction(GlassesDashboardAction.StopSync) },
                     )
                 }
+            } else {
+                state.adaptiveSyncLastReport?.let { report ->
+                    item {
+                        AdaptiveSyncDiagnosticsPanel(
+                            diagnostics = report,
+                            onDismiss = { onAction(GlassesDashboardAction.DismissAdaptiveSyncReport) },
+                        )
+                    }
+                }
             }
             item {
                 Card(
@@ -708,7 +717,10 @@ private fun TransferCard(
 }
 
 @Composable
-private fun AdaptiveSyncDiagnosticsPanel(diagnostics: AdaptiveSyncDiagnosticsUiState) {
+private fun AdaptiveSyncDiagnosticsPanel(
+    diagnostics: AdaptiveSyncDiagnosticsUiState,
+    onDismiss: (() -> Unit)? = null,
+) {
     var expandedTrials by remember { mutableStateOf(false) }
     val completed = diagnostics.stages.count { it.status == AdaptiveSyncStageStatus.COMPLETE }
     Surface(
@@ -725,7 +737,7 @@ private fun AdaptiveSyncDiagnosticsPanel(diagnostics: AdaptiveSyncDiagnosticsUiS
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Adaptive connection lab",
+                        if (onDismiss == null) "Adaptive connection lab" else "Last adaptive sync",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -745,6 +757,11 @@ private fun AdaptiveSyncDiagnosticsPanel(diagnostics: AdaptiveSyncDiagnosticsUiS
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelMedium,
                     )
+                }
+            }
+            if (onDismiss != null) {
+                TextButton(onClick = onDismiss, modifier = Modifier.testTag("adaptive_sync_dismiss_report")) {
+                    Text("Dismiss diagnostic")
                 }
             }
             Text(
