@@ -27,6 +27,7 @@ internal enum class AdaptiveSyncCheckpoint {
     MEDIA_FILE_PROGRESS,
     COMPLETE,
     FAILED,
+    CANCELLED,
 }
 
 internal enum class AdaptiveHttpRoute {
