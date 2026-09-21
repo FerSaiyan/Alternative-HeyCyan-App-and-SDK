@@ -363,7 +363,7 @@ class GeminiLiveClient(
     private fun connectOrReconnect() {
         if (!active.get()) return
         val config = tokenConfig ?: return
-        if ((config.freeTier || config.economy) && meteredConnectionAttempted) {
+        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) && meteredConnectionAttempted) {
             Log.i(TAG, "Prevented repeat Free/Economy socket connection without new user request")
             return
         }
@@ -401,7 +401,7 @@ class GeminiLiveClient(
             if (langTag.isNotBlank()) builder.header("Accept-Language", langTag)
         }
         val request = builder.build()
-        if (config.freeTier || config.economy) meteredConnectionAttempted = true
+        if GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) meteredConnectionAttempted = true
         socket = http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (!active.get()) {
@@ -411,7 +411,7 @@ class GeminiLiveClient(
                 socket = webSocket
                 reconnectAttempt = 0
                 sendSetup(webSocket, config)
-                if (!config.freeTier && !config.economy) scheduleSessionResumption(webSocket)
+                if (!GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) scheduleSessionResumption(webSocket)
                 setState(GeminiLiveState.CONNECTING, "Connected; waiting for Gemini setup")
             }
 
@@ -452,7 +452,7 @@ class GeminiLiveClient(
                     setState(GeminiLiveState.ERROR, "Gemini Live connection failed ($code). Please try again.")
                     return
                 }
-                if (active.get() && (config.freeTier || config.economy)) {
+                if (active.get() && GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) {
                     Log.i(TAG, "Metered Live socket closed; a new connection requires a user action")
                     stop()
                     return
@@ -536,7 +536,7 @@ class GeminiLiveClient(
                     setState(GeminiLiveState.ERROR, "Gemini Live connection failed. Please try again.")
                     return
                 }
-                if (active.get() && (config.freeTier || config.economy)) {
+                if (active.get() && GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) {
                     Log.i(TAG, "Metered Live socket failed; not automatically starting another session")
                     stop()
                     setState(GeminiLiveState.ERROR, "Live disconnected. Start a new session manually to continue.")
@@ -669,7 +669,7 @@ class GeminiLiveClient(
                 // The proxy/economy route can debit a daily allowance. Do not silently renew.
                 if (meteredSessionLimitJob == null) {
                     meteredSessionLimitJob = scope.launch {
-                        delay(FREE_SESSION_LIMIT_MS)
+                        delay(GeminiLiveSessionPolicy.METERED_SESSION_LIMIT_MS)
                         if (active.get()) {
                             Log.i(TAG, "Free/Economy Live reached five-minute limit; stopping without renewal")
                             listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
@@ -1177,7 +1177,6 @@ class GeminiLiveClient(
         const val AUDIO_DELAY_CHUNKS = 16
         const val VISUAL_TRAILING_SILENCE_CHUNKS = 15
         const val SESSION_RESUMPTION_RECONNECT_MS = 9 * 60 * 1000L
-        const val FREE_SESSION_LIMIT_MS = 5 * 60 * 1000L
         const val MAX_VISUAL_INPUTS_PER_SESSION = 540 // At most 1 FPS over the 9-minute resumption window.
     }
 }
