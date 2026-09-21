@@ -797,6 +797,13 @@ Notes:
 - Multilingual raw accuracy was flat, not collapsed: Gemma 50–75% per locale
   (es/zh-CN lowest at 50%), Needle 42–83%, Qwen 25–50%. No backend shows a
   single broken language, but per-locale n=12 is too small for release claims.
+- Production-description probe (`RealProductionDescriptionProbe`, 3 live-format
+  YouTube cases, 2026-09-21): sanitizing `(node N)` suffixes/quotes does NOT
+  change rankings (identical picks, margins ±0.02). 2/3 accept correctly at
+  margin≥0.10 (type-query 0.19, first-result 0.17); home-search abstains (0.06,
+  would have picked a channel distractor). Live-run margins (~0.001–0.013)
+  collapse from long noisy screen dumps in the state, not candidate
+  formatting — the lever is state brevity and threshold, not text cleanup.
 - Baseline for context: the shipped local-LLM bounded path (Qwen2.5 0.5B)
   measured 6.5 s cold / 142 ms warm. Gemma wins cold-start and determinism
   (67 ms query-only with cached prototypes); it does not beat a warm LLM
