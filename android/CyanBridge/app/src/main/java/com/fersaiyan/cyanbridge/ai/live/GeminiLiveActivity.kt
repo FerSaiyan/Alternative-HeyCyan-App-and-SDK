@@ -280,7 +280,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     override fun onModelTurnComplete() {
         runOnUiThread {
             cancelResponseIdle()
-            if (liveListening) elapsed.postDelayed(responseIdleStop, 30_000L)
+            if (liveListening) elapsed.postDelayed(responseIdleStop, GeminiLiveSessionPolicy.POST_RESPONSE_IDLE_MS)
         }
     }
 
