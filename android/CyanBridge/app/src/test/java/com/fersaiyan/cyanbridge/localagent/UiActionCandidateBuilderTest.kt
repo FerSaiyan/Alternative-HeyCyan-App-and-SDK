@@ -5,13 +5,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UiActionCandidateBuilderTest {
-    private fun obs(vararg nodes: LocalAgentScreenNode) = LocalAgentObservation(
+    private fun obs(
+        vararg nodes: LocalAgentScreenNode,
+        packageName: String = "com.google.android.youtube",
+        screenText: String = "YouTube",
+        textSummary: String = "YouTube home",
+    ) = LocalAgentObservation(
         createdAtMs = 1L,
-        packageName = "com.google.android.youtube",
-        screenText = "YouTube",
+        packageName = packageName,
+        screenText = screenText,
         screenSnapshot = LocalAgentScreenSnapshot(
-            packageName = "com.google.android.youtube",
-            textSummary = "YouTube home",
+            packageName = packageName,
+            textSummary = textSummary,
             nodes = nodes.toList(),
         ),
     )
@@ -229,6 +234,43 @@ class UiActionCandidateBuilderTest {
                 LocalAgentAction.TypeText("Linus Tech Tips", null),
             ),
             actions,
+        )
+    }
+
+    @Test fun `populated search form does not promote grounded-answer planner`() {
+        // Live failure 2026-09-20: the typed query echoes the goal keywords,
+        // which prematurely promoted detailed_planner on the search form while
+        // the goal still requires opening the first result.
+        val observation = obs(
+            node(3, "Search news", clickable = false),
+            node(4, "latest smartglasses news", clickable = false),
+            LocalAgentScreenNode(
+                index = 2,
+                depth = 0,
+                text = "",
+                contentDescription = "",
+                className = "",
+                viewId = "query",
+                isClickable = false,
+                isEditable = true,
+                isScrollable = false,
+                bounds = LocalAgentNodeBounds(120, 300, 920, 420),
+            ),
+            packageName = "com.android.chrome",
+            screenText = "CYANBRIDGE_HIL_NEWS_SEARCH_73551 latest smartglasses news",
+            textSummary = "Search page",
+        )
+        val built = UiActionCandidateBuilder.build(
+            "Open Chrome. On the CyanBridge HIL Search page, search for 'latest smartglasses news', " +
+                "open the first result, read only the first visible article without scrolling, " +
+                "then finish with a concise summary of what the page says.",
+            observation,
+        )
+
+        assertTrue("generic fallback must remain", "detailed_planner" in built.keys)
+        assertTrue(
+            "grounded-answer planner must not lead on an unsubmitted form: ${built.keys}",
+            built.keys.first() != "detailed_planner",
         )
     }
 }

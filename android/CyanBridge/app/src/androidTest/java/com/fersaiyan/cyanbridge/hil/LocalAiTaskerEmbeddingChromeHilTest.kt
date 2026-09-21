@@ -237,12 +237,10 @@ class LocalAiTaskerEmbeddingChromeHilTest {
             val reader = socket.getInputStream().bufferedReader(StandardCharsets.US_ASCII)
             val requestLine = reader.readLine().orEmpty()
             while (reader.readLine()?.isNotEmpty() == true) Unit
-            val path = requestLine.split(' ').getOrNull(1).orEmpty()
-            val body = when {
-                path.startsWith("/article") -> ARTICLE_HTML
-                path.startsWith("/search") -> RESULTS_HTML
-                else -> SEARCH_HTML
-            }.toByteArray(StandardCharsets.UTF_8)
+            // Single-page fixture: all stages live in SEARCH_HTML and toggle
+            // client-side, so no cross-URL navigation can trip Chrome's
+            // insecure-form interstitial on loopback HTTP.
+            val body = SEARCH_HTML.toByteArray(StandardCharsets.UTF_8)
             socket.getOutputStream().buffered().use { out ->
                 out.write(
                     ("HTTP/1.1 200 OK\r\n" +
@@ -264,24 +262,24 @@ class LocalAiTaskerEmbeddingChromeHilTest {
         companion object {
             private const val SEARCH_HTML = """
                 <!doctype html><html><head><meta name="viewport" content="width=device-width"></head>
-                <body><h1>CYANBRIDGE_HIL_WEB_SEARCH_72941</h1>
-                <form action="/search" method="get">
+                <body>
+                <div id="searchPage">
+                  <h1>CYANBRIDGE_HIL_WEB_SEARCH_72941</h1>
                   <label for="query">Search query</label>
                   <input id="query" name="q" aria-label="Search query">
-                  <button type="submit">Search</button>
-                </form></body></html>
-            """
-            private const val RESULTS_HTML = """
-                <!doctype html><html><head><meta name="viewport" content="width=device-width"></head>
-                <body><h1>Search results</h1>
-                <a href="/article">Borealis local-agent architecture — first result</a>
-                <a href="/unrelated">Unrelated second result</a></body></html>
-            """
-            private const val ARTICLE_HTML = """
-                <!doctype html><html><head><meta name="viewport" content="width=device-width"></head>
-                <body><h1>CYANBRIDGE_HIL_WEB_ARTICLE_72941 — Borealis local-agent architecture</h1>
-                <p>Borealis uses exactly 37 amber modules. CyanBridge owns planning and safety,
-                while Tasker only observes the screen and executes approved UI actions.</p></body></html>
+                  <button type="button" id="searchBtn" onclick="document.getElementById('searchPage').style.display='none';document.getElementById('resultsPage').style.display='block';">Search</button>
+                </div>
+                <div id="resultsPage" style="display:none">
+                  <h1>Search results</h1>
+                  <a href="#" id="firstResult" onclick="document.getElementById('resultsPage').style.display='none';document.getElementById('articlePage').style.display='block';return false;">Borealis local-agent architecture — first result</a>
+                  <a href="#" onclick="return false;">Unrelated second result</a>
+                </div>
+                <div id="articlePage" style="display:none">
+                  <h1>CYANBRIDGE_HIL_WEB_ARTICLE_72941 — Borealis local-agent architecture</h1>
+                  <p>Borealis uses exactly 37 amber modules. CyanBridge owns planning and safety,
+                  while Tasker only observes the screen and executes approved UI actions.</p>
+                </div>
+                </body></html>
             """
         }
     }

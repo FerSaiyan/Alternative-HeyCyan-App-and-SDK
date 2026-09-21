@@ -84,6 +84,7 @@ object UiActionCandidateBuilder {
             goal = goal,
             visibleText = visibleText,
             targetSpan = targetSpan,
+            nodes = nodes,
         )
         if (readyForGroundedAnswer) {
             out += Option(
@@ -232,10 +233,20 @@ object UiActionCandidateBuilder {
         goal: String,
         visibleText: String,
         targetSpan: String,
+        nodes: List<LocalAgentScreenNode>,
     ): Boolean {
         if (!FINAL_ANSWER_GOAL.containsMatchIn(goal)) return false
         val lower = visibleText.lowercase()
         if (lower.contains("first result") || lower.contains("search results")) return false
+        // A populated-but-unsubmitted search form echoes the query keywords
+        // without containing anything to summarize yet. When the goal requires
+        // opening a result first, the form must not promote the grounded-answer
+        // planner — observed live as a premature finish path on the search page.
+        if (RESULT_STEP_GOAL.containsMatchIn(goal)) {
+            val hasEditableSearch = nodes.any { it.isEditable || looksLikeEditableId(it.viewId) }
+            val queryVisible = targetSpan.length >= 3 && containsNormalizedSpan(visibleText, targetSpan)
+            if (hasEditableSearch && queryVisible) return false
+        }
         val targetKeywords = LocalAgentScreenSnapshot.extractGoalKeywords(targetSpan).distinct()
         val matchingKeywords = targetKeywords.count { keyword -> lower.contains(keyword) }
         return visibleText.length >= 80 && matchingKeywords >= minOf(2, targetKeywords.size)
@@ -259,5 +270,8 @@ object UiActionCandidateBuilder {
     )
     private val FINAL_ANSWER_GOAL = Regex(
         """(?i)\b(summar(?:y|ize|ise)|what\s+(?:the\s+)?page\s+says|tell\s+me|read\s+(?:the\s+)?page|answer)\b""",
+    )
+    private val RESULT_STEP_GOAL = Regex(
+        """(?i)\b(open|click|tap|select)\b.{0,60}\b(first\s+result|results?\b)""",
     )
 }

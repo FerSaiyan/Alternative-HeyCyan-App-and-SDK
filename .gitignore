@@ -83,6 +83,14 @@ tools/hil/*
 !tools/hil/run_real_embedding_models.sh
 !tools/hil/run_tasker_youtube_hil.sh
 !tools/hil/run_local_agent_calibration.sh
+!tools/hil/run_hil_class.sh
+!tools/hil/build_embedding_runtime_aar.sh
+!tools/hil/embedding-runtime/
+tools/hil/embedding-runtime/*
+!tools/hil/embedding-runtime/MANIFEST
+!tools/hil/embedding-runtime/nembd-per-call.patch
+!tools/hil/embedding-runtime/jni-list-contract.patch
+!tools/hil/embedding-runtime/jniLibs-prebuilt.patch
 !tools/benchmarks/
 tools/benchmarks/*
 !tools/benchmarks/generate_local_agent_calibration.py

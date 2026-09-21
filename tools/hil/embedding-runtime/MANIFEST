@@ -1,0 +1,34 @@
+# Pinned embedding-runtime provenance (llamacpp-kotlin fork)
+#
+# Upstream: https://github.com/ljcamargo/kotlinllamacpp.git
+# Pinned commit: c292c068bdd258203dd41fc6d0f08578eddd59f3 ("readme improvement 2")
+# Local source tree used for validation: /tmp/opencode/kotlinllamacpp-fixed
+#   (NOT in Git; model weights and the built AAR stay outside the repo)
+#
+# Local patches applied on top of the pin (in dependency order):
+#   1. jni-list-contract.patch — LlamaContext.embedding(): native returns
+#      ArrayList, not Map. Without this, ART aborts (JNI type mismatch)
+#      before any embedding vector is readable.
+#   2. jniLibs-prebuilt.patch — package prebuilt .so via jniLibs.srcDir
+#      instead of externalNativeBuild; the AAR ships librnllama* for
+#      arm64-v8a and x86_64 built by build_embedding_runtime_aar.sh.
+#      (Also normalizes that file CRLF->LF; verified to apply to the pin.)
+#   3. nembd-per-call.patch — rn-completion.cpp embedding(): read n_embd from
+#      the live model on every call. The upstream code cached it in a
+#      function-local static, silently truncating every model after the first
+#      (observed: Qwen3 1024-d cut to Gemma's 768 in one process).
+#
+# Toolchain used for the validated artifact:
+#   NDK 27.0.12077973 (source.properties sha256 below), cmake 3.22.1,
+#   ninja 1.13.0, ANDROID_PLATFORM=android-24, Release, -O3 -flto.
+#   ndk-source-properties-sha256=1c4a54b31c5ed242a901b4a472d412819b5e08405df1c58066bd555f9dd52515
+#
+# Validated artifact digests (2026-09-20, emulator-5554 + host):
+#   x86_64/librnllama_x86_64.so=ab93e05e367d49ff5db50280a9b8b6c0f95763668c90f2f3e959d4c3588b8059
+#   arm64-v8a/librnllama_v8_2_dotprod_i8mm.so=f012a0c758b34243d42f8f08fd3f28467c7cba20c92f39fe8627f584b4565e90
+#   llamaCpp-release.aar=9e0d412f938578b430d3beefbe977f67ebe9e6aac8f23f540bcaf86cf22574dd
+#
+# On-device validation: Gemma reports dim=768 then Qwen reports dim=1024 in
+# one instrumentation process (RealDecisionCalibrationEmulatorTest,
+# jev_calibration_max_cases=3). Short queries reliable; inputs beyond ~650
+# tokens abort native prefill (SIGABRT) — production caps gate queries.

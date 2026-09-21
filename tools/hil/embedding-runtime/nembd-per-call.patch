@@ -1,0 +1,16 @@
+diff --git a/llamaCpp/src/main/cpp/lib/rn-completion.cpp b/llamaCpp/src/main/cpp/lib/rn-completion.cpp
+index 70ec2e6..8a877b0 100644
+--- a/llamaCpp/src/main/cpp/lib/rn-completion.cpp
++++ b/llamaCpp/src/main/cpp/lib/rn-completion.cpp
+@@ -496,7 +496,10 @@ std::vector<float> llama_rn_context_completion::embedding(common_params &embd_pa
+     doCompletion();
+     endCompletion();
+ 
+-    static const int n_embd = llama_model_n_embd(llama_get_model(parent_ctx->ctx));
++    // NOTE: must be per-call, not static: one process may host several
++    // embedding models with different dimensions (e.g. Gemma 768 + Qwen 1024).
++    // A static here silently truncated every later model to the first one.
++    const int n_embd = llama_model_n_embd(llama_get_model(parent_ctx->ctx));
+     if (!embd_params.embedding)
+     {
+         LOG_WARNING("embedding disabled, embedding: %s", embd_params.embedding);
