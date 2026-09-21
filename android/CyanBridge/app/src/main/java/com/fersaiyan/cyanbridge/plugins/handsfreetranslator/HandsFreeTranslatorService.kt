@@ -4,6 +4,13 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
@@ -19,6 +26,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /** Translates recognized speech from the phone or a connected Bluetooth glasses microphone. */
 class HandsFreeTranslatorService : Service() {
@@ -28,13 +36,38 @@ class HandsFreeTranslatorService : Service() {
     private val translating = AtomicBoolean(false)
     private var voiceRecognizer: PluginVoiceRecognizer? = null
     private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    @Volatile private var ttsReady = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val pendingSpeech = AtomicReference<Pair<String, String>?>(null)
+    private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
     override fun onCreate() {
         super.onCreate()
         HandsFreeTranslatorNotificationHelper.ensureChannel(this)
         translatorStore.load(this)
-        tts = TextToSpeech(this) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+        tts = TextToSpeech(this) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+            Log.i(TAG, "Translation TTS initialization successful=$ttsReady")
+            if (ttsReady) pendingSpeech.getAndSet(null)?.let { (text, language) ->
+                mainHandler.post { speakTranslation(text, language) }
+            } else {
+                pendingSpeech.set(null)
+                HandsFreeTranslatorNotificationHelper.updateNotification(
+                    this, "Translator active; spoken output unavailable (TTS initialization failed)",
+                )
+            }
+        }
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) { Log.d(TAG, "Translation speech started") }
+            override fun onDone(utteranceId: String?) { Log.d(TAG, "Translation speech finished") }
+            @Deprecated("Use onError with code")
+            override fun onError(utteranceId: String?) {
+                Log.w(TAG, "Translation speech synthesis failed")
+            }
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                Log.w(TAG, "Translation speech synthesis failed errorCode=$errorCode")
+            }
+        })
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -52,6 +85,8 @@ class HandsFreeTranslatorService : Service() {
 
     override fun onDestroy() {
         voiceRecognizer?.stop()
+        pendingSpeech.set(null)
+        mainHandler.removeCallbacksAndMessages(null)
         tts?.stop()
         tts?.shutdown()
         tts = null
@@ -123,8 +158,16 @@ class HandsFreeTranslatorService : Service() {
                         this@HandsFreeTranslatorService,
                         HandsFreeTranslatorPreferences.getMaxHistory(this@HandsFreeTranslatorService),
                     )
-                    if (HandsFreeTranslatorPreferences.isSpeakTranslation(this@HandsFreeTranslatorService) && ttsReady) {
-                        speakTranslation(translation.translatedText, translation.targetLanguage)
+                    if (HandsFreeTranslatorPreferences.isSpeakTranslation(this@HandsFreeTranslatorService)) {
+                        val utterance = translation.translatedText to translation.targetLanguage
+                        if (ttsReady) {
+                            mainHandler.post { speakTranslation(utterance.first, utterance.second) }
+                        } else {
+                            // A translation can finish before Android binds the TTS engine.
+                            // Keep the newest phrase instead of silently showing text only.
+                            pendingSpeech.set(utterance)
+                            Log.i(TAG, "Translation speech queued until TTS initialization")
+                        }
                     }
                     HandsFreeTranslatorNotificationHelper.updateNotification(
                         this@HandsFreeTranslatorService,
@@ -196,7 +239,12 @@ class HandsFreeTranslatorService : Service() {
     }
 
     private fun speakTranslation(text: String, language: String) {
-        tts?.language = when (language) {
+        if (!ttsReady) {
+            pendingSpeech.set(text to language)
+            return
+        }
+        val engine = tts ?: return
+        val locale = when (language) {
             "en" -> Locale.US
             "es" -> Locale("es", "ES")
             "fr" -> Locale.FRANCE
@@ -206,9 +254,54 @@ class HandsFreeTranslatorService : Service() {
             "zh" -> Locale.CHINA
             "ja" -> Locale.JAPAN
             "ko" -> Locale.KOREA
-            else -> Locale.US
+            else -> Locale.forLanguageTag(language).takeIf { it.language.isNotBlank() } ?: Locale.US
         }
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "translation_utterance")
+        val languageResult = engine.setLanguage(locale)
+        if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+            languageResult == TextToSpeech.LANG_NOT_SUPPORTED
+        ) {
+            Log.w(TAG, "Translation TTS language unavailable tag=$language")
+            HandsFreeTranslatorNotificationHelper.updateNotification(
+                this, "Translation shown; install a TTS voice for $language to hear it",
+            )
+            return
+        }
+
+        // PluginVoiceRecognizer already negotiates the Bluetooth microphone's
+        // communication device; route synthesized speech with matching audio attributes.
+        // If the glasses expose only A2DP, use the system's current media output route.
+        val communicationDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioManager.communicationDevice
+        } else null
+        val hasBluetoothCommunication = communicationDevice?.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                communicationDevice?.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+        val bluetoothMediaConnected = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
+            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER)
+        }
+        val usage = if (hasBluetoothCommunication || !bluetoothMediaConnected) {
+            AudioAttributes.USAGE_VOICE_COMMUNICATION
+        } else AudioAttributes.USAGE_MEDIA
+        engine.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .setUsage(usage)
+                .build(),
+        )
+        Log.i(
+            TAG,
+            "Translation output usage=$usage communicationDevice=${communicationDevice?.type} " +
+                "bluetoothMediaConnected=$bluetoothMediaConnected language=$language",
+        )
+        val result = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "translation_utterance")
+        if (result != TextToSpeech.SUCCESS) {
+            Log.w(TAG, "Translation TTS speak() failed result=$result")
+            HandsFreeTranslatorNotificationHelper.updateNotification(
+                this, "Translation shown; speech playback failed on the selected audio route",
+            )
+        }
     }
 
     companion object {

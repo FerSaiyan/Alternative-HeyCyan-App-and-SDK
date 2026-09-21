@@ -59,6 +59,8 @@ class GeminiLiveClient(
         fun onUserSpeechActivity(active: Boolean) = Unit
         fun onTranscription(input: Boolean, text: String) = Unit
         fun onSetupComplete() = Unit
+        fun onModelOutputStarted() = Unit
+        fun onModelTurnComplete() = Unit
         fun onAnnouncement(kind: GeminiLiveAnnouncement) = Unit
     }
 
@@ -121,6 +123,8 @@ class GeminiLiveClient(
     private var playback: AudioTrack? = null
     private var reconnectJob: Job? = null
     private var sessionResumptionJob: Job? = null
+    private var meteredSessionLimitJob: Job? = null
+    private val meteredConnectionAttempted = AtomicBoolean(false)
     private var sessionResumptionHandle: String? = null
     private var reconnectAttempt = 0
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -171,6 +175,10 @@ class GeminiLiveClient(
 
     fun start(language: String, imagePrompt: String) {
         if (!active.compareAndSet(false, true)) return
+        meteredSessionLimitJob?.cancel()
+        meteredSessionLimitJob = null
+        reconnectAttempt = 0
+        meteredConnectionAttempted.set(false)
         inputAudioMs = 0L
         outputAudioMs = 0L
         visualInputCount = 0
@@ -192,11 +200,13 @@ class GeminiLiveClient(
         scope.launch {
             runCatching { requestToken(language, imagePrompt) }
                 .onSuccess {
+                    if (!active.get()) return@onSuccess
                     tokenConfig = it
                     Log.i(TAG, "Live token ok model=${it.model} reservation=${it.reservationId} url=${it.websocketUrl.take(80)} expires=${it.expiresAtMs} auth=${it.authorizationHeader?.take(20)} apiKey=${if (it.apiKey.isNullOrBlank()) "none" else "present"}")
                     connectOrReconnect()
                 }
                 .onFailure {
+                    if (!active.get()) return@onFailure
                     active.set(false)
                     Log.e(TAG, "Live token failed", it)
                     listener.onAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
@@ -214,6 +224,8 @@ class GeminiLiveClient(
         reconnectJob = null
         sessionResumptionJob?.cancel()
         sessionResumptionJob = null
+        meteredSessionLimitJob?.cancel()
+        meteredSessionLimitJob = null
         socket?.close(1000, "user_stopped")
         socket = null
         stopCapture()
@@ -351,6 +363,10 @@ class GeminiLiveClient(
     private fun connectOrReconnect() {
         if (!active.get()) return
         val config = tokenConfig ?: return
+        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) && meteredConnectionAttempted.get()) {
+            Log.i(TAG, "Prevented repeat Free/Economy socket connection without new user request")
+            return
+        }
         if (System.currentTimeMillis() >= config.expiresAtMs) {
             active.set(false)
             listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
@@ -385,6 +401,12 @@ class GeminiLiveClient(
             if (langTag.isNotBlank()) builder.header("Accept-Language", langTag)
         }
         val request = builder.build()
+        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) &&
+            !meteredConnectionAttempted.compareAndSet(false, true)
+        ) {
+            Log.i(TAG, "Blocked racing duplicate Free/Economy WebSocket attempt")
+            return
+        }
         socket = http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (!active.get()) {
@@ -394,7 +416,7 @@ class GeminiLiveClient(
                 socket = webSocket
                 reconnectAttempt = 0
                 sendSetup(webSocket, config)
-                scheduleSessionResumption(webSocket)
+                if (!GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) scheduleSessionResumption(webSocket)
                 setState(GeminiLiveState.CONNECTING, "Connected; waiting for Gemini setup")
             }
 
@@ -433,6 +455,11 @@ class GeminiLiveClient(
                     }
                     tokenConfig = null
                     setState(GeminiLiveState.ERROR, "Gemini Live connection failed ($code). Please try again.")
+                    return
+                }
+                if (active.get() && GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) {
+                    Log.i(TAG, "Metered Live socket closed; a new connection requires a user action")
+                    stop()
                     return
                 }
                 if (active.get()) {
@@ -512,6 +539,12 @@ class GeminiLiveClient(
                     }
                     tokenConfig = null
                     setState(GeminiLiveState.ERROR, "Gemini Live connection failed. Please try again.")
+                    return
+                }
+                if (active.get() && GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) {
+                    Log.i(TAG, "Metered Live socket failed; not automatically starting another session")
+                    stop()
+                    setState(GeminiLiveState.ERROR, "Live disconnected. Start a new session manually to continue.")
                     return
                 }
                 if (active.get()) {
@@ -637,6 +670,20 @@ class GeminiLiveClient(
 
         if (message.has("setupComplete") && setupComplete.compareAndSet(false, true)) {
             socketListeningStartedAtMs = System.currentTimeMillis()
+            tokenConfig?.takeIf { it.freeTier || it.economy }?.let { config ->
+                // The proxy/economy route can debit a daily allowance. Do not silently renew.
+                if (meteredSessionLimitJob == null) {
+                    meteredSessionLimitJob = scope.launch {
+                        delay(GeminiLiveSessionPolicy.METERED_SESSION_LIMIT_MS)
+                        if (active.get()) {
+                            Log.i(TAG, "Free/Economy Live reached five-minute limit; stopping without renewal")
+                            listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
+                            stop()
+                        }
+                    }
+                    Log.i(TAG, "Metered Live five-minute cap armed")
+                }
+            }
             startCapture()
             setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
             listener.onSetupComplete()
@@ -703,6 +750,7 @@ class GeminiLiveClient(
 
             if (serverContent.optBoolean("turnComplete", false) && active.get()) {
                 finishModelPlayback()
+                listener.onModelTurnComplete()
                 setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
                 reportTurnUsageIfNeeded()
             }
@@ -969,6 +1017,7 @@ class GeminiLiveClient(
     private fun playPcm(bytes: ByteArray) {
         if (bytes.isEmpty()) return
         if (modelSpeaking.compareAndSet(false, true)) {
+            listener.onModelOutputStarted()
             val wasUserSpeaking = speechActive.getAndSet(false)
             speechDetector.reset()
             if (wasUserSpeaking) listener.onUserSpeechActivity(false)
