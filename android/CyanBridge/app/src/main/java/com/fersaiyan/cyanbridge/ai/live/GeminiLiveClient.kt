@@ -401,7 +401,7 @@ class GeminiLiveClient(
             if (langTag.isNotBlank()) builder.header("Accept-Language", langTag)
         }
         val request = builder.build()
-        if GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) meteredConnectionAttempted = true
+        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) meteredConnectionAttempted = true
         socket = http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (!active.get()) {
