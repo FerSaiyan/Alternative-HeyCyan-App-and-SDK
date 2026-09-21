@@ -95,6 +95,7 @@ data class AdaptiveSyncDiagnosticsUiState(
     val headline: String,
     val explanation: String,
     val learnedProfile: String,
+    val trialPlan: String = "",
     val stages: List<AdaptiveSyncStageUiState>,
     val trials: List<AdaptiveSyncTrialUiState> = emptyList(),
     val isTerminal: Boolean = false,
