@@ -4395,8 +4395,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             try {
                 val isPro = com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs.isActiveLocally(this) &&
                     com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs.getPlan(this).lowercase() in setOf("cheap", "standard", "max")
-                com.fersaiyan.cyanbridge.ai.live.GeminiLiveForegroundService.start(
-                    context = this,
+                com.fersaiyan.cyanbridge.ai.live.GeminiLivePermissionGateActivity.launch(
+                    activity = this,
                     language = languageTag,
                     imagePrompt = baseImagePrompt,
                     initialImagePath = imagePath,
@@ -4405,7 +4405,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 )
                 Log.i(
                     "GeminiLive",
-                    "Started Live foreground service initialImage=${!imagePath.isNullOrBlank()} useRelay=${!isPro}",
+                    "Requested Live launch initialImage=${!imagePath.isNullOrBlank()} useRelay=${!isPro}",
                 )
                 // Keep activity launch as fallback for debugging if service is unavailable
                 // (no-op if service already handles it). Not started by default.
