@@ -33,8 +33,9 @@ internal object AdaptiveSyncDiagnosticsPresenter {
         )
         val succeeded = AdaptiveSyncCheckpoint.COMPLETE in kinds
         val failed = AdaptiveSyncCheckpoint.FAILED in kinds && !succeeded
+        val cancelled = AdaptiveSyncCheckpoint.CANCELLED in kinds && !succeeded && !failed
         val firstPending = completed.indexOfFirst { !it }.let { if (it < 0) 5 else it }
-        val currentStage = if (succeeded) -1 else firstPending
+        val currentStage = if (succeeded || cancelled) -1 else firstPending
         val stageRows = stages.mapIndexed { index, (title, pending) ->
             val status = when {
                 completed[index] -> AdaptiveSyncStageStatus.COMPLETE
@@ -80,6 +81,7 @@ internal object AdaptiveSyncDiagnosticsPresenter {
                 else -> "Trying the next recovery step while retaining verified checkpoints."
             }
             AdaptiveSyncCheckpoint.COMPLETE -> "Media sync completed. The successful route and warm-up can improve the next sync."
+            AdaptiveSyncCheckpoint.CANCELLED -> "Sync was stopped. Completed checkpoints remain visible for diagnosis; no connection trial is continuing."
             AdaptiveSyncCheckpoint.FAILED -> "This sync could not finish. The verified checkpoints remain visible below for diagnosis."
             AdaptiveSyncCheckpoint.MEDIA_FILE_PROGRESS -> "Media data is transferring. The successful HTTP route is already known."
             AdaptiveSyncCheckpoint.MEDIA_FILE_RETRY -> "Retrying an individual media file without repeating Wi-Fi Direct discovery."
@@ -109,6 +111,7 @@ internal object AdaptiveSyncDiagnosticsPresenter {
             AdaptiveSyncCheckpoint.RECOVERY_STEP,
             AdaptiveSyncCheckpoint.COMPLETE,
             AdaptiveSyncCheckpoint.FAILED,
+            AdaptiveSyncCheckpoint.CANCELLED,
         )
         val trials = events.filter { it.checkpoint in trialKinds }
             .takeLast(8)
@@ -118,13 +121,14 @@ internal object AdaptiveSyncDiagnosticsPresenter {
             headline = when {
                 succeeded -> "Connection learned"
                 failed -> "Sync diagnostic complete"
+                cancelled -> "Sync stopped"
                 else -> "Finding a reliable connection"
             },
             explanation = explanation,
             learnedProfile = learned,
             stages = stageRows,
             trials = trials,
-            isTerminal = succeeded || failed,
+            isTerminal = succeeded || failed || cancelled,
         )
     }
 
@@ -180,6 +184,10 @@ internal object AdaptiveSyncDiagnosticsPresenter {
             AdaptiveSyncCheckpoint.COMPLETE -> Triple(
                 "Sync completed", "Successful connection can be reused next time",
                 AdaptiveSyncStageStatus.COMPLETE,
+            )
+            AdaptiveSyncCheckpoint.CANCELLED -> Triple(
+                "Sync stopped", "Keeping the completed checkpoints for your diagnostic report",
+                AdaptiveSyncStageStatus.WAITING,
             )
             else -> Triple("Sync could not complete", "Review the last verified stage above", AdaptiveSyncStageStatus.FAILED)
         }
