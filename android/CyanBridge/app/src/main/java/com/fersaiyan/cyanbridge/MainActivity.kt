@@ -32,6 +32,7 @@ import com.fersaiyan.cyanbridge.media.OfficialHeyCyanApp
 import com.fersaiyan.cyanbridge.media.AdaptiveHttpRoute
 import com.fersaiyan.cyanbridge.media.AdaptiveP2pProfileStore
 import com.fersaiyan.cyanbridge.media.AdaptiveP2pSyncSession
+import com.fersaiyan.cyanbridge.media.AdaptiveSyncDiagnosticsPresenter
 import com.fersaiyan.cyanbridge.media.AdaptiveSyncCheckpoint
 import com.fersaiyan.cyanbridge.ota.FirmwareClient
 import com.fersaiyan.cyanbridge.ota.InstalledFirmwareVersions
@@ -1665,6 +1666,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             when (action) {
                 is GlassesDashboardAction.Navigate -> true
                 GlassesDashboardAction.StopSync -> activeSession == GlassesSession.MEDIA_SYNC
+                GlassesDashboardAction.DismissAdaptiveSyncReport -> true
                 GlassesDashboardAction.StopLivePreview -> activeSession == GlassesSession.LIVE_PREVIEW
                 GlassesDashboardAction.CancelOta -> activeSession == GlassesSession.OTA
                 else -> false
@@ -1833,6 +1835,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 stopMoyoungW620MediaSync()
             } else {
                 binding.btnTransferStop.performClick()
+            }
+            GlassesDashboardAction.DismissAdaptiveSyncReport -> updateDashboardState { state ->
+                state.copy(adaptiveSyncLastReport = null)
             }
             GlassesDashboardAction.ToggleAdvanced -> {
                 if (!dashboardState.showAdvancedControls) return
@@ -8138,8 +8143,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         resetTransferUiState()
+        updateDashboardState { state -> state.copy(adaptiveSyncLastReport = null) }
         setTransferUiVisible(true)
         setTransferFlowLabel(mode)
+        publishAdaptiveSyncDiagnostics()
         setTransferDetail("Starting sync (${mode.label})...")
         startDownloadInitialPhaseWatchdog()
 
@@ -8559,6 +8566,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return resetAccepted && isDownloadControlActive(sessionId)
     }
 
+    private fun publishAdaptiveSyncDiagnostics() {
+        val snapshot = if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+            adaptiveSyncSession?.let(AdaptiveSyncDiagnosticsPresenter::present)
+        } else null
+        updateDashboardState { state ->
+            state.copy(
+                adaptiveSyncLastReport = snapshot ?: state.adaptiveSyncLastReport,
+                transfer = state.transfer.copy(adaptiveDiagnostics = snapshot),
+            )
+        }
+    }
+
     private fun setTransferUiVisible(visible: Boolean) {
         binding.cardTransferProgress.visibility = if (visible) View.VISIBLE else View.GONE
         updateDashboardState { state ->
@@ -8891,6 +8910,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             profileKey = key,
             profile = profile,
             clockMs = android.os.SystemClock::elapsedRealtime,
+            onUpdate = { runOnUiThread { publishAdaptiveSyncDiagnostics() } },
         ).also { session ->
             session.mark(
                 AdaptiveSyncCheckpoint.BLE_READY,
@@ -8918,6 +8938,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             waitUntil(ADAPTIVE_COMMAND_RETRY_AT_MS)
             if (!isDownloadControlActive(sessionId)) return@launchDownloadSession
             if (!transferModeCommandEvidenceReceived && transferModeCommandAttempt < 2) {
+                adaptiveSyncSession?.mark(AdaptiveSyncCheckpoint.RECOVERY_STEP, "kind=command")
                 Log.i("DataDownload", "Adaptive recovery: resending transfer command without P2P reset")
                 setTransferDetailForSession(sessionId, "Retrying the glasses transfer command...")
                 sendTransferModeCommandWithRetry(
@@ -8931,6 +8952,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             waitUntil(ADAPTIVE_DISCOVERY_RESTART_AT_MS)
             if (!isDownloadControlActive(sessionId)) return@launchDownloadSession
             if (!downloadP2pConnected) {
+                adaptiveSyncSession?.mark(AdaptiveSyncCheckpoint.RECOVERY_STEP, "kind=discovery")
                 Log.i("DataDownload", "Adaptive recovery: restarting Android discovery while preserving glasses state")
                 adaptiveSyncSession?.noteDiscoveryRestart()
                 downloadP2pRestartCount++
@@ -8943,6 +8965,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (!isDownloadControlActive(sessionId)) return@launchDownloadSession
             if (downloadP2pConnected && downloadBleIp.isNullOrBlank()) {
                 val nextAttempt = (transferModeCommandAttempt + 1).coerceIn(2, 3)
+                adaptiveSyncSession?.mark(AdaptiveSyncCheckpoint.RECOVERY_STEP, "kind=metadata")
                 Log.i("DataDownload", "Adaptive recovery: P2P formed without BLE IP; requesting transfer metadata again")
                 setTransferDetailForSession(sessionId, "P2P connected; requesting the glasses IP again...")
                 sendTransferModeCommandWithRetry(
@@ -8956,6 +8979,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             waitUntil(ADAPTIVE_DEVICE_RESET_AT_MS)
             if (!isDownloadControlActive(sessionId)) return@launchDownloadSession
             if (!downloadP2pConnected && adaptiveSyncSession?.deviceResets == 0) {
+                adaptiveSyncSession?.mark(AdaptiveSyncCheckpoint.RECOVERY_STEP, "kind=reset")
                 Log.i("DataDownload", "Adaptive recovery: spending the bounded glasses P2P reset")
                 setTransferDetailForSession(sessionId, "Resetting the glasses Wi-Fi Direct state once...")
                 if (resetTransferP2pForRetry(sessionId)) {
@@ -10842,6 +10866,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             dismissButtonLabel = "Close",
         )
         downloadCancelledByUser = true
+        adaptiveSyncSession?.takeIf { downloadFlowMode == GlassesSyncFlow.CUSTOM }?.mark(
+            AdaptiveSyncCheckpoint.CANCELLED,
+            "user_requested_stop",
+        )
         finishDownloadInitialPhase("cancelled by user")
         setTransferDetail("Stopping sync...")
         if (downloadP2pTeardownInProgress) {
@@ -11283,6 +11311,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (!isActive || !isDownloadSessionActive(sessionId) || !downloadP2pConnected) {
                     return@launchDownloadSession
                 }
+                adaptive.mark(
+                    AdaptiveSyncCheckpoint.HTTP_WARMUP_WAIT,
+                    "warmup_ms=$warmupMs,sticky=${stickyEndpoint != null}",
+                )
                 setTransferDetailForSession(
                     sessionId,
                     "Adaptive HTTP check in ${warmupMs / 1000.0}s...",
@@ -11297,6 +11329,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     if (!isActive || !isDownloadSessionActive(sessionId) || !downloadP2pConnected) {
                         return@launchDownloadSession
                     }
+                    adaptive.mark(
+                        AdaptiveSyncCheckpoint.HTTP_ROUTE_TRIAL,
+                        "route=${route.name},warmup_ms=$warmupMs",
+                    )
                     setTransferDetailForSession(
                         sessionId,
                         "Trying ${adaptiveRouteLabel(route)} to the glasses HTTP server...",
@@ -11307,6 +11343,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     )
                     val result = fetchAdaptiveMediaConfig(candidateIp, route)
                     lastFailure = result.failureDetail
+                    if (result.content == null) {
+                        adaptive.mark(
+                            AdaptiveSyncCheckpoint.HTTP_ROUTE_FAILED,
+                            "route=${route.name},warmup_ms=$warmupMs,reachable=${result.serverReached}",
+                        )
+                    }
                     if (result.serverReached) {
                         stickyEndpoint = candidateIp to route
                         adaptive.mark(

@@ -18,11 +18,16 @@ internal enum class AdaptiveSyncCheckpoint {
     P2P_NETWORK_IDENTIFIED,
     TCP_80_CONNECTED,
     MEDIA_CONFIG_HEADERS,
+    HTTP_WARMUP_WAIT,
+    HTTP_ROUTE_TRIAL,
+    HTTP_ROUTE_FAILED,
+    RECOVERY_STEP,
     MEDIA_CONFIG_COMPLETE,
     MEDIA_FILE_RETRY,
     MEDIA_FILE_PROGRESS,
     COMPLETE,
     FAILED,
+    CANCELLED,
 }
 
 internal enum class AdaptiveHttpRoute {
@@ -100,7 +105,12 @@ internal class AdaptiveP2pSyncSession(
     val profileKey: String,
     val profile: AdaptiveP2pProfile,
     private val clockMs: () -> Long,
+    private val onUpdate: (() -> Unit)?,
 ) {
+    /** Preserve existing trailing-lambda call sites that supply only the monotonic clock. */
+    constructor(profileKey: String, profile: AdaptiveP2pProfile, clockMs: () -> Long) :
+        this(profileKey, profile, clockMs, null)
+
     private val startedAtMs = clockMs()
     private val events = ArrayDeque<AdaptiveSyncEvent>()
 
@@ -137,7 +147,12 @@ internal class AdaptiveP2pSyncSession(
         if (events.size >= MAX_EVENTS) events.removeFirst()
         events.addLast(event)
         lastCheckpoint = checkpoint
+        onUpdate?.invoke()
     }
+
+    /** A copy for UI rendering; callers cannot mutate or reorder the diagnostic trace. */
+    @Synchronized
+    fun snapshotEvents(): List<AdaptiveSyncEvent> = events.toList()
 
     @Synchronized
     fun noteTransferCommand(attempt: Int, maxSends: Int = Int.MAX_VALUE): Boolean {

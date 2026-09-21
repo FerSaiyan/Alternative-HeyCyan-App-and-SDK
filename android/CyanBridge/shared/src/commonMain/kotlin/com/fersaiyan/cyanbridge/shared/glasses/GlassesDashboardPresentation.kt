@@ -17,6 +17,8 @@ data class GlassesDashboardUiState(
     val showStorage: Boolean = false,
     val deviceInfoLabel: String? = null,
     val transfer: GlassesTransferUiState = GlassesTransferUiState(),
+    /** Last adaptive diagnostic remains visible after the transport is torn down. */
+    val adaptiveSyncLastReport: AdaptiveSyncDiagnosticsUiState? = null,
     val meeting: GlassesMeetingUiState = GlassesMeetingUiState(),
     val nativePluginShortcut: NativePluginShortcutUiState? = null,
     val assistantMode: GlassesAssistantMode = GlassesAssistantMode.PHONE_ASSISTANT,
@@ -69,6 +71,34 @@ data class GlassesTransferUiState(
     val detail: String = "Idle",
     /** Null represents indeterminate progress. */
     val progress: Float? = null,
+    /** Populated only by the adaptive HeyCyan sync; vendor and other devices remain unchanged. */
+    val adaptiveDiagnostics: AdaptiveSyncDiagnosticsUiState? = null,
+)
+
+enum class AdaptiveSyncStageStatus { WAITING, ACTIVE, COMPLETE, FAILED }
+
+data class AdaptiveSyncStageUiState(
+    val title: String,
+    val detail: String,
+    val status: AdaptiveSyncStageStatus,
+)
+
+data class AdaptiveSyncTrialUiState(
+    val title: String,
+    val detail: String,
+    val elapsedMs: Long,
+    val status: AdaptiveSyncStageStatus,
+)
+
+/** Immutable, platform-neutral snapshot; only real transport checkpoints may advance it. */
+data class AdaptiveSyncDiagnosticsUiState(
+    val headline: String,
+    val explanation: String,
+    val learnedProfile: String,
+    val trialPlan: String = "",
+    val stages: List<AdaptiveSyncStageUiState>,
+    val trials: List<AdaptiveSyncTrialUiState> = emptyList(),
+    val isTerminal: Boolean = false,
 )
 
 /**
@@ -240,6 +270,7 @@ sealed interface GlassesDashboardAction {
     data object RequestMediaCount : GlassesDashboardAction
     data object StartSync : GlassesDashboardAction
     data object StopSync : GlassesDashboardAction
+    data object DismissAdaptiveSyncReport : GlassesDashboardAction
     data object ToggleAdvanced : GlassesDashboardAction
     data object StartAgent : GlassesDashboardAction
     data object StopAgent : GlassesDashboardAction
