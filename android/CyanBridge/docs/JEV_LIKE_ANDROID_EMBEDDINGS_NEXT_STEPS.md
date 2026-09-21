@@ -665,28 +665,49 @@ engine is production-wired.
 ### What is still needed for embedding-backed production decisions
 
 1. **Permanent llama.cpp dependency repair.** The tested path uses the temporary
-   patched AAR documented above. Publish/vendor a corrected wrapper or build it
-   reproducibly before enabling the feature in normal app builds.
-2. **Production engine wiring.** Provide a lifecycle-owned embedder/model
-   provider for `AssistantRequestRouter.decisionEngineProvider` and
-   `LocalAgentDecisionBridge.engineProvider`, with model loading, eviction,
-   CPU/device capability checks, cancellation, and an opt-in feature flag.
+   patched AAR documented above. Update 2026-09-20: the `static n_embd`
+   truncation defect is fixed in source and both ABIs were rebuilt from
+   `/tmp/opencode/kotlinllamacpp-fixed` (x86_64 + arm64-v8a) and repackaged;
+   on-device validation shows Gemma 768 → Qwen 1024 dims in one process.
+   Still needed: a reproducible build script pinned to an upstream revision
+   before this AAR can be a real dependency (currently a local artifact).
+2. **Production engine wiring.** Partially done 2026-09-20 for the Tasker
+   service path: opt-in `LocalAgentPrefs` embedding keys (default off),
+   lifecycle-owned `LlamaCppTextEmbeddingEngine` in `TaskerLocalAgentService`,
+   and a `FallbackDecisionEngine` cascade (embedding → single-token LLM →
+   detailed JSON planner). Still dormant: `AssistantRequestRouter`
+   and `LocalAgentDecisionBridge` providers.
 3. **Calibrated safety policy.** Cosine scores and the compatibility softmax are
    not probabilities. Fit top-score/margin thresholds on a held-out multilingual
    CyanBridge command set; abstention must clarify or fall back rather than
-   starting phone control.
+   starting phone control. Corpus result: Gemma margin≥0.10. Live YouTube UI
+   shows near-tie abstentions (margin ~0.001–0.013) that correctly cascade;
+   production thresholds need a re-fit on production candidate descriptions.
 4. **Correct UI candidate identity.** Preserve the selected node index in each
    `click_text` candidate. The current production mapping can resolve every
    selected click to the first clickable node.
-5. **Embedding model contract.** Resolve why the Qwen GGUF returns 768 values
-   through this mobile runtime while its model card advertises up to 1024, and
-   verify the intended MRL dimension before storing or comparing vectors.
+5. **Embedding model contract.** Resolved 2026-09-20: the "Qwen returns 768"
+   observation was the runtime `static n_embd` defect, not the model. Qwen
+   reports its documented 1024 dims with the fixed runtime.
 6. **Model packaging decision.** Either finish the standalone EmbeddingGemma
    LiteRT `CompiledModel` + SentencePiece path, or explicitly standardize on
    the repaired GGUF backend. Do not silently mix tokenizer/model contracts.
-7. **End-to-end Tasker HIL.** Run the real local-agent service with Tasker and
-   AutoInput, then prove observation → embedding decision → candidate action →
-   Tasker execution → post-action observation on a deterministic fixture.
+   New constraint 2026-09-20: gate queries must stay short. A 687-token state
+   string aborts the native embedding prefill (SIGABRT; probe
+   `abortprobe.{0,1,2}`); the service caps gate input at 1000 chars.
+7. **End-to-end Tasker HIL.** In progress 2026-09-20: `TaskerLocalAgentHilTest`
+   passes on the provisioned Pixel_9a target (observation/click/type);
+   `LocalAiTaskerEmbeddingYouTubeHilTest` runs the Gemma gate against real
+   YouTube UI (gate engages, abstains on ties, cascades). First full playback
+   run 2026-09-20 FAILED with `max_steps_reached` (20 steps, no crash): the
+   gate abstained on every real-UI decision (production candidate descriptions
+   differ from the calibration corpus, margins collapse to ~0.01), the
+   single-token LLM tapped Voice Search instead of the search field, and the
+   run never recovered. The gate never mis-acted; it currently contributes no
+   accepted decision on production descriptions. Next: align candidate
+   descriptions with the calibration protocol (or re-fit the threshold on
+   production candidates) and re-run; the single-token mistap/recovery is a
+   pre-existing planner issue independent of the gate.
 
 ### Exact Chrome/YouTube validation still required
 
@@ -780,12 +801,28 @@ Notes:
   measured 6.5 s cold / 142 ms warm. Gemma wins cold-start and determinism
   (67 ms query-only with cached prototypes); it does not beat a warm LLM
   single-token call on raw speed.
+- Needle separate-calibrator result: no function of Needle's own outputs
+  (confidence, call count, latency, reasoning length) separates right from
+  wrong — wrong-answer confidence median is 0.98 vs 1.0 for correct. The only
+  gate that held 98%+ was cross-model: Needle agrees with Gemma AND Gemma
+  margin≥0.10 → 100% on both splits (36/36 cal, 11/11 test), coverage ~38%/31%.
+  All agreement misses were abstention-worthy vague/empty cases both models
+  confidently over-acted on. Fine-tuned Needle returns confidence=None by
+  design, so budget a separate calibrator (this agreement gate is the current
+  candidate) before any auto-action role.
 
 HIL caveats from this run: an unrelated host-side package install killed the
 app mid-run (`installPackageLI`, 98/169 Qwen cases kept — verified prefix and
 resumed 98..168 in a fresh process); a stale test-APK install caused one
 `ClassNotFoundException`, fixed by reinstall. Avoid any `adb install` while a
-calibration run is in flight.
+calibration run is in flight. HIL-specific: the service loop and a 1 Hz test
+observer poll contend inside serialized Tasker execution and starve the
+service past its 8 s observation timeout — the YouTube HIL test now warms up
+once, then polls status at 1 Hz and observes at most every 20 s, failing fast
+only on non-retryable errors. Tasker's monitor goes dormant after an emulator
+reboot; launch the Tasker UI once (dismissing its Tip) before HIL. Pixel_9a
+Chrome currently SIGILL-crashes its renderer on loopback pages, so YouTube —
+not the deterministic Chrome fixture — is the working HIL vehicle there.
 
 ## Known Jev branch follow-ups unrelated to embeddings
 
