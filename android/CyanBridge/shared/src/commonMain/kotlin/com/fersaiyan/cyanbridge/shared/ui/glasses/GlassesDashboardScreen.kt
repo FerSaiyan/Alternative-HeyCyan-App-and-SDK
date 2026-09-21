@@ -781,6 +781,25 @@ private fun AdaptiveSyncDiagnosticsPanel(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            if (diagnostics.trialPlan.isNotBlank() && !diagnostics.isTerminal) {
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text("What CyanBridge will try", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            diagnostics.trialPlan,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.testTag("adaptive_sync_trial_plan"),
+                        )
+                    }
+                }
+            }
             Column(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.testTag("adaptive_sync_stages"),
