@@ -69,6 +69,33 @@ data class GlassesTransferUiState(
     val detail: String = "Idle",
     /** Null represents indeterminate progress. */
     val progress: Float? = null,
+    /** Populated only by the adaptive HeyCyan sync; vendor and other devices remain unchanged. */
+    val adaptiveDiagnostics: AdaptiveSyncDiagnosticsUiState? = null,
+)
+
+enum class AdaptiveSyncStageStatus { WAITING, ACTIVE, COMPLETE, FAILED }
+
+data class AdaptiveSyncStageUiState(
+    val title: String,
+    val detail: String,
+    val status: AdaptiveSyncStageStatus,
+)
+
+data class AdaptiveSyncTrialUiState(
+    val title: String,
+    val detail: String,
+    val elapsedMs: Long,
+    val status: AdaptiveSyncStageStatus,
+)
+
+/** Immutable, platform-neutral snapshot; only real transport checkpoints may advance it. */
+data class AdaptiveSyncDiagnosticsUiState(
+    val headline: String,
+    val explanation: String,
+    val learnedProfile: String,
+    val stages: List<AdaptiveSyncStageUiState>,
+    val trials: List<AdaptiveSyncTrialUiState> = emptyList(),
+    val isTerminal: Boolean = false,
 )
 
 /**
