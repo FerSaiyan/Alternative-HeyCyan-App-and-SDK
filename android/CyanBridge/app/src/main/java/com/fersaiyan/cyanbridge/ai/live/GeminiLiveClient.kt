@@ -124,6 +124,7 @@ class GeminiLiveClient(
     private var reconnectJob: Job? = null
     private var sessionResumptionJob: Job? = null
     private var meteredSessionLimitJob: Job? = null
+    private var meteredConnectionAttempted = false
     private var sessionResumptionHandle: String? = null
     private var reconnectAttempt = 0
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -177,6 +178,7 @@ class GeminiLiveClient(
         meteredSessionLimitJob?.cancel()
         meteredSessionLimitJob = null
         reconnectAttempt = 0
+        meteredConnectionAttempted = false
         inputAudioMs = 0L
         outputAudioMs = 0L
         visualInputCount = 0
@@ -204,6 +206,7 @@ class GeminiLiveClient(
                     connectOrReconnect()
                 }
                 .onFailure {
+                    if (!active.get()) return@onFailure
                     active.set(false)
                     Log.e(TAG, "Live token failed", it)
                     listener.onAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
@@ -360,6 +363,10 @@ class GeminiLiveClient(
     private fun connectOrReconnect() {
         if (!active.get()) return
         val config = tokenConfig ?: return
+        if ((config.freeTier || config.economy) && meteredConnectionAttempted) {
+            Log.i(TAG, "Prevented repeat Free/Economy socket connection without new user request")
+            return
+        }
         if (System.currentTimeMillis() >= config.expiresAtMs) {
             active.set(false)
             listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
@@ -394,6 +401,7 @@ class GeminiLiveClient(
             if (langTag.isNotBlank()) builder.header("Accept-Language", langTag)
         }
         val request = builder.build()
+        if (config.freeTier || config.economy) meteredConnectionAttempted = true
         socket = http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (!active.get()) {
