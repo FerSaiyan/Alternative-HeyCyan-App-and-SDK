@@ -1666,6 +1666,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             when (action) {
                 is GlassesDashboardAction.Navigate -> true
                 GlassesDashboardAction.StopSync -> activeSession == GlassesSession.MEDIA_SYNC
+                GlassesDashboardAction.DismissAdaptiveSyncReport -> true
                 GlassesDashboardAction.StopLivePreview -> activeSession == GlassesSession.LIVE_PREVIEW
                 GlassesDashboardAction.CancelOta -> activeSession == GlassesSession.OTA
                 else -> false
@@ -1834,6 +1835,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 stopMoyoungW620MediaSync()
             } else {
                 binding.btnTransferStop.performClick()
+            }
+            GlassesDashboardAction.DismissAdaptiveSyncReport -> updateDashboardState { state ->
+                state.copy(adaptiveSyncLastReport = null)
             }
             GlassesDashboardAction.ToggleAdvanced -> {
                 if (!dashboardState.showAdvancedControls) return
@@ -8139,6 +8143,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         resetTransferUiState()
+        updateDashboardState { state -> state.copy(adaptiveSyncLastReport = null) }
         setTransferUiVisible(true)
         setTransferFlowLabel(mode)
         publishAdaptiveSyncDiagnostics()
@@ -8566,7 +8571,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             adaptiveSyncSession?.let(AdaptiveSyncDiagnosticsPresenter::present)
         } else null
         updateDashboardState { state ->
-            state.copy(transfer = state.transfer.copy(adaptiveDiagnostics = snapshot))
+            state.copy(
+                adaptiveSyncLastReport = snapshot ?: state.adaptiveSyncLastReport,
+                transfer = state.transfer.copy(adaptiveDiagnostics = snapshot),
+            )
         }
     }
 
