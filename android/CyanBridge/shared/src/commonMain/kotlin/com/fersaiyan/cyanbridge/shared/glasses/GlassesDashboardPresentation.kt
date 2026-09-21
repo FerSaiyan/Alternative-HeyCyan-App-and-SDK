@@ -17,6 +17,8 @@ data class GlassesDashboardUiState(
     val showStorage: Boolean = false,
     val deviceInfoLabel: String? = null,
     val transfer: GlassesTransferUiState = GlassesTransferUiState(),
+    /** Last adaptive diagnostic remains visible after the transport is torn down. */
+    val adaptiveSyncLastReport: AdaptiveSyncDiagnosticsUiState? = null,
     val meeting: GlassesMeetingUiState = GlassesMeetingUiState(),
     val nativePluginShortcut: NativePluginShortcutUiState? = null,
     val assistantMode: GlassesAssistantMode = GlassesAssistantMode.PHONE_ASSISTANT,
@@ -267,6 +269,7 @@ sealed interface GlassesDashboardAction {
     data object RequestMediaCount : GlassesDashboardAction
     data object StartSync : GlassesDashboardAction
     data object StopSync : GlassesDashboardAction
+    data object DismissAdaptiveSyncReport : GlassesDashboardAction
     data object ToggleAdvanced : GlassesDashboardAction
     data object StartAgent : GlassesDashboardAction
     data object StopAgent : GlassesDashboardAction
