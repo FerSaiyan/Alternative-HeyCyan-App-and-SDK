@@ -1,144 +1,206 @@
-# Alternative HeyCyan App and SDK
+<p align="center">
+  <img src="android/CyanBridge/CyanBridge_StyledB_transparent.png" alt="CyanBridge" width="120">
+</p>
 
-This repository is the source workspace for CyanBridge's Android companion,
-HeyCyan vendor integration, and smart-glasses interoperability research.
+# CyanBridge: Local AI for Smart Glasses
 
-It is not a finished, drop-in SDK for every pair of glasses. The active product
-path is the Android app in [`android/CyanBridge`](android/CyanBridge). The rest
-of the repository includes vendor references, reusable modules, prototypes, and
-research needed to support more devices without hiding their limitations.
+CyanBridge is an Android companion and device-integration project for AI smart glasses.
 
-## Start here
+It started as a working Android alternative for HeyCyan-compatible glasses and has grown into a bridge between smart glasses and the AI stack you want to use: local models on your phone, Gemini Live, self-hosted servers, and optional hosted models.
 
-| If you want to... | Start with... |
-| --- | --- |
-| Build or use the Android companion | [`android/CyanBridge/README.md`](android/CyanBridge/README.md) |
-| Connect and sync media from HeyCyan glasses | [`android/AGENTS.md`](android/AGENTS.md) |
-| Work on shared Android modules | [`heycyan-core/README.md`](heycyan-core/README.md) |
-| Build the iOS shell or inspect the vendor demo | [`ios/README.md`](ios/README.md) |
-| Investigate MemoMind/XGIMI protocol support | [`BRIDGE_RESEARCH_NOTES.md`](BRIDGE_RESEARCH_NOTES.md) |
+Local inference does not require a CyanBridge subscription.
 
-## What CyanBridge does today
+[![Android CI](https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/actions/workflows/android-self-hosted.yml/badge.svg?branch=main)](https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/actions/workflows/android-self-hosted.yml)
+[![Latest release](https://img.shields.io/github/v/release/FerSaiyan/Alternative-HeyCyan-App-and-SDK)](https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases/latest)
+[![GitHub stars](https://img.shields.io/github/stars/FerSaiyan/Alternative-HeyCyan-App-and-SDK?style=flat)](https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/stargazers)
 
-### Android companion
+[Website](https://cyanbridgelabs.com/) ·
+[Google Play](https://play.google.com/store/apps/details?id=com.fersaiyan.cyanbridge) ·
+[Latest release](https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases/latest) ·
+[Meta Ray-Ban beta](https://cyanbridgelabs.com/beta) ·
+[Compatibility matrix](https://cyanbridgelabs.com/smart-glasses/compatibility)
 
-The Android app is the most complete part of this repository. It currently
-includes:
+> **Own Ray-Ban Meta glasses?** Meta support is moving quickly through Meta's Device Access Toolkit early-access program. Join the [CyanBridge Meta Ray-Ban beta](https://cyanbridgelabs.com/beta) with the email attached to your Meta account so we can send you a DAT invite when a tester slot is available.
 
-- HeyCyan device scanning, pairing, connection management, and device state.
-- Media sync from compatible HeyCyan glasses: BLE starts transfer mode, Wi-Fi
-  Direct carries the files, and photos, videos, and supported recordings are
-  saved to Android media storage.
-- Local chat history, configurable local-model runtimes, and optional
-  OpenAI-compatible remote inference.
-- Meeting capture, transcription and summarization plumbing, notes, privacy
-  settings, data backup/export, and local-data cleanup controls.
-- A CyanBridge Model Studio bridge that can announce Studio session events and
-  handle its internal approval requests through TTS, speech recognition, and a
-  fail-closed allow/deny response.
+## What you can do
 
-The app must be tested with real glasses before a device-specific feature is
-considered reliable.
+- Run LLMs locally on Android with **LiteRT-LM** and **llama.cpp**.
+- Download curated Gemma and Qwen models or import your own `.gguf`, `.litertlm`, and `.task` models.
+- Use **Gemini Live** with real-time voice and supported glasses-camera context.
+- Connect CyanBridge to an **OpenAI-compatible server** you control.
+- Ask questions about photos captured from supported glasses.
+- Sync photos, videos, and recordings from HeyCyan-compatible devices.
+- Use hands-free tools for translation, captions, meetings, visual notes, accessibility, and phone automation.
+- Build against the device integrations and shared Android modules in this repository.
 
-### Device and platform status
+The Android app in [`android/CyanBridge/`](android/CyanBridge/) is the main product and development target.
 
-| Area | Current status | Notes |
+## Local AI on your phone
+
+CyanBridge can run inference directly on Android.
+
+| Runtime | Model format | Use |
 | --- | --- | --- |
-| HeyCyan Android path | Active | BLE connection and the BLE plus Wi-Fi Direct media-transfer flow are the primary supported path. |
-| HeyCyan vendor controls | Device-dependent | The bundled vendor AAR exposes camera, recording, device-info, and media commands. Validate each command on physical hardware. |
-| CyanBridge local and remote chat | Included | The app contains local runtime support and an OpenAI-compatible remote-server option. Model availability depends on the phone and configuration. |
-| CyanBridge Model Studio bridge | Experimental | Relays Studio events and approval requests over an authenticated WebSocket. It is not a substitute for reviewing desktop work. |
-| MemoMind/XGIMI | Experimental research | RFCOMM framing, device info, battery, cards, notifications, and selected settings are mapped. The adapter still needs sustained physical-device validation. |
-| Meta Ray-Ban | Partial setup only | Optional registration plumbing exists when the Meta DAT SDK is available. Sessions, camera streaming, photo capture, and display rendering are explicitly not implemented. |
-| Even/Mentra runtimes | Prototype | Adapter and runtime experiments are present, not a supported consumer device path. |
-| iOS | CI-validated host | A simulator-targeted KMP host is built and tested via a GitHub Actions macOS workflow (framework link, Xcode compilation, simulator launch, screenshot); the vendor QCSDK path still requires a physical device and needs hardware validation. |
+| LiteRT-LM | `.litertlm`, `.task` | Gemma and multimodal on-device models |
+| llama.cpp | `.gguf` | Qwen and other compatible GGUF language models |
+| OpenAI-compatible endpoint | HTTP API | Ollama, llama.cpp server, Model Studio, or another server you control |
 
-## Build the Android app
+Local models support configurable context size, sampling settings, CPU/GPU execution, GPU layer offload, model-specific prompt templates, and streaming generation. CyanBridge can fall back to CPU when a requested GPU configuration cannot start.
 
-Use Android Studio's bundled JDK or another Java 17+ JDK:
+See [Local Models](android/CyanBridge/docs/local-models.md) for formats, model setup, runtime options, and import instructions.
 
-```bash
-cd android/CyanBridge
-JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug
+## Free Gemini Live
+
+Free CyanBridge accounts can use **five Gemini Live sessions per UTC day**, with each session lasting up to **five minutes**.
+
+Gemini Live supports real-time voice conversations and can receive fresh visual context from compatible glasses integrations. CyanBridge also has Economy and Private Live modes for paid accounts.
+
+Local models remain available without a subscription, so Gemini Live is an option rather than a requirement.
+
+## Smart glasses support
+
+CyanBridge keeps device-specific protocols separate. Hardware, firmware, permissions, and vendor APIs determine which features each pair of glasses can expose.
+
+| Glasses / platform | Status | CyanBridge work |
+| --- | --- | --- |
+| **HeyCyan-compatible glasses** | Supported workflow | BLE connection, device controls, media transfer, image questions, and glasses-aware AI workflows |
+| **Ray-Ban Meta / Meta Ray-Ban** | Experimental | Meta DAT registration, device sessions, camera streams, photo capture, capability checks, and active hardware testing |
+| **EyeVue** | Experimental | Android connection, media, capture, and device-control work |
+| **Meizu MYVU / Star Air** | Experimental | Native BLE/RFCOMM/display integration based on hardware-tested protocol work |
+| **MoYoung / W620** | Experimental | Device-specific Android integration |
+| **TuneBuds** | Research | Dedicated protocol and media/capture research |
+| **MemoMind / XGIMI** | Research | Transport, device state, cards, notifications, and display-oriented protocol research |
+
+Check the [live compatibility matrix](https://cyanbridgelabs.com/smart-glasses/compatibility) for the public device-by-device status.
+
+### Ray-Ban Meta
+
+The Android integration uses Meta's Device Access Toolkit.
+
+Current code covers DAT registration state, device discovery and metadata, device sessions, camera streams, photo capture, display-capability detection, and camera access for features such as Visual Diary and Walking Aid.
+
+Meta controls access to third-party wearable integrations while DAT remains in preview. If you own Ray-Ban Meta glasses, request access at:
+
+**https://cyanbridgelabs.com/beta**
+
+Use the email connected to your Meta account and glasses.
+
+Technical notes are in [`meta_rayban_mvp.md`](android/CyanBridge/meta_rayban_mvp.md).
+
+## HeyCyan media sync
+
+CyanBridge transfers media from compatible HeyCyan glasses over the local device connection.
+
+```text
+Glasses
+   │
+   ├── BLE ──────────────► connection + transfer commands
+   │
+   └── Wi-Fi Direct ─────► photos / video / audio
+                              │
+                              ▼
+                         Android MediaStore
 ```
 
-Run unit tests with:
+The Android path uses BLE to enter transfer mode and obtain the glasses network information. Wi-Fi Direct carries the files from the glasses media server into Android storage.
+
+Protocol details and implementation notes live in [`android/AGENTS.md`](android/AGENTS.md).
+
+## Built-in tools
+
+CyanBridge includes smart-glasses and phone workflows such as:
+
+- **Local Agent** for supervised phone automation
+- **Walking Aid** for vision-assisted environmental context
+- **Meeting Spark Notes**
+- **Live Caption Relay**
+- **Hands-Free Translator**
+- **Errand Brain**
+- **Auto Diary**
+- **Auto Audio**
+- **Visual Diary**
+
+Camera, microphone, media, and display capabilities depend on the selected glasses integration.
+
+## Install CyanBridge
+
+### Google Play
+
+For normal Android installation and automatic updates:
+
+[**Get CyanBridge on Google Play**](https://play.google.com/store/apps/details?id=com.fersaiyan.cyanbridge)
+
+### APK
+
+Signed APKs and SHA-256 checksums are also published with GitHub releases:
+
+[**Download the latest CyanBridge release**](https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases/latest)
+
+## Build from source
+
+The Android project requires Java 17 or newer.
 
 ```bash
-JAVA_HOME=/opt/android-studio/jbr ./gradlew testDebugUnitTest
+git clone https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK.git
+cd Alternative-HeyCyan-App-and-SDK/android/CyanBridge
+
+JAVA_HOME=/path/to/jdk17 ./gradlew assembleDebug
 ```
 
-Android and shared-code CI runs on the local Linux Mint GitHub Actions runner.
-See [`docs/SELF_HOSTED_RUNNER.md`](docs/SELF_HOSTED_RUNNER.md) for the
-no-`sudo` runner service and maintenance commands.
+The current Android build resolves Meta DAT packages through GitHub Packages, so builds that include Meta support need GitHub package credentials.
 
-For device integration, use a physical Android phone with Bluetooth and the
-required nearby-device, microphone, notification, and Wi-Fi permissions. The
-Android emulator cannot validate glasses pairing or media transfer.
+Run the Android unit tests with:
 
-## How HeyCyan media sync works
+```bash
+JAVA_HOME=/path/to/jdk17 ./gradlew testDebugUnitTest
+```
 
-The supported transfer path is intentionally simple:
+The repository also contains Android emulator, hardware-in-the-loop, and iOS KMP CI workflows.
 
-1. Connect to the glasses over BLE.
-2. Ask the glasses to enter transfer mode and report their Wi-Fi address.
-3. Join the Wi-Fi Direct network.
-4. Read `http://<glasses-ip>/files/media.config`.
-5. Download each listed file from `http://<glasses-ip>/files/<filename>`.
-6. Store photos, videos, and compatible audio in Android media storage.
+## Repository layout
 
-See [`android/AGENTS.md`](android/AGENTS.md) for the confirmed command sequence,
-network-routing requirements, and audio-format caveats. Do not substitute the
-phone's Wi-Fi Direct group-owner address for the glasses address.
-
-## Repository map
-
-| Path | Purpose |
+| Path | What is there |
 | --- | --- |
-| `android/CyanBridge/` | CyanBridge Android app and the primary development target. |
-| `android/glasses_sdk_20250723_v01.aar` | Vendor Android SDK artifact used by the HeyCyan path. |
-| `android/HeyCyanOfficialApp/` | Decompiled vendor app used as protocol reference. |
-| `heycyan-core/` | Shared Android modules for BLE, connectivity, data, audio, and API boundaries. |
-| `ios/CyanBridgeKMPHost/` | Simulator-capable SwiftUI host for the shared KMP framework. |
-| `ios/QCSDKDemo/` | Vendor iOS demo and device-only protocol reference. |
-| `BRIDGE_RESEARCH_NOTES.md` | Detailed MemoMind/XGIMI transport and protocol findings. |
-| `WIFI_TRANSFER_ARCHITECTURE.md` | Historical technical background for the HeyCyan transfer design. |
+| [`android/CyanBridge/`](android/CyanBridge/) | Main CyanBridge Android app |
+| [`heycyan-core/`](heycyan-core/) | Shared HeyCyan Android modules and API boundaries |
+| [`android/AGENTS.md`](android/AGENTS.md) | HeyCyan protocol and media-transfer notes |
+| [`android/CyanBridge/docs/local-models.md`](android/CyanBridge/docs/local-models.md) | LiteRT-LM and llama.cpp local inference |
+| [`android/CyanBridge/meta_rayban_mvp.md`](android/CyanBridge/meta_rayban_mvp.md) | Meta DAT implementation and integration notes |
+| [`BRIDGE_RESEARCH_NOTES.md`](BRIDGE_RESEARCH_NOTES.md) | Smart-glasses protocol research |
+| [`ios/`](ios/) | KMP/iOS host and vendor integration work |
+| [`examples/`](examples/) | Integration examples |
+| [`tools/`](tools/) | Development, testing, and hardware tooling |
 
-## Upstream projects and acknowledgements
+## Star history
 
-CyanBridge is made possible by the work of other open-source developers. Please
-visit these projects, star the repositories, follow their maintainers, and
-consider donating or sponsoring them through any support links in their
-repositories or profiles:
+If CyanBridge is useful to you, a star helps other smart-glasses developers find the project.
 
-| Project | How it contributed |
-| --- | --- |
-| [Meizu MYVU Client](https://github.com/Panny777/Meizu-Myvu-Client) by [Panny777](https://github.com/Panny777) | Hardware-verified MYVU / Star Air protocol client. Its BLE, ECDH, RFCOMM relay, heartbeat, and display transport are used by the native MYVU integration. |
-| [OpenVision](https://github.com/rayl15/OpenVision) by [rayl15](https://github.com/rayl15) | Important reference for the Meta Ray-Ban integration direction, wearable connection architecture, and glasses-based AI workflows. |
-| [private-agent](https://github.com/orailnoor/private-agent) by [orailnoor](https://github.com/orailnoor) | Inspiration for CyanBridge's local-agent architecture, especially the Accessibility-based observe, decide, execute, and observe loop. |
+[![Star History Chart](https://api.star-history.com/svg?repos=FerSaiyan/Alternative-HeyCyan-App-and-SDK&type=Date)](https://star-history.com/#FerSaiyan/Alternative-HeyCyan-App-and-SDK&Date)
 
-These projects remain independent works with their own licenses and
-maintainers. See each repository for its licensing, contribution, and support
-information. If you use or benefit from them, a star, a follow, a useful issue
-or pull request, and financial support where available are meaningful ways to
-give back.
+## Contributing
 
-## Privacy and safety
+Device testing is especially useful.
 
-- Keep pairing, recording, transfer, and notification permissions explicit.
-- Review the app's privacy settings before enabling capture, transcription, or
-  desktop approval bridging.
-- The HeyCyan transfer server uses local HTTP over the direct device network;
-  do not expose it to an untrusted network.
-- Do not send unknown protocol commands or OTA payloads to personal hardware.
-- Treat experimental device adapters as research until they have repeatable,
-  documented hardware tests.
+If you own HeyCyan, EyeVue, TuneBuds, MoYoung, MYVU, Ray-Ban Meta, MemoMind, or another pair of AI glasses, reports with the exact model, firmware version, Android version, logs, and reproducible steps can help turn experimental integrations into reliable ones.
 
-## Vendor material and licensing
+Code contributions around device protocols, local inference, Android/iOS integration, tests, accessibility, and documentation are welcome.
 
-The bundled `.aar`, `QCSDK.framework`, decompiled vendor apps, firmware files,
-and protocol notes are not a promise that their underlying vendor components are
-open source or redistributable. Review the relevant vendor terms and applicable
-law before distributing, modifying, or using them outside personal research and
-development. This repository does not currently provide a single project-wide
-license for all included material.
+Use [GitHub Issues](https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/issues) for bugs, hardware reports, and feature requests.
+
+## Related projects
+
+CyanBridge has learned from and interoperated with work from independent open-source projects:
+
+- [Meizu MYVU Client](https://github.com/Panny777/Meizu-Myvu-Client) by Panny777
+- [OpenVision](https://github.com/rayl15/OpenVision) by rayl15
+- [private-agent](https://github.com/orailnoor/private-agent) by orailnoor
+
+Check each upstream project for its license and attribution requirements.
+
+## Licensing
+
+CyanBridge-authored code and third-party material need to be treated separately.
+
+This repository contains or references vendor SDKs, decompiled vendor applications, protocol research, model files, and third-party components with their own terms. A root project license should not be read as relicensing those materials.
+
+See [LICENSING.md](LICENSING.md) for the current license inventory, the Apache-2.0 recommendation for CyanBridge-owned code, and the third-party items that still need clean separation before a root license is added.
