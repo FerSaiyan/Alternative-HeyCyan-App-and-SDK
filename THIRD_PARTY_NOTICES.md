@@ -8,15 +8,15 @@ The entries below call out the components that are easy to mistake for
 CyanBridge-owned code. This is a licensing map, not a replacement for the
 upstream license texts.
 
-| Component | Where it appears | License or terms |
-| --- | --- | --- |
-| Meizu MYVU Client by Panny777 | `android/CyanBridge/app/src/main/myvu-upstream/` | MIT. The submodule keeps the upstream license and copyright notice. |
-| MoYoung glasses SDK | `android/CyanBridge/app/libs/moyoung_glasses_sdk_0.0.7_20260624.aar` and `android/CyanBridge/third_party/moyoung_glasses_sdk/` | GPL-3.0 upstream. The GPL text is kept beside the component. |
-| HeyCyan Android SDK | `android/glasses_sdk_20250723_v01.aar` and `android/CyanBridge/app/libs/glasses_sdk_20250723_v01.aar` | Vendor material. It is not relicensed under Apache-2.0 by this repository. |
-| QCSDK iOS framework | `ios/QCSDK.framework/` | Vendor material with upstream copyright notices. It is not relicensed under Apache-2.0 by this repository. |
-| Vendor SDK guides | `android/Android_SDK_Development_Guide_CN.pdf` and `ios/iOS_SDK_Development_Guide.pdf` | Vendor documentation. It is not covered by the CyanBridge Apache-2.0 license. |
-| Meta Wearables Device Access Toolkit | Resolved as Android dependencies when Meta support is enabled | Subject to the Meta Wearables Developer Terms and related policies, not the CyanBridge license. |
-| Downloadable AI models | Downloaded or imported through CyanBridge model features | Each model keeps its upstream model license. A model download is not relicensed as Apache-2.0. |
+| Component | Where it appears | License or terms | Upstream |
+| --- | --- | --- | --- |
+| Meizu MYVU Client by Panny777 | `android/CyanBridge/app/src/main/myvu-upstream/` | MIT. The submodule keeps the upstream license and copyright notice. | [Panny777/Meizu-Myvu-Client](https://github.com/Panny777/Meizu-Myvu-Client) |
+| MoYoung glasses SDK | `android/CyanBridge/app/libs/moyoung_glasses_sdk_0.0.7_20260624.aar` and `android/CyanBridge/third_party/moyoung_glasses_sdk/` | GPL-3.0 upstream. The GPL text is kept beside the component. | [liangqian609/moyoung_glasses_ble_plugin](https://github.com/liangqian609/moyoung_glasses_ble_plugin) |
+| HeyCyan Android SDK | `android/glasses_sdk_20250723_v01.aar` and `android/CyanBridge/app/libs/glasses_sdk_20250723_v01.aar` | Vendor material. It is not relicensed under Apache-2.0 by this repository. | Vendor-supplied SDK |
+| QCSDK iOS framework | `ios/QCSDK.framework/` | Vendor material with upstream copyright notices. It is not relicensed under Apache-2.0 by this repository. | Vendor-supplied SDK |
+| Vendor SDK guides | `android/Android_SDK_Development_Guide_CN.pdf` and `ios/iOS_SDK_Development_Guide.pdf` | Vendor documentation. It is not covered by the CyanBridge Apache-2.0 license. | Vendor-supplied documentation |
+| Meta Wearables Device Access Toolkit | Resolved as Android dependencies when Meta support is enabled | Subject to the Meta Wearables Developer Terms and related policies, not the CyanBridge license. | [facebook/meta-wearables-dat-android](https://github.com/facebook/meta-wearables-dat-android) |
+| Downloadable AI models | Downloaded or imported through CyanBridge model features | Each model keeps its upstream model license. A model download is not relicensed as Apache-2.0. | Model-specific |
 
 ## Referenced projects
 
