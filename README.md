@@ -199,8 +199,8 @@ Check each upstream project for its license and attribution requirements.
 
 ## Licensing
 
-CyanBridge is a mixed-license repository. Code and documentation written for
-CyanBridge are licensed under [Apache License 2.0](LICENSE) unless a more
+CyanBridge is a mixed-license repository. Original CyanBridge code and
+documentation are licensed under [Apache License 2.0](LICENSE) unless a more
 specific notice applies.
 
 Third-party code, vendor SDKs, binaries, and model artifacts keep their original
