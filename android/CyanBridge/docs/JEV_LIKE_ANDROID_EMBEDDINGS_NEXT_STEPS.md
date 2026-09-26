@@ -110,13 +110,89 @@ Export findings:
   Retaining the small action head in FP32 allowed export, but did not fix its
   output discrepancy.
 
-Conclusion: Laya is a genuine and promising zero-generation decision model,
-and its full custom graph is exportable. It is **not production-ready for this
-Android app** yet: the repository publishes no Android/LiteRT/ONNX artifact,
-the valid FP32 graph is about 1.69 GB, the smaller FP16 graph has an action-head
-parity issue, and generic INT8 quantization invalidates choices. The next useful
-Laya work is calibration-aware quantization or distillation, representative
-multi-fixture parity testing, then a physical Android CPU/GPU runtime probe.
+At the time of this export (2026-09-18), the repository published no Android
+runtime. The FP32 graph was about 1.69 GB, the smaller FP16 graph had an
+action-head parity issue, and generic INT8 quantization invalidated choices.
+**See the 2026-09-26 update below:** community LiteRT packages have since
+removed the artifact blocker, though task accuracy is still a separate gate.
+
+### Update, 2026-09-26: Android artifact exists; mobile-action gate still fails
+
+The [LiteRT Community multilingual package](https://huggingface.co/litert-community/Laya-Multilingual-LiteRT)
+(revision `058cbf34ed2c6a2854ec60e9534c229d08740387`) now publishes an
+Android Kotlin host, a 251 MB mixed-precision 256-token graph, separate FP32
+act head, memory-mapped token embeddings, tokenizer and calibration file (about
+679 MB together). Its card reports 81/81 choice/score argmax parity with upstream
+on a Galaxy S26 using LiteRT 2.2.0 GPU FP32; warm main+act median 50.9 ms plus
+14.6 ms host embedding lookup. The English package is about 848 MB, and unlike
+the multilingual sample it does not include an Android tokenizer implementation.
+These are **upstream parity measurements**, not our task accuracy or an emulator
+GPU result. The card explicitly reports `act_probability=1.0` on all 201 rows.
+
+We ran `tools/benchmarks/benchmark_laya_mobile_actions.py` on the *full frozen*
+169-case/13-locale corpus with Laya source `4066d5d5fbf08b66c6757ddeedbd797bd7655bc0`,
+the multilingual checkpoint sha256 `9d628fd971b700382ac6f65920a86f149777b2e748e0c955fb3b19695aa8f204`
+(the same weights cited by the LiteRT conversion), PyTorch CUDA on RTX 4060 Ti.
+The policy-blocked cases are excluded from model inference; all four candidate
+descriptions are passed verbatim in a typed `choice` question, with goal/app/
+screen as state. Thresholds were fit on calibration only (≥98% auto precision).
+
+| Split | Model cases | Raw top-1 | Safe automatic actions | Actionable coverage |
+|---|---:|---:|---:|---:|
+| Calibration | 116 | 40.5% | 0 | 0% |
+| Held-out test | 40 | 42.5% | 0 | 0% |
+
+Warm workstation CUDA median 53.2 ms/decision (p95 55.3 ms); cold model load
+10.9 s. The wrong top actions often had probabilities >0.9, including a tap
+of Home instead of Search and a discard-draft preference at the send-approval
+step. All 156 model rows produced `act_probability=1.0`, so that head cannot
+provide an abstention gate here. A separate English-only probe (12 cases) had
+57% calibration and 100% test raw accuracy with tiny n; it is **not** an
+international deployment result. Reports are under `/tmp/opencode/` and outside
+Git. Reproduce without CI downloads or installation into conda `base`:
+
+```bash
+/tmp/opencode/laya-export-venv/bin/python tools/benchmarks/benchmark_laya_mobile_actions.py \
+  --source /tmp/opencode/laya-current \
+  --checkpoint /tmp/opencode/laya-multilingual \
+  --device cuda --output /tmp/opencode/laya-mobile-actions-multilingual.json
+```
+
+**Decision:** Laya can now be prototyped on Android, but must remain a shadow
+backend for CyanBridge. The 256-token LiteRT window requires a short, auditable
+state builder; generic calibration from the conversion does not transfer to
+phone-action decisions, and actual Pixel/ARM CPU/GPU inference is unmeasured.
+Evaluate new task-specific training, safe abstention and on-device accuracy
+before letting it select executable actions; keep prose with the local LLM
+and send approval in CyanBridge's policy layer.
+
+### Inspiration and test boundary
+
+The [Ship with Jev agents/browsers directory](https://www.shipwithjev.com/categories/agents-and-browsers)
+has useful patterns: [flight search](https://www.shipwithjev.com/builds/browser-use-flights)
+enumerates a fresh small action space at every step and delegates text entry to
+an LLM; [Hunch](https://www.shipwithjev.com/builds/hunch-browser-agent)
+verifies each action in code and escalates uncertain or irreversible actions;
+[is-the-task-done checker](https://www.shipwithjev.com/builds/is-the-task-done-checker)
+uses a tiny bounded completion decision. For CyanBridge these translate to
+Tasker-observed nodes → bounded actions → code-checked state transition, with
+an explicit grounded completion candidate and a local-LLM prose fallback.
+None of those examples validates their success rate on our device or supplies
+permission to skip approval for an external side effect.
+
+[Google Artemis](https://github.com/google/artemis) (checkout
+`371aa6df56880643da57b30da936e9812fb0ec66`) provides an external Android
+agent/testing daemon and a dependency-free Python client. Its default helper
+installs an accessibility service; it can instead use UIAutomator2 with
+`ARTEMIS_HIERARCHY_BACKEND=uiautomator` and
+`ARTEMIS_HELPER_AUTO_INSTALL=false`. This does not require CyanBridge to
+request accessibility, but avoid simultaneous Artemis and Tasker runs on a
+shared AVD. The opt-in `tools/hil/run_artemis_fixture.py` tests a DEBUG fixture
+on a *separate emulator without Tasker/AutoInput*: Artemis taps/types; host-side
+UI XML checks exact count and literal text. The manual CI input `artemis_serial`
+enables this smoke after the model-free tests, with a provisioned Artemis daemon
+and its own LLM credentials. It does **not** exercise CyanBridge's local planner;
+Tasker HIL remains the end-to-end agent test.
 
 ## Needle 3 feasibility result
 
@@ -761,24 +837,27 @@ Method corrections applied during this run:
   `Current app` / `Tasker screen` biased both models toward screen-echo
   candidates (e.g. "YouTube Home" spuriously favored Tap Home) and is retained
   only as a negative result.
-- One model per instrumentation process. The patched runtime's native
+- At the time, use one model per instrumentation process. The upstream runtime's native
   `embedding()` caches `n_embd` in a function-local `static`
   (`rn-completion.cpp`), so whichever model embeds first fixes the output
   dimension process-wide: a Gemma-then-Qwen run silently truncated Qwen's
   1024-dim vectors to 768. This also resolves the old "Qwen returns 768 vs
   documented 1024" mystery: it was the runtime, not the model. A permanent fix
-  must remove the `static` and rebuild the AAR; until then never benchmark two
-  embedding models in one process (Gemma-first also risks OOB reads in the
-  reverse order).
+  must remove the `static` and rebuild the AAR (Gemma-first also risks OOB
+  reads in the reverse order). The 2026-09-20 patched AAR subsequently fixed
+  this and was validated with Gemma→Qwen in one process; see the runtime build
+  manifest under `tools/hil/embedding-runtime/`.
 - Needle evaluated with `--max-tokens 256` (128 truncated 8 envelopes).
 
-Results (emulator x86_64 CPU; Needle on host CPU for reference only):
+Results (emulator x86_64 CPU for embeddings; Needle host CPU and Laya host GPU
+are reference-only, not Android latencies):
 
 | Backend | Cal raw top-1 | Test raw top-1 | 98%-target operating point | Cold decision p50 / p95 | Query-only p50 | Size |
 |---|---|---|---|---|---:|---:|
 | EmbeddingGemma-300M-Q8_0 (768-d, goal-only) | 61% (71/116) | 70% (28/40) | margin≥0.10: 100% cal (48/48), 100% test (16/16), ~46% actionable coverage | 255 ms / 467 ms | 67 ms | 334 MB, ~518 MB PSS |
 | Qwen3-Embedding-0.6B-Q8_0 (1024-d, goal-only) | 38% | 38% (15/40) | margin≥0.23: 100% but only ~9% coverage | 2193 ms / 3375 ms | 1380 ms | 639 MB, ~1083 MB PSS |
 | Needle 3 `needle3.cact` (host, 256 tok) | 60% | 70% | none: wrong actions routinely report confidence ≈1.0, so no threshold reaches 98% with nonzero coverage | host total 397 ms / 792 ms (init 164 + complete 227) | n/a | 35 MB |
+| Laya multilingual (host RTX 4060 Ti, typed choice) | 40.5% (47/116) | 42.5% (17/40) | none: confident errors prevent 98% precision with nonzero coverage | host warm 53.2 ms / 55.3 ms; load 10.9 s | n/a | 644 MB checkpoint; LiteRT Android set ~679 MB |
 
 Notes:
 

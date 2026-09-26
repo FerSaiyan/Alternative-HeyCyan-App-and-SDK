@@ -9,6 +9,11 @@ name: Jev-like local agent CI
 # HIL layers are intentionally not triggered here.
 on:
   workflow_dispatch:
+    inputs:
+      artemis_serial:
+        description: 'Optional isolated emulator serial for Artemis black-box fixture test (never the licensed Tasker AVD)'
+        required: false
+        type: string
   push:
     branches:
       - jev-like-local-agent
@@ -32,6 +37,10 @@ on:
       - tools/hil/install.sh
       - tools/hil/run_instrumentation.sh
       - tools/hil/collect_diagnostics.sh
+      - tools/hil/run_artemis_fixture.py
+      - tools/hil/test_artemis_fixture.py
+      - tools/benchmarks/benchmark_laya_mobile_actions.py
+      - tools/benchmarks/test_benchmark_laya_mobile_actions.py
   pull_request:
     branches:
       - jev-like-local-agent
@@ -40,6 +49,10 @@ on:
       - android/CyanBridge/app/src/test/java/com/fersaiyan/cyanbridge/ai/decision/**
       - android/CyanBridge/app/src/androidTest/java/com/fersaiyan/cyanbridge/hil/JevLikeDecisionEmulatorTest.kt
       - tools/hil/run_jev_like_decision_ci.sh
+      - tools/hil/run_artemis_fixture.py
+      - tools/hil/test_artemis_fixture.py
+      - tools/benchmarks/benchmark_laya_mobile_actions.py
+      - tools/benchmarks/test_benchmark_laya_mobile_actions.py
 
 permissions:
   contents: read
@@ -87,6 +100,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         run: test -n "$GITHUB_TOKEN"
+
+      - name: Check model-free Laya gate and Artemis device/oracle contracts
+        run: |
+          python3 -m unittest discover -s tools/benchmarks -p 'test_benchmark_laya_mobile_actions.py'
+          python3 -m unittest discover -s tools/hil -p 'test_artemis_fixture.py'
 
       - name: Run Jev-like JVM unit tests (verbose)
         env:
@@ -165,6 +183,23 @@ jobs:
           '${{ steps.emulator.outputs.serial }}'
           emulator
           com.fersaiyan.cyanbridge.hil.JevLikeDecisionEmulatorTest
+
+      - name: Artemis external fixture smoke (explicit isolated emulator only)
+        if: github.event_name == 'workflow_dispatch' && inputs.artemis_serial != ''
+        env:
+          ARTEMIS_SERIAL: ${{ inputs.artemis_serial }}
+          ARTEMIS_BASE_URL: ${{ vars.CYANBRIDGE_ARTEMIS_BASE_URL || 'http://127.0.0.1:8000' }}
+          ARTEMIS_TOKEN: ${{ secrets.CYANBRIDGE_ARTEMIS_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Refuse to install anything before checking for the paid Tasker stack.
+          python3 tools/hil/run_artemis_fixture.py --serial "$ARTEMIS_SERIAL" --preflight-only
+          adb -s "$ARTEMIS_SERIAL" install -r android/CyanBridge/app/build/outputs/apk/debug/app-debug.apk
+          artemis_source="$(mktemp -d "${RUNNER_TEMP}/cyanbridge-artemis-XXXXXX")/source"
+          git clone --filter=blob:none https://github.com/google/artemis.git "$artemis_source"
+          git -C "$artemis_source" checkout 371aa6df56880643da57b30da936e9812fb0ec66
+          python3 tools/hil/run_artemis_fixture.py \
+            --serial "$ARTEMIS_SERIAL" --base-url "$ARTEMIS_BASE_URL" --client-src "$artemis_source"
 
       - name: Collect Jev-like diagnostics
         if: failure()

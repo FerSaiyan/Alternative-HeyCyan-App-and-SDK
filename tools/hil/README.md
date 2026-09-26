@@ -99,6 +99,29 @@ Recommended state once you create the dedicated Google Play AVD:
 - Configure either an on-device CyanBridge local model or Pro Subscription if those AI HIL layers should run.
 - Do not use `-wipe-data`, delete the AVD, or make CI recreate Google/account/app setup.
 
+## Opt-in Artemis black-box fixture (separate AVD)
+
+`jev-like-local-agent.yml` has an optional manual `artemis_serial` input. Use
+only a dedicated emulator without Tasker or AutoInput; the preflight refuses
+both packages before installing anything. The existing persistent Pixel_9a AVD
+is for Tasker HIL and is not an Artemis target. The workflow builds CyanBridge's
+debug APK, runs the model-free Jev tests, then installs the APK and uses the
+external Artemis daemon to tap one fixture button and type one literal. Host
+UI XML verifies `HIL_CLICK_COUNT=1` and the exact typed text. No Gmail/send
+action or paid-app login is part of this test.
+
+Provision an Artemis daemon separately with access to the dedicated serial and
+its own LLM provider credentials. The workflow uses `CYANBRIDGE_ARTEMIS_BASE_URL`
+(repository variable, defaults to loopback port 8000) and optional
+`CYANBRIDGE_ARTEMIS_TOKEN` secret. Artemis defaults to installing its own
+accessibility helper on the isolated AVD; set
+`ARTEMIS_HIERARCHY_BACKEND=uiautomator` and
+`ARTEMIS_HELPER_AUTO_INSTALL=false` on the daemon to opt out. No Artemis
+dependency or model weight is added to default CI; its dependency-free client
+is read from a pinned external checkout. This tests the *external UI/testing
+surface*, not the local-agent's decisions or approval policy. Keep Tasker HIL
+as the latter's end-to-end assertion.
+
 ## Physical phone setup
 
 - USB debugging enabled and permanently authorized for the lab PC.
