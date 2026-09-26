@@ -1,0 +1,11 @@
+CyanBridge
+
+CyanBridge-authored source code and documentation are licensed under the
+Apache License, Version 2.0.
+
+This repository also contains third-party code, SDKs, binaries, documentation,
+and model integrations that are not covered by the CyanBridge Apache-2.0
+license. Those materials keep their original licenses or vendor terms.
+
+See THIRD_PARTY_NOTICES.md and any license or copyright notice stored with the
+relevant component.
