@@ -203,4 +203,4 @@ CyanBridge-authored code and third-party material need to be treated separately.
 
 This repository contains or references vendor SDKs, decompiled vendor applications, protocol research, model files, and third-party components with their own terms. A root project license should not be read as relicensing those materials.
 
-See the repository's licensing documentation and the license files shipped with individual third-party components before redistributing a build.
+See [LICENSING.md](LICENSING.md) for the current license inventory, the Apache-2.0 recommendation for CyanBridge-owned code, and the third-party items that still need clean separation before a root license is added.
