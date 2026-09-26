@@ -2,10 +2,10 @@
 
 CyanBridge uses a mixed-license layout.
 
-The root [Apache License 2.0](LICENSE) applies to source code and documentation
-written for CyanBridge, unless a file, directory, submodule, or accompanying
-notice says otherwise. Third-party code and vendor material keep their original
-licenses or terms.
+The root [Apache License 2.0](LICENSE) applies to the original CyanBridge source
+code and documentation in this repository, unless a file, directory, submodule,
+or accompanying notice says otherwise. Third-party code and vendor material keep
+their original licenses or terms.
 
 ## How to read the repository
 
@@ -16,7 +16,7 @@ Use the most specific license notice available:
    component.
 3. Vendor SDKs, binaries, firmware, model weights, and vendor documentation are
    not relicensed by the root Apache-2.0 file.
-4. CyanBridge-authored material without a more specific notice is Apache-2.0.
+4. Original CyanBridge material without a more specific notice is Apache-2.0.
 
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists the main exceptions and
 where they live.
@@ -29,8 +29,8 @@ New CyanBridge-owned source should use:
 SPDX-License-Identifier: Apache-2.0
 ```
 
-Existing CyanBridge source is covered by the root Apache-2.0 license unless a
-more specific notice applies. Do not replace or remove upstream copyright and
+Existing original CyanBridge source is covered by the root Apache-2.0 license
+unless a more specific notice applies. Do not replace or remove upstream copyright and
 license headers when adapting third-party code.
 
 ## Third-party code
