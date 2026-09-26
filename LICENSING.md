@@ -1,80 +1,73 @@
-# CyanBridge licensing plan
+# CyanBridge licensing
 
-## Recommended project license
+CyanBridge uses a mixed-license layout.
 
-Use **Apache License 2.0** for CyanBridge-authored source code.
+The root [Apache License 2.0](LICENSE) applies to the original CyanBridge source
+code and documentation in this repository, unless a file, directory, submodule,
+or accompanying notice says otherwise. Third-party code and vendor material keep
+their original licenses or terms.
 
-Apache-2.0 fits CyanBridge better than MIT because it stays permissive for commercial and research use while adding an explicit patent grant. That is useful for a project centered on device protocols, mobile SDKs, local AI runtimes, and hardware integrations.
+## How to read the repository
 
-The root license should apply only to code and documentation that CyanBridge contributors have the right to license. It must not relicense vendor SDKs, third-party code, model weights, firmware, or documentation that carries separate terms.
+Use the most specific license notice available:
 
-## Why the root license is not being added yet
+1. A license or SPDX header on a file controls that file.
+2. A license stored inside a third-party directory or submodule controls that
+   component.
+3. Vendor SDKs, binaries, firmware, model weights, and vendor documentation are
+   not relicensed by the root Apache-2.0 file.
+4. Original CyanBridge material without a more specific notice is Apache-2.0.
 
-One current Android dependency needs to be resolved first:
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists the main exceptions and
+where they live.
 
-- `android/CyanBridge/app/libs/moyoung_glasses_sdk_0.0.7_20260624.aar` is linked directly into the Android app.
-- The upstream package is marked GPL-3.0 and the repository includes the GPL-3.0 text under `android/CyanBridge/third_party/moyoung_glasses_sdk/LICENSE`.
-- GPL-3.0 treats distribution of a linked combined work differently from permissive licenses. A root Apache-2.0 license would not remove those obligations.
-- The same app also links vendor SDK material whose redistribution/source terms are not documented in this repository. That combination needs a clean licensing boundary before CyanBridge claims one license for the distributable APK.
+## CyanBridge code
 
-The safest engineering path is to remove the GPL MoYoung AAR from the default distributable app, obtain a different license from its copyright holder, or move that integration behind a genuinely separate component whose licensing can be handled independently.
+New CyanBridge-owned source should use:
 
-## Current third-party inventory
+```text
+SPDX-License-Identifier: Apache-2.0
+```
 
-| Component | Current license / terms | CyanBridge use | Treatment |
-| --- | --- | --- | --- |
-| Meizu MYVU Client / `myvu-upstream` | MIT | Submodule and protocol implementation reference | Keep upstream MIT copyright and license notice |
-| OpenVision | MIT | Architecture and Meta integration reference | Preserve MIT notice for any copied/adapted code |
-| private-agent | No explicit root license found | Architectural inspiration for Local Agent | Treat as reference only; do not copy code without explicit permission/license |
-| Meta Wearables DAT | Meta Wearables Developer Terms | Meta Ray-Ban integration | Keep separate from the CyanBridge license and follow Meta's current developer terms |
-| HeyCyan Android SDK `glasses_sdk_20250723_v01.aar` | Vendor/proprietary terms not documented here | Android HeyCyan integration | Exclude from Apache-2.0 scope; confirm redistribution rights |
-| `ios/QCSDK.framework` and SDK guide/demo material | Vendor/proprietary terms not documented here | iOS HeyCyan integration/reference | Exclude from Apache-2.0 scope; confirm redistribution rights |
-| MoYoung/W620 AAR | GPL-3.0 upstream | Linked Android dependency | Resolve before applying a clean permissive license to the distributable app |
-| Downloadable AI models | Model-specific licenses | Local inference / vision | Keep model licenses separate and show them in the catalog/download UI |
+Existing original CyanBridge source is covered by the root Apache-2.0 license
+unless a more specific notice applies. Do not replace or remove upstream copyright and
+license headers when adapting third-party code.
 
-## Apache-2.0 and GPL-3.0
+## Third-party code
 
-Apache-2.0 code can be incorporated into a GPL-3.0 combined work, but the resulting combined work must satisfy GPL-3.0. The reverse is not a way to make GPL-3.0 code permissive.
+Third-party material stays under its upstream license. For example:
 
-That means CyanBridge can license its own source under Apache-2.0, but a distributed APK that directly links a GPL-3.0 AAR may still carry GPL-3.0 obligations for the combined work.
+- the MYVU submodule is MIT;
+- the MoYoung SDK is GPL-3.0;
+- Meta DAT is governed by Meta's developer terms;
+- HeyCyan/QCSDK vendor binaries and documentation are outside the root
+  Apache-2.0 grant;
+- model weights keep their model-specific licenses.
 
-This becomes especially important when the same APK also contains proprietary SDKs. A proprietary SDK license may impose conditions that cannot be satisfied at the same time as GPL-3.0. The MoYoung dependency should therefore be resolved before treating the current APK as a straightforward Apache-2.0 distribution.
+The root license is not a claim that CyanBridge owns those components.
 
-## Proposed repository structure
+## Source licenses and distributed apps are different questions
 
-After the GPL/vendor dependency issue is resolved:
+The mixed-license layout makes the source tree clear, but it does not override
+the obligations created when components are combined into an APK or another
+binary.
 
-1. Add a standard root `LICENSE` containing Apache License 2.0.
-2. Add `THIRD_PARTY_NOTICES.md` with the upstream project, copyright holder, license, source URL, and where it appears in CyanBridge.
-3. Add a short scope statement to the README:
-   - CyanBridge-authored source: Apache-2.0.
-   - Third-party/vendor material: its own terms.
-4. Keep third-party license files beside vendored components.
-5. Add `SPDX-License-Identifier: Apache-2.0` to new CyanBridge-authored source files where practical.
-6. Keep model licenses visible in the model catalog. Downloading a model should not imply that the model is Apache-2.0.
+In particular, the Android app currently links
+`moyoung_glasses_sdk_0.0.7_20260624.aar`, whose upstream package is GPL-3.0.
+Distribution of a build containing that component may carry GPL-3.0 obligations
+for the combined work. The same build also uses vendor SDK material with
+separate terms. Those obligations need to be satisfied independently of the
+Apache-2.0 license on CyanBridge-owned code.
 
-## Files that should not be covered by the future root Apache-2.0 license
+If the MoYoung integration is later removed from the default build, separately
+licensed, or moved behind a legally separate distribution boundary, update this
+file and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) to match the actual
+shipping architecture.
 
-At minimum:
+## Contributing
 
-- `android/glasses_sdk_20250723_v01.aar`
-- `android/CyanBridge/app/libs/glasses_sdk_20250723_v01.aar`
-- `android/CyanBridge/app/libs/moyoung_glasses_sdk_0.0.7_20260624.aar`
-- `android/CyanBridge/third_party/`
-- `android/Android_SDK_Development_Guide_CN.pdf`
-- `ios/QCSDK.framework/`
-- `ios/iOS_SDK_Development_Guide.pdf`
-- vendor demo/reference code where CyanBridge does not own the copyright
-- model weights and other downloaded artifacts
-
-The `android/CyanBridge/app/src/main/myvu-upstream` submodule remains under its upstream MIT license.
-
-## Next licensing cleanup
-
-Before publishing a root Apache-2.0 license:
-
-- decide whether MoYoung stays in the default APK;
-- verify redistribution rights for the HeyCyan Android and iOS SDK artifacts;
-- classify vendor demo/reference source directories;
-- generate a third-party notice inventory for binary releases;
-- then add Apache-2.0 to CyanBridge-owned code only.
+Contributions written for CyanBridge are expected to be compatible with
+Apache-2.0 unless the contribution is intentionally placed in a separately
+licensed component. If you bring in third-party code, keep its original license
+notice and document the source and license in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

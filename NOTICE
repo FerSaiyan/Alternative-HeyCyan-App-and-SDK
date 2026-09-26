@@ -1,0 +1,11 @@
+CyanBridge
+
+The Apache License, Version 2.0 applies to the original CyanBridge source code
+and documentation in this repository unless a more specific license notice
+applies.
+
+Third-party code, SDKs, binaries, documentation, and model artifacts keep their
+original licenses or vendor terms.
+
+See THIRD_PARTY_NOTICES.md and any license or copyright notice stored with the
+relevant component.

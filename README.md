@@ -199,8 +199,14 @@ Check each upstream project for its license and attribution requirements.
 
 ## Licensing
 
-CyanBridge-authored code and third-party material need to be treated separately.
+CyanBridge is a mixed-license repository. Original CyanBridge code and
+documentation are licensed under [Apache License 2.0](LICENSE) unless a more
+specific notice applies.
 
-This repository contains or references vendor SDKs, decompiled vendor applications, protocol research, model files, and third-party components with their own terms. A root project license should not be read as relicensing those materials.
+Third-party code, vendor SDKs, binaries, and model artifacts keep their original
+licenses or terms. The root Apache-2.0 license does not override those notices,
+and a distributed app may have obligations from linked components such as the
+GPL-3.0 MoYoung SDK.
 
-See [LICENSING.md](LICENSING.md) for the current license inventory, the Apache-2.0 recommendation for CyanBridge-owned code, and the third-party items that still need clean separation before a root license is added.
+See [LICENSING.md](LICENSING.md) for the repository rules and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the main exceptions.
