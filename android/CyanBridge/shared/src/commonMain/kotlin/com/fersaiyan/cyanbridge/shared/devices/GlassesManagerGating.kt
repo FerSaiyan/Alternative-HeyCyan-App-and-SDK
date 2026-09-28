@@ -49,6 +49,9 @@ object GlassesManagerGating {
                 base.add(Action.AI_WAKE_WORD_ROUTING)
                 base.add(Action.WIFI_ADB_DEBUG)
             }
+            DeviceClass.MENTRA_LIVE -> {
+                base.add(Action.STATUS_BATTERY)
+            }
             DeviceClass.META_RAYBAN -> {
                 base.add(Action.META_RAYBAN_CONTROLS)
                 base.add(Action.META_RAYBAN_REGISTRATION)

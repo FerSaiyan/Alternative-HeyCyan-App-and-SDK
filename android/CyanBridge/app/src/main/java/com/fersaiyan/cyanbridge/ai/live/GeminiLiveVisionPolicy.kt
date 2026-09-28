@@ -43,7 +43,8 @@ object GeminiLiveVisionPolicy {
         )
 
         DeviceClass.EYEVUE,
-        DeviceClass.TUNEBUDS -> GeminiLiveVisionCapabilities(
+        DeviceClass.TUNEBUDS,
+        DeviceClass.MENTRA_LIVE -> GeminiLiveVisionCapabilities(
             mode = GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL,
             audibleStillCapture = false,
             maxVideoFps = 0.0,

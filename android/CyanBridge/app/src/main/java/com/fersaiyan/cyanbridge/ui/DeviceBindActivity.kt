@@ -91,6 +91,7 @@ class DeviceBindActivity : BaseActivity() {
                     selectedClass = selectedDeviceClass,
                     onScan = ::startScan,
                     onPairMetaGlasses = ::openMetaPairing,
+                    onPairMentraGlasses = ::openMentraPairing,
                     onSelectDevice = { sharedDevice ->
                         val device = deviceList.firstOrNull {
                             it.macAddress.equals(sharedDevice.macAddress, ignoreCase = true)
@@ -120,6 +121,13 @@ class DeviceBindActivity : BaseActivity() {
 
     // BaseActivity invokes this after Compose installs its host view; no ViewBinding remains.
     override fun setupViews() = Unit
+
+    /** Mentra has its own SDK scanner; never hand these devices to Oudmon. */
+    private fun openMentraPairing() {
+        stopScan()
+        startActivity(Intent(this, MentraPairingActivity::class.java))
+        finish()
+    }
 
     /** Meta wearables are registered through DAT, never through the Oudmon Bluetooth connector. */
     private fun openMetaPairing() {
