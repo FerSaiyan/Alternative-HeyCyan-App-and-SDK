@@ -633,7 +633,13 @@ class MetaRaybanManager private constructor(context: Context) {
         videoJob?.cancel()
 
         streamStateJob = scope.launch {
+            var startedTransition = false
             currentStream.state.collect { state ->
+                // DAT starts a newly added stream in STOPPED. It is not a terminal
+                // event until this stream has actually begun starting; stopping it
+                // here closes the stream before start() can open the camera.
+                if (state == DatStreamState.STOPPED && !startedTransition) return@collect
+                if (state != DatStreamState.STOPPED) startedTransition = true
                 val nextState = state.toManagerState()
                 val previousState = _streamState.value
                 _streamState.value = nextState
@@ -996,25 +1002,34 @@ class MetaRaybanManager private constructor(context: Context) {
         currentSession.addDisplay().fold(
             onSuccess = { newDisplay ->
                 display = newDisplay
-                displayStateJob?.cancel()
-                displayStateJob = scope.launch {
-                    newDisplay.state.collect { state ->
-                        _isDisplayActive.value = state == DisplayState.STARTED
-                        if (state == DisplayState.STARTED) {
-                            displayStartedHandler?.invoke()
-                            displayStartedHandler = null
-                        }
-                        if (state == DisplayState.STOPPED || state == DisplayState.CLOSED) {
-                            stopDisplayInternal()
-                        }
-                    }
-                }
+                observeDisplay(newDisplay)
             },
             onFailure = { error, _ ->
                 displayStartedHandler = null
                 onError(reportFailure("addDisplay", error.description))
             },
         )
+    }
+
+    private fun observeDisplay(newDisplay: Display) {
+        displayStateJob?.cancel()
+        displayStateJob = scope.launch {
+            var startedTransition = false
+            newDisplay.state.collect { state ->
+                // addDisplay starts asynchronously; its initial STOPPED state
+                // must not close the display before DAT begins starting it.
+                if (state == DisplayState.STOPPED && !startedTransition) return@collect
+                if (state != DisplayState.STOPPED) startedTransition = true
+                _isDisplayActive.value = state == DisplayState.STARTED
+                if (state == DisplayState.STARTED) {
+                    displayStartedHandler?.invoke()
+                    displayStartedHandler = null
+                }
+                if (state == DisplayState.STOPPED || state == DisplayState.CLOSED) {
+                    stopDisplayInternal()
+                }
+            }
+        }
     }
 
     fun stopDisplay() {

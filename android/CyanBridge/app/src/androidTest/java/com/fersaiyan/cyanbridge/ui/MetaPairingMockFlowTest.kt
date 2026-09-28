@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -158,6 +159,19 @@ class MetaPairingMockFlowTest {
         assertEquals(false, mgr.debugMockEnabled.value)
         // After disable, manager should have reset mock device name
         assertTrue(mgr.selectedDeviceName.value == null || mgr.selectedDeviceName.value != "Mock Ray-Ban (Debug)")
+    }
+
+    @Test
+    fun oneShotPhotoStartsAndReleasesMockSessionForAssistantAndPlugins() {
+        val mgr = manager()
+        mgr.setDebugMockEnabled(true)
+
+        val photo = runBlocking { withTimeout(5_000) { mgr.capturePhotoOnce() } }
+
+        assertTrue(photo.bytes.isNotEmpty())
+        assertEquals("image/jpeg", photo.mimeType)
+        assertEquals(MetaRaybanManager.StreamState.STOPPED, mgr.streamState.value)
+        assertEquals(MetaRaybanManager.DeviceSessionState.IDLE, mgr.deviceSessionState.value)
     }
 
     @Test
