@@ -1,0 +1,29 @@
+{
+  "episodes": 9,
+  "decisions": 27,
+  "uniqueScreenSignatures": 12,
+  "operations": {
+    "TAP": 9,
+    "TYPE_LITERAL": 9,
+    "DONE": 9
+  },
+  "componentCount": 1,
+  "episodeComponents": [
+    [
+      "youtube_query_ancient_maps_collection",
+      "youtube_query_astronomy_sky_map",
+      "youtube_query_beginner_guitar_chords",
+      "youtube_query_bluetooth_audio_latency",
+      "youtube_query_ceramic_glazing_tutorial",
+      "youtube_query_cloud_formations",
+      "youtube_query_open_source_hardware",
+      "youtube_query_python_data_analysis",
+      "youtube_query_robotics_sensor_calibration"
+    ]
+  ],
+  "repeatedScreenCount": 3,
+  "minimumTwoFamiliesPerSplit": false,
+  "readyForIndependentSplit": false,
+  "readyForTaskerTraining": false,
+  "limitations": "Same app UI appearing in multiple goals is one screen family; Artemis is not Tasker."
+}

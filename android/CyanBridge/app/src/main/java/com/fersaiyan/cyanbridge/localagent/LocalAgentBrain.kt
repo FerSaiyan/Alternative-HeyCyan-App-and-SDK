@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.localagent
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.ai.router.AgentInferenceRouter
+import kotlinx.coroutines.CancellationException
 
 /**
  * "Brain" interface: takes an observation and returns a JSON plan.
@@ -58,9 +59,41 @@ class RemoteUiControlLocalAgentBrain(
             )
         }
 
+        if (YouTubePlaybackEvidence.playingRequestedVideo(taskState.goal, observation)) {
+            return LocalAgentBrainOutput(
+                actions = listOf(LocalAgentAction.Finish("Observed the requested video playing.")),
+                note = "current Tasker screen has requested channel, player and Pause video control",
+                isComplete = true,
+            )
+        }
+
+        if (taskState.emailSendApproved) {
+            return ApprovedEmailUiStep.next(taskState, observation)
+        }
+
         // Jev-like fast path: score enumerated legal actions with ~1 token.
         // Falls through to JSON generation for NEED_TEXT / open-ended params.
-        tryCandidateDecision(taskState, observation)?.let { return it }
+        tryCandidateDecision(context, taskState, observation)?.let { return it }
+
+        // The visible article is already grounded; use a small prose request
+        // instead of passing the full 20-action tool schema and screen dump to
+        // a 0.5B phone model. Recipient and exact subject remain code-checked,
+        // and SendEmail still enters CyanBridge's HIGH-risk approval path.
+        EmailGroundedDraft.from(taskState.goal, observation)?.let { request ->
+            val inference = AgentInferenceRouter.completeUiPlanning(
+                context = context,
+                sessionId = "local-agent-email-${taskState.startedAtMs}",
+                systemPrompt = request.prompt.system,
+                userPrompt = request.prompt.user,
+                imagePath = null,
+                allowRemoteImageUpload = false,
+                maxTokens = 200,
+            )
+            return LocalAgentBrainOutput(
+                actions = listOf(EmailGroundedDraft.parse(inference.content, request)),
+                note = "grounded email draft; approval required",
+            )
+        }
 
         val prompt = LocalAgentUiControlProtocol.buildPrompt(
             LocalAgentUiControlProtocol.StepContext(
@@ -118,6 +151,7 @@ class RemoteUiControlLocalAgentBrain(
     }
 
     private suspend fun tryCandidateDecision(
+        context: Context,
         taskState: LocalAgentTaskState,
         observation: LocalAgentObservation,
     ): LocalAgentBrainOutput? {
@@ -126,6 +160,14 @@ class RemoteUiControlLocalAgentBrain(
             ?: return null
         return try {
             val built = UiActionCandidateBuilder.build(taskState.goal, observation, taskState.previousActionResult)
+            LocalAgentShadowTrace.record(context, taskState, observation, built)
+            if (built.keys == listOf("press_back") &&
+                built.candidates.single().description == "Dismiss Chrome site information") {
+                return LocalAgentBrainOutput(
+                    actions = listOf(LocalAgentAction.GlobalBack),
+                    note = "dismiss Chrome site information and re-observe",
+                )
+            }
             if (built.candidates.size < 2) return null
             // An explicit leading "Open/Launch <app>" goal is safe to map deterministically.
             // Avoid spending a model call on it, and never let a weak classifier prematurely
@@ -144,18 +186,73 @@ class RemoteUiControlLocalAgentBrain(
                     isComplete = false,
                 )
             }
+            // When the current screen has exactly one grounded text-entry or first-result
+            // step, don't spend ~35s asking the small LLM to echo option A. The candidate
+            // is rebuilt from this observation and the selected node is resolved below.
+            if (taskState.consecutiveFailures == 0) {
+                val nextIndex = when {
+                    built.keys.firstOrNull() == "type_text" &&
+                        (built.typeSpans.firstOrNull()?.length ?: 0) >= 3 &&
+                        taskState.goal.contains(Regex("(?i)\\bsearch\\b.{0,40}\\bfor\\b")) -> 0
+                    observation.packageName == "com.android.chrome" &&
+                        taskState.goal.contains(Regex("(?i)\\bsearch\\b.{0,40}\\bfor\\b")) &&
+                        built.typeSpans.firstOrNull().orEmpty().length >= 3 &&
+                        observation.screenText.orEmpty().contains(
+                            built.typeSpans.first(), ignoreCase = true,
+                        ) &&
+                        observation.screenSnapshot?.nodes?.any { node ->
+                            node.viewId.substringAfterLast('/') == "query"
+                        } == true ->
+                        built.keys.indices.firstOrNull { index ->
+                            built.keys[index] == "click_node" &&
+                                observation.screenSnapshot?.nodes?.any { node ->
+                                    node.index == built.nodeIndices[index] &&
+                                        node.text.equals("Search", ignoreCase = true)
+                                } == true
+                        } ?: -1
+                    taskState.goal.contains(Regex("(?i)\\bfirst\\s+result\\b")) ->
+                        built.keys.indices.firstOrNull { index ->
+                            built.keys[index] == "click_node" &&
+                                observation.screenSnapshot?.nodes?.any { node ->
+                                    node.index == built.nodeIndices[index] &&
+                                        node.text.contains("first result", ignoreCase = true)
+                                } == true
+                        } ?: -1
+                    else -> -1
+                }
+                val suggestionIndex = if (observation.packageName == "com.google.android.youtube" &&
+                    taskState.goal.contains(Regex("(?i)\\bsearch\\b.{0,40}\\bfor\\b"))) {
+                    val target = built.typeSpans.firstOrNull()?.trim()
+                    built.keys.indices.firstOrNull { index ->
+                        built.keys[index] == "click_node" &&
+                            observation.screenSnapshot?.nodes?.any { node ->
+                                node.index == built.nodeIndices[index] &&
+                                    node.text.trim().equals(target, ignoreCase = true)
+                            } == true
+                    } ?: -1
+                } else -1
+                val selectedIndex = if (nextIndex >= 0) nextIndex else suggestionIndex
+                if (selectedIndex >= 0) {
+                    val actions = mapCandidateKeyToActions(
+                        selectedIndex, built.keys[selectedIndex], taskState, observation, built,
+                    )
+                    if (actions != null) return LocalAgentBrainOutput(
+                        actions = actions,
+                        note = "grounded current-screen action",
+                    )
+                }
+            }
+            // A grounded reading/summary step needs prose. Go directly to the local
+            // planner rather than letting the single-letter model choose a headline tap.
+            if (built.keys.firstOrNull() == "detailed_planner" &&
+                built.candidates.first().description.contains("grounded final answer")
+            ) return null
             val screenSummary = observation.screenSnapshot?.toCompressedPromptText(taskState.goal)
                 ?: observation.screenText.orEmpty()
             // SingleTokenDecisionEngine adds the bounded options and letter-only instructions.
             // Keep this state compact enough for CPU-first Android inference.
-            val state = buildString {
-                appendLine("Phone automation goal: ${taskState.goal.trim().take(500)}")
-                taskState.previousActionResult?.takeIf { it.isNotBlank() }?.let {
-                    appendLine("Previous result: ${it.trim().take(240)}")
-                }
-                appendLine("Current screen:")
-                append(screenSummary.trim().take(1_200))
-            }.trim()
+            val state = UiActionDecisionState.build(taskState.goal, observation, screenSummary,
+                taskState.previousActionResult)
             android.util.Log.d(TAG, "Jev-like UI candidates=${built.candidates.map { it.label to it.description }} spans=${built.typeSpans}")
             val decision = engine.choose(state, built.candidates, debugTag = "local-agent-ui")
             android.util.Log.i(TAG, "Jev-like UI choice=${decision.label} conf=${decision.confidence} raw='${decision.rawOutput.take(200)}'")
@@ -171,7 +268,9 @@ class RemoteUiControlLocalAgentBrain(
                     isComplete = actions.lastOrNull() is LocalAgentAction.Finish,
                 )
             }
-        } catch (t: Throwable) {
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (t: Exception) {
             android.util.Log.w(TAG, "Jev-like UI candidate path failed, falling back to JSON: ${t.message}")
             null
         }

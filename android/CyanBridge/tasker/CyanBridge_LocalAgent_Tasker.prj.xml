@@ -130,11 +130,14 @@ for (var i = 0; i &lt; count &amp;&amp; i &lt; 160; i++) {
     nodes.push({
         index: i,
         depth: 0,
-        text: String(texts[i] || ""),
+        // Gmail's compose accessibility tree can contain long message bodies.
+        // Bound every field before serializing the broadcast response; a large
+        // binder envelope can vanish without a callback to CyanBridge.
+        text: String(texts[i] || "").slice(0, 240),
         content_description: "",
         hint_text: "",
         class_name: "",
-        view_id: String(ids[i] || ""),
+        view_id: String(ids[i] || "").slice(0, 160),
         clickable: false,
         editable: false,
         scrollable: false,
@@ -145,8 +148,9 @@ for (var i = 0; i &lt; count &amp;&amp; i &lt; 160; i++) {
         bounds: {left:x, top:y, right:x, bottom:y}
     });
 }
-var summary = texts.filter(function(v){ return String(v || "").trim().length &gt; 0; })
-    .join("\n").slice(0, 12000);
+var summary = texts.slice(0, 160).map(function(v){ return String(v || "").slice(0, 240); })
+    .filter(function(v){ return v.trim().length &gt; 0; })
+    .join("\n").slice(0, 6000);
 var observation = {
     created_at_ms: Date.now(),
     package_name: pkg,
@@ -260,7 +264,14 @@ try {
             recordBuiltin(composeSMS(String(action.number || ""), String(action.message || "")), "send_sms:composer_opened", "tasker_sms_composer_failed");
             break;
         case "send_email":
-            recordBuiltin(composeEmail(String(action.to || ""), String(action.subject || ""), String(action.body || "")), "send_email:composer_opened", "tasker_email_composer_failed");
+            // composeEmail() uses generic ACTION_SEND and can choose Gmail's
+            // share deep-link handler, which immediately closes without a draft.
+            // SENDTO mailto: resolves to the actual email composer on Android.
+            var emailUri = "mailto:" + encodeURIComponent(String(action.to || ""))
+                + "?subject=" + encodeURIComponent(String(action.subject || ""))
+                + "&amp;body=" + encodeURIComponent(String(action.body || ""));
+            recordBuiltin(sendIntent("android.intent.action.SENDTO", "activity", undefined, undefined, undefined, emailUri, undefined, undefined),
+                "send_email:composer_requested", "tasker_email_composer_failed");
             break;
         case "set_alarm":
             recordBuiltin(setAlarm(Number(action.hour || 0), Number(action.minute || 0), String(action.label || ""), true), "set_alarm:clock_opened", "tasker_set_alarm_failed");

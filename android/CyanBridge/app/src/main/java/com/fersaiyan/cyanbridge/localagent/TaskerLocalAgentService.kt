@@ -287,6 +287,9 @@ class TaskerLocalAgentService : Service() {
                         when (awaitApprovalConversation(goal, action)) {
                             ApprovalOutcome.APPROVED -> {
                                 resultParts += "${action.javaClass.simpleName}: approved_and_executed_through_tasker"
+                                if (action is LocalAgentAction.SendEmail) {
+                                    taskState = taskState.copy(emailSendApproved = true)
+                                }
                                 requiresFreshObservation = true
                             }
                             ApprovalOutcome.REJECTED -> {
@@ -312,6 +315,12 @@ class TaskerLocalAgentService : Service() {
                             backend.execute(applicationContext, action)
                         } ?: LocalAgentBackendExecutionResult(false, "tasker_execution_timeout")
                         resultParts += "${action.javaClass.simpleName}: ${execution.detail}"
+                        if (execution.success && output.note == ApprovedEmailUiStep.SEND_TAP_NOTE) {
+                            taskState = taskState.copy(emailUiSendAttempted = true)
+                        }
+                        if (execution.success && output.note == ApprovedEmailUiStep.CHOOSE_GMAIL_NOTE) {
+                            taskState = taskState.copy(emailChooserGmailSelected = true)
+                        }
                         if (!execution.success) {
                             stepFailed = true
                             val recovery = LocalAgentRecoveryEngine.diagnose(
@@ -511,7 +520,7 @@ class TaskerLocalAgentService : Service() {
         private const val NOTIFICATION_ID = 55244
         private const val OBSERVATION_TIMEOUT_MS = 10_000L
         private const val EXECUTION_TIMEOUT_MS = 30_000L
-        private const val BRAIN_TIMEOUT_MS = 60_000L
+        private const val BRAIN_TIMEOUT_MS = 90_000L
         private const val APPROVAL_TIMEOUT_MS = 10 * 60_000L
         private const val CLARIFICATION_TIMEOUT_MS = 60_000L
         private const val RETRY_DELAY_MS = 1_000L

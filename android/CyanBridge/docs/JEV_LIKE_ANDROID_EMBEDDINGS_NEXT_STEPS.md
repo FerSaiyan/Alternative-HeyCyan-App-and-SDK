@@ -71,6 +71,18 @@ Relevant upstream documentation:
 
 ## Laya real-checkpoint feasibility result
 
+For the newer comparison of **actual Tasker UI states** with a compact
+current-step/semantic-tool representation, the upstream browser-agent and
+Needle tool-design findings, and the limits of that shadow experiment, see
+[`TASKER_SMALL_MODEL_CONTEXT.md`](TASKER_SMALL_MODEL_CONTEXT.md). Its host
+replay does not replace the frozen-corpus numbers below or establish Android
+end-to-end reliability.
+An actionable model-specific training plan with official Laya/Needle data
+formats and the Ship With Jev browser patterns is in
+[`LAYA_NEEDLE_PHONE_TRAINING.md`](LAYA_NEEDLE_PHONE_TRAINING.md).
+The local synthetic training pilot and its real-Tasker shadow countercheck are
+recorded in [`training/phone_ui_synthetic_v1/README.md`](../training/phone_ui_synthetic_v1/README.md).
+
 The Laya repository and actual public checkpoint were tested, rather than
 relying only on its published benchmark. Source was inspected at commit
 `1161ff639204388b1e576a7c5d56a0f6df470455`; checkpoint metadata reported

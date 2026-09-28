@@ -79,7 +79,49 @@ The emulator is cold-booted with `-no-snapshot` when CI must start it, but its u
    - A literal production reply `yes` is routed through `LocalAgentController` -> `TaskerLocalAgentService` -> `LocalAgentApprovalCoordinator` before the queued action reaches Tasker.
    - After approval, CyanBridge re-observes Gmail; Tasker executes the visible Send interaction, and the planner may not claim completion until the compose state is gone / send state is observed.
    - Because sender and recipient are the same lab account, the test waits for its unique `CB-HIL-<timestamp>` subject to become visible in Gmail.
-   - If Pro Subscription is selected in CyanBridge, the Pro planner is allowed; otherwise the test requires the on-device local-model path.
+- If Pro Subscription is selected in CyanBridge, the Pro planner is allowed; otherwise the test requires the on-device local-model path.
+ - To explicitly exercise the cloud Pro planner in this test or the embedding-gated YouTube HIL, set `CYANBRIDGE_HIL_PRO_PLANNER=true` when invoking `run_instrumentation.sh`. This requires a linked account token and a fresh server-verified active subscription; the test fails rather than silently falling back to CPU inference. The YouTube test still uses the on-device Gemma embedding gate, but its LLM fallback routes through Pro. Restore the previous provider setting after each run.
+
+### Opt-in Laya / Needle live-state shadow comparison
+
+`CYANBRIDGE_HIL_SHADOW=true` on the YouTube HIL enables a debug-only
+`JevShadow` log of bounded choices built from real Tasker observations. The test
+restores the previous trace preference. With provisioned, external checkpoints:
+
+```bash
+CYANBRIDGE_HIL_LOCAL_AI=true CYANBRIDGE_HIL_YOUTUBE=true \
+  CYANBRIDGE_HIL_PRO_PLANNER=true CYANBRIDGE_HIL_SHADOW=true \
+  bash tools/hil/run_instrumentation.sh emulator-5554 hardware \
+  com.fersaiyan.cyanbridge.hil.LocalAiTaskerEmbeddingYouTubeHilTest
+adb -s emulator-5554 logcat -d -v brief -s JevShadow:I '*:S' \
+  > /tmp/opencode/jev-live-shadow-trace.log
+NEEDLE_TELEMETRY=0 DO_NOT_TRACK=1 /tmp/opencode/laya-export-venv/bin/python \
+  tools/benchmarks/compare_laya_needle_live_shadow.py \
+  --trace /tmp/opencode/jev-live-shadow-trace.log \
+  --output /tmp/opencode/jev-live-shadow-results.json
+```
+
+The host comparison cannot execute device actions; it reports hypothetical
+model choices and host latency, not Laya/Needle end-to-end success or Android
+latency. Needle's published Android runtime is ARM64-only, whereas the licensed
+Pixel_9a AVD is x86_64. The current models made wrong or structurally invalid
+choices on actual YouTube states, so do not grant them action authority.
+For a **separate, read-only** test of a one-step frame with semantic tools and
+screen noise removed, add `--frame compact` and use another output path. This
+frame is a YouTube-specific research probe; most replayed steps have only one
+actionable choice. Design, upstream documentation, measurements and limitations:
+[`android/CyanBridge/docs/TASKER_SMALL_MODEL_CONTEXT.md`](../../android/CyanBridge/docs/TASKER_SMALL_MODEL_CONTEXT.md).
+The separate, opt-in **synthetic fine-tuning pilot** for Laya and Needle is
+documented under [`android/CyanBridge/training/phone_ui_synthetic_v1/README.md`](../../android/CyanBridge/training/phone_ui_synthetic_v1/README.md).
+Its generated rows are not Tasker HIL evidence; compare the real-state shadow
+reports before using a trained checkpoint for anything beyond research.
+
+For the email bottleneck, `TaskerGmailComposerObserveHilTest` is an opt-in,
+read-only check. Open a harmless `mailto:probe@example.invalid` Gmail draft
+with subject `CB-HIL-READONLY-QUERY`, then invoke its instrumentation with
+`-e hil_gmail_observe true`. It never taps Send. A timeout here blocks a
+real-email HIL retry; an already-approved `SendEmail` composer handoff is not
+proof that Gmail sent or delivered the message.
 
 6. **Optional HeyCyan HIL**
    - Invokes the real Visual Diary periodic Tasker handler on the physical phone.
@@ -121,6 +163,34 @@ dependency or model weight is added to default CI; its dependency-free client
 is read from a pinned external checkout. This tests the *external UI/testing
 surface*, not the local-agent's decisions or approval policy. Keep Tasker HIL
 as the latter's end-to-end assertion.
+
+An opt-in **real-emulator dataset** uses Artemis's device driver and
+UIAutomatorClient on the fresh `CyanBridge_Artemis_Data` AVD. Its collection
+commands, verified outcome contract and source limitations are in
+[`android/CyanBridge/training/artemis_real_v1/README.md`](../../android/CyanBridge/training/artemis_real_v1/README.md).
+This external test collection does not install Artemis on the authenticated
+`Pixel_9a` or replace Tasker/AutoInput at runtime.
+
+The separate opt-in Settings parity probe uses **Tasker/AutoInput** on the
+authenticated HIL AVD. It opens Settings HOME, requests a real observation and
+reports whether the visible `Network & internet` control survives CyanBridge's
+eight-candidate filter. It never sends email or installs Artemis on that AVD:
+
+```bash
+CYANBRIDGE_HIL_ARTEMIS_PARITY=true bash tools/hil/run_instrumentation.sh \
+  emulator-5562 hardware \
+  com.fersaiyan.cyanbridge.hil.TaskerSettingsArtemisParityHilTest
+```
+
+For a distinct observed Tasker tap plus a fresh post-action observation, use
+`TaskerSettingsEpisodeHilTest`. Its allowlisted diagnostic export and an
+independent ADB hierarchy oracle are documented in
+[`android/CyanBridge/training/tasker_real_v1/README.md`](../../android/CyanBridge/training/tasker_real_v1/README.md).
+Pin the emulator by AVD name: in its unpinned mode,
+`run_instrumentation.sh` can recover an offline serial by starting a different
+configured AVD. With `CYANBRIDGE_HIL_ARTEMIS_PARITY=true`, it now defaults to
+`CYANBRIDGE_HIL_EXPECT_AVD=Pixel_9a`, checks AVD identity before and after the
+test, and fails closed if the pinned AVD goes offline.
 
 ## Physical phone setup
 

@@ -56,6 +56,20 @@ class LocalAgentEmailApprovalHilTest {
         )
 
         val dao = MyApplication.database.pendingActionDao()
+        // A failed HIL may leave its own unapproved draft behind. Retire only
+        // those uniquely tagged self-test drafts; never touch user pending actions
+        // or any approved/executed action (which may already have sent).
+        runBlocking {
+            dao.getActionsByStatus("pending")
+                .filter { it.source == "tasker_agent" &&
+                    it.actionJson.contains("CyanBridge HIL smartglasses summary CB-HIL-") &&
+                    it.actionJson.contains(RECIPIENT, ignoreCase = true) }
+                .forEach { draft ->
+                    draft.status = "rejected"
+                    draft.result = "abandoned_hil_draft_before_approval"
+                    dao.update(draft)
+                }
+        }
         val preexistingPending = runBlocking { dao.getActionsByStatus("pending") }
         assertTrue(
             "Dedicated HIL target has pre-existing pending actions; resolve them before running a real-send test: $preexistingPending",
@@ -70,10 +84,14 @@ class LocalAgentEmailApprovalHilTest {
         val previousRemoteScreenshotUpload = RuntimePrefs.isRemoteScreenshotUploadEnabled(context)
         val previousEmbeddingEnabled = AutomationPrefs.isEmbeddingDecisionEnabled(context)
 
-        val providerForTest = if (previousProvider == AgentProviderType.PRO_SUBSCRIPTION) {
+        val providerForTest = if (HilTestSupport.proPlannerRequired ||
+            previousProvider == AgentProviderType.PRO_SUBSCRIPTION) {
             AgentProviderType.PRO_SUBSCRIPTION
         } else {
             AgentProviderType.LOCAL_AGENT
+        }
+        if (providerForTest == AgentProviderType.PRO_SUBSCRIPTION) {
+            HilTestSupport.requireVerifiedProPlanner(context)
         }
         if (providerForTest == AgentProviderType.LOCAL_AGENT) {
             HilTestSupport.requireOrSkip(
@@ -89,6 +107,14 @@ class LocalAgentEmailApprovalHilTest {
         val runTag = "CB-HIL-${System.currentTimeMillis()}"
         val subject = "CyanBridge HIL smartglasses summary $runTag"
         val goal = buildGoal(subject)
+        val reached = linkedSetOf<String>()
+        fun stage(name: String) {
+            if (reached.add(name)) {
+                val event = "JEV_HIL_STAGE email=$name reached=$reached"
+                println(event)
+                android.util.Log.i("JevHilStage", event)
+            }
+        }
 
         HilNewsFixtureServer().use { newsFixture ->
         ActivityScenario.launch(HilFixtureActivity::class.java).use {
@@ -127,6 +153,7 @@ class LocalAgentEmailApprovalHilTest {
                     "Tasker did not observe the deterministic news fixture: ${fixtureObservation?.screenText}",
                     fixtureObservation?.screenText?.contains(SEARCH_MARKER) == true,
                 )
+                stage("fixture_observed")
 
                 ContextCompat.startForegroundService(
                     context,
@@ -137,13 +164,16 @@ class LocalAgentEmailApprovalHilTest {
                 )
 
                 val pending = awaitEmailApproval(context, subject)
+                stage("send_approval_requested")
                 val preparedEmail = extractPreparedEmail(pending)
                 assertEquals("Planner prepared the email for the wrong recipient", RECIPIENT, preparedEmail.to.trim())
                 assertEquals("Planner changed the unique HIL subject", subject, preparedEmail.subject.trim())
                 assertReasonableGroundedBody(preparedEmail.body)
+                stage("grounded_draft_verified")
 
                 val initialVoicePrompt = awaitVoicePrompt(context, preparedEmail)
                 assertReasonableReadback(initialVoicePrompt, preparedEmail)
+                stage("spoken_readback_verified")
 
                 val beforeApproval = runBlocking { TaskerExecutionBackend.observe(context) }
                 assertNotNull("Tasker observation unavailable while waiting for voice approval", beforeApproval)
@@ -173,6 +203,7 @@ class LocalAgentEmailApprovalHilTest {
                         clarificationPrompt.contains("email", ignoreCase = true) ||
                         clarificationPrompt.contains("send", ignoreCase = true),
                 )
+                stage("ambiguity_kept_pending")
                 println("CYANBRIDGE_EMAIL_HIL clarification_prompt=$clarificationPrompt")
 
                 // The only authorization signal in this HIL is this explicit affirmative reply.
@@ -185,6 +216,7 @@ class LocalAgentEmailApprovalHilTest {
                     executedApproval.result?.contains("SendEmail") == true &&
                         !executedApproval.result.orEmpty().contains("failed", ignoreCase = true),
                 )
+                stage("approved_action_executed")
 
                 val sentObservation = awaitSelfDeliveredMessage(context, subject)
                 val sentText = sentObservation.screenText.orEmpty().lowercase()
@@ -197,12 +229,30 @@ class LocalAgentEmailApprovalHilTest {
                     "The test still appears to be in the Gmail compose screen rather than after send: ${sentObservation.screenText}",
                     looksLikeComposer(sentObservation.screenText.orEmpty()),
                 )
+                stage("self_delivery_observed")
 
                 val finalStatus = awaitTerminalStatus(context)
                 val finalError = RuntimePrefs.getLastError(context)
                 assertTrue("Local Agent did not report completion after the email send: $finalStatus", finalStatus.isNotBlank())
                 assertTrue("Local Agent finished with an error: $finalError", finalError == "(none)")
+                stage("agent_finished")
+            } catch (failure: Throwable) {
+                throw AssertionError(
+                    "Email HIL reached=$reached status=${RuntimePrefs.getStatus(context)} " +
+                        "error=${RuntimePrefs.getLastError(context)}: ${failure.message}",
+                    failure,
+                )
             } finally {
+                runBlocking {
+                    dao.getActionsByStatus("pending")
+                        .filter { it.source == "tasker_agent" && it.actionJson.contains(subject) &&
+                            it.actionJson.contains(RECIPIENT, ignoreCase = true) }
+                        .forEach { draft ->
+                            draft.status = "rejected"
+                            draft.result = "hil_ended_before_approval"
+                            dao.update(draft)
+                        }
+                }
                 context.startService(
                     Intent(context, TaskerLocalAgentService::class.java).apply {
                         action = LocalAgentIntents.ACTION_STOP
@@ -379,7 +429,11 @@ class LocalAgentEmailApprovalHilTest {
             }
 
             val error = RuntimePrefs.getLastError(context)
-            if (error != "(none)" && error.isNotBlank()) {
+            // Tasker/AutoInput can time out during Android's chooser -> Gmail
+            // transition. The service retries observation; retain the strict
+            // two-minute Gmail delivery oracle rather than failing on one miss.
+            if (error != "(none)" && error.isNotBlank() &&
+                error != "tasker_observation_failed_or_timed_out") {
                 throw AssertionError(
                     "Local Agent failed after email approval: status=${RuntimePrefs.getStatus(context)} error=$error observation=$text",
                 )
@@ -409,7 +463,8 @@ class LocalAgentEmailApprovalHilTest {
         return status
     }
 
-    private fun looksLikeComposer(text: String): Boolean {        val normalized = text.lowercase()
+    private fun looksLikeComposer(text: String): Boolean {
+        val normalized = text.lowercase()
         return normalized.contains(RECIPIENT) &&
             (normalized.contains("send") || normalized.contains("subject") || normalized.contains("compose"))
     }

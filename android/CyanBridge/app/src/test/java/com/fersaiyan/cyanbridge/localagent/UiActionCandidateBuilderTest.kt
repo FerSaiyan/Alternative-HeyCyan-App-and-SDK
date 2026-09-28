@@ -200,6 +200,53 @@ class UiActionCandidateBuilderTest {
         assertEquals(LocalAgentAction.ClickCoord(400, 460), action)
     }
 
+    @Test fun `typed search excludes voice shortcut but keeps current screen search target`() {
+        // A live YouTube run tapped Voice Search while trying to enter a literal query.
+        // The fresh action set must contain the grounded text-search target, not a
+        // shortcut that changes the task into a microphone interaction.
+        val home = obs(
+            node(1, "Home", clickable = false),
+            node(2, "Shorts", clickable = false),
+            node(3, "Search by voice", clickable = false),
+            node(4, "Search", clickable = false).copy(bounds = LocalAgentNodeBounds(300, 80, 500, 160)),
+            screenText = "YouTube Home Search by voice Search Shorts",
+        )
+        val goal = "Open YouTube, search for Linus Tech Tips, open a result and start playback"
+        val first = UiActionCandidateBuilder.build(goal, home)
+        assertTrue(first.candidates.any { it.description == "Tap \"Search\" (node 4)" })
+        assertTrue(first.candidates.none { it.description.contains("voice", ignoreCase = true) })
+
+        // A new observation owns the action space. A saved index/coordinate from
+        // the home screen must not be reused after the search field appears.
+        val searchField = LocalAgentScreenNode(
+            index = 8, depth = 0, text = "", contentDescription = "", className = "",
+            viewId = "com.google.android.youtube:id/search_edit_text",
+            isClickable = false, isEditable = false, isScrollable = false,
+            bounds = LocalAgentNodeBounds(100, 220, 900, 320),
+        )
+        val current = obs(searchField, node(4, "Search by voice", clickable = false))
+        val second = UiActionCandidateBuilder.build(goal, current)
+        assertEquals("type_text", second.keys.first())
+        assertEquals(8, second.nodeIndices.first())
+        val actions = RemoteUiControlLocalAgentBrain().mapCandidateKeyToActions(
+            0, second.keys.first(),
+            LocalAgentTaskState(goal = goal, maxSteps = 10, startedAtMs = 1L),
+            current, second,
+        )
+        assertEquals(
+            listOf(LocalAgentAction.ClickCoord(500, 270), LocalAgentAction.TypeText("Linus Tech Tips", null)),
+            actions,
+        )
+    }
+
+    @Test fun `explicit voice search still offers the voice control`() {
+        val built = UiActionCandidateBuilder.build(
+            "Open YouTube and search by voice for Linus Tech Tips",
+            obs(node(3, "Search by voice", clickable = false), node(4, "Search", clickable = false)),
+        )
+        assertTrue(built.candidates.any { it.description.contains("Search by voice") })
+    }
+
     @Test fun `type candidate focuses its exact node before typing`() {
         val editable = LocalAgentScreenNode(
             index = 7,
@@ -235,6 +282,65 @@ class UiActionCandidateBuilderTest {
             ),
             actions,
         )
+    }
+
+    @Test fun `results page suppresses address-bar retyping and leads with first result`() {
+        // Live email failure 2026-09-26: on the fixture results page the agent
+        // retyped the query into Chrome's omnibox (node 10, "127.0.0.1:44011"),
+        // navigated away to a live search, and then looped on repeated taps.
+        // A fresh observation must offer the observed result, not the address bar.
+        val addressBar = LocalAgentScreenNode(
+            index = 10, depth = 0, text = "127.0.0.1:44011", contentDescription = "",
+            className = "", viewId = "com.android.chrome:id/url_bar",
+            isClickable = false, isEditable = false, isScrollable = false,
+            bounds = LocalAgentNodeBounds(100, 220, 900, 320),
+        )
+        val observation = obs(
+            node(3, "Cobalt Horizon 88417 smartglasses — first result", clickable = false),
+            node(4, "Unrelated second result", clickable = false),
+            addressBar,
+            packageName = "com.android.chrome",
+            screenText = "News results Cobalt Horizon 88417 smartglasses — first result",
+            textSummary = "resultsPage",
+        )
+        val built = UiActionCandidateBuilder.build(
+            "Open Chrome. On the CyanBridge HIL Search page, search for 'latest smartglasses news', " +
+                "open the first result, read only the first visible article without scrolling, " +
+                "then finish with a concise summary of what the page says.",
+            observation,
+        )
+
+        assertTrue("address-bar retype must be suppressed: ${built.candidates.map { it.description }}", "type_text" !in built.keys)
+        assertTrue(
+            "first result must lead: ${built.candidates.map { it.description }}",
+            built.candidates.first().description.contains("Cobalt Horizon 88417"),
+        )
+    }
+
+    @Test fun `article page suppresses address-bar typing and leads with grounded planner`() {
+        val addressBar = LocalAgentScreenNode(
+            index = 6, depth = 0, text = "127.0.0.1:35725", contentDescription = "",
+            className = "", viewId = "com.android.chrome:id/url_bar",
+            isClickable = false, isEditable = false, isScrollable = false,
+            bounds = LocalAgentNodeBounds(100, 220, 900, 320),
+        )
+        val observation = obs(
+            node(2, "CYANBRIDGE_HIL_NEWS_ARTICLE_73551 — Cobalt Horizon 88417", clickable = false),
+            node(3, "The Cobalt Horizon 88417 smartglasses pack 42 sensors and run for eight hours on a single charge.", clickable = false),
+            addressBar,
+            packageName = "com.android.chrome",
+            screenText = "CYANBRIDGE_HIL_NEWS_ARTICLE_73551 Cobalt Horizon 88417 42 sensors eight hours. Latest details. Smartglasses review. News update.",
+            textSummary = "articlePage",
+        )
+        val built = UiActionCandidateBuilder.build(
+            "Open Chrome. On the CyanBridge HIL Search page, search for 'latest smartglasses news', " +
+                "open the first result, read only the first visible article without scrolling, " +
+                "then finish with a concise summary of what the page says.",
+            observation,
+        )
+
+        assertTrue("type_text must not navigate away from article: ${built.candidates.map { it.description }}", "type_text" !in built.keys)
+        assertEquals("detailed_planner", built.keys.first())
     }
 
     @Test fun `populated search form does not promote grounded-answer planner`() {

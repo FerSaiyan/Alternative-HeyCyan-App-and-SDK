@@ -1,0 +1,22 @@
+{
+  "episodes": 5,
+  "decisions": 10,
+  "uniqueScreenSignatures": 6,
+  "operations": {
+    "TAP": 5,
+    "DONE": 5
+  },
+  "componentCount": 1,
+  "episodeComponents": [
+    [
+      "clock_tab_alarm",
+      "clock_tab_bedtime",
+      "clock_tab_clock",
+      "clock_tab_stopwatch",
+      "clock_tab_timer"
+    ]
+  ],
+  "repeatedScreenCount": 1,
+  "readyForIndependentSplit": false,
+  "limitations": "Same app UI appearing in multiple goals is one screen family; Artemis is not Tasker."
+}

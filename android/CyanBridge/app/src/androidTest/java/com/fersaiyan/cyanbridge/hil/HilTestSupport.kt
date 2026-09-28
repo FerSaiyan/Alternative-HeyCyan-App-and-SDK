@@ -36,6 +36,20 @@ object HilTestSupport {
     val emailSendRequired: Boolean
         get() = args.getString("hil_email_send", "false").toBoolean()
 
+    val proPlannerRequired: Boolean
+        get() = args.getString("hil_pro_planner", "false").toBoolean()
+
+    fun requireVerifiedProPlanner(context: Context) {
+        val tokenPresent = com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
+            .getApiToken(context).isNotBlank()
+        assertTrue("Pro planner requested but this CyanBridge install has no linked account token", tokenPresent)
+        val status = com.fersaiyan.cyanbridge.agent.ProSubscriptionVerifier.verifyNow(
+            context, strictForTesting = true,
+        )
+        assertTrue("Pro planner requested but server subscription is inactive: ${status.message}",
+            status.active && status.source == "server")
+    }
+
     fun packageInstalled(context: Context, packageName: String): Boolean = runCatching {
         @Suppress("DEPRECATION")
         context.packageManager.getPackageInfo(packageName, 0)

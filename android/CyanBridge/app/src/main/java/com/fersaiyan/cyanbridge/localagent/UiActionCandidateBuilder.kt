@@ -37,6 +37,15 @@ object UiActionCandidateBuilder {
         val out = ArrayList<Option>()
         val nodes = observation.screenSnapshot?.nodes.orEmpty()
         val spans = extractTypeSpans(goal)
+        // Chrome's site-info sheet overlays the page. Its warning labels are not
+        // task actions; the only safe bounded step is to dismiss it and re-observe.
+        if (observation.packageName == "com.android.chrome" &&
+            nodes.any { candidateLabel(it).equals("Connection is not secure", ignoreCase = true) }) {
+            return Built(listOf(DecisionCandidate("A", "Dismiss Chrome site information")),
+                listOf("press_back"), listOf(null), spans)
+        }
+        val requiresTypedSearch = TYPED_SEARCH_GOAL.containsMatchIn(goal) &&
+            !VOICE_SEARCH_GOAL.containsMatchIn(goal)
 
         // Opening the app is commonly the first step, before its controls are observable.
         // Keep it ahead of unrelated launcher/fixture nodes so it survives the A-H cap.
@@ -48,10 +57,6 @@ object UiActionCandidateBuilder {
             }
         }
 
-        // Editable field -> focus/type affordance (span selection, not generation). Put this ahead
-        // of text nodes because AutoInput's compact contract does not preserve actionability and
-        // otherwise static headings can occupy the first labels. Once the target text is visible,
-        // suppress duplicate typing so the next decision can submit/open a result.
         val targetSpan = spans.firstOrNull().orEmpty()
         val visibleText = buildString {
             append(observation.screenText.orEmpty())
@@ -64,18 +69,6 @@ object UiActionCandidateBuilder {
         }
         val targetAlreadyVisible = targetSpan.length >= 3 &&
             containsNormalizedSpan(visibleText, targetSpan)
-        if (!targetAlreadyVisible) {
-            nodes.firstOrNull { it.isEditable || looksLikeEditableId(it.viewId) }?.let { n ->
-                val hint = n.hintText
-                    .ifBlank { n.text }
-                    .ifBlank { n.viewId.substringAfterLast('/') }
-                    .ifBlank { "field" }
-                    .trim()
-                    .take(30)
-                out += Option("type_text", "Focus and type into \"$hint\" (node ${n.index})", n.index)
-            }
-        }
-
         // AutoInput's compact Tasker contract currently returns text/id/coordinates but does not
         // expose clickable/editable flags. Prefer control-like labels, declared clickable nodes,
         // and goal matches, while excluding machine-readable fixture/status markers.
@@ -86,6 +79,30 @@ object UiActionCandidateBuilder {
             targetSpan = targetSpan,
             nodes = nodes,
         )
+        // Editable field -> focus/type affordance (span selection, not generation). Put this ahead
+        // of text nodes because AutoInput's compact contract does not preserve actionability and
+        // otherwise static headings can occupy the first labels. Once the target text is visible,
+        // suppress duplicate typing so the next decision can submit/open a result.
+        // On a results page Chrome's omnibox is editable too; typing the original
+        // in-page query there navigates away from the observed result (live email HIL).
+        // On a grounded-answer page typing also navigates away from the content the
+        // detailed planner must summarize, so suppress it there as well.
+        val resultsVisible = RESULT_PAGE_CUE.containsMatchIn(visibleText)
+        if (!targetAlreadyVisible && !readyForGroundedAnswer) {
+            nodes.firstOrNull {
+                (it.isEditable || looksLikeEditableId(it.viewId)) &&
+                    !(resultsVisible && looksLikeBrowserAddressBar(it))
+            }?.let { n ->
+                val hint = n.hintText
+                    .ifBlank { n.text }
+                    .ifBlank { n.viewId.substringAfterLast('/') }
+                    .ifBlank { "field" }
+                    .trim()
+                    .take(30)
+                out += Option("type_text", "Focus and type into \"$hint\" (node ${n.index})", n.index)
+            }
+        }
+
         if (readyForGroundedAnswer) {
             out += Option(
                 "detailed_planner",
@@ -99,7 +116,8 @@ object UiActionCandidateBuilder {
                     !it.isEditable &&
                     !looksLikeEditableId(it.viewId) &&
                     !looksLikeMachineMarker(label) &&
-                    !looksLikeBrowserChrome(label)
+                    !looksLikeBrowserChrome(label) &&
+                    !(requiresTypedSearch && looksLikeVoiceSearch(label))
             }
             .sortedWith(
                 compareByDescending<LocalAgentScreenNode> {
@@ -182,6 +200,13 @@ object UiActionCandidateBuilder {
         return EDITABLE_ID_MARKERS.any { marker -> id.contains(marker) }
     }
 
+    private fun looksLikeBrowserAddressBar(node: LocalAgentScreenNode): Boolean {
+        val id = node.viewId.substringAfterLast('/').lowercase()
+        if (id.contains("url_bar") || id.contains("omnibox") || id.contains("location_bar")) return true
+        val label = candidateLabel(node).lowercase()
+        return label.contains("127.0.0.1") || label.startsWith("http") || label.contains("://")
+    }
+
     private fun looksLikeMachineMarker(label: String): Boolean {
         val trimmed = label.trim()
         return trimmed.length >= 12 &&
@@ -218,8 +243,19 @@ object UiActionCandidateBuilder {
         return lower == "open the context popup" ||
             lower == "open the home page" ||
             lower == "customize and control google chrome" ||
+            lower.startsWith("your connection to this site is not secure") ||
+            lower.startsWith("your connection to 127.0.0.1:") ||
             lower.startsWith("switch or close tabs")
     }
+
+    private fun looksLikeVoiceSearch(label: String): Boolean {
+        val lower = label.trim().lowercase()
+        return lower == "voice search" || lower == "search by voice" ||
+            lower == "microphone" || lower == "mic"
+    }
+
+    private val TYPED_SEARCH_GOAL = Regex("(?i)\\bsearch\\b.+\\bfor\\b")
+    private val VOICE_SEARCH_GOAL = Regex("(?i)\\b(?:voice search|search by voice|use (?:the )?mic(?:rophone)?)\\b")
 
     private fun containsNormalizedSpan(text: String, span: String): Boolean {
         fun normalize(value: String): String = value.lowercase()
@@ -274,4 +310,5 @@ object UiActionCandidateBuilder {
     private val RESULT_STEP_GOAL = Regex(
         """(?i)\b(open|click|tap|select)\b.{0,60}\b(first\s+result|results?\b)""",
     )
+    private val RESULT_PAGE_CUE = Regex("(?i)\\b(?:first result|search results|news results|resultspage)\\b")
 }

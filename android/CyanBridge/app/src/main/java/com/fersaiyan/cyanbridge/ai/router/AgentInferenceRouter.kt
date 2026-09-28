@@ -54,6 +54,7 @@ object AgentInferenceRouter {
         imagePath: String?,
         allowRemoteImageUpload: Boolean,
         providerType: AgentProviderType = AutomationPrefs.getProviderType(context),
+        maxTokens: Int = UI_PLANNING_MAX_TOKENS,
     ): AgentInferenceResult {
         val usableImagePath = imagePath?.trim()?.takeIf { File(it).isFile }
         if (usableImagePath == null) {
@@ -65,6 +66,7 @@ object AgentInferenceRouter {
                     systemPrompt,
                     userPrompt,
                     providerType,
+                    maxTokens,
                 ),
                 usedImage = false,
                 mediaStatus = "Text-only planning",
@@ -79,6 +81,7 @@ object AgentInferenceRouter {
                     systemPrompt,
                     userPrompt,
                     providerType,
+                    maxTokens,
                 ),
                 usedImage = false,
                 mediaStatus = "Remote screenshot upload is off; used text-only planning.",
@@ -91,7 +94,7 @@ object AgentInferenceRouter {
                     context = context,
                     messages = messages(systemPrompt, userPrompt),
                     imagePaths = listOf(usableImagePath),
-                    maxTokens = UI_PLANNING_MAX_TOKENS,
+                    maxTokens = maxTokens,
                 )
 
                 AgentProviderType.PRO_SUBSCRIPTION -> CliRelayClient.imageQuery(
@@ -112,7 +115,7 @@ object AgentInferenceRouter {
                         context = context,
                         messages = messages(systemPrompt, userPrompt),
                         imagePaths = listOf(usableImagePath),
-                        maxTokens = UI_PLANNING_MAX_TOKENS,
+                        maxTokens = maxTokens,
                     )
 
                     AiProviderType.MOCK,
@@ -143,6 +146,7 @@ object AgentInferenceRouter {
                 systemPrompt,
                 userPrompt,
                 providerType,
+                maxTokens,
             ),
             usedImage = false,
             mediaStatus = "Multimodal planning was unavailable; used text-only planning.",
@@ -223,6 +227,7 @@ object AgentInferenceRouter {
         systemPrompt: String,
         userPrompt: String,
         providerType: AgentProviderType,
+        maxTokens: Int? = null,
     ): String {
         val messages = messages(systemPrompt, userPrompt)
 
@@ -230,7 +235,7 @@ object AgentInferenceRouter {
             AgentProviderType.LOCAL_AGENT -> localModelsProvider.streamChat(
                 context = context,
                 messages = messages,
-                maxTokens = if (purpose == AgentInferencePurpose.CLASSIFICATION) 256 else 512,
+                maxTokens = maxTokens ?: if (purpose == AgentInferencePurpose.CLASSIFICATION) 256 else 512,
             )
 
             AgentProviderType.PRO_SUBSCRIPTION -> CliRelayClient.chat(
@@ -247,6 +252,7 @@ object AgentInferenceRouter {
                 sessionId = sessionId,
                 userPrompt = userPrompt,
                 messages = messages,
+                maxTokens = maxTokens,
             )
         }
     }
@@ -273,6 +279,7 @@ object AgentInferenceRouter {
         sessionId: String,
         userPrompt: String,
         messages: List<Map<String, String>>,
+        maxTokens: Int? = null,
     ): String {
         return when (AiProviderPrefs.getProvider(context)) {
             AiProviderType.CLI_RELAY -> CliRelayClient.chat(
@@ -285,7 +292,7 @@ object AgentInferenceRouter {
             AiProviderType.LOCAL_MODELS -> localModelsProvider.streamChat(
                 context = context,
                 messages = messages,
-                maxTokens = if (purpose == AgentInferencePurpose.CLASSIFICATION) 256 else 512,
+                maxTokens = maxTokens ?: if (purpose == AgentInferencePurpose.CLASSIFICATION) 256 else 512,
             )
 
             AiProviderType.MOCK -> throw IllegalStateException("Mock provider cannot classify or plan agent tasks")
