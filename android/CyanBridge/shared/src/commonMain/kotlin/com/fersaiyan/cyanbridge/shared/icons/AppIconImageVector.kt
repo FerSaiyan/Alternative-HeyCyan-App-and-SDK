@@ -13,6 +13,9 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DevicesOther
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MoreVert
@@ -46,4 +49,7 @@ fun AppIcon.imageVector(): ImageVector = when (this) {
     AppIcon.Attachment -> Icons.Outlined.AttachFile
     AppIcon.Stop -> Icons.Outlined.Stop
     AppIcon.Close -> Icons.Outlined.Close
+    AppIcon.Language -> Icons.Outlined.Language
+    AppIcon.ExpandMore -> Icons.Outlined.ArrowDropDown
+    AppIcon.Warning -> Icons.Outlined.Warning
 }
