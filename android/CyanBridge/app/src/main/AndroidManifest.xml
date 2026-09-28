@@ -128,6 +128,7 @@
         </activity>
         <activity android:name=".agent.ProSubscriptionSettingsActivity" android:exported="false" android:label="Pro Subscription Settings" />
         <activity android:name=".ai.live.GeminiLiveActivity" android:exported="false" android:label="Gemini Live Preview" />
+        <activity android:name=".ai.live.GeminiLivePermissionGateActivity" android:exported="false" android:label="Gemini Live Permissions" />
         <activity android:name=".agent.LocalModelsConfigureActivity" android:exported="false" android:label="Configure Local Models" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity android:name=".agent.LocalModelTestActivity" android:exported="false" android:label="Model performance test" />
         <activity android:name=".plugins.autodiary.AutoDiarySettingsActivity" android:exported="false" android:label="AutoDiary Settings" />

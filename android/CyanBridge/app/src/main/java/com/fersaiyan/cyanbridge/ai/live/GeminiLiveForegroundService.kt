@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -46,7 +47,10 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     private lateinit var wakeLock: PowerManager.WakeLock
     private var client: GeminiLiveClient? = null
     private var visionController: GeminiLiveVisionController? = null
-    private var idleStopJob: Job? = null
+    private var idleStopJob: Job? = null // Existing absolute maximum duration
+    private var responseIdleJob: Job? = null // 30 seconds after Gemini completes its response
+    private var stopping = false
+    private var sessionStarted = false
     private var tickerJob: Job? = null
     private var startedAtMs = 0L
     private var isListening = false
@@ -108,6 +112,11 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 return START_NOT_STICKY
             }
             ACTION_START -> {
+                if (sessionStarted || stopping) {
+                    Log.i(TAG, "Ignoring duplicate Live start while an existing session is active or stopping")
+                    return START_NOT_STICKY
+                }
+                sessionStarted = true
                 val language = intent.getStringExtra(EXTRA_LANGUAGE)?.takeIf { it.isNotBlank() }
                     ?: AppLanguagePreferences.selected(this).languageTag.ifBlank { Locale.getDefault().toLanguageTag() }
                 initialImagePath = intent.getStringExtra(EXTRA_INITIAL_IMAGE_PATH)?.takeIf { it.isNotBlank() }
@@ -121,7 +130,10 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                     )
 
                 // Foreground must be started within ~5s on Android 14+
-                startForegroundWithStatus("Connecting to Gemini Live")
+                if (!startForegroundWithStatus("Connecting to Gemini Live")) {
+                    stopLive()
+                    return START_NOT_STICKY
+                }
                 if (wakeLock.isHeld) wakeLock.release()
                 wakeLock.acquire(MAX_WORK_DURATION_MS)
                 scheduleAutoStop()
@@ -149,6 +161,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
 
     override fun onDestroy() {
         idleStopJob?.cancel()
+        responseIdleJob?.cancel()
         tickerJob?.cancel()
         unregisterHardwareButton()
         visionController?.close()
@@ -156,6 +169,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         announcementTts?.shutdown()
         announcementTts = null
         if (wakeLock.isHeld) wakeLock.release()
+        serviceScope.cancel()
         super.onDestroy()
     }
 
@@ -173,6 +187,25 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         }
     }
 
+    private fun cancelResponseIdleTimeout(reason: String) {
+        if (responseIdleJob != null) Log.d(TAG, "Live idle timeout cancelled: $reason")
+        responseIdleJob?.cancel()
+        responseIdleJob = null
+    }
+
+    private fun scheduleResponseIdleTimeout() {
+        cancelResponseIdleTimeout("model turn completed")
+        if (stopping || !sessionStarted) return
+        responseIdleJob = serviceScope.launch {
+            delay(GeminiLiveSessionPolicy.POST_RESPONSE_IDLE_MS)
+            if (!stopping && sessionStarted) {
+                Log.i(TAG, "Closing Live after 30 seconds without interaction following Gemini response")
+                stopLive()
+            }
+        }
+        Log.i(TAG, "30-second post-response idle timeout armed")
+    }
+
     private fun startTicker() {
         tickerJob?.cancel()
         tickerJob = serviceScope.launch {
@@ -183,7 +216,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         }
     }
 
-    private fun startForegroundWithStatus(detail: String) {
+    private fun startForegroundWithStatus(detail: String): Boolean {
         currentDetail = detail
         val stopIntent = PendingIntent.getService(
             this, 1,
@@ -222,7 +255,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
             .addAction(NotificationCompat.Action.Builder(0, "Stop", stopIntent).build())
             .build()
 
-        runCatching {
+        return runCatching {
             ServiceCompat.startForeground(
                 this, NOTIFICATION_ID, notification,
                 when {
@@ -231,7 +264,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                     else -> 0
                 }
             )
-        }.onFailure { Log.e(TAG, "Unable to start live foreground service", it) }
+        }.onFailure { Log.e(TAG, "Unable to start live foreground service", it) }.isSuccess
     }
 
     private fun updateNotification() {
@@ -239,7 +272,11 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     }
 
     private fun stopLive() {
+        if (stopping) return
+        stopping = true
+        sessionStarted = false
         idleStopJob?.cancel()
+        cancelResponseIdleTimeout("session stopped")
         tickerJob?.cancel()
         unregisterHardwareButton()
         visionController?.stop()
@@ -267,6 +304,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
 
     private fun captureHardwareImageQuestion() {
         if (!isListening) return
+        cancelResponseIdleTimeout("manual glasses image request")
         if (!hardwareInProgress.compareAndSet(false, true)) return
         serviceScope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -302,23 +340,17 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 }
                 registerHardwareButton()
             }
-            if (state == GeminiLiveState.STOPPED || state == GeminiLiveState.ERROR) {
-                visionController?.stop()
-                startedAtMs = 0L
-                isListening = false
-                tickerJob?.cancel()
-                unregisterHardwareButton()
-                if (state == GeminiLiveState.ERROR) {
-                    if (!terminalAnnouncementIssued) {
-                        terminalAnnouncementIssued = true
-                        speakAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
-                    }
-                    // Keep notification briefly so user sees error, then stop
-                    updateNotification()
-                    delay(10_000L)
-                    stopLive()
-                    return@launch
-                }
+            if (state == GeminiLiveState.STOPPED) {
+                // A client-side stop (including free/economy cap) must destroy the service
+                // rather than leaving its foreground notification and microphone state alive.
+                stopLive()
+                return@launch
+            }
+            if (state == GeminiLiveState.ERROR) {
+                Log.w(TAG, "Live reached error state: $detail; releasing microphone immediately")
+                // Do not retain an AudioRecord for ten more seconds while presenting an error.
+                stopLive()
+                return@launch
             }
             updateNotification()
         }
@@ -336,9 +368,25 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
 
     override fun onUserSpeechActivity(active: Boolean) {
         visionController?.onSpeechActivity(active)
+        // The local detector only cancels an existing inactivity timer; it never
+        // finalizes a Gemini speech turn (server VAD remains the sole turn authority).
+        if (active) serviceScope.launch(Dispatchers.Main) {
+            cancelResponseIdleTimeout("microphone activity")
+        }
+    }
+
+    override fun onModelOutputStarted() {
+        serviceScope.launch(Dispatchers.Main) { cancelResponseIdleTimeout("Gemini responding") }
+    }
+
+    override fun onModelTurnComplete() {
+        serviceScope.launch(Dispatchers.Main) { scheduleResponseIdleTimeout() }
     }
 
     override fun onTranscription(input: Boolean, text: String) {
+        if (input && text.isNotBlank()) serviceScope.launch(Dispatchers.Main) {
+            cancelResponseIdleTimeout("user transcription")
+        }
         if (text.isNotBlank()) {
             Log.d(TAG, "${if (input) "User" else "Gemini"} transcription: $text")
         }
@@ -434,9 +482,10 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         fun stop(context: Context) {
             val intent = Intent(context, GeminiLiveForegroundService::class.java).setAction(ACTION_STOP)
             runCatching { context.startService(intent) }
-                .onFailure { Log.w(TAG, "Unable to stop Live service", it) }
-            // Also try direct stopService as fallback for pre-O
-            runCatching { context.stopService(Intent(context, GeminiLiveForegroundService::class.java)) }
+                .onFailure {
+                    Log.w(TAG, "Unable to deliver Live stop command; stopping service directly", it)
+                    context.stopService(Intent(context, GeminiLiveForegroundService::class.java))
+                }
         }
 
         fun isRunning(context: Context): Boolean {
