@@ -9,6 +9,14 @@ glasses="${CYANBRIDGE_HIL_GLASSES:-false}"
 expect_visual_fact="${CYANBRIDGE_HIL_EXPECT_VISUAL_FACT:-false}"
 local_ai="${CYANBRIDGE_HIL_LOCAL_AI:-false}"
 email_send="${CYANBRIDGE_HIL_EMAIL_SEND:-false}"
+youtube="${CYANBRIDGE_HIL_YOUTUBE:-false}"
+pro_planner="${CYANBRIDGE_HIL_PRO_PLANNER:-false}"
+shadow="${CYANBRIDGE_HIL_SHADOW:-false}"
+artemis_parity="${CYANBRIDGE_HIL_ARTEMIS_PARITY:-false}"
+expected_avd="${CYANBRIDGE_HIL_EXPECT_AVD:-}"
+if [[ "$artemis_parity" == "true" && -z "$expected_avd" ]]; then
+  expected_avd="Pixel_9a"
+fi
 
 if [[ -z "$serial" ]]; then
   serial="$(find_serial any || true)"
@@ -46,6 +54,23 @@ if m:
   fi
 }
 
+# Pin opt-in Tasker collection to the authenticated AVD. Emulator serials are
+# reused; a successful JUnit run on a replacement AVD is not Pixel evidence.
+assert_expected_avd() {
+  local target="$1"
+  [[ -n "$expected_avd" ]] || return 0
+  if [[ "$target" != emulator-* ]]; then
+    echo "Expected AVD '$expected_avd' but target '$target' is not an emulator" >&2
+    return 1
+  fi
+  local actual
+  actual="$(adb_for "$target" emu avd name 2>/dev/null | head -n 1 | tr -d '\r' || true)"
+  if [[ "$actual" != "$expected_avd" ]]; then
+    echo "Expected AVD '$expected_avd' on $target, observed '${actual:-unavailable}'; refusing HIL" >&2
+    return 1
+  fi
+}
+
 # API 37's emulator adbd has been observed going offline during a long, multi-class
 # instrumentation process. Keep each class in its own process and recover between classes.
 # This is deliberately emulator-only: a disappearing physical HIL phone must fail closed rather
@@ -53,6 +78,7 @@ if m:
 recover_target() {
   local current="$1"
   if [[ "$(adb_for "$current" get-state 2>/dev/null || true)" == "device" ]]; then
+    assert_expected_avd "$current" || return 1
     printf '%s\n' "$current"
     return 0
   fi
@@ -63,12 +89,17 @@ recover_target() {
   local deadline=$((SECONDS + 20))
   while (( SECONDS < deadline )); do
     if [[ "$(adb_for "$current" get-state 2>/dev/null || true)" == "device" ]]; then
+      assert_expected_avd "$current" || return 1
       printf '%s\n' "$current"
       return 0
     fi
     sleep 1
   done
 
+  if [[ -n "$expected_avd" ]]; then
+    echo "Pinned AVD '$expected_avd' is offline; refusing to substitute or reboot another AVD" >&2
+    return 1
+  fi
   if [[ "$current" != emulator-* ]]; then
     echo "Physical HIL target $current disconnected; refusing to substitute another device" >&2
     return 1
@@ -109,6 +140,10 @@ run_one_class() {
       -e hil_expect_visual_fact "$expect_visual_fact"
       -e hil_local_ai "$local_ai"
       -e hil_email_send "$email_send"
+      -e hil_youtube "$youtube"
+      -e hil_pro_planner "$pro_planner"
+      -e hil_shadow "$shadow"
+      -e hil_artemis_parity "$artemis_parity"
       -e class "$class_name"
       "$CYANBRIDGE_TEST_PACKAGE/$CYANBRIDGE_TEST_RUNNER"
     )
@@ -118,6 +153,8 @@ run_one_class() {
     adb_for "$serial" "${cmd[@]}" | tee "$out"
     local status=${PIPESTATUS[0]}
     set -e
+
+    assert_expected_avd "$serial" || return 12
 
     if (( status == 0 )); then
       if grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|shortMsg=Process crashed' "$out"; then
@@ -134,6 +171,13 @@ run_one_class() {
 
     local state
     state="$(adb_for "$serial" get-state 2>/dev/null || true)"
+    # A lost host connection does not stop a long-running on-device agent test.
+    # Retrying it can overlap two planners; for email it could also send twice.
+    # Fail closed and inspect the device before starting another attempt.
+    if [[ "$email_send" == "true" || "$local_ai" == "true" ]]; then
+      echo "ADB lost a local-AI/real-email HIL result; refusing an automatic retry ($class_name)" >&2
+      return "$status"
+    fi
     if [[ "$serial" == emulator-* && "$state" != "device" && $attempt -lt 2 ]]; then
       echo "Instrumentation lost emulator during $class_name (adb status $status); recovering and retrying only this class" >&2
       serial="$(recover_target "$serial")" || return "$status"

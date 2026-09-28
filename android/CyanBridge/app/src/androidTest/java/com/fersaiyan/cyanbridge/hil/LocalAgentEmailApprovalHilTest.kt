@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.hil
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -27,6 +28,13 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.Closeable
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
 /**
  * Destructive/side-effect HIL: sends one real email to the repository owner's own test address.
@@ -48,6 +56,20 @@ class LocalAgentEmailApprovalHilTest {
         )
 
         val dao = MyApplication.database.pendingActionDao()
+        // A failed HIL may leave its own unapproved draft behind. Retire only
+        // those uniquely tagged self-test drafts; never touch user pending actions
+        // or any approved/executed action (which may already have sent).
+        runBlocking {
+            dao.getActionsByStatus("pending")
+                .filter { it.source == "tasker_agent" &&
+                    it.actionJson.contains("CyanBridge HIL smartglasses summary CB-HIL-") &&
+                    it.actionJson.contains(RECIPIENT, ignoreCase = true) }
+                .forEach { draft ->
+                    draft.status = "rejected"
+                    draft.result = "abandoned_hil_draft_before_approval"
+                    dao.update(draft)
+                }
+        }
         val preexistingPending = runBlocking { dao.getActionsByStatus("pending") }
         assertTrue(
             "Dedicated HIL target has pre-existing pending actions; resolve them before running a real-send test: $preexistingPending",
@@ -60,11 +82,16 @@ class LocalAgentEmailApprovalHilTest {
         val previousRequireConfirmation = RuntimePrefs.isRequireActionConfirmationEnabled(context)
         val previousScreenshotPlanning = RuntimePrefs.isScreenshotPlanningEnabled(context)
         val previousRemoteScreenshotUpload = RuntimePrefs.isRemoteScreenshotUploadEnabled(context)
+        val previousEmbeddingEnabled = AutomationPrefs.isEmbeddingDecisionEnabled(context)
 
-        val providerForTest = if (previousProvider == AgentProviderType.PRO_SUBSCRIPTION) {
+        val providerForTest = if (HilTestSupport.proPlannerRequired ||
+            previousProvider == AgentProviderType.PRO_SUBSCRIPTION) {
             AgentProviderType.PRO_SUBSCRIPTION
         } else {
             AgentProviderType.LOCAL_AGENT
+        }
+        if (providerForTest == AgentProviderType.PRO_SUBSCRIPTION) {
+            HilTestSupport.requireVerifiedProPlanner(context)
         }
         if (providerForTest == AgentProviderType.LOCAL_AGENT) {
             HilTestSupport.requireOrSkip(
@@ -80,7 +107,16 @@ class LocalAgentEmailApprovalHilTest {
         val runTag = "CB-HIL-${System.currentTimeMillis()}"
         val subject = "CyanBridge HIL smartglasses summary $runTag"
         val goal = buildGoal(subject)
+        val reached = linkedSetOf<String>()
+        fun stage(name: String) {
+            if (reached.add(name)) {
+                val event = "JEV_HIL_STAGE email=$name reached=$reached"
+                println(event)
+                android.util.Log.i("JevHilStage", event)
+            }
+        }
 
+        HilNewsFixtureServer().use { newsFixture ->
         ActivityScenario.launch(HilFixtureActivity::class.java).use {
             try {
                 setBlockedPackages(context, "")
@@ -89,6 +125,9 @@ class LocalAgentEmailApprovalHilTest {
                 AutomationPrefs.setProviderType(context, providerForTest)
                 AutomationPrefs.setLocalAgentAutomationEnabled(context, true)
                 AutomationPrefs.setMaxSteps(context, 30)
+                // Email delegation is planner+approval mechanics; keep the
+                // embedding gate out so this test isolates that path.
+                AutomationPrefs.setEmbeddingDecisionEnabled(context, false)
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, true)
                 RuntimePrefs.setScreenshotPlanningEnabled(context, false)
                 RuntimePrefs.setRemoteScreenshotUploadEnabled(context, false)
@@ -96,6 +135,25 @@ class LocalAgentEmailApprovalHilTest {
                 RuntimePrefs.clearLastApprovalVoiceReply(context)
                 RuntimePrefs.setStatus(context, "HIL email task starting")
                 RuntimePrefs.clearLastError(context)
+
+                // The goal's first half assumes Chrome is already on the HIL
+                // search page. Serve it deterministically (loopback only) and
+                // navigate there before the agent starts; a stale Chrome tab
+                // otherwise strands the run on an error page. Chrome's renderer
+                // intermittently SIGILLs on first launch after boot on this
+                // 16k emulator target, so warm it before the real navigation.
+                warmChrome(context, newsFixture.searchUrl)
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(newsFixture.searchUrl))
+                        .setPackage(CHROME_PACKAGE)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                val fixtureObservation = awaitFixtureSearchPage(context)
+                assertTrue(
+                    "Tasker did not observe the deterministic news fixture: ${fixtureObservation?.screenText}",
+                    fixtureObservation?.screenText?.contains(SEARCH_MARKER) == true,
+                )
+                stage("fixture_observed")
 
                 ContextCompat.startForegroundService(
                     context,
@@ -106,13 +164,16 @@ class LocalAgentEmailApprovalHilTest {
                 )
 
                 val pending = awaitEmailApproval(context, subject)
+                stage("send_approval_requested")
                 val preparedEmail = extractPreparedEmail(pending)
                 assertEquals("Planner prepared the email for the wrong recipient", RECIPIENT, preparedEmail.to.trim())
                 assertEquals("Planner changed the unique HIL subject", subject, preparedEmail.subject.trim())
                 assertReasonableGroundedBody(preparedEmail.body)
+                stage("grounded_draft_verified")
 
                 val initialVoicePrompt = awaitVoicePrompt(context, preparedEmail)
                 assertReasonableReadback(initialVoicePrompt, preparedEmail)
+                stage("spoken_readback_verified")
 
                 val beforeApproval = runBlocking { TaskerExecutionBackend.observe(context) }
                 assertNotNull("Tasker observation unavailable while waiting for voice approval", beforeApproval)
@@ -142,6 +203,7 @@ class LocalAgentEmailApprovalHilTest {
                         clarificationPrompt.contains("email", ignoreCase = true) ||
                         clarificationPrompt.contains("send", ignoreCase = true),
                 )
+                stage("ambiguity_kept_pending")
                 println("CYANBRIDGE_EMAIL_HIL clarification_prompt=$clarificationPrompt")
 
                 // The only authorization signal in this HIL is this explicit affirmative reply.
@@ -154,6 +216,7 @@ class LocalAgentEmailApprovalHilTest {
                     executedApproval.result?.contains("SendEmail") == true &&
                         !executedApproval.result.orEmpty().contains("failed", ignoreCase = true),
                 )
+                stage("approved_action_executed")
 
                 val sentObservation = awaitSelfDeliveredMessage(context, subject)
                 val sentText = sentObservation.screenText.orEmpty().lowercase()
@@ -166,12 +229,30 @@ class LocalAgentEmailApprovalHilTest {
                     "The test still appears to be in the Gmail compose screen rather than after send: ${sentObservation.screenText}",
                     looksLikeComposer(sentObservation.screenText.orEmpty()),
                 )
+                stage("self_delivery_observed")
 
                 val finalStatus = awaitTerminalStatus(context)
                 val finalError = RuntimePrefs.getLastError(context)
                 assertTrue("Local Agent did not report completion after the email send: $finalStatus", finalStatus.isNotBlank())
                 assertTrue("Local Agent finished with an error: $finalError", finalError == "(none)")
+                stage("agent_finished")
+            } catch (failure: Throwable) {
+                throw AssertionError(
+                    "Email HIL reached=$reached status=${RuntimePrefs.getStatus(context)} " +
+                        "error=${RuntimePrefs.getLastError(context)}: ${failure.message}",
+                    failure,
+                )
             } finally {
+                runBlocking {
+                    dao.getActionsByStatus("pending")
+                        .filter { it.source == "tasker_agent" && it.actionJson.contains(subject) &&
+                            it.actionJson.contains(RECIPIENT, ignoreCase = true) }
+                        .forEach { draft ->
+                            draft.status = "rejected"
+                            draft.result = "hil_ended_before_approval"
+                            dao.update(draft)
+                        }
+                }
                 context.startService(
                     Intent(context, TaskerLocalAgentService::class.java).apply {
                         action = LocalAgentIntents.ACTION_STOP
@@ -181,11 +262,44 @@ class LocalAgentEmailApprovalHilTest {
                 AutomationPrefs.setProviderType(context, previousProvider)
                 AutomationPrefs.setLocalAgentAutomationEnabled(context, previousAutomationEnabled)
                 AutomationPrefs.setMaxSteps(context, previousMaxSteps)
+                AutomationPrefs.setEmbeddingDecisionEnabled(context, previousEmbeddingEnabled)
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, previousRequireConfirmation)
                 RuntimePrefs.setScreenshotPlanningEnabled(context, previousScreenshotPlanning)
                 RuntimePrefs.setRemoteScreenshotUploadEnabled(context, previousRemoteScreenshotUpload)
             }
         }
+        }
+    }
+
+    private fun warmChrome(context: Context, url: String) {
+        // Chrome's renderer intermittently SIGILLs on first launch after boot
+        // on the 16k emulator target. Absorb that here, not in the fixture wait.
+        repeat(2) {
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                        .setPackage(CHROME_PACKAGE)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+            Thread.sleep(4_000L)
+        }
+    }
+
+    private fun awaitFixtureSearchPage(context: Context): LocalAgentObservation? {
+        val deadline = System.currentTimeMillis() + FIXTURE_TIMEOUT_MS
+        var observation: LocalAgentObservation? = null
+        while (System.currentTimeMillis() < deadline) {
+            observation = runBlocking { TaskerExecutionBackend.observe(context) }
+            if (
+                observation?.packageName == CHROME_PACKAGE &&
+                observation.screenText?.contains(SEARCH_MARKER) == true
+            ) {
+                return observation
+            }
+            Thread.sleep(500L)
+        }
+        return observation
     }
 
     private fun extractPreparedEmail(pending: PendingAction): LocalAgentAction.SendEmail {
@@ -315,7 +429,11 @@ class LocalAgentEmailApprovalHilTest {
             }
 
             val error = RuntimePrefs.getLastError(context)
-            if (error != "(none)" && error.isNotBlank()) {
+            // Tasker/AutoInput can time out during Android's chooser -> Gmail
+            // transition. The service retries observation; retain the strict
+            // two-minute Gmail delivery oracle rather than failing on one miss.
+            if (error != "(none)" && error.isNotBlank() &&
+                error != "tasker_observation_failed_or_timed_out") {
                 throw AssertionError(
                     "Local Agent failed after email approval: status=${RuntimePrefs.getStatus(context)} error=$error observation=$text",
                 )
@@ -370,6 +488,10 @@ class LocalAgentEmailApprovalHilTest {
 
     companion object {
         private const val RECIPIENT = "fernandosaiyan10@gmail.com"
+        private const val CHROME_PACKAGE = "com.android.chrome"
+        private const val SEARCH_MARKER = "CYANBRIDGE_HIL_NEWS_SEARCH_73551"
+        private const val ARTICLE_MARKER = "CYANBRIDGE_HIL_NEWS_ARTICLE_73551"
+        private const val FIXTURE_TIMEOUT_MS = 45_000L
         private const val ACTION_HIL_SET_LOCALAGENT_BLOCKED =
             "com.fersaiyan.cyanbridge.HIL_SET_LOCALAGENT_BLOCKED"
         private const val PLANNING_TIMEOUT_MS = 10 * 60_000L
@@ -380,5 +502,76 @@ class LocalAgentEmailApprovalHilTest {
         private val READBACK_STOP_WORDS = setOf(
             "cyanbridge", "smartglasses", "summary", "automated", "deterministic", "fixture", "email",
         )
+    }
+
+    /**
+     * Loopback-only news fixture. The article carries every grounding signal
+     * the body assertions require (42, eight hours, Cobalt Horizon 88417) so
+     * no live network is involved in the email content.
+     */
+    private class HilNewsFixtureServer : Closeable {
+        private val running = AtomicBoolean(true)
+        private val server = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
+        private val worker = thread(name = "cyanbridge-hil-news", isDaemon = true) {
+            while (running.get()) {
+                val socket = runCatching { server.accept() }.getOrNull() ?: break
+                runCatching { respond(socket) }
+                runCatching { socket.close() }
+            }
+        }
+
+        val searchUrl: String = "http://127.0.0.1:${server.localPort}/"
+
+        private fun respond(socket: Socket) {
+            socket.soTimeout = 5_000
+            val reader = socket.getInputStream().bufferedReader(StandardCharsets.US_ASCII)
+            val requestLine = reader.readLine().orEmpty()
+            while (reader.readLine()?.isNotEmpty() == true) Unit
+            // Single-page fixture: all stages live in SEARCH_HTML and toggle
+            // client-side, so no cross-URL navigation can trip Chrome's
+            // insecure-form interstitial on loopback HTTP.
+            val body = SEARCH_HTML.toByteArray(StandardCharsets.UTF_8)
+            socket.getOutputStream().buffered().use { out ->
+                out.write(
+                    ("HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: text/html; charset=utf-8\r\n" +
+                        "Content-Length: ${body.size}\r\n" +
+                        "Cache-Control: no-store\r\n" +
+                        "Connection: close\r\n\r\n").toByteArray(StandardCharsets.US_ASCII),
+                )
+                out.write(body)
+            }
+        }
+
+        override fun close() {
+            running.set(false)
+            runCatching { server.close() }
+            worker.join(2_000L)
+        }
+
+        companion object {
+            private const val SEARCH_HTML = """
+                <!doctype html><html><head><meta name="viewport" content="width=device-width"></head>
+                <body>
+                <div id="searchPage">
+                  <h1>CYANBRIDGE_HIL_NEWS_SEARCH_73551</h1>
+                  <label for="query">Search news</label>
+                  <input id="query" name="q" aria-label="Search news">
+                  <button type="button" id="searchBtn" onclick="document.getElementById('searchPage').style.display='none';document.getElementById('resultsPage').style.display='block';">Search</button>
+                </div>
+                <div id="resultsPage" style="display:none">
+                  <h1>News results</h1>
+                  <a href="#" id="firstResult" onclick="document.getElementById('resultsPage').style.display='none';document.getElementById('articlePage').style.display='block';return false;">Cobalt Horizon 88417 smartglasses — first result</a>
+                  <a href="#" onclick="return false;">Unrelated second result</a>
+                </div>
+                <div id="articlePage" style="display:none">
+                  <h1>CYANBRIDGE_HIL_NEWS_ARTICLE_73551 — Cobalt Horizon 88417</h1>
+                  <p>The Cobalt Horizon 88417 smartglasses pack 42 sensors and run for
+                  eight hours on a single charge. CyanBridge owns planning and safety,
+                  while Tasker only observes the screen and executes approved UI actions.</p>
+                </div>
+                </body></html>
+            """
+        }
     }
 }

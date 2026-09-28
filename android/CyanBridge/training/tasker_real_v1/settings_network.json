@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "episodeId": "tasker_settings_network_1790601149125",
+  "source": "TASKER_AUTOINPUT",
+  "goal": "In Settings, open Network & internet",
+  "device": "authenticated_Pixel_9a",
+  "operation": "TAP",
+  "targetLabel": "Network & internet",
+  "targetNodeIndex": 3,
+  "pre": {
+    "provider": "TASKER_AUTOINPUT",
+    "packageName": "com.android.settings",
+    "createdAtMs": 1790601149125,
+    "snapshotSha256": "5e990157c52822b9fea142389c63c50dcb142dd43e744d9cbd780a63cd27d51c",
+    "allowlistedNodes": [
+      {
+        "nodeIndex": 0,
+        "label": "Search Settings"
+      },
+      {
+        "nodeIndex": 3,
+        "label": "Network & internet"
+      },
+      {
+        "nodeIndex": 5,
+        "label": "Connected devices"
+      },
+      {
+        "nodeIndex": 7,
+        "label": "Apps"
+      },
+      {
+        "nodeIndex": 9,
+        "label": "Notifications"
+      },
+      {
+        "nodeIndex": 11,
+        "label": "Sound & vibration"
+      },
+      {
+        "nodeIndex": 13,
+        "label": "Modes"
+      },
+      {
+        "nodeIndex": 15,
+        "label": "Display & touch"
+      },
+      {
+        "nodeIndex": 17,
+        "label": "Wallpaper & style"
+      }
+    ]
+  },
+  "post": {
+    "provider": "TASKER_AUTOINPUT",
+    "packageName": "com.android.settings",
+    "createdAtMs": 1790601150946,
+    "snapshotSha256": "3c218d02ec7ef119ddc13abecbb790505d71955341c3a31ff034fc7511550c33",
+    "allowlistedNodes": [
+      {
+        "nodeIndex": 0,
+        "label": "Network & internet"
+      },
+      {
+        "nodeIndex": 2,
+        "label": "Internet"
+      },
+      {
+        "nodeIndex": 4,
+        "label": "SIMs"
+      },
+      {
+        "nodeIndex": 6,
+        "label": "Hotspot & tethering"
+      },
+      {
+        "nodeIndex": 8,
+        "label": "Data Saver"
+      },
+      {
+        "nodeIndex": 10,
+        "label": "VPN"
+      }
+    ]
+  },
+  "outcomeVerified": true,
+  "observedDestinationMarkers": [
+    "Internet",
+    "SIMs"
+  ],
+  "actionToVerificationMs": 1734,
+  "observationToVerificationMs": 1821,
+  "candidateCount": 7,
+  "independentOutcomeVerification": {
+    "provider": "ADB_UIAUTOMATOR_DUMP",
+    "verified": true,
+    "observedTitle": "Network & internet",
+    "observedMarkers": [
+      "Airplane mode",
+      "Internet",
+      "SIMs"
+    ],
+    "hierarchySha256": "68a638ccff0bef8608e66fe580439940b310fdb673f67effb8166099cf75d68a",
+    "capturedAtUtcMs": 1790601162755
+  }
+}

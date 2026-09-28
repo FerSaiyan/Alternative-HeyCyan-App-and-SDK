@@ -12,6 +12,49 @@ object LocalAgentPrefs {
     private const val KEY_MAX_STEPS = "max_steps"
     private const val KEY_AUTOMATION_ENABLED = "automation_enabled"
 
+    // Fast embedding gate (opt-in; model weights stay outside Git).
+    private const val KEY_EMBEDDING_DECISION_ENABLED = "embedding_decision_enabled"
+    private const val KEY_EMBEDDING_MODEL_PATH = "embedding_model_path"
+    private const val KEY_EMBEDDING_MARGIN_THRESHOLD = "embedding_margin_threshold"
+
+    /** Opt-in fast path: EmbeddingGemma cosine gate ahead of the single-token LLM. Default off. */
+    fun isEmbeddingDecisionEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_EMBEDDING_DECISION_ENABLED, false)
+    }
+
+    fun setEmbeddingDecisionEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_EMBEDDING_DECISION_ENABLED, enabled)
+            .apply()
+    }
+
+    /** Absolute path to the embedding GGUF (HIL-provisioned; never bundled). Empty disables. */
+    fun getEmbeddingModelPath(context: Context): String {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_EMBEDDING_MODEL_PATH, "").orEmpty().trim()
+    }
+
+    fun setEmbeddingModelPath(context: Context, path: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_EMBEDDING_MODEL_PATH, path.trim())
+            .apply()
+    }
+
+    /** Minimum cosine margin for the embedding gate; below abstains to the LLM path. */
+    fun getEmbeddingMarginThreshold(context: Context): Float {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getFloat(KEY_EMBEDDING_MARGIN_THRESHOLD, 0.10f).coerceIn(0f, 2f)
+    }
+
+    fun setEmbeddingMarginThreshold(context: Context, margin: Float) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_EMBEDDING_MARGIN_THRESHOLD, margin.coerceIn(0f, 2f))
+            .apply()
+    }
     // Screen content capture / memory
     // KEY_AUTO_CAPTURE_ENABLED is now legacy Accessibility capture state. Tasker-backed
     // AutoDiary uses its own key so enabling AutoDiary does not also wake the old

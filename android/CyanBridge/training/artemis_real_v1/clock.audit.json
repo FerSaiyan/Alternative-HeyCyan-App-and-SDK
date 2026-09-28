@@ -1,0 +1,9 @@
+{
+  "source": "Artemis AndroidAdbDriver/UIAutomatorClient",
+  "avdName": "CyanBridge_Artemis_Data",
+  "includedEpisodes": 5,
+  "includedDecisions": 10,
+  "excludedThisRun": [],
+  "taskerCompatible": false,
+  "limitations": "Repeated Clock tabs are one screen family; no independent validation split."
+}

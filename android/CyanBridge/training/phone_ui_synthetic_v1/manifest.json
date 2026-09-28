@@ -1,0 +1,77 @@
+{
+  "version": "synthetic-phone-ui-v1",
+  "seed": "phone-ui-v1",
+  "provenance": "programmatically generated; no Tasker observations or frozen benchmark cases",
+  "use": "research pilot only; never measure real-device accuracy from these rows",
+  "splits": {
+    "train": {
+      "laya": {
+        "file": "train.laya.jsonl",
+        "rows": 576,
+        "sha256": "103f1d202de0d40d6fdbd38ff6292efc39b7adebfa27c4251f028e5ad23ddea5"
+      },
+      "needle": {
+        "file": "train.needle.jsonl",
+        "rows": 576,
+        "sha256": "d9baa1f9f6ad28159ab2d6130a4d8554401ced26a4858f18c12e16a768763cd3"
+      },
+      "episodes": 192,
+      "stages": {
+        "launch": 72,
+        "home": 72,
+        "suggestion": 72,
+        "filled_query": 72,
+        "results": 72,
+        "video": 72,
+        "no_match": 72,
+        "ambiguous": 72
+      }
+    },
+    "validation": {
+      "laya": {
+        "file": "validation.laya.jsonl",
+        "rows": 128,
+        "sha256": "b977c4f5182dbfe598b8348ac1df31fed771812c70758a4b6dff26130581b93a"
+      },
+      "needle": {
+        "file": "validation.needle.jsonl",
+        "rows": 128,
+        "sha256": "da2714be133c7b103563c15bcb0888b651668ff6d81403217490f864fa06517f"
+      },
+      "episodes": 64,
+      "stages": {
+        "launch": 16,
+        "home": 16,
+        "suggestion": 16,
+        "filled_query": 16,
+        "results": 16,
+        "video": 16,
+        "no_match": 16,
+        "ambiguous": 16
+      }
+    },
+    "test": {
+      "laya": {
+        "file": "test.laya.jsonl",
+        "rows": 128,
+        "sha256": "0b592bc6b8be6b69582c1cb3fbd27fea1d0ccf9fda467b51b2a6ae20064761ed"
+      },
+      "needle": {
+        "file": "test.needle.jsonl",
+        "rows": 128,
+        "sha256": "eddc74af5271ecbd1074948550d115408ced77b3eb0a08931b2752880af35c68"
+      },
+      "episodes": 64,
+      "stages": {
+        "launch": 16,
+        "home": 16,
+        "suggestion": 16,
+        "filled_query": 16,
+        "results": 16,
+        "video": 16,
+        "no_match": 16,
+        "ambiguous": 16
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "source": "Artemis AndroidAdbDriver/UIAutomatorClient",
+  "avdName": "CyanBridge_Artemis_Data",
+  "includedEpisodes": 10,
+  "includedDecisions": 30,
+  "excludedThisRun": [],
+  "taskerCompatible": false,
+  "limitations": "Stops before network search; no result/video verification. Repeated search UI is one screen family."
+}

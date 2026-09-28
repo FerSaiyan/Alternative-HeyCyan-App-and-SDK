@@ -62,7 +62,8 @@ class LocalAgentApprovalVoiceSession(
         AiQuestionForegroundService.start(appContext, "Waiting for spoken Local Agent approval")
         return try {
             LocalAgentPrefs.setLastApprovalVoicePrompt(appContext, prompt)
-            LocalAgentPrefs.clearLastApprovalVoiceReply(appContext)
+            // Preserve the last received answer while speaking a clarification.
+            // The service clears it once when a *new* pending action begins.
             onStatus("Speaking voice confirmation")
             speakAndAwait(prompt)
             onStatus("Listening for confirmation")

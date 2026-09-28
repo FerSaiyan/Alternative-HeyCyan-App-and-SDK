@@ -1,0 +1,30 @@
+diff --git a/llamaCpp/src/main/java/org/nehuatl/llamacpp/LLamaContext.kt b/llamaCpp/src/main/java/org/nehuatl/llamacpp/LLamaContext.kt
+index ae469de..1abba26 100644
+--- a/llamaCpp/src/main/java/org/nehuatl/llamacpp/LLamaContext.kt
++++ b/llamaCpp/src/main/java/org/nehuatl/llamacpp/LLamaContext.kt
+@@ -241,11 +241,11 @@ class LlamaContext(
+         if (!isEmbeddingEnabled(context)) {
+             throw IllegalStateException("Embedding is not enabled")
+         }
+-        val result = embedding(context, text).toMutableMap()
+-        if (result.containsKey("error")) {
+-            throw IllegalStateException(result["error"] as String)
+-        }
+-        return result
++        // JNI returns an ArrayList<Float/Double>. The original 0.4.0 wrapper
++        // incorrectly declared the native return type as Map, which causes an
++        // ART JNI abort before Kotlin can inspect the vector.
++        val values = embedding(context, text)
++        return mapOf("embedding" to values)
+     }
+ 
+     fun bench(pp: Int, tg: Int, pl: Int, nr: Int): String {
+@@ -323,7 +323,7 @@ class LlamaContext(
+ 
+     private external fun isEmbeddingEnabled(contextPtr: Long): Boolean
+ 
+-    private external fun embedding(contextPtr: Long, text: String): Map<String, Any>
++    private external fun embedding(contextPtr: Long, text: String): List<Any>
+ 
+     private external fun bench(contextPtr: Long, pp: Int, tg: Int, pl: Int, nr: Int): String
+ 

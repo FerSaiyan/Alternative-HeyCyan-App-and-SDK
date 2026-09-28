@@ -1,0 +1,31 @@
+{
+  "episodes": 14,
+  "decisions": 42,
+  "uniqueScreenSignatures": 21,
+  "operations": {
+    "TAP": 28,
+    "DONE": 14
+  },
+  "componentCount": 1,
+  "episodeComponents": [
+    [
+      "settings_apps__special_app_access",
+      "settings_connected_devices__connection_preferences",
+      "settings_display_touch__display_size_and_text",
+      "settings_display_touch__lock_screen",
+      "settings_display_touch__navigation_mode",
+      "settings_display_touch__screen_saver",
+      "settings_modes__do_not_disturb",
+      "settings_network_internet__data_saver",
+      "settings_network_internet__hotspot_tethering",
+      "settings_network_internet__internet",
+      "settings_network_internet__vpn",
+      "settings_notifications__bubbles",
+      "settings_notifications__conversations",
+      "settings_notifications__notification_history"
+    ]
+  ],
+  "repeatedScreenCount": 4,
+  "readyForIndependentSplit": false,
+  "limitations": "Same app UI appearing in multiple goals is one screen family; Artemis is not Tasker."
+}

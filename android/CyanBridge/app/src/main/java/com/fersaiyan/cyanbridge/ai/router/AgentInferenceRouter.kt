@@ -54,6 +54,7 @@ object AgentInferenceRouter {
         imagePath: String?,
         allowRemoteImageUpload: Boolean,
         providerType: AgentProviderType = AutomationPrefs.getProviderType(context),
+        maxTokens: Int = UI_PLANNING_MAX_TOKENS,
     ): AgentInferenceResult {
         val usableImagePath = imagePath?.trim()?.takeIf { File(it).isFile }
         if (usableImagePath == null) {
@@ -65,6 +66,7 @@ object AgentInferenceRouter {
                     systemPrompt,
                     userPrompt,
                     providerType,
+                    maxTokens,
                 ),
                 usedImage = false,
                 mediaStatus = "Text-only planning",
@@ -79,6 +81,7 @@ object AgentInferenceRouter {
                     systemPrompt,
                     userPrompt,
                     providerType,
+                    maxTokens,
                 ),
                 usedImage = false,
                 mediaStatus = "Remote screenshot upload is off; used text-only planning.",
@@ -91,7 +94,7 @@ object AgentInferenceRouter {
                     context = context,
                     messages = messages(systemPrompt, userPrompt),
                     imagePaths = listOf(usableImagePath),
-                    maxTokens = UI_PLANNING_MAX_TOKENS,
+                    maxTokens = maxTokens,
                 )
 
                 AgentProviderType.PRO_SUBSCRIPTION -> CliRelayClient.imageQuery(
@@ -112,7 +115,7 @@ object AgentInferenceRouter {
                         context = context,
                         messages = messages(systemPrompt, userPrompt),
                         imagePaths = listOf(usableImagePath),
-                        maxTokens = UI_PLANNING_MAX_TOKENS,
+                        maxTokens = maxTokens,
                     )
 
                     AiProviderType.MOCK,
@@ -143,6 +146,7 @@ object AgentInferenceRouter {
                 systemPrompt,
                 userPrompt,
                 providerType,
+                maxTokens,
             ),
             usedImage = false,
             mediaStatus = "Multimodal planning was unavailable; used text-only planning.",
@@ -165,6 +169,57 @@ object AgentInferenceRouter {
         }
     }
 
+    /**
+     * Jev-like constrained decode: maxTokens=[maxTokens] with a single-letter
+     * instruction. Replaces the 256-token JSON classification with ~1 output
+     * token. Thinking models may still emit a short preamble (<think>/reasoning
+     * + letter); [com.fersaiyan.cyanbridge.ai.decision.DecisionOutputParser]
+     * tolerates that. Falls back through the same provider chain as [complete].
+     */
+    suspend fun completeDecisionToken(
+        context: Context,
+        sessionId: String,
+        systemPrompt: String,
+        userPrompt: String,
+        maxTokens: Int = 8,
+        providerType: AgentProviderType = AutomationPrefs.getProviderType(context),
+    ): String {
+        val messages = messages(systemPrompt, userPrompt)
+        return when (providerType) {
+            AgentProviderType.LOCAL_AGENT -> localModelsProvider.streamChat(
+                context = context,
+                messages = messages,
+                maxTokens = maxTokens.coerceIn(1, 32),
+            )
+
+            AgentProviderType.PRO_SUBSCRIPTION -> CliRelayClient.chat(
+                context = context,
+                chatId = sessionId,
+                prompt = userPrompt,
+                messages = messages,
+                modelOverride = ProSubscriptionAiPrefs.getTasksModel(context),
+            ).getOrThrow()
+
+            AgentProviderType.TASKER -> when (AiProviderPrefs.getProvider(context)) {
+                AiProviderType.CLI_RELAY -> CliRelayClient.chat(
+                    context = context,
+                    chatId = sessionId,
+                    prompt = userPrompt,
+                    messages = messages,
+                ).getOrThrow()
+
+                AiProviderType.LOCAL_MODELS -> localModelsProvider.streamChat(
+                    context = context,
+                    messages = messages,
+                    maxTokens = maxTokens.coerceIn(1, 32),
+                )
+
+                AiProviderType.MOCK -> throw IllegalStateException("Mock provider cannot score decisions")
+                AiProviderType.COMPANY_BACKEND -> throw IllegalStateException("Company backend is not configured for decisions")
+            }
+        }
+    }
+
     private suspend fun completeText(
         context: Context,
         purpose: AgentInferencePurpose,
@@ -172,6 +227,7 @@ object AgentInferenceRouter {
         systemPrompt: String,
         userPrompt: String,
         providerType: AgentProviderType,
+        maxTokens: Int? = null,
     ): String {
         val messages = messages(systemPrompt, userPrompt)
 
@@ -179,7 +235,7 @@ object AgentInferenceRouter {
             AgentProviderType.LOCAL_AGENT -> localModelsProvider.streamChat(
                 context = context,
                 messages = messages,
-                maxTokens = if (purpose == AgentInferencePurpose.CLASSIFICATION) 256 else 512,
+                maxTokens = maxTokens ?: if (purpose == AgentInferencePurpose.CLASSIFICATION) 256 else 512,
             )
 
             AgentProviderType.PRO_SUBSCRIPTION -> CliRelayClient.chat(
@@ -196,6 +252,7 @@ object AgentInferenceRouter {
                 sessionId = sessionId,
                 userPrompt = userPrompt,
                 messages = messages,
+                maxTokens = maxTokens,
             )
         }
     }
@@ -222,6 +279,7 @@ object AgentInferenceRouter {
         sessionId: String,
         userPrompt: String,
         messages: List<Map<String, String>>,
+        maxTokens: Int? = null,
     ): String {
         return when (AiProviderPrefs.getProvider(context)) {
             AiProviderType.CLI_RELAY -> CliRelayClient.chat(
@@ -234,7 +292,7 @@ object AgentInferenceRouter {
             AiProviderType.LOCAL_MODELS -> localModelsProvider.streamChat(
                 context = context,
                 messages = messages,
-                maxTokens = if (purpose == AgentInferencePurpose.CLASSIFICATION) 256 else 512,
+                maxTokens = maxTokens ?: if (purpose == AgentInferencePurpose.CLASSIFICATION) 256 else 512,
             )
 
             AiProviderType.MOCK -> throw IllegalStateException("Mock provider cannot classify or plan agent tasks")

@@ -1,0 +1,12 @@
+{
+  "source": "Artemis AndroidAdbDriver/UIAutomatorClient",
+  "revision": "371aa6df56880643da57b30da936e9812fb0ec66",
+  "avdName": "CyanBridge_Artemis_Data",
+  "includedEpisodes": 14,
+  "includedDecisions": 42,
+  "newlyVerifiedEpisodes": 5,
+  "excludedThisRun": [],
+  "taskerCompatible": false,
+  "unobservedActionCount": 0,
+  "limitations": "Navigation-only Settings data; no Tasker equivalence or unseen-app generalization."
+}

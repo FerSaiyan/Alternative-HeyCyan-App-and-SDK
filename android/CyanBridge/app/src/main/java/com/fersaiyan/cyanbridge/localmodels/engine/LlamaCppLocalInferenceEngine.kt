@@ -109,10 +109,25 @@ class LlamaCppLocalInferenceEngine : LocalInferenceEngine {
                 val gpuResult = selectedResult
                 val gpuLayers = selectedGpuLayers
                 if (gpuResult != null && gpuLayers != null) {
-                    gpuResult to EngineLoadResult(
-                        activeBackend = config.computeBackend,
-                        activeGpuLayers = gpuLayers,
-                    )
+                    val runtimeGpu = gpuResult["gpu"] as? Boolean
+                    if (runtimeGpu == false) {
+                        val reason = (gpuResult["reasonNoGPU"] as? String)
+                            ?.trim()
+                            ?.takeIf { it.isNotBlank() }
+                            ?: "The bundled llama.cpp runtime reported that GPU execution is unavailable."
+                        gpuResult to EngineLoadResult(
+                            activeBackend = LocalComputeBackend.CPU,
+                            activeGpuLayers = 0,
+                            fallbackReason = "$reason Fell back to CPU.",
+                        )
+                    } else {
+                        // Older runtime APIs do not expose the `gpu` field. Preserve their
+                        // successful-init behavior while honoring an explicit V2 `gpu=false`.
+                        gpuResult to EngineLoadResult(
+                            activeBackend = config.computeBackend,
+                            activeGpuLayers = gpuLayers,
+                        )
+                    }
                 } else {
                     val cpuInit = initializeContext(engine, runtimeApi, createInitParams(0))
                     cpuInit to EngineLoadResult(
