@@ -51,7 +51,7 @@ fun WelcomeScreen(
                         shape = MaterialTheme.shapes.medium,
                     ) {
                         Row(
-                            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            Modifier.heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
