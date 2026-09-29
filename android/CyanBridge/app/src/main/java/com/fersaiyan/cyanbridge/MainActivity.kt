@@ -1806,7 +1806,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 startActivity(Intent(this, ExternalAssistantAutomationSetupActivity::class.java))
             }
             GlassesDashboardAction.CapturePhoto -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().takePhoto()
+                getOrCreateEyevueManager().takeManualPhoto()
             } else if (isTuneBudsSelected()) {
                 getOrCreateTuneBudsManager().takePhoto()
             } else {
@@ -1827,7 +1827,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 binding.btnRecord.performClick()
             }
             GlassesDashboardAction.RequestMediaCount -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().requestMediaCount()
+                Toast.makeText(this, "Requesting media count…", Toast.LENGTH_SHORT).show()
+                lifecycleScope.launch {
+                    val count = try {
+                        getOrCreateEyevueManager().awaitMediaCount()
+                    } catch (_: Exception) {
+                        null
+                    }
+                    Toast.makeText(
+                        this@MainActivity,
+                        if (count != null) "Media count: $count" else "Eyevue did not report a media count",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             } else if (isTuneBudsSelected()) {
                 getOrCreateTuneBudsManager().requestMediaCount()
             } else if (isMoyoungW620Selected()) {
@@ -1864,7 +1876,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             GlassesDashboardAction.StopAgent -> binding.btnAgentStop.performClick()
             GlassesDashboardAction.RunAgentDemo -> binding.btnAgentDemo.performClick()
             GlassesDashboardAction.RequestBattery -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().requestBattery()
+                Toast.makeText(this, "Requesting battery level…", Toast.LENGTH_SHORT).show()
+                lifecycleScope.launch {
+                    val percent = try {
+                        getOrCreateEyevueManager().awaitBatteryPercent()
+                    } catch (_: Exception) {
+                        null
+                    }
+                    Toast.makeText(
+                        this@MainActivity,
+                        if (percent != null) "Eyevue battery: $percent%" else "Eyevue did not report battery",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             } else if (isTuneBudsSelected()) {
                 getOrCreateTuneBudsManager().requestBattery()
             } else if (isMoyoungW620Selected()) {

@@ -36,8 +36,13 @@ data class EyevueVoiceAssistantStatus(
  * - crc = (commandId + sum(payload)) & 0xFF
  */
 object EyevueProtocol {
+    // Outbound (phone -> glasses): 0xAB55. Vendor Datagram calls this SOF_APP_BLE
+    // and hardcodes it in convertLeHeaderToBytes.
     const val SOF_HI = 0xAB.toByte()
     const val SOF_LO = 0x55.toByte()
+    // Inbound (glasses -> phone): 0xAC55. Vendor Datagram calls this SOF_BLE_APP
+    // and only parses inbound frames with this header (recoverBytesToDatagram).
+    const val INBOUND_SOF_HI = 0xAC.toByte()
 
     val SERVICE_UUID: UUID = UUID.fromString("0000aa12-0000-1000-8000-00805f9b34fb")
     val COMMAND_WRITE_UUID: UUID = UUID.fromString("0000aa13-0000-1000-8000-00805f9b34fb")
@@ -86,9 +91,13 @@ object EyevueProtocol {
     const val PARAM_LIVE_AP = 0x30.toByte()    // '0'
     const val PARAM_LIVE_P2P = 0x31.toByte()   // '1'
     const val PARAM_DOWNLOAD_FINISH = 0x30.toByte()
+    // Vendor manual shutter = 48 ('0'): saves to glasses storage, flashes LED.
+    // Vendor AI shutter = 49 ('1'): streams image back over Bluetooth.
     const val PARAM_PHOTO_THUMBNAIL = 0x30
     const val PARAM_PHOTO_HIGH_QUALITY = 0x31
-    const val PARAM_RECORD_START = 0x01
+    // Vendor startRecord/stopRecord both send value 0 (RECORD_VIDEO); the command
+    // id (35 vs 36) distinguishes start from stop. Do not use 1 here.
+    const val PARAM_RECORD_START = 0x00
     const val PARAM_RECORD_STOP = 0x00
     const val PARAM_AUDIO_START = 0x01
     const val PARAM_AUDIO_STOP = 0x00
@@ -120,7 +129,9 @@ object EyevueProtocol {
 
     fun parseDatagram(packet: ByteArray): EyevueFrame {
         require(packet.size >= 6) { "Eyevue packet is too short" }
-        require(packet[0] == SOF_HI && packet[1] == SOF_LO) { "Invalid Eyevue packet header" }
+        require(
+            (packet[0] == SOF_HI || packet[0] == INBOUND_SOF_HI) && packet[1] == SOF_LO,
+        ) { "Invalid Eyevue packet header" }
         val declaredLength = u16(packet[2], packet[3])
         require(declaredLength >= 2) { "Invalid Eyevue packet length: $declaredLength" }
         require(packet.size == declaredLength + 4) {
@@ -273,8 +284,20 @@ object EyevueProtocol {
     /** Stop live stream / complete file transfer. */
     fun buildExitLivePacket(): ByteArray = buildFinishTransferPacket()
 
-    /** Trigger photo snapshot. */
-    fun buildTakePhotoPacket(): ByteArray = buildPhotoPacket(highQuality = true)
+    /**
+     * Homescreen/manual shutter: `AB 55 00 03 22 30 52`.
+     * Saves to glasses storage and flashes the picture LED.
+     */
+    fun buildManualPhotoPacket(): ByteArray = buildPhotoPacket(highQuality = false)
+
+    /**
+     * AI shutter: `AB 55 00 03 22 31 53`.
+     * Streams the image back over Bluetooth instead of saving.
+     */
+    fun buildAiPhotoPacket(): ByteArray = buildPhotoPacket(highQuality = true)
+
+    /** Homescreen photo snapshot (manual shutter). */
+    fun buildTakePhotoPacket(): ByteArray = buildManualPhotoPacket()
 
     /** Start video recording. */
     fun buildRecordVideoPacket(): ByteArray = buildStartVideoPacket()
@@ -340,8 +363,12 @@ class EyevueFrameDecoder {
         var cursor = 0
 
         while (true) {
+            // Accept both outbound (AB55, used in tests) and inbound (AC55,
+            // what the glasses actually send) headers.
             while (cursor + 1 < bytes.size &&
-                (bytes[cursor] != EyevueProtocol.SOF_HI || bytes[cursor + 1] != EyevueProtocol.SOF_LO)
+                ((bytes[cursor] != EyevueProtocol.SOF_HI &&
+                    bytes[cursor] != EyevueProtocol.INBOUND_SOF_HI) ||
+                    bytes[cursor + 1] != EyevueProtocol.SOF_LO)
             ) {
                 cursor++
             }

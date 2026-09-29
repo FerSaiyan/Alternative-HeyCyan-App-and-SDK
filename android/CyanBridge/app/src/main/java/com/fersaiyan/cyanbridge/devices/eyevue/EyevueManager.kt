@@ -129,7 +129,16 @@ class EyevueManager private constructor(context: Context) {
 
     fun isConnected(): Boolean = client.isConnected()
 
-    fun takePhoto(highQuality: Boolean = true) = send(
+    /**
+     * Homescreen/manual shutter. Sends `AB 55 00 03 22 30 52`.
+     * Saves to glasses storage and flashes the LED.
+     */
+    fun takeManualPhoto() = send(
+        EyevueProtocol.buildManualPhotoPacket(),
+        "take photo",
+    )
+
+    fun takePhoto(highQuality: Boolean = false) = send(
         EyevueProtocol.buildPhotoPacket(highQuality),
         "take photo",
     )
@@ -139,7 +148,8 @@ class EyevueManager private constructor(context: Context) {
         // 0x31 is the only Eyevue command currently verified to return an AI image over AA15.
         // 0x30 timed out without a photo stream in hardware tests, so all AI captures use the
         // same working quality for now. Revisit this when other Eyevue quality modes are known.
-        takePhoto(highQuality = true)
+        // This intentionally uses the AI shutter, NOT the manual/dashboard shutter.
+        send(EyevueProtocol.buildAiPhotoPacket(), "take photo")
         withTimeoutOrNull(timeoutMs) { photo.await() }.also {
             if (it == null) photo.cancel()
         }
@@ -188,6 +198,34 @@ class EyevueManager private constructor(context: Context) {
         EyevueProtocol.buildGetWifiInfoPacket(p2p),
         "get Wi-Fi information",
     )
+
+    /** Requests the thumbnail count and waits for the 64/66 reply. Null on timeout. */
+    suspend fun awaitMediaCount(timeoutMs: Long = 8_000L): Int? {
+        _state.value = _state.value.copy(storageCount = null)
+        if (!sendNow(EyevueProtocol.valuePacket(EyevueProtocol.CMD_GET_MEDIA_COUNT, 0), "get media count")) {
+            return null
+        }
+        return withTimeoutOrNull(timeoutMs) {
+            state
+                .filter { it.storageCount != null }
+                .first()
+                .storageCount
+        }
+    }
+
+    /** Requests the battery level and waits for the reply. Null on timeout. */
+    suspend fun awaitBatteryPercent(timeoutMs: Long = 8_000L): Int? {
+        _state.value = _state.value.copy(batteryPercent = null)
+        if (!sendNow(EyevueProtocol.buildGetBatteryPacket(), "get battery")) {
+            return null
+        }
+        return withTimeoutOrNull(timeoutMs) {
+            state
+                .filter { it.batteryPercent != null }
+                .first()
+                .batteryPercent
+        }
+    }
 
     suspend fun awaitWifiSsid(p2p: Boolean, timeoutMs: Long = 15_000L): String? {
         _state.value = _state.value.copy(wifiSsid = null)
@@ -284,6 +322,7 @@ class EyevueManager private constructor(context: Context) {
     }
 
     private fun handleFrame(frame: EyevueFrame) {
+        Log.d(TAG, "Eyevue frame cmd=${frame.commandId} payloadSize=${frame.payload.size}")
         EyevueProtocol.parseBattery(frame)?.let { battery ->
             _state.value = _state.value.copy(
                 batteryPercent = battery.percent.coerceIn(0, 100),
@@ -323,7 +362,7 @@ class EyevueManager private constructor(context: Context) {
                 _wakeWordEvents.tryEmit(Unit)
             }
 
-            EyevueProtocol.CMD_GET_CAPACITY,
+            EyevueProtocol.CMD_GET_MEDIA_COUNT,
             EyevueProtocol.CMD_RECEIVE_THUMBNAIL_COUNT,
             -> parseU16(frame.payload)?.let { count ->
                 _state.value = _state.value.copy(storageCount = count)

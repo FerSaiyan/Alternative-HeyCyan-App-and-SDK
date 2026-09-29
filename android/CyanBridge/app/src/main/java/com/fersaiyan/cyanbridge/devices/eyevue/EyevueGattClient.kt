@@ -186,9 +186,16 @@ class EyevueGattClient(
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
+            val hex = value.joinToString("") { "%02X".format(it) }
+            Log.d(TAG, "Eyevue notify uuid=${characteristic.uuid} len=${value.size} hex=$hex")
             when (characteristic.uuid) {
-                EyevueProtocol.COMMAND_NOTIFY_UUID -> decoder.append(value).forEach(_frames::tryEmit)
+                EyevueProtocol.COMMAND_NOTIFY_UUID -> {
+                    val frames = decoder.append(value)
+                    Log.d(TAG, "Eyevue decoded ${frames.size} frame(s) from ${value.size} bytes")
+                    frames.forEach(_frames::tryEmit)
+                }
                 EyevueProtocol.PHOTO_NOTIFY_UUID -> photoAssembler.append(value)?.let(_photos::tryEmit)
+                else -> Log.w(TAG, "Eyevue notify on unexpected characteristic ${characteristic.uuid}")
             }
         }
     }

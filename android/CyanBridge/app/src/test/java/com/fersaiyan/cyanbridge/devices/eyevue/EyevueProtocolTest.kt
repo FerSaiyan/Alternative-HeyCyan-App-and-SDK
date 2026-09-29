@@ -23,6 +23,39 @@ class EyevueProtocolTest {
     }
 
     @Test
+    fun photoPacketsMatchVendorShutters() {
+        // Homescreen/manual: command 34 + 48, CRC = (34 + 48) & 0xFF = 82.
+        assertArrayEquals(
+            byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x03, 0x22, 0x30, 0x52),
+            EyevueProtocol.buildManualPhotoPacket(),
+        )
+        // AI: command 34 + 49, CRC = (34 + 49) & 0xFF = 83.
+        assertArrayEquals(
+            byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x03, 0x22, 0x31, 0x53.toByte()),
+            EyevueProtocol.buildAiPhotoPacket(),
+        )
+        // Homescreen default must be the manual shutter, not the AI shutter.
+        assertArrayEquals(
+            EyevueProtocol.buildManualPhotoPacket(),
+            EyevueProtocol.buildTakePhotoPacket(),
+        )
+    }
+
+    @Test
+    fun videoPacketsMatchVendorStartStop() {
+        // Vendor startRecord/stopRecord both send value 0; command id differs.
+        // Start: command 35 + 0, CRC = 35. Stop: command 36 + 0, CRC = 36.
+        assertArrayEquals(
+            byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x03, 0x23, 0x00, 0x23),
+            EyevueProtocol.buildStartVideoPacket(),
+        )
+        assertArrayEquals(
+            byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x03, 0x24, 0x00, 0x24),
+            EyevueProtocol.buildStopVideoPacket(),
+        )
+    }
+
+    @Test
     fun decoderHandlesFragmentedFrames() {
         val decoder = EyevueFrameDecoder()
         val packet = EyevueProtocol.buildStartLiveP2pPacket()
@@ -55,6 +88,37 @@ class EyevueProtocolTest {
             EyevueFrame(EyevueProtocol.CMD_RECEIVE_WIFI_INFO, "Eyevue-AP\u0000".toByteArray()),
         )
         assertEquals("Eyevue-AP", wifi)
+    }
+
+    @Test
+    fun parsesInboundAc55FramesFromHardware() {
+        // Real bytes captured from the glasses over AA14. Inbound frames use
+        // AC55 (vendor SOF_BLE_APP), not the AB55 we send outbound.
+        // Battery reply: command 23, payload 38 32 00 -> 82%, not charging.
+        // CRC check: (23 + 0x38 + 0x32 + 0x00) & 0xFF = 129 = 0x81.
+        val batteryBytes = byteArrayOf(
+            0xAC.toByte(), 0x55, 0x00, 0x05, 0x17, 0x38, 0x32, 0x00, 0x81.toByte(),
+        )
+        val batteryFrame = EyevueProtocol.parseDatagram(batteryBytes)
+        assertEquals(EyevueProtocol.CMD_GET_BATTERY, batteryFrame.commandId)
+        val battery = EyevueProtocol.parseBattery(batteryFrame)
+        assertEquals(82, battery?.percent)
+        assertEquals(false, battery?.isCharging)
+
+        // Thumbnail-count reply: command 66, payload 00 2D -> 45 files.
+        // CRC check: (66 + 0x00 + 0x2D) & 0xFF = 111 = 0x6F.
+        val countBytes = byteArrayOf(
+            0xAC.toByte(), 0x55, 0x00, 0x04, 0x42, 0x00, 0x2D, 0x6F,
+        )
+        val countFrame = EyevueProtocol.parseDatagram(countBytes)
+        assertEquals(EyevueProtocol.CMD_RECEIVE_THUMBNAIL_COUNT, countFrame.commandId)
+        assertArrayEquals(byteArrayOf(0x00, 0x2D), countFrame.payload)
+
+        // The streaming decoder must also accept the inbound header.
+        val decoder = EyevueFrameDecoder()
+        val frames = decoder.append(countBytes)
+        assertEquals(1, frames.size)
+        assertEquals(EyevueProtocol.CMD_RECEIVE_THUMBNAIL_COUNT, frames.single().commandId)
     }
 
     @Test
