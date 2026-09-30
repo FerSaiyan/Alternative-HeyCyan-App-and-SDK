@@ -91,6 +91,11 @@ object EyevueProtocol {
     const val PARAM_LIVE_AP = 0x30.toByte()    // '0'
     const val PARAM_LIVE_P2P = 0x31.toByte()   // '1'
     const val PARAM_DOWNLOAD_FINISH = 0x30.toByte()
+    // Vendor fileDownloadFinish variants (qfc.stopP2pWifiConnect):
+    // (48, 1) = done, keep glasses files; (48, 0) = done, CLEAR glasses files;
+    // (49, downloadedCount) = partial transfer.
+    const val PARAM_WIFI_FILE_DOWNLOAD_CLEAR = 0x00.toByte()
+    const val PARAM_DOWNLOAD_FINISH_NUN = 0x31.toByte()
     // Vendor manual shutter = 48 ('0'): saves to glasses storage, flashes LED.
     // Vendor AI shutter = 49 ('1'): streams image back over Bluetooth.
     const val PARAM_PHOTO_THUMBNAIL = 0x30
@@ -187,6 +192,24 @@ object EyevueProtocol {
 
     fun buildFinishTransferPacket(): ByteArray =
         buildDatagram(CMD_FILE_DOWNLOAD_FINISH, byteArrayOf(PARAM_DOWNLOAD_FINISH, 0x01))
+
+    /**
+     * Successful sync: tell the glasses to delete the transferred files,
+     * mirroring vendor stopP2pWifiConnect when downloaded == total.
+     * Without this the glasses keep everything and the count never drops.
+     */
+    fun buildFinishTransferAndClearPacket(): ByteArray =
+        buildDatagram(
+            CMD_FILE_DOWNLOAD_FINISH,
+            byteArrayOf(PARAM_DOWNLOAD_FINISH, PARAM_WIFI_FILE_DOWNLOAD_CLEAR),
+        )
+
+    /** Partial sync: report how many files arrived, glasses keep the rest. */
+    fun buildFinishTransferPartialPacket(downloaded: Int): ByteArray =
+        buildDatagram(
+            CMD_FILE_DOWNLOAD_FINISH,
+            byteArrayOf(PARAM_DOWNLOAD_FINISH_NUN, (downloaded and 0xFF).toByte()),
+        )
 
     fun buildWearDetectionPacket(enabled: Boolean): ByteArray =
         valuePacket(CMD_WEAR_DETECT, if (enabled) 0x31 else 0x30)

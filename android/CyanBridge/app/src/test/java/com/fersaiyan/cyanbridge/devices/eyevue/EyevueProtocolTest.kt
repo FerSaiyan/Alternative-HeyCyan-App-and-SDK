@@ -56,6 +56,24 @@ class EyevueProtocolTest {
     }
 
     @Test
+    fun finishPacketsMatchVendorCleanup() {
+        // Vendor stopP2pWifiConnect: (48, 1) keep, (48, 0) clear, (49, n) partial.
+        // CRCs: (68+48+1)=117=0x75, (68+48+0)=116=0x74, (68+49+45)=162=0xA2.
+        assertArrayEquals(
+            byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x04, 0x44, 0x30, 0x01, 0x75),
+            EyevueProtocol.buildFinishTransferPacket(),
+        )
+        assertArrayEquals(
+            byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x04, 0x44, 0x30, 0x00, 0x74),
+            EyevueProtocol.buildFinishTransferAndClearPacket(),
+        )
+        assertArrayEquals(
+            byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x04, 0x44, 0x31, 0x2D, 0xA2.toByte()),
+            EyevueProtocol.buildFinishTransferPartialPacket(45),
+        )
+    }
+
+    @Test
     fun decoderHandlesFragmentedFrames() {
         val decoder = EyevueFrameDecoder()
         val packet = EyevueProtocol.buildStartLiveP2pPacket()

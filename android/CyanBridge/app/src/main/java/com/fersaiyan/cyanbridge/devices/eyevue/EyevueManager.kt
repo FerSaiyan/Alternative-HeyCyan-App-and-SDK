@@ -309,6 +309,20 @@ class EyevueManager private constructor(context: Context) {
 
     fun finishTransfer() = send(EyevueProtocol.buildFinishTransferPacket(), "finish transfer")
 
+    /**
+     * Vendor stopP2pWifiConnect mirror: clear the glasses storage only when every
+     * file arrived, report partial progress otherwise, keep files when nothing did.
+     * Suspending so cleanup ordering stays explicit.
+     */
+    suspend fun finishMediaSync(completed: Int, total: Int) {
+        val packet = when {
+            completed > 0 && completed == total -> EyevueProtocol.buildFinishTransferAndClearPacket()
+            completed > 0 -> EyevueProtocol.buildFinishTransferPartialPacket(completed)
+            else -> EyevueProtocol.buildFinishTransferPacket()
+        }
+        sendNow(packet, "finish transfer")
+    }
+
     private fun send(packet: ByteArray, operation: String) {
         scope.launch { sendNow(packet, operation) }
     }

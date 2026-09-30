@@ -106,6 +106,8 @@ class EyevueMediaSync(
         var state = EyevueMediaSyncState(isActive = true, detail = "Starting Eyevue Wi-Fi mode")
         onState(state)
         temporaryDirectory.mkdirs()
+        var completed = 0
+        var total = 0
         try {
             // Vendor qfc.connectP2pWifitoReceivePhoto uses 0x39 for media import.
             // 0x67 belongs to live preview; both return the SSID through 0x25.
@@ -122,10 +124,10 @@ class EyevueMediaSync(
 
             val items = fetchManifest(profile)
             if (items.isEmpty()) throw IOException("Eyevue returned an empty media list")
+            total = items.size
             state = state.copy(total = items.size, detail = "Downloading 0/${items.size}")
             onState(state)
 
-            var completed = 0
             var failed = 0
             var lastError: Throwable? = null
             for (item in items) {
@@ -174,9 +176,10 @@ class EyevueMediaSync(
             return Result.failure(error)
         } finally {
             // Match the vendor cleanup order: tell the glasses to leave transfer/live mode
-            // before tearing down the Android Wi-Fi route.
+            // before tearing down the Android Wi-Fi route. Like the official app, report
+            // the per-file result so the glasses delete files only after a full sync.
             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                manager.stopLiveBlocking()
+                manager.finishMediaSync(completed, total)
                 transport.disconnect()
                 temporaryDirectory.deleteRecursively()
             }
