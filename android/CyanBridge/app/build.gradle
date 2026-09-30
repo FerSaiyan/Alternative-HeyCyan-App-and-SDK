@@ -208,6 +208,8 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.5.1'
     implementation 'androidx.media3:media3-exoplayer-rtsp:1.5.1'
     implementation 'androidx.media3:media3-ui:1.5.1'
+    // Vendor-matched live engine for EyeVue (official app uses LibVLC direct).
+    implementation 'org.videolan.android:libvlc-all:3.6.0'
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
     implementation 'com.android.billingclient:billing-ktx:8.1.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0"

@@ -3,13 +3,7 @@ package com.fersaiyan.cyanbridge.devices.eyevue
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import androidx.annotation.OptIn
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.rtsp.RtspMediaSource
+import android.view.Surface
 import com.fersaiyan.cyanbridge.ota.LivePreviewState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -29,11 +23,19 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
-/** Eyevue live-mode flow: command BLE, join vendor Wi-Fi, then play the model URL. */
+/**
+ * Eyevue live-mode flow, vendor-matched: command BLE, join vendor Wi-Fi,
+ * request the HTTP live endpoint, then play the stream URL directly with
+ * LibVLC (same engine and options as the official app). Single box session,
+ * picture and sound.
+ */
 class EyevueLivePreviewManager(
     private val context: Context,
     private val eyevueManager: EyevueManager,
@@ -50,13 +52,11 @@ class EyevueLivePreviewManager(
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val transport = EyevueWifiTransport(context)
     private var job: Job? = null
-    private var player: ExoPlayer? = null
-    private var playerListener: Player.Listener? = null
+    private var libVlc: LibVLC? = null
+    private var player: MediaPlayer? = null
     private var playbackFailure: CompletableDeferred<Throwable>? = null
-    private var liveProxy: RtspPlayRewriteProxy? = null
-    private var dummySurface: android.view.Surface? = null
-    private var dummyTexture: android.graphics.SurfaceTexture? = null
-    /** Fires when the per-session relay address is known (stable for the session). */
+    private var videoSurface: Surface? = null
+    /** Fires when the session stream address is known (stable for the session). */
     var onRelayUrlChanged: ((String?) -> Unit)? = null
     private var onSessionFinished: () -> Unit = {}
     private var finishedNotified = true
@@ -86,7 +86,20 @@ class EyevueLivePreviewManager(
         scope.cancel()
     }
 
-    fun getPlayer(): ExoPlayer? = player
+    fun getPlayer(): MediaPlayer? = player
+
+    /** Hands the dashboard picture surface to the vendor engine. */
+    fun attachVideoSurface(surface: Surface) {
+        videoSurface = surface
+        player?.let { attachSurfaceTo(it, surface) }
+    }
+
+    fun detachVideoSurface() {
+        videoSurface = null
+        player?.let {
+            runCatching { it.vlcVout.detachViews() }
+        }
+    }
 
     private suspend fun run() {
         var failed = false
@@ -114,14 +127,9 @@ class EyevueLivePreviewManager(
                 requestLiveEndpoint(controlUrl)
             }
 
-            // Single-session fan-out relay: one shared stream with the glasses
-            // (both tracks, like the vendor) fanned out to every local viewer,
-            // so viewers never disturb each other or the box.
-            val proxy = RtspPlayRewriteProxy(profile.baseIp, 554)
-            val localPort = proxy.start()
-            liveProxy = proxy
-            val streamUrl = "rtsp://127.0.0.1:$localPort/xxx.mov"
-            Log.i(TAG, "Eyevue relay up: $streamUrl -> ${profile.baseIp}:554 (open in VLC while live runs)")
+            // Vendor path: play the box URL directly with LibVLC, one session.
+            val streamUrl = profile.liveStreamUrl
+            Log.i(TAG, "Eyevue live direct: $streamUrl (single box session)")
             runCatching { onRelayUrlChanged?.invoke(streamUrl) }
             var attempt = 0
             var lastError: Throwable? = null
@@ -129,7 +137,7 @@ class EyevueLivePreviewManager(
                 val streamFailure = CompletableDeferred<Throwable>()
                 playbackFailure = streamFailure
                 val ready = withTimeoutOrNull(30_000L) {
-                    playUntilReady(streamUrl, streamFailure)
+                    playUntilPlaying(streamUrl, streamFailure)
                     true
                 } == true
                 if (!ready) {
@@ -171,8 +179,6 @@ class EyevueLivePreviewManager(
         } finally {
             withContext(NonCancellable) {
                 releasePlayer()
-                liveProxy?.stop()
-                liveProxy = null
                 if (liveCommandAttempted && eyevueManager.isConnected()) {
                     eyevueManager.stopLiveBlocking()
                 }
@@ -202,80 +208,67 @@ class EyevueLivePreviewManager(
         throw lastError ?: IOException("Eyevue live HTTP request failed")
     }
 
-    @OptIn(UnstableApi::class)
-    private suspend fun playUntilReady(
+    private suspend fun playUntilPlaying(
         streamUrl: String,
         streamFailure: CompletableDeferred<Throwable>,
     ) {
-        val mediaSource = RtspMediaSource.Factory()
-            .setForceUseRtpTcp(true)
-            .setDebugLoggingEnabled(true)
-            .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
         suspendCancellableCoroutine<Unit> { continuation ->
-            val exoPlayer = ExoPlayer.Builder(context).build()
-            // Video-only preview: the glasses' sound track keeps our player
-            // stuck in buffering (first picture shows, then freeze).
-            // Vendor's own player handles both; we unblock video first.
-            exoPlayer.trackSelectionParameters =
-                exoPlayer.trackSelectionParameters.buildUpon()
-                    .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_AUDIO, true)
-                    .build()
-            // Dummy surface so the decoder has output even before the
-            // picture box attaches. PlayerView replaces it once visible.
-            val texture = android.graphics.SurfaceTexture(0)
-            val surface = android.view.Surface(texture)
-            dummyTexture = texture
-            dummySurface = surface
-            exoPlayer.setVideoSurface(surface)
-            val listener = object : Player.Listener {
-                private var ready = false
-
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    val name = when (playbackState) {
-                        Player.STATE_IDLE -> "IDLE"
-                        Player.STATE_BUFFERING -> "BUFFERING"
-                        Player.STATE_READY -> "READY"
-                        Player.STATE_ENDED -> "ENDED"
-                        else -> playbackState.toString()
-                    }
-                    Log.i(TAG, "Eyevue player state: $name playWhenReady=${exoPlayer.playWhenReady}")
-                    if (playbackState == Player.STATE_READY && !ready) {
-                        ready = true
-                        if (continuation.isActive) continuation.resume(Unit)
-                    } else if (playbackState == Player.STATE_ENDED) {
-                        val error = IOException("Eyevue RTSP stream ended")
-                        if (continuation.isActive) {
-                            continuation.resumeWith(Result.failure(error))
-                        } else {
-                            streamFailure.complete(error)
+            val vlc = LibVLC(context)
+            val vlcPlayer = MediaPlayer(vlc)
+            videoSurface?.let { attachSurfaceTo(vlcPlayer, it) }
+            val media = Media(vlc, Uri.parse(streamUrl))
+            media.setHWDecoderEnabled(true, false)
+            media.addOption(":network-caching=1000")
+            media.addOption(":rtsp-tcp")
+            media.addOption(":file-caching=1000")
+            media.addOption(":live-caching=100")
+            media.addOption(":drop-late-frames=true")
+            media.addOption(":skip-frames=true")
+            vlcPlayer.media = media
+            media.release()
+            var ready = false
+            var firstFrame = false
+            vlcPlayer.setEventListener(
+                MediaPlayer.EventListener { event ->
+                    when (event.type) {
+                        MediaPlayer.Event.Playing -> {
+                            Log.i(TAG, "Eyevue player event: Playing")
+                            if (!ready) {
+                                ready = true
+                                if (continuation.isActive) continuation.resume(Unit)
+                            }
                         }
+                        MediaPlayer.Event.Paused,
+                        MediaPlayer.Event.Stopped,
+                        -> Log.i(TAG, "Eyevue player event: ${event.type}")
+                        MediaPlayer.Event.EndReached -> {
+                            val error = IOException("Eyevue RTSP stream ended")
+                            if (continuation.isActive) {
+                                continuation.resumeWith(Result.failure(error))
+                            } else {
+                                streamFailure.complete(error)
+                            }
+                        }
+                        MediaPlayer.Event.EncounteredError -> {
+                            val failure = IOException("Eyevue RTSP error")
+                            if (continuation.isActive) {
+                                continuation.resumeWith(Result.failure(failure))
+                            } else {
+                                streamFailure.complete(failure)
+                            }
+                        }
+                        MediaPlayer.Event.Vout -> {
+                            if (event.voutCount > 0 && !firstFrame) {
+                                firstFrame = true
+                                Log.i(TAG, "Eyevue player video output ready")
+                            }
+                        }
+                        else -> Unit
                     }
-                }
-
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    Log.i(TAG, "Eyevue player isPlaying=$isPlaying")
-                }
-
-                override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-                    Log.i(TAG, "Eyevue video size: ${videoSize.width}x${videoSize.height}")
-                }
-
-                override fun onRenderedFirstFrame() {
-                    Log.i(TAG, "Eyevue player rendered first frame")
-                }
-
-                override fun onPlayerError(error: PlaybackException) {
-                    val failure = IOException("Eyevue RTSP error: ${error.errorCodeName}", error)
-                    if (continuation.isActive) {
-                        continuation.resumeWith(Result.failure(failure))
-                    } else {
-                        streamFailure.complete(failure)
-                    }
-                }
-            }
-            player = exoPlayer
-            playerListener = listener
-            exoPlayer.addListener(listener)
+                },
+            )
+            libVlc = vlc
+            player = vlcPlayer
             // Publish now that the player exists, so the inline video box
             // never receives a null player. Gated UI shows it only for
             // EyeVue after live starts.
@@ -288,26 +281,30 @@ class EyevueLivePreviewManager(
                 canStop = true,
             )
             continuation.invokeOnCancellation {
-                if (player === exoPlayer) releasePlayer()
+                if (player === vlcPlayer) releasePlayer()
             }
-            exoPlayer.setMediaSource(mediaSource)
-            exoPlayer.playWhenReady = true
-            exoPlayer.prepare()
+            vlcPlayer.play()
+        }
+    }
+
+    private fun attachSurfaceTo(vlcPlayer: MediaPlayer, surface: Surface) {
+        runCatching {
+            vlcPlayer.vlcVout.setVideoSurface(surface, null)
+            vlcPlayer.vlcVout.attachViews()
         }
     }
 
     private fun releasePlayer() {
         playbackFailure?.cancel()
         playbackFailure = null
-        playerListener?.let { listener -> player?.removeListener(listener) }
-        playerListener = null
-        player?.setVideoSurface(null)
-        player?.release()
+        player?.let { vlcPlayer ->
+            runCatching { vlcPlayer.stop() }
+            runCatching { vlcPlayer.vlcVout.detachViews() }
+            runCatching { vlcPlayer.release() }
+        }
         player = null
-        runCatching { dummySurface?.release() }
-        dummySurface = null
-        runCatching { dummyTexture?.release() }
-        dummyTexture = null
+        libVlc?.let { runCatching { it.release() } }
+        libVlc = null
     }
 
     private fun updateState(label: String, detail: String, scanning: Boolean) {

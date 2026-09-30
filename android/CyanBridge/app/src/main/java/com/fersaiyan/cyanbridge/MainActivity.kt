@@ -487,7 +487,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var eyevueLivePreviewUiJob: Job? = null
     // Inline EyeVue video: exposed to Compose so the dashboard shows video
     // in-screen (EyeVue only, after live starts). No popup dialog.
-    private var eyevueLivePlayer by mutableStateOf<androidx.media3.exoplayer.ExoPlayer?>(null)
+    private var eyevueLivePlayer by mutableStateOf<org.videolan.libvlc.MediaPlayer?>(null)
     private var eyevueLiveStopReceiver: android.content.BroadcastReceiver? = null
     // Texture view for the inline EyeVue picture (a plain surface layer ignores
     // view rotation, so the player view could never turn the sideways sensor).
@@ -774,7 +774,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                                 ) = Unit
 
                                                 override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                                                    eyevueTextureView = null
                                                     eyevueVideoTexture = null
+                                                    eyevueLivePreviewManager?.detachVideoSurface()
                                                     runCatching { eyevueVideoSurface?.release() }
                                                     eyevueVideoSurface = null
                                                     return true
@@ -789,6 +791,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                     onRelease = {
                                         eyevueTextureView = null
                                         eyevueVideoTexture = null
+                                        eyevueLivePreviewManager?.detachVideoSurface()
                                         runCatching { eyevueVideoSurface?.release() }
                                         eyevueVideoSurface = null
                                     },
@@ -1550,10 +1553,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-    /** Attaches the inline EyeVue picture surface to the current player. */
+    /** Attaches the inline EyeVue picture surface to the vendor engine. */
     private fun attachEyevueVideoSurface() {
         val view = eyevueTextureView ?: return
-        val player = eyevueLivePlayer ?: return
+        if (eyevueLivePlayer == null) return
         if (!view.isAvailable) return
         val texture = view.surfaceTexture ?: return
         if (texture === eyevueVideoTexture && eyevueVideoSurface != null) return
@@ -1562,7 +1565,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         eyevueVideoTexture = texture
         val surface = Surface(texture)
         eyevueVideoSurface = surface
-        player.setVideoSurface(surface)
+        eyevueLivePreviewManager?.attachVideoSurface(surface)
     }
 
     private fun metaAndroidPermissionsMissing(): Array<String> {
