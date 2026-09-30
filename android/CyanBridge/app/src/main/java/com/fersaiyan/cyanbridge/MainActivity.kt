@@ -199,6 +199,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.unit.dp
+import android.graphics.SurfaceTexture
+import android.view.Surface
+import android.view.TextureView
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
@@ -476,6 +485,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var livePreviewSessionLease: GlassesSessionLease? = null
     private var eyevueLivePreviewManager: EyevueLivePreviewManager? = null
     private var eyevueLivePreviewUiJob: Job? = null
+    // Inline EyeVue video: exposed to Compose so the dashboard shows video
+    // in-screen (EyeVue only, after live starts). No popup dialog.
+    private var eyevueLivePlayer by mutableStateOf<androidx.media3.exoplayer.ExoPlayer?>(null)
+    private var eyevueLiveStopReceiver: android.content.BroadcastReceiver? = null
+    // Texture view for the inline EyeVue picture (a plain surface layer ignores
+    // view rotation, so the player view could never turn the sideways sensor).
+    private var eyevueTextureView: TextureView? = null
+    private var eyevueVideoSurface: Surface? = null
+    private var eyevueVideoTexture: SurfaceTexture? = null
     private var mediaSessionLease: GlassesSessionLease? = null
     private var eyevueMediaJob: Job? = null
     private var eyevueMediaTransport: EyevueWifiTransport? = null
@@ -716,6 +734,137 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     },
                     appearanceSettings = appearance,
                     onNavigateToActivity = ::navigateToDestination,
+                    liveVideoSlot = {
+                        // Inline EyeVue video inside the dashboard live section
+                        // (EyeVue only, after live starts). Same local relay URL
+                        // is shown so VLC on this phone can open it too.
+                        val eyevueLive = dashboardState.livePreview
+                        val eyevuePlayer = eyevueLivePlayer
+                        if (dashboardState.showEyevueControls &&
+                            eyevueLive.isPlaying &&
+                            eyevueLive.streamUrl != null &&
+                            eyevuePlayer != null
+                        ) {
+                            val liveUrl = eyevueLive.streamUrl ?: ""
+                            androidx.compose.foundation.layout.Column(
+                                modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                            ) {
+                                androidx.compose.foundation.layout.Spacer(
+                                    modifier = androidx.compose.ui.Modifier.height(8.dp),
+                                )
+                                androidx.compose.ui.viewinterop.AndroidView(
+                                    factory = { ctx ->
+                                        TextureView(ctx).apply {
+                                            // Glasses sensor picture comes out sideways;
+                                            // turn it 90 degrees left for the dashboard.
+                                            rotation = -90f
+                                            surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                                                override fun onSurfaceTextureAvailable(
+                                                    surface: SurfaceTexture,
+                                                    width: Int,
+                                                    height: Int,
+                                                ) {
+                                                    attachEyevueVideoSurface()
+                                                }
+
+                                                override fun onSurfaceTextureSizeChanged(
+                                                    surface: SurfaceTexture,
+                                                    width: Int,
+                                                    height: Int,
+                                                ) = Unit
+
+                                                override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                                                    eyevueVideoTexture = null
+                                                    runCatching { eyevueVideoSurface?.release() }
+                                                    eyevueVideoSurface = null
+                                                    return true
+                                                }
+
+                                                override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+                                            }
+                                            eyevueTextureView = this
+                                        }
+                                    },
+                                    update = { attachEyevueVideoSurface() },
+                                    onRelease = {
+                                        eyevueTextureView = null
+                                        eyevueVideoTexture = null
+                                        runCatching { eyevueVideoSurface?.release() }
+                                        eyevueVideoSurface = null
+                                    },
+                                    modifier = androidx.compose.ui.Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(0.75f),
+                                )
+                                androidx.compose.foundation.layout.Spacer(
+                                    modifier = androidx.compose.ui.Modifier.height(8.dp),
+                                )
+                                androidx.compose.material3.Text(
+                                    text = liveUrl,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                androidx.compose.foundation.layout.Row(
+                                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                                ) {
+                                    androidx.compose.material3.TextButton(
+                                        onClick = {
+                                            val clipboard =
+                                                getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                                    as android.content.ClipboardManager
+                                            clipboard.setPrimaryClip(
+                                                android.content.ClipData.newPlainText(
+                                                    "EyeVue live URL",
+                                                    liveUrl,
+                                                ),
+                                            )
+                                            android.widget.Toast.makeText(
+                                                this@MainActivity,
+                                                "Stream URL copied — open it in VLC while live is running",
+                                                android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        },
+                                    ) {
+                                        androidx.compose.material3.Text("Copy URL")
+                                    }
+                                    androidx.compose.foundation.layout.Spacer(
+                                        modifier = androidx.compose.ui.Modifier.width(8.dp),
+                                    )
+                                    androidx.compose.material3.TextButton(
+                                        onClick = {
+                                            val uri = android.net.Uri.parse(liveUrl)
+                                            val vlcIntent = android.content.Intent(
+                                                android.content.Intent.ACTION_VIEW,
+                                                uri,
+                                            ).setPackage("org.videolan.vlc")
+                                            val opened = runCatching {
+                                                startActivity(vlcIntent)
+                                                true
+                                            }.getOrDefault(false)
+                                            if (!opened) {
+                                                runCatching {
+                                                    startActivity(
+                                                        android.content.Intent(
+                                                            android.content.Intent.ACTION_VIEW,
+                                                            uri,
+                                                        ),
+                                                    )
+                                                }.onFailure {
+                                                    android.widget.Toast.makeText(
+                                                        this@MainActivity,
+                                                        "No app found for RTSP",
+                                                        android.widget.Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                }
+                                            }
+                                        },
+                                    ) {
+                                        androidx.compose.material3.Text("Open in VLC")
+                                    }
+                                }
+                            }
+                        }
+                    },
                 )
                 if (showOfficialHeyCyanWarningDialog) {
                     OfficialHeyCyanWarningDialog(
@@ -833,9 +982,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onStop() {
         if (BuildConfig.DEBUG) wifiAdbDebugController.stop()
-        if (eyevueLivePreviewManager?.isActive == true) {
-            eyevueLivePreviewManager?.stop()
-        }
+        // NOTE: EyeVue live keeps running in the background behind its
+        // foreground service so other apps can use the relay. It stops only
+        // via user Stop (dashboard, notification) or session end.
         super.onStop()
         stopBatteryPolling()
         unregisterMeetingCaptureReceiver()
@@ -876,6 +1025,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         livePreviewDialog = null
         livePreviewManager.release()
         eyevueLivePreviewManager?.release()
+        eyevueLiveStopReceiver?.let { runCatching { unregisterReceiver(it) } }
+        eyevueLiveStopReceiver = null
+        eyevueTextureView = null
+        eyevueVideoTexture = null
+        runCatching { eyevueVideoSurface?.release() }
+        eyevueVideoSurface = null
         if (eyevueMediaJob?.isActive == true) {
             eyevueMediaCancelled = true
             eyevueMediaTransport?.disconnect()
@@ -1366,22 +1521,49 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                 canStop = lp.canStop,
                             ),
                         )
-                        if (lp.isPlaying && lp.streamUrl != null) {
-                            showRtspPlayerDialog(
-                                streamUrl = lp.streamUrl,
-                                player = manager.getPlayer(),
-                                onClose = manager::stop,
-                            )
-                        } else {
-                            livePreviewDialog?.let { dialog ->
-                                livePreviewDialog = null
-                                dialog.dismiss()
-                            }
+                        // Inline video (EyeVue only): expose the player to
+                        // Compose after live starts. No popup dialog.
+                        // Dismiss any legacy dialog from older builds.
+                        livePreviewDialog?.let { dialog ->
+                            livePreviewDialog = null
+                            runCatching { dialog.dismiss() }
                         }
+                        eyevueLivePlayer = if (lp.isPlaying) manager.getPlayer() else null
                     }
                 }
             }
+            if (eyevueLiveStopReceiver == null) {
+                val receiver = object : android.content.BroadcastReceiver() {
+                    override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                        eyevueLivePreviewManager?.stop()
+                    }
+                }
+                eyevueLiveStopReceiver = receiver
+                androidx.core.content.ContextCompat.registerReceiver(
+                    this@MainActivity,
+                    receiver,
+                    android.content.IntentFilter(
+                        com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.ACTION_EYEVUE_LIVE_STOP,
+                    ),
+                    androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+                )
+            }
         }
+
+    /** Attaches the inline EyeVue picture surface to the current player. */
+    private fun attachEyevueVideoSurface() {
+        val view = eyevueTextureView ?: return
+        val player = eyevueLivePlayer ?: return
+        if (!view.isAvailable) return
+        val texture = view.surfaceTexture ?: return
+        if (texture === eyevueVideoTexture && eyevueVideoSurface != null) return
+        runCatching { eyevueVideoSurface?.release() }
+        eyevueVideoSurface = null
+        eyevueVideoTexture = texture
+        val surface = Surface(texture)
+        eyevueVideoSurface = surface
+        player.setVideoSurface(surface)
+    }
 
     private fun metaAndroidPermissionsMissing(): Array<String> {
         val permissions = mutableListOf(Manifest.permission.CAMERA)
@@ -1961,7 +2143,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             GlassesDashboardAction.StopLivePreview -> {
                 Log.i("LivePreview", "BUTTON TAP: Stop Live Preview")
                 if (isEyevueSelected()) {
-                    getOrCreateEyevueLivePreviewManager().stop()
+                    if (eyevueLivePreviewManager?.isActive == true) {
+                        getOrCreateEyevueLivePreviewManager().stop()
+                    }
+                    com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.stop(this)
                     releaseExclusiveGlassesSession(livePreviewSessionLease)
                     livePreviewSessionLease = null
                 } else {
@@ -3666,6 +3851,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
             return
         }
+        if (!hasNotificationPermission(this)) {
+            ensureNotificationPermission(this, "Eyevue live preview") {
+                startEyevueLivePreview()
+            }
+            return
+        }
         val manager = getOrCreateEyevueManager()
         if (!manager.isConnected()) {
             Toast.makeText(this, "Connect to Eyevue over Bluetooth first.", Toast.LENGTH_LONG).show()
@@ -3684,8 +3875,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         val lease = acquireExclusiveGlassesSession(GlassesSession.LIVE_PREVIEW) ?: return
         livePreviewSessionLease = lease
+        // Foreground service keeps the session + relay alive when this app is
+        // backgrounded (e.g. opening VLC). Same shape as the Gemini live one.
+        com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.start(this)
+        liveManager.onRelayUrlChanged = { url ->
+            com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.updateUrl(this, url)
+        }
         liveManager.start(
             onSessionFinished = {
+                liveManager.onRelayUrlChanged = null
+                com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.stop(this)
                 releaseExclusiveGlassesSession(lease)
                 if (livePreviewSessionLease === lease) livePreviewSessionLease = null
             },

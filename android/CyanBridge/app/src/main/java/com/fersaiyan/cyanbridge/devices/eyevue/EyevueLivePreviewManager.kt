@@ -53,6 +53,11 @@ class EyevueLivePreviewManager(
     private var player: ExoPlayer? = null
     private var playerListener: Player.Listener? = null
     private var playbackFailure: CompletableDeferred<Throwable>? = null
+    private var liveProxy: RtspPlayRewriteProxy? = null
+    private var dummySurface: android.view.Surface? = null
+    private var dummyTexture: android.graphics.SurfaceTexture? = null
+    /** Fires when the per-session relay address is known (stable for the session). */
+    var onRelayUrlChanged: ((String?) -> Unit)? = null
     private var onSessionFinished: () -> Unit = {}
     private var finishedNotified = true
 
@@ -109,23 +114,54 @@ class EyevueLivePreviewManager(
                 requestLiveEndpoint(controlUrl)
             }
 
-            val streamUrl = profile.liveStreamUrl
-            val streamFailure = CompletableDeferred<Throwable>()
-            playbackFailure = streamFailure
-            val ready = withTimeoutOrNull(20_000L) {
-                playUntilReady(streamUrl, streamFailure)
-                true
-            } == true
-            if (!ready) throw IOException("Timed out waiting for the Eyevue RTSP stream")
-            _uiState.value = LivePreviewState(
-                stateLabel = "Playing",
-                detail = streamUrl,
-                isPlaying = true,
-                streamUrl = streamUrl,
-                canStart = false,
-                canStop = true,
-            )
-            throw streamFailure.await()
+            // Single-session fan-out relay: one shared stream with the glasses
+            // (both tracks, like the vendor) fanned out to every local viewer,
+            // so viewers never disturb each other or the box.
+            val proxy = RtspPlayRewriteProxy(profile.baseIp, 554)
+            val localPort = proxy.start()
+            liveProxy = proxy
+            val streamUrl = "rtsp://127.0.0.1:$localPort/xxx.mov"
+            Log.i(TAG, "Eyevue relay up: $streamUrl -> ${profile.baseIp}:554 (open in VLC while live runs)")
+            runCatching { onRelayUrlChanged?.invoke(streamUrl) }
+            var attempt = 0
+            var lastError: Throwable? = null
+            while (attempt < 4) {
+                val streamFailure = CompletableDeferred<Throwable>()
+                playbackFailure = streamFailure
+                val ready = withTimeoutOrNull(30_000L) {
+                    playUntilReady(streamUrl, streamFailure)
+                    true
+                } == true
+                if (!ready) {
+                    lastError = IOException("Timed out waiting for the Eyevue RTSP stream")
+                    Log.w(TAG, "Eyevue handshake attempt ${attempt + 1} not ready; retrying")
+                    releasePlayer()
+                    attempt++
+                    delay(1_000L)
+                    continue
+                }
+                _uiState.value = LivePreviewState(
+                    stateLabel = "Playing",
+                    detail = streamUrl,
+                    isPlaying = true,
+                    streamUrl = streamUrl,
+                    canStart = false,
+                    canStop = true,
+                )
+                try {
+                    throw streamFailure.await()
+                } catch (reconnect: Throwable) {
+                    if (reconnect is CancellationException) throw reconnect
+                    lastError = reconnect
+                    Log.w(TAG, "Eyevue stream hiccup (attempt ${attempt + 1}); re-handshaking: ${reconnect.message}")
+                    releasePlayer()
+                    attempt++
+                    if (attempt >= 4) throw reconnect
+                    updateState("Buffering", "Reopening Eyevue stream", scanning = true)
+                    delay(1_000L)
+                }
+            }
+            throw lastError ?: IOException("Eyevue live preview failed")
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
@@ -135,6 +171,8 @@ class EyevueLivePreviewManager(
         } finally {
             withContext(NonCancellable) {
                 releasePlayer()
+                liveProxy?.stop()
+                liveProxy = null
                 if (liveCommandAttempted && eyevueManager.isConnected()) {
                     eyevueManager.stopLiveBlocking()
                 }
@@ -171,13 +209,36 @@ class EyevueLivePreviewManager(
     ) {
         val mediaSource = RtspMediaSource.Factory()
             .setForceUseRtpTcp(true)
+            .setDebugLoggingEnabled(true)
             .createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
         suspendCancellableCoroutine<Unit> { continuation ->
             val exoPlayer = ExoPlayer.Builder(context).build()
+            // Video-only preview: the glasses' sound track keeps our player
+            // stuck in buffering (first picture shows, then freeze).
+            // Vendor's own player handles both; we unblock video first.
+            exoPlayer.trackSelectionParameters =
+                exoPlayer.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_AUDIO, true)
+                    .build()
+            // Dummy surface so the decoder has output even before the
+            // picture box attaches. PlayerView replaces it once visible.
+            val texture = android.graphics.SurfaceTexture(0)
+            val surface = android.view.Surface(texture)
+            dummyTexture = texture
+            dummySurface = surface
+            exoPlayer.setVideoSurface(surface)
             val listener = object : Player.Listener {
                 private var ready = false
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
+                    val name = when (playbackState) {
+                        Player.STATE_IDLE -> "IDLE"
+                        Player.STATE_BUFFERING -> "BUFFERING"
+                        Player.STATE_READY -> "READY"
+                        Player.STATE_ENDED -> "ENDED"
+                        else -> playbackState.toString()
+                    }
+                    Log.i(TAG, "Eyevue player state: $name playWhenReady=${exoPlayer.playWhenReady}")
                     if (playbackState == Player.STATE_READY && !ready) {
                         ready = true
                         if (continuation.isActive) continuation.resume(Unit)
@@ -189,6 +250,18 @@ class EyevueLivePreviewManager(
                             streamFailure.complete(error)
                         }
                     }
+                }
+
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    Log.i(TAG, "Eyevue player isPlaying=$isPlaying")
+                }
+
+                override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                    Log.i(TAG, "Eyevue video size: ${videoSize.width}x${videoSize.height}")
+                }
+
+                override fun onRenderedFirstFrame() {
+                    Log.i(TAG, "Eyevue player rendered first frame")
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
@@ -203,6 +276,17 @@ class EyevueLivePreviewManager(
             player = exoPlayer
             playerListener = listener
             exoPlayer.addListener(listener)
+            // Publish now that the player exists, so the inline video box
+            // never receives a null player. Gated UI shows it only for
+            // EyeVue after live starts.
+            _uiState.value = LivePreviewState(
+                stateLabel = "Buffering",
+                detail = streamUrl,
+                isPlaying = true,
+                streamUrl = streamUrl,
+                canStart = false,
+                canStop = true,
+            )
             continuation.invokeOnCancellation {
                 if (player === exoPlayer) releasePlayer()
             }
@@ -217,8 +301,13 @@ class EyevueLivePreviewManager(
         playbackFailure = null
         playerListener?.let { listener -> player?.removeListener(listener) }
         playerListener = null
+        player?.setVideoSurface(null)
         player?.release()
         player = null
+        runCatching { dummySurface?.release() }
+        dummySurface = null
+        runCatching { dummyTexture?.release() }
+        dummyTexture = null
     }
 
     private fun updateState(label: String, detail: String, scanning: Boolean) {

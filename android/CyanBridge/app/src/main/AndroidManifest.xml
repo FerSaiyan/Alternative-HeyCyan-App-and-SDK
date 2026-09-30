@@ -151,6 +151,7 @@
             android:process=":benchmark_mtp_on" />
         <service android:name=".ai.AiQuestionForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|dataSync|microphone" />
         <service android:name=".ai.live.GeminiLiveForegroundService" android:exported="false" android:foregroundServiceType="microphone|connectedDevice|mediaPlayback|dataSync" />
+        <service android:name=".devices.eyevue.EyevueLiveForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|mediaPlayback" />
         <service android:name=".plugins.walkingaid.WalkingAidService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".plugins.meetingsparknotes.MeetingSparkNotesService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.livecaptionrelay.LiveCaptionRelayService" android:exported="false" android:foregroundServiceType="microphone" />

@@ -90,6 +90,7 @@ import org.jetbrains.compose.resources.stringResource
 fun GlassesDashboardScreen(
     state: GlassesDashboardUiState,
     onAction: (GlassesDashboardAction) -> Unit,
+    liveVideoSlot: @Composable () -> Unit = {},
 ) {
     var showWifiAdbConfirmation by remember { mutableStateOf(false) }
     var wifiAdbRiskAcknowledged by remember { mutableStateOf(false) }
@@ -270,7 +271,7 @@ fun GlassesDashboardScreen(
                 }
             }
             if (state.showHeyCyanControls || state.showEyevueControls || state.showTuneBudsControls) {
-                item { CoreGlassesControls(state, onAction) }
+                item { CoreGlassesControls(state, onAction, liveVideoSlot) }
             }
             if (state.showMetaRaybanControls) {
                 item { MetaRaybanControls(state.metaRayban, onAction) }
@@ -707,6 +708,7 @@ private fun TransferCard(
 private fun CoreGlassesControls(
     state: GlassesDashboardUiState,
     onAction: (GlassesDashboardAction) -> Unit,
+    liveVideoSlot: @Composable () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.testTag("glasses_core_controls"),
@@ -796,6 +798,14 @@ private fun CoreGlassesControls(
                 secondaryEnabled = state.livePreview.canStop,
                 secondaryStyle = ActionButtonStyle.Destructive,
             )
+            // Inline EyeVue video: only for EyeVue glasses, only after live
+            // starts. Other glasses see no extra UI here.
+            if (state.showEyevueControls &&
+                state.livePreview.isPlaying &&
+                state.livePreview.streamUrl != null
+            ) {
+                liveVideoSlot()
+            }
         }
     }
 }
