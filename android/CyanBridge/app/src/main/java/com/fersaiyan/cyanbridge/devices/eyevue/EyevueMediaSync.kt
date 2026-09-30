@@ -126,22 +126,38 @@ class EyevueMediaSync(
             onState(state)
 
             var completed = 0
+            var failed = 0
+            var lastError: Throwable? = null
             for (item in items) {
                 coroutineContext.ensureActive()
-                val file = download(profile, item, onProgress)
-                val imported = try {
-                    onFile(item, file)
-                } finally {
-                    file.delete()
+                try {
+                    val file = download(profile, item, onProgress)
+                    val imported = try {
+                        onFile(item, file)
+                    } finally {
+                        file.delete()
+                    }
+                    if (!imported) throw IOException("Could not import ${item.fileName}")
+                    completed++
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    // One bad file must not abort the whole sync; keep the rest.
+                    failed++
+                    lastError = error
+                    Log.w(TAG, "Eyevue sync skipped ${item.fileName}: ${error.message}")
                 }
-                if (!imported) throw IOException("Could not import ${item.fileName}")
-                completed++
                 state = state.copy(
                     completed = completed,
-                    detail = "Downloaded $completed/${items.size}",
+                    detail = if (failed == 0) {
+                        "Downloaded $completed/${items.size}"
+                    } else {
+                        "Downloaded $completed/${items.size} ($failed failed)"
+                    },
                 )
                 onState(state)
             }
+            if (completed == 0 && failed > 0) throw lastError ?: IOException("Eyevue sync failed")
             state = state.copy(isActive = false, detail = "Completed")
             onState(state)
             return Result.success(completed)

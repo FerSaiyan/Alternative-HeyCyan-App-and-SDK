@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.devices.eyevue
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -91,6 +92,10 @@ class EyevueManager private constructor(context: Context) {
             return
         }
         connectJob?.cancel()
+        // Eyevue uses its own transport, so any HeyCyan one-shot still holding the shared
+        // slot (e.g. an unanswered audio-loop command) can never complete. Drop it here
+        // instead of blocking sync/live forever. Active sessions are left untouched.
+        GlassesSessionCoordinator.clearBackgroundCommands()
         _state.value = EyevueState(
             connectionLabel = "Connecting to Eyevue",
             protocolState = EyevueGattState.CONNECTING.name,

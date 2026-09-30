@@ -373,11 +373,13 @@ class AutoAudioCaptureService : Service() {
             commandSubmitted = true
 
             // Some firmware builds start recording but never ACK (or ACK late). Treat timeout as
-            // "unknown", not as hard failure. Keep the permit until a late ACK or reconnect so
-            // the SDK's single response slot cannot be overwritten by another workflow.
+            // "unknown", not as hard failure. Release the permit so a missing ACK can never
+            // wedge the shared slot forever (release is idempotent, so a late ACK that also
+            // releases is harmless).
             val result = withTimeoutOrNull(6_000) { done.await() }
             if (result == null) {
-                Log.w(TAG, "Audio command timed out; keeping the glasses SDK isolated until ACK or reconnect")
+                Log.w(TAG, "Audio command timed out; releasing the glasses SDK slot")
+                GlassesSessionCoordinator.releaseBackgroundCommand(permit)
                 return AudioCmdAck(responded = false, ok = false)
             }
             return result

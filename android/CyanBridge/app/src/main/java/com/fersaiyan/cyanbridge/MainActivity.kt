@@ -9718,6 +9718,32 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             VendorMediaType.AUDIO -> {
                 val rawBytes = runCatching { file.readBytes() }.getOrNull() ?: return false
+                // Eyevue records standard WAV files: store them as-is. Only Opus
+                // payloads go through the Ogg wrapper; wrapping WAV bytes as Opus
+                // produces garbage and must never happen.
+                if (item.fileName.endsWith(".wav", ignoreCase = true)) {
+                    val saved = saveOpusToLibrary(
+                        payloadBytes = rawBytes,
+                        rawBytesSize = rawBytes.size,
+                        payloadNote = "wav-passthrough",
+                        displayName = item.fileName,
+                        takenTimeMs = takenMs,
+                        mimeType = "audio/wav",
+                    )
+                    if (saved.success) {
+                        runCatching {
+                            GlassesSyncedAudioIngestor.persistDownloadedAudio(
+                                context = applicationContext,
+                                displayName = item.fileName,
+                                payloadBytes = rawBytes,
+                                takenTimeMs = takenMs,
+                            )
+                        }.onFailure {
+                            Log.e("DataDownload", "Failed to persist synced audio session for ${item.fileName}", it)
+                        }
+                    }
+                    return saved.success
+                }
                 val wrapped = wrapOpusIfNeeded(rawBytes)
                 val saved = saveOpusToLibrary(
                     payloadBytes = wrapped.first,
@@ -10309,6 +10335,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         payloadNote: String,
         displayName: String,
         takenTimeMs: Long,
+        mimeType: String = "audio/ogg",
     ): GallerySaveResult {
         return try {
             val resolver = contentResolver
@@ -10322,16 +10349,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val title = displayName.substringBeforeLast('.', displayName)
             val values = ContentValues().apply {
                 put(MediaStore.Audio.Media.DISPLAY_NAME, displayName)
-                // Use Ogg/Opus container when possible.
-                put(MediaStore.Audio.Media.MIME_TYPE, "audio/ogg")
+                put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
                 put(MediaStore.Audio.Media.TITLE, title)
                 put(MediaStore.Audio.Media.IS_MUSIC, 0)
                 put(MediaStore.MediaColumns.DATE_ADDED, takenTimeMs / 1000)
                 put(MediaStore.MediaColumns.DATE_MODIFIED, takenTimeMs / 1000)
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    // Keep alongside photos/videos per your preference (DCIM/CyanBridge).
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, SyncedMediaFolder.relativePath)
+                    // Audio collections reject DCIM; recordings go under Music/CyanBridge.
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, SyncedMediaFolder.relativeAudioPath)
                     put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
             }

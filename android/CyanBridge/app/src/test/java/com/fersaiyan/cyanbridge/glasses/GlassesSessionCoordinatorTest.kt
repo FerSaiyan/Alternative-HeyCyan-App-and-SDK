@@ -86,4 +86,25 @@ class GlassesSessionCoordinatorTest {
 
         assertTrue(GlassesSessionCoordinator.isBackgroundCommandActive(currentPermit))
     }
+
+    @Test
+    fun clearingStaleOneShotsUnblocksExclusiveWorkflow() {
+        val stalePermit = requireNotNull(GlassesSessionCoordinator.tryAcquireBackgroundCommand())
+        assertFalse(GlassesSessionCoordinator.tryAcquire(GlassesSession.MEDIA_SYNC))
+
+        GlassesSessionCoordinator.clearBackgroundCommands()
+
+        assertTrue(GlassesSessionCoordinator.tryAcquire(GlassesSession.MEDIA_SYNC))
+        GlassesSessionCoordinator.releaseBackgroundCommand(stalePermit)
+    }
+
+    @Test
+    fun doubleReleaseOfBackgroundPermitIsHarmless() {
+        val permit = requireNotNull(GlassesSessionCoordinator.tryAcquireBackgroundCommand())
+        GlassesSessionCoordinator.releaseBackgroundCommand(permit)
+        GlassesSessionCoordinator.releaseBackgroundCommand(permit)
+
+        assertTrue(GlassesSessionCoordinator.canRunBackgroundCommand())
+        assertTrue(GlassesSessionCoordinator.tryAcquire(GlassesSession.MEDIA_SYNC))
+    }
 }
