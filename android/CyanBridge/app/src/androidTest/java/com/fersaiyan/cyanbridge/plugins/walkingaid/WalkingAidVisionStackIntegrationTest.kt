@@ -3,11 +3,21 @@ package com.fersaiyan.cyanbridge.plugins.walkingaid
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.rule.GrantPermissionRule
+import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveConnection
+import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLivePreviewManager
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaDatPermissions
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
+import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
+import com.meta.wearable.dat.mockdevice.MockDeviceKit
+import com.meta.wearable.dat.mockdevice.api.GlassesModel
+import com.meta.wearable.dat.mockdevice.api.MockDeviceKitConfig
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
 import com.fersaiyan.cyanbridge.plugins.walkingaid.vision.LiteRtVisionBackend
 import com.fersaiyan.cyanbridge.plugins.walkingaid.vision.VisionFrame
@@ -16,11 +26,20 @@ import java.io.PrintWriter
 import java.io.StringWriter
 import java.security.MessageDigest
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import org.junit.Rule
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.runner.RunWith
 
 /** Runs the production Walking Aid LiteRT stack against real JPEG camera scenes on Android. */
@@ -28,6 +47,98 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class WalkingAidVisionStackIntegrationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
+    @get:Rule val permissions: GrantPermissionRule = GrantPermissionRule.grant(*MetaDatPermissions.required())
+
+    @Test
+    fun realModel_runYoloOnEyevueVideo() = runRealModelTest("eyevue-video") {
+        val video = stageVideo("eyevue-scenes.mp4")
+        var connectionClosed = false
+        val connection = object : EyevueLiveConnection {
+            override suspend fun open(onStatus: (String, String) -> Unit) = Uri.fromFile(video).toString()
+            override suspend fun close() { connectionClosed = true }
+        }
+        // Only the BLE/Wi-Fi connection is substituted: production VLC output, rotation,
+        // Walking Aid acquisition/queue, and real YOLO inference are exercised below.
+        val capture = WalkingAidLiveVideoCapture(context) { EyevueLivePreviewManager(context, connection) }
+        runVideoDetector(capture, WalkingAidVideoMode.EYEVUE_VIDEO)
+        assertTrue("Eyevue transport must close on stop", connectionClosed)
+        assertNull("Eyevue lease leaked", GlassesSessionCoordinator.currentSession())
+    }
+
+    @Test
+    fun realModel_runYoloOnMetaDatVideo() = runRealModelTest("meta-video") {
+        val kit = MockDeviceKit.getInstance(context)
+        val manager = MetaRaybanManager.getInstance(context)
+        try {
+            val glasses = withContext(Dispatchers.Main) {
+                kit.enable(MockDeviceKitConfig(initiallyRegistered = true, initialPermissionsGranted = true))
+                val paired = kit.pairGlasses(GlassesModel.RAYBAN_META).fold(
+                    onSuccess = { it }, onFailure = { error, _ -> throw AssertionError(error.description) },
+                )
+                paired.powerOn()
+                paired.unfold()
+                paired.don()
+                manager.initialize()
+                paired
+            }
+            assertFalse("Must use actual DAT, not UI mock", manager.isDebugMockEnabled())
+            // DAT's mock transport negotiates HEVC; an AVC feed starts the stream
+            // but its HEVC decoder produces no frames. Exercise the negotiated codec.
+            glasses.services.camera.setCameraFeed(Uri.fromFile(stageVideo("meta-scenes.mp4")))
+            runVideoDetector(WalkingAidLiveVideoCapture(context), WalkingAidVideoMode.META_VIDEO)
+            assertFalse("Meta stream must stop", manager.isStreaming.value)
+            assertEquals(MetaRaybanManager.DeviceSessionState.IDLE, manager.deviceSessionState.value)
+            assertNull("Meta lease leaked", GlassesSessionCoordinator.currentSession())
+        } finally {
+            withContext(Dispatchers.Main) { manager.destroy(); kit.disable() }
+        }
+    }
+
+    private fun stageVideo(name: String): File = File(context.cacheDir, "walking-$name").also { file ->
+        InstrumentationRegistry.getInstrumentation().context.assets.open("walkingaid/$name").use { input ->
+            file.outputStream().use { input.copyTo(it) }
+        }
+    }
+
+    private suspend fun runVideoDetector(capture: WalkingAidLiveVideoCapture, mode: WalkingAidVideoMode) = coroutineScope {
+        verifyInstalledModel(WalkingAidModelCatalog.detectorFor(WalkingAidPreferences.MODEL_TYPE_YOLO11))
+        WalkingAidPreferences.setYoloModelType(context, WalkingAidPreferences.MODEL_TYPE_YOLO11)
+        val backend = LiteRtVisionBackend(context, LocalComputeBackend.CPU)
+        val queue = WalkingAidFrameQueue()
+        val captureJob = launch { capture.collect(mode, queue::offer) }
+        try {
+            assertTrue("YOLO load failed: ${backend.detectorInitError}", backend.isDetectorModelLoaded)
+            var analyzed = 0
+            var sawBus = false
+            var sawPerson = false
+            var sawTie = false
+            withTimeout(60_000) {
+                while (analyzed < 3 || !sawBus || !sawPerson || !sawTie) {
+                    val frame = queue.frames.receive()
+                    try {
+                        val now = System.currentTimeMillis()
+                        assertTrue("Live frame must be fresh", now - frame.timestampMs < 5_000)
+                        if (mode == WalkingAidVideoMode.EYEVUE_VIDEO) {
+                            assertEquals("Eyevue must be rotated upright", 480, frame.bitmap.width)
+                            assertEquals(640, frame.bitmap.height)
+                        }
+                        val result = backend.detect(frame)
+                        assertFalse("$mode YOLO error: ${result.errorMessage}", result.isError)
+                        val labels = result.objects.map { it.label }
+                        sawBus = sawBus || "bus" in labels
+                        sawPerson = sawPerson || "person" in labels
+                        sawTie = sawTie || "tie" in labels
+                        analyzed++
+                        Log.i(TAG, "$mode frame=${frame.captureIndex} labels=$labels inferenceMs=${result.inferenceTimeMs}")
+                    } finally { frame.bitmap.recycle() }
+                }
+            }
+        } finally {
+            captureJob.cancelAndJoin()
+            queue.clear()
+            backend.close()
+        }
+    }
 
     @Test
     fun realModel_runYolo11OnGlassesLikeJpegs() = runRealModelTest("yolo11") {
@@ -120,8 +231,8 @@ class WalkingAidVisionStackIntegrationTest {
                 )
                 val labels = detection.objects.map { it.label }
                 assertTrue(
-                    "$displayName did not detect any expected class in ${fixture.spec.fileName}; labels=$labels",
-                    labels.any(fixture.spec.expectedLabels::contains),
+                    "$displayName did not detect expected classes ${fixture.spec.expectedLabels} in ${fixture.spec.fileName}; labels=$labels",
+                    labels.containsAll(fixture.spec.expectedLabels),
                 )
                 Log.i(
                     TAG,

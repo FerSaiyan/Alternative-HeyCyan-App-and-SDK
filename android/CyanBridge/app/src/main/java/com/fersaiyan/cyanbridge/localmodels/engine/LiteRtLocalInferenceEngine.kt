@@ -271,12 +271,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         return try {
             val text = withContext(Dispatchers.IO) {
                 val userContents = buildUserContents(config)
-                runCatching {
-                    generateFromConversation(conversation, config.prompt, userContents, onToken)
-                }.recoverCatching {
-                    if (userContents == null) throw it
-                    generateFromConversation(conversation, config.prompt, null, onToken)
-                }.getOrThrow()
+                generateFromConversation(conversation, config.prompt, userContents, onToken)
             }
             GenerationResult(text = text, tokenCount = tokenizeEstimate(text))
         } catch (t: Throwable) {
@@ -356,11 +351,13 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             val path = rawPath.trim()
             if (path.isBlank()) return@forEach
             val file = File(path)
-            if (file.exists()) parts += Content.ImageFile(file.absolutePath)
+            require(file.isFile && file.length() > 0) { "Image attachment is missing: $path" }
+            parts += Content.ImageFile(file.absolutePath)
         }
         config.audioPath?.trim()?.takeIf { it.isNotBlank() }?.let { path ->
             val file = File(path)
-            if (file.exists()) {
+            require(file.isFile && file.length() > 0) { "Audio attachment is missing: $path" }
+            run {
                 val ext = file.extension.lowercase(Locale.US)
                 if (ext !in supportedAudioExtensions) {
                     throw IllegalArgumentException(

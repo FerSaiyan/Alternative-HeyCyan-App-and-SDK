@@ -16,8 +16,13 @@ import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import androidx.test.platform.app.InstrumentationRegistry
+import android.graphics.BitmapFactory
+import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
+import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Rule
@@ -36,8 +41,7 @@ class MetaPairingMockFlowTest {
 
     @After
     fun tearDown() {
-        // Always disable mock to avoid leaking state to other tests
-        manager().setDebugMockEnabled(false)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { manager().destroy() }
     }
 
     @Test
@@ -172,6 +176,50 @@ class MetaPairingMockFlowTest {
         assertEquals("image/jpeg", photo.mimeType)
         assertEquals(MetaRaybanManager.StreamState.STOPPED, mgr.streamState.value)
         assertEquals(MetaRaybanManager.DeviceSessionState.IDLE, mgr.deviceSessionState.value)
+    }
+
+    @Test
+    fun mockCameraPermissionAndOneShotPreserveAnAlreadyRunningPreview() {
+        val mgr = manager()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            mgr.setDebugMockEnabled(true)
+            var permissionGranted = false
+            mgr.checkCameraPermission(
+                onGranted = { permissionGranted = true },
+                onRequestNeeded = { throw AssertionError("Mock must not open Meta AI authorization") },
+                onError = { throw AssertionError(it) },
+            )
+            assertTrue(permissionGranted)
+            mgr.startSession({}, { throw AssertionError(it) })
+            mgr.startStreaming({}, {}, { throw AssertionError(it) })
+        }
+        val photo = runBlocking { withTimeout(5_000) { mgr.capturePhotoOnce() } }
+        val bitmap = BitmapFactory.decodeByteArray(photo.bytes, 0, photo.bytes.size)
+        assertNotNull("Mock must deliver a usable image, not just READY labels", bitmap)
+        bitmap?.recycle()
+        assertTrue(mgr.isStreaming.value)
+        assertEquals(MetaRaybanManager.DeviceSessionState.STARTED, mgr.deviceSessionState.value)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { mgr.setDebugMockEnabled(false) }
+        assertFalse(mgr.isInitialized.value)
+        assertFalse(mgr.isStreaming.value)
+        assertFalse(mgr.cameraPermissionGranted.value)
+        val lease = GlassesSessionCoordinator.tryAcquireLease(GlassesSession.META_CAMERA)
+        assertNotNull("Disabling mock must release its transport lease", lease)
+        lease?.let { GlassesSessionCoordinator.release(it) }
+    }
+
+    @Test
+    fun successfulPermissionCheckClearsOnlyRecoveredCameraErrors() {
+        val mgr = manager()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            mgr.setDebugMockEnabled(true)
+            mgr.reportExternalError("cameraPermission", "All discovered devices are powered off or disconnected")
+            mgr.recordCameraPermissionResult(true)
+            assertEquals(null, mgr.lastError.value)
+            mgr.reportExternalError("stream", "Camera closed")
+            mgr.recordCameraPermissionResult(true)
+            assertEquals("stream: Camera closed", mgr.lastError.value)
+        }
     }
 
     @Test

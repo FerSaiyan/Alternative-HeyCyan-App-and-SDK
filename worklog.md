@@ -420,3 +420,270 @@ CI is fine (workflow checks out submodules recursively + LFS pull); this is only
 - A first Settings-navigation trial had **already resumed the Network page before the tap**. Its post markers looked good, but the audited pre-action state exposed a false positive; the export was discarded. The final test explicitly starts Settings HOME and refuses an already-open destination, missing Tasker markers, unchanged hashes or stale timestamps.
 - The HIL emulator-recovery helper reused `emulator-5554` for `CyanBridge_Walking_Aid_CI` hours later. An AVD-identity check prevented an invalid Pixel export. `CYANBRIDGE_HIL_ARTEMIS_PARITY=true` now pins `Pixel_9a` and fails closed on offline/wrong AVD before and after instrumentation. Pinned HIL passed on `emulator-5562` without clearing app data.
 - The final allowlisted Tasker diagnostic is `android/CyanBridge/training/tasker_real_v1/settings_network.json` (episode `tasker_settings_network_1790601149125`). Tasker pre-state: Settings home. Tasker action: tap `Network & internet`. Tasker post-state: `Internet` and `SIMs`, changed hash; separate ADB UIAutomator dump confirmed page title and `Airplane mode`. Pre-observation to verified post-observation: **1,821 ms**; action start to verification: **1,734 ms**. This is one diagnostic episode, not a trainable split or a planner comparison. No email was sent.
+
+## 2026-09-29/30 — AudioRecord replaces Google STT for glasses questions (in progress, hunks parked)
+
+> Historical implementation note. The 2026-10-01 review below corrects the
+> diagnosis, stash reference, existing-VAD inventory, and readiness assessment.
+
+### Goal
+Remove the system Google `SpeechRecognizer` from the glasses image-question and
+voice-question flows. Field logs showed its server-side speech-onset deadline
+killing the Ask window ~0.6-0.9 s after the cue (`NO_SPEECH_DETECTED` -> error 7),
+while the app's own 3.3 s window never fired. Replacement: `AudioRecord`
+capture with on-device energy endpointing, feeding audio + image (+ text
+instruction) straight into the multimodal LiteRT turn. No transcription
+fallback (rejected: latency, VRAM/RAM contention, offline requirement) and no
+relay transcription (privacy: relay only routes to a Pro user's chosen cloud
+model, never transcribes). 99% of users are offline local-model users.
+
+### What failed (no code fault on our side)
+- Mid-implementation, a concurrent agent working Eyevue/build issues on
+  `cyanbridge-relay-readiness` stashed the shared tree (`git stash push -u`,
+  "parked to unblock eyevue build"), sweeping up the in-progress files. Current
+  branch `heycyan-eyevue-tunebuds-protocol-fixes` is back at HEAD for those
+  paths. Nothing is lost: the work sits in `stash@{0}` (see `git stash show`
+  output below), but it mixes both agents' files across two branches, so it
+  was NOT popped. The other agent is now separating my MainActivity hunks from
+  their WIP to preserve them.
+- Stash@{0} contents relevant to this task: `MainActivity.kt` (all rewires),
+  new `ai/image/AudioQuestionRecorder.kt`, new test
+  `ai/image/AudioQuestionRecorderTest.kt`.
+
+### What was planned and why (approved before implementation)
+- New `AudioQuestionRecorder`: `VOICE_COMMUNICATION` AudioRecord @16 kHz mono
+  (follows the glasses SCO mic like today), pure `VoiceEndpoint` state machine
+  (onset timeout reuses the 3.3 s constant, ~1.8 s silence hangover so long
+  questions are never cut, ~20 s cap, ~400 ms min-speech to reject cue echo),
+  pure RMS frame classifier + WAV writer (both JVM-testable), WAV to
+  `cacheDir/audio-questions/`. Rationale: endpointing fully on-device, window
+  stays open while the user speaks, zero network dependency.
+- Image flow: `CapturedImageQuestion` gains `audioPath`; threaded through the
+  parallel/sequential capture, `offerFollowUp`, `triggerAssistantImageQuery`,
+  `triggerChosenProviderImageQuery`. LOCAL route sends image + audio + short
+  instruction text (not the default description) in one LiteRT turn
+  (`audioPath` already supported end to end via `GenerationConfig` ->
+  `Content.AudioFile`). PRO/TASKER/Live proceed with text only + log line
+  (interim: PRO needs the planned combined image+audio relay endpoint; TASKER
+  external-UI fill fundamentally needs text = open product decision).
+- Voice flow: same recorder replaces its `SpeechRecognizer`; LOCAL answers
+  direct from audio; PRO answers via existing `/audio-query` (no website change);
+  TASKER voice gets a clear toast (needs text bridge). Text intent routing
+  (`AssistantRequestRouter` ANALYZE_IMAGE/EXECUTE_UI_TASK/CLARIFY from the voice
+  button) is dropped with the text it depended on — documented regression.
+- Verified beforehand (read-only): LiteRT-LM 0.16.0 already builds
+  `Content.AudioFile` (wav/mp3/flac); llamacpp-kotlin 0.4.0 binding is
+  text-only (upstream libmtmd has audio, binding does not expose it); website
+  has no standalone VAD (only Live-API `silenceDurationMs`); relay
+  `/audio-query` takes audio+prompt, `/image-query` image+prompt, no combined
+  route yet; chat-screen typed questions stay text-only via existing defaults.
+- Website plan (no edits): extend `/image-query` with optional `audioBase64`
+  appended as an `input_audio` part (mirrors `/audio-query`), backward
+  compatible.
+
+### Hunk recovery plan
+1. Let the concurrent agent finish isolating my MainActivity hunks from their
+   Eyevue WIP (in progress on their side).
+2. Re-apply on `heycyan-eyevue-tunebuds-protocol-fixes`: my 3 paths only
+   (`MainActivity.kt` hunks, `AudioQuestionRecorder.kt`,
+   `AudioQuestionRecorderTest.kt`) — via their separated patch/branch, or
+   `git checkout stash@{0} -- <paths>` + manual verification that no Eyevue
+   hunks leak in, or rewrite from context if the stash becomes unusable.
+3. Do NOT `git stash pop` (would reintroduce their files across branches).
+
+### Next steps (after recovery)
+1. Re-apply edits, then `git diff --stat` review of exactly the 3 paths.
+2. Run `:app:testDebugUnitTest` (new endpointing/classifier/WAV tests + existing
+   vision/transcription/router tests), then `:app:compileDebugKotlin`.
+3. On-device test with logcat (`ImageQuestion`, `ImageQuestionAudio`,
+   `AudioQuestionRecorder`): confirm onset/hangover behavior and that LOCAL
+   answers audio+image directly.
+4. Follow-ups (separate): combined image+audio relay endpoint (website),
+   PRO image audio enablement (one-line once endpoint lands), TASKER spoken
+   questions product decision, voice-button intent redirection (lost with text).
+
+## 2026-10-01 — Audio/image question diagnosis and parked-patch review
+
+- Full review: `android/CyanBridge/docs/AUDIO_IMAGE_QUESTION_REVIEW.md`.
+- Corrected the earlier certainty: logs prove early recognizer closure and no
+  usable question, not a proven Google server-side onset deadline. Google starts
+  online recognition **and** offline SODA; SODA fails to obtain the `en` language
+  pack although an `en-US` pack is listed. Bluetooth route-open/packet activity
+  alone does not prove intelligible speech reached recognition. An earbuds route
+  and an 11-second empty-result attempt are additional confounders.
+- The app already has local energy-based speech detection: AmbientSpeechDetector
+  (actively used), SpeechActivityDetector, SilenceCompactor, and
+  GeminiLiveSpeechActivityDetector. They are not currently the single-shot
+  question endpoint. Reuse suitable primitives rather than claiming none exist.
+- LiteRT already combines image/audio/text and preserves configured/runtime
+  system instructions. Found a separate real defect: failed media generation
+  silently retries text-only, and absent files can be silently omitted.
+- Original WIP is now `stash@{1}`, stable commit
+  `75c25289d6f2ae7755a364f088798ed834888de9`. Exported only the original audio
+  MainActivity delta plus recorder/test files and hash manifest into
+  `/tmp/opencode/audio-image-review-20261001/` without applying them.
+- The WIP is incomplete: orphaned recognizer code, undefined voice cue/timeout,
+  missing imports. Its unconditional 20-second cap contradicts the long-question
+  requirement. Cancellation ownership, file cleanup, ignored non-local image
+  audio, and removed voice intent/Live routing also require revision.
+- Concurrent EyeVue protocol, WAV-import, and RTSP changes are broadly sensible
+  for transport/live preview. The auto-audio ACK-timeout permit-release change
+  still needs vendor late-reply isolation verification; coordinator tests alone
+  establish only permit bookkeeping.
+- Current selected unit tests passed: **33 tests across five classes**; log at
+  `/tmp/opencode/audio-image-review-tests-20261001.log`. This does not validate
+  the stashed recorder. No ADB device attached. Located test WAV fixtures, but
+  no raw microphone recording associated with the failing question attempts in
+  searched paths.
+- Next: rebuild the LOCAL capture-to-multimodal handoff from the reviewed hunks,
+  preserve system/extra text, stop silent media loss or implicit cloud fallback,
+  retain route behavior deliberately, and verify offline on physical hardware.
+
+## 2026-10-01 — Offline-first question flow + upstream llama.cpp (uncommitted)
+
+### Goal (user-approved)
+- Keep Google recognition strictly on-device where usable; fix the `en` vs
+  installed-pack failure mode instead of relying on network STT.
+- If offline transcription fails, send recorded audio + image + required text
+  prompts to LiteRT.
+- Bring llama.cpp up to an upstream revision with audio-capable libmtmd, since
+  `llamacpp-kotlin:0.4.0` exposes no audio path.
+
+### Implemented (working tree, not committed)
+- Branch: `heycyan-eyevue-tunebuds-protocol-fixes` @ `05463fb`; changes uncommitted.
+- Capture: new `ai/image/AudioQuestionRecorder.kt` (16 kHz mono WAV, shared RMS
+  primitive from `SpeechActivityDetector`) + new `ai/image/QuestionEndpoint.kt`
+  (`NO_SPEECH` on onset timeout, `COMPLETE` on sustained silence, 2-min resource
+  limit reported as `LIMIT_REACHED`, not silent truncation).
+- STT: new `ai/transcription/OfflineQuestionTranscriber.kt` (API 33+ only,
+  `createOnDeviceSpeechRecognizer`, `checkRecognitionSupport` installed-locale
+  selection, recorded WAV injected via `EXTRA_AUDIO_SOURCE` + segmented session;
+  any failure returns null so the original audio is retained for the model).
+- Wiring: `MainActivity.kt` image/voice capture now records once, tries on-device
+  transcript, keeps existing text routing on success, otherwise forwards the WAV
+  to local multimodal inference. Added `audioPath` plumbing and WAV cleanup.
+- LiteRT: removed silent text-only retry/fallback in
+  `LiteRtLocalInferenceEngine.kt`; missing/empty attachments now fail loudly.
+- llama.cpp: new `:llama-runtime` module pinned to upstream
+  `0c1e57098bba43ac29e6e3b677cdceebdd22334f`
+  (`SHA256=6a85ec94...0407f`) with `libmtmd` image+audio bridge (`bridge.cpp`,
+  `UpstreamLlamaBridge.kt`); replaced `LlamaCppLocalInferenceEngine` and
+   embedding engine with the upstream JNI path; `EngineLoadConfig.projectorPath`
+  added; new `LocalModelProjectorStore.kt` for per-model mmproj GGUF imports.
+- Routing: `MediaInferenceRoutingPolicy` no longer falls back LOCAL media to
+  Pro/Tasker relay; `LocalModelsProvider` can pick an installed LiteRT or
+  projector-backed GGUF media model for the request. Tests: new
+  `QuestionEndpointTest`, `OfflineQuestionTranscriberTest`, `Utf8TokenDecoderTest`;
+  updated `MediaInferenceRoutingPolicyTest`.
+
+### Verification
+- `:app:compileDebugKotlin`: PASS (`/tmp/opencode/offline-question-compile.log`).
+- `:llama-runtime:assembleDebug`: PASS
+  (`/tmp/opencode/llama-upstream-android-build.log`).
+- `:app:testDebugUnitTest`: 576 tests, 1 failure —
+  `EyevueReleaseSafetyTest.eyevueMediaSyncUsesVerifiedWifiActivationCommand`
+  (`/tmp/opencode/offline-question-tests.log`). Unrelated EyeVue Wi-Fi
+  expectation; needs triage before commit.
+- Host JNI smoke (`test_upstream_llama_jni.sh`): blocked at CMake
+  `Could NOT find JNI` under both JBR and Java 11
+  (`/tmp/opencode/upstream-llama-host-smoke.log`); Android AAR build itself
+  succeeded, host smoke still open.
+- No device attached; no on-phone offline STT or LiteRT audio+image run yet.
+
+### Next
+1. Triage the EyeVue safety-test failure; rerun full unit tests green.
+2. Fix host JNI smoke environment or document it as device-only.
+3. On-device test with network disabled: on-device transcript path, audio+image
+  LiteRT path, long-question endpointing, and projector-backed GGUF media caps.
+4. Commit only after 1–3; review `android/CyanBridge/tools/` untracked dir before
+   committing.
+
+## 2026-10-01 — Meta DAT log review, guided setup, and actual SDK mock CI
+
+- Reviewed report `log_mukhte4r_6fb6f47a` (Samsung SM-F976U, Android SDK 37,
+  app 2.3.0). Its September 28 00:00–00:12 UTC events predate `a13fffc`
+  (14:39 UTC), whose initial-STOPPED stream/display fix is already in this branch.
+  Registration succeeded; discovery raced camera permission checks, and recovered
+  `Granted` results left the old error latched. Review:
+  `android/CyanBridge/docs/META_DAT_LOG_REVIEW_2026-10-01.md`.
+- DAT readiness now follows the selected device's `LinkState.CONNECTED`, with
+  link/auth diagnostics, bounded retries for typed connection errors, and recovery
+  of old camera failures. Setup checks are deduplicated per ready-device state and
+  resume. Permission-request errors preserve their SDK description. The manager
+  also observes an already initialized process-wide SDK (`ALREADY_INITIALIZED`).
+- Added next-step popups for Android permissions, app settings after permanent
+  denial, Bluetooth, registration, reconnecting, and separate Meta camera consent.
+  Capture failures open Meta setup. Shared `MetaDatPermissions` covers Location on
+  Android 10–11 and Nearby Devices on Android 12+. Connection errors route to Meta
+  AI rather than misleading permission/re-registration instructions.
+- Debug mock is guarded to debug builds, handles camera checks consistently,
+  preserves a running preview during one-shot capture, and releases its lease on
+  disable. Removed unreliable reflective activation of a second mock backend.
+- Added `MetaDatSdkMockTest` to self-hosted CI: actual Meta `MockDeviceKit` through
+  the production manager, authorization denial/grant, stream, decodable photo,
+  cleanup, and power-off readiness. A 3.6 KB synthetic camera video is included.
+- Actual SDK mock exposed a native packaging crash: LibVLC's old bundled STL won
+  `pickFirst`, leaving `libfbjni.so` unable to load a required stringstream symbol.
+  Added a cached AAR transform removing only LibVLC's STL so the modern shared
+  runtime is packaged. The SDK test loads LibVLC and DAT in the same process.
+- Verification: all **21 Meta instrumentation tests pass** on a fresh API 36
+  `CyanBridge_Meta_DAT_CI` emulator (4 lifecycle, 1 actual SDK mock, 7 UI mock,
+  9 setup popup tests), via the same isolated-class HIL runner used by CI.
+  Targeted unit tests: 26/26; shared portability tests: 80/80.
+- Full unit run initially found 583 tests / one pre-existing EyeVue source-check
+  failure. Removed its obsolete `stopLiveBlocking()` assertion: committed sync
+  cleanup now uses `finishMediaSync(completed, total)`. The Wi-Fi activation checks
+  remain. Final verification is green: **583/583 app unit tests**, **80/80 shared
+  portability tests**, debug and instrumentation APK builds, plus the 21/21 Meta
+  emulator tests. The normal debug APK's ARM64 and x86_64 shared runtimes both
+  contain the required fbjni symbol and match the modern fbjni dependency.
+  Build/unit logs and SDK logcat: `/tmp/opencode/meta-dat-review/`; isolated
+  instrumentation results: `build/hil/results/instrumentation-emulator-*-Meta*.txt`.
+- No physical Meta glasses attached. Hardware validation on the reported Samsung
+  / Android 17 build remains the next device check; emulator capture verifies the
+  app/SDK sequence and does not establish that hardware result. Changes uncommitted.
+
+## 2026-10-01 — Walking Aid continuous EyeVue and Meta video
+
+- Added a persisted Walking Aid camera source with periodic photos as the default,
+  and device-gated EyeVue/Meta continuous-video controls in settings. The photo
+  interval and photo benchmarks apply only to the photo source. Source changes
+  are disabled while active. Permission popups guide Bluetooth, EyeVue Wi-Fi,
+  permanent-denial settings, and Meta registration/camera authorization.
+- Live sources feed the existing local YOLO/tracking/warning worker through the
+  shared latest-frame queue. Queue overflow and shutdown recycle unused bitmaps;
+  local depth owns an independent copy and runs as a cancellable child so it does
+  not block the next YOLO frame. Video history saves only analyzed frames and
+  bounds retained JPEGs. Stream stalls/errors stop the plugin with a visible error.
+- EyeVue preview's BLE/Wi-Fi/HTTP/RTSP connection was extracted into
+  `EyevueLiveConnection`, shared by the visible preview and headless LibVLC output.
+  An ImageReader surface receives RV32/RGBX and applies the same -90° rotation as
+  preview. The real video test caught/fixed an initial RGBA/RGBX format mismatch.
+- Meta video uses the production manager and actual DAT session/stream callbacks.
+  Both sources respect exclusive transport leases and release on cancellation.
+  Continuous video uses `connectedDevice` foreground-service type.
+- Added 12-second two-scene H.264/HEVC fixtures derived from the existing pinned bus
+  and Zidane JPEGs. CI runs actual YOLO11 over EyeVue's production decoder (only
+  the connection URL substituted) and actual Meta `MockDeviceKit` video delivery.
+- Stronger cross-scene assertions found an existing detector bug: the YOLO11
+  export's unquantized UINT8 `class_idx` has scale=0. Multiplying IDs by zero made
+  every object a person. Preserve raw IDs for zero-scale integer tensors, and
+  require person/bus and person/tie in real-image tests as well as stream tests.
+- Actual Meta video testing found that the mock negotiates an HEVC decoder: an
+  H.264 feed entered STREAMING but produced no decoded frames. The Meta fixture
+  now uses HEVC, and the manager logs first-frame format metadata for diagnosis.
+  The passing mock delivered 640×480 I420 (460,800 bytes), detected bus/person and
+  then person/tie, and completed `STOPPING -> STOPPED` with no stream/lease leak.
+- Final verification is green on `CyanBridge_Walking_Aid_CI` / emulator-5580:
+  **586/586 app unit tests**, **80/80 portability tests**, **5/5 real-model/video
+  phases** (YOLO11, YOLO-World, depth, EyeVue video, actual Meta DAT video), and
+  **28/28 control/lifecycle/DAT regression instrumentation tests**. Both debug
+  APK builds pass, including the normal ARM64+x86_64 APK for hardware retesting.
+  Evidence: `/tmp/opencode/walking-video-*.log`,
+  `build/hil/results/walking-aid-model-ci/`, and
+  `build/hil/results/instrumentation-emulator-emulator-5580-*.txt`.
+- CI runner also fixes the optional `stop_other_emulators` function returning
+  failure under `set -e` when the option is disabled. Documentation:
+  `android/CyanBridge/docs/WalkingAid_mvp.md`, `tools/hil/README.md`, and video asset
+  provenance under `app/src/androidTest/assets/walkingaid/README.md`.
+- No physical EyeVue or Meta glasses are attached. Changes remain uncommitted.

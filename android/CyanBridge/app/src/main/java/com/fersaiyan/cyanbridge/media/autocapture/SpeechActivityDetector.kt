@@ -27,13 +27,7 @@ class SpeechActivityDetector(
         var i = 0
         while (i < samples.size) {
             val end = minOf(i + frameSize, samples.size)
-            var sumSq = 0.0
-            val n = end - i
-            for (j in i until end) {
-                val v = samples[j].toDouble()
-                sumSq += v * v
-            }
-            val rms = if (n > 0) kotlin.math.sqrt(sumSq / n) else 0.0
+            val rms = rms(samples, i, end - i)
             if (rms > maxRms) maxRms = rms
             if (rms >= rmsThreshold) voicedFrames++
             totalFrames++
@@ -64,4 +58,18 @@ class SpeechActivityDetector(
     /** Debug info: fraction of voiced frames and peak RMS. */
     fun debugInfo(): String =
         "frames=$totalFrames voiced=$voicedFrames (${if (totalFrames > 0) String.format("%.0f", voicedFrames * 100.0 / totalFrames) else "0"}%) maxRms=${String.format("%.0f", maxRms)}"
+
+    companion object {
+        /** Shared PCM energy primitive for loop monitoring and question endpointing. */
+        fun rms(samples: ShortArray, offset: Int = 0, count: Int = samples.size - offset): Double {
+            require(offset >= 0 && count >= 0 && offset + count <= samples.size)
+            if (count == 0) return 0.0
+            var sum = 0.0
+            for (i in offset until offset + count) {
+                val sample = samples[i].toDouble()
+                sum += sample * sample
+            }
+            return kotlin.math.sqrt(sum / count)
+        }
+    }
 }

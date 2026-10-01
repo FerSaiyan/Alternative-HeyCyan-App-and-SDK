@@ -147,6 +147,7 @@ object LocalChatSessionManager {
                 cpuThreads = settings.cpuThreads.coerceIn(1, 16),
                 computeBackend = settings.computeBackend,
                 gpuLayers = settings.gpuLayers.coerceIn(-1, 999),
+                projectorPath = com.fersaiyan.cyanbridge.localmodels.storage.LocalModelProjectorStore.get(context, model),
             )
 
             if (

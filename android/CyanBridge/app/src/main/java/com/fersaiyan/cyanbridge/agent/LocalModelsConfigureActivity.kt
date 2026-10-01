@@ -567,16 +567,25 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                         file.delete()
                         error("Imported file must be GGUF or LiteRT (.litertlm/.task)")
                     }
+                    if (file.name.contains("mmproj", ignoreCase = true)) {
+                        val model = selectedModel()
+                        if (model == null || !model.fileName.endsWith(".gguf", ignoreCase = true)) {
+                            file.delete()
+                            error("Select the matching GGUF model before importing its mmproj projector")
+                        }
+                        com.fersaiyan.cyanbridge.localmodels.storage.LocalModelProjectorStore.attach(this@LocalModelsConfigureActivity, model, file)
+                        return@runCatching "Projector attached to ${model.displayName}"
+                    }
                     LocalModelStorageRepository.registerImportedModel(
                         context = this@LocalModelsConfigureActivity,
                         displayName = file.nameWithoutExtension,
                         file = file,
-                    )
+                    ).let { "Import complete: ${it.displayName}" }
                 }
             }
             result.fold(
                 onSuccess = {
-                    downloadState = LocalModelDownloadUiState(message = "Import complete: ${it.displayName}")
+                    downloadState = LocalModelDownloadUiState(message = it)
                     refreshAllUi(loadDrafts = true)
                 },
                 onFailure = {
@@ -632,6 +641,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                     "Runtime: ${generationDraft.runtime.label}\n" +
                     "Quantization: ${model.quantization ?: "unknown"}\n" +
                     "Size: ${humanSize(model.sizeBytes)}\n" +
+                    "Projector: ${com.fersaiyan.cyanbridge.localmodels.storage.LocalModelProjectorStore.get(this, model) ?: "none (import the matching mmproj GGUF for media)"}\n" +
                     "Location: ${model.absolutePath}",
             )
             .setPositiveButton("Close", null)

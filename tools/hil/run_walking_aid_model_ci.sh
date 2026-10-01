@@ -197,7 +197,27 @@ declare -a phases=(
   "yolo11:realModel_runYolo11OnGlassesLikeJpegs"
   "yolo-world:realModel_runYoloWorldOnGlassesLikeJpegs"
   "depth-anything:realModel_runDepthAnythingOnGlassesLikeJpegs"
+  "eyevue-video:realModel_runYoloOnEyevueVideo"
+  "meta-video:realModel_runYoloOnMetaDatVideo"
 )
+
+# Allow focused reruns without repeating already verified large graphs.
+if [[ -n "${WALKING_AID_CI_PHASES:-}" ]]; then
+  IFS=, read -r -a requested_phases <<< "$WALKING_AID_CI_PHASES"
+  selected_phases=()
+  for requested in "${requested_phases[@]}"; do
+    matched=false
+    for phase in "${phases[@]}"; do
+      if [[ "${phase%%:*}" == "$requested" ]]; then
+        selected_phases+=("$phase")
+        matched=true
+        break
+      fi
+    done
+    [[ "$matched" == true ]] || { echo "Unknown Walking Aid CI phase: $requested" >&2; exit 4; }
+  done
+  phases=("${selected_phases[@]}")
+fi
 
 # Run each large graph in a fresh instrumentation process. Closing an Interpreter releases its
 # Java owner, but native LiteRT/XNNPACK allocations are not guaranteed to return to Android before
@@ -247,13 +267,13 @@ for phase in "${phases[@]}"; do
   else
     : > "$out"
   fi
+  adb_retry logcat -d -s WalkingAidModelCI LiteRtVisionBackend EyevueLive MetaRaybanManager > "$logcat_out" || true
   if [[ "$phase_result" == "fail" ]]; then
     adb_retry shell run-as "$CYANBRIDGE_PACKAGE" cat "$failure_marker" | tee -a "$out" >&2
     echo "Walking Aid $phase_name instrumentation reported a failure" >&2
     exit 10
   fi
   echo "DEVICE_TEST_RESULT: PASS ($phase_name)" | tee -a "$out"
-  adb_retry logcat -d -s WalkingAidModelCI LiteRtVisionBackend > "$logcat_out" || true
   adb_retry shell rm -f "$remote_out" >/dev/null 2>&1 || true
 done
 

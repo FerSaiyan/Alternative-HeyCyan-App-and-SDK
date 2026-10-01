@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.shared.glasses
 enum class MetaPairingIssueAction {
     INSTALL_META_AI,
     OPEN_PAIRING,
+    OPEN_META_AI,
     REQUEST_ACCESS,
 }
 
@@ -66,7 +67,15 @@ fun resolveMetaPairingIssue(
             message = setupGuidance
                 ?: "You're registered for Meta access, but no Ray-Ban is paired in Meta AI. Pair your glasses in Meta AI first, keep them powered, unfolded, and connected there, then tap Refresh. If DAT still cannot see them, use Send logs.",
             primaryLabel = "Open Meta AI",
-            action = MetaPairingIssueAction.OPEN_PAIRING,
+            action = MetaPairingIssueAction.OPEN_META_AI,
+        )
+        // The operation prefix is cameraPermission even for a transport failure.
+        // Classify the specific disconnected condition before the generic permission branch.
+        "powered off or disconnected" in normalized -> MetaPairingIssue(
+            title = "Reconnect your Meta glasses",
+            message = "CyanBridge is registered, but Meta DAT cannot reach the glasses yet. Power them on, unfold them, and confirm they are connected in Meta AI. Return here and try camera access again; re-registering CyanBridge is not needed.",
+            primaryLabel = "Open Meta AI",
+            action = MetaPairingIssueAction.OPEN_META_AI,
         )
         "permission" in normalized || "denied" in normalized -> MetaPairingIssue(
             title = "Permission needed",

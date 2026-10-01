@@ -1,0 +1,3 @@
+-keep class com.fersaiyan.cyanbridge.llama.UpstreamLlamaBridge { *; }
+-keep interface com.fersaiyan.cyanbridge.llama.UpstreamLlamaBridge$TokenSink { *; }
+-keepclassmembers class * implements com.fersaiyan.cyanbridge.llama.UpstreamLlamaBridge$TokenSink { public void onToken(byte[]); }

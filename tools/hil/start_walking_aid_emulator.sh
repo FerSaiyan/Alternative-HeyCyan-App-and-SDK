@@ -18,7 +18,7 @@ system_image="${CYANBRIDGE_WALKING_AID_SYSTEM_IMAGE:-system-images;android-36;go
 }
 
 stop_other_emulators() {
-  [[ "${CYANBRIDGE_WALKING_AID_STOP_OTHER_EMULATORS:-false}" == "true" ]] || return
+  [[ "${CYANBRIDGE_WALKING_AID_STOP_OTHER_EMULATORS:-false}" == "true" ]] || return 0
   while IFS= read -r other; do
     [[ -z "$other" || "$other" == "$serial" || "$other" != emulator-* ]] && continue
     echo "Stopping $other before the memory-intensive model test" >&2

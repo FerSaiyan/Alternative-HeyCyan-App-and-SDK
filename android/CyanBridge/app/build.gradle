@@ -1,3 +1,18 @@
+import org.gradle.api.artifacts.transform.CacheableTransform
+import org.gradle.api.artifacts.transform.InputArtifact
+import org.gradle.api.artifacts.transform.TransformAction
+import org.gradle.api.artifacts.transform.TransformOutputs
+import org.gradle.api.artifacts.transform.TransformParameters
+import org.gradle.api.attributes.Attribute
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+import org.gradle.api.file.FileSystemLocation
+import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,7 +20,50 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+/** LibVLC's old STL cannot satisfy Meta fbjni. Keep VLC code, use the shared modern STL. */
+@CacheableTransform
+abstract class VlcWithoutBundledStl implements TransformAction<TransformParameters.None> {
+    @InputArtifact
+    @PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract Provider<FileSystemLocation> getInputArtifact()
+
+    @Override
+    void transform(TransformOutputs outputs) {
+        def input = inputArtifact.get().asFile
+        if (!input.name.contains('libvlc-all')) {
+            outputs.file(input)
+            return
+        }
+        def output = outputs.file(input.name.replace('.aar', '-external-stl.aar'))
+        new ZipInputStream(new FileInputStream(input)).withCloseable { source ->
+            new ZipOutputStream(new FileOutputStream(output)).withCloseable { target ->
+                ZipEntry entry
+                while ((entry = source.nextEntry) != null) {
+                    if (!(entry.name ==~ /jni\/[^\/]+\/libc\+\+_shared\.so/)) {
+                        def copy = new ZipEntry(entry.name)
+                        copy.time = 0
+                        target.putNextEntry(copy)
+                        source.transferTo(target)
+                        target.closeEntry()
+                    }
+                    source.closeEntry()
+                }
+            }
+        }
+    }
+}
+
+def vlcStlAttribute = Attribute.of('com.fersaiyan.cyanbridge.vlc-stl', String)
+dependencies {
+    artifactTypes.maybeCreate('aar').attributes.attribute(vlcStlAttribute, 'bundled')
+    registerTransform(VlcWithoutBundledStl) {
+        from.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, 'aar').attribute(vlcStlAttribute, 'bundled')
+        to.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, 'aar').attribute(vlcStlAttribute, 'external')
+    }
+}
+
 configurations.configureEach {
+    if (name.endsWith('RuntimeClasspath')) attributes.attribute(vlcStlAttribute, 'external')
     // Full protobuf includes GeneratedMessageLite and is required by the MoYoung SDK's
     // GeneratedMessage classes. Do not package Meta DAT's duplicate javalite runtime.
     exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
@@ -167,10 +225,6 @@ android {
 
 
 dependencies {
-    def localLlamaRuntimeAarPath = (
-            project.findProperty("localLlamaRuntimeAarPath")
-                    ?: ""
-    ).toString().trim()
     def coreConnectivityVersion = project.findProperty("heycyanCoreConnectivityVersion") ?: "0.1.0-SNAPSHOT"
     implementation("com.heycyan.core:core-connectivity:${coreConnectivityVersion}")
     implementation project(":shared")
@@ -217,16 +271,8 @@ dependencies {
     // LiteRT-LM's Flow streaming API requires the newer coroutine ABI.
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"
     implementation "com.google.android.gms:play-services-location:21.3.0"
-    if (localLlamaRuntimeAarPath.isEmpty()) {
-        implementation "io.github.ljcamargo:llamacpp-kotlin:0.4.0"
-    } else {
-        def localLlamaRuntimeAar = rootProject.file(localLlamaRuntimeAarPath)
-        if (!localLlamaRuntimeAar.exists()) {
-            throw new GradleException("localLlamaRuntimeAarPath points to a missing file: ${localLlamaRuntimeAar.absolutePath}")
-        }
-        logger.lifecycle("Using local llama runtime AAR: ${localLlamaRuntimeAar.absolutePath}")
-        implementation files(localLlamaRuntimeAar)
-    }
+    // Official upstream llama.cpp/libmtmd, including image and audio input.
+    implementation project(":llama-runtime")
 
     // LiteRT-LM local multimodal/chat runtime.
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.0")

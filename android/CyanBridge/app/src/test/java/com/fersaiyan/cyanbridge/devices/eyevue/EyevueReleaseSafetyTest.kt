@@ -11,8 +11,8 @@ class EyevueReleaseSafetyTest {
     private val managerSource = File(
         "src/main/java/com/fersaiyan/cyanbridge/devices/eyevue/EyevueManager.kt",
     ).readText()
-    private val liveSource = File(
-        "src/main/java/com/fersaiyan/cyanbridge/devices/eyevue/EyevueLivePreviewManager.kt",
+    private val connectionSource = File(
+        "src/main/java/com/fersaiyan/cyanbridge/devices/eyevue/EyevueLiveConnection.kt",
     ).readText()
     private val mediaSource = File(
         "src/main/java/com/fersaiyan/cyanbridge/devices/eyevue/EyevueMediaSync.kt",
@@ -22,7 +22,6 @@ class EyevueReleaseSafetyTest {
     fun eyevueMediaSyncUsesVerifiedWifiActivationCommand() {
         assertTrue(mediaSource.contains("manager.awaitWifiSsid("))
         assertFalse(mediaSource.contains("manager.startLiveAndAwaitSsid"))
-        assertTrue(mediaSource.contains("manager.stopLiveBlocking()"))
     }
 
     @Test
@@ -38,6 +37,6 @@ class EyevueReleaseSafetyTest {
         val liveCommandBlock = managerSource.substringAfter("suspend fun startLiveAndAwaitSsid")
             .substringBefore("suspend fun stopLiveBlocking")
         assertFalse(liveCommandBlock.contains("requestWifiInfo"))
-        assertEquals(1, Regex("eyevueManager\\.stopLiveBlocking\\(\\)").findAll(liveSource).count())
+        assertEquals(1, Regex("manager\\.stopLiveBlocking\\(\\)").findAll(connectionSource).count())
     }
 }

@@ -36,6 +36,8 @@ import com.meta.wearable.dat.core.types.DeviceCompatibility
 import com.meta.wearable.dat.core.types.DeviceIdentifier
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
+import com.meta.wearable.dat.core.types.LinkState
+import com.meta.wearable.dat.core.types.WearablesError
 import com.meta.wearable.dat.core.types.RegistrationState as DatRegistrationState
 import com.meta.wearable.dat.display.Display
 import com.meta.wearable.dat.display.addDisplay
@@ -107,6 +109,7 @@ class MetaRaybanManager private constructor(context: Context) {
     private var display: Display? = null
     private var displayStateJob: Job? = null
     private val captureMutex = Mutex()
+    private val cameraPermissionMutex = Mutex()
     private val diagnosticsLock = Any()
     private val diagnosticEvents = ArrayDeque<String>()
 
@@ -129,6 +132,11 @@ class MetaRaybanManager private constructor(context: Context) {
 
     private val _selectedDeviceName = MutableStateFlow<String?>(null)
     val selectedDeviceName: StateFlow<String?> = _selectedDeviceName.asStateFlow()
+
+    private val _selectedDeviceLinkState = MutableStateFlow<LinkState?>(null)
+    val selectedDeviceLinkState: StateFlow<LinkState?> = _selectedDeviceLinkState.asStateFlow()
+    private val _cameraPermissionGranted = MutableStateFlow(false)
+    val cameraPermissionGranted: StateFlow<Boolean> = _cameraPermissionGranted.asStateFlow()
 
     private val _selectedDeviceIsDisplayCapable = MutableStateFlow(false)
     val selectedDeviceIsDisplayCapable: StateFlow<Boolean> = _selectedDeviceIsDisplayCapable.asStateFlow()
@@ -158,24 +166,32 @@ class MetaRaybanManager private constructor(context: Context) {
     fun isDebugMockEnabled(): Boolean = _debugMockEnabled.value
 
     fun setDebugMockEnabled(enabled: Boolean) {
+        check(!enabled || BuildConfig.DEBUG) { "Meta mock is only available in debug builds" }
+        if (enabled == _debugMockEnabled.value) return
+        stopSession()
         _debugMockEnabled.value = enabled
         if (enabled) {
             // Simulate fully-ready DAT without hardware: invited + registered + device present
+            selectedDeviceId = null
             _isInitialized.value = true
             _registrationState.value = RegistrationState.REGISTERED
             _availableDeviceCount.value = 1
             _selectedDeviceName.value = "Mock Ray-Ban (Debug)"
             _selectedDeviceIsDisplayCapable.value = false
+            _selectedDeviceLinkState.value = LinkState.CONNECTED
+            _cameraPermissionGranted.value = true
             _lastError.value = null
             recordInfo("debugMock", "Enabled debug mock Ray-Ban — bypasses DAT hardware requirement")
             updateMetaAccessState()
-            // Try real MockDeviceKit as well if available — best-effort, never fails the mock
-            tryEnableRealMockDevice()
         } else {
             recordInfo("debugMock", "Disabled debug mock — restoring DAT state")
             _selectedDeviceName.value = null
+            _selectedDeviceLinkState.value = null
+            _cameraPermissionGranted.value = false
+            _lastError.value = null
             _availableDeviceCount.value = 0
             // Force refresh from real DAT if initialized
+            _isInitialized.value = registrationJob != null
             if (_isInitialized.value) {
                 refreshRegistrationState()
                 // Reset to UNAVAILABLE until DAT reports again
@@ -183,61 +199,11 @@ class MetaRaybanManager private constructor(context: Context) {
                     Wearables.registrationState.value.toManagerState()
                 } catch (_: Throwable) { RegistrationState.UNAVAILABLE }
                 _availableDeviceCount.value = try { Wearables.devices.value.size } catch (_: Throwable) { 0 }
-                updateMetaAccessState()
+                updateDevices(Wearables.devices.value.map { it.toString() }.toSet())
             }
-            tryDisableRealMockDevice()
+            else _registrationState.value = RegistrationState.UNAVAILABLE
+            updateMetaAccessState()
         }
-    }
-
-    /** Best-effort: if mwdat-mockdevice is on classpath, enable it for deeper DAT simulation. */
-    private fun tryEnableRealMockDevice() {
-        if (!BuildConfig.DEBUG) return
-        try {
-            val mockKitClass = Class.forName("com.meta.wearable.dat.mockdevice.MockDeviceKit")
-            val companion = mockKitClass.getDeclaredField("Companion").get(null) ?: return
-            val getInstance = companion.javaClass.methods.firstOrNull { it.name == "getInstance" } ?: return
-            val mockKit = getInstance.invoke(companion, context) ?: return
-            val configClass = Class.forName("com.meta.wearable.dat.mockdevice.api.MockDeviceKitConfig")
-            val config = configClass.getConstructor(Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType).newInstance(true, true)
-            val enable = mockKit.javaClass.methods.firstOrNull { it.name == "enable" } ?: return
-            enable.invoke(mockKit, config)
-            recordInfo("debugMock", "Real MockDeviceKit enabled (initiallyRegistered=true)")
-            // Pair a fake Ray-Ban if possible — suspend function, fire-and-forget
-            scope.launch {
-                try {
-                    val glassesModelClass = Class.forName("com.meta.wearable.dat.mockdevice.api.GlassesModel")
-                    val rayban = glassesModelClass.getField("RAYBAN_META").get(null) ?: return@launch
-                    // pairGlasses is suspend — invoke via Kotlin coroutine reflection helper
-                    val pairMethod = mockKit.javaClass.methods.firstOrNull { it.name.startsWith("pairGlasses") } ?: return@launch
-                    // Suspend methods have extra Continuation param; we call via coroutine bridge if possible
-                    // Try direct invoke first (some builds expose non-suspend overload)
-                    try {
-                        pairMethod.invoke(mockKit, rayban)
-                        recordInfo("debugMock", "Mock Ray-Ban paired via MockDeviceKit")
-                    } catch (_: Throwable) {
-                        // Suspend variant — not critical for UI flow simulation
-                        recordInfo("debugMock", "MockDeviceKit paired pending (suspend variant)")
-                    }
-                } catch (e: Throwable) {
-                    recordWarning("debugMock", "MockDeviceKit pair failed: ${e.message}")
-                }
-            }
-        } catch (e: Throwable) {
-            recordWarning("debugMock", "Real MockDeviceKit not available: ${e.message}")
-        }
-    }
-
-    private fun tryDisableRealMockDevice() {
-        if (!BuildConfig.DEBUG) return
-        try {
-            val mockKitClass = Class.forName("com.meta.wearable.dat.mockdevice.MockDeviceKit")
-            val companion = mockKitClass.getDeclaredField("Companion").get(null) ?: return
-            val getInstance = companion.javaClass.methods.firstOrNull { it.name == "getInstance" } ?: return
-            val mockKit = getInstance.invoke(companion, context) ?: return
-            val disable = mockKit.javaClass.methods.firstOrNull { it.name == "disable" } ?: return
-            disable.invoke(mockKit)
-            recordInfo("debugMock", "Real MockDeviceKit disabled")
-        } catch (_: Throwable) { /* ignore */ }
     }
 
     fun initialize() {
@@ -255,7 +221,16 @@ class MetaRaybanManager private constructor(context: Context) {
                 recordInfo("initialize", "Meta Wearables DAT SDK initialized")
                 updateMetaAccessState()
             },
-            onFailure = { error, _ -> reportFailure("initialize", error.description) },
+            onFailure = { error, _ ->
+                if (error == WearablesError.ALREADY_INITIALIZED) {
+                    // Wearables is process-wide; another owner (including MockDeviceKit)
+                    // may already have initialized it before this manager was created.
+                    _isInitialized.value = true
+                    observeWearables()
+                    recordInfo("initialize", "Attached to already initialized Meta Wearables DAT SDK")
+                    updateMetaAccessState()
+                } else reportFailure("initialize", error.description)
+            },
         )
     }
 
@@ -268,6 +243,7 @@ class MetaRaybanManager private constructor(context: Context) {
                 val nextState = state.toManagerState()
                 val previousState = _registrationState.value
                 _registrationState.value = nextState
+                if (nextState != RegistrationState.REGISTERED) _cameraPermissionGranted.value = false
                 if (previousState != nextState) {
                     recordInfo("registrationState", "$previousState -> $nextState")
                 }
@@ -276,6 +252,7 @@ class MetaRaybanManager private constructor(context: Context) {
         }
         registrationErrorJob = scope.launch {
             Wearables.registrationErrorStream.collect { error ->
+                if (_debugMockEnabled.value) return@collect
                 reportFailure("registration", error.getLocalizedDescription(context))
             }
         }
@@ -309,6 +286,7 @@ class MetaRaybanManager private constructor(context: Context) {
             previousSelection != null && previousSelection in identifiers -> previousSelection
             else -> identifiers.firstOrNull()
         }
+        if (selectedDeviceId != previousSelection) _cameraPermissionGranted.value = false
         updateSelectedDeviceState()
         if (previousCount != identifiers.size) {
             recordInfo(
@@ -341,18 +319,23 @@ class MetaRaybanManager private constructor(context: Context) {
     }
 
     private fun updateSelectedDeviceState() {
+        if (_debugMockEnabled.value) return
         val previousName = _selectedDeviceName.value
         val previousDisplayCapability = _selectedDeviceIsDisplayCapable.value
+        val previousLinkState = _selectedDeviceLinkState.value
         val selected = synchronized(diagnosticsLock) {
             selectedDeviceId?.let { id -> devicesMetadata[id] }
         }
         _selectedDeviceName.value = selected?.name?.takeIf { it.isNotBlank() }
         _selectedDeviceIsDisplayCapable.value = selected?.isDisplayCapable() == true
-        if (previousName != _selectedDeviceName.value || previousDisplayCapability != _selectedDeviceIsDisplayCapable.value) {
+        if (selected?.linkState != LinkState.CONNECTED) _cameraPermissionGranted.value = false
+        _selectedDeviceLinkState.value = selected?.linkState
+        if (previousName != _selectedDeviceName.value || previousDisplayCapability != _selectedDeviceIsDisplayCapable.value ||
+            previousLinkState != _selectedDeviceLinkState.value) {
             recordInfo(
                 "deviceSelection",
                 "selectedId=${selectedDeviceId ?: "(none)"}, name=${_selectedDeviceName.value ?: "(unknown)"}, " +
-                    "displayCapable=${_selectedDeviceIsDisplayCapable.value}",
+                    "displayCapable=${_selectedDeviceIsDisplayCapable.value}, linkState=${_selectedDeviceLinkState.value}",
             )
         }
     }
@@ -377,13 +360,13 @@ class MetaRaybanManager private constructor(context: Context) {
     fun isCameraReady(): Boolean =
         _isInitialized.value &&
             _registrationState.value == RegistrationState.REGISTERED &&
-            _availableDeviceCount.value > 0
+            _availableDeviceCount.value > 0 && _selectedDeviceLinkState.value == LinkState.CONNECTED
 
     suspend fun awaitCameraReady(timeoutMs: Long = 10_000L): Boolean {
         if (isCameraReady()) return true
         val ready = withTimeoutOrNull(timeoutMs) {
-            combine(registrationState, availableDeviceCount) { registration, devices ->
-                registration == RegistrationState.REGISTERED && devices > 0
+            combine(registrationState, availableDeviceCount, selectedDeviceLinkState) { registration, devices, link ->
+                registration == RegistrationState.REGISTERED && devices > 0 && link == LinkState.CONNECTED
             }.first { it }
         } == true
         if (!ready) {
@@ -425,18 +408,40 @@ class MetaRaybanManager private constructor(context: Context) {
         onRequestNeeded: () -> Unit,
         onError: (String) -> Unit,
     ) {
+        if (_debugMockEnabled.value) { onGranted(); return }
         if (!requireInitialized(onError)) return
         scope.launch {
-            Wearables.checkPermissionStatus(Permission.CAMERA).fold(
-                onSuccess = { status ->
-                    recordInfo("cameraPermission", "DAT camera permission status=$status")
-                    if (status == PermissionStatus.Granted) onGranted() else onRequestNeeded()
-                },
-                onFailure = { error, _ ->
-                    onError(reportFailure("cameraPermission", error.description))
-                },
-            )
+            cameraPermissionMutex.withLock {
+                try {
+                    val result = withTimeoutOrNull(12_000) {
+                        checkMetaCameraPermissionWithRetry {
+                            Wearables.checkPermissionStatus(Permission.CAMERA).fold(
+                                onSuccess = { status ->
+                                    if (status == PermissionStatus.Granted) MetaCameraPermissionCheck.Granted else MetaCameraPermissionCheck.Denied
+                                },
+                                onFailure = { error, _ -> MetaCameraPermissionCheck.Failed(error, error.description) },
+                            )
+                        }
+                    }
+                    when (result) {
+                        MetaCameraPermissionCheck.Granted -> { recordCameraPermissionResult(true); onGranted() }
+                        MetaCameraPermissionCheck.Denied -> { recordCameraPermissionResult(false); onRequestNeeded() }
+                        is MetaCameraPermissionCheck.Failed -> onError(reportFailure("cameraPermission", result.message))
+                        null -> onError(reportFailure("cameraPermission", "Timed out checking glasses camera access. Reconnect the glasses in Meta AI and try again."))
+                    }
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) {
+                    onError(reportFailure("cameraPermission", error.message ?: "Unable to check glasses camera access", error))
+                }
+            }
         }
+    }
+
+    fun recordCameraPermissionResult(granted: Boolean) {
+        _cameraPermissionGranted.value = granted
+        recordInfo("cameraPermission", "DAT camera permission status=${if (granted) "Granted" else "Denied"}")
+        // A recovered permission check must not leave the old failure latched in setup.
+        if (_lastError.value?.startsWith("cameraPermission:") == true) clearError()
     }
 
     fun startSession(onSuccess: () -> Unit, onError: (String) -> Unit) {
@@ -461,6 +466,10 @@ class MetaRaybanManager private constructor(context: Context) {
         }
         if (_availableDeviceCount.value == 0) {
             onError(reportFailure("startSession", "No compatible Meta wearable is available"))
+            return
+        }
+        if (_selectedDeviceLinkState.value != LinkState.CONNECTED) {
+            onError(reportFailure("startSession", "Meta glasses are not connected. Power on and unfold them, reconnect in Meta AI, then try again."))
             return
         }
         when (selectedDeviceId?.let { devicesMetadata[it]?.compatibility }) {
@@ -541,6 +550,7 @@ class MetaRaybanManager private constructor(context: Context) {
                         session = null
                         releaseMetaCameraLease()
                         _deviceSessionState.value = DeviceSessionState.IDLE
+                        if (!started) onError(reportFailure("session", "Meta session stopped before starting. Reconnect the glasses in Meta AI and try again."))
                     }
                     else -> Unit
                 }
@@ -652,7 +662,9 @@ class MetaRaybanManager private constructor(context: Context) {
                     streamStartedHandler = null
                 }
                 if (state == DatStreamState.STOPPED || state == DatStreamState.CLOSED) {
+                    val stoppedBeforeReady = streamStartedHandler != null
                     stopStreamInternal()
+                    if (stoppedBeforeReady) onError(reportFailure("stream", "Meta camera stream closed before becoming ready. Reconnect the glasses in Meta AI and check camera authorization, then try again."))
                 }
             }
         }
@@ -667,7 +679,12 @@ class MetaRaybanManager private constructor(context: Context) {
             }
         }
         videoJob = scope.launch(Dispatchers.Default) {
+            var firstFrame = true
             currentStream.videoStream.collect { frame ->
+                if (firstFrame) {
+                    recordInfo("videoFrame", "First DAT frame ${frame.width}x${frame.height}, bytes=${frame.buffer.remaining()}, compressed=${frame.isCompressed}, codecConfig=${frame.isCodecConfig}")
+                    firstFrame = false
+                }
                 if (frame.isCompressed || frame.isCodecConfig) return@collect
                 val bitmap = YuvToBitmapConverter.convert(frame)
                 if (bitmap != null) {
@@ -805,8 +822,8 @@ class MetaRaybanManager private constructor(context: Context) {
      * had to start after the one-shot completes.
      */
     suspend fun capturePhotoOnce(timeoutMs: Long = 20_000L): CapturedPhoto = captureMutex.withLock {
-        val hadSession = session != null && _deviceSessionState.value == DeviceSessionState.STARTED
-        val hadStream = stream != null && _streamState.value == StreamState.STREAMING
+        val hadSession = _deviceSessionState.value == DeviceSessionState.STARTED && (session != null || _debugMockEnabled.value)
+        val hadStream = _streamState.value == StreamState.STREAMING && (stream != null || _debugMockEnabled.value)
         try {
             withTimeout(timeoutMs) {
                 if (!hadSession) awaitSession()
@@ -822,7 +839,7 @@ class MetaRaybanManager private constructor(context: Context) {
             )
             throw error
         } finally {
-            withContext(Dispatchers.Main.immediate) {
+            withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main.immediate) {
                 if (!hadStream) stopStreaming()
                 if (!hadSession) stopSession()
             }
@@ -1086,6 +1103,8 @@ class MetaRaybanManager private constructor(context: Context) {
             appendLine("availableDeviceCount=${_availableDeviceCount.value}")
             appendLine("selectedDeviceId=${selectedDeviceId ?: "(none)"}")
             appendLine("selectedDeviceName=${_selectedDeviceName.value ?: "(unknown)"}")
+            appendLine("selectedDeviceLinkState=${_selectedDeviceLinkState.value ?: "(unknown)"}")
+            appendLine("cameraPermissionGranted=${_cameraPermissionGranted.value}")
             val compatibility = synchronized(diagnosticsLock) {
                 selectedDeviceId?.let { devicesMetadata[it]?.compatibility } ?: "(unknown)"
             }
@@ -1109,11 +1128,16 @@ class MetaRaybanManager private constructor(context: Context) {
 
     fun isMetaAiInstalled(): Boolean = installedMetaAiPackageName() != null
 
-    private fun registrationGuidance(readiness: MetaDatReadiness): String? = metaDatSetupGuidance(
-        registrationState = _registrationState.value,
-        availableDeviceCount = _availableDeviceCount.value,
-        readiness = readiness,
-    )
+    private fun registrationGuidance(readiness: MetaDatReadiness): String? {
+        if (isRegistered() && _availableDeviceCount.value > 0 && _selectedDeviceLinkState.value != LinkState.CONNECTED) {
+            return "Meta registration is complete, but the glasses are disconnected or still connecting. Power them on, unfold them, and confirm they are connected in Meta AI, then return here."
+        }
+        return metaDatSetupGuidance(
+            registrationState = _registrationState.value,
+            availableDeviceCount = _availableDeviceCount.value,
+            readiness = readiness,
+        )
+    }
 
     private fun datReadiness(): MetaDatReadiness {
         val bluetoothPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||

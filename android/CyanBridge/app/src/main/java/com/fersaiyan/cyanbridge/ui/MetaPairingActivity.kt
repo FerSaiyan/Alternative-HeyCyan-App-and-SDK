@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.bluetooth.BluetoothManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -58,6 +60,7 @@ import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaAccessState
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaDatPermissions
 import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
 import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
@@ -82,6 +85,10 @@ data class MetaPairingScreenState(
     val metaAiInstalled: Boolean = true,
     val metaAccessState: MetaAccessState = MetaAccessState.UNKNOWN,
     val debugMockEnabled: Boolean = false,
+    val bluetoothEnabled: Boolean = true,
+    val deviceConnected: Boolean = true,
+    val androidPermissionPermanentlyDenied: Boolean = false,
+    val checkingCameraPermission: Boolean = false,
 ) {
     val androidPermissionsGranted: Boolean
         get() = androidCameraGranted && nearbyDevicesGranted
@@ -91,20 +98,49 @@ data class MetaPairingScreenState(
 
     val isReadyForImageQuestion: Boolean
         get() = androidPermissionsGranted && initialized && isRegistered &&
-            availableDeviceCount > 0 && glassesCameraGranted
+            availableDeviceCount > 0 && deviceConnected && bluetoothEnabled && glassesCameraGranted
 
     val primaryLabel: String
         get() = when {
             debugMockEnabled -> "Test AI image question (mock)"
+            androidPermissionPermanentlyDenied -> "Open Android app settings"
             !androidPermissionsGranted -> "Grant required permissions"
+            !bluetoothEnabled -> "Turn on Bluetooth"
             !initialized -> "Initialize Meta connection"
             !metaAiInstalled -> "Install Meta AI"
             metaAccessState == MetaAccessState.NEEDS_META_INVITE -> "Request Meta access"
             !isRegistered -> "Register CyanBridge in Meta AI"
             availableDeviceCount == 0 -> "Refresh glasses connection"
+            !deviceConnected -> "Reconnect glasses in Meta AI"
+            checkingCameraPermission -> "Checking glasses camera access…"
             !glassesCameraGranted -> "Grant glasses camera access"
             else -> "Test AI image question"
         }
+}
+
+internal data class MetaSetupPrompt(val title: String, val message: String)
+
+internal fun nextMetaSetupPrompt(state: MetaPairingScreenState): MetaSetupPrompt? = when {
+    state.debugMockEnabled -> null
+    state.androidPermissionPermanentlyDenied -> MetaSetupPrompt(
+        "Allow permissions in Android settings",
+        "Android can no longer show the permission request. Open CyanBridge's app settings, select Permissions, and allow Camera and Nearby devices (Location on Android 10–11). Return here to continue.",
+    )
+    !state.androidPermissionsGranted -> MetaSetupPrompt(
+        "Allow Camera and Nearby devices",
+        "Tap Grant required permissions, then allow Android's requests. On Android 10–11, allow Location for glasses discovery. These permissions are separate from Meta's glasses camera authorization.",
+    )
+    !state.bluetoothEnabled -> MetaSetupPrompt("Turn on Bluetooth", "Enable Bluetooth in Android settings, then return here with your glasses powered, unfolded, and nearby.")
+    state.initialized && state.registrationState == MetaRaybanManager.RegistrationState.AVAILABLE -> MetaSetupPrompt(
+        "Authorize CyanBridge in Meta AI", "Approve CyanBridge in the Meta AI registration screen, then return here. Keep the glasses connected in Meta AI.",
+    )
+    state.isRegistered && state.availableDeviceCount > 0 && !state.deviceConnected -> MetaSetupPrompt(
+        "Reconnect your Meta glasses", "Registration is complete, but the glasses are disconnected or still connecting. Open Meta AI, power on and unfold the glasses, and confirm they are connected. Return here to check camera access.",
+    )
+    state.isRegistered && state.availableDeviceCount > 0 && !state.glassesCameraGranted && !state.checkingCameraPermission -> MetaSetupPrompt(
+        "Allow glasses camera access", "Meta needs a separate camera authorization. Tap Grant glasses camera access, approve the request in Meta AI, and return here. You can then test an AI image question.",
+    )
+    else -> null
 }
 
 internal fun inferredMetaPairingError(state: MetaPairingScreenState): String? {
@@ -141,30 +177,44 @@ class MetaPairingActivity : AppCompatActivity() {
     private val manager by lazy { MetaRaybanManager.getInstance(this) }
     private var screenState by mutableStateOf(MetaPairingScreenState())
     private var checkingGlassesCameraPermission = false
+    private var cameraCheckKey: String? = null
+    private var androidPermissionError: String? = null
+    private var androidPermissionPermanentlyDenied = false
+    private var requestingGlassesCameraPermission = false
 
     private val androidPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+            MetaDatPermissions.recordRequestResult(this, grants)
             refreshState()
             val denied = requiredAndroidPermissions().filter { permission ->
                 grants[permission] != true && !hasPermission(permission)
             }
             if (denied.isNotEmpty()) {
-                screenState = screenState.copy(
-                    lastError = "Android permission denied: ${denied.joinToString { it.substringAfterLast('.') }}",
-                )
+                androidPermissionPermanentlyDenied = denied.any { !shouldShowRequestPermissionRationale(it) }
+                androidPermissionError = "Android permission denied: ${denied.joinToString { it.substringAfterLast('.') }}"
+                refreshState(checkGlassesCamera = false)
             } else if (hasRequiredAndroidPermissions()) {
+                androidPermissionPermanentlyDenied = false
+                androidPermissionError = null
                 initializeDat()
             }
         }
 
     private val glassesCameraPermissionLauncher =
         registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
-            val granted = result.getOrDefault(PermissionStatus.Denied) == PermissionStatus.Granted
-            refreshState(checkGlassesCamera = false)
-            screenState = screenState.copy(
-                glassesCameraGranted = granted,
-                lastError = if (granted) manager.lastError.value else "Meta glasses camera permission was denied",
+            requestingGlassesCameraPermission = false
+            result.fold(
+                onSuccess = { status ->
+                    val granted = status == PermissionStatus.Granted
+                    manager.recordCameraPermissionResult(granted)
+                    if (!granted) manager.reportExternalError("cameraPermission", "Meta glasses camera permission was denied. Approve camera access in Meta AI and try again.")
+                },
+                onFailure = { error, _ ->
+                    manager.recordCameraPermissionResult(false)
+                    manager.reportExternalError("cameraPermission", error.description)
+                },
             )
+            refreshState(checkGlassesCamera = false)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -200,6 +250,7 @@ class MetaPairingActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        cameraCheckKey = null
         refreshState()
         if (hasRequiredAndroidPermissions()) initializeDat()
     }
@@ -212,6 +263,8 @@ class MetaPairingActivity : AppCompatActivity() {
                 launch { manager.metaAccessState.collect { refreshState() } }
                 launch { manager.availableDeviceCount.collect { refreshState() } }
                 launch { manager.selectedDeviceName.collect { refreshState() } }
+                launch { manager.selectedDeviceLinkState.collect { refreshState() } }
+                launch { manager.cameraPermissionGranted.collect { refreshState(checkGlassesCamera = false) } }
                 launch { manager.lastError.collect { refreshState(checkGlassesCamera = false) } }
                 launch { manager.debugMockEnabled.collect { refreshState(checkGlassesCamera = false) } }
             }
@@ -219,6 +272,11 @@ class MetaPairingActivity : AppCompatActivity() {
     }
 
     private fun refreshState(checkGlassesCamera: Boolean = true) {
+        androidPermissionPermanentlyDenied = MetaDatPermissions.permanentlyDenied(this)
+        if (hasRequiredAndroidPermissions()) {
+            androidPermissionPermanentlyDenied = false
+            androidPermissionError = null
+        }
         screenState = screenState.copy(
             androidCameraGranted = hasPermission(Manifest.permission.CAMERA),
             nearbyDevicesGranted = hasNearbyDevicesPermission(),
@@ -227,14 +285,25 @@ class MetaPairingActivity : AppCompatActivity() {
             availableDeviceCount = manager.availableDeviceCount.value,
             selectedDeviceName = manager.selectedDeviceName.value,
             guidance = manager.registrationGuidance(),
-            lastError = manager.lastError.value,
+            lastError = androidPermissionError ?: manager.lastError.value,
             metaAiInstalled = manager.isMetaAiInstalled(),
             metaAccessState = manager.metaAccessState.value,
             debugMockEnabled = manager.debugMockEnabled.value,
+            deviceConnected = manager.isCameraReady(),
+            glassesCameraGranted = manager.cameraPermissionGranted.value,
+            bluetoothEnabled = hasNearbyDevicesPermission() && runCatching {
+                getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
+            }.getOrDefault(false),
+            androidPermissionPermanentlyDenied = androidPermissionPermanentlyDenied,
+            checkingCameraPermission = checkingGlassesCameraPermission,
         )
-        if (checkGlassesCamera && screenState.initialized && screenState.isRegistered) {
+        if (checkGlassesCamera && screenState.androidPermissionsGranted && screenState.initialized && screenState.deviceConnected &&
+            !requestingGlassesCameraPermission) {
+            val key = "${screenState.registrationState}:${screenState.selectedDeviceName}:${screenState.availableDeviceCount}:${screenState.deviceConnected}"
+            if (cameraCheckKey == key) return
+            cameraCheckKey = key
             checkGlassesCameraPermission()
-        }
+        } else if (!screenState.deviceConnected) cameraCheckKey = null
     }
 
     private fun initializeDat() {
@@ -250,14 +319,15 @@ class MetaPairingActivity : AppCompatActivity() {
         }
         if (checkingGlassesCameraPermission) return
         checkingGlassesCameraPermission = true
+        screenState = screenState.copy(checkingCameraPermission = true)
         manager.checkCameraPermission(
             onGranted = {
                 checkingGlassesCameraPermission = false
-                screenState = screenState.copy(glassesCameraGranted = true)
+                refreshState(checkGlassesCamera = false)
             },
             onRequestNeeded = {
                 checkingGlassesCameraPermission = false
-                screenState = screenState.copy(glassesCameraGranted = false)
+                refreshState(checkGlassesCamera = false)
             },
             onError = {
                 checkingGlassesCameraPermission = false
@@ -267,6 +337,7 @@ class MetaPairingActivity : AppCompatActivity() {
     }
 
     private fun performPrimaryAction() {
+        if (requestingGlassesCameraPermission || checkingGlassesCameraPermission) return
         when {
             screenState.debugMockEnabled -> {
                 // Mock bypasses Meta AI install/registration for testing
@@ -278,12 +349,15 @@ class MetaPairingActivity : AppCompatActivity() {
                 )
                 return
             }
+            screenState.androidPermissionPermanentlyDenied -> openAppSettings()
             !screenState.androidPermissionsGranted ->
                 androidPermissionLauncher.launch(requiredAndroidPermissions())
+            !screenState.bluetoothEnabled -> startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
             !screenState.initialized -> initializeDat()
             !screenState.metaAiInstalled -> openMetaAi()
             screenState.metaAccessState == MetaAccessState.NEEDS_META_INVITE -> openBetaAccess()
             !screenState.isRegistered -> manager.startRegistration(this)
+            !screenState.deviceConnected && screenState.availableDeviceCount > 0 -> openMetaAi()
             screenState.availableDeviceCount == 0 -> {
                 // Invited + registered but no glasses — refresh rather than restart
                 manager.refreshRegistrationState()
@@ -295,8 +369,10 @@ class MetaPairingActivity : AppCompatActivity() {
                     Toast.LENGTH_LONG,
                 ).show()
             }
-            !screenState.glassesCameraGranted ->
+            !screenState.glassesCameraGranted -> {
+                requestingGlassesCameraPermission = true
                 glassesCameraPermissionLauncher.launch(Permission.CAMERA)
+            }
             else -> startActivity(
                 Intent(this, MainActivity::class.java).apply {
                     putExtra(MainActivity.EXTRA_START_META_IMAGE_QUESTION, true)
@@ -307,22 +383,12 @@ class MetaPairingActivity : AppCompatActivity() {
     }
 
     private fun retryPairing() {
-        when {
-            !screenState.androidPermissionsGranted ->
-                androidPermissionLauncher.launch(requiredAndroidPermissions())
-            !screenState.initialized -> initializeDat()
-            !screenState.metaAiInstalled -> openMetaAi()
-            screenState.metaAccessState == MetaAccessState.NEEDS_META_INVITE -> openBetaAccess()
-            !screenState.isRegistered -> manager.startRegistration(this)
-            screenState.availableDeviceCount == 0 -> {
-                // Distinguish invited-no-device from not-invited; both benefit from a quick refresh without restart
-                manager.refreshRegistrationState()
-                refreshState()
-            }
-            !screenState.glassesCameraGranted ->
-                glassesCameraPermissionLauncher.launch(Permission.CAMERA)
-            else -> refreshState()
-        }
+        cameraCheckKey = null
+        if (!screenState.isReadyForImageQuestion) performPrimaryAction() else refreshState()
+    }
+
+    private fun openAppSettings() {
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
     }
 
     private fun refreshInviteStatus() {
@@ -338,15 +404,7 @@ class MetaPairingActivity : AppCompatActivity() {
         }
     }
 
-    private fun requiredAndroidPermissions(): Array<String> = buildList {
-        add(Manifest.permission.CAMERA)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            add(Manifest.permission.BLUETOOTH_SCAN)
-            add(Manifest.permission.BLUETOOTH_CONNECT)
-        } else {
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-    }.toTypedArray()
+    private fun requiredAndroidPermissions(): Array<String> = MetaDatPermissions.required()
 
     private fun hasRequiredAndroidPermissions(): Boolean =
         requiredAndroidPermissions().all(::hasPermission)
@@ -423,7 +481,7 @@ fun MetaPairingScreen(
         mutableStateOf(true)
     }
     val inferredError = inferredMetaPairingError(state)
-    val pairingIssue = resolveMetaPairingIssue(
+    val pairingIssue = if (state.androidPermissionPermanentlyDenied) null else resolveMetaPairingIssue(
         metaAiInstalled = state.metaAiInstalled,
         lastError = inferredError,
         setupGuidance = state.guidance,
@@ -472,6 +530,7 @@ fun MetaPairingScreen(
                         when (pairingIssue.action) {
                             MetaPairingIssueAction.INSTALL_META_AI -> onOpenMetaAi()
                             MetaPairingIssueAction.OPEN_PAIRING -> onRetryPairing()
+                            MetaPairingIssueAction.OPEN_META_AI -> onOpenMetaAi()
                             MetaPairingIssueAction.REQUEST_ACCESS -> onRequestAccess()
                         }
                     },
@@ -489,6 +548,19 @@ fun MetaPairingScreen(
                     Text("Send logs")
                 }
             },
+        )
+    } else if (pairingIssue == null) {
+        val prompt = nextMetaSetupPrompt(state)
+        var showStep by androidx.compose.runtime.remember(prompt) { mutableStateOf(prompt != null) }
+        if (prompt != null && showStep) AlertDialog(
+            onDismissRequest = { showStep = false },
+            modifier = Modifier.testTag("meta_setup_next_step"),
+            title = { Text(prompt.title) },
+            text = { Text(prompt.message) },
+            confirmButton = {
+                TextButton(onClick = { showStep = false; onPrimaryAction() }) { Text(state.primaryLabel) }
+            },
+            dismissButton = { TextButton(onClick = { showStep = false }) { Text("Later") } },
         )
     }
 
@@ -555,8 +627,9 @@ fun MetaPairingScreen(
                 SetupStep(
                     title = "3. Discover your glasses",
                     detail = "Keep the glasses powered, unfolded, nearby, and connected in Meta AI.",
-                    complete = state.availableDeviceCount > 0,
+                    complete = state.availableDeviceCount > 0 && state.deviceConnected,
                     status = state.selectedDeviceName
+                        ?.let { if (state.deviceConnected) it else "$it — connecting or disconnected" }
                         ?: if (state.availableDeviceCount > 0) {
                             "${state.availableDeviceCount} Meta device(s) available"
                         } else {
@@ -586,6 +659,9 @@ fun MetaPairingScreen(
                 Spacer(Modifier.height(4.dp))
                 Button(
                     onClick = onPrimaryAction,
+                    enabled = !state.checkingCameraPermission && state.registrationState !in setOf(
+                        MetaRaybanManager.RegistrationState.REGISTERING, MetaRaybanManager.RegistrationState.UNREGISTERING,
+                    ),
                     modifier = Modifier.fillMaxWidth().testTag("meta_pairing_primary_action"),
                 ) {
                     Text(state.primaryLabel)

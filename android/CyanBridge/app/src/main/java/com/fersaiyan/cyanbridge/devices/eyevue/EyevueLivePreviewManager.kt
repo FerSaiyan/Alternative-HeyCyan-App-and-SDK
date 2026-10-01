@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.devices.eyevue
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import com.fersaiyan.cyanbridge.ota.LivePreviewState
@@ -19,41 +20,36 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 /**
  * Eyevue live-mode flow, vendor-matched: command BLE, join vendor Wi-Fi,
  * request the HTTP live endpoint, then play video and audio with LibVLC.
  * A single upstream session supplies the inline player and external VLC.
  */
-class EyevueLivePreviewManager(
+class EyevueLivePreviewManager internal constructor(
     private val context: Context,
-    private val eyevueManager: EyevueManager,
+    private val connection: EyevueLiveConnection,
 ) {
+    constructor(context: Context, eyevueManager: EyevueManager) :
+        this(context, EyevueGlassesLiveConnection(context, eyevueManager))
     companion object {
         private const val TAG = "EyevueLive"
-        private val CLIENT = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .build()
     }
 
     private val _uiState = MutableStateFlow(LivePreviewState())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private val transport = EyevueWifiTransport(context)
     private var job: Job? = null
     private var libVlc: LibVLC? = null
     private var player: MediaPlayer? = null
     private var playbackFailure: CompletableDeferred<Throwable>? = null
     private var videoView: EyevueLiveVideoView? = null
     private var viewAttached: CompletableDeferred<Unit>? = null
-    private var liveProxy: RtspPlayRewriteProxy? = null
+    private var frameOutput: EyevueVideoFrameOutput? = null
+    private var frameConsumer: ((Bitmap) -> Unit)? = null
     private var audioMuted = false
     /** Fires when the session stream address is known (stable for the session). */
     var onRelayUrlChanged: ((String?) -> Unit)? = null
@@ -68,6 +64,20 @@ class EyevueLivePreviewManager(
         this.onSessionFinished = onSessionFinished
         finishedNotified = false
         job = scope.launch { run() }
+    }
+
+    /** Headless video; caller owns delivered bitmaps. Audio is muted for spoken warnings. */
+    fun startFrames(onFrame: (Bitmap) -> Unit, onSessionFinished: () -> Unit) {
+        check(!isActive) { "Eyevue stream is already active" }
+        frameConsumer = onFrame
+        setAudioMuted(true)
+        start(onSessionFinished)
+    }
+
+    suspend fun stopAndJoin() {
+        val active = job
+        stop()
+        active?.join()
     }
 
     fun stop() {
@@ -109,39 +119,9 @@ class EyevueLivePreviewManager(
 
     private suspend fun run() {
         var failed = false
-        var liveCommandAttempted = false
         try {
-            if (!eyeVueConnected()) throw IOException("Eyevue BLE is not connected")
-            val project = eyevueManager.awaitProject()
-                ?: throw IOException("Eyevue did not report its project/model")
-            val profile = EyevueMediaProfile.fromProject(project)
-            updateState("Starting live mode", "Sending Eyevue 0x67 command", scanning = true)
-            liveCommandAttempted = true
-            val ssid = eyevueManager.startLiveAndAwaitSsid(profile.mode == EyevueWifiMode.AP)
-                ?: throw IOException("Eyevue did not report the live Wi-Fi SSID")
-
-            updateState("Connecting Wi-Fi", "Joining $ssid", scanning = true)
-            transport.connect(
-                mode = profile.mode,
-                ssid = ssid,
-                password = "12345678",
-                baseIp = profile.baseIp,
-            ).getOrElse { throw it }
-
-            profile.liveControlUrl?.let { controlUrl ->
-                updateState("Starting stream", "Requesting Eyevue HTTP live endpoint", scanning = true)
-                requestLiveEndpoint(controlUrl)
-            }
-
-            val proxy = RtspPlayRewriteProxy(
-                profile.baseIp, 554,
-                streamPath = Uri.parse(profile.liveStreamUrl).path ?: "/xxx.mov",
-                log = { Log.i("EyevueRtspProxy", it) },
-            )
-            val localPort = proxy.start()
-            liveProxy = proxy
-            val streamUrl = "rtsp://127.0.0.1:$localPort/live/"
-            Log.i(TAG, "Eyevue shared video+audio: $streamUrl -> ${profile.liveStreamUrl}")
+            val streamUrl = connection.open { label, detail -> updateState(label, detail, scanning = true) }
+            Log.i(TAG, "Eyevue shared video+audio: $streamUrl")
             runCatching { onRelayUrlChanged?.invoke(streamUrl) }
             var attempt = 0
             var lastError: Throwable? = null
@@ -185,36 +165,17 @@ class EyevueLivePreviewManager(
             withContext(NonCancellable) {
                 // Cancel relay reads first so LibVLC stop/release can't wait for a
                 // stalled local handshake. Native teardown runs off the UI thread.
-                liveProxy?.stop()
-                liveProxy = null
-                releasePlayer()
-                if (liveCommandAttempted && eyevueManager.isConnected()) {
-                    eyevueManager.stopLiveBlocking()
+                try {
+                    connection.close()
+                } finally {
+                    releasePlayer()
+                    frameConsumer = null
+                    if (!failed) resetState()
+                    job = null
+                    notifyFinished()
                 }
-                transport.disconnect()
-                if (!failed) resetState()
-                job = null
-                notifyFinished()
             }
         }
-    }
-
-    private fun eyeVueConnected(): Boolean = eyevueManager.isConnected()
-
-    private suspend fun requestLiveEndpoint(url: String) = withContext(Dispatchers.IO) {
-        var lastError: IOException? = null
-        repeat(5) { attempt ->
-            try {
-                CLIENT.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
-                    if (response.isSuccessful) return@withContext
-                    lastError = IOException("Eyevue live HTTP request failed: ${response.code}")
-                }
-            } catch (error: IOException) {
-                lastError = error
-            }
-            if (attempt < 4) delay(500L)
-        }
-        throw lastError ?: IOException("Eyevue live HTTP request failed")
     }
 
     private suspend fun playUntilPlaying(
@@ -293,8 +254,19 @@ class EyevueLivePreviewManager(
                 canStart = false,
                 canStop = true,
             )
-            videoView?.let { attachVideoView(it) }
-            attached.await() // Compose builds the inline view from the published state.
+            val consumer = frameConsumer
+            if (consumer != null) {
+                frameOutput = EyevueVideoFrameOutput(
+                    onFrame = consumer,
+                    onError = { error ->
+                        ready.completeExceptionally(error)
+                        streamFailure.complete(error)
+                    },
+                ).also { it.attach(vlcPlayer) }
+            } else {
+                videoView?.let { attachVideoView(it) }
+                attached.await() // Compose builds the inline view from the published state.
+            }
             vlcPlayer.play()
             ready.await()
         } finally {
@@ -309,6 +281,8 @@ class EyevueLivePreviewManager(
         val oldVlc = libVlc
         oldPlayer?.setEventListener(null)
         videoView?.bindPlayer(null)
+        frameOutput?.close(oldPlayer)
+        frameOutput = null
         player = null
         libVlc = null
         withContext(NonCancellable + Dispatchers.IO) {

@@ -9,6 +9,7 @@ data class EngineLoadConfig(
     val gpuLayers: Int,
     /** null uses the runtime/model default; true/false explicitly controls MTP/speculative decode. */
     val speculativeDecoding: Boolean? = null,
+    val projectorPath: String? = null,
 )
 
 data class EngineLoadResult(

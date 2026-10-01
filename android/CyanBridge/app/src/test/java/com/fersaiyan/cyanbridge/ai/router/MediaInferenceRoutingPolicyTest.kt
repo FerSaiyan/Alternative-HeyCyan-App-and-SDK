@@ -6,17 +6,17 @@ import org.junit.Test
 
 class MediaInferenceRoutingPolicyTest {
     @Test
-    fun localFallsBackToProThenTasker() {
+    fun localNeverImplicitlyRoutesToNetworkWhenMediaIsUnavailable() {
         assertEquals(
             AgentProviderType.LOCAL_AGENT,
             MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, true, false),
         )
         assertEquals(
-            AgentProviderType.PRO_SUBSCRIPTION,
+            AgentProviderType.LOCAL_AGENT,
             MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, false, true),
         )
         assertEquals(
-            AgentProviderType.TASKER,
+            AgentProviderType.LOCAL_AGENT,
             MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, false, false),
         )
     }

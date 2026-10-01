@@ -47,6 +47,7 @@ dependencyResolutionManagement {
 rootProject.name = "CyanBridgeManagerApp"
 include(":app")
 include(":shared")
+include(":llama-runtime")
 
 // HeyCyan Core - bundled as composite build for easy compilation
 val heycyanCoreDir = file("../../heycyan-core")

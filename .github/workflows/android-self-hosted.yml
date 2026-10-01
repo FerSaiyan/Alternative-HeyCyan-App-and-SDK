@@ -97,12 +97,12 @@ jobs:
       - name: Install branch build on local emulator
         run: bash tools/hil/install.sh '${{ steps.emulator.outputs.serial }}'
 
-      - name: Run Mock DAT and Meta pairing instrumentation
+      - name: Run Mock DAT, Meta pairing, and Walking Aid video controls
         run: >-
           bash tools/hil/run_instrumentation.sh
           '${{ steps.emulator.outputs.serial }}'
           emulator
-          com.fersaiyan.cyanbridge.devices.metarayban.MetaDatLifecycleTest,com.fersaiyan.cyanbridge.ui.MetaPairingMockFlowTest,com.fersaiyan.cyanbridge.ui.MetaPairingScreenTest
+          com.fersaiyan.cyanbridge.devices.metarayban.MetaDatLifecycleTest,com.fersaiyan.cyanbridge.devices.metarayban.MetaDatSdkMockTest,com.fersaiyan.cyanbridge.ui.MetaPairingMockFlowTest,com.fersaiyan.cyanbridge.ui.MetaPairingScreenTest,com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidVideoSourceButtonsTest,com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidVideoCaptureLifecycleTest
 
       - name: Run hermetic audio instrumentation
         run: >-
@@ -123,7 +123,7 @@ jobs:
       - name: Install branch build on Walking Aid emulator
         run: bash tools/hil/install.sh '${{ steps.walking_aid_emulator.outputs.serial }}'
 
-      - name: Run Walking Aid real models on emulator
+      - name: Run Walking Aid real models and glasses video streams on emulator
         env:
           WALKING_AID_CI_CACHE_DIR: ${{ runner.temp }}/../cyanbridge-model-cache/walking-aid
         run: bash tools/hil/run_walking_aid_model_ci.sh '${{ steps.walking_aid_emulator.outputs.serial }}'

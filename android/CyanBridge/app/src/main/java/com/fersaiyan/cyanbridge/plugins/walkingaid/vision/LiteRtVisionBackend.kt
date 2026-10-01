@@ -563,7 +563,9 @@ class LiteRtVisionBackend(
     private fun readTensorValues(buffer: ByteBuffer, tensor: Tensor): FloatArray {
         buffer.rewind()
         val values = FloatArray(tensor.numBytes() / tensor.dataType().byteSize())
-        val scale = tensor.quantizationParams().scale
+        // Class-index tensors can be unquantized UINT8 (scale=0). They contain
+        // literal IDs; multiplying them by zero silently labels every box "person".
+        val scale = tensor.quantizationParams().scale.takeIf { it > 0f } ?: 1f
         val zeroPoint = tensor.quantizationParams().zeroPoint
         for (index in values.indices) {
             values[index] = when (tensor.dataType()) {

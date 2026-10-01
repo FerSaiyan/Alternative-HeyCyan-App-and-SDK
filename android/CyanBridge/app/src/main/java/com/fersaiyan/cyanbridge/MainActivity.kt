@@ -75,6 +75,7 @@ import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyRsp
 import com.fersaiyan.cyanbridge.databinding.AcitivytMainBinding
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
 import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaDatPermissions
 import com.fersaiyan.cyanbridge.ui.ChatListActivity
 import com.fersaiyan.cyanbridge.ui.ChatThreadActivity
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
@@ -189,9 +190,9 @@ import android.provider.Settings
 import android.net.Uri
 import android.app.KeyguardManager
 
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
+import kotlinx.coroutines.sync.withLock
+import com.fersaiyan.cyanbridge.ai.image.AudioQuestionRecorder
+import com.fersaiyan.cyanbridge.ai.transcription.OfflineQuestionTranscriber
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.activity.compose.setContent
@@ -445,9 +446,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val IMAGE_THUMBNAIL_TRANSFER_TIMEOUT_MS = 20_000L
         private const val VOICE_CUE_ROUTE_SETTLE_MS = 500L
         private const val VOICE_BLUETOOTH_ROUTE_TIMEOUT_MS = 3_000L
-        private const val VOICE_CUE_BLUETOOTH_TAIL_MS = 50L
-        private const val VOICE_CUE_CALLBACK_TIMEOUT_MS = 3_000L
-        private const val VOICE_RECOGNITION_RETRY_DELAY_MS = 250L
+        private const val VOICE_QUESTION_ONSET_TIMEOUT_MS = 5_000L
         private const val IMAGE_QUESTION_CUE_BLUETOOTH_TAIL_MS = 50L
         private const val IMAGE_QUESTION_INITIAL_LISTENING_TIMEOUT_MS = 3_300L
         private val DEFAULT_VIDEO_DURATION_OPTIONS_SECONDS = listOf(15, 30, 60, 180, 540, 720)
@@ -584,7 +583,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     // Guard against concurrent/duplicate image queries
     private val imageQueryInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
     private val voiceQueryInProgress = AtomicReference<Any?>(null)
-    private val activeVoiceRecognizer = AtomicReference<SpeechRecognizer?>(null)
     private data class VoiceAudioRouteOwner(
         val queryToken: Any,
         val audioManager: android.media.AudioManager,
@@ -602,7 +600,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var mediaDownloadPurpose = MediaDownloadPurpose.FULL_SYNC
     private var highQualityImageRequest: HighQualityImageRequest? = null
     private var lastImageQueryAtMs: Long = 0L
-    private var activeParallelAudioQuestionDeferred: kotlinx.coroutines.CompletableDeferred<String?>? = null
+    private var activeParallelAudioQuestionDeferred: kotlinx.coroutines.CompletableDeferred<CapturedImageQuestion?>? = null
+    private val questionMicrophoneMutex = kotlinx.coroutines.sync.Mutex()
     private var activeParallelAudioQuestionJob: Job? = null
 
     // Official app registers the notify listener with cmdType=2 for album import.
@@ -641,6 +640,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var metaRaybanUiJob: Job? = null
     private var pendingMetaDatAction: (() -> Unit)? = null
     private var pendingMetaCameraAction: (() -> Unit)? = null
+    private var metaCameraReadinessInProgress = false
     private var meizuMyvuManager: MeizuMyvuManager? = null
     private var meizuMyvuUiJob: Job? = null
     private var meizuMyvuFailureJob: Job? = null
@@ -658,10 +658,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private val metaAndroidPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            MetaDatPermissions.recordRequestResult(this, result)
             val action = pendingMetaDatAction
             pendingMetaDatAction = null
             enabledMetaCameraCheckActive = false
-            if (result.values.all { it }) {
+            if (metaAndroidPermissionsMissing().isEmpty()) {
                 val manager = getOrCreateMetaRaybanManager()
                 manager.initialize()
                 if (manager.isInitialized.value) {
@@ -686,11 +687,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val action = pendingMetaCameraAction
             pendingMetaCameraAction = null
             enabledMetaCameraCheckActive = false
-            if (result.getOrDefault(PermissionStatus.Denied) == PermissionStatus.Granted) {
-                action?.invoke()
-            } else {
-                showMetaError("DAT camera permission", "Meta camera permission was denied")
-            }
+            metaCameraReadinessInProgress = false
+            result.fold(
+                onSuccess = { status ->
+                    val granted = status == PermissionStatus.Granted
+                    getOrCreateMetaRaybanManager().recordCameraPermissionResult(granted)
+                    if (granted) action?.invoke() else showMetaError("DAT camera permission", "Meta camera permission was denied")
+                },
+                onFailure = { error, _ ->
+                    getOrCreateMetaRaybanManager().recordCameraPermissionResult(false)
+                    showMetaError("DAT camera permission", error.description)
+                },
+            )
         }
 
     // Transcription UI moved to the "Transcriptions & recordings" section
@@ -978,9 +986,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         cancelLocalStreamingSpeech("activity destroyed")
         val voiceQueryWasActive = voiceQueryInProgress.getAndSet(null) != null
-        activeVoiceRecognizer.getAndSet(null)?.let { recognizer ->
-            runCatching { recognizer.destroy() }
-        }
         activeVoiceAudioRoute.getAndSet(null)?.audioManager?.let { audioManager ->
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -1519,19 +1524,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
     private fun metaAndroidPermissionsMissing(): Array<String> {
-        val permissions = mutableListOf(Manifest.permission.CAMERA)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions += Manifest.permission.BLUETOOTH_CONNECT
-            permissions += Manifest.permission.BLUETOOTH_SCAN
-        }
-        return permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }.toTypedArray()
+        return MetaDatPermissions.missing(this)
     }
 
     private fun ensureMetaDatReady(action: () -> Unit) {
         val missing = metaAndroidPermissionsMissing()
         if (missing.isNotEmpty()) {
+            if (MetaDatPermissions.permanentlyDenied(this)) {
+                showMetaError("Android permissions", "Allow Camera and Nearby devices (Location on Android 10–11) in CyanBridge's Android app settings, then try again.")
+                return
+            }
             pendingMetaDatAction = action
             metaAndroidPermissionLauncher.launch(missing)
             return
@@ -1550,18 +1552,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun ensureMetaCameraReady(action: () -> Unit) {
+        if (metaCameraReadinessInProgress) return
+        metaCameraReadinessInProgress = true
         ensureMetaDatReady {
             val manager = getOrCreateMetaRaybanManager()
-            manager.checkCameraPermission(
-                onGranted = action,
-                onRequestNeeded = {
-                    pendingMetaCameraAction = action
-                    metaWearablePermissionLauncher.launch(Permission.CAMERA)
-                },
-                onError = { error ->
-                    showMetaError("DAT camera permission", error)
-                },
-            )
+            if (manager.isDebugMockEnabled()) {
+                metaCameraReadinessInProgress = false
+                action()
+                return@ensureMetaDatReady
+            }
+            lifecycleScope.launch {
+                if (!manager.awaitCameraReady()) {
+                    showMetaError("Glasses connection", "Reconnect your glasses in Meta AI, then return to CyanBridge.")
+                    return@launch
+                }
+                manager.checkCameraPermission(
+                    onGranted = { metaCameraReadinessInProgress = false; action() },
+                    onRequestNeeded = {
+                        pendingMetaCameraAction = action
+                        metaWearablePermissionLauncher.launch(Permission.CAMERA)
+                    },
+                    onError = { error -> showMetaError("DAT camera permission", error) },
+                )
+            }
         }
     }
 
@@ -2418,7 +2431,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             pluginId == NativePluginIds.AUTO_DIARY ||
             pluginId == NativePluginIds.VISUAL_DIARY
         ) {
-            start()
+            if (pluginId == NativePluginIds.WALKING_AID &&
+                WalkingAidPreferences.getVideoMode(this) == com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidVideoMode.EYEVUE_VIDEO
+            ) {
+                ensureGlassesTransportPermissions("Walking Aid video", start)
+            } else start()
         } else {
             PluginVoicePermissions.ensure(this, onGranted = start)
         }
@@ -4537,9 +4554,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val selected = LocalModelStorageRepository.resolveSelectedModel(this)
             ?: return "No local model selected. Install or select a local model in Settings."
         val settings = LocalModelSettingsRepository.getForModel(this, selected.id)
-        if (mediaRequested && settings.modelRuntime != LocalModelRuntime.LITERT) {
-            return "The selected local model cannot process media. Select a multimodal LiteRT model."
-        }
+        // LocalModelsProvider can select an installed LiteRT/compatible GGUF media model
+        // for this request, without changing the user's text-model selection or calling a relay.
         return null
     }
 
@@ -4652,6 +4668,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         imagePath: String,
         providerType: AgentProviderType,
         resolvedPrompt: ResolvedImageQuestionPrompt,
+        audioPath: String? = null,
         onReplySpoken: (() -> Unit)? = null,
     ) {
         Log.i("AIHijack", "Running image query with RAG disabled for chosen provider $providerType: $imagePath")
@@ -4729,10 +4746,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     AgentProviderType.LOCAL_AGENT -> {
                         var receivedModelText = false
                         runChosenProviderQuery(
-                            userPrompt = resolvedPrompt.forRoute(ImageQuestionRoute.LOCAL_GEMMA),
+                            userPrompt = if (audioPath == null) resolvedPrompt.forRoute(ImageQuestionRoute.LOCAL_GEMMA)
+                                else "Answer the question spoken in the attached audio about the attached image. Do not merely transcribe it.\n\n" +
+                                    ImageQuestionDefaults.responseLanguageInstruction(recognitionLanguageTag()),
                             providerType = AgentProviderType.LOCAL_AGENT,
                             ragProfile = RagProfile.NONE,
                             imagePaths = listOf(imagePath),
+                            audioPath = audioPath,
                             onToken = { fragment ->
                                 receivedModelText = true
                                 localSpeechSessionId?.let { sessionId ->
@@ -4795,6 +4815,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     }
                 }
             } finally {
+                audioPath?.let { File(it).delete() }
                 imageQueryInProgress.set(false)
             }
         }
@@ -5442,10 +5463,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Toast.makeText(this, transferSummary, Toast.LENGTH_LONG).show()
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             var initialQuestion = pendingVoiceImageQuestion
+            var captured: CapturedImageQuestion? = null
             pendingVoiceImageQuestion = null
-            // Live routes skip the legacy SpeechRecognizer Ask windows entirely.
+            // Live routes own their continuous microphone session.
             // Non-Live (local, tasker, gemini 3.7 flash) keeps the parallel + sequential windows.
             val isLiveRoute = withContext(Dispatchers.Main) { isGeminiLiveRoutedForImageQuestion() }
             if (isLiveRoute) {
@@ -5457,7 +5479,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 activeParallelAudioQuestionJob = null
                 if (parallelDeferred != null) {
                     Log.i("ImageQuestion", "Awaiting parallel audio question recording...")
-                    initialQuestion = parallelDeferred.await()
+                    captured = parallelDeferred.await()
+                    initialQuestion = captured?.text
                 } else if (
                     ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
                 ) {
@@ -5468,24 +5491,32 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             Toast.LENGTH_SHORT,
                         ).show()
                     }
-                    initialQuestion = captureOptionalImageQuestionFromBluetoothMic(
+                    captured = captureOptionalImageQuestionFromBluetoothMic(
                         timeoutMs = IMAGE_QUESTION_INITIAL_LISTENING_TIMEOUT_MS,
                     )
+                    initialQuestion = captured.text
                 }
             } else {
                 cancelParallelAudioQuestion()
+            }
+            if (captured?.error != null) {
+                withContext(Dispatchers.Main) { speak(captured.error!!); finishAiQuestionForegroundWork() }
+                return@launch
             }
             val externalAutomation = usesExternalImageAutomation()
             fun offerFollowUp() {
                 lifecycleScope.launch {
                     delay(500L)
-                    val spokenQuestion = captureOptionalImageQuestionFromBluetoothMic(
+                    val followUp = captureOptionalImageQuestionFromBluetoothMic(
                         timeoutMs = IMAGE_QUESTION_INITIAL_LISTENING_TIMEOUT_MS,
                     )
-                    if (!spokenQuestion.isNullOrBlank()) {
+                    if (followUp.error != null) {
+                        speak(followUp.error)
+                    } else if (followUp.heardSpeech) {
                         triggerAssistantImageQuery(
                             imagePath = imagePath,
-                            userQuestion = spokenQuestion,
+                            userQuestion = followUp.text,
+                            audioPath = followUp.audioPath,
                             source = source,
                             onReplySpoken = ::offerFollowUp,
                         )
@@ -5495,6 +5526,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             triggerAssistantImageQuery(
                 imagePath = imagePath,
                 userQuestion = initialQuestion,
+                audioPath = captured?.audioPath,
                 source = source,
                 onReplySpoken = if (externalAutomation) null else ::offerFollowUp,
             )
@@ -5551,12 +5583,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private fun cancelParallelAudioQuestion() {
         val job = activeParallelAudioQuestionJob
         activeParallelAudioQuestionJob = null
         job?.cancel()
         val deferred = activeParallelAudioQuestionDeferred
         activeParallelAudioQuestionDeferred = null
+        if (deferred?.isCompleted == true) runCatching { deferred.getCompleted()?.audioPath?.let { File(it).delete() } }
         if (deferred?.isCompleted == false) {
             deferred.complete(null)
         }
@@ -5564,7 +5598,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun startParallelAudioQuestionIfEligible(offerSpokenQuestion: Boolean) {
         // Gemini Live handles voice continuously after the session is listening.
-        // Skipping the legacy SpeechRecognizer Ask window here keeps local/tasker/
+        // Skipping the recorded Ask window here keeps local/tasker/
         // non-Live Pro (e.g. gemini 3.7 flash) parallel behavior unchanged while
         // Live takes a photo and shows Initializing Live instead.
         if (isGeminiLiveRoutedForImageQuestion()) {
@@ -5579,7 +5613,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             pendingVoiceImageQuestion.isNullOrBlank() &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         ) {
-            val deferred = kotlinx.coroutines.CompletableDeferred<String?>()
+            val deferred = kotlinx.coroutines.CompletableDeferred<CapturedImageQuestion?>()
             activeParallelAudioQuestionDeferred = deferred
             activeParallelAudioQuestionJob = lifecycleScope.launch(Dispatchers.Main) {
                 // 500 ms settling delay for photo capture command & hardware shutter sound
@@ -5593,7 +5627,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     val spokenQuestion = captureOptionalImageQuestionFromBluetoothMic(
                         timeoutMs = IMAGE_QUESTION_INITIAL_LISTENING_TIMEOUT_MS,
                     )
-                    deferred.complete(spokenQuestion)
+                    if (!deferred.complete(spokenQuestion)) spokenQuestion.audioPath?.let { File(it).delete() }
                 }
             }
         }
@@ -5654,139 +5688,67 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private data class CapturedImageQuestion(
         val text: String?,
         val heardSpeech: Boolean,
+        val audioPath: String? = null,
+        val error: String? = null,
     )
 
-    private suspend fun captureOptionalImageQuestionFromBluetoothMic(timeoutMs: Long): String? {
-        val first = captureOptionalImageQuestionFromBluetoothMicOnce(timeoutMs)
-        if (first.text == null && first.heardSpeech) {
-            Log.i("ImageQuestionAudio", "Speech was heard without a recognition result; retrying once")
-            return captureOptionalImageQuestionFromBluetoothMicOnce(timeoutMs).text
-        }
-        return first.text
-    }
-
-    private suspend fun captureOptionalImageQuestionFromBluetoothMicOnce(timeoutMs: Long): CapturedImageQuestion {
-        return withContext(Dispatchers.Main) {
-            suspendCancellableCoroutine { cont ->
-                val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-                Log.i(
-                    "ImageQuestionAudio",
-                    "Starting image-question microphone timeoutMs=$timeoutMs route=${audioRouteSummary(audioManager)}",
-                )
-                var recognizer: SpeechRecognizer? = null
-                var timeoutJob: Job? = null
-                var finished = false
-                var heardSpeech = false
-
-                fun cleanup() {
-                    runCatching {
-                        recognizer?.destroy()
-                    }
-                    recognizer = null
-
-                    runCatching {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            audioManager.clearCommunicationDevice()
-                        }
-                        audioManager.isBluetoothScoOn = false
-                        audioManager.stopBluetoothSco()
-                        audioManager.mode = android.media.AudioManager.MODE_NORMAL
-                    }
-                    Log.i("ImageQuestionAudio", "Image-question microphone route cleared: ${audioRouteSummary(audioManager)}")
-                }
-
-                fun finish(result: String?) {
-                    if (finished) return
-                    finished = true
-                    timeoutJob?.cancel()
-                    timeoutJob = null
-                    val cleaned = result?.trim()?.takeIf { it.isNotBlank() }
-                    Log.i(
-                        "ImageQuestionAudio",
-                        "Image-question microphone finished heardSpeech=$heardSpeech resultLength=${cleaned?.length ?: 0}",
-                    )
-
-                    lifecycleScope.launch {
-                        playImageQuestionTone(android.media.ToneGenerator.TONE_PROP_BEEP2)
-                        cleanup()
-                        if (cont.isActive) {
-                            cont.resume(CapturedImageQuestion(cleaned, heardSpeech))
-                        }
-                    }
-                }
-
-                lifecycleScope.launch {
-                    val routeReady = startBluetoothMicRouteAndAwait(audioManager)
-                    Log.i(
-                        "ImageQuestionAudio",
-                        "Image-question Bluetooth route ready=$routeReady route=${audioRouteSummary(audioManager)}",
-                    )
-                    playImageQuestionTone(android.media.ToneGenerator.TONE_PROP_BEEP)
-                    speakImageQuestionCue()
-                    if (finished || !cont.isActive) return@launch
-
-                    Log.i("ImageQuestionAudio", "Cue complete; creating speech recognizer")
-                    recognizer = SpeechRecognizer.createSpeechRecognizer(this@MainActivity)
-                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, recognitionLanguageTag())
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, recognitionLanguageTag())
-                        // Once speech begins, wait for Android's end-of-speech signal rather
-                        // than imposing a fixed recording deadline.
-                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2_000)
-                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2_000)
-                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500)
-                    }
-
-                    recognizer?.setRecognitionListener(object : RecognitionListener {
-                        override fun onReadyForSpeech(params: Bundle?) {
-                            Log.i("ImageQuestionAudio", "Image-question recognizer ready")
-                        }
-                        override fun onBeginningOfSpeech() {
-                            heardSpeech = true
-                            Log.i("ImageQuestionAudio", "Image-question speech detected")
-                            timeoutJob?.cancel()
-                            timeoutJob = null
-                        }
-                        override fun onRmsChanged(rmsdB: Float) {}
-                        override fun onBufferReceived(buffer: ByteArray?) {}
-                        override fun onEndOfSpeech() {}
-
-                        override fun onError(error: Int) {
-                            Log.i("AIHijack", "Image question listener ended with error code=$error")
-                            finish(null)
-                        }
-
-                        override fun onResults(results: Bundle?) {
-                            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                            Log.i("ImageQuestionAudio", "Image-question recognizer resultCount=${matches?.size ?: 0}")
-                            finish(matches?.firstOrNull())
-                        }
-
-                        override fun onPartialResults(partialResults: Bundle?) {}
-                        override fun onEvent(eventType: Int, params: Bundle?) {}
-                    })
-
-                    timeoutJob = CoroutineScope(Dispatchers.Main).launch {
-                        delay(timeoutMs)
-                        if (!heardSpeech) {
-                            finish(null)
-                        }
-                    }
-
-                    recognizer?.startListening(intent)
-                }
-
-                cont.invokeOnCancellation {
-                    // lifecycleScope is already cancelled when the Activity is destroyed, so
-                    // finish() cannot rely on launching its asynchronous cleanup in that case.
-                    finished = true
-                    timeoutJob?.cancel()
-                    timeoutJob = null
-                    cleanup()
+    private suspend fun captureOptionalImageQuestionFromBluetoothMic(
+        timeoutMs: Long,
+        voiceOnly: Boolean = false,
+    ): CapturedImageQuestion = questionMicrophoneMutex.withLock {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        val owner = VoiceAudioRouteOwner(Any(), audioManager)
+        activeVoiceAudioRoute.set(owner)
+        var audioFile: File? = null
+        try {
+            withContext(Dispatchers.Main) {
+                val ready = startBluetoothMicRouteAndAwait(audioManager)
+                Log.i("ImageQuestionAudio", "Question route ready=$ready ${audioRouteSummary(audioManager)}")
+                if (Build.VERSION.SDK_INT >= 31 && audioManager.availableCommunicationDevices.any {
+                    it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET
+                }) check(ready) { "Could not connect the glasses microphone" }
+                playImageQuestionTone(android.media.ToneGenerator.TONE_PROP_BEEP)
+                speakImageQuestionCue(voiceOnly)
+            }
+            val communicationName = if (Build.VERSION.SDK_INT >= 31) audioManager.communicationDevice?.productName?.toString() else null
+            val input = audioManager.getDevices(android.media.AudioManager.GET_DEVICES_INPUTS).firstOrNull {
+                (it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    (Build.VERSION.SDK_INT >= 31 && it.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET)) &&
+                    (communicationName == null || it.productName.toString() == communicationName)
+            }
+            audioFile = AudioQuestionRecorder(applicationContext).record(timeoutMs, input)
+            withContext(Dispatchers.Main) { playImageQuestionTone(android.media.ToneGenerator.TONE_PROP_BEEP2) }
+        } catch (cancelled: CancellationException) {
+            audioFile?.delete()
+            throw cancelled
+        } catch (error: Exception) {
+            audioFile?.delete()
+            Log.w("ImageQuestionAudio", "Question capture failed", error)
+            return@withLock CapturedImageQuestion(null, false, error = error.message ?: "Microphone capture failed")
+        } finally {
+            withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) {
+                if (activeVoiceAudioRoute.compareAndSet(owner, null)) {
+                    if (Build.VERSION.SDK_INT >= 31) audioManager.clearCommunicationDevice()
+                    audioManager.isBluetoothScoOn = false
+                    audioManager.stopBluetoothSco()
+                    audioManager.mode = android.media.AudioManager.MODE_NORMAL
                 }
             }
+        }
+        val recorded = audioFile ?: return@withLock CapturedImageQuestion(null, false)
+        try {
+            val text = OfflineQuestionTranscriber(applicationContext).transcribe(recorded, recognitionLanguageTag())
+            if (text != null) {
+                recorded.delete()
+                Log.i("ImageQuestionAudio", "On-device transcript ready chars=${text.length}")
+                CapturedImageQuestion(text, true)
+            } else {
+                Log.i("ImageQuestionAudio", "On-device STT failed/unavailable; handing original audio to model")
+                CapturedImageQuestion(null, true, recorded.absolutePath)
+            }
+        } catch (cancelled: CancellationException) {
+            recorded.delete()
+            throw cancelled
         }
     }
 
@@ -5805,7 +5767,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private suspend fun speakImageQuestionCue() {
+    private suspend fun speakImageQuestionCue(voiceOnly: Boolean = false) {
         suspendCancellableCoroutine { cont ->
             val completed = AtomicBoolean(false)
             val utteranceId = "image_question_cue_${System.nanoTime()}"
@@ -5825,7 +5787,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
 
             val questionSettings = ImageQuestionPreferences.get(this)
-            val cue = ImageQuestionDefaults.questionCueForLanguage(questionSettings.appLanguageTag)
+            val cue = if (voiceOnly) ImageQuestionDefaults.listeningCueForLanguage(questionSettings.appLanguageTag)
+                else ImageQuestionDefaults.questionCueForLanguage(questionSettings.appLanguageTag)
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
             configureTtsForVoiceCommunication("image-question cue")
             Log.i(
@@ -5867,10 +5830,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Log.i("ImageQuestionAudio", "Selecting Bluetooth microphone route: ${audioRouteSummary(audioManager)}")
             audioManager.mode = android.media.AudioManager.MODE_IN_COMMUNICATION
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val device = audioManager.availableCommunicationDevices.firstOrNull {
+                val devices = audioManager.availableCommunicationDevices.filter {
                     it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
                         it.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET
                 }
+                val glassesName = runCatching { DeviceManager.getInstance().deviceName }.getOrNull()
+                val device = devices.firstOrNull { it.productName.toString().equals(glassesName, ignoreCase = true) }
+                    ?: devices.singleOrNull()
+                check(devices.size <= 1 || device != null) { "Multiple Bluetooth microphones are connected; could not identify the glasses" }
                 if (device != null) {
                     val selected = audioManager.setCommunicationDevice(device)
                     Log.i(
@@ -6026,19 +5993,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         stopGlassesAiAudio("voice-query command")
 
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-        val recognizer = try {
-            SpeechRecognizer.createSpeechRecognizer(this)
-        } catch (error: Exception) {
-            Log.e("AIHijack", "Could not create voice recognizer", error)
-            if (voiceQueryInProgress.compareAndSet(voiceQueryToken, null)) {
-                finishAiQuestionForegroundWork()
-            }
-            Toast.makeText(this, "Speech recognition is unavailable", Toast.LENGTH_SHORT).show()
-            return
-        }
         val audioRouteOwner = VoiceAudioRouteOwner(voiceQueryToken, audioManager)
         activeVoiceAudioRoute.set(audioRouteOwner)
-        activeVoiceRecognizer.set(recognizer)
 
         fun stopSco() {
             // A delayed callback from an older query must not clear the route selected by a
@@ -6063,93 +6019,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         Toast.makeText(this, "Listening for voice query…", Toast.LENGTH_SHORT).show()
 
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, recognitionLanguageTag())
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, recognitionLanguageTag())
-        }
-        var recognitionAttempts = 0
-
-        recognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {
-                Log.i("ImageQuestionAudio", "Voice-query recognizer ready after listening cue")
-            }
-
-            override fun onBeginningOfSpeech() {
-                Log.i("ImageQuestionAudio", "Voice-query speech detected attempt=$recognitionAttempts")
-            }
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-
-            override fun onError(error: Int) {
-                val isTransientNoSpeech = error == SpeechRecognizer.ERROR_NO_MATCH ||
-                    error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
-                if (isTransientNoSpeech && recognitionAttempts == 1) {
-                    recognitionAttempts += 1
-                    Log.w(
-                        "AIHijack",
-                        "Voice query recognition returned transient error code=$error; " +
-                            "retrying attempt=$recognitionAttempts route=${audioRouteSummary(audioManager)}",
-                    )
-                    Toast.makeText(this@MainActivity, "I didn't catch that. Listening again…", Toast.LENGTH_SHORT).show()
-                    lifecycleScope.launch {
-                        var retryStarted = false
-                        try {
-                            playImageQuestionTone(android.media.ToneGenerator.TONE_PROP_BEEP)
-                            delay(VOICE_RECOGNITION_RETRY_DELAY_MS)
-                            if (isFinishing || isDestroyed) return@launch
-                            val routeReady = startBluetoothMicRouteAndAwait(audioManager)
-                            Log.i(
-                                "ImageQuestionAudio",
-                                "Restarting voice recognizer attempt=$recognitionAttempts routeReady=$routeReady",
-                            )
-                            runCatching { recognizer.startListening(intent) }
-                                .onSuccess { retryStarted = true }
-                                .onFailure { retryError ->
-                                    Log.e("AIHijack", "Voice query recognition retry could not start", retryError)
-                                }
-                        } finally {
-                            // lifecycleScope can be cancelled while the retry cue/delay is active.
-                            // Do not leave the recognizer, SCO route, or foreground work alive when
-                            // no second listening session was actually started.
-                            if (!retryStarted) {
-                                recognizer.destroy()
-                                activeVoiceRecognizer.compareAndSet(recognizer, null)
-                                stopSco()
-                                finishVoiceQueryWork()
-                            }
-                        }
-                    }
-                    return
-                }
-                val message = if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
-                    "Microphone permission is required for voice questions"
-                } else if (isTransientNoSpeech) {
-                    "I couldn't hear a voice question. Please try again."
-                } else {
-                    "Voice query failed: $error"
-                }
-                Log.w(
-                    "AIHijack",
-                    "Voice query recognition failed with error code=$error " +
-                        "attempt=$recognitionAttempts route=${audioRouteSummary(audioManager)}",
-                )
-                Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
-                recognizer.destroy()
-                activeVoiceRecognizer.compareAndSet(recognizer, null)
-                stopSco()
-                finishVoiceQueryWork()
-            }
-
-            override fun onResults(results: Bundle?) {
-                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                val prompt = matches?.firstOrNull()?.trim().orEmpty()
+        fun processVoicePrompt(prompt: String) {
 
                 if (prompt.isBlank()) {
-                    recognizer.destroy()
-                    activeVoiceRecognizer.compareAndSet(recognizer, null)
                     stopSco()
                     finishVoiceQueryWork()
                     return
@@ -6268,7 +6140,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             }
                         }
                     } catch (cancelled: CancellationException) {
-                        activeVoiceRecognizer.compareAndSet(recognizer, null)
                         stopSco()
                         finishVoiceQueryWork()
                         throw cancelled
@@ -6282,84 +6153,49 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     }
                 }
 
-                recognizer.destroy()
-                activeVoiceRecognizer.compareAndSet(recognizer, null)
-            }
+        }
 
-            override fun onPartialResults(partialResults: Bundle?) {}
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
-
-        val cueUtteranceId = "voice_listening_${System.nanoTime()}"
-        val listeningStarted = AtomicBoolean(false)
-        val setupAborted = AtomicBoolean(false)
-        fun abortVoiceRecognitionSetup(reason: String, error: Throwable? = null) {
-            if (!setupAborted.compareAndSet(false, true)) return
-            Log.e("AIHijack", "Voice recognizer setup aborted: $reason", error)
-            ttsDoneCallbacks.remove(cueUtteranceId)
-            recognizer.destroy()
-            activeVoiceRecognizer.compareAndSet(recognizer, null)
+        val provider = chosenProviderType ?: AutomationPrefs.getProviderType(this)
+        if (memoryAwareChosenProvider && shouldUseGeminiLiveQuestions(provider)) {
             stopSco()
             finishVoiceQueryWork()
+            launchGeminiLiveQuestion(prompt = "Listen to the user's spoken question and answer it.")
+            return
         }
-        fun startListeningAfterCue(reason: String) {
-            if (setupAborted.get() || !listeningStarted.compareAndSet(false, true)) return
-            if (setupAborted.get()) return
-            val startJob = lifecycleScope.launch {
-                var started = false
-                try {
-                    // Keep only a minimal route-transition gap so speech immediately after the cue
-                    // is not clipped.
-                    delay(VOICE_CUE_BLUETOOTH_TAIL_MS)
-                    Log.i("ImageQuestionAudio", "Starting voice recognizer after listening cue reason=$reason")
-                    recognitionAttempts = 1
-                    recognizer.startListening(intent)
-                    started = true
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: Exception) {
-                    abortVoiceRecognitionSetup("startListening failed", error)
-                } finally {
-                    if (!started) abortVoiceRecognitionSetup("cancelled before startListening completed")
-                }
-            }
-            // A lifecycleScope launch can already be cancelled before its block is entered.
-            startJob.invokeOnCompletion { cause ->
-                if (cause is CancellationException) {
-                    abortVoiceRecognitionSetup("cancelled before recognizer startup ran")
-                }
-            }
-        }
-        val cueJob = lifecycleScope.launch {
+        lifecycleScope.launch {
+            var originalAudio: String? = null
             try {
-                val routeReady = startBluetoothMicRouteAndAwait(audioManager)
-                Log.i(
-                    "ImageQuestionAudio",
-                    "Voice-query Bluetooth route ready=$routeReady route=${audioRouteSummary(audioManager)}",
-                )
-                configureTtsForVoiceCommunication("voice-query listening cue")
-                val languageTag = recognitionLanguageTag()
-                speak(
-                    text = ImageQuestionDefaults.listeningCueForLanguage(languageTag),
-                    languageTag = languageTag,
-                    utteranceId = cueUtteranceId,
-                    onDone = { startListeningAfterCue("tts callback") },
-                    streamType = android.media.AudioManager.STREAM_VOICE_CALL,
-                )
-                // Do not leave Test Voice unresponsive if a TTS engine never reports completion.
-                delay(VOICE_CUE_CALLBACK_TIMEOUT_MS)
-                ttsDoneCallbacks.remove(cueUtteranceId)
-                startListeningAfterCue("tts callback timeout")
-            } finally {
-                if (!listeningStarted.get()) {
-                    ttsDoneCallbacks.remove(cueUtteranceId)
-                    abortVoiceRecognitionSetup("cancelled before listening was scheduled")
+                val captured = captureOptionalImageQuestionFromBluetoothMic(VOICE_QUESTION_ONSET_TIMEOUT_MS, voiceOnly = true)
+                originalAudio = captured.audioPath
+                stopSco()
+                when {
+                    captured.error != null -> { finishVoiceQueryWork(); speak(captured.error) }
+                    !captured.heardSpeech -> { finishVoiceQueryWork(); speak("I couldn't hear a voice question. Please try again.") }
+                    captured.text != null -> processVoicePrompt(captured.text)
+                    captured.audioPath != null -> {
+                        // Transcription failure keeps the original question; raw audio is never
+                        // sent for cloud transcription or replaced with a generic question.
+                        val reply = withContext(Dispatchers.IO) {
+                            runChosenProviderQuery(
+                                userPrompt = "Answer the question spoken in the attached audio. Do not merely transcribe it.",
+                                providerType = AgentProviderType.LOCAL_AGENT,
+                                ragProfile = RagProfile.NONE,
+                                audioPath = captured.audioPath,
+                            )
+                        }
+                        speakVision(reply) { finishVoiceQueryWork() }
+                    }
                 }
-            }
-        }
-        cueJob.invokeOnCompletion { cause ->
-            if (cause is CancellationException && !listeningStarted.get()) {
-                abortVoiceRecognitionSetup("cancelled before voice cue setup ran")
+            } catch (cancelled: CancellationException) {
+                finishVoiceQueryWork()
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e("AIHijack", "Voice audio query failed", error)
+                finishVoiceQueryWork()
+                speak("I couldn't process that voice question. Please try again.")
+            } finally {
+                originalAudio?.let { File(it).delete() }
+                stopSco()
             }
         }
     }
@@ -6632,18 +6468,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun triggerAssistantImageQuery(
         imagePath: String,
         userQuestion: String? = null,
+        audioPath: String? = null,
         source: ImageQuestionSource = ImageQuestionSourcePolicy.defaultSource(),
         onReplySpoken: (() -> Unit)? = null,
     ) {
         // Debounce: prevent duplicate requests within 5 seconds
         val now = System.currentTimeMillis()
         if (now - lastImageQueryAtMs < 5000) {
+            audioPath?.let { File(it).delete() }
             Log.w("AIHijack", "Image query debounced (last was ${now - lastImageQueryAtMs}ms ago)")
             return
         }
         
         // Guard against concurrent requests
         if (!imageQueryInProgress.compareAndSet(false, true)) {
+            audioPath?.let { File(it).delete() }
             Log.w("AIHijack", "Image query already in progress; treating duplicate action as barge-in")
             cancelLocalStreamingSpeech("duplicate image-query action")
             imageQueryInProgress.set(false)
@@ -6654,8 +6493,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         lastImageQueryAtMs = now
         val resolvedPrompt = resolveImageQuestionPrompt(userQuestion)
 
-        val externalReason = externalImageAutomationUnsupportedReason()
+        val externalReason = if (audioPath == null) externalImageAutomationUnsupportedReason() else null
         if (externalReason != null) {
+            audioPath?.let { File(it).delete() }
             Toast.makeText(this, externalReason, Toast.LENGTH_LONG).show()
             if (usesExternalAssistantUi() && ExternalAssistantAutomationInspector.inspect(this).phoneLocked) {
                 speak(externalReason)
@@ -6665,8 +6505,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
         
-        val internalProvider = when (currentAssistantRoute()) {
-            GlassesAssistantRoute.LOCAL,
+        val internalProvider = if (audioPath != null) AgentProviderType.LOCAL_AGENT else when (currentAssistantRoute()) {
+            GlassesAssistantRoute.LOCAL -> AgentProviderType.LOCAL_AGENT
             GlassesAssistantRoute.PRO,
             GlassesAssistantRoute.TASKER_EXTERNAL_UI -> MediaInferenceRoutingPolicy.resolve(this)
             GlassesAssistantRoute.PHONE_ASSISTANT -> null
@@ -6676,6 +6516,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 imagePath = imagePath,
                 providerType = internalProvider,
                 resolvedPrompt = resolvedPrompt,
+                audioPath = audioPath,
                 onReplySpoken = onReplySpoken,
             )
             return
@@ -7296,14 +7137,23 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun showMetaError(operation: String, message: String) {
+        enabledMetaCameraCheckActive = false
+        metaCameraReadinessInProgress = false
         val manager = getOrCreateMetaRaybanManager()
-        val detail = manager.lastError.value?.takeIf { it.isNotBlank() } ?: message
+        val detail = message
         Log.e(
             "MainActivity",
             "$operation failed: $detail\n${manager.diagnosticsSnapshot()}",
         )
         updateMetaRaybanUiState()
-        Toast.makeText(this, "$operation: $detail", Toast.LENGTH_LONG).show()
+        if (!isFinishing && !isDestroyed) {
+            AlertDialog.Builder(this)
+                .setTitle("Complete Meta glasses setup")
+                .setMessage("$operation: $detail\n\nOpen Meta setup for the next step: Android permissions, Meta AI connection, or glasses camera authorization.")
+                .setPositiveButton("Open Meta setup") { _, _ -> startActivity(Intent(this, MetaPairingActivity::class.java)) }
+                .setNegativeButton("Close", null)
+                .show()
+        }
     }
 
     private fun updateMetaRaybanUiState() {

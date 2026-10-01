@@ -6,6 +6,7 @@ object WalkingAidPreferences {
     private const val PREFS = "walking_aid_prefs"
 
     private const val KEY_ENABLED = "enabled"
+    private const val KEY_VIDEO_MODE = "video_mode"
     private const val KEY_CAPTURE_INTERVAL_SECONDS = "capture_interval_seconds"
     private const val KEY_IMAGE_DESCRIPTION_SOURCE = "image_description_source"
     private const val KEY_IMAGE_DESCRIPTION_CLOUD_MODEL_ID = "image_description_cloud_model_id"
@@ -47,6 +48,14 @@ object WalkingAidPreferences {
 
     fun isEnabled(context: Context): Boolean =
         prefs(context).getBoolean(KEY_ENABLED, DEFAULT_ENABLED)
+
+    fun getVideoMode(context: Context): WalkingAidVideoMode =
+        WalkingAidVideoMode.entries.firstOrNull { it.name == prefs(context).getString(KEY_VIDEO_MODE, null) }
+            ?: WalkingAidVideoMode.PERIODIC_PHOTOS
+
+    fun setVideoMode(context: Context, mode: WalkingAidVideoMode) {
+        prefs(context).edit().putString(KEY_VIDEO_MODE, mode.name).apply()
+    }
 
     fun setEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_ENABLED, enabled).apply()

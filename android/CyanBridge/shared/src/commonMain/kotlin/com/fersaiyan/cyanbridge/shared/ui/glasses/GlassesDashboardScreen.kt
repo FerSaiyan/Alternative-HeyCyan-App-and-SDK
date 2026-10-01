@@ -1077,6 +1077,7 @@ private fun MetaRaybanControls(
                         onAction(
                             when (pairingIssue.action) {
                                 MetaPairingIssueAction.INSTALL_META_AI -> GlassesDashboardAction.MetaOpenMetaAi
+                                MetaPairingIssueAction.OPEN_META_AI -> GlassesDashboardAction.MetaOpenMetaAi
                                 MetaPairingIssueAction.OPEN_PAIRING -> GlassesDashboardAction.MetaOpenPairing
                                 MetaPairingIssueAction.REQUEST_ACCESS -> GlassesDashboardAction.MetaOpenPairing
                             },

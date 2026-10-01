@@ -270,7 +270,8 @@ From the repository root:
 python3 tools/hil/validate_tasker_profiles.py
 ```
 
-Walking Aid real YOLO11, YOLO-World, and Depth Anything inference on the emulator:
+Walking Aid real YOLO11, YOLO-World, and Depth Anything inference, plus EyeVue/Meta
+video-to-YOLO plumbing on the emulator:
 
 ```bash
 serial="$(bash tools/hil/start_walking_aid_emulator.sh)"
@@ -280,6 +281,12 @@ bash tools/hil/run_walking_aid_model_ci.sh "$serial"
 
 See `android/CyanBridge/docs/WALKING_AID_MODEL_TEST.md` for model/image provenance,
 checksums, build/install prerequisites, and the 8 GiB AVD storage recommendation.
+The runner also executes `eyevue-video` and `meta-video` in separate processes.
+These use packaged two-scene H.264/HEVC fixtures: EyeVue retains the production LibVLC
+headless decoder and camera rotation with a substituted connection URL; Meta uses
+the actual DAT `MockDeviceKit`. Both require real YOLO detections from multiple
+fresh frames and clean session teardown. A Meta DAT-enabled build is required.
+For a focused video rerun, use `WALKING_AID_CI_PHASES=eyevue-video,meta-video`.
 
 When a Tasker HIL target is connected:
 

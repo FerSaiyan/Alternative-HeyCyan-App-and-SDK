@@ -6,13 +6,24 @@ emulator. It executes all current local Walking Aid models rather than mocking i
 - YOLO11n TFLite detection.
 - YOLO-World quantized TFLite detection.
 - Depth Anything 3 Small FP16 TFLite depth estimation.
+- YOLO11 over EyeVue headless LibVLC video frames, with production rotation.
+- YOLO11 over Meta DAT video frames delivered by actual `MockDeviceKit`.
 
 It uses two real JPEG scenes (`bus.jpg` and `zidane.jpg`) from the Ultralytics assets repository.
 They are decoded from files in the same way as completed JPEG thumbnail transfers from the glasses.
 URLs are pinned to a Git commit, and every image/model has an exact size and SHA-256 in
-`tools/hil/walking_aid_assets.tsv`. The assets are not committed to Git or attached to CI artifacts.
+`tools/hil/walking_aid_assets.tsv`. Models and source JPEGs are downloaded into the host cache
+and are not committed to Git or attached to CI artifacts. Small derived H.264/HEVC clips are packaged
+in the test APK; provenance and checksums are in `app/src/androidTest/assets/walkingaid/README.md`.
 Ultralytics assets are offered under AGPL-3.0; model-specific licensing remains documented in
 `WalkingAidModelCatalog`.
+
+For the EyeVue video phase only its BLE/Wi-Fi connection URL is substituted with a test clip;
+the production decoder, headless output, rotation, Walking Aid acquisition and latest-frame queue
+are used. Meta uses the actual DAT SDK mock and production manager/session. Both video phases
+require multiple fresh frames and detections from both scenes (person, bus, and tie), then verify
+session/transport cleanup. They run in separate instrumentation processes alongside the three
+existing model phases. Build with Meta DAT dependencies enabled for these phases.
 
 ## Run locally on Linux
 

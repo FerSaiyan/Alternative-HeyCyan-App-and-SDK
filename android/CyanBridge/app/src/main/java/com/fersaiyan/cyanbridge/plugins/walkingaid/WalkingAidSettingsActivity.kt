@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.os.SystemClock
+import android.os.Build
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.material3.CircularProgressIndicator
@@ -50,6 +51,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -75,6 +77,19 @@ import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
 
 
 import com.fersaiyan.cyanbridge.devices.DeviceCapabilityHelper
+import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaDatPermissions
+import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
+import com.fersaiyan.cyanbridge.ui.hasBluetooth
+import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
+import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
+import com.fersaiyan.cyanbridge.ui.ensureNotificationPermission
+import com.fersaiyan.cyanbridge.ui.requestBluetoothPermission
+import com.fersaiyan.cyanbridge.ui.requestWifiP2pPermission
+import com.hjq.permissions.OnPermissionCallback
+import com.hjq.permissions.XXPermissions
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.filled.Warning
 
 class WalkingAidSettingsActivity : AppCompatActivity() {
@@ -88,10 +103,64 @@ class WalkingAidSettingsActivity : AppCompatActivity() {
         setThemedComposeContent(composeView) {
             WalkingAidSettingsScreen(
                 onBack = ::finish,
-                onStartService = { WalkingAidService.start(this) },
+                onStartService = ::startWithPermissions,
                 onStopService = { WalkingAidService.stop(this) },
             )
         }
+    }
+
+    private fun startWithPermissions() {
+        if (!hasBluetooth(this)) {
+            requestTransportPermission(wifi = false)
+            return
+        }
+        if (WalkingAidPreferences.getVideoMode(this) == WalkingAidVideoMode.EYEVUE_VIDEO && !hasWifiP2pPermission(this)) {
+            requestTransportPermission(wifi = true)
+            return
+        }
+        if (!hasNotificationPermission(this)) {
+            WalkingAidPreferences.setEnabled(this, false)
+            ensureNotificationPermission(this, "Walking Aid") { startWithPermissions() }
+            return
+        }
+        if (DeviceProfileStore.isMetaSelected(this)) {
+            val manager = MetaRaybanManager.getInstance(this)
+            if (MetaDatPermissions.missing(this).isNotEmpty() || !manager.isCameraReady() || !manager.cameraPermissionGranted.value) {
+                WalkingAidPreferences.setEnabled(this, false)
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle(R.string.walking_aid_meta_setup_title)
+                    .setMessage(R.string.walking_aid_meta_setup_message)
+                    .setPositiveButton(R.string.walking_aid_open_meta_setup) { _, _ -> startActivity(Intent(this, MetaPairingActivity::class.java)) }
+                    .setNegativeButton(android.R.string.cancel, null).show()
+                return
+            }
+        }
+        WalkingAidService.start(this)
+    }
+
+    private fun requestTransportPermission(wifi: Boolean) {
+        WalkingAidPreferences.setEnabled(this, false)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(if (wifi) R.string.walking_aid_wifi_permission_title else R.string.walking_aid_bluetooth_permission_title)
+            .setMessage(if (wifi) R.string.walking_aid_wifi_permission_message else R.string.walking_aid_bluetooth_permission_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.walking_aid_grant_permission) { _, _ ->
+                val callback = object : OnPermissionCallback {
+                    override fun onGranted(permissions: MutableList<String>, all: Boolean) {
+                        if (all) startWithPermissions() else onDenied(permissions, false)
+                    }
+                    override fun onDenied(permissions: MutableList<String>, never: Boolean) {
+                        androidx.appcompat.app.AlertDialog.Builder(this@WalkingAidSettingsActivity)
+                            .setTitle(R.string.walking_aid_permission_required)
+                            .setMessage(R.string.walking_aid_permission_required_message)
+                            .setPositiveButton(if (never) R.string.walking_aid_open_app_settings else R.string.walking_aid_try_again) { _, _ ->
+                                if (never) XXPermissions.startPermissionActivity(this@WalkingAidSettingsActivity, permissions)
+                                else requestTransportPermission(wifi)
+                            }.setNegativeButton(android.R.string.cancel, null).show()
+                    }
+                }
+                if (wifi) requestWifiP2pPermission(this, callback) else requestBluetoothPermission(this, callback)
+            }.show()
     }
 }
 
@@ -111,6 +180,25 @@ fun WalkingAidSettingsScreen(
 
     // State
     var enabled by remember { mutableStateOf(WalkingAidPreferences.isEnabled(context)) }
+    var running by remember { mutableStateOf(WalkingAidService.isRunning()) }
+    var videoMode by remember { mutableStateOf(WalkingAidPreferences.getVideoMode(context)) }
+    val selectedDevice = DeviceProfileStore.selectedClass(context)
+    val serviceFailure by WalkingAidService.lastFailure.collectAsState()
+    serviceFailure?.let { message ->
+        AlertDialog(
+            onDismissRequest = WalkingAidService::dismissFailure,
+            title = { Text(stringResource(R.string.walking_aid_stopped)) },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = WalkingAidService::dismissFailure) { Text(stringResource(android.R.string.ok)) } },
+        )
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            enabled = WalkingAidPreferences.isEnabled(context)
+            running = WalkingAidService.isRunning()
+            delay(500)
+        }
+    }
     var captureInterval by remember { mutableIntStateOf(WalkingAidPreferences.getCaptureIntervalSeconds(context)) }
     var imageDescriptionSource by remember { mutableStateOf(WalkingAidPreferences.getImageDescriptionSource(context)) }
     var imageDescriptionCloudModelId by remember { mutableStateOf(WalkingAidPreferences.getImageDescriptionCloudModelId(context)) }
@@ -249,6 +337,22 @@ fun WalkingAidSettingsScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    WalkingAidVideoSourceButtons(
+                        selected = videoMode,
+                        deviceClass = selectedDevice,
+                        sdk = Build.VERSION.SDK_INT,
+                        enabled = !enabled && !running,
+                        onSelected = { mode ->
+                            videoMode = mode
+                            WalkingAidPreferences.setVideoMode(context, mode)
+                        },
+                    )
+                    Text(
+                        stringResource(R.string.walking_aid_video_source_help),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     // Capture interval
                     Text(
                         stringResource(R.string.walking_aid_capture_interval),
@@ -263,6 +367,7 @@ fun WalkingAidSettingsScreen(
                         intervalOptions.forEach { option ->
                             FilterChip(
                                 selected = captureInterval == option,
+                                enabled = videoMode == WalkingAidVideoMode.PERIODIC_PHOTOS,
                                 onClick = {
                                     captureInterval = option
                                     WalkingAidPreferences.setCaptureIntervalSeconds(context, option)
@@ -408,7 +513,7 @@ fun WalkingAidSettingsScreen(
                                 }
                             }
                         },
-                        enabled = !isTestingLatency,
+                        enabled = !isTestingLatency && !running && videoMode == WalkingAidVideoMode.PERIODIC_PHOTOS,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         if (isTestingLatency) {
@@ -480,7 +585,7 @@ fun WalkingAidSettingsScreen(
                                 }
                             }
                         },
-                        enabled = !isTestingAcquisition && hasCamera,
+                        enabled = !isTestingAcquisition && hasCamera && !running && videoMode == WalkingAidVideoMode.PERIODIC_PHOTOS,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         if (isTestingAcquisition) {
