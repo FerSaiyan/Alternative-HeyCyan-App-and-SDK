@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.devices.eyevue
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import android.view.Surface
 import com.fersaiyan.cyanbridge.ota.LivePreviewState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -18,7 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
@@ -28,13 +26,11 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import java.io.IOException
 import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
 
 /**
  * Eyevue live-mode flow, vendor-matched: command BLE, join vendor Wi-Fi,
- * request the HTTP live endpoint, then play the stream URL directly with
- * LibVLC (same engine and options as the official app). Single box session,
- * picture and sound.
+ * request the HTTP live endpoint, then play video and audio with LibVLC.
+ * A single upstream session supplies the inline player and external VLC.
  */
 class EyevueLivePreviewManager(
     private val context: Context,
@@ -55,7 +51,10 @@ class EyevueLivePreviewManager(
     private var libVlc: LibVLC? = null
     private var player: MediaPlayer? = null
     private var playbackFailure: CompletableDeferred<Throwable>? = null
-    private var videoSurface: Surface? = null
+    private var videoView: EyevueLiveVideoView? = null
+    private var viewAttached: CompletableDeferred<Unit>? = null
+    private var liveProxy: RtspPlayRewriteProxy? = null
+    private var audioMuted = false
     /** Fires when the session stream address is known (stable for the session). */
     var onRelayUrlChanged: ((String?) -> Unit)? = null
     private var onSessionFinished: () -> Unit = {}
@@ -88,17 +87,24 @@ class EyevueLivePreviewManager(
 
     fun getPlayer(): MediaPlayer? = player
 
-    /** Hands the dashboard picture surface to the vendor engine. */
-    fun attachVideoSurface(surface: Surface) {
-        videoSurface = surface
-        player?.let { attachSurfaceTo(it, surface) }
+    /** Attach the vendor's view helper before starting the decoder. Main thread only. */
+    fun attachVideoView(view: EyevueLiveVideoView) {
+        if (videoView !== view) videoView?.bindPlayer(null)
+        videoView = view
+        player?.let {
+            view.bindPlayer(it)
+            viewAttached?.complete(Unit)
+        }
     }
 
-    fun detachVideoSurface() {
-        videoSurface = null
-        player?.let {
-            runCatching { it.vlcVout.detachViews() }
-        }
+    fun detachVideoView(view: EyevueLiveVideoView) {
+        view.bindPlayer(null)
+        if (videoView === view) videoView = null
+    }
+
+    fun setAudioMuted(muted: Boolean) {
+        audioMuted = muted
+        player?.setVolume(if (muted) 0 else 100)
     }
 
     private suspend fun run() {
@@ -127,36 +133,35 @@ class EyevueLivePreviewManager(
                 requestLiveEndpoint(controlUrl)
             }
 
-            // Vendor path: play the box URL directly with LibVLC, one session.
-            val streamUrl = profile.liveStreamUrl
-            Log.i(TAG, "Eyevue live direct: $streamUrl (single box session)")
+            val proxy = RtspPlayRewriteProxy(
+                profile.baseIp, 554,
+                streamPath = Uri.parse(profile.liveStreamUrl).path ?: "/xxx.mov",
+                log = { Log.i("EyevueRtspProxy", it) },
+            )
+            val localPort = proxy.start()
+            liveProxy = proxy
+            val streamUrl = "rtsp://127.0.0.1:$localPort/live/"
+            Log.i(TAG, "Eyevue shared video+audio: $streamUrl -> ${profile.liveStreamUrl}")
             runCatching { onRelayUrlChanged?.invoke(streamUrl) }
             var attempt = 0
             var lastError: Throwable? = null
             while (attempt < 4) {
                 val streamFailure = CompletableDeferred<Throwable>()
                 playbackFailure = streamFailure
-                val ready = withTimeoutOrNull(30_000L) {
-                    playUntilPlaying(streamUrl, streamFailure)
-                    true
-                } == true
-                if (!ready) {
-                    lastError = IOException("Timed out waiting for the Eyevue RTSP stream")
-                    Log.w(TAG, "Eyevue handshake attempt ${attempt + 1} not ready; retrying")
-                    releasePlayer()
-                    attempt++
-                    delay(1_000L)
-                    continue
-                }
-                _uiState.value = LivePreviewState(
-                    stateLabel = "Playing",
-                    detail = streamUrl,
-                    isPlaying = true,
-                    streamUrl = streamUrl,
-                    canStart = false,
-                    canStop = true,
-                )
                 try {
+                    val ready = withTimeoutOrNull(30_000L) {
+                        playUntilPlaying(streamUrl, streamFailure)
+                        true
+                    } == true
+                    if (!ready) throw IOException("Timed out waiting for the Eyevue RTSP stream")
+                    _uiState.value = LivePreviewState(
+                        stateLabel = "Playing",
+                        detail = streamUrl,
+                        isPlaying = true,
+                        streamUrl = streamUrl,
+                        canStart = false,
+                        canStop = true,
+                    )
                     throw streamFailure.await()
                 } catch (reconnect: Throwable) {
                     if (reconnect is CancellationException) throw reconnect
@@ -178,6 +183,10 @@ class EyevueLivePreviewManager(
             updateState("Error", error.message ?: "Eyevue live preview failed", scanning = false)
         } finally {
             withContext(NonCancellable) {
+                // Cancel relay reads first so LibVLC stop/release can't wait for a
+                // stalled local handshake. Native teardown runs off the UI thread.
+                liveProxy?.stop()
+                liveProxy = null
                 releasePlayer()
                 if (liveCommandAttempted && eyevueManager.isConnected()) {
                     eyevueManager.stopLiveBlocking()
@@ -212,12 +221,19 @@ class EyevueLivePreviewManager(
         streamUrl: String,
         streamFailure: CompletableDeferred<Throwable>,
     ) {
-        suspendCancellableCoroutine<Unit> { continuation ->
-            val vlc = LibVLC(context)
-            val vlcPlayer = MediaPlayer(vlc)
-            videoSurface?.let { attachSurfaceTo(vlcPlayer, it) }
+        val ready = CompletableDeferred<Unit>()
+        val attached = CompletableDeferred<Unit>()
+        viewAttached = attached
+        val vlc = LibVLC(context)
+        libVlc = vlc
+        val vlcPlayer = MediaPlayer(vlc)
+        player = vlcPlayer
+        try {
             val media = Media(vlc, Uri.parse(streamUrl))
-            media.setHWDecoderEnabled(true, false)
+            // The Samsung trace reports an unknown MediaCodec output format and
+            // decoder buffer deadlocks. External VLC successfully chose avcodec.
+            // Software H264/AAC decoding is sufficient for this 640x480 preview.
+            media.addOption(":codec=avcodec")
             media.addOption(":network-caching=1000")
             media.addOption(":rtsp-tcp")
             media.addOption(":file-caching=1000")
@@ -226,49 +242,46 @@ class EyevueLivePreviewManager(
             media.addOption(":skip-frames=true")
             vlcPlayer.media = media
             media.release()
-            var ready = false
-            var firstFrame = false
+            vlcPlayer.setVolume(if (audioMuted) 0 else 100)
+            var videoOutputReady = false
+            var playing = false
+            fun completeWhenVideoIsReady() {
+                if (playing && videoOutputReady) ready.complete(Unit)
+            }
             vlcPlayer.setEventListener(
                 MediaPlayer.EventListener { event ->
                     when (event.type) {
                         MediaPlayer.Event.Playing -> {
                             Log.i(TAG, "Eyevue player event: Playing")
-                            if (!ready) {
-                                ready = true
-                                if (continuation.isActive) continuation.resume(Unit)
-                            }
+                            playing = true
+                            completeWhenVideoIsReady()
                         }
                         MediaPlayer.Event.Paused,
                         MediaPlayer.Event.Stopped,
                         -> Log.i(TAG, "Eyevue player event: ${event.type}")
                         MediaPlayer.Event.EndReached -> {
                             val error = IOException("Eyevue RTSP stream ended")
-                            if (continuation.isActive) {
-                                continuation.resumeWith(Result.failure(error))
-                            } else {
-                                streamFailure.complete(error)
-                            }
+                            ready.completeExceptionally(error)
+                            streamFailure.complete(error)
                         }
                         MediaPlayer.Event.EncounteredError -> {
                             val failure = IOException("Eyevue RTSP error")
-                            if (continuation.isActive) {
-                                continuation.resumeWith(Result.failure(failure))
-                            } else {
-                                streamFailure.complete(failure)
-                            }
+                            ready.completeExceptionally(failure)
+                            streamFailure.complete(failure)
                         }
                         MediaPlayer.Event.Vout -> {
-                            if (event.voutCount > 0 && !firstFrame) {
-                                firstFrame = true
-                                Log.i(TAG, "Eyevue player video output ready")
+                            if (event.voutCount > 0 && !videoOutputReady) {
+                                videoOutputReady = true
+                                val track = vlcPlayer.currentVideoTrack
+                                Log.i(TAG, "Eyevue video output ready: ${track?.width}x${track?.height}, audio tracks=${vlcPlayer.audioTracksCount}")
+                                completeWhenVideoIsReady()
                             }
                         }
+                        MediaPlayer.Event.Buffering -> Log.d(TAG, "Eyevue buffering: ${event.buffering}%")
                         else -> Unit
                     }
                 },
             )
-            libVlc = vlc
-            player = vlcPlayer
             // Publish now that the player exists, so the inline video box
             // never receives a null player. Gated UI shows it only for
             // EyeVue after live starts.
@@ -280,31 +293,29 @@ class EyevueLivePreviewManager(
                 canStart = false,
                 canStop = true,
             )
-            continuation.invokeOnCancellation {
-                if (player === vlcPlayer) releasePlayer()
-            }
+            videoView?.let { attachVideoView(it) }
+            attached.await() // Compose builds the inline view from the published state.
             vlcPlayer.play()
+            ready.await()
+        } finally {
+            viewAttached = null
         }
     }
 
-    private fun attachSurfaceTo(vlcPlayer: MediaPlayer, surface: Surface) {
-        runCatching {
-            vlcPlayer.vlcVout.setVideoSurface(surface, null)
-            vlcPlayer.vlcVout.attachViews()
-        }
-    }
-
-    private fun releasePlayer() {
+    private suspend fun releasePlayer() {
         playbackFailure?.cancel()
         playbackFailure = null
-        player?.let { vlcPlayer ->
-            runCatching { vlcPlayer.stop() }
-            runCatching { vlcPlayer.vlcVout.detachViews() }
-            runCatching { vlcPlayer.release() }
-        }
+        val oldPlayer = player
+        val oldVlc = libVlc
+        oldPlayer?.setEventListener(null)
+        videoView?.bindPlayer(null)
         player = null
-        libVlc?.let { runCatching { it.release() } }
         libVlc = null
+        withContext(NonCancellable + Dispatchers.IO) {
+            runCatching { oldPlayer?.stop() }.onFailure { Log.w(TAG, "LibVLC stop failed", it) }
+            runCatching { oldPlayer?.release() }.onFailure { Log.w(TAG, "LibVLC release failed", it) }
+            runCatching { oldVlc?.release() }
+        }
     }
 
     private fun updateState(label: String, detail: String, scanning: Boolean) {

@@ -1,693 +1,408 @@
 package com.fersaiyan.cyanbridge.devices.eyevue
 
-import android.util.Log
 import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Single-session RTSP fan-out relay for the EyeVue live stream.
- *
- * The glasses box effectively serves one stream session: every new handshake
- * starves the previous viewer, so two viewers (inline player + VLC) murder
- * each other on alternating cycles. This relay holds exactly ONE upstream
- * session with the glasses (both tracks, like the vendor) and fans the
- * picture out to any number of local viewers. Viewers only ever talk to the
- * relay - describe, setup, play and pings are answered locally - so no viewer
- * can disturb another or the box. If the upstream stalls, the relay re-opens
- * it transparently while viewers just see a brief freeze.
+ * One glasses RTSP session, shared by independent loopback clients. Both RTP
+ * tracks are preserved. Client control/RTCP never tears down the glasses session.
+ * Network reads have one owner; slow viewers have bounded, independent writers.
  */
 internal class RtspPlayRewriteProxy(
     private val upstreamHost: String,
     private val upstreamPort: Int,
+    private val streamPath: String = "/xxx.mov",
+    private val log: (String) -> Unit = {},
 ) {
-    private val tag = "EyevueRtspProxy"
-    private var serverSocket: ServerSocket? = null
     private val active = AtomicBoolean(false)
-    private var acceptThread: Thread? = null
-    private var watchdogThread: Thread? = null
-
-    // ---- shared upstream session ----
-    private val upLock = Any()
-    @Volatile private var upSock: Socket? = null
-    private var upSession: String? = null
-    private var upBasePath: String? = null
-    private var upSdpVideoOnly: String? = null
-    @Volatile private var upStreaming = false
-    private val upCseq = AtomicInteger(1)
-    @Volatile private var lastRtpAt = 0L
-    @Volatile private var lastVideoSeq = 0
-    @Volatile private var lastVideoRtptime = 0L
-    private var upGeneration = 0
-
-    // ---- viewers ----
-    private class TcpViewer(val out: java.io.OutputStream, var ch0: Int = 0, var ch1: Int = 1)
-    private val tcpViewers = CopyOnWriteArrayList<TcpViewer>()
-    private class UdpViewer(
-        val rtcpRecvSock: DatagramSocket,
-        val clientRtp: Int,
-        val clientRtcp: Int,
-        @Volatile var playing: Boolean = false,
-    )
-    private val udpViewers = CopyOnWriteArrayList<UdpViewer>()
-    private val clientSockets = CopyOnWriteArrayList<Socket>()
-    private var udpSendSock: DatagramSocket? = null
-
-    companion object {
-        private const val RELAY_SESSION = "52454C4159"
-        private const val PUBLIC =
-            "OPTIONS, DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE, GET_PARAMETER, SET_PARAMETER"
-    }
+    private val upstreamLock = Any()
+    private val upstreamWriteLock = Any()
+    private val cseq = AtomicInteger(1)
+    private val sessionIds = AtomicInteger(1)
+    private val clients = CopyOnWriteArrayList<Viewer>()
+    @Volatile private var server: ServerSocket? = null
+    @Volatile private var upstream: Socket? = null
+    @Volatile private var description: EyevueRtspDescription? = null
+    @Volatile private var upstreamSession: String? = null
+    private var streaming = false // Guarded by upstreamLock.
+    private var keepaliveMethod = "OPTIONS"
+    private var keepalive: Thread? = null
+    @Volatile private var lastVideoPacketAt = 0L
+    private val loopback = InetAddress.getByName("127.0.0.1")
+    private val upstreamUrl: String get() = "rtsp://$upstreamHost" +
+        (if (upstreamPort == 554) "" else ":$upstreamPort") + streamPath
+    private val localBase: String get() = "rtsp://127.0.0.1:${server?.localPort}/live/"
 
     fun start(): Int {
-        val server = ServerSocket()
-        server.reuseAddress = true
-        server.bind(InetSocketAddress("127.0.0.1", 0))
-        serverSocket = server
-        active.set(true)
-        acceptThread = Thread({
+        check(active.compareAndSet(false, true))
+        val listener = ServerSocket().apply { bind(InetSocketAddress(loopback, 0)) }
+        server = listener
+        worker("accept") {
             while (active.get()) {
                 try {
-                    val client = server.accept()
-                    Log.i(tag, "relay viewer ${client.inetAddress?.hostAddress} -> $upstreamHost:$upstreamPort")
-                    clientSockets.add(client)
-                    Thread({ handleClient(client) }, "eyevue-rtsp-relay").apply {
-                        isDaemon = true
-                        start()
-                    }
-                } catch (_: Exception) {
-                    if (!active.get()) return@Thread
+                    val socket = listener.accept().apply { tcpNoDelay = true }
+                    val viewer = Viewer(socket)
+                    clients.add(viewer)
+                    if (!active.get() || viewer.closed.get()) {
+                        viewer.close()
+                        clients.remove(viewer)
+                    } else worker("client") { handleClient(viewer) }
+                } catch (error: IOException) {
+                    if (active.get()) log("accept failed: ${error.message}")
+                    break
                 }
             }
-        }, "eyevue-rtsp-accept").apply {
-            isDaemon = true
-            start()
         }
-        watchdogThread = Thread({
-            while (active.get()) {
-                try {
-                    Thread.sleep(5_000)
-                } catch (_: InterruptedException) {
-                    return@Thread
-                }
-                if (active.get() && upStreaming && lastRtpAt > 0 &&
-                    System.currentTimeMillis() - lastRtpAt > 12_000
-                ) {
-                    Log.w(tag, "upstream stall, reopening transparently")
-                    synchronized(upLock) {
-                        runCatching { upSock?.close() }
-                        upSock = null
-                        upStreaming = false
-                    }
-                    ensureUpstream()
-                }
-            }
-        }, "eyevue-rtsp-watchdog").apply {
-            isDaemon = true
-            start()
-        }
-        return server.localPort
+        return listener.localPort
     }
 
+    /** No handshake lock, thread join or socket write on the caller (UI) thread. */
     fun stop() {
         active.set(false)
-        runCatching { serverSocket?.close() }
-        serverSocket = null
-        // Lock-free: never wait on the upstream lock here, it can be held by
-        // a long blocking handshake. Closing dead sockets unblocks readers.
-        clientSockets.forEach { runCatching { it.close() } }
-        clientSockets.clear()
-        upSock?.let { runCatching { it.close() } }
-        upSock = null
-        upStreaming = false
-        tcpViewers.clear()
-        udpViewers.forEach { runCatching { it.rtcpRecvSock.close() } }
-        udpViewers.clear()
-        runCatching { udpSendSock?.close() }
-        udpSendSock = null
-    }
-
-    private fun localPort(): Int = serverSocket?.localPort ?: 0
-
-    private fun localBase(): String = "rtsp://127.0.0.1:${localPort()}${upBasePath ?: "/xxx.mov/"}"
-
-    // ---------------- upstream ----------------
-
-    /** Opens (or reuses) the single shared session with the glasses. */
-    private fun ensureUpstream(): Boolean {
-        synchronized(upLock) {
-            if (upStreaming && upSock?.isConnected == true) return true
-            var lastError: Exception? = null
-            // The box is occasionally slow or wedged after a long day of
-            // sessions; retry the handshake a few times before giving up.
-            repeat(3) { attempt ->
-                if (!active.get()) return false
-                runCatching { upSock?.close() }
-                upSock = null
-                upStreaming = false
-                try {
-                    openUpstreamSession()
-                    return true
-                } catch (error: Exception) {
-                    if (!active.get()) return false
-                    lastError = error
-                    Log.w(tag, "upstream handshake ${attempt + 1}/3 failed: ${error.message}")
-                    runCatching { upSock?.close() }
-                    upSock = null
-                    upStreaming = false
-                    try {
-                        Thread.sleep(2_000)
-                    } catch (_: InterruptedException) {
-                        return false
-                    }
-                }
+        runCatching { server?.close() }
+        server = null
+        keepalive?.interrupt()
+        clients.forEach { it.close() }
+        val socket = upstream
+        val session = upstreamSession
+        val aggregate = description?.aggregateUrl
+        if (socket != null && session != null && aggregate != null) {
+            // Best-effort RTSP teardown, with a separate deadline closer. Neither
+            // a socket write nor its write lock can delay the Stop button.
+            worker("teardown") {
+                try { sendUpstream(socket, request("TEARDOWN", aggregate, listOf("Session: $session"))) }
+                catch (_: IOException) { }
+                finally { runCatching { socket.close() } }
             }
-            Log.w(tag, "upstream handshake giving up: ${lastError?.message}")
-            return false
+            worker("close-deadline") {
+                Thread.sleep(250)
+                runCatching { socket.close() }
+            }
+        } else {
+            // Cancel a pending DESCRIBE/SETUP immediately.
+            runCatching { socket?.close() }
         }
+        upstream = null
+        description = null
+        upstreamSession = null
     }
 
-    @Throws(IOException::class)
-    private fun openUpstreamSession() {
-        val sock = Socket()
-        upSock = sock
-        sock.connect(InetSocketAddress(upstreamHost, upstreamPort), 5_000)
-        sock.soTimeout = 20_000
-        val out = sock.getOutputStream()
-        val input = sock.getInputStream()
-        // Mirror a plain client handshake: OPTIONS first, then DESCRIBE
-        // without an explicit port, both with a user agent. The box answered
-        // exactly this shape all day; a bare DESCRIBE with explicit port
-        // gets silence. DESCRIBE mints a fresh aggregate name.
-        val options = listOf(
-            "OPTIONS rtsp://$upstreamHost/xxx.mov RTSP/1.0",
-            "CSeq: ${upCseq.getAndIncrement()}",
-            "User-Agent: LibVLC/3.0.23 (LIVE555 Streaming Media v2016.11.28)",
-            "",
-        )
-        writeLines(out, options)
-        out.flush()
-        Log.i(tag, "upstream OPTIONS sent, awaiting reply")
-        readResponse(input)
-        Log.i(tag, "upstream OPTIONS reply ok")
-        val describe = listOf(
-            "DESCRIBE rtsp://$upstreamHost/xxx.mov RTSP/1.0",
-            "CSeq: ${upCseq.getAndIncrement()}",
-            "User-Agent: LibVLC/3.0.23 (LIVE555 Streaming Media v2016.11.28)",
-            "Accept: application/sdp",
-            "",
-        )
-                writeLines(out, describe)
-                out.flush()
-                Log.i(tag, "upstream DESCRIBE sent, awaiting reply")
-                val descResp = readResponse(input) ?: throw IOException("no DESCRIBE reply")
-                Log.i(tag, "upstream DESCRIBE reply: ${descResp.first.firstOrNull()}")
-                val base = descResp.first.firstOrNull {
-                    it.startsWith("Content-Base:", ignoreCase = true)
-                }?.substringAfter(':')?.trim()
-                    ?: throw IOException("no Content-Base")
-                upBasePath = base.substringAfter("://$upstreamHost").substringAfter("://$upstreamHost:$upstreamPort")
-                    .takeIf { it.startsWith("/") } ?: "/"
-                val sdpLen = contentLengthOf(descResp.first)
-                Log.i(tag, "upstream SDP body declared bytes=$sdpLen")
-                val sdp = readBytes(input, sdpLen)
-                upSdpVideoOnly = stripAudio(String(sdp, Charsets.US_ASCII))
-                Log.i(tag, "upstream aggregate $base")
-                // SETUP both tracks like the vendor (picture + sound); only the
-                // picture is fanned out, the sound subscription keeps the session.
-                // Every request carries a user agent: the box answers agented
-                // requests and hangs on bare ones.
-                val setup1 = listOf(
-                    "SETUP ${base}track1 RTSP/1.0",
-                    "CSeq: ${upCseq.getAndIncrement()}",
-                    "User-Agent: LibVLC/3.0.23 (LIVE555 Streaming Media v2016.11.28)",
-                    "Transport: RTP/AVP/TCP;unicast;interleaved=0-1",
-                    "",
-                )
-                writeLines(out, setup1)
-                out.flush()
-                Log.i(tag, "upstream SETUP track1 sent, awaiting reply")
-                val setupResp = readResponse(input) ?: throw IOException("no SETUP reply")
-                Log.i(tag, "upstream SETUP track1 reply: ${setupResp.first.firstOrNull()}")
-                val session = setupResp.first.firstOrNull {
-                    it.startsWith("Session:", ignoreCase = true)
-                }?.substringAfter(':')?.trim()?.substringBefore(';')?.trim()
-                    ?: throw IOException("no Session")
-                upSession = session
-                val setup2 = listOf(
-                    "SETUP ${base}track2 RTSP/1.0",
-                    "CSeq: ${upCseq.getAndIncrement()}",
-                    "User-Agent: LibVLC/3.0.23 (LIVE555 Streaming Media v2016.11.28)",
-                    "Session: $session",
-                    "Transport: RTP/AVP/TCP;unicast;interleaved=2-3",
-                    "",
-                )
-                writeLines(out, setup2)
-                out.flush()
-                Log.i(tag, "upstream SETUP track2 sent, awaiting reply")
-                readResponse(input)
-                Log.i(tag, "upstream SETUP track2 reply ok")
-                val play = listOf(
-                    "PLAY $base RTSP/1.0",
-                    "CSeq: ${upCseq.getAndIncrement()}",
-                    "User-Agent: LibVLC/3.0.23 (LIVE555 Streaming Media v2016.11.28)",
-                    "Session: $session",
-                    "Range: npt=0.000-",
-                    "",
-                )
-                writeLines(out, play)
-                out.flush()
-                Log.i(tag, "upstream PLAY sent, awaiting reply")
-                readResponse(input)
-                Log.i(tag, "upstream PLAY reply ok")
-                upStreaming = true
-                lastRtpAt = 0L
-                upGeneration++
-                startUpstreamPump(sock, upGeneration)
-                Log.i(tag, "upstream streaming session $session")
-    }
-
-    private fun startUpstreamPump(sock: Socket, generation: Int) {
-        Thread({
-            val input = sock.getInputStream()
-            try {
-                while (active.get() && generation == upGeneration && !sock.isClosed) {
-                    val first = input.read()
-                    if (first < 0) break
-                    if (first != '$'.code) {
-                        // Server-initiated message (e.g. keep-alive ping): answer.
-                        val headers = readHeaders(input, first) ?: break
-                        answerUpstreamPing(sock, headers)
-                        continue
-                    }
-                    val channel = input.read()
-                    val hi = input.read()
-                    val lo = input.read()
-                    if (channel < 0 || hi < 0 || lo < 0) break
-                    val length = (hi shl 8) or lo
-                    val payload = readBytes(input, length)
-                    if (payload.size < length) break
-                    lastRtpAt = System.currentTimeMillis()
-                    when (channel) {
-                        0 -> {
-                            if (payload.size >= 8) {
-                                lastVideoSeq = ((payload[2].toInt() and 0xFF) shl 8) or
-                                    (payload[3].toInt() and 0xFF)
-                                lastVideoRtptime =
-                                    ((payload[4].toLong() and 0xFF) shl 24) or
-                                    ((payload[5].toLong() and 0xFF) shl 16) or
-                                    ((payload[6].toLong() and 0xFF) shl 8) or
-                                    (payload[7].toLong() and 0xFF)
-                            }
-                            fanOutTcp(channel, payload)
-                            fanOutUdpRtp(payload)
-                        }
-                        1 -> {
-                            fanOutTcp(channel, payload)
-                            fanOutUdpRtcp(payload)
-                        }
-                        else -> Unit // sound channels consumed, not fanned out
-                    }
-                }
-            } catch (_: Exception) {
-            } finally {
-                synchronized(upLock) {
-                    if (generation == upGeneration) {
-                        upStreaming = false
-                        if (upSock === sock) upSock = null
-                    }
-                }
-            }
-        }, "eyevue-rtsp-upstream").apply { isDaemon = true; start() }
-    }
-
-    private fun answerUpstreamPing(sock: Socket, headers: List<String>) {
-        val first = headers.firstOrNull() ?: return
-        Log.i(tag, "upstream ping: $first")
-        if (!first.startsWith("GET_PARAMETER", ignoreCase = true)) return
-        val cseq = headers.firstOrNull { it.startsWith("CSeq:", ignoreCase = true) } ?: "CSeq: 0"
-        val session = headers.firstOrNull { it.startsWith("Session:", ignoreCase = true) }
-        val lines = mutableListOf("RTSP/1.0 200 OK", cseq)
-        if (session != null) lines.add(session)
-        lines.add("")
-        synchronized(upLock) {
-            runCatching {
-                writeLines(sock.getOutputStream(), lines)
-                sock.getOutputStream().flush()
-            }
-        }
-    }
-
-    private fun fanOutTcp(channel: Int, payload: ByteArray) {
-        for (viewer in tcpViewers) {
-            try {
-                synchronized(viewer.out) {
-                    viewer.out.write('$'.code)
-                    viewer.out.write(if (channel == 0) viewer.ch0 else viewer.ch1)
-                    viewer.out.write((payload.size shr 8) and 0xFF)
-                    viewer.out.write(payload.size and 0xFF)
-                    viewer.out.write(payload)
-                    viewer.out.flush()
-                }
-            } catch (_: Exception) {
-                tcpViewers.remove(viewer)
-            }
-        }
-    }
-
-    private fun fanOutUdpRtp(payload: ByteArray) {
-        val sendSock = synchronized(upLock) {
-            if (udpSendSock == null || udpSendSock?.isClosed == true) {
-                udpSendSock = runCatching { DatagramSocket() }.getOrNull()
-            }
-            udpSendSock
-        } ?: return
-        for (viewer in udpViewers) {
-            if (!viewer.playing) continue
-            try {
-                val packet = DatagramPacket(
-                    payload, payload.size,
-                    InetAddress.getByName("127.0.0.1"), viewer.clientRtp,
-                )
-                synchronized(sendSock) { sendSock.send(packet) }
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    private fun fanOutUdpRtcp(payload: ByteArray) {
-        val sendSock = synchronized(upLock) { udpSendSock } ?: return
-        for (viewer in udpViewers) {
-            if (!viewer.playing) continue
-            try {
-                val packet = DatagramPacket(
-                    payload, payload.size,
-                    InetAddress.getByName("127.0.0.1"), viewer.clientRtcp,
-                )
-                synchronized(sendSock) { sendSock.send(packet) }
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    /** Forwards one viewer's control-channel bytes upstream (RTCP reports). */
-    private fun forwardUpstreamInterleaved(channel: Int, payload: ByteArray) {
-        synchronized(upLock) {
-            val sock = upSock
-            if (!upStreaming || sock == null || sock.isClosed) return
-            runCatching {
-                val out = sock.getOutputStream()
-                out.write('$'.code)
-                out.write(channel)
-                out.write((payload.size shr 8) and 0xFF)
-                out.write(payload.size and 0xFF)
-                out.write(payload)
-                out.flush()
-            }
-        }
-    }
-
-    // ---------------- downstream (viewers) ----------------
-
-    private fun handleClient(client: Socket) {
-        var tcpViewer: TcpViewer? = null
-        var pendingCh0 = 0
-        var pendingCh1 = 1
-        val ownedUdp = mutableListOf<UdpViewer>()
+    private fun ensureUpstream(): EyevueRtspDescription = synchronized(upstreamLock) {
+        description?.let { return@synchronized it }
+        if (!active.get()) throw IOException("Relay stopped")
+        val socket = Socket()
+        upstream = socket // Publish before connect/read so Stop can cancel the handshake.
         try {
-            val input = client.getInputStream()
-            val out = client.getOutputStream()
-            while (active.get() && !client.isClosed) {
+            if (!active.get()) throw IOException("Relay stopped")
+            socket.connect(InetSocketAddress(upstreamHost, upstreamPort), 5_000)
+            socket.soTimeout = 10_000
+            socket.tcpNoDelay = true
+            val options = exchange(socket, "OPTIONS", upstreamUrl)
+            val describe = exchange(socket, "DESCRIBE", upstreamUrl, listOf("Accept: application/sdp"))
+            // exchange already read the body. Never read it a second time.
+            val parsed = EyevueRtspDescription.from(describe, upstreamUrl)
+            log("SDP received ${describe.body.size} bytes, ${parsed.tracks.size} tracks")
+            var session: String? = null
+            parsed.tracks.forEach { track ->
+                val headers = mutableListOf("Transport: RTP/AVP/TCP;unicast;interleaved=${track.rtpChannel}-${track.rtcpChannel}")
+                session?.let { headers.add("Session: $it") }
+                val response = exchange(socket, "SETUP", track.controlUrl, headers)
+                session = response.header("Session")?.substringBefore(';') ?: session
+                val transport = response.header("Transport").orEmpty()
+                if (!transport.contains("interleaved=${track.rtpChannel}-${track.rtcpChannel}")) {
+                    throw IOException("Unexpected glasses transport: $transport")
+                }
+            }
+            val sessionId = session ?: throw IOException("Missing glasses RTSP Session")
+            if (!active.get()) throw IOException("Relay stopped")
+            upstreamSession = sessionId
+            description = parsed
+            streaming = false
+            keepaliveMethod = if (options.header("Public").orEmpty().contains("GET_PARAMETER", ignoreCase = true)) "GET_PARAMETER" else "OPTIONS"
+            // Start PLAY only once a local player is subscribed. Otherwise the
+            // first H264 keyframe may be discarded during local DESCRIBE/SETUP.
+            log("glasses session prepared: $sessionId")
+            parsed
+        } catch (error: Exception) {
+            runCatching { socket.close() }
+            if (upstream === socket) upstream = null
+            log("glasses handshake failed: ${error.message}")
+            throw error
+        }
+    }
+
+    private fun play(viewer: Viewer, message: EyevueRtspMessage) = synchronized(upstreamLock) {
+        val parsed = ensureUpstream()
+        val socket = upstream ?: throw IOException("Glasses disconnected")
+        val session = upstreamSession ?: throw IOException("Missing glasses Session")
+        if (!streaming) {
+            exchange(socket, "PLAY", parsed.aggregateUrl, listOf("Session: $session", "Range: npt=0.000-"))
+        }
+        // Serialize the complete PLAY response before any RTP, including the
+        // very first keyframe already buffered in the upstream socket.
+        viewer.reply(message, headers = listOf("Session: ${viewer.session}", "Range: npt=0.000-"))
+        viewer.playing = true
+        if (!streaming) {
+            streaming = true
+            lastVideoPacketAt = System.nanoTime()
+            val input = socket.getInputStream()
+            val videoChannel = parsed.tracks.firstOrNull { it.mediaType == "video" }?.rtpChannel
+            worker("upstream") { pumpUpstream(socket, input, videoChannel) }
+            val ping = keepaliveMethod
+            keepalive = worker("keepalive") {
+                try {
+                    while (active.get() && upstream === socket && !socket.isClosed) {
+                        Thread.sleep(5_000)
+                        if (upstream === socket && !socket.isClosed) {
+                            if (videoChannel != null && System.nanoTime() - lastVideoPacketAt > 15_000_000_000L) {
+                                log("no video RTP for 15 seconds; closing stalled session")
+                                socket.close()
+                                break
+                            }
+                            sendUpstream(socket, request(ping, parsed.aggregateUrl, listOf("Session: $session")))
+                        }
+                    }
+                } catch (_: InterruptedException) {
+                } catch (error: IOException) {
+                    log("keepalive failed: ${error.message}")
+                    runCatching { socket.close() }
+                }
+            }
+            log("glasses session playing: $session")
+        }
+    }
+
+    private fun request(method: String, url: String, headers: List<String> = emptyList()) =
+        EyevueRtspMessage(listOf("$method $url RTSP/1.0", "CSeq: ${cseq.getAndIncrement()}",
+            "User-Agent: CyanBridge LibVLC relay") + headers)
+
+    private fun sendUpstream(socket: Socket, message: EyevueRtspMessage) = synchronized(upstreamWriteLock) {
+        socket.getOutputStream().apply { write(message.bytes()); flush() }
+    }
+
+    private fun exchange(socket: Socket, method: String, url: String, headers: List<String> = emptyList()): EyevueRtspMessage {
+        sendUpstream(socket, request(method, url, headers))
+        val response = readEyevueRtspMessage(socket.getInputStream()) ?: throw IOException("Glasses disconnected")
+        log("glasses $method: ${response.firstLine}")
+        return response.requireOk()
+    }
+
+    private fun pumpUpstream(socket: Socket, input: java.io.InputStream, videoChannel: Int?) {
+        val seen = mutableSetOf<Int>()
+        try {
+            while (active.get() && upstream === socket) {
                 val first = input.read()
                 if (first < 0) break
                 if (first == '$'.code) {
-                    val channel = input.read()
-                    val hi = input.read()
-                    val lo = input.read()
-                    if (channel < 0 || hi < 0 || lo < 0) break
-                    val payload = readBytes(input, (hi shl 8) or lo)
-                    forwardUpstreamInterleaved(channel, payload)
+                    val header = readEyevueBytes(input, 3)
+                    val channel = header[0].toInt() and 255
+                    val size = ((header[1].toInt() and 255) shl 8) or (header[2].toInt() and 255)
+                    val payload = readEyevueBytes(input, size)
+                    if (channel == videoChannel) lastVideoPacketAt = System.nanoTime()
+                    clients.forEach { it.media(channel, payload) }
+                    if (seen.add(channel)) log("first upstream packet channel=$channel bytes=$size")
+                } else {
+                    val message = readEyevueRtspMessage(input, first) ?: break
+                    if (!message.firstLine.startsWith("RTSP/")) {
+                        sendUpstream(socket, EyevueRtspMessage(listOf("RTSP/1.0 200 OK",
+                            "CSeq: ${message.header("CSeq") ?: "0"}")))
+                    }
+                }
+            }
+        } catch (error: IOException) {
+            if (active.get()) log("glasses stream closed: ${error.message}")
+        } finally {
+            runCatching { socket.close() }
+            synchronized(upstreamLock) {
+                if (upstream === socket) {
+                    description = null
+                    upstreamSession = null
+                    streaming = false
+                    upstream = null
+                    keepalive?.interrupt()
+                    clients.forEach { it.close() }
+                }
+            }
+        }
+    }
+
+    private inner class Viewer(val socket: Socket) {
+        val session = "CB${sessionIds.getAndIncrement()}"
+        val queue = ArrayBlockingQueue<ByteArray>(128)
+        val closed = AtomicBoolean(false)
+        val subscriptions = CopyOnWriteArrayList<Subscription>()
+        @Volatile var playing = false
+        private val writer = Thread({
+            try {
+                val output = socket.getOutputStream()
+                while (!closed.get()) {
+                    output.write(queue.take())
+                    output.flush()
+                }
+            } catch (_: InterruptedException) {
+            } catch (_: IOException) {
+            } finally { close() }
+        }, "eyevue-rtsp-writer").apply { isDaemon = true }
+
+        init { writer.start() }
+
+        fun send(bytes: ByteArray) {
+            if (!closed.get() && !queue.offer(bytes)) {
+                log("disconnecting slow viewer $session")
+                close() // Never block the upstream reader or another client's picture/audio.
+            }
+        }
+
+        fun reply(request: EyevueRtspMessage, status: String = "200 OK", headers: List<String> = emptyList(), body: ByteArray = byteArrayOf()) {
+            send(EyevueRtspMessage(listOf("RTSP/1.0 $status", "CSeq: ${request.header("CSeq") ?: "0"}") +
+                headers + "Content-Length: ${body.size}", body).bytes())
+        }
+
+        fun media(channel: Int, payload: ByteArray) {
+            if (!playing || closed.get()) return
+            subscriptions.forEach { subscription ->
+                when (channel) {
+                    subscription.track.rtpChannel -> subscription.send(this, false, payload)
+                    subscription.track.rtcpChannel -> subscription.send(this, true, payload)
+                }
+            }
+        }
+
+        fun close() {
+            if (!closed.compareAndSet(false, true)) return
+            playing = false
+            runCatching { socket.close() }
+            subscriptions.forEach { it.close() }
+            subscriptions.clear()
+            queue.clear()
+            writer.interrupt()
+            clients.remove(this)
+        }
+    }
+
+    private class Subscription(
+        val track: EyevueRtspTrack,
+        val channels: Pair<Int, Int>? = null,
+        val udp: Pair<DatagramSocket, DatagramSocket>? = null,
+    ) {
+        fun send(viewer: Viewer, rtcp: Boolean, payload: ByteArray) {
+            if (channels != null) {
+                val channel = if (rtcp) channels.second else channels.first
+                viewer.send(byteArrayOf('$'.code.toByte(), channel.toByte(), (payload.size shr 8).toByte(), payload.size.toByte()) + payload)
+            } else if (udp != null) {
+                try {
+                    (if (rtcp) udp.second else udp.first).send(DatagramPacket(payload, payload.size))
+                } catch (_: IOException) { viewer.close() }
+            }
+        }
+        fun close() { udp?.let { it.first.close(); it.second.close() } }
+    }
+
+    private fun handleClient(viewer: Viewer) {
+        try {
+            val input = viewer.socket.getInputStream()
+            while (active.get() && !viewer.closed.get()) {
+                val first = input.read()
+                if (first < 0) break
+                if (first == '$'.code) {
+                    // Drain local RTCP reports/BYE. A viewer must not end the shared session.
+                    val header = readEyevueBytes(input, 3)
+                    readEyevueBytes(input, ((header[1].toInt() and 255) shl 8) or (header[2].toInt() and 255))
                     continue
                 }
-                val headers = readHeaders(input, first) ?: break
-                val requestLine = headers.firstOrNull() ?: break
-                Log.i(tag, "viewer: $requestLine")
-                val parts = requestLine.split(" ")
-                val method = parts.getOrNull(0)?.uppercase() ?: break
-                val cseq = headers.firstOrNull { it.startsWith("CSeq:", ignoreCase = true) } ?: "CSeq: 0"
+                val request = readEyevueRtspMessage(input, first) ?: break
+                val method = request.firstLine.substringBefore(' ')
+                log("viewer ${viewer.session}: ${request.firstLine}")
                 when (method) {
-                    "OPTIONS", "GET_PARAMETER" -> {
-                        val session = headers.firstOrNull { it.startsWith("Session:", ignoreCase = true) }
-                        val lines = mutableListOf("RTSP/1.0 200 OK", cseq)
-                        if (session != null) lines.add(session)
-                        if (method == "OPTIONS") lines.add("Public: $PUBLIC")
-                        lines.add("")
-                        writeLines(out, lines)
-                        out.flush()
-                    }
+                    "OPTIONS" -> viewer.reply(request, headers = listOf("Public: OPTIONS, DESCRIBE, SETUP, PLAY, PAUSE, TEARDOWN, GET_PARAMETER"))
+                    "GET_PARAMETER" -> viewer.reply(request, headers = listOf("Session: ${viewer.session}"))
                     "DESCRIBE" -> {
-                        if (!ensureUpstream() || upSdpVideoOnly == null) {
-                            writeLines(out, listOf("RTSP/1.0 503 Service Unavailable", cseq, ""))
-                            out.flush()
-                        } else {
-                            val body = upSdpVideoOnly!!.toByteArray(Charsets.US_ASCII)
-                            writeLines(
-                                out,
-                                listOf(
-                                    "RTSP/1.0 200 OK",
-                                    cseq,
-                                    "Content-Base: ${localBase()}",
-                                    "Content-Type: application/sdp",
-                                    "Content-Length: ${body.size}",
-                                    "",
-                                ),
-                            )
-                            out.write(body)
-                            out.flush()
-                        }
+                        val parsed = ensureUpstream()
+                        viewer.reply(request, headers = listOf("Content-Base: $localBase", "Content-Type: application/sdp"), body = parsed.localSdp)
                     }
-                    "SETUP" -> {
-                        val transport = headers.firstOrNull {
-                            it.startsWith("Transport:", ignoreCase = true)
-                        } ?: ""
-                        if (transport.contains("/TCP", ignoreCase = true)) {
-                            val m = Regex("interleaved=(\\d+)-(\\d+)").find(transport)
-                            pendingCh0 = m?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                            pendingCh1 = m?.groupValues?.get(2)?.toIntOrNull() ?: 1
-                            if (!ensureUpstream()) {
-                                writeLines(out, listOf("RTSP/1.0 503 Service Unavailable", cseq, ""))
-                            } else {
-                                tcpViewer?.let { tcpViewers.remove(it) }
-                                tcpViewer = TcpViewer(out, pendingCh0, pendingCh1).also {
-                                    tcpViewers.add(it)
-                                }
-                                writeLines(
-                                    out,
-                                    listOf(
-                                        "RTSP/1.0 200 OK",
-                                        cseq,
-                                        "Transport: RTP/AVP/TCP;unicast;interleaved=$pendingCh0-$pendingCh1",
-                                        "Session: $RELAY_SESSION",
-                                        "",
-                                    ),
-                                )
-                            }
-                            out.flush()
-                        } else {
-                            val viewer = setupUdpViewer(transport, out, cseq)
-                            if (viewer != null) ownedUdp.add(viewer)
-                        }
-                    }
+                    "SETUP" -> setup(viewer, request)
                     "PLAY" -> {
-                        if (!ensureUpstream()) {
-                            writeLines(out, listOf("RTSP/1.0 503 Service Unavailable", cseq, ""))
-                        } else {
-                            ownedUdp.forEach { it.playing = true }
-                            writeLines(
-                                out,
-                                listOf(
-                                    "RTSP/1.0 200 OK",
-                                    cseq,
-                                    "Range: npt=0.000-",
-                                    "Session: $RELAY_SESSION",
-                                    "RTP-Info: url=${localBase()}track1;seq=$lastVideoSeq;rtptime=$lastVideoRtptime",
-                                    "",
-                                ),
-                            )
+                        if (viewer.subscriptions.isEmpty()) viewer.reply(request, "455 Method Not Valid in This State")
+                        else play(viewer, request)
+                    }
+                    "PAUSE", "TEARDOWN" -> {
+                        viewer.playing = false
+                        if (method == "TEARDOWN") {
+                            viewer.subscriptions.forEach { it.close() }
+                            viewer.subscriptions.clear()
                         }
-                        out.flush()
+                        viewer.reply(request, headers = listOf("Session: ${viewer.session}"))
                     }
-                    "TEARDOWN" -> {
-                        tcpViewer?.let { tcpViewers.remove(it) }
-                        tcpViewer = null
-                        ownedUdp.forEach {
-                            it.playing = false
-                            runCatching { it.rtcpRecvSock.close() }
-                            udpViewers.remove(it)
-                        }
-                        ownedUdp.clear()
-                        writeLines(out, listOf("RTSP/1.0 200 OK", cseq, "Session: $RELAY_SESSION", ""))
-                        out.flush()
-                    }
-                    else -> {
-                        writeLines(out, listOf("RTSP/1.0 501 Not Implemented", cseq, ""))
-                        out.flush()
-                    }
+                    else -> viewer.reply(request, "501 Not Implemented")
                 }
             }
-        } catch (_: Exception) {
-        } finally {
-            tcpViewer?.let { tcpViewers.remove(it) }
-            ownedUdp.forEach {
-                runCatching { it.rtcpRecvSock.close() }
-                udpViewers.remove(it)
-            }
-            clientSockets.remove(client)
-            runCatching { client.close() }
-        }
-    }
-
-    /**
-     * UDP viewer (e.g. VLC): binds a return path for its control packets and
-     * answers setup locally. Media itself is fanned out from the shared
-     * picture, so its ports stay valid whatever the box does.
-     */
-    private fun setupUdpViewer(
-        transportLine: String,
-        out: java.io.OutputStream,
-        cseq: String,
-    ): UdpViewer? {
-        val match = Regex("client_port=(\\d+)-(\\d+)", RegexOption.IGNORE_CASE).find(transportLine)
-        val clientRtp = match?.groupValues?.get(1)?.toIntOrNull()
-        val clientRtcp = match?.groupValues?.get(2)?.toIntOrNull()
-        if (clientRtp == null || clientRtcp == null) {
-            writeLines(out, listOf("RTSP/1.0 400 Bad Request", cseq, ""))
-            out.flush()
-            return null
-        }
-        if (!ensureUpstream()) {
-            writeLines(out, listOf("RTSP/1.0 503 Service Unavailable", cseq, ""))
-            out.flush()
-            return null
-        }
-        return try {
-            val recvSock = DatagramSocket()
-            val viewer = UdpViewer(recvSock, clientRtp, clientRtcp)
-            udpViewers.add(viewer)
-            writeLines(
-                out,
-                listOf(
-                    "RTSP/1.0 200 OK",
-                    cseq,
-                    "Transport: RTP/AVP;unicast;client_port=$clientRtp-$clientRtcp;" +
-                        "server_port=${recvSock.localPort};source=127.0.0.1",
-                    "Session: $RELAY_SESSION",
-                    "",
-                ),
-            )
-            out.flush()
-            Log.i(tag, "UDP viewer control path via relay ${recvSock.localPort}")
-            startUdpControlPump(viewer)
-            viewer
         } catch (error: Exception) {
-            Log.w(tag, "UDP viewer setup failed: ${error.message}")
-            writeLines(out, listOf("RTSP/1.0 500 Internal Server Error", cseq, ""))
-            out.flush()
-            null
-        }
+            if (active.get() && !viewer.closed.get()) log("viewer ${viewer.session} closed: ${error.message}")
+        } finally { viewer.close() }
     }
 
-    /** Forwards one UDP viewer's control packets upstream as channel 1. */
-    private fun startUdpControlPump(viewer: UdpViewer) {
-        Thread({
-            val buffer = ByteArray(64 * 1024)
-            while (active.get() && !viewer.rtcpRecvSock.isClosed) {
-                try {
-                    val packet = DatagramPacket(buffer, buffer.size)
-                    viewer.rtcpRecvSock.receive(packet)
-                    val payload = packet.data.copyOfRange(packet.offset, packet.offset + packet.length)
-                    forwardUpstreamInterleaved(1, payload)
-                } catch (_: Exception) {
-                    if (viewer.rtcpRecvSock.isClosed) return@Thread
-                }
+    private fun setup(viewer: Viewer, request: EyevueRtspMessage) {
+        val url = request.firstLine.split(' ').getOrNull(1).orEmpty()
+        val index = url.substringAfterLast('/').removePrefix("track").toIntOrNull()?.minus(1)
+        val track = index?.let { ensureUpstream().tracks.getOrNull(it) }
+        if (track == null) { viewer.reply(request, "404 Not Found"); return }
+        val transport = request.header("Transport").orEmpty()
+        if (viewer.playing) { viewer.reply(request, "455 Method Not Valid in This State"); return }
+        val subscription: Subscription
+        val replyTransport: String
+        if (transport.contains("RTP/AVP/TCP", ignoreCase = true)) {
+            val match = Regex("interleaved=(\\d+)-(\\d+)", RegexOption.IGNORE_CASE).find(transport)
+            val rtp = match?.groupValues?.get(1)?.toIntOrNull()
+            val rtcp = match?.groupValues?.get(2)?.toIntOrNull()
+            if (rtp == null || rtcp == null || rtp !in 0..255 || rtcp !in 0..255 || rtp == rtcp) {
+                viewer.reply(request, "461 Unsupported Transport"); return
             }
-        }, "eyevue-udp-control").apply { isDaemon = true; start() }
-    }
-
-    // ---------------- helpers ----------------
-
-    private fun stripAudio(sdp: String): String {
-        val audioAt = sdp.indexOf("m=audio")
-        return if (audioAt >= 0) {
-            sdp.substring(0, audioAt).trimEnd('\r', '\n') + "\r\n"
+            subscription = Subscription(track, rtp to rtcp)
+            replyTransport = "RTP/AVP/TCP;unicast;interleaved=$rtp-$rtcp"
         } else {
-            sdp
-        }
-    }
-
-    private fun readResponse(input: InputStream): Pair<List<String>, ByteArray>? {
-        val headers = readHeaders(input) ?: return null
-        val length = contentLengthOf(headers)
-        val body = if (length > 0) readBytes(input, length) else ByteArray(0)
-        return headers to body
-    }
-
-    private fun readBytes(input: InputStream, count: Int): ByteArray {
-        if (count <= 0) return ByteArray(0)
-        val out = ByteArray(count)
-        var offset = 0
-        while (offset < count) {
-            val read = input.read(out, offset, count - offset)
-            if (read <= 0) break
-            offset += read
-        }
-        return if (offset < count) out.copyOf(offset) else out
-    }
-
-    private fun readHeaders(input: InputStream, firstByte: Int? = null): List<String>? {
-        val lines = mutableListOf<String>()
-        val current = StringBuilder()
-        if (firstByte != null) current.append(firstByte.toChar())
-        while (true) {
-            val byte = try {
-                input.read()
-            } catch (_: Exception) {
-                return null
+            val match = Regex("client_port=(\\d+)-(\\d+)", RegexOption.IGNORE_CASE).find(transport)
+            val rtp = match?.groupValues?.get(1)?.toIntOrNull()
+            val rtcp = match?.groupValues?.get(2)?.toIntOrNull()
+            if (rtp == null || rtcp == null || rtp !in 1..65535 || rtcp !in 1..65535) {
+                viewer.reply(request, "461 Unsupported Transport"); return
             }
-            if (byte < 0) return if (lines.isEmpty() && current.isEmpty()) null else lines
-            if (byte == '\n'.code) {
-                var line = current.toString()
-                if (line.endsWith("\r")) line = line.dropLast(1)
-                current.clear()
-                if (line.isEmpty()) {
-                    lines.add("")
-                    return lines
-                }
-                lines.add(line)
-            } else {
-                current.append(byte.toChar())
+            val sockets = udpPair()
+            sockets.first.connect(loopback, rtp)
+            sockets.second.connect(loopback, rtcp)
+            subscription = Subscription(track, udp = sockets)
+            replyTransport = "RTP/AVP;unicast;client_port=$rtp-$rtcp;server_port=${sockets.first.localPort}-${sockets.second.localPort};source=127.0.0.1"
+            // Drain client RTCP on the actual advertised RTCP port, without forwarding BYE.
+            worker("udp-rtcp") {
+                try {
+                    val packet = DatagramPacket(ByteArray(65535), 65535)
+                    while (!sockets.second.isClosed) { packet.length = packet.data.size; sockets.second.receive(packet) }
+                } catch (_: IOException) { }
             }
-            if (current.length > 16_384) return null
         }
+        viewer.subscriptions.filter { it.track == track }.forEach { it.close(); viewer.subscriptions.remove(it) }
+        viewer.subscriptions.add(subscription)
+        viewer.reply(request, headers = listOf("Transport: $replyTransport", "Session: ${viewer.session};timeout=60"))
     }
 
-    private fun contentLengthOf(headers: List<String>): Int {
-        val line = headers.firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
-            ?: return 0
-        return line.substringAfter(':').trim().toIntOrNull()?.coerceAtLeast(0) ?: 0
+    private fun udpPair(): Pair<DatagramSocket, DatagramSocket> {
+        repeat(64) {
+            val rtp = DatagramSocket(InetSocketAddress(loopback, 0))
+            if (rtp.localPort % 2 != 0 || rtp.localPort == 65535) { rtp.close(); return@repeat }
+            try { return rtp to DatagramSocket(InetSocketAddress(loopback, rtp.localPort + 1)) }
+            catch (_: IOException) { rtp.close() }
+        }
+        throw IOException("Unable to allocate local RTP/RTCP ports")
     }
 
-    private fun writeLines(output: OutputStream, headers: List<String>) {
-        val text = headers.joinToString("\r\n") + "\r\n"
-        output.write(text.toByteArray(Charsets.US_ASCII))
-    }
+    private fun worker(name: String, block: () -> Unit): Thread =
+        Thread(block, "eyevue-rtsp-$name").apply { isDaemon = true; start() }
 }

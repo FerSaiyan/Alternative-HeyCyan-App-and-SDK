@@ -205,9 +205,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.unit.dp
-import android.graphics.SurfaceTexture
-import android.view.Surface
-import android.view.TextureView
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
@@ -489,11 +486,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     // in-screen (EyeVue only, after live starts). No popup dialog.
     private var eyevueLivePlayer by mutableStateOf<org.videolan.libvlc.MediaPlayer?>(null)
     private var eyevueLiveStopReceiver: android.content.BroadcastReceiver? = null
-    // Texture view for the inline EyeVue picture (a plain surface layer ignores
-    // view rotation, so the player view could never turn the sideways sensor).
-    private var eyevueTextureView: TextureView? = null
-    private var eyevueVideoSurface: Surface? = null
-    private var eyevueVideoTexture: SurfaceTexture? = null
+    private var eyevueLiveAudioMuted by mutableStateOf(false)
     private var mediaSessionLease: GlassesSessionLease? = null
     private var eyevueMediaJob: Job? = null
     private var eyevueMediaTransport: EyevueWifiTransport? = null
@@ -754,46 +747,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                 )
                                 androidx.compose.ui.viewinterop.AndroidView(
                                     factory = { ctx ->
-                                        TextureView(ctx).apply {
-                                            // Glasses sensor picture comes out sideways;
-                                            // turn it 90 degrees left for the dashboard.
-                                            rotation = -90f
-                                            surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                                                override fun onSurfaceTextureAvailable(
-                                                    surface: SurfaceTexture,
-                                                    width: Int,
-                                                    height: Int,
-                                                ) {
-                                                    attachEyevueVideoSurface()
-                                                }
-
-                                                override fun onSurfaceTextureSizeChanged(
-                                                    surface: SurfaceTexture,
-                                                    width: Int,
-                                                    height: Int,
-                                                ) = Unit
-
-                                                override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                                                    eyevueTextureView = null
-                                                    eyevueVideoTexture = null
-                                                    eyevueLivePreviewManager?.detachVideoSurface()
-                                                    runCatching { eyevueVideoSurface?.release() }
-                                                    eyevueVideoSurface = null
-                                                    return true
-                                                }
-
-                                                override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
-                                            }
-                                            eyevueTextureView = this
-                                        }
+                                        com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveVideoView(ctx)
                                     },
-                                    update = { attachEyevueVideoSurface() },
-                                    onRelease = {
-                                        eyevueTextureView = null
-                                        eyevueVideoTexture = null
-                                        eyevueLivePreviewManager?.detachVideoSurface()
-                                        runCatching { eyevueVideoSurface?.release() }
-                                        eyevueVideoSurface = null
+                                    update = { view -> eyevueLivePreviewManager?.attachVideoView(view) },
+                                    onRelease = { view ->
+                                        eyevueLivePreviewManager?.detachVideoView(view)
                                     },
                                     modifier = androidx.compose.ui.Modifier
                                         .fillMaxWidth()
@@ -807,6 +765,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                androidx.compose.material3.TextButton(
+                                    onClick = {
+                                        eyevueLiveAudioMuted = !eyevueLiveAudioMuted
+                                        eyevueLivePreviewManager?.setAudioMuted(eyevueLiveAudioMuted)
+                                    },
+                                ) {
+                                    androidx.compose.material3.Text(if (eyevueLiveAudioMuted) "Listen to audio" else "Mute audio")
+                                }
                                 androidx.compose.foundation.layout.Row(
                                     modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
                                 ) {
@@ -835,6 +801,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                     )
                                     androidx.compose.material3.TextButton(
                                         onClick = {
+                                            // Only one speaker should monitor the glasses microphone.
+                                            eyevueLiveAudioMuted = true
+                                            eyevueLivePreviewManager?.setAudioMuted(true)
                                             val uri = android.net.Uri.parse(liveUrl)
                                             val vlcIntent = android.content.Intent(
                                                 android.content.Intent.ACTION_VIEW,
@@ -1030,10 +999,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         eyevueLivePreviewManager?.release()
         eyevueLiveStopReceiver?.let { runCatching { unregisterReceiver(it) } }
         eyevueLiveStopReceiver = null
-        eyevueTextureView = null
-        eyevueVideoTexture = null
-        runCatching { eyevueVideoSurface?.release() }
-        eyevueVideoSurface = null
         if (eyevueMediaJob?.isActive == true) {
             eyevueMediaCancelled = true
             eyevueMediaTransport?.disconnect()
@@ -1552,21 +1517,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 )
             }
         }
-
-    /** Attaches the inline EyeVue picture surface to the vendor engine. */
-    private fun attachEyevueVideoSurface() {
-        val view = eyevueTextureView ?: return
-        if (eyevueLivePlayer == null) return
-        if (!view.isAvailable) return
-        val texture = view.surfaceTexture ?: return
-        if (texture === eyevueVideoTexture && eyevueVideoSurface != null) return
-        runCatching { eyevueVideoSurface?.release() }
-        eyevueVideoSurface = null
-        eyevueVideoTexture = texture
-        val surface = Surface(texture)
-        eyevueVideoSurface = surface
-        eyevueLivePreviewManager?.attachVideoSurface(surface)
-    }
 
     private fun metaAndroidPermissionsMissing(): Array<String> {
         val permissions = mutableListOf(Manifest.permission.CAMERA)
@@ -3884,6 +3834,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         liveManager.onRelayUrlChanged = { url ->
             com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.updateUrl(this, url)
         }
+        eyevueLiveAudioMuted = false
+        liveManager.setAudioMuted(false)
         liveManager.start(
             onSessionFinished = {
                 liveManager.onRelayUrlChanged = null
