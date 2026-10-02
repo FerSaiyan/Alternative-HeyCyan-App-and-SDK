@@ -16,6 +16,7 @@ import org.robolectric.annotation.Config
 class WalkingAidVideoModeTest {
     @Test fun liveSourcesAreGatedToTheirOwnDeviceAndSupportedAndroidVersion() {
         DeviceClass.entries.forEach { device ->
+            assertEquals(device == DeviceClass.HEY_CYAN, WalkingAidVideoMode.HEYCYAN_VIDEO.supports(device, 34))
             assertEquals(device == DeviceClass.META_RAYBAN, WalkingAidVideoMode.META_VIDEO.supports(device, 34))
             assertEquals(device == DeviceClass.EYEVUE, WalkingAidVideoMode.EYEVUE_VIDEO.supports(device, 34))
         }

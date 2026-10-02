@@ -28,6 +28,19 @@ class WalkingAidVideoSourceButtonsTest {
         compose.runOnIdle { assertEquals(WalkingAidVideoMode.EYEVUE_VIDEO, selected) }
     }
 
+    @Test fun heyCyanButtonSelectsContinuousVideo() {
+        var selected = WalkingAidVideoMode.PERIODIC_PHOTOS
+        compose.setContent {
+            MaterialTheme {
+                WalkingAidVideoSourceButtons(selected, DeviceClass.HEY_CYAN, 34, true) { selected = it }
+            }
+        }
+        compose.onNodeWithText("EyeVue continuous video").assertDoesNotExist()
+        compose.onNodeWithText("Meta Ray-Ban continuous video").assertDoesNotExist()
+        compose.onNodeWithText("HeyCyan continuous video").performClick()
+        compose.runOnIdle { assertEquals(WalkingAidVideoMode.HEYCYAN_VIDEO, selected) }
+    }
+
     @Test fun metaButtonSelectsVideoAndPhotosCanBeRestored() {
         var selected = WalkingAidVideoMode.PERIODIC_PHOTOS
         compose.setContent {
@@ -48,6 +61,7 @@ class WalkingAidVideoSourceButtonsTest {
                 WalkingAidVideoSourceButtons(WalkingAidVideoMode.PERIODIC_PHOTOS, DeviceClass.UNKNOWN, 34, true) {}
             }
         }
+        compose.onNodeWithText("HeyCyan continuous video").assertDoesNotExist()
         compose.onNodeWithText("EyeVue continuous video").assertDoesNotExist()
         compose.onNodeWithText("Meta Ray-Ban continuous video").assertDoesNotExist()
     }
