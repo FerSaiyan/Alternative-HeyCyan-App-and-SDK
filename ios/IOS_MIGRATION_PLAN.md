@@ -78,6 +78,7 @@ Status: implementada; compila para iPhone e simulador e abre sem crash. Aba Conv
 
 Notas:
 - 3.5/3.7: as respostas são faladas pelo áudio atual (os óculos, quando conectados como fone Bluetooth) e ficam salvas na conversa "Glasses". A pergunta por voz grava uma janela fixa de 6 segundos, preferindo o microfone Bluetooth dos óculos.
+- 3.6: a resposta falada não envia `setAISpeekModel` (pensando/falando/parar), igual ao Android. Esses comandos chegavam aos óculos com a resposta já tocando e são a causa provável das frases cortadas (falta validar com os óculos). Só uma pergunta roda por vez, e há 500 ms de folga após a fala antes da próxima deixa.
 - 3.5: a pergunta usada para as fotos é a "pergunta padrão da imagem" de Configurações, que agora é salva no iOS.
 - 3.8: o modo do assistente fica salvo; os dois modos usam o relay CyanBridge no iOS até o provedor de IA personalizado ser ligado.
 - 3.9: as cores dos balões alternam entre paletas prontas (o Android abre um seletor de cor).
