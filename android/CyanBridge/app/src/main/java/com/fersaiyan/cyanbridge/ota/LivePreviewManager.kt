@@ -98,9 +98,9 @@ class LivePreviewManager(
 
     companion object {
         // Realtime-preview command recovered from the official app and
-        // hardware-tested by vortex1024. The trailing byte is the enable flag.
+        // hardware-tested by vortex1024. Start and stop are separate vendor opcodes.
         private val START_LIVE_COMMAND = byteArrayOf(0x02, 0x01, 0x14, 0x01)
-        private val STOP_LIVE_COMMAND = byteArrayOf(0x02, 0x01, 0x14, 0x00)
+        private val STOP_LIVE_COMMAND = byteArrayOf(0x02, 0x01, 0x15, 0x01)
         private val WIFI_IP_COMMAND = byteArrayOf(0x02, 0x03)
 
         // Official app first; V821/live555 firmware endpoint second.
