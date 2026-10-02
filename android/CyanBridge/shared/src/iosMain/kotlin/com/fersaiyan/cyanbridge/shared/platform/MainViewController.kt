@@ -137,7 +137,8 @@ private const val VOICE_QUESTION_INITIAL_LISTENING_MS = 6_000L
 /** Android: IMAGE_QUESTION_INITIAL_LISTENING_TIMEOUT_MS and the 500 ms shutter settle delay. */
 private const val IMAGE_QUESTION_INITIAL_LISTENING_MS = 3_300L
 private const val IMAGE_QUESTION_SHUTTER_SETTLE_MS = 500L
-private const val MAX_IMAGE_FOLLOW_UPS = 3
+/** No "Pergunte." after the first description (follow-ups were too eager). */
+private const val MAX_IMAGE_FOLLOW_UPS = 0
 private const val ASSISTANT_TAG = "IosGlassesAssistant"
 // Same option lists as Android's MainActivity for HeyCyan recording limits.
 private val VIDEO_DURATION_OPTIONS_SECONDS = listOf(15, 30, 60, 180, 540, 720)
@@ -1167,9 +1168,18 @@ private class IosAppController {
     private var lastPhotoCount: Int? = null
     private var voiceQuestionJob: Job? = null
 
+    private suspend fun releaseGlassesAiMode(bridge: com.fersaiyan.cyanbridge.shared.ble.VendorGlassesBridge) {
+        val released = bridge.awaitModeAccepted(VendorGlassesMode.SPEECH_RECOGNITION_STOP)
+        PlatformLogger.i(ASSISTANT_TAG, "Glasses AI mode released=$released")
+    }
+
     /** Wake word / AI button: run the action chosen in "Wake word action" (Android: AiWakeWordRoute). */
     private suspend fun onGlassesAiVoice() {
         if (imageQuestionJob?.isActive == true || voiceQuestionJob?.isActive == true) return
+        // Android stopGlassesAiAudio: end the glasses' own AI voice mode first, otherwise they
+        // stay busy and reject the AI photo.
+        vendor?.let { releaseGlassesAiMode(it) }
+        delay(300L)
         when (_dashboardState.value.aiWakeWordRoute) {
             AiWakeWordRoute.IMAGE_QUESTION -> {
                 PlatformLogger.i(ASSISTANT_TAG, "Wake word: image question")
@@ -1215,8 +1225,9 @@ private class IosAppController {
     private suspend fun answerImageQuestion(image: ByteArray) {
         scope.launch { IosLocalModels.preload() }
         updateState { it.copy(agentLastError = "Ask about the photo now, or wait for the description…") }
-        val spoken = pendingImageQuestion?.also { pendingImageQuestion = null }?.await()
-            ?: IosVoiceQuestion.ask(IMAGE_QUESTION_INITIAL_LISTENING_MS)
+        // A question already asked while the photo transferred is final, even if it was silence.
+        val pending = pendingImageQuestion?.also { pendingImageQuestion = null }
+        val spoken = if (pending != null) pending.await() else IosVoiceQuestion.ask(IMAGE_QUESTION_INITIAL_LISTENING_MS)
         var question = spoken ?: sharedDefaultImageQuestion()
         repeat(MAX_IMAGE_FOLLOW_UPS + 1) { round ->
             updateState { it.copy(agentLastError = "Analyzing the photo: $question") }
@@ -1230,7 +1241,7 @@ private class IosAppController {
                 }
             }
             deliverAnswer("📷 $question", reply, photo = image.takeIf { round == 0 })
-            if (reply.isFailure) return
+            if (reply.isFailure || round >= MAX_IMAGE_FOLLOW_UPS) return
             question = IosVoiceQuestion.ask(IMAGE_QUESTION_INITIAL_LISTENING_MS) ?: return
         }
     }
@@ -1288,6 +1299,8 @@ private class IosAppController {
             withContext(NonCancellable) {
                 bridge?.awaitAiSpeakMode(VendorAiSpeakMode.THINKING_STOP)
                 bridge?.awaitAiSpeakMode(VendorAiSpeakMode.STOP)
+                // Leave the glasses' AI mode, or the camera button stops reporting photos.
+                if (bridge != null) releaseGlassesAiMode(bridge)
             }
         }
         PlatformLogger.i(ASSISTANT_TAG, reply.fold({ "Answer: $it" }, { "Answer failed: ${it.message}" }))

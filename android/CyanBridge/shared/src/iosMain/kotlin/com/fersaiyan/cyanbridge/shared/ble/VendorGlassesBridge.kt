@@ -134,6 +134,8 @@ object VendorGlassesMode {
     const val SPEECH_RECOGNITION = 0x07
     const val AUDIO = 0x08
     const val TRANSFER_STOP = 0x09
+    /** Ends the glasses' AI voice/recognition mode (Android: glassesControl [02 01 0b]). */
+    const val SPEECH_RECOGNITION_STOP = 0x0B
     const val AUDIO_STOP = 0x0C
 }
 
