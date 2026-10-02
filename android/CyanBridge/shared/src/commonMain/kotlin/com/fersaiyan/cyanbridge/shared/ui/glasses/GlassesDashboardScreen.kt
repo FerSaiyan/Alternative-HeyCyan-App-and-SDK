@@ -755,14 +755,14 @@ private fun CoreGlassesControls(
                 if (state.showEyevueControls) {
                     stringResource(Res.string.dashboard_eye_vue_live_preview)
                 } else {
-                    stringResource(Res.string.dashboard_passive_rtsp_probe)
+                    stringResource(Res.string.dashboard_heycyan_live_preview)
                 },
             )
             Text(
                 text = if (state.showEyevueControls) {
                     stringResource(Res.string.dashboard_eye_vue_description)
                 } else {
-                    stringResource(Res.string.dashboard_passive_probe_description)
+                    stringResource(Res.string.dashboard_heycyan_live_description)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -785,10 +785,8 @@ private fun CoreGlassesControls(
             ActionRow(
                 primaryLabel = if (state.livePreview.isScanning) {
                     stringResource(Res.string.dashboard_connecting)
-                } else if (state.showEyevueControls) {
-                    stringResource(Res.string.dashboard_start_live_preview)
                 } else {
-                    stringResource(Res.string.dashboard_arm_passive_probe)
+                    stringResource(Res.string.dashboard_start_live_preview)
                 },
                 onPrimary = { onAction(GlassesDashboardAction.StartLivePreview) },
                 primaryEnabled = state.livePreview.canStart && !state.livePreview.isScanning,
@@ -798,9 +796,9 @@ private fun CoreGlassesControls(
                 secondaryEnabled = state.livePreview.canStop,
                 secondaryStyle = ActionButtonStyle.Destructive,
             )
-            // Inline EyeVue video: only for EyeVue glasses, only after live
-            // starts. Other glasses see no extra UI here.
-            if (state.showEyevueControls &&
+            // Both Eyevue and HeyCyan render live video inline; transport and
+            // orientation remain device-specific in the Android host.
+            if ((state.showEyevueControls || state.showHeyCyanControls) &&
                 state.livePreview.isPlaying &&
                 state.livePreview.streamUrl != null
             ) {

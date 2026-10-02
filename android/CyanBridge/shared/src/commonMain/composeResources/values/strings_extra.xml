@@ -468,9 +468,9 @@
     <string name="dashboard_count">Count</string>
     <string name="dashboard_sync_wifi">Sync data over Wi-Fi</string>
     <string name="dashboard_eye_vue_live_preview">Eyevue live preview</string>
-    <string name="dashboard_passive_rtsp_probe">Passive RTSP lab probe</string>
+    <string name="dashboard_heycyan_live_preview">HeyCyan live preview</string>
     <string name="dashboard_eye_vue_description">Starts the vendor live mode, joins the returned Eyevue Wi-Fi network, and plays the camera stream.</string>
-    <string name="dashboard_passive_probe_description">Sends no BLE mode command. Activate mode 8 separately using the approved hardware procedure.</string>
+    <string name="dashboard_heycyan_live_description">Starts HeyCyan realtime preview over Wi-Fi Direct and plays the glasses camera with LibVLC.</string>
     <string name="dashboard_connecting">Connecting...</string>
     <string name="dashboard_start_live_preview">Start live preview</string>
     <string name="dashboard_arm_passive_probe">Arm passive probe</string>

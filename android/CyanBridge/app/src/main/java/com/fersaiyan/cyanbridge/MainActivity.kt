@@ -486,6 +486,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var eyevueLivePlayer by mutableStateOf<org.videolan.libvlc.MediaPlayer?>(null)
     private var eyevueLiveStopReceiver: android.content.BroadcastReceiver? = null
     private var eyevueLiveAudioMuted by mutableStateOf(false)
+    private var heyCyanLivePlayer by mutableStateOf<org.videolan.libvlc.MediaPlayer?>(null)
+    private var heyCyanLiveStopReceiver: android.content.BroadcastReceiver? = null
     private var mediaSessionLease: GlassesSessionLease? = null
     private var eyevueMediaJob: Job? = null
     private var eyevueMediaTransport: EyevueWifiTransport? = null
@@ -736,35 +738,45 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     appearanceSettings = appearance,
                     onNavigateToActivity = ::navigateToDestination,
                     liveVideoSlot = {
-                        // Inline EyeVue video inside the dashboard live section
-                        // (EyeVue only, after live starts). Same local relay URL
-                        // is shown so VLC on this phone can open it too.
-                        val eyevueLive = dashboardState.livePreview
-                        val eyevuePlayer = eyevueLivePlayer
-                        if (dashboardState.showEyevueControls &&
-                            eyevueLive.isPlaying &&
-                            eyevueLive.streamUrl != null &&
-                            eyevuePlayer != null
+                        val live = dashboardState.livePreview
+                        val isEyevueLive = dashboardState.showEyevueControls
+                        val isHeyCyanLive = dashboardState.showHeyCyanControls
+                        val livePlayer = if (isEyevueLive) eyevueLivePlayer else heyCyanLivePlayer
+                        if ((isEyevueLive || isHeyCyanLive) &&
+                            live.isPlaying &&
+                            live.streamUrl != null &&
+                            livePlayer != null
                         ) {
-                            val liveUrl = eyevueLive.streamUrl ?: ""
+                            val liveUrl = live.streamUrl ?: ""
                             androidx.compose.foundation.layout.Column(
                                 modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
                             ) {
                                 androidx.compose.foundation.layout.Spacer(
                                     modifier = androidx.compose.ui.Modifier.height(8.dp),
                                 )
-                                androidx.compose.ui.viewinterop.AndroidView(
-                                    factory = { ctx ->
-                                        com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveVideoView(ctx)
-                                    },
-                                    update = { view -> eyevueLivePreviewManager?.attachVideoView(view) },
-                                    onRelease = { view ->
-                                        eyevueLivePreviewManager?.detachVideoView(view)
-                                    },
-                                    modifier = androidx.compose.ui.Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(0.75f),
-                                )
+                                if (isEyevueLive) {
+                                    androidx.compose.ui.viewinterop.AndroidView(
+                                        factory = { ctx ->
+                                            com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveVideoView(ctx)
+                                        },
+                                        update = { view -> eyevueLivePreviewManager?.attachVideoView(view) },
+                                        onRelease = { view -> eyevueLivePreviewManager?.detachVideoView(view) },
+                                        modifier = androidx.compose.ui.Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(0.75f),
+                                    )
+                                } else {
+                                    androidx.compose.ui.viewinterop.AndroidView(
+                                        factory = { ctx ->
+                                            com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveVideoView(ctx)
+                                        },
+                                        update = { view -> livePreviewManager.attachVideoView(view) },
+                                        onRelease = { view -> livePreviewManager.detachVideoView(view) },
+                                        modifier = androidx.compose.ui.Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(4f / 3f),
+                                    )
+                                }
                                 androidx.compose.foundation.layout.Spacer(
                                     modifier = androidx.compose.ui.Modifier.height(8.dp),
                                 )
@@ -773,13 +785,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                androidx.compose.material3.TextButton(
-                                    onClick = {
-                                        eyevueLiveAudioMuted = !eyevueLiveAudioMuted
-                                        eyevueLivePreviewManager?.setAudioMuted(eyevueLiveAudioMuted)
-                                    },
-                                ) {
-                                    androidx.compose.material3.Text(if (eyevueLiveAudioMuted) "Listen to audio" else "Mute audio")
+                                if (isEyevueLive) {
+                                    androidx.compose.material3.TextButton(
+                                        onClick = {
+                                            eyevueLiveAudioMuted = !eyevueLiveAudioMuted
+                                            eyevueLivePreviewManager?.setAudioMuted(eyevueLiveAudioMuted)
+                                        },
+                                    ) {
+                                        androidx.compose.material3.Text(
+                                            if (eyevueLiveAudioMuted) "Listen to audio" else "Mute audio",
+                                        )
+                                    }
                                 }
                                 androidx.compose.foundation.layout.Row(
                                     modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
@@ -791,13 +807,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                                     as android.content.ClipboardManager
                                             clipboard.setPrimaryClip(
                                                 android.content.ClipData.newPlainText(
-                                                    "EyeVue live URL",
+                                                    "Glasses live URL",
                                                     liveUrl,
                                                 ),
                                             )
                                             android.widget.Toast.makeText(
                                                 this@MainActivity,
-                                                "Stream URL copied — open it in VLC while live is running",
+                                                "Stream URL copied — open it while live preview is running",
                                                 android.widget.Toast.LENGTH_SHORT,
                                             ).show()
                                         },
@@ -809,9 +825,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                     )
                                     androidx.compose.material3.TextButton(
                                         onClick = {
-                                            // Only one speaker should monitor the glasses microphone.
-                                            eyevueLiveAudioMuted = true
-                                            eyevueLivePreviewManager?.setAudioMuted(true)
+                                            if (isEyevueLive) {
+                                                eyevueLiveAudioMuted = true
+                                                eyevueLivePreviewManager?.setAudioMuted(true)
+                                            }
                                             val uri = android.net.Uri.parse(liveUrl)
                                             val vlcIntent = android.content.Intent(
                                                 android.content.Intent.ACTION_VIEW,
@@ -846,6 +863,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         }
                     },
                 )
+                if (showOfficialHeyCyanWarningDialog) {                )
                 if (showOfficialHeyCyanWarningDialog) {
                     OfficialHeyCyanWarningDialog(
                         onDismissRequest = { showOfficialHeyCyanWarningDialog = false },
@@ -1004,6 +1022,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         eyevueLivePreviewManager?.release()
         eyevueLiveStopReceiver?.let { runCatching { unregisterReceiver(it) } }
         eyevueLiveStopReceiver = null
+        heyCyanLiveStopReceiver?.let { runCatching { unregisterReceiver(it) } }
+        heyCyanLiveStopReceiver = null
+        com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.stop(this)
         if (eyevueMediaJob?.isActive == true) {
             eyevueMediaCancelled = true
             eyevueMediaTransport?.disconnect()
@@ -3764,37 +3785,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun startLivePreview() {
-        Log.i("LivePreview", "========================================")
-
         if (rejectHeyCyanOnlyFeature("Live preview")) return
-
-        if (!BuildConfig.DEBUG) {
-            Log.w("LivePreview", "Passive live preview is unavailable outside debug builds")
-            return
-        }
         if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
-            ensureGlassesTransportPermissions("live preview") {
-                startLivePreview()
-            }
+            ensureGlassesTransportPermissions("HeyCyan live preview") { startLivePreview() }
             return
         }
-        Log.i("LivePreview", "  BUTTON TAP: Start Live Preview")
-        Log.i("LivePreview", "  BLE connected: ${BleOperateManager.getInstance().isConnected}")
-        Log.i("LivePreview", "  Manager active: ${livePreviewManager.isActive}")
-        Log.i("LivePreview", "========================================")
-
-        if (livePreviewManager.isActive) {
-            Log.w("LivePreview", "Manager already active, ignoring tap")
+        if (!hasNotificationPermission(this)) {
+            ensureNotificationPermission(this, "HeyCyan live preview") { startLivePreview() }
             return
         }
-
+        if (!BleOperateManager.getInstance().isConnected) {
+            Toast.makeText(this, "Connect to HeyCyan over Bluetooth first.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (livePreviewManager.isActive) return
         if (downloadInProgress || downloadAttemptJob?.isActive == true || downloadP2pConnected) {
-            Log.w("LivePreview", "Refusing to start while a media-sync P2P session owns the connection")
-            Toast.makeText(
-                this,
-                "Stop the current P2P sync before starting live preview.",
-                Toast.LENGTH_LONG,
-            ).show()
+            Toast.makeText(this, "Stop the current Wi-Fi sync before starting live preview.", Toast.LENGTH_LONG).show()
             return
         }
         if (AutoAudioCaptureService.isRunning()) {
@@ -3802,11 +3808,32 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        val livePreviewLease = acquireExclusiveGlassesSession(GlassesSession.LIVE_PREVIEW) ?: return
-        livePreviewSessionLease = livePreviewLease
+        val lease = acquireExclusiveGlassesSession(GlassesSession.LIVE_PREVIEW) ?: return
+        livePreviewSessionLease = lease
+        livePreviewManager.setAudioMuted(true)
 
+        if (heyCyanLiveStopReceiver == null) {
+            val receiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                    livePreviewManager.stop()
+                }
+            }
+            heyCyanLiveStopReceiver = receiver
+            androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                receiver,
+                android.content.IntentFilter(
+                    com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.ACTION_HEYCYAN_LIVE_STOP,
+                ),
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+        }
+
+        com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.start(this)
         livePreviewManager.start {
-            releaseExclusiveGlassesSession(livePreviewLease)
+            com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.stop(this)
+            releaseExclusiveGlassesSession(lease)
+            if (livePreviewSessionLease === lease) livePreviewSessionLease = null
         }
     }
 
@@ -3867,13 +3894,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         lifecycleScope.launch {
             var lastLabel = ""
             livePreviewManager.uiState.collect { lp ->
+                if (!isHeyCyanSelected()) return@collect
                 if (lp.stateLabel != lastLabel) {
-                    Log.i("LivePreview", "Dashboard state: '${lp.stateLabel}' | scanning=${lp.isScanning} | playing=${lp.isPlaying} | url=${lp.streamUrl}")
+                    Log.i(
+                        "LivePreview",
+                        "HeyCyan state='${lp.stateLabel}' scanning=${lp.isScanning} playing=${lp.isPlaying} url=${lp.streamUrl}",
+                    )
                     lastLabel = lp.stateLabel
                 }
                 dashboardState = dashboardState.copy(
                     livePreview = com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState(
-                        isAvailable = BuildConfig.DEBUG && !isEyevueSelected() && !isTuneBudsSelected(),
+                        isAvailable = true,
                         stateLabel = lp.stateLabel,
                         detail = lp.detail,
                         isScanning = lp.isScanning,
@@ -3883,22 +3914,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         canStop = lp.canStop,
                     ),
                 )
-
-                if (lp.isPlaying && lp.streamUrl != null) {
-                    Log.i("LivePreview", "Stream playing, showing ExoPlayer dialog: ${lp.streamUrl}")
-                    showRtspPlayerDialog(lp.streamUrl)
-                } else {
-                    livePreviewDialog?.let { dialog ->
-                        livePreviewDialog = null
-                        dialog.dismiss()
-                    }
+                heyCyanLivePlayer = if (lp.isPlaying) livePreviewManager.getPlayer() else null
+                livePreviewDialog?.let { dialog ->
+                    livePreviewDialog = null
+                    runCatching { dialog.dismiss() }
                 }
             }
         }
     }
 
-    private fun stopLivePreview() {
+    private fun stopLivePreview() {    private fun stopLivePreview() {
         livePreviewManager.stop()
+        heyCyanLivePlayer = null
+        com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.stop(this)
         livePreviewDialog?.let { dialog ->
             livePreviewDialog = null
             dialog.dismiss()
@@ -3952,58 +3980,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun showRtspPlayerDialog(
-        streamUrl: String,
-        player: androidx.media3.exoplayer.ExoPlayer? = livePreviewManager.getPlayer(),
-        onClose: () -> Unit = livePreviewManager::stop,
-    ) {
-        Log.i("LivePreview", "showRtspPlayerDialog: $streamUrl")
-        if (livePreviewDialog?.isShowing == true) {
-            Log.d("LivePreview", "showRtspPlayerDialog: dialog is already visible")
-            return
-        }
-        val activePlayer = player
-        if (activePlayer == null) {
-            Log.e("LivePreview", "showRtspPlayerDialog: player is null!")
-            return
-        }
-
-        val dialogView = android.widget.FrameLayout(this).apply {
-            layoutParams = android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-            )
-        }
-
-        val playerView = androidx.media3.ui.PlayerView(this).apply {
-            this.player = activePlayer
-            useController = true
-            layoutParams = android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                600,
-            )
-        }
-        dialogView.addView(playerView)
-
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Live Preview")
-            .setMessage(streamUrl)
-            .setView(dialogView)
-            .setPositiveButton("Close", null)
-            .create()
-        dialog.setOnDismissListener {
-            if (livePreviewDialog === dialog) {
-                Log.i("LivePreview", "Dialog: dismissed")
-                livePreviewDialog = null
-                onClose()
-            }
-        }
-        livePreviewDialog = dialog
-        dialog.show()
-        Log.i("LivePreview", "Dialog: shown")
-    }
-    
-    private fun controlVideoRecording(start: Boolean) {
+    private fun controlVideoRecording(start: Boolean) {    private fun controlVideoRecording(start: Boolean) {
         if (rejectHeyCyanOnlyFeature("Video recording")) return
         if (isGlassesCommandBlocked("video recording command")) return
         val permit = acquireBackgroundGlassesCommand("video recording command") ?: return
@@ -6825,6 +6802,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     isAvailable = BuildConfig.DEBUG &&
                         model.isVisible(GlassesManagerGating.Action.WIFI_ADB_DEBUG),
                 ),
+                livePreview = when {
+                    model.isVisible(GlassesManagerGating.Action.HEY_CYAN_EXTRAS) ->
+                        state.livePreview.copy(isAvailable = true)
+                    model.isVisible(GlassesManagerGating.Action.EYEVUE_CONTROLS) ->
+                        state.livePreview
+                    else -> state.livePreview.copy(
+                        isAvailable = false,
+                        isScanning = false,
+                        isPlaying = false,
+                        streamUrl = null,
+                    )
+                },
             )
         }
 
