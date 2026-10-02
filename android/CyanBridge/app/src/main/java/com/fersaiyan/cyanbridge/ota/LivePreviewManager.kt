@@ -1,12 +1,12 @@
 package com.fersaiyan.cyanbridge.ota
 
 import android.content.Context
-import android.annotation.SuppressLint
 import android.Manifest
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.Uri
+import android.graphics.Bitmap
 import android.net.wifi.WifiManager
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
@@ -14,12 +14,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.rtsp.RtspMediaSource
-import com.fersaiyan.cyanbridge.BuildConfig
+import com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveVideoView
+import com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanVideoFrameOutput
 import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.bluetooth.DeviceManager
@@ -33,6 +29,9 @@ import kotlinx.coroutines.flow.StateFlow
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer
 
 private const val TAG = "LivePreview"
 
@@ -47,14 +46,15 @@ data class LivePreviewState(
 )
 
 /**
- * Orchestrates live video preview from the glasses via RTSP.
+ * HeyCyan realtime preview over the stock V821 Wi-Fi/RTSP path.
  *
- * Passive lab flow:
- * 1. Verify BLE connection
- * 2. Register the BLE IP listener without sending a mode-control command
- * 3. Start P2P peer discovery + connection (same as OTA)
- * 4. Wait for externally activated glasses to report their P2P IP via BLE notify (type 0x08)
- * 5. Probe the RTSP server and connect ExoPlayer
+ * The official app realtime-preview command is 02 01 14 01. CyanBridge arms
+ * the BLE IP listener and Wi-Fi Direct discovery first, sends that command via
+ * the vendor glasses-control channel, binds to the resulting P2P network, then
+ * plays the RTSP feed with LibVLC.
+ *
+ * The official app URL (8554/ch0) is tried first. The V821/live555 endpoint
+ * found in firmware analysis (554/testH264VideoStreamer) remains a fallback.
  *
  * All logcat tags: "LivePreview". Filter: `adb logcat -s LivePreview`
  */
@@ -65,8 +65,14 @@ class LivePreviewManager(
     private val _uiState = MutableStateFlow(LivePreviewState())
     val uiState: StateFlow<LivePreviewState> = _uiState
 
-    private var exoPlayer: ExoPlayer? = null
-    private var activePlayerListener: Player.Listener? = null
+    private var libVlc: LibVLC? = null
+    private var player: MediaPlayer? = null
+    private var videoView: HeyCyanLiveVideoView? = null
+    private var viewAttached: CompletableDeferred<Unit>? = null
+    private var frameOutput: HeyCyanVideoFrameOutput? = null
+    private var frameConsumer: ((Bitmap) -> Unit)? = null
+    private var audioMuted = true
+    private var liveCommandAttempted = false
     private var mainJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -91,18 +97,24 @@ class LivePreviewManager(
     val isActive: Boolean get() = mainJob?.isActive == true
 
     companion object {
-        // From static analysis: port 554 (hardcoded), stream name "testH264VideoStreamer"
-        private val RTSP_PORTS = intArrayOf(554, 8554)
+        // Realtime-preview command recovered from the official app and
+        // hardware-tested by vortex1024. The trailing byte is the enable flag.
+        private val START_LIVE_COMMAND = byteArrayOf(0x02, 0x01, 0x14, 0x01)
+        private val STOP_LIVE_COMMAND = byteArrayOf(0x02, 0x01, 0x14, 0x00)
+        private val WIFI_IP_COMMAND = byteArrayOf(0x02, 0x03)
+
+        // Official app first; V821/live555 firmware endpoint second.
+        private val RTSP_PORTS = intArrayOf(8554, 554)
         private val STREAM_PATHS = arrayOf(
-            "testH264VideoStreamer",   // From binary: Session streamed by "testH264VideoStreamer"
+            "ch0",
+            "testH264VideoStreamer",
             "live",
             "stream",
             "video",
-            "ch0",
             "h264",
             "",
         )
-        private const val PROBE_TIMEOUT_MS = 3000L
+        private const val PROBE_TIMEOUT_MS = 8_000L
         private const val BLE_IP_TIMEOUT_MS = 45_000L
         private const val P2P_CONNECT_TIMEOUT_MS = 20_000L
         private const val P2P_GROUP_REMOVAL_RETRY_MS = 1_000L
@@ -132,6 +144,41 @@ class LivePreviewManager(
         mainJob = scope.launch { runLivestream() }
     }
 
+    /** Headless decoder for Walking Aid. Caller owns each delivered bitmap. */
+    fun startFrames(onFrame: (Bitmap) -> Unit, onSessionFinished: () -> Unit) {
+        check(!isActive) { "HeyCyan live stream is already active" }
+        frameConsumer = onFrame
+        audioMuted = true
+        start(onSessionFinished)
+    }
+
+    suspend fun stopAndJoin() {
+        val active = mainJob
+        stop()
+        active?.join()
+    }
+
+    fun getPlayer(): MediaPlayer? = player
+
+    fun attachVideoView(view: HeyCyanLiveVideoView) {
+        if (videoView !== view) videoView?.bindPlayer(null)
+        videoView = view
+        player?.let {
+            view.bindPlayer(it)
+            viewAttached?.complete(Unit)
+        }
+    }
+
+    fun detachVideoView(view: HeyCyanLiveVideoView) {
+        view.bindPlayer(null)
+        if (videoView === view) videoView = null
+    }
+
+    fun setAudioMuted(muted: Boolean) {
+        audioMuted = muted
+        player?.setVolume(if (muted) 0 else 100)
+    }
+
     fun stop() {
         Log.i(TAG, "[${elapsed()}ms] stop() called")
         mainJob?.cancel()
@@ -154,6 +201,7 @@ class LivePreviewManager(
         Log.i(TAG, "Bluetooth disconnected; abandoning preview resources")
         mainJob?.cancel()
         mainJob = null
+        liveCommandAttempted = false
         releasePlayer()
         unbindP2pNetwork()
         if (!cleanupComplete) {
@@ -168,9 +216,11 @@ class LivePreviewManager(
         if (cleanupComplete || cleanupInProgress) return
         cleanupInProgress = true
         Log.i(TAG, "[${elapsed()}ms] cleanup: releasing resources...")
-        val playerWasActive = exoPlayer != null
+        if (liveCommandAttempted && BleOperateManager.getInstance().isConnected) sendStopLiveCommand()
+        liveCommandAttempted = false
+        val playerWasActive = player != null
         releasePlayer()
-        if (playerWasActive) Log.i(TAG, "[${elapsed()}ms] cleanup: ExoPlayer released")
+        if (playerWasActive) Log.i(TAG, "[${elapsed()}ms] cleanup: LibVLC released")
 
         unbindP2pNetwork()
 
@@ -300,113 +350,61 @@ class LivePreviewManager(
             p2pInfo = null
             p2pFailure = null
 
-            if (!BuildConfig.DEBUG) {
-                Log.w(TAG, "Live preview is disabled outside debug builds until the command protocol is confirmed")
-                updateState(
-                    "Developer preview only",
-                    "Live preview is experimental and is available only in debug builds.",
-                )
+            updateState("Connecting", "Checking Bluetooth and Wi-Fi...", scanning = true)
+            if (!BleOperateManager.getInstance().isConnected) {
+                updateState("BLE disconnected", "Connect to HeyCyan glasses over Bluetooth first.")
                 return
             }
-
-            // ── Step 1: BLE connection check ─────────────────────────
-            Log.i(TAG, "[${elapsed()}ms] [Step 1/5] Checking BLE connection...")
-            updateState("Connecting", "Checking BLE connection...", scanning = true)
-            val bleConnected = BleOperateManager.getInstance().isConnected
-            Log.i(TAG, "[${elapsed()}ms] [Step 1/5] BLE connected=$bleConnected")
-            if (!bleConnected) {
-                Log.e(TAG, "[${elapsed()}ms] [Step 1/5] FAIL: BLE not connected — aborting")
-                updateState("BLE disconnected", "Connect to glasses via Bluetooth first.")
-                return
-            }
-            val deviceName = try { DeviceManager.getInstance().deviceName ?: "?" } catch (_: Exception) { "?" }
-            val deviceMac = try { DeviceManager.getInstance().deviceAddress ?: "?" } catch (_: Exception) { "?" }
-            Log.i(TAG, "[${elapsed()}ms] [Step 1/5] OK: device=$deviceName mac=$deviceMac")
             if (!hasWifiP2pPermission()) {
-                Log.e(TAG, "[${elapsed()}ms] [Step 1/5] FAIL: required Wi-Fi Direct permission is missing")
                 updateState("P2P permission required", "Grant Nearby devices or Location permission before starting preview.")
                 return
             }
             val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
             if (wifiManager?.isWifiEnabled != true) {
-                Log.e(TAG, "[${elapsed()}ms] [Step 1/5] FAIL: Wi-Fi is disabled")
                 updateState("Wi-Fi disabled", "Enable Wi-Fi before starting live preview.")
                 return
             }
 
-            // Arm the passive probe before the hardware team activates mode 8.
-            Log.i(TAG, "[${elapsed()}ms] [Step 2/5] Arming passive BLE IP listener...")
+            // Do both before the BLE trigger: the IP notify and peer appearance
+            // can arrive immediately after V821 realtime mode starts.
             if (!registerNotifyListener()) {
-                updateState("Listener unavailable", "Could not receive the glasses P2P IP notification.")
+                updateState("Listener unavailable", "Could not receive the glasses Wi-Fi IP notification.")
                 return
             }
-            Log.w(TAG, "[${elapsed()}ms] [Step 2/5] PASSIVE MODE: no BLE mode-control command will be sent")
-            updateState(
-                "Awaiting mode 8",
-                "Passive lab probe armed. Activate livestream mode through the approved hardware procedure.",
-                scanning = true,
-            )
-
-            // ── Step 3: Start P2P ────────────────────────────────────
-            Log.i(TAG, "[${elapsed()}ms] [Step 3/5] Starting P2P connection...")
-            updateState("P2P connecting", "Establishing P2P connection to glasses...", scanning = true)
-            val p2pStartTime = System.currentTimeMillis()
+            updateState("P2P connecting", "Looking for the HeyCyan Wi-Fi Direct peer...", scanning = true)
             if (!startP2p()) {
                 updateState("P2P unavailable", "Could not start Wi-Fi Direct discovery.")
                 return
             }
-            Log.i(TAG, "[${elapsed()}ms] [Step 3/5] P2P discovery initiated (took ${System.currentTimeMillis() - p2pStartTime}ms)")
 
-            // ── Step 4: Wait for glasses IP via BLE ──────────────────
-            Log.i(TAG, "[${elapsed()}ms] [Step 4/5] Waiting for glasses IP via BLE notification 0x08 (timeout=${BLE_IP_TIMEOUT_MS}ms)...")
-            updateState("Waiting for IP", "Waiting for glasses to report P2P IP via BLE...", scanning = true)
-            val ipStartTime = System.currentTimeMillis()
+            updateState("Starting live mode", "Starting the glasses realtime camera...", scanning = true)
+            Log.i(TAG, "[${elapsed()}ms] Sending realtime-preview command 02 01 14 01")
+            sendStartLiveCommand()
+            delay(350)
+            requestWifiIp()
+
             val glassesIp = waitForBleIp(BLE_IP_TIMEOUT_MS)
-            val ipElapsed = System.currentTimeMillis() - ipStartTime
             if (glassesIp == null) {
-                Log.e(TAG, "[${elapsed()}ms] [Step 4/5] FAIL: No glasses IP after ${ipElapsed}ms")
-                Log.e(TAG, "[${elapsed()}ms]   bleIpReceived=$bleIpReceived, p2pConnected=$p2pConnected, p2pInfo=$p2pInfo")
-                Log.e(TAG, "[${elapsed()}ms]   Possible causes: glasses didn't enter P2P mode, BLE notify not sent, timeout too short")
-                updateState("No IP", "Glasses didn't report IP after ${ipElapsed / 1000}s. " +
-                    "P2P=$p2pConnected. Try Sync data first to verify P2P works.")
+                updateState("No IP", "The glasses did not report their Wi-Fi Direct IP. Reconnect and try again.")
                 return
             }
-            Log.i(TAG, "[${elapsed()}ms] [Step 4/5] OK: Glasses IP=$glassesIp (waited ${ipElapsed}ms)")
-
-            Log.i(TAG, "[${elapsed()}ms] [Step 4/5] Waiting for P2P group (timeout=${P2P_CONNECT_TIMEOUT_MS}ms)...")
             if (!waitForP2pConnection(P2P_CONNECT_TIMEOUT_MS)) {
-                Log.e(TAG, "[${elapsed()}ms] [Step 4/5] FAIL: BLE reported $glassesIp but P2P never connected")
-                updateState("P2P unavailable", "Glasses reported $glassesIp, but the Wi-Fi Direct group did not connect.")
+                updateState("P2P unavailable", "The glasses reported $glassesIp, but the Wi-Fi Direct group did not connect.")
                 return
             }
             if (!bindToP2pNetwork(glassesIp)) {
-                updateState("P2P route unavailable", "Could not bind the RTSP probe to the glasses Wi-Fi Direct network.")
+                updateState("P2P route unavailable", "Could not route RTSP through the glasses Wi-Fi Direct network.")
                 return
             }
 
-            // ── Step 5: Probe RTSP server ────────────────────────────
-            Log.i(TAG, "[${elapsed()}ms] [Step 5/5] Probing RTSP server on $glassesIp...")
-            updateState("Probing", "Searching for RTSP server on $glassesIp...", scanning = true)
-            val probeStartTime = System.currentTimeMillis()
+            updateState("Opening stream", "Trying the official HeyCyan RTSP endpoint...", scanning = true)
             val streamUrl = probeRtsp(glassesIp)
-            val probeElapsed = System.currentTimeMillis() - probeStartTime
             if (streamUrl == null) {
-                Log.e(TAG, "[${elapsed()}ms] [Step 5/5] FAIL: No RTSP server found after ${probeElapsed}ms")
-                Log.e(TAG, "[${elapsed()}ms]   Tried ports: ${RTSP_PORTS.joinToString()}")
-                Log.e(TAG, "[${elapsed()}ms]   Tried paths: ${STREAM_PATHS.joinToString()}")
-                Log.e(TAG, "[${elapsed()}ms]   Possible causes: livestream binary not running, port blocked, different stream name")
-                updateState("No RTSP found",
-                    "No RTSP server found on $glassesIp after ${probeElapsed / 1000}s. " +
-                    "The livestream binary may not have started.")
+                updateState("No RTSP found", "Realtime mode is active, but no compatible RTSP endpoint answered.")
                 return
             }
 
-            // ── Success ──────────────────────────────────────────────
-            Log.i(TAG, "========================================")
-            Log.i(TAG, "  LIVESTREAM SUCCESS")
-            Log.i(TAG, "  URL: $streamUrl")
-            Log.i(TAG, "  Total time: ${elapsed()}ms")
-            Log.i(TAG, "========================================")
+            Log.i(TAG, "HEYCYAN LIVESTREAM SUCCESS url=$streamUrl total=${elapsed()}ms")
             _uiState.value = LivePreviewState(
                 stateLabel = "Playing",
                 detail = streamUrl,
@@ -415,22 +413,45 @@ class LivePreviewManager(
                 canStart = false,
                 canStop = true,
             )
-            // Keep the P2P group and player alive until the user explicitly stops preview.
             awaitCancellation()
-
         } catch (e: CancellationException) {
-            Log.i(TAG, "[${elapsed()}ms] LIVESTREAM CANCELLED by user")
+            Log.i(TAG, "[${elapsed()}ms] HEYCYAN LIVESTREAM CANCELLED")
             throw e
         } catch (e: Exception) {
-            Log.e(TAG, "[${elapsed()}ms] LIVESTREAM EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
-            updateState("Error", "Failed: ${e.message}")
+            Log.e(TAG, "[${elapsed()}ms] HeyCyan livestream failed: ${e.message}", e)
+            updateState("Error", e.message ?: "HeyCyan live preview failed")
         } finally {
-            Log.i(TAG, "[${elapsed()}ms] runLivestream() exiting, running cleanup")
+            frameConsumer = null
             cleanup()
         }
     }
 
+    private fun sendStartLiveCommand() {
+        liveCommandAttempted = true
+        runCatching {
+            LargeDataHandler.getInstance().glassesControl(START_LIVE_COMMAND) { _, response ->
+                Log.i(TAG, "[${elapsed()}ms] live start response type=${response.dataType} error=${response.errorCode} work=${response.workTypeIng}")
+            }
+        }.onFailure { throw IOException("Could not send HeyCyan realtime-preview command", it) }
+    }
+
+    private fun sendStopLiveCommand() {
+        runCatching {
+            LargeDataHandler.getInstance().glassesControl(STOP_LIVE_COMMAND) { _, response ->
+                Log.i(TAG, "[${elapsed()}ms] live stop response type=${response.dataType} error=${response.errorCode} work=${response.workTypeIng}")
+            }
+        }.onFailure { Log.w(TAG, "Could not send HeyCyan realtime-preview stop command", it) }
+    }
+
+    private fun requestWifiIp() {
+        if (!BleOperateManager.getInstance().isConnected) return
+        runCatching {
+            LargeDataHandler.getInstance().glassesControl(WIFI_IP_COMMAND) { _, _ -> }
+        }.onFailure { Log.d(TAG, "Wi-Fi IP poll failed: ${it.message}") }
+    }
+
     /**
+     * Start P2P peer discovery and connection.    /**
      * Start P2P peer discovery and connection.
      * Logs every P2P event with details.
      */
@@ -562,7 +583,7 @@ class LivePreviewManager(
         }
         manager.resetFailCount()
         Log.i(TAG, "[${elapsed()}ms] [P2P] Registered receiver, reset fail count, starting discovery...")
-        // The vendor-style timeout normally sends the 0x0F BLE reset. Passive preview must not.
+        // Never let generic discovery timeout send 0x0F while realtime preview owns V821.
         manager.startPeerDiscovery(allowDeviceResetOnTimeout = false)
         return true
     }
@@ -576,7 +597,7 @@ class LivePreviewManager(
     }
 
     /**
-     * Register a listener for the glasses IP notification before sending the experimental trigger.
+     * Register the glasses IP listener before sending the validated realtime-preview trigger.
      * Logs every BLE notification received.
      */
     private fun registerNotifyListener(): Boolean {
@@ -646,26 +667,19 @@ class LivePreviewManager(
         val deadline = System.currentTimeMillis() + timeoutMs
         var pollCount = 0
         while (System.currentTimeMillis() < deadline) {
-            val ip = bleIpReceived
-            if (ip != null) {
-                Log.i(TAG, "[${elapsed()}ms] [BLE] IP received after ${pollCount} polls: $ip")
-                return ip
+            bleIpReceived?.let {
+                Log.i(TAG, "[${elapsed()}ms] [BLE] IP received after $pollCount polls: $it")
+                return it
             }
             pollCount++
-            if (pollCount % 10 == 0) {
-                val remaining = (deadline - System.currentTimeMillis()) / 1000
-                Log.d(TAG, "[${elapsed()}ms] [BLE] Still waiting for IP... ${remaining}s remaining (poll #$pollCount)")
-            }
+            if (pollCount == 1 || pollCount % 6 == 0) requestWifiIp()
             delay(500)
         }
-        Log.e(TAG, "[${elapsed()}ms] [BLE] Timed out waiting for IP after ${timeoutMs}ms ($pollCount polls)")
-        Log.e(TAG, "[${elapsed()}ms] [BLE]   bleIpReceived=$bleIpReceived")
-        Log.e(TAG, "[${elapsed()}ms] [BLE]   p2pConnected=$p2pConnected")
-        Log.e(TAG, "[${elapsed()}ms] [BLE]   p2pInfo=$p2pInfo")
+        Log.e(TAG, "[${elapsed()}ms] [BLE] Timed out waiting for glasses IP")
         return null
     }
 
-    private suspend fun waitForP2pConnection(timeoutMs: Long): Boolean {
+    private suspend fun waitForP2pConnection(timeoutMs: Long): Boolean {    private suspend fun waitForP2pConnection(timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             if (p2pConnected) {
@@ -680,7 +694,7 @@ class LivePreviewManager(
 
     /**
      * Probe RTSP server on the glasses IP.
-     * Logs every port check and ExoPlayer attempt with timing.
+     * Logs every port check and LibVLC attempt with timing.
      */
     private suspend fun probeRtsp(glassesIp: String): String? {
         var totalAttempts = 0
@@ -723,6 +737,7 @@ class LivePreviewManager(
                     return url
                 } else {
                     Log.d(TAG, "[${elapsed()}ms] [RTSP] Failed: $url (${attemptElapsed}ms)")
+                    updateState("Opening stream", "Trying the next HeyCyan RTSP endpoint...", scanning = true)
                 }
             }
         }
@@ -837,137 +852,126 @@ class LivePreviewManager(
     }
 
     /**
-     * Try to play an RTSP URL with ExoPlayer.
-     * Logs state transitions, errors, and timing.
+     * Try one RTSP URL with the same LibVLC stack proven on Eyevue. Visible
+     * preview attaches a VLC view; Walking Aid attaches an ImageReader sink.
      */
-    // Media3 marks its RTSP source as experimental; it is the intended player for this probe.
-    @SuppressLint("UnsafeOptInUsageError")
-    private suspend fun tryPlayUrl(url: String): Boolean {
-        return withContext(Dispatchers.Main) {
-            val startTime = System.currentTimeMillis()
-            val result = withTimeoutOrNull(PROBE_TIMEOUT_MS) {
-                suspendCancellableCoroutine<Boolean> { cont ->
-                    val player = ExoPlayer.Builder(context).build()
-                    val mediaSource = RtspMediaSource.Factory()
-                        .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
-                    var resolved = false
+    private suspend fun tryPlayUrl(url: String): Boolean = withContext(Dispatchers.Main.immediate) {
+        releasePlayer()
+        val ready = CompletableDeferred<Unit>()
+        val attached = CompletableDeferred<Unit>()
+        viewAttached = attached
+        val vlc = LibVLC(context)
+        libVlc = vlc
+        val vlcPlayer = MediaPlayer(vlc)
+        player = vlcPlayer
+        try {
+            val media = Media(vlc, Uri.parse(url))
+            media.addOption(":codec=avcodec")
+            media.addOption(":rtsp-tcp")
+            media.addOption(":network-caching=300")
+            media.addOption(":live-caching=100")
+            media.addOption(":drop-late-frames=true")
+            media.addOption(":skip-frames=true")
+            vlcPlayer.media = media
+            media.release()
+            vlcPlayer.setVolume(if (audioMuted) 0 else 100)
 
-                    Log.d(TAG, "[${elapsed()}ms] [ExoPlayer] Creating player for $url")
-
-                    val listener = object : Player.Listener {
-                        override fun onPlaybackStateChanged(playbackState: Int) {
-                            if (resolved) return
-                            val stateElapsed = System.currentTimeMillis() - startTime
-                            when (playbackState) {
-                                Player.STATE_IDLE -> {
-                                    Log.d(TAG, "[${elapsed()}ms] [ExoPlayer] STATE_IDLE ($stateElapsed ms)")
-                                }
-                                Player.STATE_BUFFERING -> {
-                                    Log.d(TAG, "[${elapsed()}ms] [ExoPlayer] STATE_BUFFERING ($stateElapsed ms)")
-                                }
-                                Player.STATE_READY -> {
-                                    Log.i(TAG, "[${elapsed()}ms] [ExoPlayer] STATE_READY — stream is playing! ($stateElapsed ms)")
-                                    resolved = true
-                                    player.removeListener(this)
-                                    if (!cont.isActive) {
-                                        player.release()
-                                        return
-                                    }
-                                    exoPlayer = player
-                                    observeActivePlayer(player)
-                                    cont.resume(true) {}
-                                }
-                                Player.STATE_ENDED -> {
-                                    Log.w(TAG, "[${elapsed()}ms] [ExoPlayer] STATE_ENDED ($stateElapsed ms)")
-                                    resolved = true
-                                    player.removeListener(this)
-                                    player.release()
-                                    if (cont.isActive) cont.resume(false) {}
-                                }
-                            }
-                        }
-
-                        override fun onPlayerError(error: PlaybackException) {
-                            if (resolved) return
-                            val errorElapsed = System.currentTimeMillis() - startTime
-                            resolved = true
-                            Log.w(TAG, "[${elapsed()}ms] [ExoPlayer] ERROR after ${errorElapsed}ms:")
-                            Log.w(TAG, "[${elapsed()}ms]   type=${error.errorCodeName}")
-                            Log.w(TAG, "[${elapsed()}ms]   code=${error.errorCode}")
-                            Log.w(TAG, "[${elapsed()}ms]   message=${error.message}")
-                            Log.w(TAG, "[${elapsed()}ms]   cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message}")
-                            player.removeListener(this)
-                            player.release()
-                            if (cont.isActive) cont.resume(false) {}
-                        }
+            var playing = false
+            var videoOutputReady = false
+            fun completeWhenReady() {
+                if (playing && videoOutputReady && !ready.isCompleted) ready.complete(Unit)
+            }
+            fun fail(error: Throwable) {
+                if (!ready.isCompleted) {
+                    ready.completeExceptionally(error)
+                } else if (player === vlcPlayer && mainJob?.isActive == true) {
+                    scope.launch {
+                        updateState("Stream interrupted", error.message ?: "HeyCyan RTSP stream stopped")
+                        mainJob?.cancel(CancellationException("HeyCyan RTSP stream stopped"))
                     }
-
-                    player.addListener(listener)
-                    cont.invokeOnCancellation {
-                        player.removeListener(listener)
-                        player.release()
-                    }
-                    player.setMediaSource(mediaSource)
-                    player.playWhenReady = true
-                    player.prepare()
-                    Log.d(TAG, "[${elapsed()}ms] [ExoPlayer] playWhenReady=true; prepare() called for $url")
                 }
             }
-            if (result == null) {
-                val timeoutElapsed = System.currentTimeMillis() - startTime
-                Log.w(TAG, "[${elapsed()}ms] [ExoPlayer] TIMEOUT after ${timeoutElapsed}ms for $url")
-                false
+
+            vlcPlayer.setEventListener(MediaPlayer.EventListener { event ->
+                when (event.type) {
+                    MediaPlayer.Event.Playing -> {
+                        playing = true
+                        Log.i(TAG, "[${elapsed()}ms] [LibVLC] Playing $url")
+                        completeWhenReady()
+                    }
+                    MediaPlayer.Event.Vout -> if (event.voutCount > 0) {
+                        videoOutputReady = true
+                        val track = vlcPlayer.currentVideoTrack
+                        Log.i(TAG, "[${elapsed()}ms] [LibVLC] video=${track?.width}x${track?.height}")
+                        completeWhenReady()
+                    }
+                    MediaPlayer.Event.EndReached -> fail(IOException("HeyCyan RTSP stream ended"))
+                    MediaPlayer.Event.EncounteredError -> fail(IOException("HeyCyan RTSP playback error"))
+                    MediaPlayer.Event.Buffering -> Log.d(TAG, "[${elapsed()}ms] [LibVLC] buffering=${event.buffering}%")
+                    else -> Unit
+                }
+            })
+
+            // Publishing the player before play lets Compose attach the inline
+            // VLC surface while this candidate is buffering.
+            _uiState.value = LivePreviewState(
+                stateLabel = "Buffering",
+                detail = url,
+                isScanning = true,
+                isPlaying = true,
+                streamUrl = url,
+                canStart = false,
+                canStop = true,
+            )
+            val consumer = frameConsumer
+            if (consumer != null) {
+                frameOutput = HeyCyanVideoFrameOutput(
+                    onFrame = consumer,
+                    onError = { error -> if (!ready.isCompleted) ready.completeExceptionally(error) },
+                ).also { it.attach(vlcPlayer) }
             } else {
-                result
+                videoView?.let { attachVideoView(it) }
             }
-        }
-    }
-
-    private fun observeActivePlayer(player: ExoPlayer) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState != Player.STATE_ENDED || exoPlayer !== player) return
-                Log.w(TAG, "[${elapsed()}ms] [ExoPlayer] Active stream ended")
-                scope.launch {
-                    if (exoPlayer === player) {
-                        updateState("Stream ended", "The glasses RTSP stream ended.")
-                        mainJob?.cancel()
-                    }
-                }
+            vlcPlayer.play()
+            if (consumer == null && videoView == null) {
+                withTimeoutOrNull(2_500L) { attached.await() }
             }
 
-            override fun onPlayerError(error: PlaybackException) {
-                if (exoPlayer !== player) return
-                Log.e(
-                    TAG,
-                    "[${elapsed()}ms] [ExoPlayer] Active stream error: ${error.errorCodeName} (${error.message})"
-                )
-                scope.launch {
-                    if (exoPlayer === player) {
-                        updateState("Stream interrupted", "${error.errorCodeName}: ${error.message}")
-                        mainJob?.cancel()
-                    }
-                }
-            }
+            val success = withTimeoutOrNull(PROBE_TIMEOUT_MS) {
+                ready.await()
+                true
+            } == true
+            if (!success) releasePlayer()
+            success
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            Log.w(TAG, "[${elapsed()}ms] [LibVLC] failed $url: ${error.message}")
+            releasePlayer()
+            false
+        } finally {
+            viewAttached = null
         }
-        activePlayerListener = listener
-        player.addListener(listener)
     }
 
     private fun releasePlayer() {
-        val player = exoPlayer
-        activePlayerListener?.let { listener -> player?.removeListener(listener) }
-        activePlayerListener = null
-        player?.let {
-            Log.d(TAG, "[${elapsed()}ms] Releasing ExoPlayer")
-            it.release()
+        val oldPlayer = player
+        val oldVlc = libVlc
+        oldPlayer?.setEventListener(null)
+        videoView?.bindPlayer(null)
+        frameOutput?.close(oldPlayer)
+        frameOutput = null
+        player = null
+        libVlc = null
+        if (oldPlayer != null || oldVlc != null) {
+            kotlin.concurrent.thread(name = "HeyCyanVlcRelease", isDaemon = true) {
+                runCatching { oldPlayer?.stop() }
+                runCatching { oldPlayer?.release() }
+                runCatching { oldVlc?.release() }
+            }
         }
-        exoPlayer = null
     }
 
-    fun getPlayer(): ExoPlayer? = exoPlayer
-
-    private fun updateState(label: String, detail: String, scanning: Boolean = false) {
+    private fun updateState(label: String, detail: String, scanning: Boolean = false) {    private fun updateState(label: String, detail: String, scanning: Boolean = false) {
         Log.d(TAG, "[${elapsed()}ms] State: '$label' | detail='$detail' | scanning=$scanning")
         _uiState.value = LivePreviewState(
             stateLabel = label,

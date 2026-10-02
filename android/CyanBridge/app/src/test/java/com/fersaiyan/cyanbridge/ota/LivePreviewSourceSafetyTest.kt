@@ -7,14 +7,19 @@ import org.junit.Test
 
 class LivePreviewSourceSafetyTest {
     @Test
-    fun `live preview remains a passive probe`() {
+    fun `live preview uses only the validated realtime control path`() {
         val source = File(
             "src/main/java/com/fersaiyan/cyanbridge/ota/LivePreviewManager.kt",
         ).readText()
 
-        assertTrue(source.contains("PASSIVE MODE: no BLE mode-control command will be sent"))
-        assertFalse(Regex("""\bglassesControl\s*\(""").containsMatchIn(source))
-        assertFalse(source.contains("byteArrayOf(0x09, 0x0a, 0x0d, 0x0e)"))
+        assertTrue(source.contains("START_LIVE_COMMAND = byteArrayOf(0x02, 0x01, 0x14, 0x01)"))
+        assertTrue(source.contains("STOP_LIVE_COMMAND = byteArrayOf(0x02, 0x01, 0x14, 0x00)"))
+        assertTrue(source.contains("RTSP_PORTS = intArrayOf(8554, 554)"))
+        assertTrue(source.contains("\"ch0\","))
+        assertTrue(source.contains("\"testH264VideoStreamer\","))
         assertTrue(source.contains("manager.startPeerDiscovery(allowDeviceResetOnTimeout = false)"))
+        assertFalse(source.contains("byteArrayOf(0x02, 0x01, 0x0A)"))
+        assertFalse(source.contains("byteArrayOf(0x02, 0x01, 0x0F)"))
+        assertFalse(source.contains("PASSIVE MODE"))
     }
 }
