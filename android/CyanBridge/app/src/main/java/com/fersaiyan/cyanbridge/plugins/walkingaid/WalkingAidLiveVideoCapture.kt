@@ -6,6 +6,7 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLivePreviewManager
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
+import com.fersaiyan.cyanbridge.ota.LivePreviewManager
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.plugins.walkingaid.vision.VisionFrame
 import kotlinx.coroutines.CompletableDeferred
@@ -25,6 +26,7 @@ import java.util.concurrent.atomic.AtomicLong
 /** Owns a continuous camera session until cancellation; never takes an existing preview. */
 internal class WalkingAidLiveVideoCapture(
     private val context: Context,
+    private val heyCyanFactory: () -> LivePreviewManager = { LivePreviewManager(context) },
     private val eyevueFactory: () -> EyevueLivePreviewManager = {
         EyevueLivePreviewManager(context, EyevueManager.getInstance(context))
     },
@@ -50,6 +52,7 @@ internal class WalkingAidLiveVideoCapture(
         }
         try {
             when (mode) {
+                WalkingAidVideoMode.HEYCYAN_VIDEO -> collectHeyCyan(deliver)
                 WalkingAidVideoMode.EYEVUE_VIDEO -> collectEyevue(deliver)
                 WalkingAidVideoMode.META_VIDEO -> collectMeta(deliver)
                 WalkingAidVideoMode.PERIODIC_PHOTOS -> error("Select a live video source")
@@ -57,6 +60,28 @@ internal class WalkingAidLiveVideoCapture(
         } catch (timeout: TimeoutCancellationException) {
             throw IOException("Timed out starting or stopping glasses video. Reconnect and try again.", timeout)
         } finally { watchdog.cancel() }
+    }
+
+    private suspend fun collectHeyCyan(onFrame: (Bitmap) -> Unit): Unit = withContext(Dispatchers.Main.immediate) {
+        val lease = GlassesSessionCoordinator.tryAcquireLease(GlassesSession.LIVE_PREVIEW)
+            ?: throw IOException("Stop the current glasses transport before starting Walking Aid video.")
+        var manager: LivePreviewManager? = null
+        val finished = CompletableDeferred<Unit>()
+        try {
+            val activeManager = heyCyanFactory().also { manager = it }
+            activeManager.startFrames(onFrame) { finished.complete(Unit) }
+            finished.await()
+            throw IOException(activeManager.uiState.value.detail.ifBlank { "HeyCyan video stopped" })
+        } finally {
+            withContext(NonCancellable) {
+                try {
+                    manager?.stopAndJoin()
+                } finally {
+                    manager?.release()
+                    GlassesSessionCoordinator.release(lease)
+                }
+            }
+        }
     }
 
     private suspend fun collectEyevue(onFrame: (Bitmap) -> Unit): Unit = withContext(Dispatchers.Main.immediate) {

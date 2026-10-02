@@ -1,13 +1,14 @@
 <resources>
     <string name="walking_aid_periodic_photos">Periodic photos</string>
+    <string name="walking_aid_heycyan_video">HeyCyan continuous video</string>
     <string name="walking_aid_eyevue_video">EyeVue continuous video</string>
     <string name="walking_aid_meta_video">Meta Ray-Ban continuous video</string>
     <string name="walking_aid_video_source_help">Select a camera source, then enable Walking Aid. Stop Walking Aid before changing sources. Live video runs YOLO locally on the latest frame; the photo interval applies only to periodic photos.</string>
     <string name="walking_aid_meta_setup_title">Set up Meta glasses camera</string>
     <string name="walking_aid_meta_setup_message">Connect your glasses, register CyanBridge, and authorize the camera in Meta setup. Then return here and enable Walking Aid.</string>
     <string name="walking_aid_open_meta_setup">Open Meta setup</string>
-    <string name="walking_aid_wifi_permission_title">Allow EyeVue Wi-Fi video</string>
-    <string name="walking_aid_wifi_permission_message">Nearby Wi-Fi devices (or Location on older Android versions) is required to receive EyeVue live video.</string>
+    <string name="walking_aid_wifi_permission_title">Allow glasses Wi-Fi video</string>
+    <string name="walking_aid_wifi_permission_message">Nearby Wi-Fi devices (or Location on older Android versions) is required to receive continuous video from EyeVue or HeyCyan glasses.</string>
     <string name="walking_aid_bluetooth_permission_title">Allow glasses Bluetooth</string>
     <string name="walking_aid_bluetooth_permission_message">Nearby devices permission is required to connect to the glasses camera.</string>
     <string name="walking_aid_grant_permission">Grant permission</string>

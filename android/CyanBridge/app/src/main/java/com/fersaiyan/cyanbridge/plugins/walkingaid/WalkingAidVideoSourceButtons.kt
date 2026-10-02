@@ -27,6 +27,7 @@ internal fun WalkingAidVideoSourceButtons(
                 onClick = { onSelected(mode) },
                 label = { Text(stringResource(when (mode) {
                     WalkingAidVideoMode.PERIODIC_PHOTOS -> R.string.walking_aid_periodic_photos
+                    WalkingAidVideoMode.HEYCYAN_VIDEO -> R.string.walking_aid_heycyan_video
                     WalkingAidVideoMode.EYEVUE_VIDEO -> R.string.walking_aid_eyevue_video
                     WalkingAidVideoMode.META_VIDEO -> R.string.walking_aid_meta_video
                 })) },

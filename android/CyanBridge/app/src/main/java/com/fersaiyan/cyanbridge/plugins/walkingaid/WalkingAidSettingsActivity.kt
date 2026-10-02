@@ -114,7 +114,11 @@ class WalkingAidSettingsActivity : AppCompatActivity() {
             requestTransportPermission(wifi = false)
             return
         }
-        if (WalkingAidPreferences.getVideoMode(this) == WalkingAidVideoMode.EYEVUE_VIDEO && !hasWifiP2pPermission(this)) {
+        if (WalkingAidPreferences.getVideoMode(this) in setOf(
+                WalkingAidVideoMode.EYEVUE_VIDEO,
+                WalkingAidVideoMode.HEYCYAN_VIDEO,
+            ) && !hasWifiP2pPermission(this)
+        ) {
             requestTransportPermission(wifi = true)
             return
         }
