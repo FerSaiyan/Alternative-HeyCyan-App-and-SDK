@@ -39,7 +39,6 @@ import com.fersaiyan.cyanbridge.shared.ble.BleNotificationListener
 import com.fersaiyan.cyanbridge.shared.ble.VendorGlassesEventListener
 import com.fersaiyan.cyanbridge.shared.ble.VendorGlassesMode
 import com.fersaiyan.cyanbridge.shared.ble.VendorGlassesRegistry
-import com.fersaiyan.cyanbridge.shared.ble.VendorAiSpeakMode
 import com.fersaiyan.cyanbridge.shared.ble.awaitAiSpeakMode
 import com.fersaiyan.cyanbridge.shared.ble.awaitAudioSettings
 import com.fersaiyan.cyanbridge.shared.ble.awaitBattery
@@ -52,6 +51,7 @@ import com.fersaiyan.cyanbridge.shared.ble.awaitVideoSettings
 import com.fersaiyan.cyanbridge.shared.ble.awaitVolume
 import com.fersaiyan.cyanbridge.shared.ble.awaitWearingDetection
 import com.fersaiyan.cyanbridge.shared.ble.awaitWifiIp
+import com.fersaiyan.cyanbridge.shared.ble.awaitGlassesControl
 import com.fersaiyan.cyanbridge.shared.ble.awaitMediaCounts
 import com.fersaiyan.cyanbridge.shared.ble.awaitModeAccepted
 import com.fersaiyan.cyanbridge.shared.ble.awaitSyncTime
@@ -135,6 +135,9 @@ private const val VOICE_QUESTION_INITIAL_LISTENING_MS = 6_000L
 private const val IMAGE_QUESTION_INITIAL_LISTENING_MS = 3_300L
 private const val IMAGE_QUESTION_SHUTTER_SETTLE_MS = 500L
 private const val MAX_IMAGE_FOLLOW_UPS = 3
+/** Android ImageThumbnailQuality "Detailed": the largest AI photo the glasses send. */
+private const val MANUAL_PHOTO_QUALITY = 5
+private const val RAW_PHOTO_WAIT_MS = 12_000L
 private const val ASSISTANT_TAG = "IosGlassesAssistant"
 // Same option lists as Android's MainActivity for HeyCyan recording limits.
 private val VIDEO_DURATION_OPTIONS_SECONDS = listOf(15, 30, 60, 180, 540, 720)
@@ -191,6 +194,10 @@ fun MainViewControllerForDestination(destination: String) = ComposeUIViewControl
         // "preview:<file in Documents>" opens the QuickLook preview used by chat photos.
         if (destination.startsWith("preview:")) {
             controller.launchAfterStart { IosMediaPlatform.openMedia(PlatformFilePaths.dataDirectory() + "/" + destination.substringAfter(':')) }
+        }
+        // "ai-photo": same as tapping Test description (checks the AI photo resolution).
+        if (destination == "ai-photo") {
+            controller.launchAfterStart { scopeDelayedTestImageQuestion(controller) }
         }
         // "chat:<thread id>" opens that conversation.
         if (destination.startsWith("chat:")) SharedChatHooks.initialThreadId = destination.substringAfter(':')
@@ -668,7 +675,9 @@ private class IosAppController {
             override fun onAiImage(data: NSData) {
                 // Fired by the glasses' AI photo button and by TestImageQuestion.
                 val bytes = data.toKotlinBytes()
-                PlatformLogger.i(ASSISTANT_TAG, "AI photo received from the glasses: ${bytes.size} bytes")
+                aiPhotosReceived++
+                val size = IosMediaPlatform.imageSizeLabel(data)
+                PlatformLogger.i(ASSISTANT_TAG, "AI photo received from the glasses: ${bytes.size} bytes, $size")
                 if (pluginsRuntime.isWalkingAidActive) {
                     pluginsRuntime.onGlassesImage(bytes)
                 } else {
@@ -809,15 +818,21 @@ private class IosAppController {
                 meetingRecorder.start(timer)?.let { error -> updateState { it.copy(agentLastError = error) } }
             }
             GlassesDashboardAction.StopMeetingCapture -> meetingRecorder.stopMeetingCapture()
-            GlassesDashboardAction.TestImageQuestion -> vendorMode(VendorGlassesMode.AI_PHOTO, "Image question") {
-                PlatformLogger.i(ASSISTANT_TAG, "AI photo requested; glasses accepted the command")
+            GlassesDashboardAction.TestImageQuestion -> scope.launch {
+                val bridge = vendor ?: return@launch reportVendorRequired("Image question")
                 imageQuestionJob?.cancel()
                 pendingImageQuestion?.cancel()
                 updateState { it.copy(agentLastError = "Waiting for the glasses photo… ask about it now") }
                 // Android: startParallelAudioQuestionIfEligible — listen while the photo transfers.
-                pendingImageQuestion = scope.async {
+                val question = scope.async {
                     delay(IMAGE_QUESTION_SHUTTER_SETTLE_MS)
                     IosVoiceQuestion.ask(IMAGE_QUESTION_INITIAL_LISTENING_MS)
+                }
+                pendingImageQuestion = question
+                if (!requestAiPhoto(bridge)) {
+                    question.cancel()
+                    if (pendingImageQuestion === question) pendingImageQuestion = null
+                    updateState { it.copy(agentLastError = "Image question was rejected by the glasses (they may be busy)") }
                 }
             }
             GlassesDashboardAction.TestVoiceQuestion -> scope.launch { answerVoiceQuestion() }
@@ -1136,6 +1151,30 @@ private class IosAppController {
     private var pendingImageQuestion: Deferred<String?>? = null
     private var imageQuestionJob: Job? = null
     private var lastPhotoCount: Int? = null
+    private var aiPhotosReceived = 0
+
+    /**
+     * Manual photos (Test description, camera button) use the highest AI-photo quality, as
+     * Android does: configure the AI vision mode with the quality ([02 01 06 q q], sent raw
+     * because QCSDK for iOS has no quality parameter). If no photo arrives, fall back to
+     * QCSDK's plain AI-photo mode.
+     */
+    private suspend fun requestAiPhoto(bridge: com.fersaiyan.cyanbridge.shared.ble.VendorGlassesBridge): Boolean {
+        val before = aiPhotosReceived
+        val quality = MANUAL_PHOTO_QUALITY.toByte()
+        if (bridge.awaitGlassesControl(byteArrayOf(0x02, 0x01, 0x06, quality, quality))) {
+            PlatformLogger.i(ASSISTANT_TAG, "AI photo requested at quality $MANUAL_PHOTO_QUALITY (raw command)")
+            val arrived = withTimeoutOrNull(RAW_PHOTO_WAIT_MS) {
+                while (aiPhotosReceived == before) delay(200L)
+                true
+            } ?: false
+            if (arrived) return true
+            PlatformLogger.w(ASSISTANT_TAG, "No photo after the raw quality command; using QCSDK AI-photo mode")
+        }
+        return bridge.awaitModeAccepted(VendorGlassesMode.AI_PHOTO).also { accepted ->
+            PlatformLogger.i(ASSISTANT_TAG, "AI photo requested via QCSDK mode: accepted=$accepted")
+        }
+    }
 
     /** The camera button stores a regular photo; take an AI photo of the same view to ask about it. */
     private suspend fun askAboutCameraButtonPhoto() {
@@ -1144,7 +1183,7 @@ private class IosAppController {
         updateState { it.copy(agentLastError = "Camera button: getting the photo for your question…") }
         // The glasses may still be saving the photo; retry while they report busy.
         repeat(3) { attempt ->
-            if (bridge.awaitModeAccepted(VendorGlassesMode.AI_PHOTO)) return
+            if (requestAiPhoto(bridge)) return
             PlatformLogger.w(ASSISTANT_TAG, "AI photo after camera button rejected (attempt ${attempt + 1})")
             delay(1_500L)
         }
@@ -1204,15 +1243,9 @@ private class IosAppController {
      * models stream tokens; remote/relay replies are spoken chunk by chunk when they arrive).
      */
     private suspend fun speakAnswer(generate: suspend (onToken: (String) -> Unit) -> String): Result<String> {
-        vendor?.awaitAiSpeakMode(VendorAiSpeakMode.THINKING_START)
-        var speaking = false
-        val speech = IosStreamingSpeech(onFirstChunk = {
-            speaking = true
-            scope.launch {
-                vendor?.awaitAiSpeakMode(VendorAiSpeakMode.THINKING_STOP)
-                vendor?.awaitAiSpeakMode(VendorAiSpeakMode.START)
-            }
-        })
+        // No QCSDK AI-speak mode changes here: Android never sends them, and switching the glasses'
+        // AI state mid-answer played a sound over the speech and cut words.
+        val speech = IosStreamingSpeech()
         var streamed = false
         val reply = runCatching {
             generate { token ->
@@ -1225,9 +1258,7 @@ private class IosAppController {
         }
         reply.onSuccess { text -> if (!streamed) speech.append(text) }.onFailure { speech.cancel() }
         if (reply.isSuccess) speech.finish()
-        if (!speaking) vendor?.awaitAiSpeakMode(VendorAiSpeakMode.THINKING_STOP)
-        vendor?.awaitAiSpeakMode(VendorAiSpeakMode.STOP)
-        PlatformLogger.i("IosGlassesAssistant", reply.fold({ "Answer: $it" }, { "Answer failed: ${it.message}" }))
+        PlatformLogger.i(ASSISTANT_TAG, reply.fold({ "Answer: $it" }, { "Answer failed: ${it.message}" }))
         return reply
     }
 
@@ -1935,4 +1966,12 @@ private fun ByteArray.encodeBase64(): String {
         i += 3
     }
     return sb.toString()
+}
+
+/** Screenshot harness: waits for QCSDK to attach, then runs Test description. */
+private fun scopeDelayedTestImageQuestion(controller: IosAppController) {
+    kotlinx.coroutines.MainScope().launch {
+        delay(5_000L)
+        controller.handle(GlassesDashboardAction.TestImageQuestion)
+    }
 }

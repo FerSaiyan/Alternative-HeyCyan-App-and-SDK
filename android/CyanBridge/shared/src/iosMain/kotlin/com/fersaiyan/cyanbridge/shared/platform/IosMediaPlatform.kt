@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.platform
 
+import kotlinx.cinterop.useContents
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import kotlinx.cinterop.ByteVar
@@ -156,6 +157,10 @@ object IosMediaPlatform {
         )
         presenter.presentViewController(alert, animated = true, completion = null)
     }
+
+    /** "WIDTHxHEIGHT" of an encoded image, for logs. */
+    fun imageSizeLabel(data: NSData): String =
+        UIImage(data = data).size.useContents { "${width.toInt()}x${height.toInt()}" }
 
     fun readFile(path: String): ByteArray? = NSData.dataWithContentsOfFile(path)?.toKotlinBytes()
 

@@ -245,8 +245,10 @@ object IosChatPlatform {
     /** Queues one utterance; AVSpeechSynthesizer plays queued utterances back to back. */
     fun enqueueSpeech(text: String) {
         if (text.isBlank()) return
-        if (speechDelegate.pending == 0) {
-            val session = AVAudioSession.sharedInstance()
+        // Reconfiguring the session between streamed chunks renegotiated the Bluetooth link
+        // (a click on the glasses that ate the next words), so only set it up when it changed.
+        val session = AVAudioSession.sharedInstance()
+        if (session.category != AVAudioSessionCategoryPlayAndRecord) {
             session.setCategory(
                 AVAudioSessionCategoryPlayAndRecord,
                 withOptions = AVAudioSessionCategoryOptionAllowBluetooth or AVAudioSessionCategoryOptionDefaultToSpeaker,

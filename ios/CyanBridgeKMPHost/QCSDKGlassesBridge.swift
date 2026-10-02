@@ -21,6 +21,7 @@ final class QCSDKGlassesBridge: NSObject, VendorGlassesBridge, QCSDKManagerDeleg
     static let shared = QCSDKGlassesBridge()
 
     private var eventListener: VendorGlassesEventListener?
+    private weak var attachedPeripheral: CBPeripheral?
 
     private override init() {
         super.init()
@@ -33,6 +34,7 @@ final class QCSDKGlassesBridge: NSObject, VendorGlassesBridge, QCSDKManagerDeleg
         let manager = QCSDKManager.shareInstance()
         manager.delegate = self
         manager.remove(peripheral)
+        attachedPeripheral = peripheral
         manager.add(peripheral) { success in
             completion.onResult(success: success)
         }
@@ -187,6 +189,40 @@ final class QCSDKGlassesBridge: NSObject, VendorGlassesBridge, QCSDKManagerDeleg
         }, fail: {
             completion.onResult(success: false)
         })
+    }
+
+    /// Android's LargeDataHandler.glassesControl, which QCSDK for iOS does not expose: frame the
+    /// payload as [0xBC, 0x41, length LE16, CRC16-Modbus LE16, payload] and write it to the
+    /// glasses' serial-port characteristic (the AI-photo quality command needs it).
+    func sendGlassesControl(payload: Data, completion: VendorResultCallback) {
+        let service = CBUUID(string: "DE5BF728-D711-4E47-AF26-65E3012A5DC7")
+        let write = CBUUID(string: "DE5BF72A-D711-4E47-AF26-65E3012A5DC7")
+        guard let peripheral = attachedPeripheral,
+              let characteristic = peripheral.services?.first(where: { $0.uuid == service })?
+                  .characteristics?.first(where: { $0.uuid == write })
+        else {
+            completion.onResult(success: false)
+            return
+        }
+        var packet = Data([0xBC, 0x41])
+        packet.append(Self.littleEndian(UInt16(payload.count)))
+        packet.append(Self.littleEndian(Self.crc16Modbus(payload)))
+        packet.append(payload)
+        let type: CBCharacteristicWriteType =
+            characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        peripheral.writeValue(packet, for: characteristic, type: type)
+        completion.onResult(success: true)
+    }
+
+    private static func littleEndian(_ value: UInt16) -> Data { Data([UInt8(value & 0xFF), UInt8(value >> 8)]) }
+
+    private static func crc16Modbus(_ data: Data) -> UInt16 {
+        var crc: UInt16 = 0xFFFF
+        for byte in data {
+            crc ^= UInt16(byte)
+            for _ in 0..<8 { crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xA001 : crc >> 1 }
+        }
+        return crc
     }
 
     func requestThumbnail(pocket: Int32, completion: VendorThumbnailCallback) {

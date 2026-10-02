@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.ble
 
+import com.fersaiyan.cyanbridge.shared.platform.toNSData
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import platform.CoreBluetooth.CBPeripheral
@@ -38,6 +39,9 @@ interface VendorGlassesBridge {
     fun requestAudioSettings(completion: VendorRecordingSettingsCallback)
     fun setAudioSettings(angle: Int, durationSeconds: Int, completion: VendorResultCallback)
     fun deleteMedia(filename: String, completion: VendorResultCallback)
+
+    /** Raw glasses command (Android LargeDataHandler.glassesControl), e.g. AI-photo quality. */
+    fun sendGlassesControl(payload: NSData, completion: VendorResultCallback)
 
     /** Thumbnail of the photo at [pocket] (QCSDK getThumbnail); empty data on failure. */
     fun requestThumbnail(pocket: Int, completion: VendorThumbnailCallback)
@@ -293,3 +297,11 @@ suspend fun VendorGlassesBridge.awaitThumbnail(pocket: Int): NSData? = withTimeo
         }
     }
 }
+
+suspend fun VendorGlassesBridge.awaitGlassesControl(payload: ByteArray): Boolean = withTimeoutOrNull(VENDOR_COMMAND_TIMEOUT_MS) {
+    suspendCancellableCoroutine { continuation ->
+        sendGlassesControl(payload.toNSData()) { success ->
+            if (continuation.isActive) continuation.resume(success)
+        }
+    }
+} ?: false
