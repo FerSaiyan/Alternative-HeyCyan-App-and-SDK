@@ -451,7 +451,6 @@ class LivePreviewManager(
     }
 
     /**
-     * Start P2P peer discovery and connection.    /**
      * Start P2P peer discovery and connection.
      * Logs every P2P event with details.
      */
@@ -679,7 +678,7 @@ class LivePreviewManager(
         return null
     }
 
-    private suspend fun waitForP2pConnection(timeoutMs: Long): Boolean {    private suspend fun waitForP2pConnection(timeoutMs: Long): Boolean {
+    private suspend fun waitForP2pConnection(timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             if (p2pConnected) {
@@ -971,7 +970,7 @@ class LivePreviewManager(
         }
     }
 
-    private fun updateState(label: String, detail: String, scanning: Boolean = false) {    private fun updateState(label: String, detail: String, scanning: Boolean = false) {
+    private fun updateState(label: String, detail: String, scanning: Boolean = false) {
         Log.d(TAG, "[${elapsed()}ms] State: '$label' | detail='$detail' | scanning=$scanning")
         _uiState.value = LivePreviewState(
             stateLabel = label,
