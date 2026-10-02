@@ -196,6 +196,9 @@ fun MainViewControllerForDestination(destination: String) = ComposeUIViewControl
         if (destination.startsWith("preview:")) {
             controller.launchAfterStart { IosMediaPlatform.openMedia(PlatformFilePaths.dataDirectory() + "/" + destination.substringAfter(':')) }
         }
+        // "photo-cycle": regular photo, AI photo turn, regular photo — checks the glasses still
+        // report the camera after an AI turn.
+        if (destination == "photo-cycle") controller.launchAfterStart { controller.debugPhotoCycle() }
         // "ai-photo": same as tapping Test description (checks the AI photo resolution).
         if (destination == "ai-photo") {
             controller.launchAfterStart { scopeDelayedTestImageQuestion(controller) }
@@ -571,6 +574,26 @@ private class IosAppController {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    private var debugCycleRunning = false
+
+    fun debugPhotoCycle() {
+        scope.launch {
+            delay(5_000L)
+            val bridge = vendor ?: return@launch PlatformLogger.w(ASSISTANT_TAG, "Photo cycle: glasses not attached")
+            debugCycleRunning = true
+            PlatformLogger.i(ASSISTANT_TAG, "Photo cycle 1: AI photo turn")
+            handle(GlassesDashboardAction.TestImageQuestion)
+            delay(4_000L)
+            withTimeoutOrNull(120_000L) { while (imageQuestionJob?.isActive != false) delay(500L) }
+            PlatformLogger.i(ASSISTANT_TAG, "Photo cycle 2: turn finished")
+            delay(5_000L)
+            PlatformLogger.i(ASSISTANT_TAG, "Photo cycle 3: regular photo accepted=${bridge.awaitModeAccepted(VendorGlassesMode.PHOTO)}")
+            delay(8_000L)
+            debugCycleRunning = false
+            PlatformLogger.i(ASSISTANT_TAG, "Photo cycle done")
+        }
+    }
+
     /** Screenshot harness: runs [block] once the UI had time to appear. */
     fun launchAfterStart(block: () -> Unit) {
         scope.launch {
@@ -668,7 +691,7 @@ private class IosAppController {
                 scope.launch { showMediaCounts(photos, videos, audio) }
                 // iOS QCSDK only reports the camera button as a new photo in the count (Android
                 // gets a photo-ready notify); answer it like the AI-photo button.
-                if (previousPhotos != null && photos > previousPhotos && syncJob?.isActive != true) {
+                if (previousPhotos != null && photos > previousPhotos && syncJob?.isActive != true && !debugCycleRunning) {
                     scope.launch { askAboutCameraButtonPhoto() }
                 }
             }
@@ -1231,6 +1254,8 @@ private class IosAppController {
         var question = spoken ?: sharedDefaultImageQuestion()
         repeat(MAX_IMAGE_FOLLOW_UPS + 1) { round ->
             updateState { it.copy(agentLastError = "Analyzing the photo: $question") }
+            // Leave the HFP call route right after listening; answers use normal playback.
+            IosChatPlatform.useSpeechPlaybackRoute()
             // Photos take several seconds on the iPhone; say so instead of going silent.
             IosChatPlatform.enqueueSpeech(IosChatPlatform.waitCue())
             val reply = speakAnswer { onToken ->
@@ -1251,10 +1276,13 @@ private class IosAppController {
         updateState { it.copy(agentLastError = "Listening… ask your question") }
         val question = IosVoiceQuestion.ask(VOICE_QUESTION_INITIAL_LISTENING_MS)
         if (question.isNullOrBlank()) {
+            IosChatPlatform.releaseAudioSession()
+            vendor?.let { releaseGlassesAiMode(it) }
             updateState { it.copy(agentLastError = "No question heard. Tap Test voice and speak after \"${IosChatPlatform.questionCue()}\"") }
             return
         }
         updateState { it.copy(agentLastError = "You asked: $question") }
+        IosChatPlatform.useSpeechPlaybackRoute()
         IosChatPlatform.enqueueSpeech(IosChatPlatform.waitCue())
         val reply = speakAnswer { onToken ->
             if (IosLocalModels.isActive && !IosRemoteModelSettings.isActive) {
@@ -1301,6 +1329,7 @@ private class IosAppController {
                 bridge?.awaitAiSpeakMode(VendorAiSpeakMode.STOP)
                 // Leave the glasses' AI mode, or the camera button stops reporting photos.
                 if (bridge != null) releaseGlassesAiMode(bridge)
+                IosChatPlatform.releaseAudioSession()
             }
         }
         PlatformLogger.i(ASSISTANT_TAG, reply.fold({ "Answer: $it" }, { "Answer failed: ${it.message}" }))

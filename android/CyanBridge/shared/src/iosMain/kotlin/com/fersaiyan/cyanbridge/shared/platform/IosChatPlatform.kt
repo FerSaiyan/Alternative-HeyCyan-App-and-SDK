@@ -10,6 +10,9 @@ import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryOptionAllowBluetooth
 import platform.AVFAudio.AVAudioSessionCategoryOptionDefaultToSpeaker
 import platform.AVFAudio.AVAudioSessionCategoryPlayAndRecord
+import platform.AVFAudio.AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+import platform.AVFAudio.AVAudioSessionCategoryAmbient
+import platform.AVFAudio.AVAudioSessionCategoryPlayback
 import platform.AVFAudio.AVAudioSessionPortBluetoothHFP
 import platform.AVFAudio.AVAudioSessionPortBuiltInMic
 import platform.AVFAudio.currentRoute
@@ -246,15 +249,12 @@ object IosChatPlatform {
     fun enqueueSpeech(text: String) {
         if (text.isBlank()) return
         // Reconfiguring the session between streamed chunks renegotiated the Bluetooth link
-        // (a click on the glasses that ate the next words), so only set it up when it changed.
+        // (a click on the glasses that ate the next words): keep whichever speech route is set
+        // (the HFP call route for "Pergunte.", plain playback for answers) and only set one up
+        // when the session is idle.
         val session = AVAudioSession.sharedInstance()
-        if (session.category != AVAudioSessionCategoryPlayAndRecord) {
-            session.setCategory(
-                AVAudioSessionCategoryPlayAndRecord,
-                withOptions = AVAudioSessionCategoryOptionAllowBluetooth or AVAudioSessionCategoryOptionDefaultToSpeaker,
-                error = null,
-            )
-            session.setActive(true, error = null)
+        if (session.category != AVAudioSessionCategoryPlayAndRecord && session.category != AVAudioSessionCategoryPlayback) {
+            useSpeechPlaybackRoute()
         }
         val utterance = AVSpeechUtterance.speechUtteranceWithString(text)
         (NSLocale.preferredLanguages.firstOrNull() as? String)?.let { language ->
@@ -264,6 +264,26 @@ object IosChatPlatform {
         synthesizer.delegate = speechDelegate
         speechDelegate.pending++
         synthesizer.speakUtterance(utterance)
+    }
+
+    /**
+     * Answers play over normal Bluetooth audio (A2DP), as on Android. Keeping the HFP call route
+     * open after listening left the glasses in "call" mode: the camera button and the "Hey Cyan"
+     * wake word stopped working until the app restarted.
+     */
+    fun useSpeechPlaybackRoute() {
+        val session = AVAudioSession.sharedInstance()
+        if (session.category == AVAudioSessionCategoryPlayback) return
+        session.setCategory(AVAudioSessionCategoryPlayback, error = null)
+        session.setActive(true, error = null)
+    }
+
+    /** Ends the audio session so the glasses leave the call/media route (Android: stopSco + MODE_NORMAL). */
+    fun releaseAudioSession() {
+        if (speechDelegate.pending > 0) return
+        val session = AVAudioSession.sharedInstance()
+        session.setActive(false, withOptions = AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation, error = null)
+        session.setCategory(AVAudioSessionCategoryAmbient, error = null)
     }
 
     /** Suspends until every queued utterance finished (or was cancelled). */
