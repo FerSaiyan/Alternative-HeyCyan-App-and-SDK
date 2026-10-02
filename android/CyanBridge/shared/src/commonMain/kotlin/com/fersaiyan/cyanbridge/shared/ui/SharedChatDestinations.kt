@@ -272,6 +272,7 @@ private fun SharedChatThreadDestination(
         }
     }
 
+    SystemBackHandler(onBack = onBack)
     ChatThreadScreen(
         state = ChatThreadUiState(
             thread = ChatThread(
@@ -376,6 +377,7 @@ private fun SharedNoteEditorDestination(
         body.text,
     ).joinToString("\n\n")
 
+    SystemBackHandler(onBack = onClose)
     MarkdownNoteEditorScreen(
         screenTitle = stringResource(if (isNew) Res.string.notes_new_title else Res.string.notes_edit_title),
         title = title,

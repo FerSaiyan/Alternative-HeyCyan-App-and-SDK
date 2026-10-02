@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -63,7 +64,11 @@ fun CyanBridgeApp(
     var showAppearance by remember { mutableStateOf(false) }
     var localAppearance by remember(appearanceSettings) { mutableStateOf(appearanceSettings) }
 
+    // Re-selecting the current tab pops it back to its root (chat list, settings...), as on iOS.
+    var tabResetCount by remember { mutableStateOf(0) }
+
     if (showAppearance) {
+        SystemBackHandler { showAppearance = false }
         AppearanceScreen(
             settings = localAppearance,
             dynamicColorAvailable = false,
@@ -79,6 +84,7 @@ fun CyanBridgeApp(
         )
     } else {
         val show: (AppDestination) -> Unit = { destination ->
+            if (destination == currentDestination) tabResetCount++
             if (destination !in hiddenDestinations) currentDestination = destination
         }
         CyanBridgeNavShell(
@@ -118,7 +124,7 @@ fun CyanBridgeApp(
                 AppDestination.MEDIA,
                 AppDestination.PLUGINS,
                 AppDestination.SETTINGS,
-                -> if (useSharedDestinations) {
+                -> if (useSharedDestinations) key(destination, tabResetCount) {
                     SharedDestinationScreen(
                         destination = destination,
                         onDestinationSelected = show,

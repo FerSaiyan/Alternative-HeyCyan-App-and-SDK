@@ -4,6 +4,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.ComposeUIViewController
+import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
+import androidx.compose.ui.uikit.OnFocusBehavior
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.runtime.CompositionLocalProvider
+import com.fersaiyan.cyanbridge.shared.ui.LocalPlatformBackHandler
+import com.fersaiyan.cyanbridge.shared.ui.PlatformBackHandler
+import com.fersaiyan.cyanbridge.shared.ui.SystemBackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -147,7 +155,18 @@ private val IOS_PRO_SUBSCRIPTION_STATE = ProSubscriptionUiState(
 /**
  * Initialize CyanBridgeServices with iOS implementations and return the ComposeUIViewController.
  */
-fun MainViewController() = ComposeUIViewController {
+/**
+ * Keyboard: shared screens pad themselves with imePadding, so UIKit must not also pan the whole
+ * view up (that pushed the chat composer to the top and hid the history and back button).
+ * Back: UIKit's left-edge swipe drives SystemBackHandler in shared sub-screens.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+private fun ComposeUIViewControllerConfiguration.cyanBridgeDefaults() {
+    onFocusBehavior = OnFocusBehavior.DoNothing
+    enableBackGesture = true
+}
+
+fun MainViewController() = ComposeUIViewController(configure = { cyanBridgeDefaults() }) {
     val controller = remember { IosAppController() }
     if (!CyanBridgeServices.isInitialized()) {
         controller.initializeServices()
@@ -160,7 +179,7 @@ fun MainViewController() = ComposeUIViewController {
 }
 
 /** Used only by the simulator screenshot harness to exercise each root route. */
-fun MainViewControllerForDestination(destination: String) = ComposeUIViewController {
+fun MainViewControllerForDestination(destination: String) = ComposeUIViewController(configure = { cyanBridgeDefaults() }) {
     val controller = remember { IosAppController() }
     if (!CyanBridgeServices.isInitialized()) {
         controller.initializeServices()
@@ -207,6 +226,7 @@ private fun IosCyanBridgeApp(
 
     // Re-keying on the language rebuilds the tree so Compose resources pick up the new locale.
     key(IosAppLanguage.selectedId) {
+    CompositionLocalProvider(LocalPlatformBackHandler provides IosBackHandler) {
     CyanBridgeMaterialTheme(settings = appearanceSettings) {
         if (!welcomeDone) {
             WelcomeScreen(
@@ -242,6 +262,7 @@ private fun IosCyanBridgeApp(
             )
             // Android opens DeviceBindActivity for Scan; iOS shows the same shared screen on top.
             deviceBindState?.let { bind ->
+                SystemBackHandler { controller.closeDeviceBind() }
                 DeviceBindScreen(
                     devices = bind.devices,
                     isScanning = bind.isScanning,
@@ -259,6 +280,7 @@ private fun IosCyanBridgeApp(
                 )
             }
             if (IosLocalModels.isOpen) {
+                SystemBackHandler { IosLocalModels.handle(com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsAction.Back) }
                 LocalModelsConfigureScreen(
                     state = IosLocalModels.uiState,
                     onAction = IosLocalModels::handle,
@@ -269,6 +291,14 @@ private fun IosCyanBridgeApp(
         }
     }
     }
+    }
+}
+
+/** UIKit's back swipe (Compose Multiplatform BackHandler) for shared sub-screens. */
+private object IosBackHandler : PlatformBackHandler {
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Composable
+    override fun Handle(enabled: Boolean, onBack: () -> Unit) = BackHandler(enabled, onBack)
 }
 
 private fun iosProSubscriptionActionStatus(action: ProSubscriptionAction): String = when (action) {
