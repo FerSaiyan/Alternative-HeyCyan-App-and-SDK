@@ -10,7 +10,7 @@ from the official HeyCyan app and hardware-tested by vortex1024.
 5. Try `rtsp://<glasses-ip>:8554/ch0` first with LibVLC/RTSP-over-TCP.
 6. Fall back to the V821/live555 endpoint, including
    `rtsp://<glasses-ip>:554/testH264VideoStreamer`.
-7. Stop with `02 01 14 00`, release LibVLC, and tear down P2P.
+7. Stop with `02 01 15 01`, release LibVLC, and tear down P2P.
 
 The feature is gated by `DeviceClass.HEY_CYAN`, not a particular model.
 The same session also exposes decoded frames for Walking Aid.
