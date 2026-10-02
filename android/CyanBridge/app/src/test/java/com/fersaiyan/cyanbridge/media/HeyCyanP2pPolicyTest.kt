@@ -63,6 +63,33 @@ class HeyCyanP2pPolicyTest {
     }
 
     @Test
+    fun `matches live peer with full ble mac when bluetooth name uses short suffix`() {
+        assertTrue(
+            HeyCyanP2pPolicy.matchesOfficialPeer(
+                "AIMB-G3_C4E3BFC3A402",
+                "AIMB-G3_A402",
+                "C4:E3:BF:C3:A4:02",
+            ),
+        )
+        assertTrue(
+            HeyCyanP2pPolicy.matchesOfficialPeer(
+                "M02S_c4e3bfc3a402",
+                "M02S_A402",
+                "C4:E3:BF:C3:A4:02",
+            ),
+        )
+        // A shared short suffix or model family is not the paired identity.
+        assertFalse(
+            HeyCyanP2pPolicy.matchesOfficialPeer(
+                "AIMB-G3_11223344A402",
+                "AIMB-G3_A402",
+                "C4:E3:BF:C3:A4:02",
+            ),
+        )
+        assertFalse(HeyCyanP2pPolicy.matchesOfficialPeer(null, null, null))
+    }
+
+    @Test
     fun `rejects ordinary wifi and accepts verified p2p networks`() {
         assertFalse(
             HeyCyanP2pPolicy.isVerifiedP2pNetwork(

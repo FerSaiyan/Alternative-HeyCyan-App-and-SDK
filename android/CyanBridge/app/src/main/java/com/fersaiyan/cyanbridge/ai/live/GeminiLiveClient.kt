@@ -512,7 +512,7 @@ class GeminiLiveClient(
                     val detail = runCatching {
                         JSONObject(responseBody.ifBlank { "{}" }).optString("message", "")
                             .takeIf { it.isNotBlank() }
-                    }.getOrNull() ?: "You've used your 5 free Live sessions for today. Come back tomorrow, or upgrade to Pro for more access."
+                    }.getOrNull() ?: "You've used your 25 free Live minutes for today. Come back tomorrow, or use Pro quota for more access."
                     setState(GeminiLiveState.ERROR, detail)
                     return
                 }

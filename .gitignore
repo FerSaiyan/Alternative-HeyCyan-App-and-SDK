@@ -83,6 +83,8 @@ tools/
 tools/*
 !tools/hil/
 tools/hil/*
+!tools/hil/build_debug_fast.sh
+!tools/hil/fast-build.init.gradle
 !tools/hil/run_real_embedding_models.sh
 !tools/hil/run_tasker_youtube_hil.sh
 !tools/hil/run_local_agent_calibration.sh

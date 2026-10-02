@@ -16,6 +16,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveVideoView
 import com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanVideoFrameOutput
+import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
 import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.bluetooth.DeviceManager
@@ -51,7 +52,8 @@ data class LivePreviewState(
  * The official app realtime-preview command is 02 01 14 01. CyanBridge arms
  * the BLE IP listener and Wi-Fi Direct discovery first, sends that command via
  * the vendor glasses-control channel, binds to the resulting P2P network, then
- * plays the RTSP feed with LibVLC.
+ * plays the RTSP feed with LibVLC. On phones that reject process binding, a
+ * TCP probe must confirm the local socket address belongs to the P2P route.
  *
  * The official app URL (8554/ch0) is tried first. The V821/live555 endpoint
  * found in firmware analysis (554/testH264VideoStreamer) remains a fallback.
@@ -92,6 +94,7 @@ class LivePreviewManager(
     @Volatile private var p2pConnected = false
     @Volatile private var p2pInfo: WifiP2pInfo? = null
     @Volatile private var p2pFailure: String? = null
+    private val peerConnectionState = HeyCyanLiveP2pConnectionState()
     @Volatile private var flowStartTimeMs = 0L
 
     val isActive: Boolean get() = mainJob?.isActive == true
@@ -349,6 +352,7 @@ class LivePreviewManager(
             p2pConnected = false
             p2pInfo = null
             p2pFailure = null
+            peerConnectionState.reset()
 
             updateState("Connecting", "Checking Bluetooth and Wi-Fi...", scanning = true)
             if (!BleOperateManager.getInstance().isConnected) {
@@ -490,13 +494,22 @@ class LivePreviewManager(
                 val pairedMac = try { DeviceManager.getInstance().deviceAddress } catch (_: Exception) { null }
                 Log.d(TAG, "[${elapsed()}ms] [P2P] Looking for paired device: name='$pairedName' mac=$pairedMac")
 
-                val target = peers.firstOrNull { peer ->
-                    peer.deviceName == pairedName ||
-                        peer.deviceAddress == pairedMac ||
-                        peer.deviceName?.endsWith("_${pairedMac?.takeLast(5)?.replace(":", "")}") == true
-                }
+                // Wi-Fi Direct has its own MAC. The official peer name embeds
+                // the full BLE MAC (e.g. AIMB-G3_C4E3BFC3A402), whereas the BLE
+                // name may contain only its last four digits (AIMB-G3_A402).
+                fun matches(peer: WifiP2pDevice): Boolean =
+                    HeyCyanP2pPolicy.matchesOfficialPeer(peer.deviceName, pairedName, pairedMac) ||
+                        (!pairedName.isNullOrBlank() && peer.deviceName.equals(pairedName, ignoreCase = true)) ||
+                        (!pairedMac.isNullOrBlank() && peer.deviceAddress.equals(pairedMac, ignoreCase = true))
+
+                val target = peers.firstOrNull { matches(it) && it.status == WifiP2pDevice.AVAILABLE }
+                    ?: peers.firstOrNull(::matches)
 
                 if (target != null) {
+                    if (!peerConnectionState.beginConnect()) {
+                        Log.d(TAG, "[${elapsed()}ms] [P2P] Connect already requested; waiting for group formation")
+                        return
+                    }
                     Log.i(TAG, "[${elapsed()}ms] [P2P] Matched glasses peer: '${target.deviceName}' (${target.deviceAddress})")
                     Log.i(TAG, "[${elapsed()}ms] [P2P] Sending connect request (WPS PBC)...")
                     p2pManager?.connectToDevice(target)
@@ -516,6 +529,7 @@ class LivePreviewManager(
                 Log.i(TAG, "[${elapsed()}ms] [P2P]   groupOwnerAddress=${info.groupOwnerAddress?.hostAddress}")
                 Log.i(TAG, "[${elapsed()}ms] [P2P]   groupOwnerAddress=${info.groupOwnerAddress}")
                 p2pConnected = info.groupFormed
+                peerConnectionState.onConnectionInfo(info.groupFormed)
                 p2pInfo = info
                 if (cleanupInProgress && !info.groupFormed) {
                     Log.i(TAG, "[${elapsed()}ms] [P2P] Confirmed group removal from connection info")
@@ -525,7 +539,7 @@ class LivePreviewManager(
 
             override fun onDisconnected() {
                 Log.w(TAG, "[${elapsed()}ms] [P2P] Disconnected!")
-                val wasConnected = p2pConnected
+                val wasConnected = peerConnectionState.onDisconnected()
                 p2pConnected = false
                 if (cleanupInProgress) {
                     finishCleanup()
@@ -778,13 +792,33 @@ class LivePreviewManager(
                 } catch (e: Exception) {
                     Log.w(TAG, "[${elapsed()}ms] [P2P] Failed to bind RTSP to the P2P route: ${e.message}")
                 }
+                // Samsung may expose the local-only P2P Network but reject
+                // process binding. Its kernel route still works for ordinary
+                // sockets (the vendor media-sync path uses this too). Verify
+                // the actual socket source before allowing LibVLC to use it.
+                val properties = connectivityManager.getLinkProperties(network)
+                val localAddresses = properties?.linkAddresses
+                    ?.mapNotNull { it.address.hostAddress }
+                    ?.toSet().orEmpty()
+                val directRoute = withContext(Dispatchers.IO) {
+                    HeyCyanLiveP2pRouteProbe.findRoute(glassesIp, RTSP_PORTS, localAddresses)
+                }
+                if (directRoute != null && p2pConnected) {
+                    Log.i(
+                        TAG,
+                        "[${elapsed()}ms] [P2P] Verified direct P2P socket route: " +
+                            "${directRoute.localAddress} -> $glassesIp:${directRoute.port} " +
+                            "if=${properties?.interfaceName}; process binding is unavailable",
+                    )
+                    return true
+                }
             } else if (attempts % 4 == 0) {
                 Log.i(TAG, "[${elapsed()}ms] [P2P] Waiting for a route on the glasses subnet (attempt=$attempts)")
             }
             delay(500)
         }
 
-        Log.e(TAG, "[${elapsed()}ms] [P2P] No usable P2P route after ${P2P_CONNECT_TIMEOUT_MS}ms; RTSP probe will not use the default network")
+        Log.e(TAG, "[${elapsed()}ms] [P2P] No bound or verified direct P2P route after ${P2P_CONNECT_TIMEOUT_MS}ms")
         return false
     }
 

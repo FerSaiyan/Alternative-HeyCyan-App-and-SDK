@@ -48,6 +48,49 @@ JAVA_HOME=/opt/android-studio/jbr ./gradlew testDebugUnitTest
 JAVA_HOME=/opt/android-studio/jbr ./gradlew connectedDebugAndroidTest
 ```
 
+### Fast local device builds
+
+Gradle enables parallel projects, a 24-worker limit, build/configuration caches,
+an 8 GB Gradle heap, and a separate 6 GB Kotlin compiler heap. Smaller machines
+can override these settings in `~/.gradle/gradle.properties` or use
+`--max-workers=4`.
+
+For ARM64 phones, run from the repository root:
+
+```bash
+bash tools/hil/build_debug_fast.sh
+```
+
+This puts generated files, native CMake staging, and the project cache under
+`~/.cache/cyanbridge/` on the host disk, and builds only ARM64. The final APK
+path is printed. Set `CYANBRIDGE_FAST_BUILD_ROOT` to choose an SSD directory,
+and `CYANBRIDGE_BUILD_ABI=x86_64` for an emulator. Pass Gradle tasks/options
+after the script:
+
+```bash
+bash tools/hil/build_debug_fast.sh :app:assembleDebug :app:testDebugUnitTest \
+  --tests 'com.fersaiyan.cyanbridge.ota.*'
+```
+
+Regular `./gradlew` builds keep their usual output locations. `-PtestAbi` also
+limits the native llama runtime to the selected ABI.
+
+### Native llama runtime
+
+The `:llama-runtime` dependency is built automatically with the app. No manual
+llama.cpp checkout or `llamaSourceDir` argument is required. CMake downloads
+upstream revision `0c1e57098bba43ac29e6e3b677cdceebdd22334f`, verifies its pinned
+SHA-256, and builds both llama.cpp and its multimodal `libmtmd` library. The
+first build needs Internet access to fetch that archive; subsequent builds
+reuse the source and native compilation state in CMake's staging directory.
+Gradle installs the pinned NDK/CMake toolchain through the configured Android
+SDK when needed.
+
+For development with an existing local checkout, `-PllamaSourceDir=/path/to/llama.cpp`
+is an optional override. The fast-build script accepts the equivalent
+`LLAMA_SOURCE_DIR` environment variable. This override is useful for offline
+development and is not part of the normal build command.
+
 ## Privacy defaults (MVP)
 
 - Transcript storage: ON by default; users can opt out in Settings.

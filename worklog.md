@@ -1,5 +1,74 @@
 # Worklog — CyanBridge local agent
 
+## 2026-10-02 — HeyCyan live preview hardware peer-matching failure
+
+- Captured the original attempts and a fresh user-driven retest on Samsung
+  SM-F956B (`RQCX700KSDF`, Android 15 / API 35). Evidence is under
+  `/tmp/opencode/heycyan-live-20261002/`: `before-retest.log`, `retest.log`,
+  `wifip2p-after-failure.txt`, and `connectivity-after-failure.txt`.
+- The 16:04:18 retest sent `02 01 14 01` and discovered
+  `AIMB-G3_C4E3BFC3A402` after 6.6 seconds. LivePreview rejected that peer:
+  its BLE identity is `AIMB-G3_A402` / `C4:E3:BF:C3:A4:02`, while its distinct
+  P2P address is `60:c2:2a:4c:5b:b5`. No connection request was sent, and
+  BLE IP discovery timed out after 45 seconds. RTSP playback was never reached.
+- The subsequent ordinary media sync in the same trace matched that peer,
+  formed a P2P group, received glasses IP `192.168.49.40`, and downloaded two
+  JPEGs successfully. This corroborates the live-specific matching bug.
+- Updated LivePreview to reuse `HeyCyanP2pPolicy.matchesOfficialPeer`, the
+  existing media-sync full-BLE-MAC matcher, preferring available matching peers.
+  Added coverage for the observed AIMB identity, the report's M02S naming form,
+  and rejection of an unrelated full MAC sharing the same short suffix.
+- Reference: https://gist.github.com/vortex1024/2a9e0bada7692900a3bb4285362d8a2a
+  confirms the branch's start/stop opcodes, `8554/ch0`, and LibVLC transport.
+  End-to-end preview validation of this peer fix is pending the patched retest.
+
+## 2026-10-02 — Live preview duplicate connect and local build tuning
+
+- The peer-fix build passed all eight focused unit tests and was sideloaded to
+  `RQCX700KSDF`. Its build took 27m38s. The project previously limited Gradle
+  and Kotlin to 2 GB heaps, disabled parallel projects, and wrote generated
+  outputs to the NTFS HDD while an unrelated tape-backup job read that disk.
+- The patched 16:47:49 and 16:48:00 attempts successfully matched the full-MAC
+  P2P peer. Samsung sent a disconnected broadcast immediately after accepting
+  the first connect request, clearing the generic manager's connecting flag.
+  A subsequent invited-peer broadcast triggered a duplicate connect, returning
+  Android BUSY (`reason=2`); LivePreview treated it as terminal and tore down
+  the negotiating group. Evidence: `patched-retest-focused.log` and `retest.log`
+  under `/tmp/opencode/heycyan-live-20261002/`.
+- Added preview-owned connection-request state to retain the pending request
+  across startup disconnect / unformed-group broadcasts. Established-group
+  disconnects remain terminal. Regression coverage replays this sequence.
+- Enabled Gradle build/configuration caches and parallel projects with 24
+  workers, 8 GB Gradle heap and 6 GB Kotlin heap. Added
+  `tools/hil/build_debug_fast.sh` to place app/composite/native generated files
+  and the project cache on the host SSD. `testAbi` now also filters native llama
+  builds, avoiding an unused x86_64 build for ARM64 phone debugging.
+- The fresh SSD/ARM64 build completed in 6m49s with configuration cache stored;
+  all 46 selected media/P2P/OTA unit tests passed. Its APK contains only
+  `arm64-v8a`, is 189.6 MiB, and was installed successfully on `RQCX700KSDF`.
+  Build evidence: `fast-build.log`; profile:
+  `~/.cache/cyanbridge/build-c42ce86fe7b6/CyanBridgeManagerApp/root/reports/profile/profile-2026-10-02-16-59-22.html`.
+- Kept SSD native staging outside Gradle's build directory so `clean` preserves
+  the expensive native compilation state; the staging-path update built in
+  1m44s. The identical warm invocation then completed in 11s, reused the
+  configuration cache, and reported 113 tasks up-to-date / three executed.
+  Evidence: `fast-build-staging.log` and `fast-build-warm.log`.
+- Documented that llama's local-source override is optional: normal CMake
+  FetchContent downloads the pinned, SHA-256-verified upstream automatically.
+  The no-override build passed in 2m46s (`no-llama-override-build.log`).
+- The 17:27:00 and 17:27:33 hardware attempts confirmed both prior fixes:
+  a single connect request formed the group in eight seconds, followed by BLE
+  IP `192.168.49.40`. Android exposed `p2p-wlan0-0` with source `192.168.49.1`
+  but rejected all process-bind attempts, so the app aborted before RTSP.
+  Evidence: `second-patched-focused.log`.
+- Added a direct-route probe for this platform behavior. Playback is allowed
+  only after a TCP connection to the BLE-reported glasses endpoint uses a local
+  address on the verified P2P Network. An ordinary Wi-Fi route or missing P2P
+  interface cannot satisfy the gate. The no-override build passed in 7m7s with
+  all 15 focused tests passing (`direct-route-build.log`); installed successfully
+  on `RQCX700KSDF`, marked `HEYCYAN_DIRECT_P2P_ROUTE_FIX_INSTALLED` in logcat.
+  End-to-end hardware playback validation is pending the next user retest.
+
 ## 2026-09-27 — Laya/Needle local training pilot
 
 - Follow-up data audit after the synthetic transfer regressions: the available
