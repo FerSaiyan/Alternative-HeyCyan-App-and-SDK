@@ -135,6 +135,7 @@ private const val VOICE_QUESTION_INITIAL_LISTENING_MS = 6_000L
 private const val IMAGE_QUESTION_INITIAL_LISTENING_MS = 3_300L
 private const val IMAGE_QUESTION_SHUTTER_SETTLE_MS = 500L
 private const val MAX_IMAGE_FOLLOW_UPS = 3
+private const val ASSISTANT_TAG = "IosGlassesAssistant"
 // Same option lists as Android's MainActivity for HeyCyan recording limits.
 private val VIDEO_DURATION_OPTIONS_SECONDS = listOf(15, 30, 60, 180, 540, 720)
 private val AUDIO_DURATION_OPTIONS_SECONDS = listOf(1_800, 3_600, 7_200)
@@ -653,16 +654,22 @@ private class IosAppController {
             }
 
             override fun onMediaCountsChanged(photos: Int, videos: Int, audio: Int) {
+                PlatformLogger.i(ASSISTANT_TAG, "Glasses media counts: $photos photos, $videos videos, $audio audio")
                 scope.launch { showMediaCounts(photos, videos, audio) }
             }
 
             override fun onAiImage(data: NSData) {
                 // Fired by the glasses' AI photo button and by TestImageQuestion.
                 val bytes = data.toKotlinBytes()
+                PlatformLogger.i(ASSISTANT_TAG, "AI photo received from the glasses: ${bytes.size} bytes")
                 if (pluginsRuntime.isWalkingAidActive) {
                     pluginsRuntime.onGlassesImage(bytes)
                 } else {
-                    scope.launch { answerImageQuestion(bytes) }
+                    // One image question at a time: a new photo replaces the previous turn
+                    // (its speech, listening and generation) instead of piling up.
+                    imageQuestionJob?.cancel()
+                    IosChatPlatform.stopSpeaking()
+                    imageQuestionJob = scope.launch { answerImageQuestion(bytes) }
                 }
             }
         })
@@ -796,6 +803,9 @@ private class IosAppController {
             }
             GlassesDashboardAction.StopMeetingCapture -> meetingRecorder.stopMeetingCapture()
             GlassesDashboardAction.TestImageQuestion -> vendorMode(VendorGlassesMode.AI_PHOTO, "Image question") {
+                PlatformLogger.i(ASSISTANT_TAG, "AI photo requested; glasses accepted the command")
+                imageQuestionJob?.cancel()
+                pendingImageQuestion?.cancel()
                 updateState { it.copy(agentLastError = "Waiting for the glasses photo… ask about it now") }
                 // Android: startParallelAudioQuestionIfEligible — listen while the photo transfers.
                 pendingImageQuestion = scope.async {
@@ -1117,6 +1127,7 @@ private class IosAppController {
 
     /** Question captured while the photo is still being taken (TestImageQuestion). */
     private var pendingImageQuestion: Deferred<String?>? = null
+    private var imageQuestionJob: Job? = null
 
     /**
      * Android's image-question flow: ask "Pergunte." while the photo arrives (the model loads in
@@ -1131,6 +1142,8 @@ private class IosAppController {
         var question = spoken ?: sharedDefaultImageQuestion()
         repeat(MAX_IMAGE_FOLLOW_UPS + 1) { round ->
             updateState { it.copy(agentLastError = "Analyzing the photo: $question") }
+            // Photos take several seconds on the iPhone; say so instead of going silent.
+            IosChatPlatform.enqueueSpeech(IosChatPlatform.waitCue())
             val reply = speakAnswer { onToken ->
                 if (IosLocalModels.isActive && !IosRemoteModelSettings.isActive) {
                     IosLocalModels.describeImage(image, question, onToken)
@@ -1153,6 +1166,7 @@ private class IosAppController {
             return
         }
         updateState { it.copy(agentLastError = "You asked: $question") }
+        IosChatPlatform.enqueueSpeech(IosChatPlatform.waitCue())
         val reply = speakAnswer { onToken ->
             if (IosLocalModels.isActive && !IosRemoteModelSettings.isActive) {
                 IosLocalModels.chat(listOf(com.fersaiyan.cyanbridge.shared.ai.ChatMessage("user", question)), onToken = onToken)
@@ -1362,6 +1376,7 @@ private class IosAppController {
                 onAccepted()
                 updateState { it.copy(agentLastError = "") }
             } else {
+                PlatformLogger.w(ASSISTANT_TAG, "$label: glasses rejected or did not answer mode $mode")
                 updateState { it.copy(agentLastError = "$label was rejected by the glasses (they may be busy)") }
             }
         }

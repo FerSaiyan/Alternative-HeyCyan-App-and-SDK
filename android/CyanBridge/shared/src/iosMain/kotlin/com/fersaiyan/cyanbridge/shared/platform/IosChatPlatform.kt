@@ -185,6 +185,19 @@ object IosChatPlatform {
         else -> "Ask."
     }
 
+    /** Spoken while an answer is being prepared. */
+    fun waitCue(): String = when (preferredLanguageCode()) {
+        "pt" -> "Um momento."
+        "es" -> "Un momento."
+        "de" -> "Einen Moment."
+        "fr" -> "Un instant."
+        "it" -> "Un momento."
+        "zh" -> "请稍等。"
+        "ko" -> "잠시만요."
+        "ru" -> "Минутку."
+        else -> "One moment."
+    }
+
     private fun preferredLanguageCode(): String =
         ((NSLocale.preferredLanguages.firstOrNull() as? String) ?: "en").substringBefore('-').lowercase()
 

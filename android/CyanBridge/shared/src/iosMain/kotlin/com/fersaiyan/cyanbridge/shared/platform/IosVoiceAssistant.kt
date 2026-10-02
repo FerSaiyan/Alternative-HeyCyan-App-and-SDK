@@ -79,7 +79,8 @@ object IosVoiceQuestion {
                 if (buffer != null) request.appendAudioPCMBuffer(buffer)
             }
             engine.prepare()
-            if (!engine.startAndReturnError(null)) {
+            // Right after speech the audio route can still be switching; retry once.
+            if (!engine.startAndReturnError(null) && !(platform.Foundation.NSThread.sleepForTimeInterval(0.3).let { engine.startAndReturnError(null) })) {
                 input.removeTapOnBus(0u)
                 PlatformLogger.w(TAG, "Could not start the microphone")
                 continuation.resume(null)
