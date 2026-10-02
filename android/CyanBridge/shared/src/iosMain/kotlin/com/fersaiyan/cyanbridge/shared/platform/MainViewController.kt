@@ -187,6 +187,8 @@ fun MainViewControllerForDestination(destination: String) = ComposeUIViewControl
     val dashboardState by controller.dashboardState.collectAsState()
     // "local-models" or "local-models:<search>" opens Settings ▸ Local for screenshots.
     remember(destination) {
+        // "chat:<thread id>" opens that conversation.
+        if (destination.startsWith("chat:")) SharedChatHooks.initialThreadId = destination.substringAfter(':')
         if (destination.startsWith("local-models")) {
             IosLocalModels.open()
             destination.substringAfter(':', "").takeIf { it.isNotBlank() }?.let(IosLocalModels::onCatalogSearchQueryChange)
@@ -196,6 +198,7 @@ fun MainViewControllerForDestination(destination: String) = ComposeUIViewControl
         controller = controller,
         initialDestination = when (destination.substringBefore(':')) {
             "local-models" -> AppDestination.SETTINGS
+            "chat" -> AppDestination.CHATS
             "chats" -> AppDestination.CHATS
             "media" -> AppDestination.MEDIA
             "plugins" -> AppDestination.PLUGINS
@@ -226,7 +229,10 @@ private fun IosCyanBridgeApp(
 
     // Re-keying on the language rebuilds the tree so Compose resources pick up the new locale.
     key(IosAppLanguage.selectedId) {
-    CompositionLocalProvider(LocalPlatformBackHandler provides IosBackHandler) {
+    CompositionLocalProvider(
+        LocalPlatformBackHandler provides IosBackHandler,
+        com.fersaiyan.cyanbridge.shared.ui.chat.LocalChatMathRenderer provides IosKatexRenderer,
+    ) {
     CyanBridgeMaterialTheme(settings = appearanceSettings) {
         if (!welcomeDone) {
             WelcomeScreen(
@@ -1120,7 +1126,7 @@ private class IosAppController {
                     imageAiService.analyzeImage(image, question)
                 }
             }
-            deliverAnswer("📷 $question", reply)
+            deliverAnswer("📷 $question", reply, photo = image.takeIf { round == 0 })
             if (reply.isFailure) return
             question = IosVoiceQuestion.ask(IMAGE_QUESTION_INITIAL_LISTENING_MS) ?: return
         }
@@ -1178,17 +1184,21 @@ private class IosAppController {
     }
 
     /** Shows the reply and keeps it in the "Glasses" chat (it was already spoken by speakAnswer). */
-    private suspend fun deliverAnswer(question: String, reply: Result<String>) {
+    private suspend fun deliverAnswer(question: String, reply: Result<String>, photo: ByteArray? = null) {
         val answer = reply.getOrElse { error ->
             updateState { it.copy(agentLastError = "AI request failed: ${error.message ?: "unknown error"}") }
             return
         }
         updateState { it.copy(agentLastError = answer) }
         val now = platformCurrentTimeMillis()
+        val photoFile = photo?.let { bytes ->
+            "chat-image-$now.jpg".takeIf { IosMediaPlatform.writeFile(PlatformFilePaths.dataDirectory() + "/" + it, bytes) }
+        }
+        val userContent = photoFile?.let { com.fersaiyan.cyanbridge.shared.chat.ChatImageMarkup.attach(it, question) } ?: question
         if (chatRepository.getChat(GLASSES_CHAT_ID) == null) {
             chatRepository.insertChat(ChatEntity(id = GLASSES_CHAT_ID, title = "Glasses", createdAt = now, updatedAt = now))
         }
-        chatRepository.insertMessage(ChatMessageEntity("user-$now", GLASSES_CHAT_ID, "user", question, now))
+        chatRepository.insertMessage(ChatMessageEntity("user-$now", GLASSES_CHAT_ID, "user", userContent, now))
         chatRepository.insertMessage(ChatMessageEntity("assistant-$now", GLASSES_CHAT_ID, "assistant", answer, now + 1))
     }
 

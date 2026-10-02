@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.ui
 
+import com.fersaiyan.cyanbridge.shared.chat.ChatImageMarkup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,7 +65,9 @@ internal fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> U
     var threads by remember { mutableStateOf<List<ChatThreadSummary>>(emptyList()) }
     var notes by remember { mutableStateOf<List<NoteEntity>>(emptyList()) }
     var pendingDelete by remember { mutableStateOf<ChatThreadSummary?>(null) }
-    var selectedThreadId by remember { mutableStateOf<String?>(null) }
+    var selectedThreadId by remember {
+        mutableStateOf(SharedChatHooks.initialThreadId.also { SharedChatHooks.initialThreadId = null })
+    }
     var selectedTab by remember { mutableStateOf(NotesChatsTab.CHATS) }
     var editingNote by remember { mutableStateOf<NoteEntity?>(null) }
     var showAppearance by remember { mutableStateOf(false) }
@@ -236,12 +239,20 @@ private fun SharedChatThreadDestination(
             isThinking = true
             statusText = null
             val prompt = text.ifEmpty { sharedDefaultImageQuestion() }
+            // Keep the photo next to the question so the bubble can show it.
+            val imageFile = image?.let { bytes ->
+                "chat-image-$now.jpg".takeIf { SharedMediaHooks.saveDocument?.invoke(it, bytes) != null }
+            }
             CyanBridgeServices.chatRepository.insertMessage(
                 ChatMessageEntity(
                     id = "user-$now",
                     chatId = threadSummary.id,
                     role = "user",
-                    content = if (image != null) "📷 $prompt" else text,
+                    content = when {
+                        imageFile != null -> ChatImageMarkup.attach(imageFile, "📷 $prompt")
+                        image != null -> "📷 $prompt"
+                        else -> text
+                    },
                     timestamp = now,
                 ),
             )
@@ -251,7 +262,7 @@ private fun SharedChatThreadDestination(
                     CyanBridgeServices.imageAiService.analyzeImage(image, prompt)
                 } else {
                     val history = CyanBridgeServices.chatRepository.getMessages(threadSummary.id)
-                        .map { AiChatMessage(it.role, it.content) }
+                        .map { AiChatMessage(it.role, ChatImageMarkup.stripImage(it.content)) }
                     CyanBridgeServices.chatAiService.chat(history).message.content
                 }
             }.onSuccess { reply ->

@@ -37,8 +37,11 @@ fun ChatRichText(
     markdown: String,
     color: Color,
     modifier: Modifier = Modifier,
+    // Bubble color, for math renderers that cannot draw on a transparent background.
+    background: Color = Color.Unspecified,
 ) {
     val blocks = ChatMarkdownParser.parse(markdown)
+    val math = LocalChatMathRenderer.current
     Column(modifier = modifier, verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
         blocks.forEach { block ->
             when (block) {
@@ -53,13 +56,19 @@ fun ChatRichText(
                     fontWeight = FontWeight.SemiBold,
                 )
 
-                is ChatMarkdownBlock.Paragraph -> Text(
-                    text = richInline(block.text),
-                    color = color,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                is ChatMarkdownBlock.Paragraph -> if (math != null && hasInlineMath(block.text)) {
+                    math.Paragraph(block.text, color, background, Modifier.fillMaxWidth())
+                } else {
+                    Text(
+                        text = richInline(block.text),
+                        color = color,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
 
-                is ChatMarkdownBlock.ListItem -> Text(
+                is ChatMarkdownBlock.ListItem -> if (math != null && hasInlineMath(block.text)) {
+                    math.Paragraph("${block.prefix} ${block.text}", color, background, Modifier.fillMaxWidth())
+                } else Text(
                     text = richInline("${block.prefix} ${block.text}"),
                     color = color,
                     style = MaterialTheme.typography.bodyLarge,
@@ -83,7 +92,9 @@ fun ChatRichText(
                         .padding(10.dp),
                 )
 
-                is ChatMarkdownBlock.Math -> Text(
+                is ChatMarkdownBlock.Math -> if (math != null) {
+                    math.Formula(block.formula, color, background, Modifier.fillMaxWidth())
+                } else Text(
                     text = normalizeLatex(block.formula),
                     color = color,
                     style = MaterialTheme.typography.bodyLarge,

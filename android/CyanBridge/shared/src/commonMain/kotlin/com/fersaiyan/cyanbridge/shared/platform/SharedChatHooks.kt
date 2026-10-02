@@ -5,6 +5,9 @@ package com.fersaiyan.cyanbridge.shared.platform
  * installs them; Android keeps its own Activities and leaves them unset.
  */
 object SharedChatHooks {
+    /** Thread to open when the chats tab first appears (screenshot harness / deep links). */
+    var initialThreadId: String? = null
+
     /** Returns a JPEG chosen by the user, or null when cancelled. */
     var pickImage: (suspend () -> ByteArray?)? = null
 

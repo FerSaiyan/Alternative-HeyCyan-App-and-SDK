@@ -1,5 +1,12 @@
 package com.fersaiyan.cyanbridge.shared.ui.chat
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.runtime.produceState
+import com.fersaiyan.cyanbridge.shared.platform.SharedMediaHooks
+import com.fersaiyan.cyanbridge.shared.platform.PlatformFilePaths
+import com.fersaiyan.cyanbridge.shared.chat.ChatImageMarkup
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.interaction.DragInteraction
@@ -423,11 +430,16 @@ private fun ChatMessageBubble(
                 contentColor = contentColor,
                 shape = shape,
             ) {
-                ChatRichText(
-                    markdown = message.content,
-                    color = contentColor,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                )
+                val imagePath = ChatImageMarkup.imagePath(message.content)
+                Column {
+                    if (imagePath != null) ChatBubbleImage(imagePath)
+                    ChatRichText(
+                        markdown = ChatImageMarkup.stripImage(message.content),
+                        color = contentColor,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        background = background,
+                    )
+                }
             }
         }
     }
@@ -610,4 +622,24 @@ private fun ChatNavigationBar(onDestinationSelected: (AppDestination) -> Unit) {
             )
         }
     }
+}
+
+/** Photo attached to a message (image questions); tap opens it full screen. */
+@Composable
+private fun ChatBubbleImage(relativePath: String) {
+    val path = PlatformFilePaths.dataDirectory() + "/" + relativePath
+    val bitmap by produceState<ImageBitmap?>(null, path) {
+        value = SharedMediaHooks.loadImage?.invoke(path)
+    }
+    val image = bitmap ?: return
+    Image(
+        bitmap = image,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio((image.width.toFloat() / image.height).coerceIn(0.6f, 1.8f))
+            .heightIn(max = 280.dp)
+            .clickable { SharedMediaHooks.openMedia?.invoke(path) },
+    )
 }
