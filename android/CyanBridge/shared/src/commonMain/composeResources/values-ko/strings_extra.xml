@@ -24,7 +24,7 @@
     <string name="settings_intro">개인정보 보호 중심의 기본값, 로컬 제어 및 자동화 설정입니다.</string>
     <string name="settings_appearance">모양</string>
     <string name="settings_appearance_description">테마, 강조색 프로필, 동적 색상 및 대비</string>
-    <string name="settings_custom_ai_provider">맞춤 AI 제공업체</string>
+    <string name="settings_custom_ai_provider">AI 제공업체</string>
     <string name="settings_memory_privacy">메모리 개인정보 보호</string>
     <string name="settings_transcripts">텍스트 변환</string>
     <string name="settings_data">데이터</string>
@@ -571,4 +571,12 @@
     <string name="plugin_category_operations">운영</string>
     <string name="plugin_category_language">언어</string>
     <string name="plugin_category_other">기타</string>
+    <string name="dashboard_conn_connected">연결됨</string>
+    <string name="dashboard_conn_disconnected">연결 끊김</string>
+    <string name="dashboard_conn_disconnecting">연결 해제 중</string>
+    <string name="dashboard_conn_bluetooth_unavailable">블루투스 사용 불가</string>
+    <string name="dashboard_storage_title">저장공간</string>
+    <string name="dashboard_media_photos">사진 %1$d장</string>
+    <string name="dashboard_media_videos">동영상 %1$d개</string>
+    <string name="dashboard_media_audio">오디오 %1$d개</string>
 </resources>

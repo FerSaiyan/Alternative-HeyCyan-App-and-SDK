@@ -24,7 +24,7 @@
     <string name="settings_intro">Padrões que priorizam a privacidade, controles locais e configurações de automação.</string>
     <string name="settings_appearance">Aparência</string>
     <string name="settings_appearance_description">Tema, perfil de destaque, cor dinâmica e contraste</string>
-    <string name="settings_custom_ai_provider">Provedor de IA personalizado</string>
+    <string name="settings_custom_ai_provider">Provedor de IA</string>
     <string name="settings_memory_privacy">Privacidade da memória</string>
     <string name="settings_transcripts">Transcrições</string>
     <string name="settings_data">Dados</string>
@@ -638,4 +638,12 @@
     <string name="native_errand_brain_title">Errand Brain</string>
     <string name="native_errand_brain_description">Transforma o que você fala em tarefas e lembretes com horário.</string>
     <string name="native_ios_badge">iOS</string>
+    <string name="dashboard_conn_connected">Conectado</string>
+    <string name="dashboard_conn_disconnected">Desconectado</string>
+    <string name="dashboard_conn_disconnecting">Desconectando</string>
+    <string name="dashboard_conn_bluetooth_unavailable">Bluetooth indisponível</string>
+    <string name="dashboard_storage_title">Armazenamento</string>
+    <string name="dashboard_media_photos">%1$d fotos</string>
+    <string name="dashboard_media_videos">%1$d vídeos</string>
+    <string name="dashboard_media_audio">%1$d áudios</string>
 </resources>

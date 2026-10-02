@@ -24,7 +24,7 @@
     <string name="settings_intro">Настройки с приоритетом приватности, локальное управление и автоматизация.</string>
     <string name="settings_appearance">Внешний вид</string>
     <string name="settings_appearance_description">Тема, профиль акцента, динамический цвет и контраст</string>
-    <string name="settings_custom_ai_provider">Свой провайдер ИИ</string>
+    <string name="settings_custom_ai_provider">Провайдер ИИ</string>
     <string name="settings_memory_privacy">Конфиденциальность памяти</string>
     <string name="settings_transcripts">Транскрипции</string>
     <string name="settings_data">Данные</string>
@@ -571,4 +571,12 @@
     <string name="plugin_category_operations">Операции</string>
     <string name="plugin_category_language">Язык</string>
     <string name="plugin_category_other">Другое</string>
+    <string name="dashboard_conn_connected">Подключено</string>
+    <string name="dashboard_conn_disconnected">Отключено</string>
+    <string name="dashboard_conn_disconnecting">Отключение</string>
+    <string name="dashboard_conn_bluetooth_unavailable">Bluetooth недоступен</string>
+    <string name="dashboard_storage_title">Хранилище</string>
+    <string name="dashboard_media_photos">Фото: %1$d</string>
+    <string name="dashboard_media_videos">Видео: %1$d</string>
+    <string name="dashboard_media_audio">Аудио: %1$d</string>
 </resources>

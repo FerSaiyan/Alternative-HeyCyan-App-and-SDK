@@ -44,7 +44,7 @@
     <string name="settings_intro">Privacy-first defaults, local controls, and automation settings.</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_appearance_description">Theme, accent profile, dynamic color, and contrast</string>
-    <string name="settings_custom_ai_provider">Custom AI provider</string>
+    <string name="settings_custom_ai_provider">AI provider</string>
     <string name="settings_memory_privacy">Memory Privacy</string>
     <string name="settings_transcripts">Transcripts</string>
     <string name="settings_data">Data</string>
@@ -641,4 +641,12 @@
     <string name="native_errand_brain_title">Errand Brain</string>
     <string name="native_errand_brain_description">Turns what you say into tasks and timed reminders.</string>
     <string name="native_ios_badge">iOS</string>
+    <string name="dashboard_conn_connected">Connected</string>
+    <string name="dashboard_conn_disconnected">Disconnected</string>
+    <string name="dashboard_conn_disconnecting">Disconnecting</string>
+    <string name="dashboard_conn_bluetooth_unavailable">Bluetooth unavailable</string>
+    <string name="dashboard_storage_title">Storage</string>
+    <string name="dashboard_media_photos">%1$d photos</string>
+    <string name="dashboard_media_videos">%1$d videos</string>
+    <string name="dashboard_media_audio">%1$d audio</string>
 </resources>

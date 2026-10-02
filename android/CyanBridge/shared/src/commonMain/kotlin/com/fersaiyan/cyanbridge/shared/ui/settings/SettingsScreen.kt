@@ -205,19 +205,6 @@ fun SettingsScreen(
                 }
             }
             item {
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    shape = MaterialTheme.shapes.extraLarge,
-                ) {
-                    Text(
-                        text = stringResource(Res.string.settings_intro),
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
-            }
-            item {
                 QuickActionCard(
                     title = stringResource(Res.string.settings_appearance),
                     subtitle = stringResource(Res.string.settings_appearance_description),
@@ -281,14 +268,13 @@ fun SettingsScreen(
                     onToggle = { onToggleSection(SettingsSection.SUPPORT) },
                 ) {
                     SupportContent(actions)
-                }
-            }
-            item {
-                SettingsSectionCard(
-                    title = stringResource(Res.string.settings_faq),
-                    expanded = SettingsSection.FAQ in expandedSections,
-                    onToggle = { onToggleSection(SettingsSection.FAQ) },
-                ) {
+                    // FAQ lives inside Support: description, send logs, then the questions.
+                    HorizontalDivider()
+                    Text(
+                        stringResource(Res.string.settings_faq),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                     FaqContent()
                 }
             }

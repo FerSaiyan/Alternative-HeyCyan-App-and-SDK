@@ -42,6 +42,8 @@ data class GlassesDashboardUiState(
     val showAiWakeWordRouting: Boolean = false,
     /** The Gemini / ChatGPT image-automation setup button (Android-only external automation). */
     val showExternalAutomationSetup: Boolean = true,
+    /** Media on the glasses; when set, the status card lists them with icons instead of storageLabel. */
+    val mediaCounts: GlassesMediaCounts? = null,
     val showAdvancedControls: Boolean = false,
     val showAdvancedLocalAgent: Boolean = false,
     val showAdvancedDeviceInfo: Boolean = false,
@@ -284,3 +286,5 @@ sealed interface GlassesDashboardAction {
     data object DismissTransportPermissionDialog : GlassesDashboardAction
     data object RequestTransportPermission : GlassesDashboardAction
 }
+
+data class GlassesMediaCounts(val photos: Int, val videos: Int, val audio: Int)

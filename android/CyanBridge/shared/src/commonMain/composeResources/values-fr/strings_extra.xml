@@ -24,7 +24,7 @@
     <string name="settings_intro">Parametres par defaut axes sur la confidentialite, controles locaux et automatisation.</string>
     <string name="settings_appearance">Apparence</string>
     <string name="settings_appearance_description">Theme, profil d'accent, couleur dynamique et contraste</string>
-    <string name="settings_custom_ai_provider">Fournisseur d'IA personnalise</string>
+    <string name="settings_custom_ai_provider">Fournisseur d'IA</string>
     <string name="settings_memory_privacy">Confidentialite de la memoire</string>
     <string name="settings_transcripts">Transcriptions</string>
     <string name="settings_data">Donnees</string>
@@ -571,4 +571,12 @@
     <string name="plugin_category_operations">Operations</string>
     <string name="plugin_category_language">Langue</string>
     <string name="plugin_category_other">Autre</string>
+    <string name="dashboard_conn_connected">Connecté</string>
+    <string name="dashboard_conn_disconnected">Déconnecté</string>
+    <string name="dashboard_conn_disconnecting">Déconnexion</string>
+    <string name="dashboard_conn_bluetooth_unavailable">Bluetooth indisponible</string>
+    <string name="dashboard_storage_title">Stockage</string>
+    <string name="dashboard_media_photos">%1$d photos</string>
+    <string name="dashboard_media_videos">%1$d vidéos</string>
+    <string name="dashboard_media_audio">%1$d audios</string>
 </resources>

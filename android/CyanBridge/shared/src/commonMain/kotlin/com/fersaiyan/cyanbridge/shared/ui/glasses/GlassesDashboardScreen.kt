@@ -1,5 +1,24 @@
 package com.fersaiyan.cyanbridge.shared.ui.glasses
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.rotate
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_connecting
+import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_bluetooth_unavailable
+import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_disconnecting
+import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_disconnected
+import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_connected
+import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_media_audio
+import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_media_videos
+import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_media_photos
+import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_storage_title
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.SmartDisplay
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.BatteryStd
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -597,7 +616,7 @@ private fun StatusIdentity(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
-            state.connectionLabel,
+            localizedConnectionLabel(state.connectionLabel),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
@@ -628,25 +647,64 @@ private fun StatusMetrics(
         shape = MaterialTheme.shapes.large,
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalAlignment = horizontalAlignment,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (state.showBattery) {
-                Text(
+                MetricRow(
+                    icon = Icons.Outlined.BatteryStd,
                     text = state.batteryPercent?.let { stringResource(Res.string.dashboard_battery, it) }
                         ?: stringResource(Res.string.dashboard_battery_unknown),
-                    style = MaterialTheme.typography.titleSmall,
+                    emphasized = true,
                 )
             }
             if (state.showStorage) {
-                Text(
-                    text = stringResource(Res.string.dashboard_storage, state.storageLabel),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                val counts = state.mediaCounts
+                if (counts == null) {
+                    MetricRow(Icons.Outlined.Folder, stringResource(Res.string.dashboard_storage, state.storageLabel))
+                } else {
+                    MetricRow(Icons.Outlined.Folder, stringResource(Res.string.dashboard_storage_title))
+                    Column(
+                        modifier = Modifier.padding(start = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        MetricRow(Icons.Outlined.Image, stringResource(Res.string.dashboard_media_photos, counts.photos))
+                        MetricRow(Icons.Outlined.SmartDisplay, stringResource(Res.string.dashboard_media_videos, counts.videos))
+                        MetricRow(Icons.Outlined.MusicNote, stringResource(Res.string.dashboard_media_audio, counts.audio))
+                    }
+                }
             }
         }
     }
+}
+
+/** One status line: the icon takes the place of the bullet. */
+@Composable
+private fun MetricRow(icon: ImageVector, text: String, emphasized: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(if (emphasized) 18.dp else 16.dp),
+            tint = if (emphasized) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = text,
+            style = if (emphasized) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodySmall,
+            color = if (emphasized) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** The platforms report connection states in English; show them in the app language. */
+@Composable
+internal fun localizedConnectionLabel(label: String): String = when (label.trim().trimEnd('.', '…')) {
+    "Connected" -> stringResource(Res.string.dashboard_conn_connected)
+    "Disconnected" -> stringResource(Res.string.dashboard_conn_disconnected)
+    "Connecting" -> stringResource(Res.string.dashboard_connecting)
+    "Disconnecting" -> stringResource(Res.string.dashboard_conn_disconnecting)
+    "Bluetooth unavailable" -> stringResource(Res.string.dashboard_conn_bluetooth_unavailable)
+    else -> label
 }
 
 @Composable
@@ -1150,7 +1208,7 @@ private fun MeizuMyvuControls(
     ) {
         SectionTitle(stringResource(Res.string.dashboard_meizu_title), accented = true)
         Text(
-            text = state.connectionLabel,
+            text = localizedConnectionLabel(state.connectionLabel),
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
@@ -1234,9 +1292,13 @@ private fun AdvancedControls(
     onRequestOtaFirmware: () -> Unit,
 ) {
     var pendingDetailedQuality by remember { mutableStateOf<Int?>(null) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    var developerToolsExpanded by rememberSaveable { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
         if (state.showAdvancedDeviceInfo) {
-            Column(modifier = Modifier.testTag("advanced_device_info")) {
+            Column(
+                modifier = Modifier.testTag("advanced_device_info"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 SectionTitle(stringResource(Res.string.dashboard_device_info))
                 state.deviceInfoLabel?.let { info ->
                     Text(
@@ -1269,7 +1331,10 @@ private fun AdvancedControls(
         }
         if (state.showAdvancedImageQuality) {
             HorizontalDivider()
-            Column(modifier = Modifier.testTag("advanced_image_quality")) {
+            Column(
+                modifier = Modifier.testTag("advanced_image_quality"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 SectionTitle(stringResource(Res.string.dashboard_image_quality))
                 val thumbnailQualityLabel = stringResource(
                     when (state.imageThumbnailQualitySdkValue) {
@@ -1384,27 +1449,45 @@ private fun AdvancedControls(
         }
         if (state.showAdvancedDeveloperTools) {
             HorizontalDivider()
-            Column(modifier = Modifier.testTag("advanced_developer_tools")) {
-                SectionTitle(stringResource(Res.string.dashboard_developer_tools))
-                TextButton(
+            Column(
+                modifier = Modifier.testTag("advanced_developer_tools"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Collapsed by default: these buttons are for debugging the vendor SDK.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clickable { developerToolsExpanded = !developerToolsExpanded }
+                        .testTag("advanced_developer_tools_toggle"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) { SectionTitle(stringResource(Res.string.dashboard_developer_tools)) }
+                    Icon(
+                        imageVector = Icons.Outlined.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.rotate(if (developerToolsExpanded) 180f else 0f),
+                    )
+                }
+                if (developerToolsExpanded) TextButton(
                     onClick = { onAction(GlassesDashboardAction.AddDeviceListener) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
                 ) { Text(stringResource(Res.string.dashboard_register_listener)) }
-                TextButton(
+                if (developerToolsExpanded) TextButton(
                     onClick = { onAction(GlassesDashboardAction.StartClassicBluetoothScan) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
                 ) { Text(stringResource(Res.string.dashboard_classic_scan)) }
-                TextButton(
+                if (developerToolsExpanded) TextButton(
                     onClick = { onAction(GlassesDashboardAction.DumpOtaInfo) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
                 ) { Text(stringResource(Res.string.dashboard_dump_ota)) }
-                TextButton(
+                if (developerToolsExpanded) TextButton(
                     onClick = { onAction(GlassesDashboardAction.TestPullOta) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1414,7 +1497,10 @@ private fun AdvancedControls(
         }
         if (state.showAdvancedOta) {
             HorizontalDivider()
-            Column(modifier = Modifier.testTag("advanced_ota")) {
+            Column(
+                modifier = Modifier.testTag("advanced_ota"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 SectionTitle(stringResource(Res.string.dashboard_ota_update))
                 Text(
                     text = stringResource(Res.string.dashboard_ota_description),

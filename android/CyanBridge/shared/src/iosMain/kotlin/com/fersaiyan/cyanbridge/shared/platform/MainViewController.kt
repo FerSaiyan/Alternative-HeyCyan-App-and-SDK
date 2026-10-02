@@ -1335,6 +1335,7 @@ private class IosAppController {
                 isAudioRecording = false,
                 showStorage = false,
                 storageLabel = "--",
+                mediaCounts = null,
             )
         }
     }
@@ -1395,6 +1396,7 @@ private class IosAppController {
         updateState {
             it.copy(
                 storageLabel = "$photos photos / $videos videos / $audio audio",
+                mediaCounts = com.fersaiyan.cyanbridge.shared.glasses.GlassesMediaCounts(photos, videos, audio),
                 showStorage = true,
                 transfer = it.transfer.copy(countsLabel = "Photos: $photos  Videos: $videos  Audio: $audio"),
             )
