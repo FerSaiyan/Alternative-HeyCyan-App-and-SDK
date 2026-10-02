@@ -863,7 +863,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         }
                     },
                 )
-                if (showOfficialHeyCyanWarningDialog) {                )
                 if (showOfficialHeyCyanWarningDialog) {
                     OfficialHeyCyanWarningDialog(
                         onDismissRequest = { showOfficialHeyCyanWarningDialog = false },
@@ -3923,7 +3922,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun stopLivePreview() {    private fun stopLivePreview() {
+    private fun stopLivePreview() {
         livePreviewManager.stop()
         heyCyanLivePlayer = null
         com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.stop(this)
@@ -3980,7 +3979,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun controlVideoRecording(start: Boolean) {    private fun controlVideoRecording(start: Boolean) {
+    private fun controlVideoRecording(start: Boolean) {
         if (rejectHeyCyanOnlyFeature("Video recording")) return
         if (isGlassesCommandBlocked("video recording command")) return
         val permit = acquireBackgroundGlassesCommand("video recording command") ?: return
