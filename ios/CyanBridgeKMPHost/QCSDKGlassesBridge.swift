@@ -35,7 +35,14 @@ final class QCSDKGlassesBridge: NSObject, VendorGlassesBridge, QCSDKManagerDeleg
         manager.delegate = self
         manager.remove(peripheral)
         attachedPeripheral = peripheral
-        manager.add(peripheral) { success in
+        manager.add(peripheral) { [weak self] success in
+            if success, let delegate = peripheral.delegate as? NSObject {
+                // QCSDK owns the peripheral delegate; tap its notifications without replacing it.
+                PeripheralNotifyTap.install(on: delegate) { characteristic in
+                    guard characteristic.uuid == Self.serialNotify, let value = characteristic.value else { return }
+                    self?.eventListener?.onRawNotify(data: value)
+                }
+            }
             completion.onResult(success: success)
         }
     }
@@ -191,6 +198,12 @@ final class QCSDKGlassesBridge: NSObject, VendorGlassesBridge, QCSDKManagerDeleg
         })
     }
 
+    func setVoiceWakeup(enabled: Bool, completion: VendorResultCallback) {
+        QCSDKCmdCreator.setVoiceWakeup(enabled) { success, _, _ in
+            completion.onResult(success: success)
+        }
+    }
+
     /// Android's LargeDataHandler.glassesControl, which QCSDK for iOS does not expose: frame the
     /// payload as [0xBC, 0x41, length LE16, CRC16-Modbus LE16, payload] and write it to the
     /// glasses' serial-port characteristic (the AI-photo quality command needs it).
@@ -213,6 +226,8 @@ final class QCSDKGlassesBridge: NSObject, VendorGlassesBridge, QCSDKManagerDeleg
         peripheral.writeValue(packet, for: characteristic, type: type)
         completion.onResult(success: true)
     }
+
+    private static let serialNotify = CBUUID(string: "DE5BF729-D711-4E47-AF26-65E3012A5DC7")
 
     private static func littleEndian(_ value: UInt16) -> Data { Data([UInt8(value & 0xFF), UInt8(value >> 8)]) }
 
@@ -272,3 +287,28 @@ final class QCSDKGlassesBridge: NSObject, VendorGlassesBridge, QCSDKManagerDeleg
     }
 }
 #endif
+
+/// Copies serial-port notifications to CyanBridge before QCSDK handles them. QCSDK for iOS does
+/// not report the glasses' "AI voice" (wake word / AI button) notify that Android's SDK does, so
+/// its delegate method is wrapped once per class and always calls the original implementation.
+enum PeripheralNotifyTap {
+    private static var handler: ((CBCharacteristic) -> Void)?
+    private static var tappedClasses = Set<String>()
+
+    static func install(on delegate: NSObject, handler: @escaping (CBCharacteristic) -> Void) {
+        self.handler = handler
+        let cls: AnyClass = type(of: delegate)
+        let name = NSStringFromClass(cls)
+        guard !tappedClasses.contains(name) else { return }
+        let selector = NSSelectorFromString("peripheral:didUpdateValueForCharacteristic:error:")
+        guard let method = class_getInstanceMethod(cls, selector) else { return }
+        typealias Original = @convention(c) (AnyObject, Selector, CBPeripheral, CBCharacteristic, NSError?) -> Void
+        let original = unsafeBitCast(method_getImplementation(method), to: Original.self)
+        let wrapper: @convention(block) (AnyObject, CBPeripheral, CBCharacteristic, NSError?) -> Void = { object, peripheral, characteristic, error in
+            if error == nil { PeripheralNotifyTap.handler?(characteristic) }
+            original(object, selector, peripheral, characteristic, error)
+        }
+        method_setImplementation(method, imp_implementationWithBlock(wrapper))
+        tappedClasses.insert(name)
+    }
+}

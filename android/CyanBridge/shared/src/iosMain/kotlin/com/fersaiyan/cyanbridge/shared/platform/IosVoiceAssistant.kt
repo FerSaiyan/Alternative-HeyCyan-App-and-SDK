@@ -136,16 +136,29 @@ object IosVoiceQuestion {
  * Speaks an LLM reply while it is generated (Android: StreamingSpeechSessionManager): the
  * shared [StreamingSpeechChunker] picks the chunks and AVSpeechSynthesizer queues them.
  */
-class IosStreamingSpeech(private val onFirstChunk: () -> Unit = {}) {
+class IosStreamingSpeech(
+    /** Runs once before the first chunk is spoken (e.g. switching the glasses to "speaking"). */
+    private val beforeFirstChunk: suspend () -> Unit = {},
+) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var idleJob: Job? = null
-    private var started = false
+    private val pendingChunks = mutableListOf<String>()
+    private var gate: Job? = null
     private val chunker = StreamingSpeechChunker { chunk ->
-        if (!started) {
-            started = true
-            onFirstChunk()
+        // Chunks wait until beforeFirstChunk finished, so glasses state sounds never overlap speech.
+        val opened = gate
+        if (opened != null && opened.isCompleted) {
+            IosChatPlatform.enqueueSpeech(chunk)
+        } else {
+            pendingChunks += chunk
+            if (opened == null) {
+                gate = scope.launch {
+                    runCatching { beforeFirstChunk() }
+                    pendingChunks.forEach(IosChatPlatform::enqueueSpeech)
+                    pendingChunks.clear()
+                }
+            }
         }
-        IosChatPlatform.enqueueSpeech(chunk)
     }
 
     /** Appends a token delta from the model. */
@@ -165,11 +178,14 @@ class IosStreamingSpeech(private val onFirstChunk: () -> Unit = {}) {
     suspend fun finish() {
         idleJob?.cancel()
         chunker.finish()
+        gate?.join()
         IosChatPlatform.awaitSpeechDone()
     }
 
     fun cancel() {
         idleJob?.cancel()
+        gate?.cancel()
+        pendingChunks.clear()
         chunker.reset()
         IosChatPlatform.stopSpeaking()
     }

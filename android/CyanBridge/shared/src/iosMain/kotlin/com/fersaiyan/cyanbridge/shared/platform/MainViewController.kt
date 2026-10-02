@@ -51,9 +51,11 @@ import com.fersaiyan.cyanbridge.shared.ble.awaitVideoSettings
 import com.fersaiyan.cyanbridge.shared.ble.awaitVolume
 import com.fersaiyan.cyanbridge.shared.ble.awaitWearingDetection
 import com.fersaiyan.cyanbridge.shared.ble.awaitWifiIp
+import com.fersaiyan.cyanbridge.shared.ble.VendorAiSpeakMode
 import com.fersaiyan.cyanbridge.shared.ble.awaitMediaCounts
 import com.fersaiyan.cyanbridge.shared.ble.awaitModeAccepted
 import com.fersaiyan.cyanbridge.shared.ble.awaitSyncTime
+import com.fersaiyan.cyanbridge.shared.ble.awaitVoiceWakeup
 import com.fersaiyan.cyanbridge.shared.ble.awaitVersion
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
@@ -96,6 +98,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.SupervisorJob
@@ -668,6 +672,16 @@ private class IosAppController {
                 }
             }
 
+            override fun onRawNotify(data: NSData) {
+                val bytes = data.toKotlinBytes()
+                // Android DeviceNotify: cmd 0x73 (ACTION_DEVICE_DATA_REPORTING), payload[0] = type.
+                if (bytes.size < 7 || bytes[0] != 0xBC.toByte() || bytes[1] != 0x73.toByte()) return
+                val type = bytes[6].toInt() and 0xFF
+                PlatformLogger.i(ASSISTANT_TAG, "Glasses notify 0x${type.toString(16)}: ${bytes.joinToString(" ") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }}")
+                // 0x03 with payload[1] == 1: AI voice ("Hey Cyan" wake word or the AI button).
+                if (type == 0x03 && bytes.size > 7 && bytes[7].toInt() == 1) scope.launch { onGlassesAiVoice() }
+            }
+
             override fun onAiImage(data: NSData) {
                 // Fired by the glasses' AI photo button and by TestImageQuestion.
                 val bytes = data.toKotlinBytes()
@@ -830,7 +844,10 @@ private class IosAppController {
                     updateState { it.copy(agentLastError = "Image question was rejected by the glasses (they may be busy)") }
                 }
             }
-            GlassesDashboardAction.TestVoiceQuestion -> scope.launch { answerVoiceQuestion() }
+            GlassesDashboardAction.TestVoiceQuestion -> {
+                voiceQuestionJob?.cancel()
+                voiceQuestionJob = scope.launch { answerVoiceQuestion() }
+            }
             is GlassesDashboardAction.SelectAssistantMode -> {
                 glassesPreferences.putString(PREF_ASSISTANT_MODE, action.mode.name)
                 updateState { it.copy(assistantMode = action.mode) }
@@ -1063,6 +1080,8 @@ private class IosAppController {
         bridge.awaitMediaCounts()?.let { counts -> showMediaCounts(counts.photos, counts.videos, counts.audio) }
         bridge.awaitWearingDetection()?.let { enabled -> updateState { it.copy(wearingDetectionEnabled = enabled) } }
         refreshRecordingSettings(showErrors = false)
+        // Android (configureHeyCyanWakeWordIfNeeded) enables the onboard wake word on every connection.
+        PlatformLogger.i(ASSISTANT_TAG, "Hey Cyan wake word enabled=${bridge.awaitVoiceWakeup(true)}")
     }
 
     private fun requestVolume() {
@@ -1146,6 +1165,22 @@ private class IosAppController {
     private var pendingImageQuestion: Deferred<String?>? = null
     private var imageQuestionJob: Job? = null
     private var lastPhotoCount: Int? = null
+    private var voiceQuestionJob: Job? = null
+
+    /** Wake word / AI button: run the action chosen in "Wake word action" (Android: AiWakeWordRoute). */
+    private suspend fun onGlassesAiVoice() {
+        if (imageQuestionJob?.isActive == true || voiceQuestionJob?.isActive == true) return
+        when (_dashboardState.value.aiWakeWordRoute) {
+            AiWakeWordRoute.IMAGE_QUESTION -> {
+                PlatformLogger.i(ASSISTANT_TAG, "Wake word: image question")
+                handle(GlassesDashboardAction.TestImageQuestion)
+            }
+            AiWakeWordRoute.VOICE_QUESTION -> {
+                PlatformLogger.i(ASSISTANT_TAG, "Wake word: voice question")
+                voiceQuestionJob = scope.launch { answerVoiceQuestion() }
+            }
+        }
+    }
 
     /**
      * QCSDK's AI-photo mode. Android also sends a quality command ([02 01 06 q q]); on iOS that
@@ -1225,21 +1260,36 @@ private class IosAppController {
      * models stream tokens; remote/relay replies are spoken chunk by chunk when they arrive).
      */
     private suspend fun speakAnswer(generate: suspend (onToken: (String) -> Unit) -> String): Result<String> {
-        // No QCSDK AI-speak mode changes here: Android never sends them, and switching the glasses'
-        // AI state mid-answer played a sound over the speech and cut words.
-        val speech = IosStreamingSpeech()
+        // The glasses' AI state must end with STOP or they stay in AI mode (the camera button then
+        // stops reporting photos until a restart). Changes happen only outside speech: thinking
+        // before generation, speaking before the first chunk, stop after the last one.
+        val bridge = vendor
+        bridge?.awaitAiSpeakMode(VendorAiSpeakMode.THINKING_START)
+        val speech = IosStreamingSpeech(beforeFirstChunk = {
+            bridge?.awaitAiSpeakMode(VendorAiSpeakMode.THINKING_STOP)
+            bridge?.awaitAiSpeakMode(VendorAiSpeakMode.START)
+        })
         var streamed = false
-        val reply = runCatching {
-            generate { token ->
-                streamed = true
-                speech.append(token)
+        val reply = try {
+            runCatching {
+                generate { token ->
+                    streamed = true
+                    speech.append(token)
+                }
+            }.mapCatching { text ->
+                if (text.startsWith("Error:")) error(text.removePrefix("Error:").trim())
+                text
+            }.also { result ->
+                result.onSuccess { text -> if (!streamed) speech.append(text) }.onFailure { speech.cancel() }
+                if (result.isSuccess) speech.finish()
             }
-        }.mapCatching { text ->
-            if (text.startsWith("Error:")) error(text.removePrefix("Error:").trim())
-            text
+        } finally {
+            // Also on cancellation (a new photo replaced this turn).
+            withContext(NonCancellable) {
+                bridge?.awaitAiSpeakMode(VendorAiSpeakMode.THINKING_STOP)
+                bridge?.awaitAiSpeakMode(VendorAiSpeakMode.STOP)
+            }
         }
-        reply.onSuccess { text -> if (!streamed) speech.append(text) }.onFailure { speech.cancel() }
-        if (reply.isSuccess) speech.finish()
         PlatformLogger.i(ASSISTANT_TAG, reply.fold({ "Answer: $it" }, { "Answer failed: ${it.message}" }))
         return reply
     }

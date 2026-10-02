@@ -40,6 +40,9 @@ interface VendorGlassesBridge {
     fun setAudioSettings(angle: Int, durationSeconds: Int, completion: VendorResultCallback)
     fun deleteMedia(filename: String, completion: VendorResultCallback)
 
+    /** Turns the glasses' onboard "Hey Cyan" detector on or off (Android: aiVoiceWake). */
+    fun setVoiceWakeup(enabled: Boolean, completion: VendorResultCallback)
+
     /** Raw glasses command (Android LargeDataHandler.glassesControl), e.g. AI-photo quality. */
     fun sendGlassesControl(payload: NSData, completion: VendorResultCallback)
 
@@ -115,6 +118,9 @@ interface VendorGlassesEventListener {
     fun onBatteryChanged(level: Int, charging: Boolean)
     fun onMediaCountsChanged(photos: Int, videos: Int, audio: Int)
     fun onAiImage(data: NSData)
+
+    /** Raw serial-port notification ([0xBC, cmd, len LE16, crc LE16, payload]) seen before QCSDK. */
+    fun onRawNotify(data: NSData)
 }
 
 /** Raw values of QCSDK's QCOperatorDeviceMode. */
@@ -303,5 +309,11 @@ suspend fun VendorGlassesBridge.awaitGlassesControl(payload: ByteArray): Boolean
         sendGlassesControl(payload.toNSData()) { success ->
             if (continuation.isActive) continuation.resume(success)
         }
+    }
+} ?: false
+
+suspend fun VendorGlassesBridge.awaitVoiceWakeup(enabled: Boolean): Boolean = withTimeoutOrNull(VENDOR_COMMAND_TIMEOUT_MS) {
+    suspendCancellableCoroutine { continuation ->
+        setVoiceWakeup(enabled) { success -> if (continuation.isActive) continuation.resume(success) }
     }
 } ?: false
