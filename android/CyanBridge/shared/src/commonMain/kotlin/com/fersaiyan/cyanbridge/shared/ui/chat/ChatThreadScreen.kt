@@ -1,5 +1,8 @@
 package com.fersaiyan.cyanbridge.shared.ui.chat
 
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
@@ -275,6 +278,17 @@ private fun ChatTimeline(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    // Dragging the conversation dismisses the keyboard, like Messages / WhatsApp.
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) {
+                keyboard?.hide()
+                focusManager.clearFocus()
+            }
+        }
+    }
     var isNearBottom by remember { mutableStateOf(true) }
     var completedInitialScroll by remember { mutableStateOf(false) }
     val finalItemIndex = messages.lastIndex + if (isThinking) 1 else 0

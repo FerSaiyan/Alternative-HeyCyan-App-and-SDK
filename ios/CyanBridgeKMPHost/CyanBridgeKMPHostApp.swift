@@ -14,7 +14,11 @@ struct CyanBridgeKMPHostApp: App {
 
     var body: some Scene {
         WindowGroup {
+            // Compose handles the keyboard (imePadding) and safe areas (WindowInsets) itself.
+            // Letting SwiftUI also shrink the view above the keyboard doubled the offset and
+            // pushed the chat composer to the top; it also left a black band under the tab bar.
             ComposeView()
+                .ignoresSafeArea()
         }
     }
 }
