@@ -187,8 +187,17 @@ object IosMediaPlatform {
 private class MediaPreviewDataSource(private val url: NSURL) : NSObject(), QLPreviewControllerDataSourceProtocol {
     override fun numberOfPreviewItemsInPreviewController(controller: QLPreviewController): NSInteger = 1
 
-    override fun previewController(controller: QLPreviewController, previewItemAtIndex: NSInteger): QLPreviewItemProtocol =
-        url as QLPreviewItemProtocol
+    // NSURL adopts QLPreviewItem only through an Objective-C category, so casting it in Kotlin
+    // throws (the chat photo tap crashed); hand QuickLook an explicit item instead.
+    private val item = MediaPreviewItem(url)
+
+    override fun previewController(controller: QLPreviewController, previewItemAtIndex: NSInteger): QLPreviewItemProtocol = item
+}
+
+private class MediaPreviewItem(private val url: NSURL) : NSObject(), QLPreviewItemProtocol {
+    override fun previewItemURL(): NSURL? = url
+
+    override fun previewItemTitle(): String? = url.lastPathComponent
 }
 
 @OptIn(ExperimentalForeignApi::class)

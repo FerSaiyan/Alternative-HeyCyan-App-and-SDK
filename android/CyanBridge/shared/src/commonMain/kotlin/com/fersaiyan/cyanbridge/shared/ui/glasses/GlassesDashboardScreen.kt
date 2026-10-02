@@ -1,5 +1,16 @@
 package com.fersaiyan.cyanbridge.shared.ui.glasses
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.outlined.Battery6Bar
+import androidx.compose.material.icons.outlined.Battery5Bar
+import androidx.compose.material.icons.outlined.Battery4Bar
+import androidx.compose.material.icons.outlined.Battery3Bar
+import androidx.compose.material.icons.outlined.Battery2Bar
+import androidx.compose.material.icons.outlined.Battery1Bar
+import androidx.compose.material.icons.outlined.Battery0Bar
+import androidx.compose.material.icons.outlined.BatteryFull
+import androidx.compose.material.icons.outlined.BatteryAlert
+import androidx.compose.material.icons.outlined.BatteryUnknown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.rotate
@@ -18,7 +29,6 @@ import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.SmartDisplay
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.BatteryStd
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -651,42 +661,57 @@ private fun StatusMetrics(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (state.showBattery) {
+                val level = state.batteryPercent
                 MetricRow(
-                    icon = Icons.Outlined.BatteryStd,
-                    text = state.batteryPercent?.let { stringResource(Res.string.dashboard_battery, it) }
+                    icon = batteryIcon(level),
+                    text = level?.let { stringResource(Res.string.dashboard_battery, it) }
                         ?: stringResource(Res.string.dashboard_battery_unknown),
                     emphasized = true,
+                    tint = if (level != null && level <= LOW_BATTERY_PERCENT) MaterialTheme.colorScheme.error else null,
                 )
             }
+            // Some glasses report no media counts; then only the platform's storage label (if any) shows.
             if (state.showStorage) {
                 val counts = state.mediaCounts
                 if (counts == null) {
                     MetricRow(Icons.Outlined.Folder, stringResource(Res.string.dashboard_storage, state.storageLabel))
                 } else {
-                    MetricRow(Icons.Outlined.Folder, stringResource(Res.string.dashboard_storage_title))
-                    Column(
-                        modifier = Modifier.padding(start = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        MetricRow(Icons.Outlined.Image, stringResource(Res.string.dashboard_media_photos, counts.photos))
-                        MetricRow(Icons.Outlined.SmartDisplay, stringResource(Res.string.dashboard_media_videos, counts.videos))
-                        MetricRow(Icons.Outlined.MusicNote, stringResource(Res.string.dashboard_media_audio, counts.audio))
-                    }
+                    MetricRow(Icons.Outlined.Image, stringResource(Res.string.dashboard_media_photos, counts.photos))
+                    MetricRow(Icons.Outlined.SmartDisplay, stringResource(Res.string.dashboard_media_videos, counts.videos))
+                    MetricRow(Icons.Outlined.MusicNote, stringResource(Res.string.dashboard_media_audio, counts.audio))
                 }
             }
         }
     }
 }
 
+private const val LOW_BATTERY_PERCENT = 15
+
+/** Battery glyph that follows the charge: alert when low, bars in between, full near 100%. */
+private fun batteryIcon(percent: Int?): ImageVector = when {
+    percent == null -> Icons.Outlined.BatteryUnknown
+    percent <= 5 -> Icons.Outlined.BatteryAlert
+    percent >= 95 -> Icons.Outlined.BatteryFull
+    else -> when ((percent * 7) / 100) {
+        0 -> Icons.Outlined.Battery0Bar
+        1 -> Icons.Outlined.Battery1Bar
+        2 -> Icons.Outlined.Battery2Bar
+        3 -> Icons.Outlined.Battery3Bar
+        4 -> Icons.Outlined.Battery4Bar
+        5 -> Icons.Outlined.Battery5Bar
+        else -> Icons.Outlined.Battery6Bar
+    }
+}
+
 /** One status line: the icon takes the place of the bullet. */
 @Composable
-private fun MetricRow(icon: ImageVector, text: String, emphasized: Boolean = false) {
+private fun MetricRow(icon: ImageVector, text: String, emphasized: Boolean = false, tint: Color? = null) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             modifier = Modifier.size(if (emphasized) 18.dp else 16.dp),
-            tint = if (emphasized) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = tint ?: if (emphasized) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = text,

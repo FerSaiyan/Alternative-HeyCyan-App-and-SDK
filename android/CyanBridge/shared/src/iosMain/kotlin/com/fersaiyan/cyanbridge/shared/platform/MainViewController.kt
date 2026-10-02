@@ -187,6 +187,10 @@ fun MainViewControllerForDestination(destination: String) = ComposeUIViewControl
     val dashboardState by controller.dashboardState.collectAsState()
     // "local-models" or "local-models:<search>" opens Settings ▸ Local for screenshots.
     remember(destination) {
+        // "preview:<file in Documents>" opens the QuickLook preview used by chat photos.
+        if (destination.startsWith("preview:")) {
+            controller.launchAfterStart { IosMediaPlatform.openMedia(PlatformFilePaths.dataDirectory() + "/" + destination.substringAfter(':')) }
+        }
         // "chat:<thread id>" opens that conversation.
         if (destination.startsWith("chat:")) SharedChatHooks.initialThreadId = destination.substringAfter(':')
         if (destination.startsWith("local-models")) {
@@ -557,6 +561,14 @@ private class IosAppController {
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /** Screenshot harness: runs [block] once the UI had time to appear. */
+    fun launchAfterStart(block: () -> Unit) {
+        scope.launch {
+            delay(1_500L)
+            block()
+        }
+    }
     private val _dashboardState = MutableStateFlow(
         GlassesDashboardUiState(
             connectionLabel = "Bluetooth unavailable",
