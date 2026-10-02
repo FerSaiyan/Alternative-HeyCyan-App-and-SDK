@@ -39,8 +39,15 @@ interface VendorGlassesBridge {
     fun setAudioSettings(angle: Int, durationSeconds: Int, completion: VendorResultCallback)
     fun deleteMedia(filename: String, completion: VendorResultCallback)
 
+    /** Thumbnail of the photo at [pocket] (QCSDK getThumbnail); empty data on failure. */
+    fun requestThumbnail(pocket: Int, completion: VendorThumbnailCallback)
+
     /** Drives the glasses' AI speaking/thinking indicator (QGAISpeakMode raw values). */
     fun setAiSpeakMode(mode: Int, completion: VendorResultCallback)
+}
+
+fun interface VendorThumbnailCallback {
+    fun onResult(success: Boolean, data: NSData?, width: Int, height: Int)
 }
 
 fun interface VendorResultCallback {
@@ -278,3 +285,11 @@ private suspend fun awaitRecordingSettings(
 }
 
 suspend fun VendorGlassesBridge.awaitAiSpeakMode(mode: Int): Boolean = awaitResult { setAiSpeakMode(mode, it) }
+
+suspend fun VendorGlassesBridge.awaitThumbnail(pocket: Int): NSData? = withTimeoutOrNull(VENDOR_COMMAND_TIMEOUT_MS * 2) {
+    suspendCancellableCoroutine { continuation ->
+        requestThumbnail(pocket) { success, data, _, _ ->
+            if (continuation.isActive) continuation.resume(data?.takeIf { success && it.length > 0u })
+        }
+    }
+}

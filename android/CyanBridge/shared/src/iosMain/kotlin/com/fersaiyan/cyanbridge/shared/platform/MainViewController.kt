@@ -655,7 +655,14 @@ private class IosAppController {
 
             override fun onMediaCountsChanged(photos: Int, videos: Int, audio: Int) {
                 PlatformLogger.i(ASSISTANT_TAG, "Glasses media counts: $photos photos, $videos videos, $audio audio")
+                val previousPhotos = lastPhotoCount
+                lastPhotoCount = photos
                 scope.launch { showMediaCounts(photos, videos, audio) }
+                // iOS QCSDK only reports the camera button as a new photo in the count (Android
+                // gets a photo-ready notify); answer it like the AI-photo button.
+                if (previousPhotos != null && photos > previousPhotos && syncJob?.isActive != true) {
+                    scope.launch { askAboutCameraButtonPhoto() }
+                }
             }
 
             override fun onAiImage(data: NSData) {
@@ -1128,6 +1135,21 @@ private class IosAppController {
     /** Question captured while the photo is still being taken (TestImageQuestion). */
     private var pendingImageQuestion: Deferred<String?>? = null
     private var imageQuestionJob: Job? = null
+    private var lastPhotoCount: Int? = null
+
+    /** The camera button stores a regular photo; take an AI photo of the same view to ask about it. */
+    private suspend fun askAboutCameraButtonPhoto() {
+        val bridge = vendor ?: return
+        PlatformLogger.i(ASSISTANT_TAG, "Camera button photo detected; requesting an AI photo for a question")
+        updateState { it.copy(agentLastError = "Camera button: getting the photo for your question…") }
+        // The glasses may still be saving the photo; retry while they report busy.
+        repeat(3) { attempt ->
+            if (bridge.awaitModeAccepted(VendorGlassesMode.AI_PHOTO)) return
+            PlatformLogger.w(ASSISTANT_TAG, "AI photo after camera button rejected (attempt ${attempt + 1})")
+            delay(1_500L)
+        }
+        updateState { it.copy(agentLastError = "The glasses were busy; press Test description to ask about the view") }
+    }
 
     /**
      * Android's image-question flow: ask "Pergunte." while the photo arrives (the model loads in
@@ -1420,6 +1442,7 @@ private class IosAppController {
     }
 
     private fun showMediaCounts(photos: Int, videos: Int, audio: Int) {
+        lastPhotoCount = photos
         updateState {
             it.copy(
                 storageLabel = "$photos photos / $videos videos / $audio audio",

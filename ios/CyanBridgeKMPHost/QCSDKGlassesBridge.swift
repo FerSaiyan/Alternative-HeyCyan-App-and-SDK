@@ -189,6 +189,14 @@ final class QCSDKGlassesBridge: NSObject, VendorGlassesBridge, QCSDKManagerDeleg
         })
     }
 
+    func requestThumbnail(pocket: Int32, completion: VendorThumbnailCallback) {
+        QCSDKCmdCreator.getThumbnail(Int(pocket), success: { data, width, height in
+            completion.onResult(success: true, data: data, width: Int32(width), height: Int32(height))
+        }, fail: {
+            completion.onResult(success: false, data: nil, width: 0, height: 0)
+        })
+    }
+
     func setAiSpeakMode(mode: Int32, completion: VendorResultCallback) {
         guard let speakMode = QGAISpeakMode(rawValue: Int(mode)) else {
             completion.onResult(success: false)

@@ -487,7 +487,7 @@
     <string name="dashboard_quality_detailed_warning_body">Detailed uses Wi-Fi instead of Bluetooth and takes longer (up to 30 seconds) to transfer the full-resolution image.</string>
     <string name="dashboard_quality_detailed_warning_continue">Continue</string>
     <string name="dashboard_quality_detailed_warning_cancel">Cancel</string>
-    <string name="dashboard_test_image">测试 AI 图像描述</string>
+    <string name="dashboard_test_image">测试描述</string>
     <string name="dashboard_ai_wake_word_route">唤醒词操作</string>
     <string name="dashboard_ai_wake_word_route_description">在 HeyCyan 和 Eyevue 眼镜上，AI 唤醒词启动：</string>
     <string name="dashboard_ai_wake_word_voice">语音提问</string>
