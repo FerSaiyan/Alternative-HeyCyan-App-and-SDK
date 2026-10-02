@@ -294,7 +294,7 @@ private fun IosCyanBridgeApp(
                 LocalModelsConfigureScreen(
                     state = IosLocalModels.uiState,
                     onAction = IosLocalModels::handle,
-                    features = LocalModelsPlatformFeatures(studioBridge = false, advancedOptions = false, mtp = false),
+                    features = LocalModelsPlatformFeatures(studioBridge = false, mtp = false, runtimeTuning = false),
                     onCatalogSearchQueryChange = IosLocalModels::onCatalogSearchQueryChange,
                 )
             }

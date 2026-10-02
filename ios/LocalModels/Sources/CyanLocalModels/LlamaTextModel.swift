@@ -65,7 +65,7 @@ final class LlamaTextModel: LocalTextModel, @unchecked Sendable {
     func generate(
         messages: [LocalChatMessage],
         systemPrompt: String,
-        maxTokens: Int,
+        options: LocalGenerationOptions,
         imagePath: String?,
         onToken: @escaping (String) -> Void
     ) async throws -> String {
@@ -73,14 +73,14 @@ final class LlamaTextModel: LocalTextModel, @unchecked Sendable {
             throw LocalModelError.generationFailed("llama.cpp models in CyanBridge are text-only. Use a LiteRT-LM vision model such as Gemma 4.")
         }
         return try await Task.detached(priority: .userInitiated) { [self] in
-            try generateBlocking(messages: messages, systemPrompt: systemPrompt, maxTokens: maxTokens, onToken: onToken)
+            try generateBlocking(messages: messages, systemPrompt: systemPrompt, options: options, onToken: onToken)
         }.value
     }
 
     private func generateBlocking(
         messages: [LocalChatMessage],
         systemPrompt: String,
-        maxTokens: Int,
+        options: LocalGenerationOptions,
         onToken: (String) -> Void
     ) throws -> String {
         lock.lock()
@@ -88,7 +88,7 @@ final class LlamaTextModel: LocalTextModel, @unchecked Sendable {
         lock.unlock()
 
         let contextSize = Int(llama_n_ctx(context))
-        let replyBudget = max(16, min(maxTokens, contextSize / 2))
+        let replyBudget = max(16, min(options.maxTokens, contextSize / 2))
         // Drop the oldest turns until the prompt leaves room for the reply.
         var turns = messages
         var tokens = tokenize(formatPrompt(turns, systemPrompt: systemPrompt))
@@ -111,7 +111,7 @@ final class LlamaTextModel: LocalTextModel, @unchecked Sendable {
             offset += count
         }
 
-        let sampler = makeSampler()
+        let sampler = makeSampler(options)
         defer { llama_sampler_free(sampler) }
         var reply = ""
         var pendingBytes: [UInt8] = []
@@ -137,12 +137,19 @@ final class LlamaTextModel: LocalTextModel, @unchecked Sendable {
         return reply
     }
 
-    private func makeSampler() -> UnsafeMutablePointer<llama_sampler> {
+    private func makeSampler(_ options: LocalGenerationOptions) -> UnsafeMutablePointer<llama_sampler> {
         let chain = llama_sampler_chain_init(llama_sampler_chain_default_params())!
-        llama_sampler_chain_add(chain, llama_sampler_init_top_k(40))
-        llama_sampler_chain_add(chain, llama_sampler_init_top_p(0.95, 1))
-        llama_sampler_chain_add(chain, llama_sampler_init_temp(0.7))
-        llama_sampler_chain_add(chain, llama_sampler_init_dist(UInt32.random(in: 0...UInt32.max)))
+        if options.repetitionPenalty != 1 {
+            llama_sampler_chain_add(
+                chain,
+                llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 64, options.repetitionPenalty, 0, 0)
+            )
+        }
+        llama_sampler_chain_add(chain, llama_sampler_init_top_k(Int32(options.topK)))
+        llama_sampler_chain_add(chain, llama_sampler_init_top_p(options.topP, 1))
+        llama_sampler_chain_add(chain, llama_sampler_init_temp(options.temperature))
+        let seed = options.seed >= 0 ? UInt32(truncatingIfNeeded: options.seed) : UInt32.random(in: 0...UInt32.max)
+        llama_sampler_chain_add(chain, llama_sampler_init_dist(seed))
         return chain
     }
 

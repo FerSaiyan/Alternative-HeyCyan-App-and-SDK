@@ -31,6 +31,11 @@ interface LocalModelBridge {
         messagesJson: String,
         systemPrompt: String,
         maxTokens: Int,
+        temperature: Double,
+        topK: Int,
+        topP: Double,
+        repetitionPenalty: Double,
+        seed: Int,
         imagePath: String,
         onToken: LocalModelTokenCallback,
         completion: LocalModelResultCallback,
@@ -54,15 +59,29 @@ internal suspend fun LocalModelBridge.awaitLoad(path: String, useGpu: Boolean, c
         }
     }
 
+/** Sampling settings (Android: LocalGenerationSettings defaults). */
+internal data class LocalGenerationSettings(
+    val maxTokens: Int = 4096,
+    val contextSize: Int = 4096,
+    val temperature: Double = 0.7,
+    val topK: Int = 40,
+    val topP: Double = 0.92,
+    val repetitionPenalty: Double = 1.1,
+    val seed: Int = -1,
+)
+
 internal suspend fun LocalModelBridge.awaitGenerate(
     messagesJson: String,
     systemPrompt: String,
-    maxTokens: Int,
+    settings: LocalGenerationSettings,
     imagePath: String = "",
     onToken: (String) -> Unit,
 ): Result<String> = suspendCancellableCoroutine { continuation ->
     continuation.invokeOnCancellation { cancel() }
-    generate(messagesJson, systemPrompt, maxTokens, imagePath, { onToken(it) }) { success, message ->
+    generate(
+        messagesJson, systemPrompt, settings.maxTokens, settings.temperature, settings.topK, settings.topP,
+        settings.repetitionPenalty, settings.seed, imagePath, { onToken(it) },
+    ) { success, message ->
         if (continuation.isActive) {
             continuation.resume(if (success) Result.success(message) else Result.failure(IllegalStateException(message)))
         }

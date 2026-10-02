@@ -30,11 +30,13 @@ data class LocalModelCatalogSearchUiState(
     val results: List<LocalModelCatalogUiItem> = emptyList(),
 )
 
-/** Optional parts of the local-models screen; iOS has no Studio bridge, MTP or advanced runtime knobs. */
+/** Optional parts of the local-models screen; iOS has no Studio bridge, MTP or runtime knobs. */
 data class LocalModelsPlatformFeatures(
     val studioBridge: Boolean = true,
     val advancedOptions: Boolean = true,
     val mtp: Boolean = true,
+    /** Runtime choice, CPU threads, GPU layers, prompt template and structured JSON. */
+    val runtimeTuning: Boolean = true,
 )
 
 data class InstalledModelUiItem(

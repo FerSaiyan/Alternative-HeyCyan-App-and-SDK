@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.ui.glasses
 
+import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.outlined.Battery6Bar
 import androidx.compose.material.icons.outlined.Battery5Bar
@@ -279,8 +281,10 @@ fun GlassesDashboardScreen(
                             primaryLabel = stringResource(Res.string.dashboard_scan),
                             onPrimary = { onAction(GlassesDashboardAction.Scan) },
                             primaryStyle = ActionButtonStyle.Primary,
+                            primaryIcon = Icons.Outlined.Search,
                             secondaryLabel = stringResource(Res.string.dashboard_reconnect),
                             onSecondary = { onAction(GlassesDashboardAction.Reconnect) },
+                            secondaryIcon = Icons.Outlined.Autorenew,
                         )
                         ActionButton(
                             label = stringResource(Res.string.dashboard_disconnect),
@@ -1712,14 +1716,22 @@ private fun ActionButton(
     style: ActionButtonStyle = ActionButtonStyle.Neutral,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    icon: ImageVector? = null,
 ) {
+    val content: @Composable () -> Unit = {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
     when (style) {
         ActionButtonStyle.Primary -> Button(
             onClick = onClick,
             enabled = enabled,
             modifier = modifier.heightIn(min = 48.dp),
         ) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            content()
         }
 
         ActionButtonStyle.Neutral -> OutlinedButton(
@@ -1727,7 +1739,7 @@ private fun ActionButton(
             enabled = enabled,
             modifier = modifier.heightIn(min = 48.dp),
         ) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            content()
         }
 
         ActionButtonStyle.Destructive -> OutlinedButton(
@@ -1743,7 +1755,7 @@ private fun ActionButton(
                 MaterialTheme.colorScheme.error.copy(alpha = if (enabled) 1f else 0.38f),
             ),
         ) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            content()
         }
     }
 }
@@ -1758,6 +1770,8 @@ private fun ActionRow(
     secondaryEnabled: Boolean = true,
     primaryStyle: ActionButtonStyle = ActionButtonStyle.Neutral,
     secondaryStyle: ActionButtonStyle = ActionButtonStyle.Neutral,
+    primaryIcon: ImageVector? = null,
+    secondaryIcon: ImageVector? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1769,6 +1783,7 @@ private fun ActionRow(
             enabled = primaryEnabled,
             modifier = Modifier.weight(1f),
             style = primaryStyle,
+            icon = primaryIcon,
         )
         ActionButton(
             label = secondaryLabel,
@@ -1776,6 +1791,7 @@ private fun ActionRow(
             enabled = secondaryEnabled,
             modifier = Modifier.weight(1f),
             style = secondaryStyle,
+            icon = secondaryIcon,
         )
     }
 }

@@ -358,30 +358,32 @@ fun LocalModelsConfigureScreen(
                     onToggle = { onAction(LocalModelsAction.ToggleSection(LocalModelsSection.GENERATION_SETTINGS)) },
                 ) {
                     val generation = state.generation
-                    ChoiceField(
-                        label = "Runtime",
-                        value = generation.runtimeOptions.getOrNull(generation.runtimeIndex).orEmpty(),
-                        options = generation.runtimeOptions,
-                        onSelected = {
-                            onAction(LocalModelsAction.SelectOption(LocalModelOptionField.RUNTIME, it))
-                        },
-                    )
-                    SupportingText(generation.runtimeNote)
-                    ModelTextField(
-                        label = "CPU threads",
-                        value = generation.cpuThreads,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.CPU_THREADS, it))
-                        },
-                    )
-                    ModelTextField(
-                        label = "GPU layers (-1 = auto)",
-                        value = generation.gpuLayers,
-                        enabled = generation.gpuLayersEnabled,
-                        onValueChange = {
-                            onAction(LocalModelsAction.UpdateText(LocalModelTextField.GPU_LAYERS, it))
-                        },
-                    )
+                    if (features.runtimeTuning) {
+                        ChoiceField(
+                            label = "Runtime",
+                            value = generation.runtimeOptions.getOrNull(generation.runtimeIndex).orEmpty(),
+                            options = generation.runtimeOptions,
+                            onSelected = {
+                                onAction(LocalModelsAction.SelectOption(LocalModelOptionField.RUNTIME, it))
+                            },
+                        )
+                        SupportingText(generation.runtimeNote)
+                        ModelTextField(
+                            label = "CPU threads",
+                            value = generation.cpuThreads,
+                            onValueChange = {
+                                onAction(LocalModelsAction.UpdateText(LocalModelTextField.CPU_THREADS, it))
+                            },
+                        )
+                        ModelTextField(
+                            label = "GPU layers (-1 = auto)",
+                            value = generation.gpuLayers,
+                            enabled = generation.gpuLayersEnabled,
+                            onValueChange = {
+                                onAction(LocalModelsAction.UpdateText(LocalModelTextField.GPU_LAYERS, it))
+                            },
+                        )
+                    }
                     ModelTextField(label = "Temperature", value = generation.temperature, onValueChange = {
                         onAction(LocalModelsAction.UpdateText(LocalModelTextField.TEMPERATURE, it))
                     })
@@ -403,21 +405,23 @@ fun LocalModelsConfigureScreen(
                     ModelTextField(label = "Seed (-1 = random)", value = generation.seed, onValueChange = {
                         onAction(LocalModelsAction.UpdateText(LocalModelTextField.SEED, it))
                     })
-                    ChoiceField(
-                        label = "Prompt template",
-                        value = generation.templateOptions.getOrNull(generation.templateIndex).orEmpty(),
-                        options = generation.templateOptions,
-                        onSelected = {
-                            onAction(LocalModelsAction.SelectOption(LocalModelOptionField.TEMPLATE, it))
-                        },
-                    )
-                    ToggleRow(
-                        label = "Experimental structured JSON",
-                        checked = generation.experimentalStructuredJson,
-                        onCheckedChange = {
-                            onAction(LocalModelsAction.SetToggle(LocalModelToggleField.EXPERIMENTAL_STRUCTURED_JSON, it))
-                        },
-                    )
+                    if (features.runtimeTuning) {
+                        ChoiceField(
+                            label = "Prompt template",
+                            value = generation.templateOptions.getOrNull(generation.templateIndex).orEmpty(),
+                            options = generation.templateOptions,
+                            onSelected = {
+                                onAction(LocalModelsAction.SelectOption(LocalModelOptionField.TEMPLATE, it))
+                            },
+                        )
+                        ToggleRow(
+                            label = "Experimental structured JSON",
+                            checked = generation.experimentalStructuredJson,
+                            onCheckedChange = {
+                                onAction(LocalModelsAction.SetToggle(LocalModelToggleField.EXPERIMENTAL_STRUCTURED_JSON, it))
+                            },
+                        )
+                    }
                     OutlinedButton(
                         onClick = { onAction(LocalModelsAction.RemoveSelectedModel) },
                         enabled = state.selectedInstalledModelId != null,

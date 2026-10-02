@@ -31,17 +31,30 @@ final class LocalModelBridgeImpl: NSObject, LocalModelBridge {
         messagesJson: String,
         systemPrompt: String,
         maxTokens: Int32,
+        temperature: Double,
+        topK: Int32,
+        topP: Double,
+        repetitionPenalty: Double,
+        seed: Int32,
         imagePath: String,
         onToken: LocalModelTokenCallback,
         completion: LocalModelResultCallback
     ) {
         let messages = Self.decode(messagesJson)
+        let options = LocalGenerationOptions(
+            maxTokens: Int(maxTokens),
+            temperature: Float(temperature),
+            topK: Int(topK),
+            topP: Float(topP),
+            repetitionPenalty: Float(repetitionPenalty),
+            seed: Int(seed)
+        )
         Task {
             do {
                 let reply = try await worker.generate(
                     messages: messages,
                     systemPrompt: systemPrompt,
-                    maxTokens: Int(maxTokens),
+                    options: options,
                     imagePath: imagePath.isEmpty ? nil : imagePath
                 ) { piece in
                     DispatchQueue.main.async { onToken.onToken(text: piece) }
@@ -92,7 +105,7 @@ private actor LocalModelWorker {
     func generate(
         messages: [LocalChatMessage],
         systemPrompt: String,
-        maxTokens: Int,
+        options: LocalGenerationOptions,
         imagePath: String?,
         onToken: @escaping (String) -> Void
     ) async throws -> String {
@@ -102,7 +115,7 @@ private actor LocalModelWorker {
         return try await model.generate(
             messages: messages,
             systemPrompt: systemPrompt,
-            maxTokens: maxTokens,
+            options: options,
             imagePath: imagePath,
             onToken: onToken
         )

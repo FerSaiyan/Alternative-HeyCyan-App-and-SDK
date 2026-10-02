@@ -1,5 +1,9 @@
 package com.fersaiyan.cyanbridge.shared.platform
 
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.Serializable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -73,9 +77,18 @@ object IosLocalModels {
     private const val KEY_USE_GPU = "use_gpu"
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
     private const val KEYCHAIN_HF_TOKEN = "hugging_face_token"
-    private const val CONTEXT_TOKENS = 2048
-    private const val REPLY_TOKENS = 512
+    private const val KEY_GENERATION = "generation_settings"
+    /** Android's LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT plus the language rule it adds per request. */
     private const val DEFAULT_SYSTEM_PROMPT =
+        "You are CyanBridge's assistant for smart glasses. Answer the user's request directly. " +
+            "Give the most useful answer first in one clear sentence, then stop when the request is fully answered. " +
+            "For simple spoken requests, usually use 1-3 short sentences; for complex requests, include the " +
+            "important explanation, steps, caveats, and safety information needed. Use the shortest complete answer. " +
+            "Avoid filler, long preambles, repetition, and unnecessary formatting unless the user asks for them. " +
+            "Use the latest glasses image as visual context when the user refers to what they see. " +
+            "Answer in the user's language."
+    /** The first iOS default asked for brief answers, which cut lists short; it migrates to the default above. */
+    private const val LEGACY_BRIEF_SYSTEM_PROMPT =
         "You are a helpful assistant on smart glasses. Answer briefly, in the user's language."
     private const val TAG = "IosLocalModels"
 
@@ -84,6 +97,7 @@ object IosLocalModels {
     private val runMutex = Mutex()
     private var loadedPath: String? = null
     private var loadedOnGpu = false
+    private var loadedContextSize = 0
     private var downloadTask: NSURLSessionDownloadTask? = null
     private var downloadJob: Job? = null
     private var pickerDelegate: ModelPickerDelegate? = null
@@ -131,6 +145,12 @@ object IosLocalModels {
 
     private val systemPrompt: String
         get() = preferences.getString(KEY_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT)
+            .takeUnless { it.trim() == LEGACY_BRIEF_SYSTEM_PROMPT } ?: DEFAULT_SYSTEM_PROMPT
+
+    private val generationSettings: LocalGenerationSettings
+        get() = runCatching {
+            Json.decodeFromString<StoredGenerationSettings>(preferences.getString(KEY_GENERATION, "{}")).toSettings()
+        }.getOrDefault(LocalGenerationSettings())
 
     private val huggingFaceToken: String
         get() = IosSecurityRegistry.bridge?.keychainGet(KEYCHAIN_HF_TOKEN)?.toKotlinBytes()?.decodeToString().orEmpty()
@@ -174,7 +194,7 @@ object IosLocalModels {
                 }
             }
         }.toString()
-        val reply = runtime.awaitGenerate(messagesJson, systemPrompt, REPLY_TOKENS, imagePath, onToken).getOrThrow()
+        val reply = runtime.awaitGenerate(messagesJson, systemPrompt, generationSettings, imagePath, onToken).getOrThrow()
         refreshUi()
         stripReasoning(reply).ifBlank { error("The model returned an empty reply") }
     }
@@ -190,16 +210,18 @@ object IosLocalModels {
         val runtime = bridge ?: error("On-device runtimes are not available in this build")
         val name = selectedName ?: error("No on-device model selected")
         val path = pathOf(name)
-        if (loadedPath != path || loadedOnGpu != useGpu) {
+        val contextSize = generationSettings.contextSize
+        if (loadedPath != path || loadedOnGpu != useGpu || loadedContextSize != contextSize) {
             refreshUi("Loading $name…")
-            runtime.awaitLoad(path, useGpu, CONTEXT_TOKENS).getOrElse {
+            runtime.awaitLoad(path, useGpu, contextSize).getOrElse {
                 loadedPath = null
                 refreshUi()
                 throw it
             }
             loadedPath = path
             loadedOnGpu = useGpu
-            PlatformLogger.i(TAG, "Loaded $name (gpu=$useGpu)")
+            loadedContextSize = contextSize
+            PlatformLogger.i(TAG, "Loaded $name (gpu=$useGpu, context=$contextSize)")
         }
         return runtime
     }
@@ -227,7 +249,9 @@ object IosLocalModels {
             val documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).first() as String
             val photo = IosMediaPlatform.readFile("$documents/selftest.jpg") ?: return@launch
             val imageStarted = TimeSource.Monotonic.markNow()
-            runCatching { describeImage(photo, "Describe this image in one sentence.") }
+            val imagePrompt = (platform.Foundation.NSProcessInfo.processInfo.environment["CYANBRIDGE_LOCAL_MODEL_SELFTEST_PROMPT"] as? String)
+                ?.takeIf { it.isNotBlank() } ?: "Describe this image in one sentence."
+            runCatching { describeImage(photo, imagePrompt) }
                 .onSuccess { PlatformLogger.i(TAG, "Self-test image reply in ${imageStarted.elapsedNow()}: $it") }
                 .onFailure { PlatformLogger.e(TAG, "Self-test image failed: ${it.message}") }
         }
@@ -293,13 +317,12 @@ object IosLocalModels {
             is LocalModelsAction.ShowCatalogModelInfo -> findEntry(action.id)?.let(::showCatalogInfo)
             LocalModelsAction.CancelDownload -> downloadTask?.cancel()
             LocalModelsAction.RunWarmup -> runWarmup()
-            LocalModelsAction.SaveGenerationSettings -> {
-                preferences.putString(KEY_SYSTEM_PROMPT, uiState.generation.systemPrompt.ifBlank { DEFAULT_SYSTEM_PROMPT })
-                uiState = uiState.copy(hasUnsavedChanges = false, warmupResult = "Settings saved.")
-            }
+            LocalModelsAction.SaveGenerationSettings -> saveGenerationSettings()
             is LocalModelsAction.ToggleSection -> uiState = when (action.section) {
                 LocalModelsSection.CATALOG -> uiState.copy(catalogExpanded = !uiState.catalogExpanded)
                 LocalModelsSection.REMOTE_SERVER -> uiState.copy(remoteServerExpanded = !uiState.remoteServerExpanded)
+                LocalModelsSection.GENERATION_SETTINGS ->
+                    uiState.copy(generationSettingsExpanded = !uiState.generationSettingsExpanded)
                 else -> uiState
             }
             is LocalModelsAction.SelectOption -> if (action.field == LocalModelOptionField.COMPUTE_BACKEND) {
@@ -311,6 +334,13 @@ object IosLocalModels {
                     generation = uiState.generation.copy(systemPrompt = action.value),
                     hasUnsavedChanges = true,
                 )
+                LocalModelTextField.TEMPERATURE -> editGeneration { it.copy(temperature = action.value) }
+                LocalModelTextField.TOP_P -> editGeneration { it.copy(topP = action.value) }
+                LocalModelTextField.TOP_K -> editGeneration { it.copy(topK = action.value) }
+                LocalModelTextField.MAX_TOKENS -> editGeneration { it.copy(maxTokens = action.value) }
+                LocalModelTextField.REPETITION_PENALTY -> editGeneration { it.copy(repetitionPenalty = action.value) }
+                LocalModelTextField.CONTEXT_SIZE -> editGeneration { it.copy(contextSize = action.value) }
+                LocalModelTextField.SEED -> editGeneration { it.copy(seed = action.value) }
                 LocalModelTextField.HUGGING_FACE_TOKEN -> {
                     saveHuggingFaceToken(action.value)
                     uiState = uiState.copy(generation = uiState.generation.copy(huggingFaceToken = action.value))
@@ -358,6 +388,7 @@ object IosLocalModels {
                     search.copy(results = search.results.mapNotNull { searchResults[it.id] }.map(::catalogItem))
                 },
                 catalog = filteredCatalog(current.catalogSearch?.query.orEmpty()),
+                generationSettingsExpanded = current.generationSettingsExpanded,
                 generation = current.generation.copy(
                     computeBackendOptions = backendOptions(),
                     computeBackendIndex = if (useGpu) 0 else backendOptions().lastIndex,
@@ -402,10 +433,48 @@ object IosLocalModels {
                 computeBackendNote = backendNote(),
                 systemPrompt = systemPrompt,
                 huggingFaceToken = huggingFaceToken,
-            ),
+            ).withSettings(generationSettings),
             remoteServer = remote,
         )
     }
+
+    private fun editGeneration(change: (LocalModelGenerationUiState) -> LocalModelGenerationUiState) {
+        uiState = uiState.copy(generation = change(uiState.generation), hasUnsavedChanges = true)
+    }
+
+    /** Validates the Assistant behavior + Advanced options drafts like Android's saveGenerationSettings. */
+    private fun saveGenerationSettings() {
+        val draft = uiState.generation
+        val defaults = LocalGenerationSettings()
+        val parsed = LocalGenerationSettings(
+            maxTokens = draft.maxTokens.trim().toIntOrNull()?.coerceIn(32, 8192) ?: defaults.maxTokens,
+            contextSize = draft.contextSize.trim().toIntOrNull()?.coerceIn(1024, 32768) ?: defaults.contextSize,
+            temperature = draft.temperature.trim().replace(',', '.').toDoubleOrNull()?.coerceIn(0.0, 2.0) ?: defaults.temperature,
+            topK = draft.topK.trim().toIntOrNull()?.coerceIn(1, 200) ?: defaults.topK,
+            topP = draft.topP.trim().replace(',', '.').toDoubleOrNull()?.coerceIn(0.05, 1.0) ?: defaults.topP,
+            repetitionPenalty = draft.repetitionPenalty.trim().replace(',', '.').toDoubleOrNull()?.coerceIn(0.8, 2.0)
+                ?: defaults.repetitionPenalty,
+            seed = draft.seed.trim().toIntOrNull() ?: defaults.seed,
+        )
+        preferences.putString(KEY_SYSTEM_PROMPT, draft.systemPrompt.ifBlank { DEFAULT_SYSTEM_PROMPT })
+        preferences.putString(KEY_GENERATION, Json.encodeToString(StoredGenerationSettings.from(parsed)))
+        uiState = uiState.copy(
+            hasUnsavedChanges = false,
+            generation = draft.withSettings(parsed),
+            warmupResult = "Settings saved. Context changes apply when the model reloads.",
+        )
+        PlatformLogger.i(TAG, "Generation settings saved: $parsed")
+    }
+
+    private fun LocalModelGenerationUiState.withSettings(settings: LocalGenerationSettings) = copy(
+        temperature = settings.temperature.toString(),
+        topP = settings.topP.toString(),
+        topK = settings.topK.toString(),
+        maxTokens = settings.maxTokens.toString(),
+        repetitionPenalty = settings.repetitionPenalty.toString(),
+        contextSize = settings.contextSize.toString(),
+        seed = settings.seed.toString(),
+    )
 
     private fun filteredCatalog(query: String): List<LocalModelCatalogUiItem> =
         IosModelCatalog.curated.filter { query.isBlank() || IosModelCatalog.matches(it, query) }.map(::catalogItem)
@@ -490,7 +559,7 @@ object IosLocalModels {
         val runtime = if (name.endsWith(".gguf", ignoreCase = true)) "llama.cpp" else "LiteRT-LM"
         val alert = UIAlertController.alertControllerWithTitle(
             name,
-            "Runtime: $runtime\nSize: ${formatSize(sizeOf(name))}\nContext: $CONTEXT_TOKENS tokens",
+            "Runtime: $runtime\nSize: ${formatSize(sizeOf(name))}\nContext: ${generationSettings.contextSize} tokens",
             UIAlertControllerStyleAlert,
         )
         alert.addAction(UIAlertAction.actionWithTitle("Delete model", UIAlertActionStyleDestructive) { _ -> confirmDelete(name) })
@@ -626,4 +695,29 @@ private class ModelPickerDelegate(
     }
 
     override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) = onPicked(null)
+}
+
+@Serializable
+private data class StoredGenerationSettings(
+    val maxTokens: Int? = null,
+    val contextSize: Int? = null,
+    val temperature: Double? = null,
+    val topK: Int? = null,
+    val topP: Double? = null,
+    val repetitionPenalty: Double? = null,
+    val seed: Int? = null,
+) {
+    fun toSettings(): LocalGenerationSettings {
+        val d = LocalGenerationSettings()
+        return LocalGenerationSettings(
+            maxTokens ?: d.maxTokens, contextSize ?: d.contextSize, temperature ?: d.temperature,
+            topK ?: d.topK, topP ?: d.topP, repetitionPenalty ?: d.repetitionPenalty, seed ?: d.seed,
+        )
+    }
+
+    companion object {
+        fun from(s: LocalGenerationSettings) = StoredGenerationSettings(
+            s.maxTokens, s.contextSize, s.temperature, s.topK, s.topP, s.repetitionPenalty, s.seed,
+        )
+    }
 }

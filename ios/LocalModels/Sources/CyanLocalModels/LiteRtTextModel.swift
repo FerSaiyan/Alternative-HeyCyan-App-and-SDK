@@ -5,30 +5,35 @@ import LiteRTLM
 final class LiteRtTextModel: LocalTextModel, @unchecked Sendable {
     let runtime = LocalModelRuntime.liteRtLm
     let supportsImages: Bool
+    /// Largest image token budget the package offers (more detail for text in photos).
+    private let visionTokenBudget: Int32?
 
     private let engine: Engine
     private let lock = NSLock()
     private var conversation: Conversation?
 
-    private init(engine: Engine, supportsImages: Bool) {
+    private init(engine: Engine, supportsImages: Bool, visionTokenBudget: Int32?) {
         self.engine = engine
         self.supportsImages = supportsImages
+        self.visionTokenBudget = visionTokenBudget
     }
 
     /// Vision models (Gemma 4, Gemma 3n...) also get an image encoder; if that does not fit in
     /// memory the model is reloaded text-only.
     static func load(path: String, useGpu: Bool, contextTokens: Int) async throws -> LiteRtTextModel {
         let backend: Backend = useGpu ? .gpu : .cpu()
-        let hasVision = Capabilities(modelPath: path)?.inputModalities.vision ?? false
+        let capabilities = Capabilities(modelPath: path)
+        let hasVision = capabilities?.inputModalities.vision ?? false
+        let budget = capabilities.map { Int32($0.maxVisionTokenBudget()) }.flatMap { $0 > 0 ? $0 : nil }
         // The image encoder runs on the CPU: with a GPU vision executor on iOS, LiteRT-LM fails
         // to create conversations. Photos are occasional, so the CPU cost is acceptable.
         if hasVision, let engine = try? await makeEngine(path, backend, vision: .cpu(), contextTokens),
            await canConverse(engine) {
-            return LiteRtTextModel(engine: engine, supportsImages: true)
+            return LiteRtTextModel(engine: engine, supportsImages: true, visionTokenBudget: budget)
         }
         do {
             let engine = try await makeEngine(path, backend, vision: nil, contextTokens)
-            return LiteRtTextModel(engine: engine, supportsImages: false)
+            return LiteRtTextModel(engine: engine, supportsImages: false, visionTokenBudget: nil)
         } catch {
             throw LocalModelError.loadFailed(error.localizedDescription)
         }
@@ -62,7 +67,7 @@ final class LiteRtTextModel: LocalTextModel, @unchecked Sendable {
     func generate(
         messages: [LocalChatMessage],
         systemPrompt: String,
-        maxTokens: Int,
+        options: LocalGenerationOptions,
         imagePath: String?,
         onToken: @escaping (String) -> Void
     ) async throws -> String {
@@ -80,7 +85,13 @@ final class LiteRtTextModel: LocalTextModel, @unchecked Sendable {
                 with: ConversationConfig(
                     systemMessage: systemPrompt.isEmpty ? nil : Message(systemPrompt, role: .system),
                     initialMessages: Array(history),
-                    samplerConfig: try SamplerConfig(topK: 40, topP: 0.95, temperature: 0.7)
+                    samplerConfig: try SamplerConfig(
+                        topK: options.topK,
+                        topP: options.topP,
+                        temperature: options.temperature,
+                        seed: options.seed >= 0 ? options.seed : Int.random(in: 0...Int(Int32.max))
+                    ),
+                    visualTokenBudget: imagePath != nil ? visionTokenBudget : nil
                 )
             )
         } catch {
@@ -97,7 +108,12 @@ final class LiteRtTextModel: LocalTextModel, @unchecked Sendable {
 
         var reply = ""
         do {
-            for try await chunk in conversation.sendMessageStream(userMessage(last.content, imagePath), maxOutputTokens: maxTokens) {
+            for try await chunk in conversation.sendMessageStream(
+                userMessage(last.content, imagePath),
+                repetitionPenaltyConfig: options.repetitionPenalty != 1
+                    ? RepetitionPenaltyConfig(repetitionPenalty: options.repetitionPenalty) : nil,
+                maxOutputTokens: options.maxTokens
+            ) {
                 let text = chunk.toString
                 guard !text.isEmpty else { continue }
                 reply += text

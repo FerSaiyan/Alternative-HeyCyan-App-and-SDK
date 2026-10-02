@@ -11,6 +11,26 @@ public struct LocalChatMessage: Sendable {
     }
 }
 
+/// Sampling settings (Android: LocalGenerationSettings).
+public struct LocalGenerationOptions: Sendable {
+    public let maxTokens: Int
+    public let temperature: Float
+    public let topK: Int
+    public let topP: Float
+    public let repetitionPenalty: Float
+    /// Negative means random.
+    public let seed: Int
+
+    public init(maxTokens: Int, temperature: Float, topK: Int, topP: Float, repetitionPenalty: Float, seed: Int) {
+        self.maxTokens = max(16, maxTokens)
+        self.temperature = max(0, temperature)
+        self.topK = max(1, topK)
+        self.topP = min(1, max(0.01, topP))
+        self.repetitionPenalty = max(0.5, repetitionPenalty)
+        self.seed = seed
+    }
+}
+
 public enum LocalModelRuntime: String, Sendable {
     /// GGUF files run by llama.cpp.
     case llamaCpp = "gguf"
@@ -52,7 +72,7 @@ public protocol LocalTextModel: AnyObject {
     func generate(
         messages: [LocalChatMessage],
         systemPrompt: String,
-        maxTokens: Int,
+        options: LocalGenerationOptions,
         imagePath: String?,
         onToken: @escaping (String) -> Void
     ) async throws -> String
