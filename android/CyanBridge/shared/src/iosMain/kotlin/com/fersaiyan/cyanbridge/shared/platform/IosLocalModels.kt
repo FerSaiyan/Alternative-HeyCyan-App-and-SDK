@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.platform
 
+import com.fersaiyan.cyanbridge.shared.settings.LocalizedPromptDefaults
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -78,18 +79,12 @@ object IosLocalModels {
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
     private const val KEYCHAIN_HF_TOKEN = "hugging_face_token"
     private const val KEY_GENERATION = "generation_settings"
-    /** Android's LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT plus the language rule it adds per request. */
-    private const val DEFAULT_SYSTEM_PROMPT =
-        "You are CyanBridge's assistant for smart glasses. Answer the user's request directly. " +
-            "Give the most useful answer first in one clear sentence, then stop when the request is fully answered. " +
-            "For simple spoken requests, usually use 1-3 short sentences; for complex requests, include the " +
-            "important explanation, steps, caveats, and safety information needed. Use the shortest complete answer. " +
-            "Avoid filler, long preambles, repetition, and unnecessary formatting unless the user asks for them. " +
-            "Use the latest glasses image as visual context when the user refers to what they see. " +
-            "Answer in the user's language."
-    /** The first iOS default asked for brief answers, which cut lists short; it migrates to the default above. */
+    /** The first iOS default asked for brief answers, which cut lists short; it migrates to the default. */
     private const val LEGACY_BRIEF_SYSTEM_PROMPT =
         "You are a helpful assistant on smart glasses. Answer briefly, in the user's language."
+
+    /** Android's default system prompt in the app language. */
+    private val defaultSystemPrompt: String get() = LocalizedPromptDefaults.systemPrompt(platformLanguageTag())
     private const val TAG = "IosLocalModels"
 
     private val preferences = createPlatformPreferences("cyanbridge_local_models")
@@ -143,9 +138,11 @@ object IosLocalModels {
     private val useGpu: Boolean
         get() = preferences.getBoolean(KEY_USE_GPU, true) && bridge?.gpuAvailable() == true
 
+    /** A stock prompt (any language, or the old brief one) follows the app language; edits are kept. */
     private val systemPrompt: String
-        get() = preferences.getString(KEY_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT)
-            .takeUnless { it.trim() == LEGACY_BRIEF_SYSTEM_PROMPT } ?: DEFAULT_SYSTEM_PROMPT
+        get() = preferences.getString(KEY_SYSTEM_PROMPT, "")
+            .takeUnless { LocalizedPromptDefaults.isDefaultSystemPrompt(it) || it.trim() == LEGACY_BRIEF_SYSTEM_PROMPT }
+            ?: defaultSystemPrompt
 
     private val generationSettings: LocalGenerationSettings
         get() = runCatching {
@@ -456,7 +453,7 @@ object IosLocalModels {
                 ?: defaults.repetitionPenalty,
             seed = draft.seed.trim().toIntOrNull() ?: defaults.seed,
         )
-        preferences.putString(KEY_SYSTEM_PROMPT, draft.systemPrompt.ifBlank { DEFAULT_SYSTEM_PROMPT })
+        preferences.putString(KEY_SYSTEM_PROMPT, draft.systemPrompt.ifBlank { defaultSystemPrompt })
         preferences.putString(KEY_GENERATION, Json.encodeToString(StoredGenerationSettings.from(parsed)))
         uiState = uiState.copy(
             hasUnsavedChanges = false,

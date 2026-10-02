@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.ui
 
+import com.fersaiyan.cyanbridge.shared.platform.platformLanguageTag
+import com.fersaiyan.cyanbridge.shared.settings.LocalizedPromptDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -478,7 +480,7 @@ private class SharedSettingsScreenActions(
     override fun openSubscription() = onOpenSubscription.invoke()
     override fun setDefaultImageQuestion(question: String) = update { it.copy(defaultImageQuestion = question) }
     override fun resetDefaultImageQuestion() = update {
-        it.copy(defaultImageQuestion = SettingsUiState().defaultImageQuestion)
+        it.copy(defaultImageQuestion = LocalizedPromptDefaults.imageQuestion(platformLanguageTag()))
     }
     override fun setMemoryMode(mode: MemoryPrivacyMode) = update { it.copy(memoryMode = mode) }
     override fun setMemorySync(source: MemorySourceType, enabled: Boolean) = update { state ->
@@ -535,14 +537,16 @@ private fun loadSharedSettings(preferences: PlatformPreferences): SettingsUiStat
     transcriptStorageEnabled = preferences.getBoolean("transcript_storage", true),
     redactNamesEnabled = preferences.getBoolean("redact_names", true),
     includeFullTranscriptionInExports = preferences.getBoolean("full_transcript_exports", false),
-    defaultImageQuestion = preferences.getString("default_image_question", SettingsUiState().defaultImageQuestion),
+    defaultImageQuestion = sharedDefaultImageQuestion(),
 )
 
 /** The image-question prompt from Settings, shared by chat attachments and glasses image questions. */
 internal fun sharedDefaultImageQuestion(): String =
     createPlatformPreferences(SHARED_SETTINGS_PREFS)
         .getString("default_image_question", "")
-        .ifBlank { SettingsUiState().defaultImageQuestion }
+        .takeUnless(LocalizedPromptDefaults::isDefaultImageQuestion)
+        // Untouched defaults follow the app language (English system → English text, and so on).
+        ?: LocalizedPromptDefaults.imageQuestion(platformLanguageTag())
 
 private fun saveSharedSettings(preferences: PlatformPreferences, state: SettingsUiState) {
     preferences.putString("provider_type", state.providerType.name)
