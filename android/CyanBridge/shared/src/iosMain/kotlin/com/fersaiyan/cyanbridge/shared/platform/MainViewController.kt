@@ -51,7 +51,6 @@ import com.fersaiyan.cyanbridge.shared.ble.awaitVideoSettings
 import com.fersaiyan.cyanbridge.shared.ble.awaitVolume
 import com.fersaiyan.cyanbridge.shared.ble.awaitWearingDetection
 import com.fersaiyan.cyanbridge.shared.ble.awaitWifiIp
-import com.fersaiyan.cyanbridge.shared.ble.awaitGlassesControl
 import com.fersaiyan.cyanbridge.shared.ble.awaitMediaCounts
 import com.fersaiyan.cyanbridge.shared.ble.awaitModeAccepted
 import com.fersaiyan.cyanbridge.shared.ble.awaitSyncTime
@@ -135,9 +134,6 @@ private const val VOICE_QUESTION_INITIAL_LISTENING_MS = 6_000L
 private const val IMAGE_QUESTION_INITIAL_LISTENING_MS = 3_300L
 private const val IMAGE_QUESTION_SHUTTER_SETTLE_MS = 500L
 private const val MAX_IMAGE_FOLLOW_UPS = 3
-/** Android ImageThumbnailQuality "Detailed": the largest AI photo the glasses send. */
-private const val MANUAL_PHOTO_QUALITY = 5
-private const val RAW_PHOTO_WAIT_MS = 12_000L
 private const val ASSISTANT_TAG = "IosGlassesAssistant"
 // Same option lists as Android's MainActivity for HeyCyan recording limits.
 private val VIDEO_DURATION_OPTIONS_SECONDS = listOf(15, 30, 60, 180, 540, 720)
@@ -675,7 +671,6 @@ private class IosAppController {
             override fun onAiImage(data: NSData) {
                 // Fired by the glasses' AI photo button and by TestImageQuestion.
                 val bytes = data.toKotlinBytes()
-                aiPhotosReceived++
                 val size = IosMediaPlatform.imageSizeLabel(data)
                 PlatformLogger.i(ASSISTANT_TAG, "AI photo received from the glasses: ${bytes.size} bytes, $size")
                 if (pluginsRuntime.isWalkingAidActive) {
@@ -1151,30 +1146,17 @@ private class IosAppController {
     private var pendingImageQuestion: Deferred<String?>? = null
     private var imageQuestionJob: Job? = null
     private var lastPhotoCount: Int? = null
-    private var aiPhotosReceived = 0
 
     /**
-     * Manual photos (Test description, camera button) use the highest AI-photo quality, as
-     * Android does: configure the AI vision mode with the quality ([02 01 06 q q], sent raw
-     * because QCSDK for iOS has no quality parameter). If no photo arrives, fall back to
-     * QCSDK's plain AI-photo mode.
+     * QCSDK's AI-photo mode. Android also sends a quality command ([02 01 06 q q]); on iOS that
+     * command (via sendGlassesControl) makes the glasses shoot, but QCSDK never downloads a
+     * photo it did not request, so it only added a shutter sound and a 12 s wait. AI photos on
+     * iOS therefore stay at the glasses' default size (512x384) for now.
      */
-    private suspend fun requestAiPhoto(bridge: com.fersaiyan.cyanbridge.shared.ble.VendorGlassesBridge): Boolean {
-        val before = aiPhotosReceived
-        val quality = MANUAL_PHOTO_QUALITY.toByte()
-        if (bridge.awaitGlassesControl(byteArrayOf(0x02, 0x01, 0x06, quality, quality))) {
-            PlatformLogger.i(ASSISTANT_TAG, "AI photo requested at quality $MANUAL_PHOTO_QUALITY (raw command)")
-            val arrived = withTimeoutOrNull(RAW_PHOTO_WAIT_MS) {
-                while (aiPhotosReceived == before) delay(200L)
-                true
-            } ?: false
-            if (arrived) return true
-            PlatformLogger.w(ASSISTANT_TAG, "No photo after the raw quality command; using QCSDK AI-photo mode")
-        }
-        return bridge.awaitModeAccepted(VendorGlassesMode.AI_PHOTO).also { accepted ->
+    private suspend fun requestAiPhoto(bridge: com.fersaiyan.cyanbridge.shared.ble.VendorGlassesBridge): Boolean =
+        bridge.awaitModeAccepted(VendorGlassesMode.AI_PHOTO).also { accepted ->
             PlatformLogger.i(ASSISTANT_TAG, "AI photo requested via QCSDK mode: accepted=$accepted")
         }
-    }
 
     /** The camera button stores a regular photo; take an AI photo of the same view to ask about it. */
     private suspend fun askAboutCameraButtonPhoto() {

@@ -29,6 +29,8 @@ object IosVoiceQuestion {
     /** Android: EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS. */
     private const val COMPLETE_SILENCE_MS = 2_000L
     private const val MAX_QUESTION_MS = 20_000L
+    /** Sentinel from [listen] when the audio engine could not start. */
+    private const val MIC_FAILED = "\u0000mic-failed"
 
     /** Returns the question, or null when the user stayed silent. */
     suspend fun ask(initialTimeoutMs: Long): String? {
@@ -44,7 +46,18 @@ object IosVoiceQuestion {
             PlatformLogger.w(TAG, "Speech recognition unavailable for $language")
             return null
         }
-        val question = listen(recognizer, initialTimeoutMs)
+        // Right after the glasses spoke, the Bluetooth input can still be switching and the
+        // engine fails to start; retry with a fresh engine.
+        var question: String? = null
+        for (attempt in 1..3) {
+            val result = listen(recognizer, initialTimeoutMs)
+            if (result != MIC_FAILED) {
+                question = result
+                break
+            }
+            PlatformLogger.w(TAG, "Microphone did not start (attempt $attempt)")
+            delay(500L)
+        }
         PlatformLogger.i(TAG, "Question via ${IosChatPlatform.currentInputName() ?: "?"}: ${question ?: "(silence)"}")
         return question
     }
@@ -79,11 +92,9 @@ object IosVoiceQuestion {
                 if (buffer != null) request.appendAudioPCMBuffer(buffer)
             }
             engine.prepare()
-            // Right after speech the audio route can still be switching; retry once.
-            if (!engine.startAndReturnError(null) && !(platform.Foundation.NSThread.sleepForTimeInterval(0.3).let { engine.startAndReturnError(null) })) {
+            if (!engine.startAndReturnError(null)) {
                 input.removeTapOnBus(0u)
-                PlatformLogger.w(TAG, "Could not start the microphone")
-                continuation.resume(null)
+                continuation.resume(MIC_FAILED)
                 return@suspendCancellableCoroutine
             }
             task = recognizer.recognitionTaskWithRequest(request) { result, error ->
