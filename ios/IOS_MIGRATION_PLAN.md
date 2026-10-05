@@ -152,11 +152,17 @@ Pagamento, assinatura Pro e cobrança ficam fora deste plano por decisão do pro
 
 ## Sprint 6 — Outros óculos e recursos avançados
 
-Status: parcial. 6.4 (EyeVue por Bluetooth) implementada; as demais dependem de algo que não existe neste repositório (ver notas).
+Status: parcial. 6.1, 6.2, 6.4, 6.5 e 6.6 implementadas e compilando (simulador e iPhone); só 6.4 foi testada com os óculos. TuneBuds também foi portado (fora da tabela original). 6.3 não é possível no iOS.
 
 Notas:
 - 6.4: protocolo EyeVue portado para o código compartilhado, com testes. No iOS funcionam foto, vídeo, áudio, bateria, hora, detecção de uso, duração de gravação e perguntas por foto (AA15). A sincronização de mídia do EyeVue por Wi-Fi ainda não foi portada.
-- 6.1/6.2 Meta, 6.3 Meizu, 6.5 MoYoung e 6.6 Mentra: o Android usa SDKs fechados de cada fabricante (MWDAT, `com.myvu.client`, MoYoung, Mentra). É preciso obter os SDKs iOS equivalentes; o da Meta exige cadastro de desenvolvedor.
+- Os óculos com SDK em Swift implementam `SdkGlassesBridge` (`shared/iosMain/.../ble/SdkGlassesBridge.kt`); `IosOtherGlasses.kt` liga TuneBuds, MoYoung, Meta, Mentra e Meizu à tela Óculos, com as mesmas seções do Android (`GlassesManagerGating`). Pendente: teste com cada par de óculos.
+- 6.1/6.2 Meta: SDK `meta-wearables-dat-ios` 1.0.0 (Swift Package; exige iOS 17.2, por isso o app passou de 16.4 para 17.2). "Parear óculos Meta" abre o Meta AI para aprovar o CyanBridge (modo desenvolvedor, `MetaAppID` 0, retorno por `cyanbridge://`); depois a sessão abre sozinha. A câmera atende "Testar imagem" e "Testar voz", como o `capturePhotoOnce` do Android. Display e transmissão contínua não foram portados (o Android também os esconde da tela).
+- 6.3 Meizu: não é possível. Depois do handshake BLE, os óculos só falam pelo relay RFCOMM (Bluetooth clássico), que apps iOS não abrem sem MFi. O cartão Meizu explica isso, e as perguntas por voz funcionam pelo áudio Bluetooth dos óculos (parear em Ajustes ▸ Bluetooth).
+- 6.5 MoYoung: `CRPSmartGlasses.framework`, do mesmo pacote de onde vem o `.aar` do Android. Só existe para iPhone (arm64); baixar com `ios/scripts/fetch_moyoung_sdk.sh`, que também compila `SwiftProtobuf` e `AFNetworking` dinâmicos. Bateria, contagem de mídia, hora, versão e foto de IA para perguntas. A sincronização de mídia por Wi-Fi não foi portada (o Android também não a mostra na tela).
+- 6.6 Mentra Live: `mentra-bluetooth-sdk-ios` 3.2.0-dev.227 (mesma versão do Android). "Parear Mentra" procura e conecta; o botão dos óculos faz uma pergunta com foto; a foto vem por BLE para um receptor local em 127.0.0.1, como no Android.
+- TuneBuds: no iOS não há RFCOMM, mas o app AB Mate usa o serviço BLE `FDB3` (escrita `FF17`, notificação `FF18`) com os mesmos quadros. O protocolo e a sessão foram para o código compartilhado (`shared/devices/tunebuds`, com testes): foto, vídeo, áudio, bateria, armazenamento, contagem, hora, versão e foto de IA. A sincronização de mídia não foi portada: os óculos entram no hotspot do telefone, e apps iOS não criam hotspot.
+- MemoMind não entrou: no Android o código está desligado (sem `DeviceClass`, adaptador nem tela; o adaptador ficou na branch arquivada `memomind-adapter`).
 - 6.7 Prévia ao vivo: os óculos transmitem RTSP, que o player do iOS não abre; precisa de uma biblioteca externa (ex.: VLCKit).
 - 6.8 Gemini Live: usa a cota da assinatura Pro, que ficou fora do plano junto com o pagamento.
 - 6.9 IA local (estudo): viável. llama.cpp compila para iOS com aceleração Metal e LiteRT tem runtime iOS; o limite é memória (modelos de 1–3 B parâmetros quantizados cabem em iPhones com 6 GB+). Estimativa: sprint própria.
@@ -164,7 +170,7 @@ Notas:
 
 ## Testes automáticos das partes portadas
 
-`./gradlew :shared:portabilityTest` roda `IosMigrationPortsTest` (protocolo EyeVue, conversão Ogg, classificador de aparelhos, importador ChatGPT/Claude e catálogo de plugins). Esses testes compilam o código compartilhado fora do iOS, o que também confere que o Android continua compilando essa parte.
+`./gradlew :shared:portabilityTest` roda `IosMigrationPortsTest` (protocolo EyeVue, conversão Ogg, classificador de aparelhos, importador ChatGPT/Claude e catálogo de plugins) e os testes do protocolo e da sessão TuneBuds. Esses testes compilam o código compartilhado fora do iOS, o que também confere que o Android continua compilando essa parte.
 
 | # | Tarefa | Android (origem) | iOS (destino) |
 |---|---|---|---|
@@ -187,7 +193,8 @@ Notas:
 | Local Agent, AutoDiary (leitura da tela) | Depende do serviço de acessibilidade do Android |
 | Tasker, TaskerNet | Não existe no iOS |
 | Wi-Fi ADB (`RequestStartWifiAdbDebug`) | Não existe no iOS |
-| TuneBuds (`StartClassicBluetoothScan`) | Bluetooth Classic RFCOMM exige certificação MFi da Apple |
+| TuneBuds por RFCOMM (`StartClassicBluetoothScan`) | Bluetooth Classic RFCOMM exige certificação MFi da Apple (o iOS usa o BLE `FDB3`) |
+| Meizu MYVU (tela, notificações, teleprompter) | O relay do app é só RFCOMM |
 | Wi-Fi Direct | O iOS entra no hotspot dos óculos no lugar |
 | Encaminhar notificações de outros apps | O iOS não deixa um app ler notificações de outros |
 | Guia de otimização de bateria | Conceito exclusivo do Android |

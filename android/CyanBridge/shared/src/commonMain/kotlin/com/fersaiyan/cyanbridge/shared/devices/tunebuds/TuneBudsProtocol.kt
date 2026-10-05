@@ -1,8 +1,7 @@
-package com.fersaiyan.cyanbridge.devices.tunebuds
+package com.fersaiyan.cyanbridge.shared.devices.tunebuds
 
-import java.io.ByteArrayOutputStream
-import java.nio.charset.StandardCharsets
-import java.util.TimeZone
+import com.fersaiyan.cyanbridge.shared.platform.platformCurrentTimeMillis
+import com.fersaiyan.cyanbridge.shared.platform.platformUtcOffsetMinutes
 
 enum class TuneBudsFrameType(val id: Int) {
     REQUEST(1),
@@ -206,14 +205,14 @@ object TuneBudsProtocol {
     }
 
     fun parseString(payload: ByteArray): String? = payload
-        .toString(StandardCharsets.UTF_8)
+        .decodeToString()
         .trim { it <= ' ' || it == '\u0000' }
         .takeIf { it.isNotBlank() }
 
     fun deriveClassicAddress(manufacturerData: ByteArray): String {
         require(manufacturerData.size >= 9) { "TuneBuds manufacturer data is too short" }
         return (3 until 9).joinToString(":") { index ->
-            "%02X".format((manufacturerData[index].toInt() xor 0xAD) and 0xFF)
+            ((manufacturerData[index].toInt() xor 0xAD) and 0xFF).toString(16).uppercase().padStart(2, '0')
         }
     }
 
@@ -234,8 +233,8 @@ object TuneBudsProtocol {
     fun parseStatus(payload: ByteArray): Int? = payload.firstOrNull()?.toInt()?.and(0xFF)
 
     fun buildSetTimePayload(
-        epochMillis: Long = System.currentTimeMillis(),
-        utcOffsetMinutes: Int = TimeZone.getDefault().getOffset(epochMillis) / 60_000,
+        epochMillis: Long = platformCurrentTimeMillis(),
+        utcOffsetMinutes: Int = platformUtcOffsetMinutes(epochMillis),
     ): ByteArray {
         require(utcOffsetMinutes in Short.MIN_VALUE..Short.MAX_VALUE)
         val seconds = epochMillis / 1_000L
@@ -258,8 +257,8 @@ object TuneBudsProtocol {
     ): ByteArray {
         require(mode in 0..2)
         require(channel in 0..0xFF)
-        val ssidBytes = ssid.toByteArray(StandardCharsets.UTF_8)
-        val passwordBytes = password.toByteArray(StandardCharsets.UTF_8)
+        val ssidBytes = ssid.encodeToByteArray()
+        val passwordBytes = password.encodeToByteArray()
         require(ssidBytes.size <= 0xFF && passwordBytes.size <= 0xFF)
         return byteArrayOf(0x01, 0x01, mode.toByte()) +
             byteArrayOf(0x02, ssidBytes.size.toByte()) + ssidBytes +
@@ -288,14 +287,14 @@ object TuneBudsProtocol {
             ((bytes[offset + 3].toLong() and 0xFF) shl 24)
 }
 
-/** Splits an RFCOMM byte stream and strictly reassembles AB Mate fragments. */
+/** Splits an RFCOMM or BLE byte stream and strictly reassembles AB Mate fragments. */
 class TuneBudsFrameDecoder {
     private data class Assembly(
         val command: Int,
         val type: TuneBudsFrameType,
         val total: Int,
         var nextIndex: Int,
-        val payload: ByteArrayOutputStream,
+        var payload: ByteArray,
         val firstSequence: Int,
     )
 
@@ -370,7 +369,7 @@ class TuneBudsFrameDecoder {
         var current = assembly
         if (current == null) {
             require(index == 0) { "TuneBuds fragmented response did not start at index zero" }
-            current = Assembly(command, type, total, 0, ByteArrayOutputStream(), sequence)
+            current = Assembly(command, type, total, 0, byteArrayOf(), sequence)
             assembly = current
         } else {
             require(current.command == command) { "TuneBuds command changed during reassembly" }
@@ -380,7 +379,7 @@ class TuneBudsFrameDecoder {
         require(index == current.nextIndex) {
             "TuneBuds fragment index mismatch: expected=${current.nextIndex} actual=$index"
         }
-        current.payload.write(payload)
+        current.payload += payload
         current.nextIndex++
 
         if (index != total - 1) return null
@@ -389,7 +388,7 @@ class TuneBudsFrameDecoder {
             sequence = current.firstSequence,
             command = command,
             type = type,
-            payload = current.payload.toByteArray(),
+            payload = current.payload,
         )
     }
 

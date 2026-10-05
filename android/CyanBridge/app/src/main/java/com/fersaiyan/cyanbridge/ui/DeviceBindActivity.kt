@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
 import com.fersaiyan.cyanbridge.shared.devices.DeviceProfile
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice as SharedScannedDevice
 
@@ -27,7 +28,6 @@ import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
-import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsProtocol
 import com.fersaiyan.cyanbridge.devices.ScannedDevice
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings

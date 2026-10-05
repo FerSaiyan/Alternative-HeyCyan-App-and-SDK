@@ -1,9 +1,9 @@
-package com.fersaiyan.cyanbridge.devices.tunebuds
+package com.fersaiyan.cyanbridge.shared.devices.tunebuds
 
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.Test
 
 class TuneBudsProtocolTest {
     @Test
@@ -18,15 +18,15 @@ class TuneBudsProtocolTest {
 
         assertEquals(3, encoded.frames.size)
         assertEquals(1, encoded.nextSequence)
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(14, 0x27, 1, 0x20, 15) + payload.copyOfRange(0, 15),
             encoded.frames[0],
         )
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(15, 0x27, 1, 0x21, 15) + payload.copyOfRange(15, 30),
             encoded.frames[1],
         )
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0, 0x27, 1, 0x22, 1) + payload.copyOfRange(30, 31),
             encoded.frames[2],
         )
@@ -52,7 +52,7 @@ class TuneBudsProtocolTest {
         assertEquals(1, result.size)
         assertEquals(TuneBudsProtocol.CMD_STORAGE, result.single().command)
         assertEquals(TuneBudsFrameType.NOTIFICATION, result.single().type)
-        assertArrayEquals(payload, result.single().payload)
+        assertContentEquals(payload, result.single().payload)
         assertEquals(0, decoder.malformedFrameCount)
     }
 
@@ -105,7 +105,7 @@ class TuneBudsProtocolTest {
 
         assertEquals(2, frames.size)
         assertEquals(TuneBudsProtocol.CMD_AI_PICTURE, frames.last().command)
-        assertArrayEquals(byteArrayOf(0, 0xFF.toByte(), 0xD9.toByte()), frames.last().payload)
+        assertContentEquals(byteArrayOf(0, 0xFF.toByte(), 0xD9.toByte()), frames.last().payload)
         assertEquals(1, decoder.malformedFrameCount)
     }
 
@@ -167,14 +167,14 @@ class TuneBudsProtocolTest {
 
     @Test
     fun commandPayloadBuildersMatchReverseEngineeredLayout() {
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0x00, 0xF1.toByte(), 0x53, 0x65, 0x4A, 0x01),
             TuneBudsProtocol.buildSetTimePayload(
                 epochMillis = 1_700_000_000_000L,
                 utcOffsetMinutes = 330,
             ),
         )
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(
                 1, 1, 0,
                 2, 4, 'T'.code.toByte(), 'e'.code.toByte(), 's'.code.toByte(), 't'.code.toByte(),
@@ -183,7 +183,7 @@ class TuneBudsProtocolTest {
             ),
             TuneBudsProtocol.buildWifiPayload(0, "Test", "pw", 6),
         )
-        assertArrayEquals(byteArrayOf(4, 10, 15), TuneBudsProtocol.rtspQualityPayload(50))
-        assertArrayEquals(byteArrayOf(0, 0, 0), TuneBudsProtocol.rtspQualityPayload(-1))
+        assertContentEquals(byteArrayOf(4, 10, 15), TuneBudsProtocol.rtspQualityPayload(50))
+        assertContentEquals(byteArrayOf(0, 0, 0), TuneBudsProtocol.rtspQualityPayload(-1))
     }
 }

@@ -64,6 +64,8 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesTransferUiState
 import com.fersaiyan.cyanbridge.shared.devices.BleDeviceClassifier
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
+import com.fersaiyan.cyanbridge.shared.ble.IosTuneBudsSession
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice
 import com.fersaiyan.cyanbridge.shared.media.IosMediaTransfer
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
@@ -150,6 +152,21 @@ private const val ASSISTANT_TAG = "IosGlassesAssistant"
  * 500 ms too (offerFollowUp).
  */
 private const val SPEECH_BLUETOOTH_TAIL_MS = 500L
+
+/** Glasses handled by IosOtherGlasses. */
+private val OTHER_GLASSES_CLASSES = setOf(
+    DeviceClass.TUNEBUDS,
+    DeviceClass.MOYOUNG_W620,
+    DeviceClass.META_RAYBAN,
+    DeviceClass.MENTRA_LIVE,
+    DeviceClass.MEIZU_MYVU,
+)
+
+/** Classes the app does not reconnect at launch (audio-only devices; Meizu's relay is RFCOMM-only). */
+private val NO_LINK_CLASSES = setOf(DeviceClass.GENERIC_AUDIO, DeviceClass.MEIZU_MYVU)
+
+/** Classes whose dashboard card is useful without a live link (Meta registration, Meizu notice). */
+private val CARD_WITHOUT_LINK_CLASSES = setOf(DeviceClass.META_RAYBAN, DeviceClass.MEIZU_MYVU)
 // Same option lists as Android's MainActivity for HeyCyan recording limits.
 private val VIDEO_DURATION_OPTIONS_SECONDS = listOf(15, 30, 60, 180, 540, 720)
 private val AUDIO_DURATION_OPTIONS_SECONDS = listOf(1_800, 3_600, 7_200)
@@ -301,8 +318,8 @@ private fun IosCyanBridgeApp(
                     connectingDevice = bind.connectingDevice,
                     selectedClass = bind.selectedClass,
                     onScan = controller::startDeviceScan,
-                    onPairMetaGlasses = { controller.closeDeviceBind("Meta glasses pairing is not available on iOS yet") },
-                    onPairMentraGlasses = { controller.closeDeviceBind("Mentra Live pairing is not available on iOS yet") },
+                    onPairMetaGlasses = controller::pairMetaGlasses,
+                    onPairMentraGlasses = controller::pairMentraGlasses,
                     onSelectDevice = controller::selectDevice,
                     onSelectedClassChange = controller::selectDeviceClass,
                     onConfirmConnection = controller::confirmConnection,
@@ -584,6 +601,36 @@ private class IosAppController {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** TuneBuds, MoYoung, Meta, Mentra and Meizu (see IosOtherGlasses). */
+    private val otherGlasses: IosOtherGlasses = IosOtherGlasses(
+        bleManager = bleManager,
+        scope = scope,
+        host = object : IosGlassesHost {
+            override fun updateDashboard(transform: (GlassesDashboardUiState) -> GlassesDashboardUiState) =
+                updateState(transform)
+
+            override fun onGlassesPhoto(bytes: ByteArray) = answerGlassesPhoto(bytes)
+
+            override fun onGlassesButton() {
+                if (questionJob?.isActive == true) return
+                // Mentra Live's button is its camera button: ask about what the glasses see.
+                if (selectedDeviceClass == DeviceClass.MENTRA_LIVE) {
+                    handle(GlassesDashboardAction.TestImageQuestion)
+                } else {
+                    scope.launch { onGlassesAiVoice() }
+                }
+            }
+
+            override fun onSdkConnectionChanged(connected: Boolean) {
+                updateConnectionCapabilities()
+                if (connected) {
+                    otherGlasses.sdkBridge?.requestBattery()
+                    otherGlasses.sdkBridge?.requestMediaCounts()
+                }
+            }
+        },
+    )
+
     private var debugCycleRunning = false
 
     fun debugPhotoCycle() {
@@ -721,14 +768,7 @@ private class IosAppController {
                 val bytes = data.toKotlinBytes()
                 val size = IosMediaPlatform.imageSizeLabel(data)
                 PlatformLogger.i(ASSISTANT_TAG, "AI photo received from the glasses: ${bytes.size} bytes, $size")
-                if (pluginsRuntime.isWalkingAidActive) {
-                    pluginsRuntime.onGlassesImage(bytes)
-                } else {
-                    // One image question at a time: a new photo replaces the previous turn
-                    // (its speech, listening and generation) instead of piling up.
-                    IosChatPlatform.stopSpeaking()
-                    startQuestion { answerImageQuestion(bytes) }
-                }
+                answerGlassesPhoto(bytes)
             }
         })
         scope.launch {
@@ -741,7 +781,7 @@ private class IosAppController {
             )
             // Android's AutoPair reconnects the last glasses on launch; do the same here.
             val identifier = selectedProfile?.macAddress
-            if (identifier != null && selectedDeviceClass != DeviceClass.GENERIC_AUDIO) {
+            if (identifier != null && selectedDeviceClass !in NO_LINK_CLASSES) {
                 val poweredOn = withTimeoutOrNull(10_000L) { bleManager.isBluetoothEnabled.first { it } } ?: false
                 if (poweredOn && !isBleConnected) {
                     lastDiscoveredIdentifier = identifier
@@ -761,40 +801,24 @@ private class IosAppController {
                 if (!wasBleConnected && isBleConnected && selectedDeviceClass == DeviceClass.EYEVUE) {
                     scope.launch { eyevue.onConnected() }
                 }
+                if (!wasBleConnected && isBleConnected && selectedDeviceClass == DeviceClass.TUNEBUDS) {
+                    scope.launch { otherGlasses.onBleConnected() }
+                }
                 if (wasBleConnected && connectionState == BleConnectionState.DISCONNECTED) {
                     IosTransferModeConfiguration.clearHotspot()
                 }
-                updateState { state ->
-                    state.copy(
-                        connectionLabel = when (connectionState) {
-                            BleConnectionState.DISCONNECTED -> "Disconnected"
-                            BleConnectionState.CONNECTING -> "Connecting"
-                            BleConnectionState.CONNECTED -> "Connected"
-                            BleConnectionState.DISCONNECTING -> "Disconnecting"
-                        },
-                        showHeyCyanControls = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showCaptureSettings = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showAiWakeWordRouting = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showAdvancedControls = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showAdvancedLocalAgent = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showAdvancedDeviceInfo = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showAdvancedDeviceVolume = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showAdvancedImageQuality = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showAdvancedDeveloperTools = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showAdvancedOta = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showMetaRaybanControls = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.META_RAYBAN,
-                    )
+                // SDK-driven glasses report their own connection (IosOtherGlasses).
+                if (!otherGlasses.usesSdk) {
+                    updateState { state ->
+                        state.copy(
+                            connectionLabel = when (connectionState) {
+                                BleConnectionState.DISCONNECTED -> "Disconnected"
+                                BleConnectionState.CONNECTING -> "Connecting"
+                                BleConnectionState.CONNECTED -> "Connected"
+                                BleConnectionState.DISCONNECTING -> "Disconnecting"
+                            },
+                        )
+                    }
                 }
                 updateConnectionCapabilities()
             }
@@ -820,10 +844,15 @@ private class IosAppController {
 
     fun handle(action: GlassesDashboardAction) {
         if (isEyevueConnected && handleEyevue(action)) return
+        if (otherGlasses.handle(action)) return
         when (action) {
             GlassesDashboardAction.Scan -> openDeviceBind()
             GlassesDashboardAction.Reconnect -> reconnect()
-            GlassesDashboardAction.Disconnect -> scope.launch { bleManager.disconnect() }
+            GlassesDashboardAction.Disconnect -> if (otherGlasses.usesSdk) {
+                otherGlasses.disconnectSdk()
+            } else {
+                scope.launch { bleManager.disconnect() }
+            }
             GlassesDashboardAction.RequestBattery -> requestBattery()
             GlassesDashboardAction.RequestVersion -> requestVersion()
             GlassesDashboardAction.StartSync -> if (vendor != null) startVendorSync() else startSync()
@@ -861,7 +890,12 @@ private class IosAppController {
             }
             GlassesDashboardAction.StopMeetingCapture -> meetingRecorder.stopMeetingCapture()
             GlassesDashboardAction.TestImageQuestion -> startQuestion {
-                val bridge = vendor ?: return@startQuestion reportVendorRequired("Image question")
+                val bridge = vendor
+                if (bridge == null && !otherGlasses.canTakeAiPhoto) {
+                    return@startQuestion otherGlasses.missingSdkMessage()?.let { message ->
+                        updateState { it.copy(agentLastError = message) }
+                    } ?: reportVendorRequired("Image question")
+                }
                 dropPendingImageQuestion()
                 updateState { it.copy(agentLastError = "Waiting for the glasses photo… ask about it now") }
                 // Android: startParallelAudioQuestionIfEligible — listen while the photo transfers.
@@ -870,7 +904,8 @@ private class IosAppController {
                     IosVoiceQuestion.ask(IMAGE_QUESTION_INITIAL_LISTENING_MS)
                 }
                 pendingImageQuestion = question
-                if (!requestAiPhoto(bridge)) {
+                val requested = if (bridge != null) requestAiPhoto(bridge) else otherGlasses.requestAiPhoto()
+                if (!requested) {
                     question.cancel()
                     if (pendingImageQuestion === question) pendingImageQuestion = null
                     updateState { it.copy(agentLastError = "Image question was rejected by the glasses (they may be busy)") }
@@ -1008,11 +1043,12 @@ private class IosAppController {
         val bind = _deviceBindState.value ?: return
         val device = bind.connectingDevice ?: return
         when (bind.selectedClass) {
-            DeviceClass.META_RAYBAN -> closeDeviceBind("Meta glasses require the native MWDAT adapter on iOS")
+            DeviceClass.META_RAYBAN -> pairMetaGlasses()
             DeviceClass.GENERIC_AUDIO -> {
                 saveProfileAndConnect(device, DeviceClass.GENERIC_AUDIO, connect = false)
             }
-            DeviceClass.MEIZU_MYVU -> saveProfileAndConnect(device, DeviceClass.MEIZU_MYVU)
+            // The MYVU app relay is RFCOMM-only; keep the profile for the assistant over Bluetooth audio.
+            DeviceClass.MEIZU_MYVU -> saveProfileAndConnect(device, DeviceClass.MEIZU_MYVU, connect = false)
             // HEY_CYAN is the sentinel for the manual consumer picker handled by the screen.
             else -> confirmManualProtocol(DeviceClass.HEY_CYAN)
         }
@@ -1031,26 +1067,67 @@ private class IosAppController {
         saveProfileAndConnect(device, normalized)
     }
 
+    /** Meta glasses pair through the Meta AI app, not a BLE scan (Android: MetaPairingActivity). */
+    fun pairMetaGlasses() {
+        pairSdkGlasses(DeviceClass.META_RAYBAN, "Meta glasses")
+    }
+
+    /** Mentra Live: the Mentra SDK scans and connects (Android: MentraPairingActivity). */
+    fun pairMentraGlasses() {
+        pairSdkGlasses(DeviceClass.MENTRA_LIVE, "Mentra Live")
+    }
+
+    private fun pairSdkGlasses(deviceClass: DeviceClass, name: String) {
+        closeDeviceBind()
+        scope.launch { if (bleManager.isConnected()) bleManager.disconnect() }
+        applySelectedClass(deviceClass)
+        otherGlasses.missingSdkMessage()?.let { message ->
+            updateState { it.copy(agentLastError = message) }
+            return
+        }
+        updateState { it.copy(agentLastError = "Connecting to $name…") }
+        scope.launch {
+            // Meta finishes pairing in the Meta AI app, so keep the choice even if that is still pending.
+            if (deviceClass == DeviceClass.META_RAYBAN) saveProfile(deviceClass.name, name, deviceClass)
+            otherGlasses.connectSdk(identifier = "", name = name).onSuccess { identifier ->
+                lastDiscoveredIdentifier = identifier
+                saveProfile(identifier.ifBlank { deviceClass.name }, name, deviceClass)
+                updateState { it.copy(agentLastError = "") }
+            }
+        }
+    }
+
+    private suspend fun saveProfile(identifier: String, name: String?, deviceClass: DeviceClass) {
+        deviceProfileRepository.upsert(
+            DeviceProfileEntity(
+                macAddress = identifier,
+                advertisedName = name,
+                detectedClass = deviceClass.name,
+                selectedClass = deviceClass.name,
+                userOverridden = true,
+                lastConnectedAt = platformCurrentTimeMillis(),
+            ),
+        )
+    }
+
     private fun saveProfileAndConnect(device: ScannedDevice, deviceClass: DeviceClass, connect: Boolean = true) {
         closeDeviceBind()
         applySelectedClass(deviceClass)
         lastDiscoveredIdentifier = device.macAddress
+        if (deviceClass == DeviceClass.MEIZU_MYVU) {
+            updateState { it.copy(agentLastError = IosOtherGlasses.MEIZU_UNSUPPORTED) }
+        }
         scope.launch {
-            deviceProfileRepository.upsert(
-                DeviceProfileEntity(
-                    macAddress = device.macAddress,
-                    advertisedName = device.advertisedName,
-                    detectedClass = deviceClass.name,
-                    selectedClass = deviceClass.name,
-                    userOverridden = true,
-                    lastConnectedAt = platformCurrentTimeMillis(),
-                ),
-            )
-            if (connect) connectTo(device.macAddress)
+            saveProfile(device.macAddress, device.advertisedName, deviceClass)
+            if (connect) connectTo(device.macAddress, device.advertisedName)
         }
     }
 
-    private suspend fun connectTo(identifier: String) {
+    private suspend fun connectTo(identifier: String, name: String? = null) {
+        if (otherGlasses.usesSdk) {
+            otherGlasses.connectSdk(identifier.takeIf { it != selectedDeviceClass.name }.orEmpty(), name.orEmpty())
+            return
+        }
         runCatching { withTimeout(IOS_BLE_CONNECT_TIMEOUT_MS) { bleManager.connect(identifier) } }
             .onFailure { error ->
                 updateState { it.copy(agentLastError = error.message ?: "Connection failed") }
@@ -1256,6 +1333,18 @@ private class IosAppController {
         questionJob = scope.launch {
             previous?.cancelAndJoin()
             block()
+        }
+    }
+
+    /** A photo from any glasses: the walking aid takes it, otherwise it starts an image question. */
+    private fun answerGlassesPhoto(bytes: ByteArray) {
+        if (pluginsRuntime.isWalkingAidActive) {
+            pluginsRuntime.onGlassesImage(bytes)
+        } else {
+            // One image question at a time: a new photo replaces the previous turn
+            // (its speech, listening and generation) instead of piling up.
+            IosChatPlatform.stopSpeaking()
+            startQuestion { answerImageQuestion(bytes) }
         }
     }
 
@@ -1610,8 +1699,12 @@ private class IosAppController {
     private fun applySelectedClass(deviceClass: DeviceClass) {
         selectedDeviceClass = deviceClass
         bleManager.attachVendorOnConnect = deviceClass == DeviceClass.HEY_CYAN
-        bleManager.preferredWriteCharacteristicUuid =
-            EyevueProtocol.COMMAND_WRITE_UUID.takeIf { deviceClass == DeviceClass.EYEVUE }
+        bleManager.preferredWriteCharacteristicUuid = when (deviceClass) {
+            DeviceClass.EYEVUE -> EyevueProtocol.COMMAND_WRITE_UUID
+            DeviceClass.TUNEBUDS -> IosTuneBudsSession.WRITE_UUID
+            else -> null
+        }
+        otherGlasses.select(deviceClass)
         updateState { it.copy(deviceClassLabel = deviceClass.displayName()) }
         updateConnectionCapabilities()
     }
@@ -1801,19 +1894,31 @@ private class IosAppController {
 
     private fun updateConnectionCapabilities() {
         val showHeyCyan = isBleConnected && selectedDeviceClass == DeviceClass.HEY_CYAN
+        // The other glasses follow Android's GlassesManagerGating. Meta (registration) and Meizu
+        // (the unsupported notice) show their card without a live link.
+        val otherConnected = if (otherGlasses.usesSdk) otherGlasses.isSdkConnected else isBleConnected
+        val other = if (selectedDeviceClass in OTHER_GLASSES_CLASSES &&
+            (otherConnected || selectedDeviceClass in CARD_WITHOUT_LINK_CLASSES)
+        ) {
+            GlassesManagerGating.visibleActions(selectedDeviceClass)
+        } else {
+            emptySet()
+        }
         updateState { state ->
             state.copy(
                 showHeyCyanControls = showHeyCyan,
                 showCaptureSettings = showHeyCyan,
                 showAiWakeWordRouting = showHeyCyan,
-                showAdvancedControls = showHeyCyan,
+                showAdvancedControls = showHeyCyan || GlassesManagerGating.Action.ADVANCED_CONTROLS in other,
                 showAdvancedLocalAgent = showHeyCyan,
-                showAdvancedDeviceInfo = showHeyCyan,
+                showAdvancedDeviceInfo = showHeyCyan || GlassesManagerGating.Action.ADVANCED_DEVICE_INFO in other,
                 showAdvancedDeviceVolume = showHeyCyan,
-                showAdvancedImageQuality = showHeyCyan,
+                showAdvancedImageQuality = showHeyCyan || GlassesManagerGating.Action.ADVANCED_IMAGE_QUALITY in other,
                 showAdvancedDeveloperTools = showHeyCyan,
                 showAdvancedOta = showHeyCyan,
-                showMetaRaybanControls = isBleConnected && selectedDeviceClass == DeviceClass.META_RAYBAN,
+                showMetaRaybanControls = GlassesManagerGating.Action.META_RAYBAN_CONTROLS in other,
+                showMeizuMyvuControls = GlassesManagerGating.Action.MEIZU_MYVU_CONTROLS in other,
+                showTuneBudsControls = GlassesManagerGating.Action.TUNEBUDS_CONTROLS in other,
                 showEyevueControls = isEyevueConnected,
                 videoRecordingDurationOptionsSeconds = if (isEyevueConnected) {
                     VIDEO_DURATION_OPTIONS_SECONDS

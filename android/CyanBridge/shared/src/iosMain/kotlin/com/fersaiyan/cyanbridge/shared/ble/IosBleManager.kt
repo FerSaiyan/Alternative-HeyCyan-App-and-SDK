@@ -200,6 +200,11 @@ class IosBleManager : BleManager {
         peripheral.writeValue(data, forCharacteristic = characteristic, type = writeType)
     }
 
+    /** Largest single write the connected peripheral accepts (ATT MTU minus 3); 20 before connecting. */
+    fun maximumWriteLength(): Int =
+        connectedPeripheral?.maximumWriteValueLengthForType(CBCharacteristicWriteWithoutResponse)?.toInt()
+            ?.takeIf { it > 0 } ?: 20
+
     override fun addNotificationListener(listener: BleNotificationListener) {
         if (!listeners.contains(listener)) listeners += listener
     }

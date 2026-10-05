@@ -32,6 +32,13 @@
 		CB2000012F00000100CB0001 /* CyanBridgeKMPHostApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2000022F00000100CB0001 /* CyanBridgeKMPHostApp.swift */; };
 		CB2000132F00000100CB0001 /* IosSecurityBridgeImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2000142F00000100CB0001 /* IosSecurityBridgeImpl.swift */; };
 		CB2000112F00000100CB0001 /* QCSDKGlassesBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2000122F00000100CB0001 /* QCSDKGlassesBridge.swift */; };
+		CB4000022F00000100CB0001 /* MoyoungGlassesBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB4000012F00000100CB0001 /* MoyoungGlassesBridge.swift */; };
+		CB4000042F00000100CB0001 /* MetaGlassesBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB4000032F00000100CB0001 /* MetaGlassesBridge.swift */; };
+		CB4000062F00000100CB0001 /* MentraGlassesBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB4000052F00000100CB0001 /* MentraGlassesBridge.swift */; };
+		CB4000082F00000100CB0001 /* SdkGlassesSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB4000072F00000100CB0001 /* SdkGlassesSetup.swift */; };
+		CB4000162F00000100CB0001 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = CB4000122F00000100CB0001 /* MWDATCore */; };
+		CB4000172F00000100CB0001 /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = CB4000132F00000100CB0001 /* MWDATCamera */; };
+		CB4000192F00000100CB0001 /* MentraBluetoothSDK in Frameworks */ = {isa = PBXBuildFile; productRef = CB4000152F00000100CB0001 /* MentraBluetoothSDK */; };
 		CT3000012F00000100CT0001 /* CyanBridgeKMPHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CT3000022F00000100CT0001 /* CyanBridgeKMPHostTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -80,6 +87,10 @@
 		CB2000022F00000100CB0001 /* CyanBridgeKMPHostApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CyanBridgeKMPHostApp.swift; sourceTree = "<group>"; };
 		CB2000142F00000100CB0001 /* IosSecurityBridgeImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosSecurityBridgeImpl.swift; sourceTree = "<group>"; };
 		CB2000122F00000100CB0001 /* QCSDKGlassesBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QCSDKGlassesBridge.swift; sourceTree = "<group>"; };
+		CB4000012F00000100CB0001 /* MoyoungGlassesBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoyoungGlassesBridge.swift; sourceTree = "<group>"; };
+		CB4000032F00000100CB0001 /* MetaGlassesBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaGlassesBridge.swift; sourceTree = "<group>"; };
+		CB4000052F00000100CB0001 /* MentraGlassesBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentraGlassesBridge.swift; sourceTree = "<group>"; };
+		CB4000072F00000100CB0001 /* SdkGlassesSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SdkGlassesSetup.swift; sourceTree = "<group>"; };
 		CB2000032F00000100CB0001 /* CyanBridgeKMPHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CyanBridgeKMPHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB20000D2F00000100CB0001 /* CyanBridgeKMPHost.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CyanBridgeKMPHost.entitlements; sourceTree = "<group>"; };
 		CT3000022F00000100CT0001 /* CyanBridgeKMPHostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CyanBridgeKMPHostTests.swift; sourceTree = "<group>"; };
@@ -122,6 +133,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				CB2000192F00000100CB0001 /* CyanLocalModels in Frameworks */,
+				CB4000162F00000100CB0001 /* MWDATCore in Frameworks */,
+				CB4000172F00000100CB0001 /* MWDATCamera in Frameworks */,
+				CB4000192F00000100CB0001 /* MentraBluetoothSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -213,6 +227,10 @@
 			children = (
 				CB2000022F00000100CB0001 /* CyanBridgeKMPHostApp.swift */,
 				CB2000122F00000100CB0001 /* QCSDKGlassesBridge.swift */,
+				CB4000012F00000100CB0001 /* MoyoungGlassesBridge.swift */,
+				CB4000032F00000100CB0001 /* MetaGlassesBridge.swift */,
+				CB4000052F00000100CB0001 /* MentraGlassesBridge.swift */,
+				CB4000072F00000100CB0001 /* SdkGlassesSetup.swift */,
 				CB2000142F00000100CB0001 /* IosSecurityBridgeImpl.swift */,
 				CB2000162F00000100CB0001 /* LocalModelBridgeImpl.swift */,
 				CB20000D2F00000100CB0001 /* CyanBridgeKMPHost.entitlements */,
@@ -275,6 +293,7 @@
 				CB2000052F00000100CB0001 /* Sources */,
 				CB2000062F00000100CB0001 /* Frameworks */,
 				CB2000072F00000100CB0001 /* Resources */,
+				CB4000202F00000100CB0001 /* Embed MoYoung frameworks */,
 			);
 			buildRules = (
 			);
@@ -283,6 +302,9 @@
 			name = CyanBridgeKMPHost;
 			packageProductDependencies = (
 				CB2000182F00000100CB0001 /* CyanLocalModels */,
+				CB4000122F00000100CB0001 /* MWDATCore */,
+				CB4000132F00000100CB0001 /* MWDATCamera */,
+				CB4000152F00000100CB0001 /* MentraBluetoothSDK */,
 			);
 			productName = CyanBridgeKMPHost;
 			productReference = CB2000032F00000100CB0001 /* CyanBridgeKMPHost.app */;
@@ -339,6 +361,8 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				CB2000172F00000100CB0001 /* XCLocalSwiftPackageReference "LocalModels" */,
+				CB4000102F00000100CB0001 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
+				CB4000112F00000100CB0001 /* XCRemoteSwiftPackageReference "mentra-bluetooth-sdk-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AA1313582E2F903500B03938 /* Products */;
@@ -415,6 +439,24 @@
 			shellPath = /bin/sh;
 			shellScript = "set -e\nif [ -z \"${JAVA_HOME:-}\" ]; then\n  export JAVA_HOME=\"$(/usr/libexec/java_home -v 17)\"\nfi\ncd \"$SRCROOT/../android/CyanBridge\"\n./gradlew -PenableAppleTargets=true :shared:embedAndSignAppleFrameworkForXcode\n";
 		};
+		CB4000202F00000100CB0001 /* Embed MoYoung frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed MoYoung frameworks";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n# CRPSmartGlasses (MoYoung) and the dynamic frameworks it links are iPhone-only; see ios/scripts/fetch_moyoung_sdk.sh.\nSRC=\"$SRCROOT/Vendor/MoYoung/Frameworks\"\nif [ \"$PLATFORM_NAME\" != \"iphoneos\" ] || [ ! -d \"$SRC/CRPSmartGlasses.framework\" ]; then exit 0; fi\nDEST=\"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor fw in CRPSmartGlasses SpeexKit AFNetworking SwiftProtobuf; do\n  rsync -a --delete --exclude Headers --exclude PrivateHeaders --exclude Modules \"$SRC/$fw.framework/\" \"$DEST/$fw.framework/\"\n  if [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --preserve-metadata=identifier \"$DEST/$fw.framework\"\n  fi\ndone\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -442,6 +484,10 @@
 			files = (
 				CB2000012F00000100CB0001 /* CyanBridgeKMPHostApp.swift in Sources */,
 				CB2000112F00000100CB0001 /* QCSDKGlassesBridge.swift in Sources */,
+				CB4000022F00000100CB0001 /* MoyoungGlassesBridge.swift in Sources */,
+				CB4000042F00000100CB0001 /* MetaGlassesBridge.swift in Sources */,
+				CB4000062F00000100CB0001 /* MentraGlassesBridge.swift in Sources */,
+				CB4000082F00000100CB0001 /* SdkGlassesSetup.swift in Sources */,
 				CB2000132F00000100CB0001 /* IosSecurityBridgeImpl.swift in Sources */,
 				CB2000152F00000100CB0001 /* LocalModelBridgeImpl.swift in Sources */,
 			);
@@ -842,7 +888,7 @@
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "CyanBridge uses Bluetooth to find and communicate with your glasses.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "CyanBridge connects to your glasses over their local Wi-Fi transfer network.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location access lets CyanBridge verify the glasses Wi-Fi connection.";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -865,6 +911,7 @@
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"$(SRCROOT)",
+					"$(SRCROOT)/Vendor/MoYoung/Frameworks",
 				);
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
@@ -896,7 +943,7 @@
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "CyanBridge uses Bluetooth to find and communicate with your glasses.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "CyanBridge connects to your glasses over their local Wi-Fi transfer network.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location access lets CyanBridge verify the glasses Wi-Fi connection.";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -919,6 +966,7 @@
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"$(SRCROOT)",
+					"$(SRCROOT)/Vendor/MoYoung/Frameworks",
 				);
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
@@ -949,7 +997,7 @@
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "CyanBridge uses Bluetooth to find and communicate with your glasses.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "CyanBridge connects to your glasses over their local Wi-Fi transfer network.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location access lets CyanBridge verify the glasses Wi-Fi connection.";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -972,6 +1020,7 @@
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"$(SRCROOT)",
+					"$(SRCROOT)/Vendor/MoYoung/Frameworks",
 				);
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
 					"$(inherited)",
@@ -995,7 +1044,7 @@
 					"$(SRCROOT)/../android/CyanBridge/shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1026,7 +1075,7 @@
 					"$(SRCROOT)/../android/CyanBridge/shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1056,7 +1105,7 @@
 					"$(SRCROOT)/../android/CyanBridge/shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1128,10 +1177,44 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		CB4000102F00000100CB0001 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.0;
+			};
+		};
+		CB4000112F00000100CB0001 /* XCRemoteSwiftPackageReference "mentra-bluetooth-sdk-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Mentra-Community/mentra-bluetooth-sdk-ios";
+			requirement = {
+				kind = exactVersion;
+				version = "3.2.0-dev.227";
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		CB2000182F00000100CB0001 /* CyanLocalModels */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = CyanLocalModels;
+		};
+		CB4000122F00000100CB0001 /* MWDATCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CB4000102F00000100CB0001 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCore;
+		};
+		CB4000132F00000100CB0001 /* MWDATCamera */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CB4000102F00000100CB0001 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCamera;
+		};
+		CB4000152F00000100CB0001 /* MentraBluetoothSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CB4000112F00000100CB0001 /* XCRemoteSwiftPackageReference "mentra-bluetooth-sdk-ios" */;
+			productName = MentraBluetoothSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

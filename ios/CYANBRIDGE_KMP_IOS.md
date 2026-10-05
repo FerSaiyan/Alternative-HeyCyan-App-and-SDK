@@ -46,6 +46,18 @@ HeyCyan glasses are driven through QCSDK, the iOS counterpart of Android's `glas
 - `IosBleManager` still owns scanning and connecting. When the selected class is HeyCyan, it hands the connected `CBPeripheral` to `QCSDKManager` instead of running generic service discovery, and falls back to the generic path if QCSDK rejects it.
 - Simulator builds have no bridge; the dashboard reports that vendor controls need a device build.
 
+## Other glasses SDKs
+
+TuneBuds, MoYoung, Meta Ray-Ban, Mentra Live and Meizu run through `IosOtherGlasses.kt`:
+
+- **TuneBuds**: the shared `TuneBudsSession` (AB Mate frames) over BLE service `FDB3` (write `FF17`, notify `FF18`), through `IosBleManager`.
+- **MoYoung / W620**: `MoyoungGlassesBridge.swift` with `CRPSmartGlasses.framework`. It is arm64 iPhone-only and not committed: run `ios/scripts/fetch_moyoung_sdk.sh` once. The script downloads the pinned plugin archive (checksum verified) into `ios/Vendor/MoYoung` and builds the dynamic `SwiftProtobuf` and `AFNetworking` frameworks the SDK links against. The "Embed MoYoung frameworks" build phase copies and signs them for device builds only.
+- **Meta Ray-Ban**: `MetaGlassesBridge.swift` with the `meta-wearables-dat-ios` 1.0.0 Swift package (requires iOS 17.2). Registration goes through the Meta AI app and returns through the `cyanbridge://` URL. `Info.plist` runs the toolkit in developer mode (`MetaAppID` 0), with analytics and crash reporting opted out. A production release needs the app ID and client token from the Wearables Developer Center.
+- **Mentra Live**: `MentraGlassesBridge.swift` with the `mentra-bluetooth-sdk-ios` 3.2.0-dev.227 Swift package, the same version as Android.
+- **Meizu MYVU**: not drivable on iOS, because its app relay is RFCOMM-only. The dashboard card explains this.
+
+The Swift bridges implement the shared `SdkGlassesBridge` contract and register in `SdkGlassesSetup.swift`. Each bridge is wrapped in `#if canImport(...)`, so a build without one of the SDKs still compiles and the dashboard says which SDK is missing.
+
 ## On-device models
 
 The "Local" AI provider runs models on the iPhone through `ios/LocalModels`, a local Swift package linked into `CyanBridgeKMPHost`:
