@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.platform
 
+import com.fersaiyan.cyanbridge.shared.assistant.AssistantSpeechStream
 import com.fersaiyan.cyanbridge.shared.speech.StreamingSpeechChunker
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
@@ -139,7 +140,7 @@ object IosVoiceQuestion {
 class IosStreamingSpeech(
     /** Runs once before the first chunk is spoken (e.g. switching the glasses to "speaking"). */
     private val beforeFirstChunk: suspend () -> Unit = {},
-) {
+) : AssistantSpeechStream {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var idleJob: Job? = null
     private val pendingChunks = mutableListOf<String>()
@@ -162,8 +163,8 @@ class IosStreamingSpeech(
     }
 
     /** Appends a token delta from the model. */
-    fun append(delta: String) {
-        chunker.append(delta)
+    override fun append(text: String) {
+        chunker.append(text)
         idleJob?.cancel()
         idleJob = scope.launch {
             delay(
@@ -175,14 +176,14 @@ class IosStreamingSpeech(
     }
 
     /** Speaks whatever is left and waits until the glasses finished talking. */
-    suspend fun finish() {
+    override suspend fun finish() {
         idleJob?.cancel()
         chunker.finish()
         gate?.join()
         IosChatPlatform.awaitSpeechDone()
     }
 
-    fun cancel() {
+    override fun cancel() {
         idleJob?.cancel()
         gate?.cancel()
         pendingChunks.clear()
