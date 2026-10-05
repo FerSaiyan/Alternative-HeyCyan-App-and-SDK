@@ -95,6 +95,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -104,7 +105,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
@@ -140,6 +144,12 @@ private const val IMAGE_QUESTION_SHUTTER_SETTLE_MS = 500L
 /** No "Pergunte." after the first description (follow-ups were too eager). */
 private const val MAX_IMAGE_FOLLOW_UPS = 0
 private const val ASSISTANT_TAG = "IosGlassesAssistant"
+/**
+ * Pause after a spoken reply before the AI-speak STOP and the next cue or listening window:
+ * AVSpeechSynthesizer reports the end before the glasses played the last words. Android waits
+ * 500 ms too (offerFollowUp).
+ */
+private const val SPEECH_BLUETOOTH_TAIL_MS = 500L
 // Same option lists as Android's MainActivity for HeyCyan recording limits.
 private val VIDEO_DURATION_OPTIONS_SECONDS = listOf(15, 30, 60, 180, 540, 720)
 private val AUDIO_DURATION_OPTIONS_SECONDS = listOf(1_800, 3_600, 7_200)
@@ -560,7 +570,7 @@ private class IosAppController {
         onWifiSsid = { ssid ->
             scope.launch { updateState { it.copy(transfer = it.transfer.copy(detail = "Eyevue Wi-Fi: $ssid")) } }
         },
-        onPhoto = { image -> scope.launch { answerImageQuestion(image) } },
+        onPhoto = { image -> startQuestion { answerImageQuestion(image) } },
     )
     private val isEyevueConnected get() = isBleConnected && selectedDeviceClass == DeviceClass.EYEVUE
     private val pluginsRuntime = IosPluginsRuntime(
@@ -584,7 +594,7 @@ private class IosAppController {
             PlatformLogger.i(ASSISTANT_TAG, "Photo cycle 1: AI photo turn")
             handle(GlassesDashboardAction.TestImageQuestion)
             delay(4_000L)
-            withTimeoutOrNull(120_000L) { while (imageQuestionJob?.isActive != false) delay(500L) }
+            withTimeoutOrNull(120_000L) { while (questionJob?.isActive != false) delay(500L) }
             PlatformLogger.i(ASSISTANT_TAG, "Photo cycle 2: turn finished")
             delay(5_000L)
             PlatformLogger.i(ASSISTANT_TAG, "Photo cycle 3: regular photo accepted=${bridge.awaitModeAccepted(VendorGlassesMode.PHOTO)}")
@@ -716,9 +726,8 @@ private class IosAppController {
                 } else {
                     // One image question at a time: a new photo replaces the previous turn
                     // (its speech, listening and generation) instead of piling up.
-                    imageQuestionJob?.cancel()
                     IosChatPlatform.stopSpeaking()
-                    imageQuestionJob = scope.launch { answerImageQuestion(bytes) }
+                    startQuestion { answerImageQuestion(bytes) }
                 }
             }
         })
@@ -851,10 +860,9 @@ private class IosAppController {
                 meetingRecorder.start(timer)?.let { error -> updateState { it.copy(agentLastError = error) } }
             }
             GlassesDashboardAction.StopMeetingCapture -> meetingRecorder.stopMeetingCapture()
-            GlassesDashboardAction.TestImageQuestion -> scope.launch {
-                val bridge = vendor ?: return@launch reportVendorRequired("Image question")
-                imageQuestionJob?.cancel()
-                pendingImageQuestion?.cancel()
+            GlassesDashboardAction.TestImageQuestion -> startQuestion {
+                val bridge = vendor ?: return@startQuestion reportVendorRequired("Image question")
+                dropPendingImageQuestion()
                 updateState { it.copy(agentLastError = "Waiting for the glasses photo… ask about it now") }
                 // Android: startParallelAudioQuestionIfEligible — listen while the photo transfers.
                 val question = scope.async {
@@ -868,10 +876,7 @@ private class IosAppController {
                     updateState { it.copy(agentLastError = "Image question was rejected by the glasses (they may be busy)") }
                 }
             }
-            GlassesDashboardAction.TestVoiceQuestion -> {
-                voiceQuestionJob?.cancel()
-                voiceQuestionJob = scope.launch { answerVoiceQuestion() }
-            }
+            GlassesDashboardAction.TestVoiceQuestion -> startQuestion { answerVoiceQuestion() }
             is GlassesDashboardAction.SelectAssistantMode -> {
                 glassesPreferences.putString(PREF_ASSISTANT_MODE, action.mode.name)
                 updateState { it.copy(assistantMode = action.mode) }
@@ -1187,9 +1192,7 @@ private class IosAppController {
 
     /** Question captured while the photo is still being taken (TestImageQuestion). */
     private var pendingImageQuestion: Deferred<String?>? = null
-    private var imageQuestionJob: Job? = null
     private var lastPhotoCount: Int? = null
-    private var voiceQuestionJob: Job? = null
 
     private suspend fun releaseGlassesAiMode(bridge: com.fersaiyan.cyanbridge.shared.ble.VendorGlassesBridge) {
         val released = bridge.awaitModeAccepted(VendorGlassesMode.SPEECH_RECOGNITION_STOP)
@@ -1198,7 +1201,7 @@ private class IosAppController {
 
     /** Wake word / AI button: run the action chosen in "Wake word action" (Android: AiWakeWordRoute). */
     private suspend fun onGlassesAiVoice() {
-        if (imageQuestionJob?.isActive == true || voiceQuestionJob?.isActive == true) return
+        if (questionJob?.isActive == true) return
         // Android stopGlassesAiAudio: end the glasses' own AI voice mode first, otherwise they
         // stay busy and reject the AI photo.
         vendor?.let { releaseGlassesAiMode(it) }
@@ -1210,7 +1213,7 @@ private class IosAppController {
             }
             AiWakeWordRoute.VOICE_QUESTION -> {
                 PlatformLogger.i(ASSISTANT_TAG, "Wake word: voice question")
-                voiceQuestionJob = scope.launch { answerVoiceQuestion() }
+                startQuestion { answerVoiceQuestion() }
             }
         }
     }
@@ -1240,6 +1243,27 @@ private class IosAppController {
         updateState { it.copy(agentLastError = "The glasses were busy; press Test description to ask about the view") }
     }
 
+    /** The running glasses question; see [startQuestion]. */
+    private var questionJob: Job? = null
+
+    /**
+     * Runs one glasses question at a time. A new one (dashboard button or glasses photo) cancels
+     * the running one and waits for it to stop, so two answers never talk over each other and a
+     * new cue or microphone switch never lands in the middle of a reply.
+     */
+    private fun startQuestion(block: suspend () -> Unit) {
+        val previous = questionJob
+        questionJob = scope.launch {
+            previous?.cancelAndJoin()
+            block()
+        }
+    }
+
+    private fun dropPendingImageQuestion() {
+        pendingImageQuestion?.cancel()
+        pendingImageQuestion = null
+    }
+
     /**
      * Android's image-question flow: ask "Pergunte." while the photo arrives (the model loads in
      * parallel), answer the spoken question or the default description, then offer follow-ups
@@ -1250,7 +1274,15 @@ private class IosAppController {
         updateState { it.copy(agentLastError = "Ask about the photo now, or wait for the description…") }
         // A question already asked while the photo transferred is final, even if it was silence.
         val pending = pendingImageQuestion?.also { pendingImageQuestion = null }
-        val spoken = if (pending != null) pending.await() else IosVoiceQuestion.ask(IMAGE_QUESTION_INITIAL_LISTENING_MS)
+        val spoken = if (pending != null) {
+            try {
+                pending.await()
+            } finally {
+                pending.cancel() // no-op once answered; stops listening when this question is replaced
+            }
+        } else {
+            IosVoiceQuestion.ask(IMAGE_QUESTION_INITIAL_LISTENING_MS)
+        }
         var question = spoken ?: sharedDefaultImageQuestion()
         repeat(MAX_IMAGE_FOLLOW_UPS + 1) { round ->
             updateState { it.copy(agentLastError = "Analyzing the photo: $question") }
@@ -1272,6 +1304,7 @@ private class IosAppController {
     }
 
     private suspend fun answerVoiceQuestion() {
+        dropPendingImageQuestion()
         scope.launch { IosLocalModels.preload() }
         updateState { it.copy(agentLastError = "Listening… ask your question") }
         val question = IosVoiceQuestion.ask(VOICE_QUESTION_INITIAL_LISTENING_MS)
@@ -1319,9 +1352,17 @@ private class IosAppController {
                 if (text.startsWith("Error:")) error(text.removePrefix("Error:").trim())
                 text
             }.also { result ->
+                // runCatching also catches cancellation: a replaced question stops here, unreported.
+                currentCoroutineContext().ensureActive()
                 result.onSuccess { text -> if (!streamed) speech.append(text) }.onFailure { speech.cancel() }
-                if (result.isSuccess) speech.finish()
+                if (result.isSuccess) {
+                    speech.finish()
+                    delay(SPEECH_BLUETOOTH_TAIL_MS)
+                }
             }
+        } catch (cancelled: CancellationException) {
+            speech.cancel()
+            throw cancelled
         } finally {
             // Also on cancellation (a new photo replaced this turn).
             withContext(NonCancellable) {
