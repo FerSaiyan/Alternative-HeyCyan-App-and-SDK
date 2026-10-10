@@ -33,6 +33,8 @@ class OnboardingFeatureActivity : AppCompatActivity() {
     private var glassesConnectionPermissionGranted by mutableStateOf(false)
     private var selectedModelId by mutableStateOf<String?>(null)
     private var modelChoices = emptyList<OnboardingChoice>()
+    private var deviceRamGb = 0.0
+    private var showBluetoothSkipWarning by mutableStateOf(false)
 
     data class OnboardingFeature(
         val iconRes: Int,
@@ -47,6 +49,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
         val ramGb = DeviceCapabilityService.totalRamGb(
             DeviceCapabilityService.snapshot(this).totalRamBytes,
         )
+        deviceRamGb = ramGb
         val recommended = LocalModelCatalogRepository.recommendedStarterForRam(ramGb)
         val storedModelId = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_ONBOARDING_MODEL_ID, null)
@@ -86,6 +89,27 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                     showOpenSourceContribution = featureIndex == OPEN_SOURCE_FEATURE_INDEX,
                     choices = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) modelChoices else emptyList(),
                     selectedChoiceId = selectedModelId,
+                    stepIndex = featureIndex,
+                    stepCount = FEATURES.size,
+                    deviceCapabilitySummary = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) {
+                        getString(R.string.onboarding_device_ram, deviceRamGb)
+                    } else null,
+                    lowMemoryWarningTitle = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX && deviceRamGb < 6.0) {
+                        getString(R.string.onboarding_ram_warning_title)
+                    } else null,
+                    lowMemoryWarning = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX && deviceRamGb < 6.0) {
+                        getString(
+                            if (deviceRamGb < 4.0) R.string.onboarding_ram_too_low
+                            else R.string.onboarding_ram_limited,
+                            deviceRamGb,
+                        )
+                    } else null,
+                    showBluetoothSkipWarning = showBluetoothSkipWarning,
+                    bluetoothSkipWarningTitle = getString(R.string.onboarding_bluetooth_skip_title),
+                    bluetoothSkipWarningBody = getString(R.string.onboarding_bluetooth_skip_body),
+                    bluetoothSkipConfirmLabel = getString(R.string.onboarding_bluetooth_skip_confirm),
+                    bluetoothSkipCancelLabel = getString(R.string.onboarding_bluetooth_skip_cancel),
+                    findGlassesLabel = getString(R.string.onboarding_find_glasses),
                     backLabel = getString(
                         if (featureIndex == 0) R.string.onboarding_skip_all else R.string.onboarding_back,
                     ),
@@ -95,8 +119,10 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                     onRequestGlassesConnectionPermission = {
                         requestBluetoothPermission(this, OnPermissionCallback { _, allGranted ->
                             glassesConnectionPermissionGranted = allGranted && hasBluetooth(this)
+                            if (glassesConnectionPermissionGranted) openRealGlassesScanner()
                         })
                     },
+                    onFindGlasses = ::openRealGlassesScanner,
                     onRequestStoragePermission = {},
                     onOpenSourceRepository = {
                         runCatching {
@@ -110,14 +136,22 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                             .putString(KEY_ONBOARDING_MODEL_ID, modelId)
                             .apply()
                     },
+                    onConfirmBluetoothSkip = {
+                        showBluetoothSkipWarning = false
+                        goToFeature(featureIndex + 1)
+                    },
+                    onDismissBluetoothSkip = { showBluetoothSkipWarning = false },
                     onBack = {
                         if (featureIndex == 0) skipAllOnboarding() else goToFeature(featureIndex - 1)
                     },
                     onNext = {
-                        if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) {
-                            startSelectedModelDownload()
+                        if (featureIndex == GLASSES_CONNECTION_FEATURE_INDEX && !glassesConnectionPermissionGranted) {
+                            showBluetoothSkipWarning = true
+                        } else {
+                            if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) startSelectedModelDownload()
+                            if (featureIndex == FEATURES.lastIndex) finishOnboarding()
+                            else goToFeature(featureIndex + 1)
                         }
-                        if (featureIndex == FEATURES.lastIndex) finishOnboarding() else goToFeature(featureIndex + 1)
                     },
                 )
             }
@@ -128,8 +162,13 @@ class OnboardingFeatureActivity : AppCompatActivity() {
         startActivity(Intent(this, OnboardingFeatureActivity::class.java).apply {
             putExtra(EXTRA_FEATURE_INDEX, index)
         })
-        overridePendingTransition(android.R.anim.slide_in_left, android.R.anim.slide_out_right)
+        overridePendingTransition(R.anim.onboarding_fade_in, R.anim.onboarding_fade_out)
         finish()
+    }
+
+    private fun openRealGlassesScanner() {
+        startActivity(Intent(this, DeviceBindActivity::class.java))
+        overridePendingTransition(R.anim.onboarding_fade_in, R.anim.onboarding_fade_out)
     }
 
     private fun finishOnboarding() {
@@ -262,10 +301,12 @@ class OnboardingFeatureActivity : AppCompatActivity() {
             val entry = LocalModelCatalogRepository.findById(id) ?: return@mapNotNull null
             val enabled = ramGb >= entry.minRamGb
             val ramLabel = String.format(Locale.US, "%.0f", entry.minRamGb)
+            val storageLabel = String.format(Locale.US, "%.1f", entry.minStorageGb)
+            val downloadLabel = String.format(Locale.US, "%.1f", entry.sizeBytes / 1_000_000_000.0)
             OnboardingChoice(
                 id = id,
                 title = if (id == recommendedId) "$title - Recommended" else title,
-                description = "$description Requires $ramLabel GB RAM.",
+                description = "$description\nRequirements: $ramLabel GB RAM • $storageLabel GB free • $downloadLabel GB download",
                 enabled = enabled,
             )
         }

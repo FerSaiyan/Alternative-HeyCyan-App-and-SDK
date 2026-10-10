@@ -22,4 +22,7 @@ enum class AppIcon {
     Attachment,
     Stop,
     Close,
+    Language,
+    ExpandMore,
+    Warning,
 }

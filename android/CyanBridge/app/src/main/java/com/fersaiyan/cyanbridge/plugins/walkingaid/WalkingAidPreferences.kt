@@ -6,6 +6,10 @@ object WalkingAidPreferences {
     private const val PREFS = "walking_aid_prefs"
 
     private const val KEY_ENABLED = "enabled"
+    private const val KEY_VIDEO_MODE = "video_mode"
+    private const val KEY_MODE = "mode"
+    private const val KEY_SPEECH_RATE = "speech_rate"
+    private const val KEY_ANNOUNCEMENT_PAUSE_MS = "announcement_pause_ms"
     private const val KEY_CAPTURE_INTERVAL_SECONDS = "capture_interval_seconds"
     private const val KEY_IMAGE_DESCRIPTION_SOURCE = "image_description_source"
     private const val KEY_IMAGE_DESCRIPTION_CLOUD_MODEL_ID = "image_description_cloud_model_id"
@@ -47,6 +51,38 @@ object WalkingAidPreferences {
 
     fun isEnabled(context: Context): Boolean =
         prefs(context).getBoolean(KEY_ENABLED, DEFAULT_ENABLED)
+
+    fun getVideoMode(context: Context): WalkingAidVideoMode =
+        WalkingAidVideoMode.entries.firstOrNull { it.name == prefs(context).getString(KEY_VIDEO_MODE, null) }
+            ?: WalkingAidVideoMode.PERIODIC_PHOTOS
+
+    fun setVideoMode(context: Context, mode: WalkingAidVideoMode) {
+        prefs(context).edit().putString(KEY_VIDEO_MODE, mode.name).apply()
+    }
+
+    fun getMode(context: Context): WalkingAidMode =
+        WalkingAidMode.entries.firstOrNull { it.name == prefs(context).getString(KEY_MODE, null) }
+            ?: WalkingAidMode.WALKING
+
+    fun setMode(context: Context, mode: WalkingAidMode) {
+        prefs(context).edit().putString(KEY_MODE, mode.name).apply()
+    }
+
+    fun getSpeechRate(context: Context): Float =
+        prefs(context).getFloat(KEY_SPEECH_RATE, 1f).let {
+            if (it.isFinite()) it.coerceIn(0.5f, 2f) else 1f
+        }
+
+    fun setSpeechRate(context: Context, rate: Float) {
+        prefs(context).edit().putFloat(KEY_SPEECH_RATE, if (rate.isFinite()) rate.coerceIn(0.5f, 2f) else 1f).apply()
+    }
+
+    fun getAnnouncementPauseMs(context: Context): Long =
+        prefs(context).getLong(KEY_ANNOUNCEMENT_PAUSE_MS, 1_000L).coerceIn(0L, 5_000L)
+
+    fun setAnnouncementPauseMs(context: Context, pauseMs: Long) {
+        prefs(context).edit().putLong(KEY_ANNOUNCEMENT_PAUSE_MS, pauseMs.coerceIn(0L, 5_000L)).apply()
+    }
 
     fun setEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_ENABLED, enabled).apply()

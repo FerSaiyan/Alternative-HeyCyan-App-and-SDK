@@ -163,6 +163,7 @@ class TuneBudsSppClient(context: Context) {
             try {
                 while (isActive && connectedSocket.isConnected) {
                     val count = connectedSocket.inputStream.read(buffer)
+                    if (!isActive || socket !== connectedSocket) break
                     if (count < 0) throw IOException("TuneBuds RFCOMM stream closed")
                     if (count == 0) continue
                     val malformedBefore = decoder.malformedFrameCount

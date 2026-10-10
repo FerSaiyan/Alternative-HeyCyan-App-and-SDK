@@ -102,6 +102,7 @@ object LocalModelStorageRepository {
             setSelectedModelId(context, current.firstOrNull()?.id)
         }
         runCatching { File(model.absolutePath).delete() }
+        LocalModelProjectorStore.remove(context, model.id)
         return true
     }
 

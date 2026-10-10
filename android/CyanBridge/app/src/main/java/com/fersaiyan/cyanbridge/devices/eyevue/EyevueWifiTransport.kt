@@ -40,7 +40,8 @@ enum class EyevueWifiMode {
 data class EyevueWifiConnection(
     val mode: EyevueWifiMode,
     val baseIp: String,
-    val network: Network,
+    /** Present when the OS surfaced the P2P/AP link for binding; null means default route. */
+    val network: Network?,
 )
 
 /** Connects Eyevue's AP or Wi-Fi Direct network and binds process traffic to it. */
@@ -85,7 +86,7 @@ class EyevueWifiTransport(
         return try {
             val network = when (mode) {
                 EyevueWifiMode.AP -> connectAp(ssid, password)
-                EyevueWifiMode.P2P -> connectP2p(ssid)
+                EyevueWifiMode.P2P -> connectP2p(ssid, baseIp)
             }
             Result.success(EyevueWifiConnection(mode, baseIp, network))
         } catch (error: TimeoutCancellationException) {
@@ -195,7 +196,7 @@ class EyevueWifiTransport(
     }
 
     @SuppressLint("MissingPermission")
-    private suspend fun connectP2p(ssid: String): Network {
+    private suspend fun connectP2p(ssid: String, baseIp: String): Network? {
         val manager = p2pManager
         val channel = manager.initialize(context, Looper.getMainLooper(), null)
             ?: throw IOException("Wi-Fi Direct channel initialization failed")
@@ -256,9 +257,13 @@ class EyevueWifiTransport(
             }
         }
 
-        val network = awaitP2pNetwork(info, ssid)
-        boundNetwork = network
-        connectivityManager.bindProcessToNetwork(network)
+        val network = awaitP2pRoute(info, ssid, baseIp)
+        if (network != null) {
+            boundNetwork = network
+            connectivityManager.bindProcessToNetwork(network)
+        } else {
+            Log.i(TAG, "Eyevue P2P proceeding on the default route (no bindable Network surfaced)")
+        }
         return network
     }
 
@@ -310,33 +315,60 @@ class EyevueWifiTransport(
         }
     }
 
-    private suspend fun awaitP2pNetwork(info: WifiP2pInfo, ssid: String): Network =
+    /**
+     * Matches the vendor flow: once the P2P group is formed, the glasses HTTP server
+     * is probed directly (baseIp port 80) instead of waiting for the OS to surface a
+     * Network object, which Samsung builds often never do for P2P links. A matching
+     * Network is bound opportunistically when one appears; reachability is the gate.
+     */
+    private suspend fun awaitP2pRoute(info: WifiP2pInfo, ssid: String, baseIp: String): Network? =
         withContext(Dispatchers.IO) {
             val prefix = "192.168.49."
             val deadline = System.currentTimeMillis() + P2P_ROUTE_TIMEOUT_MS
+            var reachable = false
+            var boundCandidate: Network? = null
             while (System.currentTimeMillis() < deadline) {
-                val candidate = connectivityManager.allNetworks.firstOrNull { network ->
-                    val capabilities = connectivityManager.getNetworkCapabilities(network)
-                        ?: return@firstOrNull false
-                    if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                        return@firstOrNull false
-                    }
-                    val properties = connectivityManager.getLinkProperties(network)
-                    val interfaceName = properties?.interfaceName.orEmpty()
-                    val addresses = properties?.linkAddresses.orEmpty()
-                        .mapNotNull { it.address.hostAddress }
-                    interfaceName.contains("p2p", ignoreCase = true) ||
-                        interfaceName.contains("wfd", ignoreCase = true) ||
-                        addresses.any { it.startsWith(prefix) }
+                if (!reachable && isHostReachable(baseIp, 80, 1_500)) {
+                    Log.i(TAG, "Eyevue P2P host reachable: $baseIp:80")
+                    reachable = true
                 }
-                if (candidate != null) return@withContext candidate
-                delay(250)
+                if (boundCandidate == null) {
+                    boundCandidate = connectivityManager.allNetworks.firstOrNull { network ->
+                        val capabilities = connectivityManager.getNetworkCapabilities(network)
+                            ?: return@firstOrNull false
+                        if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                            return@firstOrNull false
+                        }
+                        val properties = connectivityManager.getLinkProperties(network)
+                        val interfaceName = properties?.interfaceName.orEmpty()
+                        val addresses = properties?.linkAddresses.orEmpty()
+                            .mapNotNull { it.address.hostAddress }
+                        interfaceName.contains("p2p", ignoreCase = true) ||
+                            interfaceName.contains("wfd", ignoreCase = true) ||
+                            addresses.any { it.startsWith(prefix) }
+                    }
+                }
+                if (reachable) return@withContext boundCandidate
+                delay(500)
             }
+            if (reachable) return@withContext boundCandidate
             throw IOException(
-                "Eyevue P2P connected for $ssid but no usable Wi-Fi route appeared " +
+                "Eyevue P2P glasses not reachable at $baseIp:80 for $ssid " +
                     "(groupOwner=${info.groupOwnerAddress?.hostAddress})",
             )
         }
+
+    private fun isHostReachable(host: String, port: Int, timeoutMs: Int): Boolean {
+        if (host.isBlank()) return false
+        try {
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress(host, port), timeoutMs)
+                return true
+            }
+        } catch (_: Exception) {
+            return false
+        }
+    }
 
     private fun hasWifiPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

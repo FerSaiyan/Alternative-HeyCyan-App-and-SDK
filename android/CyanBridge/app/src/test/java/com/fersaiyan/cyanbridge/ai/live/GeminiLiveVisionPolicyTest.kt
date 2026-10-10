@@ -106,6 +106,14 @@ class GeminiLiveVisionPolicyTest {
     }
 
     @Test
+    fun `mentra live uses speech gated still images`() {
+        val caps = GeminiLiveVisionPolicy.forDevice(DeviceClass.MENTRA_LIVE)
+        assertEquals(GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL, caps.mode)
+        assertEquals(0.0, caps.maxVideoFps, 0.0)
+        assertTrue(caps.supportsAutomaticVision)
+    }
+
+    @Test
     fun `unsupported device does not enable automatic vision`() {
         val capabilities = GeminiLiveVisionPolicy.forDevice(DeviceClass.UNKNOWN)
         assertEquals(GeminiLiveVisionCapabilities.Mode.NONE, capabilities.mode)

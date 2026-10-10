@@ -25,11 +25,9 @@ object MediaInferenceRoutingPolicy {
         taskerUsesLocalModels: Boolean = false,
     ): AgentProviderType {
         return when (preferred) {
-            AgentProviderType.LOCAL_AGENT -> when {
-                localMediaAvailable -> AgentProviderType.LOCAL_AGENT
-                proAvailable -> AgentProviderType.PRO_SUBSCRIPTION
-                else -> AgentProviderType.TASKER
-            }
+            // LOCAL is an offline choice. Missing media support is reported locally;
+            // it must not implicitly enable the Pro/Tasker relay or Gemini Live.
+            AgentProviderType.LOCAL_AGENT -> AgentProviderType.LOCAL_AGENT
             // Explicit Pro selection also represents Free Gemini Live for image and voice
             // questions. Subscription status controls direct Pro access, not this route.
             AgentProviderType.PRO_SUBSCRIPTION -> AgentProviderType.PRO_SUBSCRIPTION
@@ -44,6 +42,8 @@ object MediaInferenceRoutingPolicy {
 
     fun hasLocalMultimodalModel(context: Context): Boolean {
         val selected = LocalModelStorageRepository.resolveSelectedModel(context) ?: return false
-        return LocalModelSettingsRepository.getForModel(context, selected.id).modelRuntime == LocalModelRuntime.LITERT
+        val runtime = LocalModelSettingsRepository.getForModel(context, selected.id).modelRuntime
+        return runtime == LocalModelRuntime.LITERT || (runtime == LocalModelRuntime.LLAMA_CPP &&
+            com.fersaiyan.cyanbridge.localmodels.storage.LocalModelProjectorStore.get(context, selected) != null)
     }
 }

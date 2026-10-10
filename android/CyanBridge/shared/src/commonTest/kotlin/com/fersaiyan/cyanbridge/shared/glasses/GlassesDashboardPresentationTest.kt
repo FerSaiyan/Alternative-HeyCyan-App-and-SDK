@@ -85,7 +85,7 @@ class GlassesDashboardPresentationTest {
     @Test
     fun syncFlowLabelsKeepTheExistingProtocolChoicesDistinct() {
         assertEquals("HeyCyan app flow", GlassesSyncFlow.OFFICIAL_HEYCYAN.label)
-        assertEquals("Custom flow", GlassesSyncFlow.CUSTOM.label)
+        assertEquals("Adaptive flow", GlassesSyncFlow.CUSTOM.label)
     }
 
     @Test

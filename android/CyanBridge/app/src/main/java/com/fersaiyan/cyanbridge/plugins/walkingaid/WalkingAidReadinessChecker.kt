@@ -22,6 +22,7 @@ object WalkingAidReadinessChecker {
     fun checkReadiness(context: Context): WalkingAidReadinessResult {
         val details = mutableListOf<String>()
         val isProActive = ProSubscriptionPrefs.isActiveLocally(context)
+        val exploreMode = WalkingAidPreferences.getMode(context) == WalkingAidMode.EXPLORE
         var requiresPro = false
 
         // 1. Local object detection is always the non-blocking safety path. Cloud vision, when
@@ -53,7 +54,7 @@ object WalkingAidReadinessChecker {
                 details.add("❌ Walking Aid YOLO model is missing ($expected). Download it in this screen.")
             }
         }
-        val cloudDescriptionSelected = WalkingAidPreferences.getImageDescriptionSource(context) == "cloud"
+        val cloudDescriptionSelected = !exploreMode && WalkingAidPreferences.getImageDescriptionSource(context) == "cloud"
         val cloudDescriptionReady = !cloudDescriptionSelected || isProActive
         if (!cloudDescriptionReady) {
             requiresPro = true
@@ -62,7 +63,7 @@ object WalkingAidReadinessChecker {
         val yoloReady = localYoloReady && cloudDescriptionReady
 
         // 2. Relative Depth Readiness Check
-        val depthEnabled = WalkingAidPreferences.isDepthEnabled(context)
+        val depthEnabled = !exploreMode && WalkingAidPreferences.isDepthEnabled(context)
         val depthSource = WalkingAidPreferences.getDepthSource(context)
         val depthReady = if (!depthEnabled) {
             true

@@ -1,9 +1,9 @@
 #include <jni.h>
 #include "llama.h"
-#include "chat.h"
+#include "mtmd.h"
+#include "mtmd-helper.h"
 #include <algorithm>
 #include <atomic>
-#include <cmath>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -12,167 +12,202 @@
 #include <vector>
 
 namespace {
-const std::string OPEN = "\xE2\x8A\xB2", CLOSE = "\xE2\x8A\xB3";
 struct Context {
     llama_model * model = nullptr;
     llama_context * llm = nullptr;
-    common_chat_templates_ptr templates;
+    mtmd_context * media = nullptr;
     std::atomic<bool> cancelled{false};
     std::mutex inference_mutex;
-    int batch = 128;
-    ~Context() { if (llm) llama_free(llm); if (model) llama_model_free(model); }
+    bool embedding = false;
+    int batch = 512;
+    ~Context() {
+        if (media) mtmd_free(media);
+        if (llm) llama_free(llm);
+        if (model) llama_model_free(model);
+    }
 };
 std::mutex registry_mutex;
 std::unordered_map<jlong, std::shared_ptr<Context>> registry;
 std::atomic<jlong> next_id{1};
 std::once_flag backend_init;
+
 void fail(JNIEnv * env, const std::exception & e) {
     if (!env->ExceptionCheck()) env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), e.what());
 }
 std::shared_ptr<Context> get(jlong id) {
-    std::lock_guard<std::mutex> lock(registry_mutex);
+    std::lock_guard<std::mutex> guard(registry_mutex);
     auto it = registry.find(id);
-    if (it == registry.end()) throw std::runtime_error("Model is unloaded");
+    if (it == registry.end()) throw std::runtime_error("llama.cpp context is unloaded");
     return it->second;
 }
-std::string text(JNIEnv * env, jstring value) {
+std::string path(JNIEnv * env, jstring value) {
     if (!value) return {};
-    auto chars = env->GetStringUTFChars(value, nullptr);
-    if (!chars) throw std::runtime_error("Cannot read JNI string");
-    std::string out(chars); env->ReleaseStringUTFChars(value, chars); return out;
+    const char * chars = env->GetStringUTFChars(value, nullptr);
+    if (!chars) throw std::runtime_error("Cannot read model/media path");
+    std::string result(chars);
+    env->ReleaseStringUTFChars(value, chars);
+    return result;
 }
 std::string bytes(JNIEnv * env, jbyteArray value) {
-    if (!value) throw std::runtime_error("Missing UTF-8 input");
-    std::string out(env->GetArrayLength(value), '\0');
-    env->GetByteArrayRegion(value, 0, out.size(), reinterpret_cast<jbyte *>(out.data())); return out;
+    std::string result(env->GetArrayLength(value), '\0');
+    env->GetByteArrayRegion(value, 0, result.size(), reinterpret_cast<jbyte *>(result.data()));
+    return result;
 }
-jbyteArray output_bytes(JNIEnv * env, const std::string & value) {
+jbyteArray byte_array(JNIEnv * env, const std::string & value) {
     auto out = env->NewByteArray(value.size());
     if (out) env->SetByteArrayRegion(out, 0, value.size(), reinterpret_cast<const jbyte *>(value.data()));
     return out;
 }
-std::vector<llama_token> tokenize(Context & ctx, const std::string & input, bool special = true) {
+std::vector<llama_token> tokenize(Context & ctx, const std::string & text) {
     auto vocab = llama_model_get_vocab(ctx.model);
-    int n = llama_tokenize(vocab, input.data(), input.size(), nullptr, 0, special, special);
+    int n = llama_tokenize(vocab, text.data(), text.size(), nullptr, 0, true, true);
     if (n >= 0) return {};
     std::vector<llama_token> tokens(-n);
-    n = llama_tokenize(vocab, input.data(), input.size(), tokens.data(), tokens.size(), special, special);
-    if (n < 0) throw std::runtime_error("Tokenization failed");
-    tokens.resize(n); return tokens;
+    n = llama_tokenize(vocab, text.data(), text.size(), tokens.data(), tokens.size(), true, true);
+    if (n < 0) throw std::runtime_error("llama.cpp tokenization failed");
+    tokens.resize(n);
+    return tokens;
 }
-void prefill(Context & ctx, std::vector<llama_token> & tokens) {
-    if (tokens.empty() || tokens.size() >= llama_n_ctx(ctx.llm)) throw std::runtime_error("Prompt exceeds context or is empty");
+void clear(Context & ctx) {
     if (auto memory = llama_get_memory(ctx.llm)) llama_memory_clear(memory, true);
+}
+void decode(Context & ctx, std::vector<llama_token> & tokens) {
+    if (tokens.empty()) throw std::runtime_error("Prompt is empty");
+    if (tokens.size() >= llama_n_ctx(ctx.llm)) throw std::runtime_error("Prompt exceeds model context size");
     for (size_t i = 0; i < tokens.size(); i += ctx.batch) {
-        if (ctx.cancelled) throw std::runtime_error("Inference cancelled");
         auto count = std::min<size_t>(ctx.batch, tokens.size() - i);
+        if (ctx.cancelled) throw std::runtime_error("Generation cancelled");
         if (llama_decode(ctx.llm, llama_batch_get_one(tokens.data() + i, count)) != 0)
-            throw std::runtime_error("Prompt decode failed or cancelled");
+            throw std::runtime_error("llama.cpp prompt decode failed");
     }
 }
+using Bitmap = std::unique_ptr<mtmd_bitmap, decltype(&mtmd_bitmap_free)>;
+using Chunks = std::unique_ptr<mtmd_input_chunks, decltype(&mtmd_input_chunks_free)>;
+using Sampler = std::unique_ptr<llama_sampler, decltype(&llama_sampler_free)>;
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_fersaiyan_cyanbridge_llama_SharedGemmaBridge_load(JNIEnv * env, jobject, jstring path, jint size, jint threads) {
+Java_com_fersaiyan_cyanbridge_llama_UpstreamLlamaBridge_load(JNIEnv * env, jobject, jstring model, jstring projector, jint size, jint threads, jboolean embedding) {
     try {
-        if (size < 32 || threads < 1) throw std::runtime_error("Invalid context size/threads");
         std::call_once(backend_init, [] { llama_backend_init(); });
         auto ctx = std::make_shared<Context>();
-        auto mp = llama_model_default_params(); mp.n_gpu_layers = 0;
-        ctx->model = llama_model_load_from_file(text(env, path).c_str(), mp);
-        if (!ctx->model || !llama_model_has_decoder(ctx->model)) throw std::runtime_error("Cannot load a generative GGUF");
+        ctx->embedding = embedding;
+        auto mp = llama_model_default_params();
+        mp.n_gpu_layers = 0;
+        ctx->model = llama_model_load_from_file(path(env, model).c_str(), mp);
+        if (!ctx->model) throw std::runtime_error("Cannot load GGUF with upstream llama.cpp");
         auto cp = llama_context_default_params();
-        cp.n_ctx = size; cp.n_batch = ctx->batch; cp.n_ubatch = ctx->batch;
-        cp.n_threads = threads; cp.n_threads_batch = threads;
+        cp.n_ctx = size;
+        cp.n_batch = ctx->batch;
+        cp.n_ubatch = ctx->batch;
+        cp.n_threads = threads;
+        cp.n_threads_batch = threads;
+        cp.embeddings = embedding;
+        if (embedding) cp.pooling_type = LLAMA_POOLING_TYPE_MEAN;
         cp.abort_callback = [](void * p) { return static_cast<Context *>(p)->cancelled.load(); };
         cp.abort_callback_data = ctx.get();
         ctx->llm = llama_init_from_model(ctx->model, cp);
-        if (!ctx->llm) throw std::runtime_error("Cannot create llama context");
-        ctx->templates = common_chat_templates_init(ctx->model, "");
+        if (!ctx->llm) throw std::runtime_error("Cannot create upstream llama.cpp context");
+        auto proj = path(env, projector);
+        if (!proj.empty()) {
+            auto params = mtmd_context_params_default();
+            params.use_gpu = false;
+            params.n_threads = threads;
+            params.warmup = false;
+            ctx->media = mtmd_init_from_file(proj.c_str(), ctx->model, params);
+            if (!ctx->media) throw std::runtime_error("Projector does not match this GGUF model");
+        }
         auto id = next_id++;
-        std::lock_guard<std::mutex> lock(registry_mutex); registry[id] = ctx; return id;
+        std::lock_guard<std::mutex> guard(registry_mutex);
+        registry[id] = ctx;
+        return id;
     } catch (const std::exception & e) { fail(env, e); return 0; }
 }
+
 extern "C" JNIEXPORT void JNICALL
-Java_com_fersaiyan_cyanbridge_llama_SharedGemmaBridge_release(JNIEnv *, jobject, jlong id) {
-    std::lock_guard<std::mutex> lock(registry_mutex);
+Java_com_fersaiyan_cyanbridge_llama_UpstreamLlamaBridge_release(JNIEnv *, jobject, jlong id) {
+    std::lock_guard<std::mutex> guard(registry_mutex);
     auto it = registry.find(id);
     if (it != registry.end()) { it->second->cancelled = true; registry.erase(it); }
 }
 extern "C" JNIEXPORT void JNICALL
-Java_com_fersaiyan_cyanbridge_llama_SharedGemmaBridge_cancel(JNIEnv * env, jobject, jlong id) {
+Java_com_fersaiyan_cyanbridge_llama_UpstreamLlamaBridge_cancel(JNIEnv * env, jobject, jlong id) {
     try { get(id)->cancelled = true; } catch (const std::exception & e) { fail(env, e); }
 }
 extern "C" JNIEXPORT jint JNICALL
-Java_com_fersaiyan_cyanbridge_llama_SharedGemmaBridge_tokenCount(JNIEnv * env, jobject, jlong id, jbyteArray input) {
-    try { auto ctx = get(id); return tokenize(*ctx, bytes(env, input)).size(); }
+Java_com_fersaiyan_cyanbridge_llama_UpstreamLlamaBridge_capabilities(JNIEnv * env, jobject, jlong id) {
+    try {
+        auto ctx = get(id);
+        return ctx->media ? (mtmd_support_vision(ctx->media) ? 1 : 0) | (mtmd_support_audio(ctx->media) ? 2 : 0) : 0;
+    } catch (const std::exception & e) { fail(env, e); return 0; }
+}
+extern "C" JNIEXPORT jint JNICALL
+Java_com_fersaiyan_cyanbridge_llama_UpstreamLlamaBridge_tokenCount(JNIEnv * env, jobject, jlong id, jbyteArray text) {
+    try { auto ctx = get(id); return tokenize(*ctx, bytes(env, text)).size(); }
     catch (const std::exception & e) { fail(env, e); return 0; }
 }
-extern "C" JNIEXPORT jfloatArray JNICALL
-Java_com_fersaiyan_cyanbridge_llama_SharedGemmaBridge_decide(JNIEnv * env, jobject, jlong id, jbyteArray input, jobjectArray labels) {
-    try {
-        auto ctx = get(id); std::lock_guard<std::mutex> lock(ctx->inference_mutex);
-        ctx->cancelled = false;
-        common_chat_msg msg; msg.role = "user"; msg.content = bytes(env, input);
-        common_chat_templates_inputs request; request.messages = {msg}; request.enable_thinking = false;
-        const auto prompt = common_chat_templates_apply(ctx->templates.get(), request).prompt + OPEN;
-        auto tokens = tokenize(*ctx, prompt);
-        auto close = tokenize(*ctx, CLOSE, false);
-        std::vector<llama_token> ids;
-        const int count = labels ? env->GetArrayLength(labels) : 0;
-        if (count < 2 || count > 26) throw std::runtime_error("Need 2..26 labels");
-        for (int i = 0; i < count; ++i) {
-            auto value = static_cast<jstring>(env->GetObjectArrayElement(labels, i));
-            auto label = text(env, value); env->DeleteLocalRef(value);
-            if (label.size() != 1 || label[0] < 'A' || label[0] > 'Z') throw std::runtime_error("Invalid label");
-            auto token = tokenize(*ctx, label, false);
-            if (token.size() != 1) throw std::runtime_error("Label is not a single token: " + label);
-            auto expected = tokens; expected.push_back(token[0]); expected.insert(expected.end(), close.begin(), close.end());
-            if (tokenize(*ctx, prompt + label + CLOSE) != expected)
-                throw std::runtime_error("Label merges with delimiters in this vocabulary: " + label);
-            if (std::find(ids.begin(), ids.end(), token[0]) != ids.end()) throw std::runtime_error("Duplicate label token");
-            ids.push_back(token[0]);
-        }
-        prefill(*ctx, tokens);
-        const float * logits = llama_get_logits_ith(ctx->llm, -1);
-        if (!logits || ctx->cancelled) throw std::runtime_error("Missing logits or cancelled");
-        const int vocab_size = llama_vocab_n_tokens(llama_model_get_vocab(ctx->model));
-        float max_value = -INFINITY;
-        for (int i = 0; i < vocab_size; ++i) {
-            if (std::isnan(logits[i]) || logits[i] == INFINITY) throw std::runtime_error("Invalid vocabulary logits");
-            max_value = std::max(max_value, logits[i]);
-        }
-        if (!std::isfinite(max_value)) throw std::runtime_error("No finite vocabulary logits");
-        double total = 0, label_mass = 0;
-        for (int i = 0; i < vocab_size; ++i) total += std::exp(double(logits[i]) - max_value);
-        std::vector<float> values;
-        for (auto token : ids) {
-            if (!std::isfinite(logits[token])) throw std::runtime_error("Non-finite label logit");
-            values.push_back(logits[token]); label_mass += std::exp(double(logits[token]) - max_value);
-        }
-        values.push_back(label_mass / total);
-        auto out = env->NewFloatArray(values.size());
-        if (out) env->SetFloatArrayRegion(out, 0, values.size(), values.data()); return out;
-    } catch (const std::exception & e) { fail(env, e); return nullptr; }
-}
+
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_com_fersaiyan_cyanbridge_llama_SharedGemmaBridge_generate(JNIEnv * env, jobject, jlong id, jbyteArray input,
-    jint max_tokens, jfloat temperature, jfloat top_p, jint top_k, jfloat repeat_penalty, jint seed,
+Java_com_fersaiyan_cyanbridge_llama_UpstreamLlamaBridge_generate(JNIEnv * env, jobject, jlong id, jbyteArray input, jobjectArray images,
+    jstring audio, jint max_tokens, jfloat temperature, jfloat top_p, jint top_k, jfloat repeat_penalty, jint seed,
     jstring grammar, jobject sink, jintArray stats) {
     try {
-        auto ctx = get(id); std::lock_guard<std::mutex> lock(ctx->inference_mutex);
-        if (max_tokens < 1 || !stats || env->GetArrayLength(stats) < 2 || !sink) throw std::runtime_error("Invalid generation request");
+        auto ctx = get(id);
+        std::lock_guard<std::mutex> inference(ctx->inference_mutex);
         ctx->cancelled = false;
-        auto tokens = tokenize(*ctx, bytes(env, input)); prefill(*ctx, tokens);
-        using Sampler = std::unique_ptr<llama_sampler, decltype(&llama_sampler_free)>;
-        Sampler sampler(llama_sampler_chain_init(llama_sampler_chain_default_params()), llama_sampler_free);
-        auto rules = text(env, grammar);
-        if (!rules.empty()) {
-            auto constrained = llama_sampler_init_grammar(llama_model_get_vocab(ctx->model), rules.c_str(), "root");
-            if (!constrained) throw std::runtime_error("Invalid grammar");
-            llama_sampler_chain_add(sampler.get(), constrained);
+        clear(*ctx);
+        auto prompt = bytes(env, input);
+        const auto image_count = env->GetArrayLength(images);
+        const auto audio_path = path(env, audio);
+        const bool has_media = image_count > 0 || !audio_path.empty();
+        llama_pos past = 0;
+        if (has_media) {
+            if (!ctx->media) throw std::runtime_error("This GGUF needs a matching mmproj projector for media input");
+            if (image_count && !mtmd_support_vision(ctx->media)) throw std::runtime_error("Selected GGUF/projector does not support images");
+            if (!audio_path.empty() && !mtmd_support_audio(ctx->media)) throw std::runtime_error("Selected GGUF/projector does not support audio");
+            std::vector<Bitmap> owned;
+            std::vector<const mtmd_bitmap *> bitmaps;
+            std::string markers;
+            auto add_media = [&](const std::string & name) {
+                auto decoded = mtmd_helper_bitmap_init_from_file(ctx->media, name.c_str(), false, mtmd_helper_init_opt_default());
+                if (!decoded.bitmap || decoded.video_ctx) throw std::runtime_error("Cannot decode attached image/audio: " + name);
+                owned.emplace_back(decoded.bitmap, mtmd_bitmap_free);
+                bitmaps.push_back(decoded.bitmap);
+                markers += std::string(mtmd_default_marker()) + "\n";
+            };
+            for (int i = 0; i < image_count; ++i) {
+                auto value = static_cast<jstring>(env->GetObjectArrayElement(images, i));
+                auto name = path(env, value);
+                env->DeleteLocalRef(value);
+                add_media(name);
+            }
+            if (!audio_path.empty()) add_media(audio_path);
+            // Kotlin places the media marker inside the user turn before rendering the template.
+            const std::string slot = "<cyanbridge_media>";
+            auto at = prompt.find(slot);
+            if (at == std::string::npos) throw std::runtime_error("Multimodal prompt has no user media slot");
+            prompt.replace(at, slot.size(), markers);
+            Chunks chunks(mtmd_input_chunks_init(), mtmd_input_chunks_free);
+            mtmd_input_text text{prompt.data(), prompt.size(), true, true};
+            if (mtmd_tokenize(ctx->media, chunks.get(), &text, bitmaps.data(), bitmaps.size()) != 0)
+                throw std::runtime_error("Multimodal tokenization failed");
+            if (mtmd_helper_get_n_pos(chunks.get()) >= llama_n_ctx(ctx->llm))
+                throw std::runtime_error("Image/audio question exceeds model context size");
+            if (ctx->cancelled || mtmd_helper_eval_chunks(ctx->media, ctx->llm, chunks.get(), 0, 0, ctx->batch, true, &past) != 0)
+                throw std::runtime_error("Multimodal encoding failed or was cancelled");
+        } else {
+            auto tokens = tokenize(*ctx, prompt);
+            decode(*ctx, tokens);
+            past = tokens.size();
         }
         auto vocab = llama_model_get_vocab(ctx->model);
+        Sampler sampler(llama_sampler_chain_init(llama_sampler_chain_default_params()), llama_sampler_free);
+        auto rules = path(env, grammar);
+        if (!rules.empty()) {
+            auto constrained = llama_sampler_init_grammar(vocab, rules.c_str(), "root");
+            if (!constrained) throw std::runtime_error("Invalid structured-output grammar");
+            llama_sampler_chain_add(sampler.get(), constrained);
+        }
         llama_sampler_chain_add(sampler.get(), llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 64, repeat_penalty, 0, 0));
         if (temperature <= 0) llama_sampler_chain_add(sampler.get(), llama_sampler_init_greedy());
         else {
@@ -181,27 +216,59 @@ Java_com_fersaiyan_cyanbridge_llama_SharedGemmaBridge_generate(JNIEnv * env, job
             llama_sampler_chain_add(sampler.get(), llama_sampler_init_temp(temperature));
             llama_sampler_chain_add(sampler.get(), llama_sampler_init_dist(seed));
         }
-        auto sink_class = env->GetObjectClass(sink);
-        auto callback = env->GetMethodID(sink_class, "onToken", "([B)V"); env->DeleteLocalRef(sink_class);
-        if (!callback) throw std::runtime_error("Missing token callback");
-        std::string response; int count = 0; bool eog = false;
-        size_t past = tokens.size();
+        auto callback = env->GetMethodID(env->GetObjectClass(sink), "onToken", "([B)V");
+        std::string response;
+        int count = 0;
+        bool eog = false;
         while (!ctx->cancelled && count < max_tokens && past < llama_n_ctx(ctx->llm)) {
             auto token = llama_sampler_sample(sampler.get(), ctx->llm, -1);
             if (llama_vocab_is_eog(vocab, token)) { eog = true; break; }
-            int n = llama_token_to_piece(vocab, token, nullptr, 0, 0, false);
-            std::string piece(n < 0 ? -n : n, '\0');
-            n = llama_token_to_piece(vocab, token, piece.data(), piece.size(), 0, false);
-            if (n < 0) throw std::runtime_error("Cannot decode output token");
-            piece.resize(n); response += piece;
-            auto chunk = output_bytes(env, piece); env->CallVoidMethod(sink, callback, chunk); env->DeleteLocalRef(chunk);
+            int size = llama_token_to_piece(vocab, token, nullptr, 0, 0, false);
+            std::string piece(size < 0 ? -size : size, '\0');
+            size = llama_token_to_piece(vocab, token, piece.data(), piece.size(), 0, false);
+            if (size < 0) throw std::runtime_error("Cannot decode output token");
+            piece.resize(size);
+            response += piece;
+            auto chunk = byte_array(env, piece);
+            env->CallVoidMethod(sink, callback, chunk);
+            env->DeleteLocalRef(chunk);
             if (env->ExceptionCheck()) return nullptr;
             ++count;
-            if (llama_decode(ctx->llm, llama_batch_get_one(&token, 1)) != 0) throw std::runtime_error("Decode failed or cancelled");
+            if (llama_decode(ctx->llm, llama_batch_get_one(&token, 1)) != 0)
+                throw std::runtime_error("llama.cpp output decode failed or was cancelled");
             ++past;
         }
-        if (ctx->cancelled) throw std::runtime_error("Inference cancelled");
-        jint values[] = {count, eog ? 0 : 1}; env->SetIntArrayRegion(stats, 0, 2, values);
-        return output_bytes(env, response);
+        jint values[2] = {count, (!eog && !ctx->cancelled) ? 1 : 0};
+        env->SetIntArrayRegion(stats, 0, 2, values);
+        return byte_array(env, response);
+    } catch (const std::exception & e) { fail(env, e); return nullptr; }
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_com_fersaiyan_cyanbridge_llama_UpstreamLlamaBridge_embed(JNIEnv * env, jobject, jlong id, jbyteArray text) {
+    try {
+        auto ctx = get(id);
+        std::lock_guard<std::mutex> inference(ctx->inference_mutex);
+        if (!ctx->embedding) throw std::runtime_error("Context was not loaded for embeddings");
+        ctx->cancelled = false;
+        clear(*ctx);
+        auto tokens = tokenize(*ctx, bytes(env, text));
+        // Pooled embeddings require one complete sequence in one decode batch.
+        if (tokens.empty() || tokens.size() > ctx->batch || tokens.size() > llama_n_ctx(ctx->llm))
+            throw std::runtime_error("Embedding input exceeds the batch/context limit");
+        auto batch = llama_batch_init(tokens.size(), 0, 1);
+        batch.n_tokens = tokens.size();
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            batch.token[i] = tokens[i]; batch.pos[i] = i; batch.n_seq_id[i] = 1; batch.seq_id[i][0] = 0; batch.logits[i] = true;
+        }
+        int rc = llama_model_has_encoder(ctx->model) ? llama_encode(ctx->llm, batch) : llama_decode(ctx->llm, batch);
+        llama_batch_free(batch);
+        if (rc != 0) throw std::runtime_error("Embedding evaluation failed");
+        auto vector = llama_get_embeddings_seq(ctx->llm, 0);
+        if (!vector) throw std::runtime_error("Model returned no pooled embedding");
+        auto dimension = llama_model_n_embd_out(ctx->model);
+        auto result = env->NewFloatArray(dimension);
+        env->SetFloatArrayRegion(result, 0, dimension, vector);
+        return result;
     } catch (const std::exception & e) { fail(env, e); return nullptr; }
 }

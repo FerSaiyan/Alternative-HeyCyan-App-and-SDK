@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="walking_aid_mode_title">Режим</string>
+    <string name="walking_aid_mode_walking">Ходьба</string>
+    <string name="walking_aid_mode_explore">Обзор</string>
+    <string name="walking_aid_mode_walking_description">Сообщать о выбранных препятствиях и приближающихся объектах.</string>
+    <string name="walking_aid_mode_explore_description">Описывать обнаруженные объекты по одному. Если сцена не меняется, сообщения не звучат.</string>
+    <string name="walking_aid_speech_rate">Скорость речи</string>
+    <string name="walking_aid_speech_rate_value">%1$.1f×</string>
+    <string name="walking_aid_announcement_pause">Пауза между сообщениями в режиме Обзор</string>
+    <string name="walking_aid_announcement_pause_value">%1$.1f с</string>
+    <string name="walking_aid_position_left">слева от вас</string>
+    <string name="walking_aid_position_center">впереди</string>
+    <string name="walking_aid_position_right">справа от вас</string>
+    <string name="walking_aid_explore_single">%1$s %2$s.</string>
+    <string name="walking_aid_explore_multiple">%1$d %2$s %3$s.</string>
+
+    <plurals name="walking_aid_object_person"><item quantity="one">человек</item><item quantity="few">человека</item><item quantity="many">человек</item><item quantity="other">человека</item></plurals>
+    <plurals name="walking_aid_object_bicycle"><item quantity="one">велосипед</item><item quantity="few">велосипеда</item><item quantity="many">велосипедов</item><item quantity="other">велосипеда</item></plurals>
+    <plurals name="walking_aid_object_car"><item quantity="one">автомобиль</item><item quantity="few">автомобиля</item><item quantity="many">автомобилей</item><item quantity="other">автомобиля</item></plurals>
+    <plurals name="walking_aid_object_motorcycle"><item quantity="one">мотоцикл</item><item quantity="few">мотоцикла</item><item quantity="many">мотоциклов</item><item quantity="other">мотоцикла</item></plurals>
+    <plurals name="walking_aid_object_airplane"><item quantity="one">самолёт</item><item quantity="few">самолёта</item><item quantity="many">самолётов</item><item quantity="other">самолёта</item></plurals>
+    <plurals name="walking_aid_object_bus"><item quantity="one">автобус</item><item quantity="few">автобуса</item><item quantity="many">автобусов</item><item quantity="other">автобуса</item></plurals>
+    <plurals name="walking_aid_object_train"><item quantity="one">поезд</item><item quantity="few">поезда</item><item quantity="many">поездов</item><item quantity="other">поезда</item></plurals>
+    <plurals name="walking_aid_object_truck"><item quantity="one">грузовик</item><item quantity="few">грузовика</item><item quantity="many">грузовиков</item><item quantity="other">грузовика</item></plurals>
+    <plurals name="walking_aid_object_boat"><item quantity="one">лодка</item><item quantity="few">лодки</item><item quantity="many">лодок</item><item quantity="other">лодки</item></plurals>
+    <plurals name="walking_aid_object_traffic_light"><item quantity="one">светофор</item><item quantity="few">светофора</item><item quantity="many">светофоров</item><item quantity="other">светофора</item></plurals>
+    <plurals name="walking_aid_object_fire_hydrant"><item quantity="one">пожарный гидрант</item><item quantity="few">пожарных гидранта</item><item quantity="many">пожарных гидрантов</item><item quantity="other">пожарного гидранта</item></plurals>
+    <plurals name="walking_aid_object_stop_sign"><item quantity="one">знак стоп</item><item quantity="few">знака стоп</item><item quantity="many">знаков стоп</item><item quantity="other">знака стоп</item></plurals>
+    <plurals name="walking_aid_object_parking_meter"><item quantity="one">паркомат</item><item quantity="few">паркомата</item><item quantity="many">паркоматов</item><item quantity="other">паркомата</item></plurals>
+    <plurals name="walking_aid_object_bench"><item quantity="one">скамейка</item><item quantity="few">скамейки</item><item quantity="many">скамеек</item><item quantity="other">скамейки</item></plurals>
+    <plurals name="walking_aid_object_bird"><item quantity="one">птица</item><item quantity="few">птицы</item><item quantity="many">птиц</item><item quantity="other">птицы</item></plurals>
+    <plurals name="walking_aid_object_cat"><item quantity="one">кошка</item><item quantity="few">кошки</item><item quantity="many">кошек</item><item quantity="other">кошки</item></plurals>
+    <plurals name="walking_aid_object_dog"><item quantity="one">собака</item><item quantity="few">собаки</item><item quantity="many">собак</item><item quantity="other">собаки</item></plurals>
+    <plurals name="walking_aid_object_horse"><item quantity="one">лошадь</item><item quantity="few">лошади</item><item quantity="many">лошадей</item><item quantity="other">лошади</item></plurals>
+    <plurals name="walking_aid_object_sheep"><item quantity="one">овца</item><item quantity="few">овцы</item><item quantity="many">овец</item><item quantity="other">овцы</item></plurals>
+    <plurals name="walking_aid_object_cow"><item quantity="one">корова</item><item quantity="few">коровы</item><item quantity="many">коров</item><item quantity="other">коровы</item></plurals>
+    <plurals name="walking_aid_object_elephant"><item quantity="one">слон</item><item quantity="few">слона</item><item quantity="many">слонов</item><item quantity="other">слона</item></plurals>
+    <plurals name="walking_aid_object_bear"><item quantity="one">медведь</item><item quantity="few">медведя</item><item quantity="many">медведей</item><item quantity="other">медведя</item></plurals>
+    <plurals name="walking_aid_object_zebra"><item quantity="one">зебра</item><item quantity="few">зебры</item><item quantity="many">зебр</item><item quantity="other">зебры</item></plurals>
+    <plurals name="walking_aid_object_giraffe"><item quantity="one">жираф</item><item quantity="few">жирафа</item><item quantity="many">жирафов</item><item quantity="other">жирафа</item></plurals>
+    <plurals name="walking_aid_object_backpack"><item quantity="one">рюкзак</item><item quantity="few">рюкзака</item><item quantity="many">рюкзаков</item><item quantity="other">рюкзака</item></plurals>
+    <plurals name="walking_aid_object_umbrella"><item quantity="one">зонт</item><item quantity="few">зонта</item><item quantity="many">зонтов</item><item quantity="other">зонта</item></plurals>
+    <plurals name="walking_aid_object_handbag"><item quantity="one">сумка</item><item quantity="few">сумки</item><item quantity="many">сумок</item><item quantity="other">сумки</item></plurals>
+    <plurals name="walking_aid_object_tie"><item quantity="one">галстук</item><item quantity="few">галстука</item><item quantity="many">галстуков</item><item quantity="other">галстука</item></plurals>
+    <plurals name="walking_aid_object_suitcase"><item quantity="one">чемодан</item><item quantity="few">чемодана</item><item quantity="many">чемоданов</item><item quantity="other">чемодана</item></plurals>
+    <plurals name="walking_aid_object_frisbee"><item quantity="one">фрисби</item><item quantity="few">фрисби</item><item quantity="many">фрисби</item><item quantity="other">фрисби</item></plurals>
+    <plurals name="walking_aid_object_skis"><item quantity="one">пара лыж</item><item quantity="few">пары лыж</item><item quantity="many">пар лыж</item><item quantity="other">пары лыж</item></plurals>
+    <plurals name="walking_aid_object_snowboard"><item quantity="one">сноуборд</item><item quantity="few">сноуборда</item><item quantity="many">сноубордов</item><item quantity="other">сноуборда</item></plurals>
+    <plurals name="walking_aid_object_sports_ball"><item quantity="one">мяч</item><item quantity="few">мяча</item><item quantity="many">мячей</item><item quantity="other">мяча</item></plurals>
+    <plurals name="walking_aid_object_kite"><item quantity="one">воздушный змей</item><item quantity="few">воздушных змея</item><item quantity="many">воздушных змеев</item><item quantity="other">воздушного змея</item></plurals>
+    <plurals name="walking_aid_object_baseball_bat"><item quantity="one">бейсбольная бита</item><item quantity="few">бейсбольные биты</item><item quantity="many">бейсбольных бит</item><item quantity="other">бейсбольной биты</item></plurals>
+    <plurals name="walking_aid_object_baseball_glove"><item quantity="one">бейсбольная перчатка</item><item quantity="few">бейсбольные перчатки</item><item quantity="many">бейсбольных перчаток</item><item quantity="other">бейсбольной перчатки</item></plurals>
+    <plurals name="walking_aid_object_skateboard"><item quantity="one">скейтборд</item><item quantity="few">скейтборда</item><item quantity="many">скейтбордов</item><item quantity="other">скейтборда</item></plurals>
+    <plurals name="walking_aid_object_surfboard"><item quantity="one">доска для сёрфинга</item><item quantity="few">доски для сёрфинга</item><item quantity="many">досок для сёрфинга</item><item quantity="other">доски для сёрфинга</item></plurals>
+    <plurals name="walking_aid_object_tennis_racket"><item quantity="one">теннисная ракетка</item><item quantity="few">теннисные ракетки</item><item quantity="many">теннисных ракеток</item><item quantity="other">теннисной ракетки</item></plurals>
+    <plurals name="walking_aid_object_bottle"><item quantity="one">бутылка</item><item quantity="few">бутылки</item><item quantity="many">бутылок</item><item quantity="other">бутылки</item></plurals>
+    <plurals name="walking_aid_object_wine_glass"><item quantity="one">винный бокал</item><item quantity="few">винных бокала</item><item quantity="many">винных бокалов</item><item quantity="other">винного бокала</item></plurals>
+    <plurals name="walking_aid_object_cup"><item quantity="one">чашка</item><item quantity="few">чашки</item><item quantity="many">чашек</item><item quantity="other">чашки</item></plurals>
+    <plurals name="walking_aid_object_fork"><item quantity="one">вилка</item><item quantity="few">вилки</item><item quantity="many">вилок</item><item quantity="other">вилки</item></plurals>
+    <plurals name="walking_aid_object_knife"><item quantity="one">нож</item><item quantity="few">ножа</item><item quantity="many">ножей</item><item quantity="other">ножа</item></plurals>
+    <plurals name="walking_aid_object_spoon"><item quantity="one">ложка</item><item quantity="few">ложки</item><item quantity="many">ложек</item><item quantity="other">ложки</item></plurals>
+    <plurals name="walking_aid_object_bowl"><item quantity="one">миска</item><item quantity="few">миски</item><item quantity="many">мисок</item><item quantity="other">миски</item></plurals>
+    <plurals name="walking_aid_object_banana"><item quantity="one">банан</item><item quantity="few">банана</item><item quantity="many">бананов</item><item quantity="other">банана</item></plurals>
+    <plurals name="walking_aid_object_apple"><item quantity="one">яблоко</item><item quantity="few">яблока</item><item quantity="many">яблок</item><item quantity="other">яблока</item></plurals>
+    <plurals name="walking_aid_object_sandwich"><item quantity="one">бутерброд</item><item quantity="few">бутерброда</item><item quantity="many">бутербродов</item><item quantity="other">бутерброда</item></plurals>
+    <plurals name="walking_aid_object_orange"><item quantity="one">апельсин</item><item quantity="few">апельсина</item><item quantity="many">апельсинов</item><item quantity="other">апельсина</item></plurals>
+    <plurals name="walking_aid_object_broccoli"><item quantity="one">брокколи</item><item quantity="few">брокколи</item><item quantity="many">брокколи</item><item quantity="other">брокколи</item></plurals>
+    <plurals name="walking_aid_object_carrot"><item quantity="one">морковка</item><item quantity="few">морковки</item><item quantity="many">морковок</item><item quantity="other">морковки</item></plurals>
+    <plurals name="walking_aid_object_hot_dog"><item quantity="one">хот-дог</item><item quantity="few">хот-дога</item><item quantity="many">хот-догов</item><item quantity="other">хот-дога</item></plurals>
+    <plurals name="walking_aid_object_pizza"><item quantity="one">пицца</item><item quantity="few">пиццы</item><item quantity="many">пицц</item><item quantity="other">пиццы</item></plurals>
+    <plurals name="walking_aid_object_donut"><item quantity="one">пончик</item><item quantity="few">пончика</item><item quantity="many">пончиков</item><item quantity="other">пончика</item></plurals>
+    <plurals name="walking_aid_object_cake"><item quantity="one">торт</item><item quantity="few">торта</item><item quantity="many">тортов</item><item quantity="other">торта</item></plurals>
+    <plurals name="walking_aid_object_chair"><item quantity="one">стул</item><item quantity="few">стула</item><item quantity="many">стульев</item><item quantity="other">стула</item></plurals>
+    <plurals name="walking_aid_object_couch"><item quantity="one">диван</item><item quantity="few">дивана</item><item quantity="many">диванов</item><item quantity="other">дивана</item></plurals>
+    <plurals name="walking_aid_object_potted_plant"><item quantity="one">растение в горшке</item><item quantity="few">растения в горшках</item><item quantity="many">растений в горшках</item><item quantity="other">растения в горшке</item></plurals>
+    <plurals name="walking_aid_object_bed"><item quantity="one">кровать</item><item quantity="few">кровати</item><item quantity="many">кроватей</item><item quantity="other">кровати</item></plurals>
+    <plurals name="walking_aid_object_dining_table"><item quantity="one">обеденный стол</item><item quantity="few">обеденных стола</item><item quantity="many">обеденных столов</item><item quantity="other">обеденного стола</item></plurals>
+    <plurals name="walking_aid_object_toilet"><item quantity="one">унитаз</item><item quantity="few">унитаза</item><item quantity="many">унитазов</item><item quantity="other">унитаза</item></plurals>
+    <plurals name="walking_aid_object_tv"><item quantity="one">телевизор</item><item quantity="few">телевизора</item><item quantity="many">телевизоров</item><item quantity="other">телевизора</item></plurals>
+    <plurals name="walking_aid_object_laptop"><item quantity="one">ноутбук</item><item quantity="few">ноутбука</item><item quantity="many">ноутбуков</item><item quantity="other">ноутбука</item></plurals>
+    <plurals name="walking_aid_object_mouse"><item quantity="one">компьютерная мышь</item><item quantity="few">компьютерные мыши</item><item quantity="many">компьютерных мышей</item><item quantity="other">компьютерной мыши</item></plurals>
+    <plurals name="walking_aid_object_remote"><item quantity="one">пульт</item><item quantity="few">пульта</item><item quantity="many">пультов</item><item quantity="other">пульта</item></plurals>
+    <plurals name="walking_aid_object_keyboard"><item quantity="one">клавиатура</item><item quantity="few">клавиатуры</item><item quantity="many">клавиатур</item><item quantity="other">клавиатуры</item></plurals>
+    <plurals name="walking_aid_object_cell_phone"><item quantity="one">телефон</item><item quantity="few">телефона</item><item quantity="many">телефонов</item><item quantity="other">телефона</item></plurals>
+    <plurals name="walking_aid_object_microwave"><item quantity="one">микроволновая печь</item><item quantity="few">микроволновые печи</item><item quantity="many">микроволновых печей</item><item quantity="other">микроволновой печи</item></plurals>
+    <plurals name="walking_aid_object_oven"><item quantity="one">духовка</item><item quantity="few">духовки</item><item quantity="many">духовок</item><item quantity="other">духовки</item></plurals>
+    <plurals name="walking_aid_object_toaster"><item quantity="one">тостер</item><item quantity="few">тостера</item><item quantity="many">тостеров</item><item quantity="other">тостера</item></plurals>
+    <plurals name="walking_aid_object_sink"><item quantity="one">раковина</item><item quantity="few">раковины</item><item quantity="many">раковин</item><item quantity="other">раковины</item></plurals>
+    <plurals name="walking_aid_object_refrigerator"><item quantity="one">холодильник</item><item quantity="few">холодильника</item><item quantity="many">холодильников</item><item quantity="other">холодильника</item></plurals>
+    <plurals name="walking_aid_object_book"><item quantity="one">книга</item><item quantity="few">книги</item><item quantity="many">книг</item><item quantity="other">книги</item></plurals>
+    <plurals name="walking_aid_object_clock"><item quantity="one">часы</item><item quantity="few">часов</item><item quantity="many">часов</item><item quantity="other">часов</item></plurals>
+    <plurals name="walking_aid_object_vase"><item quantity="one">ваза</item><item quantity="few">вазы</item><item quantity="many">ваз</item><item quantity="other">вазы</item></plurals>
+    <plurals name="walking_aid_object_scissors"><item quantity="one">пара ножниц</item><item quantity="few">пары ножниц</item><item quantity="many">пар ножниц</item><item quantity="other">пары ножниц</item></plurals>
+    <plurals name="walking_aid_object_teddy_bear"><item quantity="one">плюшевый медведь</item><item quantity="few">плюшевых медведя</item><item quantity="many">плюшевых медведей</item><item quantity="other">плюшевого медведя</item></plurals>
+    <plurals name="walking_aid_object_hair_drier"><item quantity="one">фен</item><item quantity="few">фена</item><item quantity="many">фенов</item><item quantity="other">фена</item></plurals>
+    <plurals name="walking_aid_object_toothbrush"><item quantity="one">зубная щётка</item><item quantity="few">зубные щётки</item><item quantity="many">зубных щёток</item><item quantity="other">зубной щётки</item></plurals>
+    <plurals name="walking_aid_object_unknown"><item quantity="one">объект</item><item quantity="few">объекта</item><item quantity="many">объектов</item><item quantity="other">объекта</item></plurals>
+</resources>

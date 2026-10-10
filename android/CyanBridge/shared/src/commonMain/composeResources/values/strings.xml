@@ -31,11 +31,19 @@
 
     <!-- First-run onboarding -->
     <string name="onboarding_language_title">Choose your app language</string>
+    <string name="onboarding_language_selector_label">Language</string>
     <string name="onboarding_language_description">Select the language CyanBridge should use for onboarding, plugin settings, screens, and dialogs.</string>
     <string name="onboarding_language_continue">Continue</string>
-    <string name="onboarding_welcome_title">Welcome to CyanBridge</string>
-    <string name="onboarding_welcome_body">Connect your smart glasses and configure Android for a stable background connection.</string>
-    <string name="onboarding_start_setup">Start setup</string>
+    <string name="onboarding_welcome_title">Your glasses. One intelligent bridge.</string>
+    <string name="onboarding_welcome_body">Connect, capture and turn everyday moments into useful memories—with privacy and control built in.</string>
+    <string name="onboarding_start_setup">Get started</string>
+    <string name="onboarding_benefit_bridge_title">One bridge</string>
+    <string name="onboarding_benefit_bridge_body">Connect supported smart glasses in one place.</string>
+    <string name="onboarding_benefit_ai_title">AI that stays close</string>
+    <string name="onboarding_benefit_ai_body">Use local intelligence and keep control of your data.</string>
+    <string name="onboarding_benefit_capture_title">Capture the moment</string>
+    <string name="onboarding_benefit_capture_body">Move photos, audio and ideas into useful memories.</string>
+    <string name="onboarding_duration_note">About 2 minutes · You stay in control</string>
     <string name="onboarding_setup">Setup</string>
     <string name="onboarding_connect_glasses_title">Connect your glasses</string>
     <string name="onboarding_connect_glasses_body">CyanBridge needs nearby-device access to discover and connect to your glasses. Android may also request location on older phones because it requires it for Bluetooth scanning. Wi-Fi Direct permission is requested later, only when you transfer media.</string>

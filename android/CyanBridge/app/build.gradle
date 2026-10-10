@@ -1,3 +1,18 @@
+import org.gradle.api.artifacts.transform.CacheableTransform
+import org.gradle.api.artifacts.transform.InputArtifact
+import org.gradle.api.artifacts.transform.TransformAction
+import org.gradle.api.artifacts.transform.TransformOutputs
+import org.gradle.api.artifacts.transform.TransformParameters
+import org.gradle.api.attributes.Attribute
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+import org.gradle.api.file.FileSystemLocation
+import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,7 +20,50 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+/** LibVLC's old STL cannot satisfy Meta fbjni. Keep VLC code, use the shared modern STL. */
+@CacheableTransform
+abstract class VlcWithoutBundledStl implements TransformAction<TransformParameters.None> {
+    @InputArtifact
+    @PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract Provider<FileSystemLocation> getInputArtifact()
+
+    @Override
+    void transform(TransformOutputs outputs) {
+        def input = inputArtifact.get().asFile
+        if (!input.name.contains('libvlc-all')) {
+            outputs.file(input)
+            return
+        }
+        def output = outputs.file(input.name.replace('.aar', '-external-stl.aar'))
+        new ZipInputStream(new FileInputStream(input)).withCloseable { source ->
+            new ZipOutputStream(new FileOutputStream(output)).withCloseable { target ->
+                ZipEntry entry
+                while ((entry = source.nextEntry) != null) {
+                    if (!(entry.name ==~ /jni\/[^\/]+\/libc\+\+_shared\.so/)) {
+                        def copy = new ZipEntry(entry.name)
+                        copy.time = 0
+                        target.putNextEntry(copy)
+                        source.transferTo(target)
+                        target.closeEntry()
+                    }
+                    source.closeEntry()
+                }
+            }
+        }
+    }
+}
+
+def vlcStlAttribute = Attribute.of('com.fersaiyan.cyanbridge.vlc-stl', String)
+dependencies {
+    artifactTypes.maybeCreate('aar').attributes.attribute(vlcStlAttribute, 'bundled')
+    registerTransform(VlcWithoutBundledStl) {
+        from.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, 'aar').attribute(vlcStlAttribute, 'bundled')
+        to.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, 'aar').attribute(vlcStlAttribute, 'external')
+    }
+}
+
 configurations.configureEach {
+    if (name.endsWith('RuntimeClasspath')) attributes.attribute(vlcStlAttribute, 'external')
     // Full protobuf includes GeneratedMessageLite and is required by the MoYoung SDK's
     // GeneratedMessage classes. Do not package Meta DAT's duplicate javalite runtime.
     exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
@@ -47,7 +105,7 @@ android {
     defaultConfig {
         applicationId = "com.fersaiyan.cyanbridge"
         // Meta DAT declares minSdk 29. Keep the regular build on API 24 if Meta SDK is skipped.
-        minSdk = metaDatEnabled ? 29 : 24
+        minSdk = metaDatEnabled ? 29 : 28
         targetSdk = 36
         versionCode = 31
         versionName = "2.3.0"
@@ -145,6 +203,12 @@ android {
         freeCompilerArgs += ["-Xskip-metadata-version-check"]
     }
 
+    packaging {
+        jniLibs {
+            pickFirsts += ['**/libc++_shared.so']
+        }
+    }
+
     buildFeatures {
         viewBinding = true
         buildConfig = true
@@ -191,14 +255,11 @@ android {
 
 
 dependencies {
-    def localLlamaRuntimeAarPath = (
-            project.findProperty("localLlamaRuntimeAarPath")
-                    ?: ""
-    ).toString().trim()
     def coreConnectivityVersion = project.findProperty("heycyanCoreConnectivityVersion") ?: "0.1.0-SNAPSHOT"
     implementation("com.heycyan.core:core-connectivity:${coreConnectivityVersion}")
     implementation project(":shared")
-    implementation project(":llama-runtime")
+    // Pin to the paired Mentra Live firmware release; override with -PmentraSdkVersion.
+    implementation "com.mentraglass:bluetooth-sdk:${project.findProperty('mentraSdkVersion') ?: '3.2.0-dev.227'}"
     implementation files("libs/glasses_sdk_20250723_v01.aar")
     implementation files("libs/moyoung_glasses_sdk_0.0.7_20260624.aar")
     implementation "com.google.protobuf:protobuf-java:4.29.3"
@@ -216,6 +277,9 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+    // Compose instrumentation uses coroutines-test's ServiceLoader handler. Coroutines
+    // loads handlers from the app classloader, not the separate androidTest APK.
+    debugImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 
     implementation("com.google.android.material:material:1.12.0")
     implementation "androidx.browser:browser:1.8.0"
@@ -228,6 +292,8 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.5.1'
     implementation 'androidx.media3:media3-exoplayer-rtsp:1.5.1'
     implementation 'androidx.media3:media3-ui:1.5.1'
+    // Vendor-matched live engine for EyeVue (official app uses LibVLC direct).
+    implementation 'org.videolan.android:libvlc-all:3.6.0'
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
     implementation 'com.android.billingclient:billing-ktx:8.1.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0"
@@ -235,16 +301,8 @@ dependencies {
     // LiteRT-LM's Flow streaming API requires the newer coroutine ABI.
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"
     implementation "com.google.android.gms:play-services-location:21.3.0"
-    if (localLlamaRuntimeAarPath.isEmpty()) {
-        implementation "io.github.ljcamargo:llamacpp-kotlin:0.4.0"
-    } else {
-        def localLlamaRuntimeAar = rootProject.file(localLlamaRuntimeAarPath)
-        if (!localLlamaRuntimeAar.exists()) {
-            throw new GradleException("localLlamaRuntimeAarPath points to a missing file: ${localLlamaRuntimeAar.absolutePath}")
-        }
-        logger.lifecycle("Using local llama runtime AAR: ${localLlamaRuntimeAar.absolutePath}")
-        implementation files(localLlamaRuntimeAar)
-    }
+    // Official upstream llama.cpp/libmtmd, including image and audio input.
+    implementation project(":llama-runtime")
 
     // LiteRT-LM local multimodal/chat runtime.
     def liteRtDecisionPrototype = providers.gradleProperty("liteRtDecisionPrototype").orNull == "true"

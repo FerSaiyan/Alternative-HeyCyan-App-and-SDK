@@ -5,6 +5,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 data class WalkingAidModelDownloadProgress(
@@ -62,7 +63,27 @@ object WalkingAidModelInstaller {
             }
         }
 
+        check(partial.length() == entry.sizeBytes) {
+            "Downloaded ${entry.displayName} has unexpected size ${partial.length()} (expected ${entry.sizeBytes})"
+        }
+        check(sha256(partial).equals(entry.sha256, ignoreCase = true)) {
+            "Downloaded ${entry.displayName} failed SHA-256 verification"
+        }
+
         if (target.exists()) target.delete()
         check(partial.renameTo(target)) { "Could not install ${entry.displayName}" }
+    }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val count = input.read(buffer)
+                if (count <= 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

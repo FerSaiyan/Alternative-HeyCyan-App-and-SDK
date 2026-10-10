@@ -10,6 +10,31 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MetaPairingScreenStateTest {
+    @Test fun logDisconnectedCameraPermissionIsConnectionGuidanceRatherThanMissingPermission() {
+        val issue = resolveMetaPairingIssue(true, "cameraPermission: All discovered devices are powered off or disconnected", null)
+        assertEquals("Reconnect your Meta glasses", issue?.title)
+        assertEquals(MetaPairingIssueAction.OPEN_META_AI, issue?.action)
+    }
+
+    @Test fun permanentAndroidDenialAndSeparateMetaDenialHaveActionableNextSteps() {
+        val blocked = MetaPairingScreenState(androidPermissionPermanentlyDenied = true)
+        assertEquals("Open Android app settings", blocked.primaryLabel)
+        assertEquals("Allow permissions in Android settings", nextMetaSetupPrompt(blocked)?.title)
+        val camera = MetaPairingScreenState(androidCameraGranted = true, nearbyDevicesGranted = true, initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.REGISTERED, availableDeviceCount = 1)
+        assertEquals("Allow glasses camera access", nextMetaSetupPrompt(camera)?.title)
+        assertEquals(null, nextMetaSetupPrompt(camera.copy(checkingCameraPermission = true)))
+    }
+
+    @Test fun discoveredButDisconnectedGlassesCannotBeMarkedReadyEvenWithOldAuthorization() {
+        val state = MetaPairingScreenState(androidCameraGranted = true, nearbyDevicesGranted = true, initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.REGISTERED, availableDeviceCount = 1,
+            glassesCameraGranted = true, deviceConnected = false)
+        assertFalse(state.isReadyForImageQuestion)
+        assertEquals("Reconnect glasses in Meta AI", state.primaryLabel)
+        assertEquals("Reconnect your Meta glasses", nextMetaSetupPrompt(state)?.title)
+    }
+
     @Test
     fun requiresAndroidPermissionsFirst() {
         val state = MetaPairingScreenState()

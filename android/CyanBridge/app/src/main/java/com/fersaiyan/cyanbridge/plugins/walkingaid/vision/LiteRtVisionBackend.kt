@@ -31,6 +31,7 @@ import kotlin.math.roundToInt
 class LiteRtVisionBackend(
     private val context: Context,
     private val computeBackend: LocalComputeBackend? = null,
+    private val loadDepth: Boolean = true,
 ) : VisionBackend {
 
     private var detectorInterpreter: Interpreter? = null
@@ -73,7 +74,7 @@ class LiteRtVisionBackend(
 
     init {
         initDetector()
-        initDepthModel()
+        if (loadDepth) initDepthModel()
     }
 
     private fun initDetector() {
@@ -172,9 +173,12 @@ class LiteRtVisionBackend(
                 val input = interpreter.getInputTensor(0)
                 val outputs = (0 until interpreter.outputTensorCount).joinToString { index ->
                     val tensor = interpreter.getOutputTensor(index)
-                    "${tensor.name()}=${tensor.shape().contentToString()}"
+                    "${tensor.name()}=${tensor.shape().contentToString()}:${tensor.dataType()}" +
+                        "(scale=${tensor.quantizationParams().scale},zero=${tensor.quantizationParams().zeroPoint})"
                 }
-                "input=${input.shape().contentToString()}, outputs=[$outputs]"
+                "input=${input.shape().contentToString()}:${input.dataType()}" +
+                    "(scale=${input.quantizationParams().scale},zero=${input.quantizationParams().zeroPoint}), " +
+                    "outputs=[$outputs]"
             }.orEmpty()
             activeAcceleratorInfo = AcceleratorInfo(
                 type = accelType,
@@ -378,14 +382,20 @@ class LiteRtVisionBackend(
                 val second = output.values[numBoxes + i]
                 val third = output.values[2 * numBoxes + i]
                 val fourth = output.values[3 * numBoxes + i]
-                val rawLeft = if (output.boxesAreCorners) first else first - third / 2f
-                val rawTop = if (output.boxesAreCorners) second else second - fourth / 2f
-                val rawRight = if (output.boxesAreCorners) third else first + third / 2f
-                val rawBottom = if (output.boxesAreCorners) fourth else second + fourth / 2f
-                val left = normalizeCoordinate(rawLeft, modelWidth)
-                val top = normalizeCoordinate(rawTop, modelHeight)
-                val right = normalizeCoordinate(rawRight, modelWidth)
-                val bottom = normalizeCoordinate(rawBottom, modelHeight)
+                val (left, top, right, bottom) = if (output.boxesUseYoloWorldDistances) {
+                    decodeYoloWorldBox(i, first, second, third, fourth)
+                } else {
+                    val rawLeft = if (output.boxesAreCorners) first else first - third / 2f
+                    val rawTop = if (output.boxesAreCorners) second else second - fourth / 2f
+                    val rawRight = if (output.boxesAreCorners) third else first + third / 2f
+                    val rawBottom = if (output.boxesAreCorners) fourth else second + fourth / 2f
+                    listOf(
+                        normalizeCoordinate(rawLeft, modelWidth),
+                        normalizeCoordinate(rawTop, modelHeight),
+                        normalizeCoordinate(rawRight, modelWidth),
+                        normalizeCoordinate(rawBottom, modelHeight),
+                    )
+                }
                 val cx = (left + right) / 2f
 
                 val box = RectF(left, top, right, bottom)
@@ -428,7 +438,31 @@ class LiteRtVisionBackend(
         val boxesAreCorners: Boolean = false,
         val classIndices: FloatArray? = null,
         val confidenceScores: FloatArray? = null,
+        val boxesUseYoloWorldDistances: Boolean = false,
     )
+
+    private fun decodeYoloWorldBox(
+        candidateIndex: Int,
+        leftDistance: Float,
+        topDistance: Float,
+        rightDistance: Float,
+        bottomDistance: Float,
+    ): List<Float> {
+        val (levelOffset, gridSize, stride) = when {
+            candidateIndex < 80 * 80 -> Triple(0, 80, 8f)
+            candidateIndex < 80 * 80 + 40 * 40 -> Triple(80 * 80, 40, 16f)
+            else -> Triple(80 * 80 + 40 * 40, 20, 32f)
+        }
+        val levelIndex = candidateIndex - levelOffset
+        val anchorX = (levelIndex % gridSize + 0.5f) * stride
+        val anchorY = (levelIndex / gridSize + 0.5f) * stride
+        return listOf(
+            ((anchorX - leftDistance * stride) / modelWidth).coerceIn(0f, 1f),
+            ((anchorY - topDistance * stride) / modelHeight).coerceIn(0f, 1f),
+            ((anchorX + rightDistance * stride) / modelWidth).coerceIn(0f, 1f),
+            ((anchorY + bottomDistance * stride) / modelHeight).coerceIn(0f, 1f),
+        )
+    }
 
     private fun normalizeCoordinate(value: Float, dimension: Int): Float {
         val normalized = if (abs(value) > 1.5f) value / dimension.toFloat() else value
@@ -550,7 +584,18 @@ class LiteRtVisionBackend(
             destination = values,
             destinationOffset = primary.channelCount * primary.boxCount,
         )
-        return DetectorOutput(channels, primary.boxCount, values, boxesAreCorners = true)
+        // This YOLO-World split [1,N,4] + [1,N,C] export emits left/top/right/bottom
+        // distances from the 80x80, 40x40, and 20x20 grid anchors. Only the Qualcomm
+        // boxes/classes/scores export above emits decoded corners directly.
+        val isYoloWorldDistanceOutput = primary.boxCount == YOLO_WORLD_CANDIDATE_COUNT &&
+            scores.channelCount == COCO_CLASSES.size
+        return DetectorOutput(
+            channelCount = channels,
+            boxCount = primary.boxCount,
+            values = values,
+            boxesAreCorners = false,
+            boxesUseYoloWorldDistances = isYoloWorldDistanceOutput,
+        )
     }
 
     /**
@@ -617,7 +662,9 @@ class LiteRtVisionBackend(
     private fun readTensorValues(buffer: ByteBuffer, tensor: Tensor): FloatArray {
         buffer.rewind()
         val values = FloatArray(tensor.numBytes() / tensor.dataType().byteSize())
-        val scale = tensor.quantizationParams().scale
+        // Class-index tensors can be unquantized UINT8 (scale=0). They contain
+        // literal IDs; multiplying them by zero silently labels every box "person".
+        val scale = tensor.quantizationParams().scale.takeIf { it > 0f } ?: 1f
         val zeroPoint = tensor.quantizationParams().zeroPoint
         // Scale 0 means "not quantized" (e.g. the uint8 class_idx output): keep the raw value.
         val quantized = scale != 0f
@@ -825,6 +872,7 @@ class LiteRtVisionBackend(
         private const val TAG = "LiteRtVisionBackend"
         private const val CONFIDENCE_THRESHOLD = 0.35f
         private const val IOU_THRESHOLD = 0.45f
+        private const val YOLO_WORLD_CANDIDATE_COUNT = 8_400
 
         private val COCO_CLASSES = arrayOf(
             "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",

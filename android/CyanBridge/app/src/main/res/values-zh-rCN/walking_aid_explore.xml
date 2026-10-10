@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="walking_aid_mode_title">模式</string>
+    <string name="walking_aid_mode_walking">步行</string>
+    <string name="walking_aid_mode_explore">探索</string>
+    <string name="walking_aid_mode_walking_description">播报选定的障碍物和正在靠近的物体。</string>
+    <string name="walking_aid_mode_explore_description">逐一描述检测到的物体。场景未变化时不播报。</string>
+    <string name="walking_aid_speech_rate">语速</string>
+    <string name="walking_aid_speech_rate_value">%1$.1f×</string>
+    <string name="walking_aid_announcement_pause">探索模式播报间隔</string>
+    <string name="walking_aid_announcement_pause_value">%1$.1f秒</string>
+    <string name="walking_aid_position_left">您的左侧</string>
+    <string name="walking_aid_position_center">前方</string>
+    <string name="walking_aid_position_right">您的右侧</string>
+    <string name="walking_aid_explore_single">%2$s有%1$s。</string>
+    <string name="walking_aid_explore_multiple">%3$s有%2$s，数量为%1$d。</string>
+
+    <plurals name="walking_aid_object_person"><item quantity="other">人</item></plurals>
+    <plurals name="walking_aid_object_bicycle"><item quantity="other">自行车</item></plurals>
+    <plurals name="walking_aid_object_car"><item quantity="other">汽车</item></plurals>
+    <plurals name="walking_aid_object_motorcycle"><item quantity="other">摩托车</item></plurals>
+    <plurals name="walking_aid_object_airplane"><item quantity="other">飞机</item></plurals>
+    <plurals name="walking_aid_object_bus"><item quantity="other">公交车</item></plurals>
+    <plurals name="walking_aid_object_train"><item quantity="other">火车</item></plurals>
+    <plurals name="walking_aid_object_truck"><item quantity="other">卡车</item></plurals>
+    <plurals name="walking_aid_object_boat"><item quantity="other">船</item></plurals>
+    <plurals name="walking_aid_object_traffic_light"><item quantity="other">红绿灯</item></plurals>
+    <plurals name="walking_aid_object_fire_hydrant"><item quantity="other">消防栓</item></plurals>
+    <plurals name="walking_aid_object_stop_sign"><item quantity="other">停车让行标志</item></plurals>
+    <plurals name="walking_aid_object_parking_meter"><item quantity="other">停车计费器</item></plurals>
+    <plurals name="walking_aid_object_bench"><item quantity="other">长椅</item></plurals>
+    <plurals name="walking_aid_object_bird"><item quantity="other">鸟</item></plurals>
+    <plurals name="walking_aid_object_cat"><item quantity="other">猫</item></plurals>
+    <plurals name="walking_aid_object_dog"><item quantity="other">狗</item></plurals>
+    <plurals name="walking_aid_object_horse"><item quantity="other">马</item></plurals>
+    <plurals name="walking_aid_object_sheep"><item quantity="other">绵羊</item></plurals>
+    <plurals name="walking_aid_object_cow"><item quantity="other">牛</item></plurals>
+    <plurals name="walking_aid_object_elephant"><item quantity="other">大象</item></plurals>
+    <plurals name="walking_aid_object_bear"><item quantity="other">熊</item></plurals>
+    <plurals name="walking_aid_object_zebra"><item quantity="other">斑马</item></plurals>
+    <plurals name="walking_aid_object_giraffe"><item quantity="other">长颈鹿</item></plurals>
+    <plurals name="walking_aid_object_backpack"><item quantity="other">背包</item></plurals>
+    <plurals name="walking_aid_object_umbrella"><item quantity="other">雨伞</item></plurals>
+    <plurals name="walking_aid_object_handbag"><item quantity="other">手提包</item></plurals>
+    <plurals name="walking_aid_object_tie"><item quantity="other">领带</item></plurals>
+    <plurals name="walking_aid_object_suitcase"><item quantity="other">行李箱</item></plurals>
+    <plurals name="walking_aid_object_frisbee"><item quantity="other">飞盘</item></plurals>
+    <plurals name="walking_aid_object_skis"><item quantity="other">双板滑雪板</item></plurals>
+    <plurals name="walking_aid_object_snowboard"><item quantity="other">单板滑雪板</item></plurals>
+    <plurals name="walking_aid_object_sports_ball"><item quantity="other">球</item></plurals>
+    <plurals name="walking_aid_object_kite"><item quantity="other">风筝</item></plurals>
+    <plurals name="walking_aid_object_baseball_bat"><item quantity="other">棒球棒</item></plurals>
+    <plurals name="walking_aid_object_baseball_glove"><item quantity="other">棒球手套</item></plurals>
+    <plurals name="walking_aid_object_skateboard"><item quantity="other">滑板</item></plurals>
+    <plurals name="walking_aid_object_surfboard"><item quantity="other">冲浪板</item></plurals>
+    <plurals name="walking_aid_object_tennis_racket"><item quantity="other">网球拍</item></plurals>
+    <plurals name="walking_aid_object_bottle"><item quantity="other">瓶子</item></plurals>
+    <plurals name="walking_aid_object_wine_glass"><item quantity="other">葡萄酒杯</item></plurals>
+    <plurals name="walking_aid_object_cup"><item quantity="other">杯子</item></plurals>
+    <plurals name="walking_aid_object_fork"><item quantity="other">叉子</item></plurals>
+    <plurals name="walking_aid_object_knife"><item quantity="other">刀</item></plurals>
+    <plurals name="walking_aid_object_spoon"><item quantity="other">勺子</item></plurals>
+    <plurals name="walking_aid_object_bowl"><item quantity="other">碗</item></plurals>
+    <plurals name="walking_aid_object_banana"><item quantity="other">香蕉</item></plurals>
+    <plurals name="walking_aid_object_apple"><item quantity="other">苹果</item></plurals>
+    <plurals name="walking_aid_object_sandwich"><item quantity="other">三明治</item></plurals>
+    <plurals name="walking_aid_object_orange"><item quantity="other">橙子</item></plurals>
+    <plurals name="walking_aid_object_broccoli"><item quantity="other">西兰花</item></plurals>
+    <plurals name="walking_aid_object_carrot"><item quantity="other">胡萝卜</item></plurals>
+    <plurals name="walking_aid_object_hot_dog"><item quantity="other">热狗</item></plurals>
+    <plurals name="walking_aid_object_pizza"><item quantity="other">披萨</item></plurals>
+    <plurals name="walking_aid_object_donut"><item quantity="other">甜甜圈</item></plurals>
+    <plurals name="walking_aid_object_cake"><item quantity="other">蛋糕</item></plurals>
+    <plurals name="walking_aid_object_chair"><item quantity="other">椅子</item></plurals>
+    <plurals name="walking_aid_object_couch"><item quantity="other">沙发</item></plurals>
+    <plurals name="walking_aid_object_potted_plant"><item quantity="other">盆栽植物</item></plurals>
+    <plurals name="walking_aid_object_bed"><item quantity="other">床</item></plurals>
+    <plurals name="walking_aid_object_dining_table"><item quantity="other">餐桌</item></plurals>
+    <plurals name="walking_aid_object_toilet"><item quantity="other">马桶</item></plurals>
+    <plurals name="walking_aid_object_tv"><item quantity="other">电视机</item></plurals>
+    <plurals name="walking_aid_object_laptop"><item quantity="other">笔记本电脑</item></plurals>
+    <plurals name="walking_aid_object_mouse"><item quantity="other">鼠标</item></plurals>
+    <plurals name="walking_aid_object_remote"><item quantity="other">遥控器</item></plurals>
+    <plurals name="walking_aid_object_keyboard"><item quantity="other">键盘</item></plurals>
+    <plurals name="walking_aid_object_cell_phone"><item quantity="other">手机</item></plurals>
+    <plurals name="walking_aid_object_microwave"><item quantity="other">微波炉</item></plurals>
+    <plurals name="walking_aid_object_oven"><item quantity="other">烤箱</item></plurals>
+    <plurals name="walking_aid_object_toaster"><item quantity="other">烤面包机</item></plurals>
+    <plurals name="walking_aid_object_sink"><item quantity="other">水槽</item></plurals>
+    <plurals name="walking_aid_object_refrigerator"><item quantity="other">冰箱</item></plurals>
+    <plurals name="walking_aid_object_book"><item quantity="other">书</item></plurals>
+    <plurals name="walking_aid_object_clock"><item quantity="other">时钟</item></plurals>
+    <plurals name="walking_aid_object_vase"><item quantity="other">花瓶</item></plurals>
+    <plurals name="walking_aid_object_scissors"><item quantity="other">剪刀</item></plurals>
+    <plurals name="walking_aid_object_teddy_bear"><item quantity="other">泰迪熊</item></plurals>
+    <plurals name="walking_aid_object_hair_drier"><item quantity="other">吹风机</item></plurals>
+    <plurals name="walking_aid_object_toothbrush"><item quantity="other">牙刷</item></plurals>
+    <plurals name="walking_aid_object_unknown"><item quantity="other">物体</item></plurals>
+</resources>

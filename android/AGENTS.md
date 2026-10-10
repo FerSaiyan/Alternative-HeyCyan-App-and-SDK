@@ -122,6 +122,42 @@ Hardware validation of that retry succeeded end to end. Three busy responses pre
 
 The same APK passed a Clearer regression with a valid 192x144, 10,221-byte JPEG in 4,349 ms while tolerating three transport-sequence warnings before completion. Trace: `/tmp/opencode/tunebuds-clearer-final-regression-20260902.log`.
 
+### TuneBuds livestream integration (2026-10-03)
+
+- TuneBuds-profile Live preview is exposed on Android 8+ through the shared dashboard/action allowlist and the existing transport/notification permission flow.
+- Transport: local-only phone hotspot → AB Mate `0xE6` mode 0 → `0xE8` quality payload → exact device-reported RTSP URL. Busy replies 1/3/5 retry; 6 reports unsupported. Never infer the upstream address from HeyCyan/EyeVue defaults.
+- `TuneBudsLiveConnection` feeds the existing `GlassesRtspRelay` at `rtsp://127.0.0.1:8554/live/` with ordinary live PLAY. TuneBuds and EyeVue share `LibVlcLivePreviewManager`; EyeVue retains its rotated view/default caching, while TuneBuds uses stream orientation and 300 ms network/live caching.
+- `TuneBudsLiveForegroundService` keeps preview/relay alive behind external VLC. Dashboard/notification Stop, Bluetooth/Wi-Fi failure, and activity release clean up relay/camera/hotspot/player before releasing the `LIVE_PREVIEW` lease. Vendor-AAR BLE events do not clear the independent Classic/SPP session.
+- Documentation: `CyanBridge/docs/LIVE_STREAM_INTEGRATION.md`. Focused verification: 38 tests passed (TuneBuds codec/startup/action gate, shared relay/lifecycle, device gating, EyeVue viewport) and debug APK built. No ADB device was connected; TuneBuds hardware playback/latency remains unverified.
+
+### TuneBuds media command re-audit (2026-10-04)
+
+- See `CyanBridge/docs/TUNEBUDS_MEDIA_COMMAND_AUDIT.md` and the October 4 section in `TUNEBUDS_REVERSE_ENGINEERING.md` for the vendor-source comparison.
+- The complete official `startPullFileInternal` treats `0xE7` statuses **1/3/5** as busy and **4** as low battery. The earlier hardware investigation observed only 1/3; keep the full vendor mapping.
+- Ordinary TuneBuds sync now tries an isolated P2P path when Wi-Fi capability bit `0x04` is reported: `0xE6` mode 2 with generated `AiGlassDb_` SSID, empty `0xE7`, `0xEC=2`, six-byte `0xF2`, peer MAC/name matching, WPS PBC, group-owner intent 15 on Android 10+, and HTTP sockets bound to the group Network. The device's `0xE7` URL is the target, never the phone group-owner IP.
+- P2P transport failure can fall back to the previously hardware-validated local-only hotspot after camera/group cleanup. Unknown capabilities keep the hotspot path. Glasses-hosted AP mode 1 is still not implemented.
+- HTTP uses the vendor's omitted-port fallback 8080, preserves explicit port 80/path prefixes, strips accidental manifest headers before JSON detection, and sends `Connection: close` / `TSClient/1.0` for all media. Stop interrupts blocked reads and removes incomplete files; progress counts distinguish photos/videos/audio.
+- Manual saved photos now finish with the existing saving-aware `0xE2` loop; dashboard multi-step commands are serialized and closed `0xE2` notifications clear recording flags. New P2P and manual-photo cleanup changes need a hardware retest; no ADB device was connected during the audit.
+
+## Shared photo ownership (2026-10-04)
+
+- HeyCyan, EyeVue and TuneBuds AI-photo acquisition share Android
+  `GlassesPhotoCapture` and device-tagged `GlassesSessionCoordinator` permits.
+  Use `GlassesAiPhotoCapture` for selected-device consumers, or the native
+  manager's `capturePhotoForAi()`; never acquire an image from a broadcast
+  `photos.first()` or `aiPhotos.first()` subscription.
+- Live, Walking Aid periodic photos and visual notes all use the selected-device
+  adapter. Native push streams have a command-plus-image deadline, bounded JPEG
+  buffers, complete-image validation and noncancellable late-packet draining.
+  Native manual AI streams reserve a receive-only owner at stream start and
+  expose acquisition outcomes to Live without another shutter.
+- Pass the owning device when clearing permits on disconnect. Vendor-AAR events
+  cannot release an EyeVue/TuneBuds background capture. Native disconnect cancels
+  its own capture; release happens after cleanup.
+- Implementation, protocol limitations and hardware acceptance:
+  `CyanBridge/docs/UNIFIED_GLASSES_PHOTO_CAPTURE.md`. The website diagnostics
+  endpoint is deployed; hardware retesting of this capture extension is pending.
+
 ## Error handling notes
 
 - `loadData[6] == 0x09` with error 255 is common and not necessarily fatal.

@@ -1,0 +1,9 @@
+// Applied to the app and composite builds. Keep all generated files on the
+// selected fast disk without changing CI's default output locations.
+gradle.beforeProject { project ->
+    def outputRoot = project.providers.gradleProperty('cyanbridgeBuildRoot').orNull
+    if (outputRoot != null) {
+        def module = project.path == ':' ? 'root' : project.path.substring(1).replace(':', '/')
+        project.layout.buildDirectory.set(new File(outputRoot, "${project.rootProject.name}/${module}"))
+    }
+}

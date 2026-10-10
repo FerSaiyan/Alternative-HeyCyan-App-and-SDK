@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="walking_aid_mode_title">모드</string>
+    <string name="walking_aid_mode_walking">걷기</string>
+    <string name="walking_aid_mode_explore">탐색</string>
+    <string name="walking_aid_mode_walking_description">선택한 장애물과 다가오는 물체를 알려줍니다.</string>
+    <string name="walking_aid_mode_explore_description">감지한 물체를 하나씩 설명합니다. 장면이 바뀌지 않으면 안내하지 않습니다.</string>
+    <string name="walking_aid_speech_rate">말하기 속도</string>
+    <string name="walking_aid_speech_rate_value">%1$.1f×</string>
+    <string name="walking_aid_announcement_pause">탐색 안내 사이의 대기 시간</string>
+    <string name="walking_aid_announcement_pause_value">%1$.1f초</string>
+    <string name="walking_aid_position_left">왼쪽에</string>
+    <string name="walking_aid_position_center">앞에</string>
+    <string name="walking_aid_position_right">오른쪽에</string>
+    <string name="walking_aid_explore_single">%2$s %1$s.</string>
+    <string name="walking_aid_explore_multiple">%3$s %2$s: %1$d.</string>
+
+    <plurals name="walking_aid_object_person"><item quantity="other">사람</item></plurals>
+    <plurals name="walking_aid_object_bicycle"><item quantity="other">자전거</item></plurals>
+    <plurals name="walking_aid_object_car"><item quantity="other">자동차</item></plurals>
+    <plurals name="walking_aid_object_motorcycle"><item quantity="other">오토바이</item></plurals>
+    <plurals name="walking_aid_object_airplane"><item quantity="other">비행기</item></plurals>
+    <plurals name="walking_aid_object_bus"><item quantity="other">버스</item></plurals>
+    <plurals name="walking_aid_object_train"><item quantity="other">기차</item></plurals>
+    <plurals name="walking_aid_object_truck"><item quantity="other">트럭</item></plurals>
+    <plurals name="walking_aid_object_boat"><item quantity="other">배</item></plurals>
+    <plurals name="walking_aid_object_traffic_light"><item quantity="other">신호등</item></plurals>
+    <plurals name="walking_aid_object_fire_hydrant"><item quantity="other">소화전</item></plurals>
+    <plurals name="walking_aid_object_stop_sign"><item quantity="other">정지 표지판</item></plurals>
+    <plurals name="walking_aid_object_parking_meter"><item quantity="other">주차 요금기</item></plurals>
+    <plurals name="walking_aid_object_bench"><item quantity="other">벤치</item></plurals>
+    <plurals name="walking_aid_object_bird"><item quantity="other">새</item></plurals>
+    <plurals name="walking_aid_object_cat"><item quantity="other">고양이</item></plurals>
+    <plurals name="walking_aid_object_dog"><item quantity="other">개</item></plurals>
+    <plurals name="walking_aid_object_horse"><item quantity="other">말</item></plurals>
+    <plurals name="walking_aid_object_sheep"><item quantity="other">양</item></plurals>
+    <plurals name="walking_aid_object_cow"><item quantity="other">소</item></plurals>
+    <plurals name="walking_aid_object_elephant"><item quantity="other">코끼리</item></plurals>
+    <plurals name="walking_aid_object_bear"><item quantity="other">곰</item></plurals>
+    <plurals name="walking_aid_object_zebra"><item quantity="other">얼룩말</item></plurals>
+    <plurals name="walking_aid_object_giraffe"><item quantity="other">기린</item></plurals>
+    <plurals name="walking_aid_object_backpack"><item quantity="other">배낭</item></plurals>
+    <plurals name="walking_aid_object_umbrella"><item quantity="other">우산</item></plurals>
+    <plurals name="walking_aid_object_handbag"><item quantity="other">핸드백</item></plurals>
+    <plurals name="walking_aid_object_tie"><item quantity="other">넥타이</item></plurals>
+    <plurals name="walking_aid_object_suitcase"><item quantity="other">여행 가방</item></plurals>
+    <plurals name="walking_aid_object_frisbee"><item quantity="other">원반</item></plurals>
+    <plurals name="walking_aid_object_skis"><item quantity="other">스키</item></plurals>
+    <plurals name="walking_aid_object_snowboard"><item quantity="other">스노보드</item></plurals>
+    <plurals name="walking_aid_object_sports_ball"><item quantity="other">공</item></plurals>
+    <plurals name="walking_aid_object_kite"><item quantity="other">연</item></plurals>
+    <plurals name="walking_aid_object_baseball_bat"><item quantity="other">야구 방망이</item></plurals>
+    <plurals name="walking_aid_object_baseball_glove"><item quantity="other">야구 글러브</item></plurals>
+    <plurals name="walking_aid_object_skateboard"><item quantity="other">스케이트보드</item></plurals>
+    <plurals name="walking_aid_object_surfboard"><item quantity="other">서핑 보드</item></plurals>
+    <plurals name="walking_aid_object_tennis_racket"><item quantity="other">테니스 라켓</item></plurals>
+    <plurals name="walking_aid_object_bottle"><item quantity="other">병</item></plurals>
+    <plurals name="walking_aid_object_wine_glass"><item quantity="other">와인 잔</item></plurals>
+    <plurals name="walking_aid_object_cup"><item quantity="other">컵</item></plurals>
+    <plurals name="walking_aid_object_fork"><item quantity="other">포크</item></plurals>
+    <plurals name="walking_aid_object_knife"><item quantity="other">칼</item></plurals>
+    <plurals name="walking_aid_object_spoon"><item quantity="other">숟가락</item></plurals>
+    <plurals name="walking_aid_object_bowl"><item quantity="other">그릇</item></plurals>
+    <plurals name="walking_aid_object_banana"><item quantity="other">바나나</item></plurals>
+    <plurals name="walking_aid_object_apple"><item quantity="other">사과</item></plurals>
+    <plurals name="walking_aid_object_sandwich"><item quantity="other">샌드위치</item></plurals>
+    <plurals name="walking_aid_object_orange"><item quantity="other">오렌지</item></plurals>
+    <plurals name="walking_aid_object_broccoli"><item quantity="other">브로콜리</item></plurals>
+    <plurals name="walking_aid_object_carrot"><item quantity="other">당근</item></plurals>
+    <plurals name="walking_aid_object_hot_dog"><item quantity="other">핫도그</item></plurals>
+    <plurals name="walking_aid_object_pizza"><item quantity="other">피자</item></plurals>
+    <plurals name="walking_aid_object_donut"><item quantity="other">도넛</item></plurals>
+    <plurals name="walking_aid_object_cake"><item quantity="other">케이크</item></plurals>
+    <plurals name="walking_aid_object_chair"><item quantity="other">의자</item></plurals>
+    <plurals name="walking_aid_object_couch"><item quantity="other">소파</item></plurals>
+    <plurals name="walking_aid_object_potted_plant"><item quantity="other">화분 식물</item></plurals>
+    <plurals name="walking_aid_object_bed"><item quantity="other">침대</item></plurals>
+    <plurals name="walking_aid_object_dining_table"><item quantity="other">식탁</item></plurals>
+    <plurals name="walking_aid_object_toilet"><item quantity="other">변기</item></plurals>
+    <plurals name="walking_aid_object_tv"><item quantity="other">텔레비전</item></plurals>
+    <plurals name="walking_aid_object_laptop"><item quantity="other">노트북</item></plurals>
+    <plurals name="walking_aid_object_mouse"><item quantity="other">컴퓨터 마우스</item></plurals>
+    <plurals name="walking_aid_object_remote"><item quantity="other">리모컨</item></plurals>
+    <plurals name="walking_aid_object_keyboard"><item quantity="other">키보드</item></plurals>
+    <plurals name="walking_aid_object_cell_phone"><item quantity="other">휴대전화</item></plurals>
+    <plurals name="walking_aid_object_microwave"><item quantity="other">전자레인지</item></plurals>
+    <plurals name="walking_aid_object_oven"><item quantity="other">오븐</item></plurals>
+    <plurals name="walking_aid_object_toaster"><item quantity="other">토스터</item></plurals>
+    <plurals name="walking_aid_object_sink"><item quantity="other">싱크대</item></plurals>
+    <plurals name="walking_aid_object_refrigerator"><item quantity="other">냉장고</item></plurals>
+    <plurals name="walking_aid_object_book"><item quantity="other">책</item></plurals>
+    <plurals name="walking_aid_object_clock"><item quantity="other">시계</item></plurals>
+    <plurals name="walking_aid_object_vase"><item quantity="other">꽃병</item></plurals>
+    <plurals name="walking_aid_object_scissors"><item quantity="other">가위</item></plurals>
+    <plurals name="walking_aid_object_teddy_bear"><item quantity="other">곰 인형</item></plurals>
+    <plurals name="walking_aid_object_hair_drier"><item quantity="other">헤어드라이어</item></plurals>
+    <plurals name="walking_aid_object_toothbrush"><item quantity="other">칫솔</item></plurals>
+    <plurals name="walking_aid_object_unknown"><item quantity="other">물체</item></plurals>
+</resources>

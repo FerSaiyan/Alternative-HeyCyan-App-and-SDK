@@ -2,6 +2,63 @@
 
 This document preserves the WalkingAid implementation review and proposed P0-P5 roadmap verbatim so later implementation work can be checked against the original findings.
 
+## Explore and Walking modes (October 3, 2026)
+
+Select the behavior independently of the camera source, while the plugin is stopped:
+
+- **Walking** (default) retains the existing obstacle/approaching-object alerts and optional depth/context settings.
+- **Explore** describes local YOLO detections one group at a time, e.g. "2 people ahead" or "chair on your right". It does not require cloud access or a depth model.
+
+Explore groups by detector class, direction, and count. Changes must appear in at least two fresh analyzed frames over 600 ms before being announced. Completed groups stay quiet until their count/direction changes or they disappear consistently and return. Track-ID changes alone do not repeat a description. Pending descriptions are checked against the newest detections and expire with stale frames; speech which is interrupted or fails is not recorded as heard. Empty detections do not produce a path-clear announcement.
+
+Output settings provide speech speed (0.5–2×, both modes) and an Explore pause between completed announcements (0–5 seconds, default one second). Explore waits for TTS completion rather than interrupting each sentence with the next detection. Object names, plural forms, directions, and Explore controls use resources for all nine app languages. Detector labels remain English internally for matching/tracking.
+
+This is simple class/count/position memory, not recognition of places or individual objects. Scenes with the same class counts and positions cannot be distinguished by this version. The photo interval still applies only to periodic photos; live video keeps the existing latest-frame processing.
+
+## Continuous video sources (October 1, 2026)
+
+Walking Aid settings now offers **Periodic photos** plus a device-gated video
+button: **EyeVue continuous video** on EyeVue (Android 10+), or **Meta Ray-Ban
+continuous video** on Meta. Select a source before enabling Walking Aid. Stop the
+plugin before changing sources. The existing photo interval applies to photos;
+video is processed as frames arrive, with one pending frame and latest-frame wins.
+
+- EyeVue uses the same vendor BLE `0x67`, Wi-Fi, HTTP activation, and RTSP relay
+  as live preview. LibVLC software decoding renders to an ImageReader surface,
+  independent of any Activity/window, then applies the preview's -90° rotation.
+  Stream audio is muted so it does not compete with spoken hazard warnings.
+- Meta uses a single production DAT session/stream, including connection and
+  camera-authorization checks. Existing previews/transports retain their session;
+  Walking Aid reports a conflict rather than stealing their callbacks.
+- Both feed `VisionFrame` into the same local YOLO → motion/tracking → warning/TTS
+  worker used for photos. Superseded queued bitmaps are recycled. The active frame
+  is recycled after processing; local depth owns a separate bitmap so slow native
+  enrichment cannot delay the next YOLO frame. Shutdown joins all inference before
+  closing the backend. Only analyzed video
+  frames are saved for bounded thumbnail/Q&A history, after immediate warnings.
+- Android permission dialogs guide Bluetooth/Wi-Fi setup. Meta setup guides
+  registration and camera consent. Startup, disconnection, and frame-stall failures
+  stop the plugin and surface an error. Stream frame timestamps currently describe
+  receipt at the phone, not measured sensor exposure or transport latency.
+
+CI covers source-button gating, latest-frame backpressure/recycling, cancellation,
+transport failures, and lease ownership. The real-model runner additionally uses
+12-second H.264 (EyeVue) and HEVC (Meta) clips built from the existing pinned `bus.jpg` and `zidane.jpg`
+fixtures. EyeVue substitutes its connection URL while retaining the production
+LibVLC decoder/rotation. Meta uses actual `MockDeviceKit` video delivery through
+the production manager. Both run the real YOLO11 model, require multiple fresh
+frames, and verify detections across the two scenes, plus transport/session cleanup.
+
+Run with `tools/hil/run_walking_aid_model_ci.sh` (see `tools/hil/README.md`).
+Verified on the API 36 `CyanBridge_Walking_Aid_CI` emulator: all five real-model
+and stream phases pass, along with 28 control/lifecycle/DAT regression tests.
+Both streams identify bus/person and then person/tie and release their sessions.
+The Meta fixture uses HEVC to match the SDK mock's negotiated decoder; an H.264
+fixture can enter STREAMING without yielding frames. Full unit checks: 586 app
+and 80 shared portability tests passed. Results are in
+`build/hil/results/walking-aid-model-ci/`.
+Physical EyeVue/Meta stream verification remains a device-dependent check.
+
 ## Implementation Status (July 30, 2026)
 
 P0, P1, P2, and P5 have been implemented in the Android codebase without physical-device validation:

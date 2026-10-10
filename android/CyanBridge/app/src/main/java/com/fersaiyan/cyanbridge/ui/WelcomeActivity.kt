@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.MainActivity
+import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.OnboardingLanguageOption
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.WelcomeScreen
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
@@ -29,12 +30,8 @@ class WelcomeActivity : AppCompatActivity() {
         }
 
         val storedLanguage = AppLanguagePreferences.selected(this)
-        var selectedLanguageId by mutableStateOf(
-            if (AppLanguagePreferences.hasUserSelectedLanguage(this)) storedLanguage.name else "",
-        )
-        var languageSelectionComplete by mutableStateOf(
-            AppLanguagePreferences.hasUserSelectedLanguage(this),
-        )
+        var selectedLanguageId by mutableStateOf(storedLanguage.name)
+        var languageSelectionComplete by mutableStateOf(true)
         val languageOptions = AppLanguage.entries.map { language ->
             OnboardingLanguageOption(
                 id = language.name,
@@ -56,7 +53,11 @@ class WelcomeActivity : AppCompatActivity() {
                         languageSelectionComplete = true
                     },
                     onStartSetup = {
+                        if (!AppLanguagePreferences.hasUserSelectedLanguage(this)) {
+                            AppLanguagePreferences.select(this, AppLanguage.fromStored(selectedLanguageId))
+                        }
                         startActivity(Intent(this, BatteryOptimizationGuideActivity::class.java))
+                        overridePendingTransition(R.anim.onboarding_fade_in, R.anim.onboarding_fade_out)
                         finish()
                     },
                 )

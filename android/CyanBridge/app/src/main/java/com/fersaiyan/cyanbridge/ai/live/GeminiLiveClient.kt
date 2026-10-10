@@ -22,6 +22,9 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
+import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +62,8 @@ class GeminiLiveClient(
         fun onUserSpeechActivity(active: Boolean) = Unit
         fun onTranscription(input: Boolean, text: String) = Unit
         fun onSetupComplete() = Unit
+        fun onModelOutputStarted() = Unit
+        fun onModelTurnComplete() = Unit
         fun onAnnouncement(kind: GeminiLiveAnnouncement) = Unit
     }
 
@@ -117,10 +122,13 @@ class GeminiLiveClient(
     private var lastSystemPrompt: String = ""
     private var socket: WebSocket? = null
     private var recorder: AudioRecord? = null
+    @Volatile private var mentraMicActive = false
     private var recorderJob: Job? = null
     private var playback: AudioTrack? = null
     private var reconnectJob: Job? = null
     private var sessionResumptionJob: Job? = null
+    private var meteredSessionLimitJob: Job? = null
+    private val meteredConnectionAttempted = AtomicBoolean(false)
     private var sessionResumptionHandle: String? = null
     private var reconnectAttempt = 0
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -129,7 +137,11 @@ class GeminiLiveClient(
     private var liveAudioRouteConfigured = false
     private var inputAudioMs = 0L
     private var outputAudioMs = 0L
-    private var visualInputCount = 0
+    private val visionDiagnostics = GeminiLiveVisionDiagnostics()
+    private val visualInputCount: Int get() = visionDiagnostics.snapshot().imagesQueued
+    private var visionReportId = java.util.UUID.randomUUID().toString()
+    private var visionReportJob: Job? = null
+    private var visionReportConfig: LiveTokenConfig? = null
     private var lastBilledInputMs = 0L
     private var lastBilledOutputMs = 0L
     private var lastBilledImages = 0
@@ -171,9 +183,15 @@ class GeminiLiveClient(
 
     fun start(language: String, imagePrompt: String) {
         if (!active.compareAndSet(false, true)) return
+        meteredSessionLimitJob?.cancel()
+        meteredSessionLimitJob = null
+        reconnectAttempt = 0
+        meteredConnectionAttempted.set(false)
         inputAudioMs = 0L
         outputAudioMs = 0L
-        visualInputCount = 0
+        visionDiagnostics.reset()
+        visionReportId = java.util.UUID.randomUUID().toString()
+        visionReportConfig = null
         lastBilledInputMs = 0L
         lastBilledOutputMs = 0L
         lastBilledImages = 0
@@ -192,20 +210,30 @@ class GeminiLiveClient(
         scope.launch {
             runCatching { requestToken(language, imagePrompt) }
                 .onSuccess {
+                    if (!active.get()) return@onSuccess
                     tokenConfig = it
+                    visionReportConfig = it
                     Log.i(TAG, "Live token ok model=${it.model} reservation=${it.reservationId} url=${it.websocketUrl.take(80)} expires=${it.expiresAtMs} auth=${it.authorizationHeader?.take(20)} apiKey=${if (it.apiKey.isNullOrBlank()) "none" else "present"}")
                     connectOrReconnect()
                 }
                 .onFailure {
+                    if (!active.get()) return@onFailure
                     active.set(false)
                     Log.e(TAG, "Live token failed", it)
-                    listener.onAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
+                    val rejection = it as? LiveTokenRequestException
+                    val announcement = when (rejection?.errorCode) {
+                        "live_concurrent_session" -> GeminiLiveAnnouncement.PRIVATE_SESSION_BUSY
+                        "live_rate_limited" -> GeminiLiveAnnouncement.PRIVATE_RATE_LIMITED
+                        else -> GeminiLiveAnnouncement.GENERIC_FAILURE
+                    }
+                    listener.onAnnouncement(announcement)
                     setState(GeminiLiveState.ERROR, it.message ?: "Unable to start Gemini Live")
                 }
         }
     }
 
     fun stop() {
+        reportVisionDiagnostics()
         active.set(false)
         setupComplete.set(false)
         modelSpeaking.set(false)
@@ -214,6 +242,8 @@ class GeminiLiveClient(
         reconnectJob = null
         sessionResumptionJob?.cancel()
         sessionResumptionJob = null
+        meteredSessionLimitJob?.cancel()
+        meteredSessionLimitJob = null
         socket?.close(1000, "user_stopped")
         socket = null
         stopCapture()
@@ -259,6 +289,13 @@ class GeminiLiveClient(
         sendPcm(bytes)
     }
 
+    /** Direct 16 kHz mono signed little-endian PCM; no second AudioRecord. */
+    fun offerMentraPcm(pcm: ByteArray) {
+        if (mentraMicActive && active.get() && setupComplete.get() &&
+            captureEnabled.get() && pcm.isNotEmpty() && pcm.size % 2 == 0
+        ) sendPcm(pcm)
+    }
+
     /** Backward-compatible name for explicit still images. */
     fun sendImage(jpegBytes: ByteArray) = sendVideoFrame(jpegBytes)
 
@@ -278,13 +315,79 @@ class GeminiLiveClient(
     }
 
     /** Sends one JPEG frame through the current realtimeInput.video field. */
-    fun sendVideoFrame(jpegBytes: ByteArray) {
-        if (!active.get() || !setupComplete.get() || jpegBytes.isEmpty()) return
-        if (visualInputCount >= MAX_VISUAL_INPUTS_PER_SESSION) {
+    fun sendVideoFrame(jpegBytes: ByteArray): Boolean {
+        val limit = if (tokenConfig?.let { it.freeTier || it.economy } == true) 10 else MAX_VISUAL_INPUTS_PER_SESSION
+        if (visualInputCount >= limit) {
             setState(GeminiLiveState.LISTENING, "Live visual-input safety limit reached")
-            return
         }
-        if (sendRealtimeBlob("video", "image/jpeg", jpegBytes)) visualInputCount++
+        val accepted = visionDiagnostics.send(
+            ready = active.get() && setupComplete.get(),
+            bytes = jpegBytes,
+            limit = limit,
+        ) { sendRealtimeBlob("video", "image/jpeg", jpegBytes) }
+        Log.i(TAG, "Live image queued=$accepted diagnostics=${visionDiagnostics.snapshot()}")
+        scheduleVisionDiagnosticsReport()
+        return accepted
+    }
+
+    fun recordVisionCaptureStarted() {
+        visionDiagnostics.captureStarted()
+        scheduleVisionDiagnosticsReport()
+    }
+
+    fun recordVisionCaptureFinished(success: Boolean, error: Throwable? = null) {
+        visionDiagnostics.captureFinished(success, error)
+        Log.i(TAG, "Live capture success=$success diagnostics=${visionDiagnostics.snapshot()}")
+        scheduleVisionDiagnosticsReport()
+    }
+
+    private fun scheduleVisionDiagnosticsReport() {
+        synchronized(visionDiagnostics) {
+            visionReportJob?.cancel()
+            visionReportJob = scope.launch {
+                delay(1_000)
+                reportVisionDiagnostics()
+            }
+        }
+    }
+
+    private fun reportVisionDiagnostics() {
+        val config = tokenConfig ?: visionReportConfig ?: return
+        if (config.reservationId == "direct") return
+        val snapshot = visionDiagnostics.snapshot()
+        val reportId = visionReportId
+        val auth = ProSubscriptionServerPrefs.getApiToken(appContext).trim()
+        val base = AiProviderPrefs.getRelayBaseUrl(appContext).trim().trimEnd('/')
+        if (auth.isBlank() || !base.startsWith("https://")) return
+        val body = JSONObject()
+            .put("report_id", reportId)
+            .put("session_id", if (config.freeTier || config.economy) reportId else config.reservationId)
+            .put("mode", if (config.economy) "economy" else if (config.freeTier) "free" else "private")
+            .put("device_class", DeviceProfileStore.selectedClass(appContext).name)
+            .put("refresh_mode", if (GeminiLiveVisionPreferences.imageDelaySeconds(appContext) == 0) "initial_only" else "every_turn")
+            .put("revision", snapshot.revision)
+            .put("capture_attempts", snapshot.captureAttempts)
+            .put("captures_completed", snapshot.capturesCompleted)
+            .put("capture_failures", snapshot.captureFailures)
+            .put("images_queued", snapshot.imagesQueued)
+            .put("send_failures", snapshot.sendFailures)
+            .put("photo_ready_timeouts", snapshot.photoReadyTimeouts)
+            .put("transfer_failures", snapshot.transferFailures)
+            .toString()
+        scope.launch {
+            // Snapshots have deterministic revision IDs; retrying cannot double-count or bill.
+            repeat(2) { attempt ->
+                val ok = runCatching {
+                    val request = Request.Builder().url("$base/api/pro/live/vision")
+                        .header("Authorization", "Bearer $auth")
+                        .post(body.toRequestBody("application/json".toMediaType())).build()
+                    http.newCall(request).execute().use { it.isSuccessful }
+                }.getOrDefault(false)
+                if (ok) return@launch
+                if (attempt == 0) delay(1_000)
+            }
+            Log.w(TAG, "Live vision diagnostics report failed revision=${snapshot.revision}")
+        }
     }
 
     /** Prevents trailing silence from finalizing a turn before its fresh image is sent. */
@@ -351,6 +454,10 @@ class GeminiLiveClient(
     private fun connectOrReconnect() {
         if (!active.get()) return
         val config = tokenConfig ?: return
+        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) && meteredConnectionAttempted.get()) {
+            Log.i(TAG, "Prevented repeat Free/Economy socket connection without new user request")
+            return
+        }
         if (System.currentTimeMillis() >= config.expiresAtMs) {
             active.set(false)
             listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
@@ -369,10 +476,18 @@ class GeminiLiveClient(
             if (reconnectAttempt == 0) GeminiLiveState.CONNECTING else GeminiLiveState.RECONNECTING,
             "Connecting to Google",
         )
-        val builder = Request.Builder().url(config.websocketUrl)
+        val liveUrl = if (config.freeTier || config.economy) {
+            config.websocketUrl.replaceFirst("wss://", "https://").toHttpUrl().newBuilder()
+                .addQueryParameter("vision_session_id", visionReportId).build().toString()
+                .replaceFirst("https://", "wss://")
+        } else config.websocketUrl
+        val builder = Request.Builder().url(liveUrl)
+        // A constrained Google URL already carries its ephemeral access_token.
+        // Do not send the same credential in a second Authorization header.
+        // Free/Economy proxies still require their own CyanBridge Bearer header.
         config.authorizationHeader?.takeIf { it.isNotBlank() }?.let {
             builder.header("Authorization", it)
-        } ?: config.token.takeIf { it.isNotBlank() }?.let {
+        } ?: config.token.takeIf { it.isNotBlank() && !config.websocketUrl.contains("access_token=") }?.let {
             builder.header("Authorization", "Token $it")
         }
         // Free-tier Live requires x-goog-api-key alongside the ephemeral token (or alone).
@@ -385,6 +500,12 @@ class GeminiLiveClient(
             if (langTag.isNotBlank()) builder.header("Accept-Language", langTag)
         }
         val request = builder.build()
+        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) &&
+            !meteredConnectionAttempted.compareAndSet(false, true)
+        ) {
+            Log.i(TAG, "Blocked racing duplicate Free/Economy WebSocket attempt")
+            return
+        }
         socket = http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (!active.get()) {
@@ -394,7 +515,7 @@ class GeminiLiveClient(
                 socket = webSocket
                 reconnectAttempt = 0
                 sendSetup(webSocket, config)
-                scheduleSessionResumption(webSocket)
+                if (!GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) scheduleSessionResumption(webSocket)
                 setState(GeminiLiveState.CONNECTING, "Connected; waiting for Gemini setup")
             }
 
@@ -435,6 +556,11 @@ class GeminiLiveClient(
                     setState(GeminiLiveState.ERROR, "Gemini Live connection failed ($code). Please try again.")
                     return
                 }
+                if (active.get() && GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) {
+                    Log.i(TAG, "Metered Live socket closed; a new connection requires a user action")
+                    stop()
+                    return
+                }
                 if (active.get()) {
                     val announcement = GeminiLiveReconnectAnnouncementPolicy.resolve(
                         proxySession = config.reservationId == "free-proxy",
@@ -465,7 +591,7 @@ class GeminiLiveClient(
                     val detail = runCatching {
                         JSONObject(responseBody.ifBlank { "{}" }).optString("message", "")
                             .takeIf { it.isNotBlank() }
-                    }.getOrNull() ?: "You've used your 5 free Live sessions for today. Come back tomorrow, or upgrade to Pro for more access."
+                    }.getOrNull() ?: "You've used your 25 free Live minutes for today. Come back tomorrow, or use Pro quota for more access."
                     setState(GeminiLiveState.ERROR, detail)
                     return
                 }
@@ -512,6 +638,12 @@ class GeminiLiveClient(
                     }
                     tokenConfig = null
                     setState(GeminiLiveState.ERROR, "Gemini Live connection failed. Please try again.")
+                    return
+                }
+                if (active.get() && GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) {
+                    Log.i(TAG, "Metered Live socket failed; not automatically starting another session")
+                    stop()
+                    setState(GeminiLiveState.ERROR, "Live disconnected. Start a new session manually to continue.")
                     return
                 }
                 if (active.get()) {
@@ -611,7 +743,8 @@ class GeminiLiveClient(
                 .put("systemInstruction", systemInstruction)
         }
         val setupJson = JSONObject().put("setup", setup).toString()
-        Log.i(TAG, "Sending Live setup model=${config.model} handle=${sessionResumptionHandle?.take(12)} json=${setupJson.take(2000)}")
+        // Do not log the user-provided system instruction or session-resumption handle.
+        Log.i(TAG, "Sending Live setup model=${config.model} serverProvided=${serverSetup != null} resuming=${!sessionResumptionHandle.isNullOrBlank()}")
         check(webSocket.send(setupJson)) {
             "Live setup could not be sent"
         }
@@ -637,6 +770,20 @@ class GeminiLiveClient(
 
         if (message.has("setupComplete") && setupComplete.compareAndSet(false, true)) {
             socketListeningStartedAtMs = System.currentTimeMillis()
+            tokenConfig?.takeIf { it.freeTier || it.economy }?.let { config ->
+                // The proxy/economy route can debit a daily allowance. Do not silently renew.
+                if (meteredSessionLimitJob == null) {
+                    meteredSessionLimitJob = scope.launch {
+                        delay(GeminiLiveSessionPolicy.METERED_SESSION_LIMIT_MS)
+                        if (active.get()) {
+                            Log.i(TAG, "Free/Economy Live reached five-minute limit; stopping without renewal")
+                            listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
+                            stop()
+                        }
+                    }
+                    Log.i(TAG, "Metered Live five-minute cap armed")
+                }
+            }
             startCapture()
             setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
             listener.onSetupComplete()
@@ -703,6 +850,7 @@ class GeminiLiveClient(
 
             if (serverContent.optBoolean("turnComplete", false) && active.get()) {
                 finishModelPlayback()
+                listener.onModelTurnComplete()
                 setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
                 reportTurnUsageIfNeeded()
             }
@@ -796,6 +944,26 @@ class GeminiLiveClient(
         }
         if (!captureEnabled.compareAndSet(false, true)) return
         requestAudioFocus()
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
+            // SDK PCM is the ONLY input. SCO and a second AudioRecord can duplicate audio
+            // and force output away from Mentra's Bluetooth media profile.
+            val manager = MentraLiveManager.getInstance(appContext)
+            if (!manager.connected || !manager.ready) {
+                captureEnabled.set(false)
+                setState(GeminiLiveState.ERROR, "Mentra Live is not ready")
+                return
+            }
+            startPlayback()
+            mentraMicActive = true
+            manager.setPcmListener(::offerMentraPcm)
+            runCatching { manager.setMicrophoneEnabled(true) }.onFailure { error ->
+                manager.setPcmListener(null)
+                mentraMicActive = false
+                captureEnabled.set(false)
+                setState(GeminiLiveState.ERROR, error.message ?: "Mentra microphone failed")
+            }
+            return
+        }
         configureAudioRoute()
         startPlayback()
         val minBuffer = AudioRecord.getMinBufferSize(
@@ -837,6 +1005,16 @@ class GeminiLiveClient(
 
     private fun pauseCapture() {
         val wasCapturing = captureEnabled.getAndSet(false)
+        if (mentraMicActive) {
+            mentraMicActive = false
+            runCatching {
+                MentraLiveManager.getInstance(appContext).apply {
+                    setPcmListener(null)
+                    setMicrophoneEnabled(false)
+                    setOwnAudioPlaying(false)
+                }
+            }
+        }
         speechDetector.reset()
         speechActive.set(false)
         recorderJob?.cancel()
@@ -969,11 +1147,15 @@ class GeminiLiveClient(
     private fun playPcm(bytes: ByteArray) {
         if (bytes.isEmpty()) return
         if (modelSpeaking.compareAndSet(false, true)) {
+            listener.onModelOutputStarted()
             val wasUserSpeaking = speechActive.getAndSet(false)
             speechDetector.reset()
             if (wasUserSpeaking) listener.onUserSpeechActivity(false)
         }
         if (playback == null) startPlayback()
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
+            runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(true) }
+        }
         val track = playback ?: return
         if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
             runCatching { track.play() }
@@ -992,11 +1174,17 @@ class GeminiLiveClient(
 
     private fun finishModelPlayback() {
         if (!modelSpeaking.getAndSet(false)) return
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
+            runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(false) }
+        }
         speechDetector.reset()
         speechActive.set(false)
     }
 
     private fun stopPlayback() {
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
+            runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(false) }
+        }
         playback?.let {
             runCatching { it.pause() }
             runCatching { it.flush() }

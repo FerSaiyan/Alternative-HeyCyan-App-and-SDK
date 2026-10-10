@@ -70,6 +70,7 @@ object TuneBudsProtocol {
     const val CMD_STORAGE = 0xEA
     const val CMD_MEDIA_COUNTS = 0xEF
     const val CMD_SET_TIME = 0xF0
+    const val CMD_P2P_ADDRESS = 0xF2
     const val CMD_WORK_STATE = 0xF6
     const val CMD_GLASS_CONFIG = 0xF7
     const val CMD_TELEPROMPTER = 0xF8
@@ -232,6 +233,10 @@ object TuneBudsProtocol {
     }
 
     fun parseStatus(payload: ByteArray): Int? = payload.firstOrNull()?.toInt()?.and(0xFF)
+
+    fun parseP2pAddress(payload: ByteArray): String? = if (payload.size == 6) {
+        payload.joinToString(":") { "%02X".format(it.toInt() and 0xFF) }
+    } else null
 
     fun buildSetTimePayload(
         epochMillis: Long = System.currentTimeMillis(),

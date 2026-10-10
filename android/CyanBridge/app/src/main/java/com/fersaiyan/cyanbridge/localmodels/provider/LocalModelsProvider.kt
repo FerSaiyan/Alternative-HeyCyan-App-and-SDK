@@ -7,6 +7,7 @@ import com.fersaiyan.cyanbridge.localmodels.session.LocalModelLoadDetails
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
+import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelProjectorStore
 import com.fersaiyan.cyanbridge.localmodels.templates.PromptMessage
 import com.fersaiyan.cyanbridge.localmodels.templates.PromptTemplateRegistry
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
@@ -111,17 +112,28 @@ class LocalModelsProvider {
             }
 
             LocalModelStorageRepository.cleanupMissingModels(context)
-            val selected = LocalModelStorageRepository.resolveSelectedModel(context)
+            val hasMediaAttachments = imagePaths.isNotEmpty() || !audioPath.isNullOrBlank()
+            val preferred = LocalModelStorageRepository.resolveSelectedModel(context)
+            val selected = (if (hasMediaAttachments) {
+                val candidates = LocalModelStorageRepository.listInstalled(context)
+                fun mediaReady(model: com.fersaiyan.cyanbridge.localmodels.storage.InstalledLocalModel): Boolean {
+                    val runtime = LocalModelSettingsRepository.getForModel(context, model.id).modelRuntime
+                    return runtime == LocalModelRuntime.LITERT || (runtime == LocalModelRuntime.LLAMA_CPP && LocalModelProjectorStore.get(context, model) != null)
+                }
+                // Failed STT prefers a local LiteRT audio package. A GGUF with a projector can
+                // consume the same audio when no LiteRT package is installed (native caps checked).
+                if (!audioPath.isNullOrBlank()) {
+                    preferred?.takeIf { LocalModelSettingsRepository.getForModel(context, it.id).modelRuntime == LocalModelRuntime.LITERT }
+                        ?: candidates.firstOrNull { LocalModelSettingsRepository.getForModel(context, it.id).modelRuntime == LocalModelRuntime.LITERT }
+                        ?: preferred?.takeIf(::mediaReady) ?: candidates.firstOrNull(::mediaReady)
+                } else preferred?.takeIf(::mediaReady) ?: candidates.firstOrNull(::mediaReady)
+            } else preferred)
                 ?: throw IllegalStateException(
                     "No local model is installed. Open Configure Local Models to download or import a GGUF model first.",
                 )
 
             val catalogEntry = LocalModelCatalogRepository.findById(selected.catalogId)
             val settings = LocalModelSettingsRepository.getForModel(context, selected.id)
-            val hasMediaAttachments = imagePaths.isNotEmpty() || !audioPath.isNullOrBlank()
-            if (hasMediaAttachments && settings.modelRuntime != LocalModelRuntime.LITERT) {
-                throw IllegalStateException("Media attachments require Local Runtime = LiteRT for the selected model.")
-            }
             val templateId = settings.templateOverrideId
                 ?: selected.promptTemplateId
                 ?: catalogEntry?.promptTemplateId
@@ -143,8 +155,15 @@ class LocalModelsProvider {
 
             // LiteRT accepts one prompt alongside image/audio attachments. Preserve system instructions
             // instead of dropping them when moving from the chat template to the media API.
-            val effectivePrompt = if (hasMediaAttachments) {
+            val effectivePrompt = if (hasMediaAttachments && settings.modelRuntime == LocalModelRuntime.LITERT) {
                 buildMultimodalPrompt(systemPrompt, chatMessages)
+            } else if (hasMediaAttachments) {
+                val lastUser = chatMessages.indexOfLast { it.role.equals("user", true) }
+                require(lastUser >= 0) { "Media request needs a user message" }
+                val withMedia = chatMessages.mapIndexed { index, message ->
+                    if (index == lastUser) message.copy(content = "<cyanbridge_media>\n${message.content}") else message
+                }
+                PromptTemplateRegistry.renderPrompt(templateId, systemPrompt, withMedia)
             } else {
                 // For text-only, use the full template-rendered prompt
                 PromptTemplateRegistry.renderPrompt(

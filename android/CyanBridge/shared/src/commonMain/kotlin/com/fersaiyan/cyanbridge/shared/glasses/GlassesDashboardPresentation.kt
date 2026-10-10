@@ -84,8 +84,8 @@ enum class GlassesSyncFlow(
         description = "Vendor-like strict BLE + P2P sync",
     ),
     CUSTOM(
-        label = "Custom flow",
-        description = "CyanBridge resolver with fallback scanning",
+        label = "Adaptive flow",
+        description = "Checkpoint recovery that learns the reliable route for this phone and glasses",
     ),
 }
 

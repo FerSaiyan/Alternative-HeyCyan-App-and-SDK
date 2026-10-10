@@ -2,6 +2,10 @@ package com.fersaiyan.cyanbridge.devices.tunebuds
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.glasses.GlassesPhotoCapture
+import com.fersaiyan.cyanbridge.glasses.NativeGlassesPhotoCapture
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveImageButtonRouter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +28,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 
 data class TuneBudsState(
@@ -72,8 +75,6 @@ class TuneBudsManager private constructor(context: Context) {
         private const val REQUEST_TIMEOUT_MS = 10_000L
         private const val CAMERA_CLOSE_RETRY_MS = 1_000L
         private const val CAMERA_CLOSE_MAX_ATTEMPTS = 15
-        private const val FILE_MANAGER_RETRY_MS = 1_000L
-        private const val FILE_MANAGER_MAX_ATTEMPTS = 30
 
         @Volatile
         private var instance: TuneBudsManager? = null
@@ -87,10 +88,20 @@ class TuneBudsManager private constructor(context: Context) {
     private val client = TuneBudsSppClient(context.applicationContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val requestMutex = Mutex()
-    private val aiPictureBuffer = ByteArrayOutputStream()
+    private val operationMutex = Mutex()
+    private val aiPictureAssembler = TuneBudsPhotoAssembler()
     private val _state = MutableStateFlow(TuneBudsState())
     private val _aiPhotos = MutableSharedFlow<ByteArray>(extraBufferCapacity = 1)
     private var connectJob: Job? = null
+    private val photoCapture = NativeGlassesPhotoCapture(
+        device = DeviceClass.TUNEBUDS,
+        connected = client::isConnected,
+        trigger = {
+            requireSuccess(request(TuneBudsProtocol.CMD_CAMERA_ON, byteArrayOf(1)))
+        },
+        resetStream = aiPictureAssembler::reset,
+        manualScope = scope,
+    )
 
     val state: StateFlow<TuneBudsState> = _state.asStateFlow()
     val aiPhotos: SharedFlow<ByteArray> = _aiPhotos.asSharedFlow()
@@ -98,6 +109,10 @@ class TuneBudsManager private constructor(context: Context) {
     init {
         scope.launch {
             client.state.collect { transportState ->
+                if (transportState == TuneBudsSppState.DISCONNECTED || transportState == TuneBudsSppState.ERROR) {
+                    GlassesPhotoCapture.invalidate(DeviceClass.TUNEBUDS)
+                    aiPictureAssembler.reset()
+                }
                 val label = when (transportState) {
                     TuneBudsSppState.DISCONNECTED -> "TuneBuds disconnected"
                     TuneBudsSppState.BONDING -> "Pairing TuneBuds"
@@ -136,6 +151,7 @@ class TuneBudsManager private constructor(context: Context) {
             return
         }
         connectJob?.cancel()
+        GlassesPhotoCapture.invalidate(DeviceClass.TUNEBUDS)
         _state.value = TuneBudsState(
             connectionLabel = "Connecting to TuneBuds",
             protocolState = TuneBudsSppState.CONNECTING.name,
@@ -158,6 +174,8 @@ class TuneBudsManager private constructor(context: Context) {
     }
 
     fun disconnect() {
+        GlassesPhotoCapture.invalidate(DeviceClass.TUNEBUDS)
+        aiPictureAssembler.reset()
         connectJob?.cancel()
         connectJob = null
         client.disconnect()
@@ -165,29 +183,30 @@ class TuneBudsManager private constructor(context: Context) {
 
     fun isConnected(): Boolean = client.isConnected()
 
-    fun takePhoto() = launchCommand("take photo") {
-        requireSuccess(request(TuneBudsProtocol.CMD_CAMERA_ON, byteArrayOf(0)))
+    fun takePhoto() = launchCommand("take photo", usesCamera = true) {
+        takeRecordingPhoto()
     }
 
-    suspend fun takePhotoBlocking() {
+    suspend fun takePhotoBlocking(lease: GlassesPhotoCapture.Lease) = operationMutex.withLock {
+        check(lease.device == DeviceClass.TUNEBUDS)
+        lease.ensureActive()
+        takeRecordingPhoto()
+        lease.ensureActive()
+    }
+
+    private suspend fun takeRecordingPhoto() {
         requireSuccess(request(TuneBudsProtocol.CMD_CAMERA_ON, byteArrayOf(0)))
         delay(2_500L)
         stopCameraSubsystem()
     }
 
-    suspend fun capturePhotoForAi(timeoutMs: Long = 15_000L): ByteArray? = coroutineScope {
-        if (!client.isConnected()) return@coroutineScope null
-        synchronized(aiPictureBuffer) { aiPictureBuffer.reset() }
-        val photo = async(start = CoroutineStart.UNDISPATCHED) { aiPhotos.first() }
-        try {
-            requireSuccess(request(TuneBudsProtocol.CMD_CAMERA_ON, byteArrayOf(1)))
-            withTimeoutOrNull(timeoutMs) { photo.await() }
-        } finally {
-            photo.cancel()
-        }
+    suspend fun capturePhotoForAi(timeoutMs: Long = 15_000L): ByteArray {
+        check(operationMutex.tryLock()) { "TuneBuds camera is busy with another operation" }
+        try { return photoCapture.capture(timeoutMs) }
+        finally { operationMutex.unlock() }
     }
 
-    fun toggleVideo() = launchCommand("toggle video recording") {
+    fun toggleVideo() = launchCommand("toggle video recording", usesCamera = true) {
         if (_state.value.isVideoRecording) {
             stopCameraSubsystem()
         } else {
@@ -196,7 +215,7 @@ class TuneBudsManager private constructor(context: Context) {
         }
     }
 
-    fun toggleAudio() = launchCommand("toggle audio recording") {
+    fun toggleAudio() = launchCommand("toggle audio recording", usesCamera = true) {
         if (_state.value.isAudioRecording) {
             stopCameraSubsystem()
         } else {
@@ -266,60 +285,36 @@ class TuneBudsManager private constructor(context: Context) {
         hotspotSsid: String,
         hotspotPassword: String,
         channel: Int = 0,
-        timeoutMs: Long = 30_000L,
-    ): String? = coroutineScope {
-        if (!client.isConnected()) return@coroutineScope null
+        timeoutMs: Long = 60_000L,
+    ): String? = operationMutex.withLock {
+        if (!client.isConnected()) return@withLock null
         _state.value = _state.value.copy(mediaBaseUrl = null, wifiState = null)
-        // Register before configuration so an immediate failure cannot be missed.
-        val wifiFailure = launch(start = CoroutineStart.UNDISPATCHED) {
-            val failed = state.first { it.wifiState in setOf(0, 4, 5) }
-            throw IOException("TuneBuds Wi-Fi connection failed (state ${failed.wifiState})")
-        }
-        val endpoint = async(start = CoroutineStart.UNDISPATCHED) {
-            state.filter { !it.mediaBaseUrl.isNullOrBlank() }.first().mediaBaseUrl
-        }
-        try {
-            requireSuccess(
-                request(
-                    TuneBudsProtocol.CMD_CONFIGURE_WIFI,
-                    TuneBudsProtocol.buildWifiPayload(
-                        mode = 0,
-                        ssid = hotspotSsid,
-                        password = hotspotPassword,
-                        channel = channel,
-                    ),
-                ),
-            )
-            var fileManagerAttempt = 1
-            while (true) {
-                val response = request(TuneBudsProtocol.CMD_FILE_MANAGER)
-                when (val status = TuneBudsProtocol.parseStatus(response.payload)) {
-                    0 -> break
-                    1, 3, 5 -> {
-                        if (fileManagerAttempt >= FILE_MANAGER_MAX_ATTEMPTS) {
-                            throw IOException("TuneBuds file manager remained busy for ${FILE_MANAGER_MAX_ATTEMPTS}s")
-                        }
-                        Log.i(TAG, "TuneBuds file manager busy status=$status attempt=$fileManagerAttempt")
-                        fileManagerAttempt++
-                        delay(FILE_MANAGER_RETRY_MS)
-                    }
-                    null -> throw IOException("TuneBuds file manager returned no status")
-                    else -> throw IOException("TuneBuds file manager failed with status $status")
-                }
-            }
-            withTimeoutOrNull(timeoutMs) { endpoint.await() }
-        } finally {
-            wifiFailure.cancel()
-            endpoint.cancel()
-        }
+        TuneBudsFileStartup(client.frames, ::request).open(0, hotspotSsid, hotspotPassword, channel, timeoutMs)
+    }
+
+    internal suspend fun startP2pFileManager(ssid: String, connect: suspend (String) -> Unit): String = operationMutex.withLock {
+        if (!client.isConnected()) throw IOException("TuneBuds Bluetooth is not connected")
+        _state.value = _state.value.copy(mediaBaseUrl = null, wifiState = null)
+        TuneBudsFileStartup(client.frames, ::request).open(
+            2, ssid, "", timeoutMs = 150_000L, connectP2p = connect,
+        )
     }
 
     fun finishTransfer() = launchCommand("close camera subsystem") {
         stopCameraSubsystem()
     }
 
-    suspend fun finishTransferBlocking() {
-        stopCameraSubsystem()
+    suspend fun finishTransferBlocking() = operationMutex.withLock { stopCameraSubsystem() }
+
+    suspend fun startLivestream(
+        credentials: TuneBudsHotspotCredentials,
+        quality: Int = -1,
+    ): String {
+        if (!isConnected()) throw IOException("TuneBuds Bluetooth is not connected")
+        _state.value = _state.value.copy(wifiState = null)
+        return TuneBudsRtspStartup(client.frames, ::request).open(
+            credentials.ssid, credentials.password, credentials.channel, quality,
+        )
     }
 
     private suspend fun initializeProtocol() {
@@ -446,6 +441,12 @@ class TuneBudsManager private constructor(context: Context) {
 
     private fun handleFrame(frame: TuneBudsFrame) {
         when (frame.command) {
+            TuneBudsProtocol.CMD_CAMERA_CLOSE -> if (frame.type == TuneBudsFrameType.NOTIFICATION &&
+                TuneBudsProtocol.parseStatus(frame.payload) == 0
+            ) {
+                // Firmware can stop recording automatically (limit or physical button).
+                _state.value = _state.value.copy(isVideoRecording = false, isAudioRecording = false)
+            }
             TuneBudsProtocol.CMD_WIFI_STATE -> if (frame.type == TuneBudsFrameType.NOTIFICATION) {
                 TuneBudsProtocol.parseStatus(frame.payload)?.let { value ->
                     _state.value = _state.value.copy(wifiState = value)
@@ -585,35 +586,36 @@ class TuneBudsManager private constructor(context: Context) {
 
     private fun handleAiPicture(payload: ByteArray) {
         if (payload.isEmpty()) return
-        val status = payload[0].toInt() and 0xFF
-        synchronized(aiPictureBuffer) {
-            when (status) {
-                1 -> {
-                    if (payload.size > 1) aiPictureBuffer.write(payload, 1, payload.size - 1)
-                    Log.d(TAG, "TuneBuds AI photo chunk bytes=${payload.size - 1} total=${aiPictureBuffer.size()}")
-                }
-                0 -> {
-                    if (payload.size > 1) aiPictureBuffer.write(payload, 1, payload.size - 1)
-                    val image = aiPictureBuffer.toByteArray()
-                    aiPictureBuffer.reset()
-                    Log.i(TAG, "TuneBuds AI photo completed bytes=${image.size}")
-                    if (image.isNotEmpty()) _aiPhotos.tryEmit(image)
-                }
-                else -> {
-                    aiPictureBuffer.reset()
-                    updateError("TuneBuds AI photo failed with status $status")
-                }
+        photoCapture.onPacket()
+        if (aiPictureAssembler.isAtStart() && payload.size > 1 && payload[1] == 0xFF.toByte()) {
+            GeminiLiveImageButtonRouter.nativePhotoReceiver(DeviceClass.TUNEBUDS)?.let { receiver ->
+                photoCapture.onManualStreamStart(15_000, receiver)
             }
+        }
+        val status = payload[0].toInt() and 0xFF
+        val image = aiPictureAssembler.append(payload)
+        if (status !in 0..1) {
+            val message = "TuneBuds AI photo failed with status $status"
+            photoCapture.onFailure(message)
+            updateError(message)
+        }
+        if (image != null) {
+            Log.i(TAG, "TuneBuds AI photo completed bytes=${image.size}")
+            photoCapture.onPhoto(image)
+            _aiPhotos.tryEmit(image)
         }
     }
 
-    private fun launchCommand(operation: String, block: suspend () -> Unit) {
+    private fun launchCommand(operation: String, usesCamera: Boolean = false, block: suspend () -> Unit) {
         scope.launch {
             if (!client.isConnected()) {
                 updateError("Connect TuneBuds glasses before trying to $operation")
                 return@launch
             }
-            runCatching { block() }
+            runCatching {
+                if (usesCamera) GlassesPhotoCapture.withCapture(DeviceClass.TUNEBUDS) { operationMutex.withLock { block() } }
+                else operationMutex.withLock { block() }
+            }
                 .onFailure { error -> updateError("Could not $operation: ${error.message}") }
         }
     }

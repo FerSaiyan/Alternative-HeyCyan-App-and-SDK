@@ -44,7 +44,7 @@ object OfficialHeyCyanApp {
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(KEY_WARNING_SUPPRESSED, false)
 
-    private fun isInstalled(context: Context): Boolean = try {
+    fun isInstalled(context: Context): Boolean = try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.packageManager.getApplicationInfo(
                 PACKAGE_NAME,

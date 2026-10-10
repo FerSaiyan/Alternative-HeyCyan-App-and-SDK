@@ -263,7 +263,7 @@ Implement the smallest isolated vertical slice first:
 4. Add `TuneBudsSppClient.kt` for bonding, serialized RFCOMM writes, stream decoding, and the initial `0x27` max-packet query. Keep GATT as a future transport option only if another model is observed with `BLE_CONNECTION=true`.
 5. Add `TuneBudsManager.kt` for connection state, command/response correlation, battery/device info, camera controls, media count, and storage state.
 6. Reuse CyanBridge's existing P2P and network-binding infrastructure, but add a TuneBuds-specific coordinator because its BLE state machine and endpoint notifications differ from HeyCyan and Eyevue.
-7. Media sync is implemented behind the TuneBuds profile, but its local-hotspot endpoint flow still requires hardware validation. RTSP remains intentionally unexposed for this camera-only product.
+7. Media sync is implemented behind the TuneBuds profile. Local-hotspot transfer was validated on hardware (see below); the October 4 audit adds a capability-selected P2P path with hotspot fallback. RTSP was exposed on October 3; hardware playback remains pending.
 8. Keep OTA disabled until normal media/RTSP cleanup is proven on hardware.
 
 Do not route TuneBuds through the HeyCyan vendor AAR or Eyevue protocol. The UUIDs, framing, commands, and Wi-Fi signaling are independent.
@@ -314,9 +314,42 @@ The same APK passed the final Clearer regression immediately afterward: a valid 
 - Capture the reported protocol packet size over SPP.
 - Record raw request/response/notification frames for initial device info and one safe command such as storage/media count.
 - Record the exact raw `0xE7` endpoint notification string; the successful local-hotspot HTTP host was `10.71.31.247`.
-- Record `0xE8` RTSP endpoint strings only if a future product requirement enables streaming; RTSP is not exposed in CyanBridge for this model.
-- Verify P2P role selection/routing separately if a future model cannot use the now-confirmed local-hotspot path.
+- Record the `0xE8` RTSP endpoint and validate playback for the now-exposed livestream flow.
+- Verify P2P role selection, `0xEC=2` / `0xF2` notifications, network routing, and hotspot fallback for the new October 4 file-sync path.
 - Do not test format (`0xEB` empty), delete (`0xEB` filename), or OTA (`0xED`) until read-only operations are stable.
+
+## October 4, 2026: capture and media-sync re-audit
+
+Detailed findings and source locations:
+[`CyanBridge/docs/TUNEBUDS_MEDIA_COMMAND_AUDIT.md`](CyanBridge/docs/TUNEBUDS_MEDIA_COMMAND_AUDIT.md).
+
+- Confirmed saved photo `E1 00`, AI preview `E1 01` / `E3`, video `E4` empty,
+  audio `E5` empty, and stop/cleanup `E2` empty against the actual request classes.
+- Corrected the earlier partial description of `E7` busy handling: the complete
+  `ABMateManager.startPullFileInternal` maps **1, 3, and 5** to `ERROR_BUSY=10`.
+  Status **4 maps to `ERROR_LOW_BATTERY=5`**, not busy or recording. Historical
+  hardware traces below/above encountered statuses 1/3, which explains the older
+  narrower wording.
+- Added isolated TuneBuds Wi-Fi Direct file sync when capability bit `0x04` is
+  reported: `E6` mode 2, generated `AiGlassDb_` SSID, `E7`, `EC=2`, `F2` peer MAC,
+  Android WPS PBC/group-owner preference, and network-scoped HTTP sockets.
+  Transport failures fall back to the already hardware-validated phone hotspot
+  after cleanup. Unknown capabilities retain the hotspot route. The official
+  app's intermediate glasses-AP mode 1 remains unimplemented in CyanBridge.
+- HTTP now matches the vendor's omitted-port fallback **8080**, explicit-port
+  preservation, status/header stripping before JSON parsing, and headers for
+  both manifests and payloads. Stop cancels blocked reads; empty/truncated files
+  are rejected. Photo/video/audio progress counts are separate.
+- Manual photo capture now uses the same saving-aware close as Detailed capture;
+  dashboard operations serialize multi-step state changes, and closed `E2`
+  notifications clear recording flags. No unverified work-state meanings were
+  added, and sync continues to retain device originals.
+- No ADB device was connected during this review; the new P2P path and modified
+  manual-photo cleanup still need a hardware retest. Earlier local-hotspot media
+  and Detailed-photo successes do not validate this new path.
+- The focused Android JVM run passed 39 tests (including 12 new file-startup and
+  HTTP tests), and the debug APK built. Log:
+  `/tmp/opencode/tunebuds-media-audit-verification.log`.
 
 ## Decompiled Source References
 

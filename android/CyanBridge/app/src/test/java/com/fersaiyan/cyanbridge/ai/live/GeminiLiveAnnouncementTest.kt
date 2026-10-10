@@ -37,6 +37,18 @@ class GeminiLiveAnnouncementTest {
     }
 
     @Test
+    fun `Private active-session error is distinct from a generic Google failure`() {
+        assertEquals(
+            "Another Live session is still active. End it before starting Private Live.",
+            GeminiLiveAnnouncementMessages.text(GeminiLiveAnnouncement.PRIVATE_SESSION_BUSY, "en-US"),
+        )
+        assertEquals(
+            "Too many Live session starts. Wait a few minutes before trying Private Live again.",
+            GeminiLiveAnnouncementMessages.text(GeminiLiveAnnouncement.PRIVATE_RATE_LIMITED, "en-US"),
+        )
+    }
+
+    @Test
     fun `free proxy rotation is announced only near five minutes`() {
         assertEquals(
             null,

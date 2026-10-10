@@ -79,6 +79,10 @@ object AutoPairManager {
                 }
 
                 val selectedClass = DeviceProfileStore.selectedClass(appContext)
+                if (selectedClass == DeviceClass.MENTRA_LIVE || selectedClass == DeviceClass.META_RAYBAN) {
+                    delay(20_000L)
+                    continue
+                }
                 val connected = BleOperateManager.getInstance().isConnected
                 if (selectedClass == DeviceClass.EYEVUE) {
                     if (EyevueManager.getInstance(appContext).isConnected()) {
@@ -127,12 +131,14 @@ object AutoPairManager {
             return
         }
         val appContext = context.applicationContext
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) return
         scope.launch {
             tryConnectOnce(appContext, reason)
         }
     }
 
     fun requestConnectToMac(context: Context, mac: String, reason: String) {
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) return
         if (DeviceProfileStore.selectedClass(context) == DeviceClass.EYEVUE) {
             if (suppressAutoReconnect) {
                 Log.d(TAG, "Skipping Eyevue reconnect ($reason): suppressed")
@@ -271,6 +277,7 @@ object AutoPairManager {
      * @return true if we attempted a connection.
      */
     private fun tryConnectOnce(context: Context, reason: String): Boolean {
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) return false
         if (suppressAutoReconnect) {
             Log.d(TAG, "Skipping auto-pair ($reason): suppressed")
             return false
@@ -337,6 +344,7 @@ object AutoPairManager {
     }
 
     private fun tryConnectToMacOnce(context: Context, mac: String, reason: String): Boolean {
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) return false
         if (suppressAutoReconnect) {
             Log.d(TAG, "Skipping auto-pair ($reason): suppressed")
             return false

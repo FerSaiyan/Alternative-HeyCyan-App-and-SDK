@@ -69,6 +69,8 @@
         <meta-data android:name="com.meta.wearable.mwdat.APPLICATION_ID" android:value="${mwdat_application_id}" />
         <meta-data android:name="com.meta.wearable.mwdat.CLIENT_TOKEN" android:value="${mwdat_client_token}" />
         <meta-data android:name="com.meta.wearable.mwdat.DAM_ENABLED" android:value="true" />
+        <meta-data android:name="com.mentra.bluetoothsdk.analytics.disabled" android:value="true" />
+        <activity android:name=".ui.MentraPairingActivity" android:exported="false" />
 
         <activity android:name=".ui.WelcomeActivity" android:exported="true">
             <intent-filter>
@@ -129,6 +131,7 @@
         </activity>
         <activity android:name=".agent.ProSubscriptionSettingsActivity" android:exported="false" android:label="Pro Subscription Settings" />
         <activity android:name=".ai.live.GeminiLiveActivity" android:exported="false" android:label="Gemini Live Preview" />
+        <activity android:name=".ai.live.GeminiLivePermissionGateActivity" android:exported="false" android:label="Gemini Live Permissions" />
         <activity android:name=".agent.LocalModelsConfigureActivity" android:exported="false" android:label="Configure Local Models" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity android:name=".agent.LocalModelTestActivity" android:exported="false" android:label="Model performance test" />
         <activity android:name=".plugins.autodiary.AutoDiarySettingsActivity" android:exported="false" android:label="AutoDiary Settings" />
@@ -148,7 +151,10 @@
             android:process=":benchmark_mtp_on" />
         <service android:name=".ai.AiQuestionForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|dataSync|microphone" />
         <service android:name=".ai.live.GeminiLiveForegroundService" android:exported="false" android:foregroundServiceType="microphone|connectedDevice|mediaPlayback|dataSync" />
-        <service android:name=".plugins.walkingaid.WalkingAidService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".devices.eyevue.EyevueLiveForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|mediaPlayback" />
+        <service android:name=".devices.heycyan.HeyCyanLiveForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|mediaPlayback" />
+        <service android:name=".devices.tunebuds.TuneBudsLiveForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|mediaPlayback" />
+        <service android:name=".plugins.walkingaid.WalkingAidService" android:exported="false" android:foregroundServiceType="dataSync|connectedDevice" />
         <service android:name=".plugins.meetingsparknotes.MeetingSparkNotesService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.livecaptionrelay.LiveCaptionRelayService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.handsfreetranslator.HandsFreeTranslatorService" android:exported="false" android:foregroundServiceType="microphone" />

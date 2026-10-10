@@ -81,4 +81,14 @@ class DebugLogSupportTest {
         assertTrue(DebugLogSupport.LOG_TAGS.contains("DAT:CORE:RegistrationManager"))
         assertTrue(DebugLogSupport.LOG_TAGS.contains("DAT:CORE:BluetoothDeviceDetection"))
     }
+
+    @Test
+    fun `logcat collection is pid scoped instead of using malformed colon tag filters`() {
+        val command = DebugLogSupport.buildLogcatCommand(4321)
+
+        assertTrue(command.contains("--pid=4321"))
+        assertTrue(command.contains("threadtime"))
+        assertTrue(command.none { it.contains("DAT:CORE") })
+        assertTrue(command.none { it.endsWith(":*") })
+    }
 }

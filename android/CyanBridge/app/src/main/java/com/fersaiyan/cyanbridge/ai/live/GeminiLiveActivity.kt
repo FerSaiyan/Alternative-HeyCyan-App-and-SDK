@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.ai.live
 
 import android.Manifest
+import android.os.Build
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.View
@@ -42,13 +43,26 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     private lateinit var stopButton: MaterialButton
     private var startedAtMs = 0L
     private var liveListening = false
+    private val responseIdleStop = Runnable {
+        if (liveListening) {
+            android.util.Log.i("GeminiLiveActivity", "Closing after 30 seconds following completed model turn")
+            visionController.stop()
+            client.stop()
+        }
+    }
+
+    private fun cancelResponseIdle() {
+        if (::elapsed.isInitialized) elapsed.removeCallbacks(responseIdleStop)
+    }
     private var hardwareImageButtonRegistered = false
     private var visionStatus = "Glasses vision: waiting"
     private var initialImagePath: String? = null
     private var initialPrompt: String? = null
     private var initialTurnSent = false
     private val hardwareImageCaptureInProgress = AtomicBoolean(false)
-    private val hardwareImageButtonHandler: () -> Unit = { captureHardwareImageQuestion() }
+    private val hardwareImageButtonHandler: (ManualGlassesPhoto) -> Unit = { photo ->
+        lifecycleScope.launch(Dispatchers.Main) { captureHardwareImageQuestion(photo) }
+    }
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -74,6 +88,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         indicators = findViewById(R.id.gemini_live_indicators)
         startButton = findViewById(R.id.gemini_live_start)
         stopButton = findViewById(R.id.gemini_live_stop)
+        useRelayForFreeTier = !hasPaidPlan()
         client = GeminiLiveClient(this, this)
         initialImagePath = intent.getStringExtra(EXTRA_INITIAL_IMAGE_PATH)?.takeIf { it.isNotBlank() }
         initialPrompt = intent.getStringExtra(EXTRA_INITIAL_PROMPT)?.takeIf { it.isNotBlank() }
@@ -86,6 +101,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
         startButton.setOnClickListener { explainAndRequestMicrophone() }
         stopButton.setOnClickListener {
+            cancelResponseIdle()
             visionController.stop()
             client.stop()
         }
@@ -110,12 +126,21 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
     override fun onPause() {
         unregisterHardwareImageButton()
+        // With denied notification permission this is a foreground-only session;
+        // never keep the socket alive when the user locks the phone or leaves the preview.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !hasPermission(Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            cancelResponseIdle()
+            client.stop()
+        }
         visionController.stop()
         client.pauseForBackground()
         super.onPause()
     }
 
     override fun onDestroy() {
+        cancelResponseIdle()
         elapsed.removeCallbacks(ticker)
         unregisterHardwareImageButton()
         visionController.close()
@@ -164,30 +189,45 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         client.start(language, defaultImageQuestion)
     }
 
-    private fun captureHardwareImageQuestion() {
-        if (!liveListening) return
-        if (!hardwareImageCaptureInProgress.compareAndSet(false, true)) return
+    private fun captureHardwareImageQuestion(photo: ManualGlassesPhoto) {
+        if (!liveListening) { photo.acquisition?.cancel(); return }
+        cancelResponseIdle()
+        if (!hardwareImageCaptureInProgress.compareAndSet(false, true)) { photo.acquisition?.cancel(); return }
         status.text = "Receiving glasses AI photo"
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching { GeminiLiveGlassesImageCapture(this@GeminiLiveActivity).captureFromHardwareButton() }
+            client.recordVisionCaptureStarted()
+            var captured = false
+            var captureError: Throwable? = null
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { GeminiLiveGlassesImageCapture(this@GeminiLiveActivity).captureFromHardwareButton(photo) }
+                }
+                result
+                    .onSuccess { image ->
+                        captured = true
+                        if (client.sendImage(image)) {
+                            visionController.onVisualContextSent()
+                            visionStatus = "Glasses vision: manual AI-photo queued"
+                            status.text = "Image queued for Gemini Live"
+                        } else {
+                            visionStatus = "Glasses vision: image was not queued"
+                            status.text = "Live connection is not ready for an image"
+                        }
+                        renderIndicators()
+                    }
+                    .onFailure { error ->
+                        captureError = error
+                        Toast.makeText(
+                            this@GeminiLiveActivity,
+                            error.message ?: "Glasses image capture failed",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+            } finally {
+                client.recordVisionCaptureFinished(captured, captureError)
+                photo.acquisition?.cancel()
+                hardwareImageCaptureInProgress.set(false)
             }
-            result
-                .onSuccess { image ->
-                    client.sendImage(image)
-                    visionController.onVisualContextSent()
-                    visionStatus = "Glasses vision: manual AI-photo sent"
-                    status.text = "Image sent to Gemini Live"
-                    renderIndicators()
-                }
-                .onFailure { error ->
-                    Toast.makeText(
-                        this@GeminiLiveActivity,
-                        error.message ?: "Glasses image capture failed",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-            hardwareImageCaptureInProgress.set(false)
         }
     }
 
@@ -214,6 +254,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
             }
 
             if (state == GeminiLiveState.STOPPED || state == GeminiLiveState.ERROR) {
+                cancelResponseIdle()
                 visionController.stop()
                 startedAtMs = 0L
                 elapsed.removeCallbacks(ticker)
@@ -245,11 +286,24 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
     override fun onUserSpeechActivity(active: Boolean) {
         visionController.onSpeechActivity(active)
+        if (active) runOnUiThread { cancelResponseIdle() }
+    }
+
+    override fun onModelOutputStarted() {
+        runOnUiThread { cancelResponseIdle() }
+    }
+
+    override fun onModelTurnComplete() {
+        runOnUiThread {
+            cancelResponseIdle()
+            if (liveListening) elapsed.postDelayed(responseIdleStop, GeminiLiveSessionPolicy.POST_RESPONSE_IDLE_MS)
+        }
     }
 
     override fun onTranscription(input: Boolean, text: String) {
         // Transcription is intentionally parallel metadata. It is not inserted into the
         // audio -> Gemini -> native-audio critical path.
+        if (input && text.isNotBlank()) runOnUiThread { cancelResponseIdle() }
         if (text.isNotBlank()) {
             val direction = if (input) "User" else "Gemini"
             android.util.Log.d("GeminiLiveActivity", "$direction transcription: $text")
@@ -267,8 +321,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
             lifecycleScope.launch(Dispatchers.IO) {
                 val image = runCatching { File(path).readBytes() }.getOrNull()
                 if (image != null && image.isNotEmpty()) {
-                    client.sendImage(image)
-                    visionController.onVisualContextSent()
+                    if (client.sendImage(image)) visionController.onVisualContextSent()
                 }
                 initialPrompt?.let(client::sendTextTurn)
             }
@@ -292,7 +345,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         val shouldRegister = liveListening &&
             lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
         if (shouldRegister && !hardwareImageButtonRegistered) {
-            GeminiLiveImageButtonRouter.register(hardwareImageButtonHandler)
+            GeminiLiveImageButtonRouter.register(com.fersaiyan.cyanbridge.devices.DeviceProfileStore.selectedClass(this), hardwareImageButtonHandler)
             hardwareImageButtonRegistered = true
         } else if (!shouldRegister) {
             unregisterHardwareImageButton()

@@ -90,6 +90,7 @@ import org.jetbrains.compose.resources.stringResource
 fun GlassesDashboardScreen(
     state: GlassesDashboardUiState,
     onAction: (GlassesDashboardAction) -> Unit,
+    liveVideoSlot: @Composable () -> Unit = {},
 ) {
     var showWifiAdbConfirmation by remember { mutableStateOf(false) }
     var wifiAdbRiskAcknowledged by remember { mutableStateOf(false) }
@@ -270,7 +271,7 @@ fun GlassesDashboardScreen(
                 }
             }
             if (state.showHeyCyanControls || state.showEyevueControls || state.showTuneBudsControls) {
-                item { CoreGlassesControls(state, onAction) }
+                item { CoreGlassesControls(state, onAction, liveVideoSlot) }
             }
             if (state.showMetaRaybanControls) {
                 item { MetaRaybanControls(state.metaRayban, onAction) }
@@ -707,6 +708,7 @@ private fun TransferCard(
 private fun CoreGlassesControls(
     state: GlassesDashboardUiState,
     onAction: (GlassesDashboardAction) -> Unit,
+    liveVideoSlot: @Composable () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.testTag("glasses_core_controls"),
@@ -750,17 +752,17 @@ private fun CoreGlassesControls(
         if (state.livePreview.isAvailable) {
             Spacer(Modifier.height(8.dp))
             SectionTitle(
-                if (state.showEyevueControls) {
-                    stringResource(Res.string.dashboard_eye_vue_live_preview)
-                } else {
-                    stringResource(Res.string.dashboard_passive_rtsp_probe)
+                when {
+                    state.showEyevueControls -> stringResource(Res.string.dashboard_eye_vue_live_preview)
+                    state.showTuneBudsControls -> stringResource(Res.string.dashboard_tunebuds_live_preview)
+                    else -> stringResource(Res.string.dashboard_heycyan_live_preview)
                 },
             )
             Text(
-                text = if (state.showEyevueControls) {
-                    stringResource(Res.string.dashboard_eye_vue_description)
-                } else {
-                    stringResource(Res.string.dashboard_passive_probe_description)
+                text = when {
+                    state.showEyevueControls -> stringResource(Res.string.dashboard_eye_vue_description)
+                    state.showTuneBudsControls -> stringResource(Res.string.dashboard_tunebuds_live_description)
+                    else -> stringResource(Res.string.dashboard_heycyan_live_description)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -783,10 +785,8 @@ private fun CoreGlassesControls(
             ActionRow(
                 primaryLabel = if (state.livePreview.isScanning) {
                     stringResource(Res.string.dashboard_connecting)
-                } else if (state.showEyevueControls) {
-                    stringResource(Res.string.dashboard_start_live_preview)
                 } else {
-                    stringResource(Res.string.dashboard_arm_passive_probe)
+                    stringResource(Res.string.dashboard_start_live_preview)
                 },
                 onPrimary = { onAction(GlassesDashboardAction.StartLivePreview) },
                 primaryEnabled = state.livePreview.canStart && !state.livePreview.isScanning,
@@ -796,6 +796,14 @@ private fun CoreGlassesControls(
                 secondaryEnabled = state.livePreview.canStop,
                 secondaryStyle = ActionButtonStyle.Destructive,
             )
+            // Supported glasses render live video inline; transport and
+            // orientation remain device-specific in the Android host.
+            if ((state.showEyevueControls || state.showHeyCyanControls || state.showTuneBudsControls) &&
+                state.livePreview.isPlaying &&
+                state.livePreview.streamUrl != null
+            ) {
+                liveVideoSlot()
+            }
         }
     }
 }
@@ -1067,6 +1075,7 @@ private fun MetaRaybanControls(
                         onAction(
                             when (pairingIssue.action) {
                                 MetaPairingIssueAction.INSTALL_META_AI -> GlassesDashboardAction.MetaOpenMetaAi
+                                MetaPairingIssueAction.OPEN_META_AI -> GlassesDashboardAction.MetaOpenMetaAi
                                 MetaPairingIssueAction.OPEN_PAIRING -> GlassesDashboardAction.MetaOpenPairing
                                 MetaPairingIssueAction.REQUEST_ACCESS -> GlassesDashboardAction.MetaOpenPairing
                             },

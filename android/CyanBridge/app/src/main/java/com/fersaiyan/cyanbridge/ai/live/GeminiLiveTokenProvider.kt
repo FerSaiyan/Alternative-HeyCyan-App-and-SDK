@@ -27,6 +27,21 @@ data class LiveTokenConfig(
     val freeTier: Boolean = false,
 )
 
+/** An explicit relay rejection is not a Google Live connection failure. */
+class LiveTokenRequestException(
+    val errorCode: String,
+    val httpStatus: Int,
+    val retryAfterMs: Long = 0L,
+    val activeMode: String? = null,
+) : IllegalStateException(
+    when (errorCode) {
+        "live_concurrent_session" -> "Another ${activeMode ?: "Live"} session is still active. End it and try again${if (retryAfterMs > 0) " (reservation expires in approximately ${((retryAfterMs + 999L) / 1000L)} seconds)" else ""}."
+        "live_rate_limited" -> "Too many Private Live starts. Try again in ${((retryAfterMs + 999L) / 1000L).coerceAtLeast(1L)} seconds."
+        "live_quota_exhausted" -> "Your Live quota is exhausted."
+        else -> "Private Live could not start ($errorCode, HTTP $httpStatus)."
+    },
+)
+
 interface GeminiLiveTokenProvider {
     suspend fun requestToken(language: String, imagePrompt: String): LiveTokenConfig
 }
@@ -80,7 +95,7 @@ class DefaultGeminiLiveTokenProvider(
             val raw = response.body?.string().orEmpty()
             val json = JSONObject(raw.ifBlank { "{}" })
             if (!response.isSuccessful) {
-                val error = json.optString("error", "Gemini Live token request failed")
+                val error = json.optString("error", "gemini_live_token_request_failed")
                 // Surface quota details for live_quota_exhausted so the UI can show remaining vs required.
                 if (error == "live_quota_exhausted" || raw.contains("live_quota_exhausted")) {
                     val quota = json.optJSONObject("quota")
@@ -99,7 +114,12 @@ class DefaultGeminiLiveTokenProvider(
                     }
                     throw IllegalStateException(detail)
                 }
-                throw IllegalStateException(error)
+                throw LiveTokenRequestException(
+                    errorCode = error,
+                    httpStatus = response.code,
+                    retryAfterMs = json.optLong("retry_after_ms", 0L).coerceAtLeast(0L),
+                    activeMode = json.optString("active_mode").takeIf { it.isNotBlank() },
+                )
             }
             val expiresAt = Instant.parse(json.getString("expire_time")).toEpochMilli()
             // Production Pro uses Google's client-to-server ephemeral-token flow.
@@ -113,7 +133,7 @@ class DefaultGeminiLiveTokenProvider(
                 reservationId = json.getString("reservation_id"),
                 authorizationHeader = null,
                 apiKey = null,
-                setupJson = null,
+                setupJson = json.optString("setup_json").takeIf { it.isNotBlank() },
             )
         }
     }

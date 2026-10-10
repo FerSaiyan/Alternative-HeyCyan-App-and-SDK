@@ -27,3 +27,8 @@
 -keepclassmembers class com.google.ai.edge.litertlm.Engine {
     public float[] scoreDecision(byte[], java.lang.String[]);
 }
+
+# HeyCyanThumbnailReceiver reuses the vendor's exact FD framing/queue implementation.
+-keepclassmembers class com.oudmon.ble.base.communication.LargeDataHandler {
+    private void syncPictureThumbnails(int);
+}

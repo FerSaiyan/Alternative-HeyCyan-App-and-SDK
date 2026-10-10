@@ -4,7 +4,7 @@ import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 
-/** Holds split UTF-8 codepoints until the next native token arrives. */
+/** Tokens can split Unicode codepoints. Hold incomplete bytes instead of emitting replacement characters. */
 internal class Utf8TokenDecoder {
     private val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPLACE).onUnmappableCharacter(CodingErrorAction.REPLACE)
     private var pending = ByteArray(0)

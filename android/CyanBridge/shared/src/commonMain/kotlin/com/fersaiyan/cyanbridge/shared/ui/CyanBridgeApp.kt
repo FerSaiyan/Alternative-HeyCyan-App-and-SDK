@@ -55,6 +55,7 @@ fun CyanBridgeApp(
     useSharedDestinations: Boolean = false,
     proSubscriptionState: ProSubscriptionUiState = ProSubscriptionUiState(),
     onProSubscriptionAction: (ProSubscriptionAction) -> String = ::unavailableProSubscriptionStatus,
+    liveVideoSlot: @Composable () -> Unit = {},
 ) {
     var currentDestination by remember(initialDestination) { mutableStateOf(initialDestination) }
     var showAppearance by remember { mutableStateOf(false) }
@@ -98,6 +99,7 @@ fun CyanBridgeApp(
                                 onDashboardAction(action)
                             }
                         },
+                        liveVideoSlot = liveVideoSlot,
                     )
                     if (showSyncFlowPicker) {
                         GlassesSyncFlowPickerDialog(

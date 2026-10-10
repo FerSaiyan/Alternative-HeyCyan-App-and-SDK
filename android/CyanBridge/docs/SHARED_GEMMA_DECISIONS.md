@@ -139,7 +139,7 @@ Host JNI smoke reproduction with an existing local chat GGUF:
 cmake -S android/CyanBridge/llama-runtime/src/main/cpp \
   -B /tmp/opencode/shared-gemma-host-build \
   -DCYAN_LLAMA_SOURCE_DIR=/tmp/opencode/llama-upstream-20261001 \
-  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_BUILD_TYPE=Release -DCYAN_SHARED_GEMMA=ON \
   -DCYAN_JNI_INCLUDE_DIR="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
 cmake --build /tmp/opencode/shared-gemma-host-build --target cyan_shared_gemma -j 4
 "$JAVA_HOME/bin/javac" -d /tmp/opencode/shared-gemma-host-classes \

@@ -59,6 +59,11 @@ class EyevueGattClient(
     val frames: SharedFlow<EyevueFrame> = _frames.asSharedFlow()
     val photos: SharedFlow<ByteArray> = _photos.asSharedFlow()
 
+    @Volatile internal var photoListener: ((ByteArray) -> Unit)? = null
+    @Volatile internal var photoPacketListener: ((ByteArray) -> Unit)? = null
+
+    internal fun resetPhotoStream() = photoAssembler.reset()
+
     @Volatile
     private var gatt: BluetoothGatt? = null
     private var writeCharacteristic: BluetoothGattCharacteristic? = null
@@ -76,6 +81,7 @@ class EyevueGattClient(
             status: Int,
             newState: Int,
         ) {
+            if (callbackGatt !== gatt) return
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.i(TAG, "GATT connected: ${callbackGatt.device.address} status=$status")
                 connectContinuation?.let { continuation ->
@@ -115,6 +121,7 @@ class EyevueGattClient(
         }
 
         override fun onServicesDiscovered(callbackGatt: BluetoothGatt, status: Int) {
+            if (callbackGatt !== gatt) return
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.i(TAG, "Eyevue services discovered: ${callbackGatt.services.size}")
                 resolveCharacteristics(callbackGatt)
@@ -139,6 +146,7 @@ class EyevueGattClient(
             descriptor: BluetoothGattDescriptor,
             status: Int,
         ) {
+            if (callbackGatt !== gatt) return
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 descriptorContinuation?.let { continuation ->
                     descriptorContinuation = null
@@ -161,6 +169,7 @@ class EyevueGattClient(
             characteristic: BluetoothGattCharacteristic,
             status: Int,
         ) {
+            if (callbackGatt !== gatt) return
             val write = pendingWrite ?: return
             pendingWrite = null
             write.complete(status == BluetoothGatt.GATT_SUCCESS)
@@ -171,6 +180,7 @@ class EyevueGattClient(
             callbackGatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
         ) {
+            if (callbackGatt !== gatt) return
             handleNotification(characteristic, characteristic.value.copyOf())
         }
 
@@ -179,6 +189,7 @@ class EyevueGattClient(
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
+            if (callbackGatt !== gatt) return
             handleNotification(characteristic, value.copyOf())
         }
 
@@ -186,9 +197,22 @@ class EyevueGattClient(
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
+            val hex = value.joinToString("") { "%02X".format(it) }
+            Log.d(TAG, "Eyevue notify uuid=${characteristic.uuid} len=${value.size} hex=$hex")
             when (characteristic.uuid) {
-                EyevueProtocol.COMMAND_NOTIFY_UUID -> decoder.append(value).forEach(_frames::tryEmit)
-                EyevueProtocol.PHOTO_NOTIFY_UUID -> photoAssembler.append(value)?.let(_photos::tryEmit)
+                EyevueProtocol.COMMAND_NOTIFY_UUID -> {
+                    val frames = decoder.append(value)
+                    Log.d(TAG, "Eyevue decoded ${frames.size} frame(s) from ${value.size} bytes")
+                    frames.forEach(_frames::tryEmit)
+                }
+                EyevueProtocol.PHOTO_NOTIFY_UUID -> {
+                    photoPacketListener?.invoke(value)
+                    photoAssembler.append(value)?.let { image ->
+                        photoListener?.invoke(image)
+                        _photos.tryEmit(image)
+                    }
+                }
+                else -> Log.w(TAG, "Eyevue notify on unexpected characteristic ${characteristic.uuid}")
             }
         }
     }
@@ -328,6 +352,7 @@ class EyevueGattClient(
 
     @SuppressLint("MissingPermission")
     private fun closeGatt() {
+        photoAssembler.reset()
         val currentGatt = gatt
         gatt = null
         writeCharacteristic = null

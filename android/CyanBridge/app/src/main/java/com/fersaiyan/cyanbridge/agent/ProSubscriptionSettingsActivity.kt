@@ -662,15 +662,15 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                         )
                         val isPro = ProSubscriptionPrefs.isActiveLocally(this@ProSubscriptionSettingsActivity) &&
                             ProSubscriptionPrefs.getPlan(this@ProSubscriptionSettingsActivity).lowercase() in setOf("cheap", "standard", "max")
-                        GeminiLiveForegroundService.start(
-                            context = this@ProSubscriptionSettingsActivity,
+                        com.fersaiyan.cyanbridge.ai.live.GeminiLivePermissionGateActivity.launch(
+                            activity = this@ProSubscriptionSettingsActivity,
                             language = language,
                             imagePrompt = imagePrompt,
                             initialImagePath = null,
                             initialPrompt = null,
                             useRelay = !isPro,
                         )
-                        Toast.makeText(this@ProSubscriptionSettingsActivity, "Gemini Live started — see notification to stop", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@ProSubscriptionSettingsActivity, "Checking Live microphone and notification permissions", Toast.LENGTH_SHORT).show()
                     },
                     onCloudSyncChange = {
                         switchCloudSync.isChecked = it
