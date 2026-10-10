@@ -21,11 +21,17 @@ enum class LocalModelRequestPriority {
     LOW,
 }
 
-/** LiteRT accepts one prompt alongside media, so preserve all system instructions in that prompt. */
+/**
+ * LiteRT-LM media requests: one user turn with the attachments, plus every system instruction
+ * as the conversation's system turn. Inlining the instructions after the attachments made
+ * Gemma 4 answer as if no recording/image had been attached.
+ */
+internal data class MultimodalPrompt(val systemInstruction: String, val userRequest: String)
+
 internal fun buildMultimodalPrompt(
     configuredSystemPrompt: String,
     messages: List<PromptMessage>,
-): String {
+): MultimodalPrompt {
     val systemInstructions = buildList {
         configuredSystemPrompt.trim().takeIf { it.isNotBlank() }?.let(::add)
         messages
@@ -38,15 +44,7 @@ internal fun buildMultimodalPrompt(
         ?.content
         ?: messages.lastOrNull()?.content.orEmpty()
 
-    return buildString {
-        if (systemInstructions.isNotEmpty()) {
-            appendLine("System instructions:")
-            appendLine(systemInstructions.joinToString("\n\n"))
-            appendLine()
-        }
-        append("User request: ")
-        append(userRequest)
-    }
+    return MultimodalPrompt(systemInstructions.joinToString("\n\n"), userRequest)
 }
 
 class LocalModelsProvider {
@@ -137,6 +135,7 @@ class LocalModelsProvider {
             val templateId = settings.templateOverrideId
                 ?: selected.promptTemplateId
                 ?: catalogEntry?.promptTemplateId
+                ?: PromptTemplateRegistry.inferForFileName(selected.fileName)
                 ?: "generic_chatml"
 
             val systemPrompt = buildString {
@@ -153,10 +152,13 @@ class LocalModelsProvider {
                     if (role.isBlank() || content.isBlank()) null else PromptMessage(role = role, content = content)
                 }
 
-            // LiteRT accepts one prompt alongside image/audio attachments. Preserve system instructions
-            // instead of dropping them when moving from the chat template to the media API.
-            val effectivePrompt = if (hasMediaAttachments && settings.modelRuntime == LocalModelRuntime.LITERT) {
+            // LiteRT takes one user prompt alongside image/audio attachments; system instructions
+            // go to its system turn instead of being dropped.
+            val litertMedia = if (hasMediaAttachments && settings.modelRuntime == LocalModelRuntime.LITERT) {
                 buildMultimodalPrompt(systemPrompt, chatMessages)
+            } else null
+            val effectivePrompt = if (litertMedia != null) {
+                litertMedia.userRequest
             } else if (hasMediaAttachments) {
                 val lastUser = chatMessages.indexOfLast { it.role.equals("user", true) }
                 require(lastUser >= 0) { "Media request needs a user message" }
@@ -197,6 +199,7 @@ class LocalModelsProvider {
                 audioPath = audioPath,
                 requestPriority = requestPriority,
                 maxTokensOverride = maxTokens,
+                systemInstruction = litertMedia?.systemInstruction,
             )
 
             val firstCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()
@@ -235,6 +238,7 @@ class LocalModelsProvider {
                 audioPath = audioPath,
                 requestPriority = requestPriority,
                 maxTokensOverride = maxTokens,
+                systemInstruction = litertMedia?.systemInstruction,
             )
 
             val retryCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()

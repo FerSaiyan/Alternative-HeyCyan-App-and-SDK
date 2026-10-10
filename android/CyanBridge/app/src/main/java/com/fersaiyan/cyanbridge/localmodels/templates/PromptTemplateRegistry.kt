@@ -69,6 +69,33 @@ object PromptTemplateRegistry {
             },
         ),
         PromptTemplate(
+            id = "gemma4_it",
+            label = "Gemma 4 instruct",
+            description = "Gemma 4 turn tags (<|turn>role ... <turn|>), as in Google's chat template.",
+            render = { systemPrompt, messages ->
+                buildString {
+                    if (systemPrompt.isNotBlank()) {
+                        append("<|turn>system\n")
+                        append(systemPrompt.trim())
+                        append("<turn|>\n")
+                    }
+                    messages.forEach { msg ->
+                        val wireRole = when (msg.role.lowercase()) {
+                            "assistant", "model" -> "model"
+                            "system" -> "system"
+                            else -> "user"
+                        }
+                        append("<|turn>")
+                        append(wireRole)
+                        append("\n")
+                        append(msg.content.trim())
+                        append("<turn|>\n")
+                    }
+                    append("<|turn>model\n")
+                }
+            },
+        ),
+        PromptTemplate(
             id = "generic_chatml",
             label = "Generic ChatML",
             description = "Generic ChatML format for unknown chat-tuned models.",
@@ -120,6 +147,17 @@ object PromptTemplateRegistry {
             },
         ),
     )
+
+    /** Template for a model without a catalog entry or saved override, guessed from its file name. */
+    fun inferForFileName(fileName: String): String? {
+        val name = fileName.lowercase()
+        return when {
+            "gemma-4" in name || "gemma4" in name -> "gemma4_it"
+            "gemma" in name -> "gemma_it"
+            "qwen" in name -> "qwen_chat"
+            else -> null
+        }
+    }
 
     fun findById(id: String?): PromptTemplate? {
         if (id.isNullOrBlank()) return null

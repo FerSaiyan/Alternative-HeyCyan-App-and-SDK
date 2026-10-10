@@ -25,6 +25,7 @@ import com.google.ai.edge.litertlm.ToolProvider
 import com.google.ai.edge.litertlm.ThinkingConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -41,13 +42,19 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     private var modelPath: String? = null
     private var activeLoadConfig: EngineLoadConfig? = null
     private var activeLoadResult: EngineLoadResult? = null
+    /** False while the engine has an audio encoder that has not run yet (see [primeAudioEncoder]). */
+    @Volatile private var audioEncoderReady = true
 
     override suspend fun loadModel(modelPath: String, config: EngineLoadConfig): EngineLoadResult = operationMutex.withLock {
         loadModelSerialized(modelPath, config)
     }
 
     private suspend fun loadModelSerialized(modelPath: String, config: EngineLoadConfig): EngineLoadResult {
-        val effectiveConfig = resolveAutomaticMtp(modelPath, config)
+        // SoC-compiled NPU packages (e.g. *_Qualcomm_SM8650.litertlm) only run on the NPU,
+        // whatever backend an imported model's settings name.
+        val effectiveConfig = resolveAutomaticMtp(modelPath, config).let {
+            if (LiteRtNpuSupport.compiledFor(modelPath) != null) it.copy(computeBackend = LocalComputeBackend.NPU_EXPERIMENTAL) else it
+        }
         Log.i(
             TAG,
             "loadModel path=$modelPath backend=${effectiveConfig.computeBackend} cpuThreads=${effectiveConfig.cpuThreads} " +
@@ -189,6 +196,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         config: EngineLoadConfig,
     ): Pair<Engine, EngineLoadResult> {
         val npuBackend = Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
+        // A package compiled for one SoC's NPU cannot run on GPU/CPU, so report the NPU error.
+        val npuOnly = LiteRtNpuSupport.compiledFor(modelPath) != null
         return runCatching {
             val npu = LiteRtNpuSupport.status(context)
             check(npu.available) { npu.reason }
@@ -208,6 +217,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 speculativeDecodingEnabled = config.speculativeDecoding,
             )
         }.recoverCatching { npuErr ->
+            if (npuOnly) throw IllegalStateException("NPU model could not start: ${compactError(npuErr)}", npuErr)
             Log.w(TAG, "LiteRT NPU unavailable; trying GPU: ${compactError(npuErr)}", npuErr)
             val gpu = initializeGpuWithFallback(modelPath, config.copy(computeBackend = LocalComputeBackend.GPU))
             val reason = buildString {
@@ -232,6 +242,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         val media = runCatching { LiteRtModelProbe.mediaSupport(modelPath) }.getOrNull()
         val vision = visionBackend?.takeIf { media?.vision != false }
         val audio = audioBackend?.takeIf { media?.audio != false }
+        audioEncoderReady = audio == null || vision == null
         Log.i(
             TAG,
             "Initializing LiteRT engine backend=${backend.javaClass.simpleName} " +
@@ -326,6 +337,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         val llm = mutex.withLock {
             engine ?: throw IllegalStateException("LiteRT engine is not initialized")
         }
+        val hasAudio = !config.audioPath.isNullOrBlank()
+        if (!audioEncoderReady && !hasAudio && config.imagePaths.isNotEmpty()) primeAudioEncoder(llm)
         val conversation = withContext(Dispatchers.IO) {
             llm.createConversation(buildConversationConfig(config))
         }
@@ -338,6 +351,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 val userContents = buildUserContents(config)
                 generateFromConversation(conversation, config.prompt, userContents, onToken)
             }
+            if (hasAudio) audioEncoderReady = true
             GenerationResult(text = text, tokenCount = tokenizeEstimate(text))
         } catch (t: Throwable) {
             Log.e(TAG, "LiteRT generation failed", t)
@@ -347,6 +361,39 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 if (activeConversation === conversation) closeConversationLocked()
             }
         }
+    }
+
+    /**
+     * LiteRT-LM 0.18: once the vision encoder has run in an engine, its audio encoder fails to
+     * prepare (XNNPack "failed to prepare", audio_litert_compiled_model_executor.cc:887);
+     * audio that ran first keeps working. So run audio once, on a short silent clip, before
+     * the engine's first image request.
+     */
+    private suspend fun primeAudioEncoder(llm: Engine) = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        runCatching {
+            val silence = File(context.cacheDir, "litert_audio_prime.wav")
+            if (!silence.isFile) silence.writeBytes(silentWav(samples = 8_000))
+            llm.createConversation(ConversationConfig()).use { primer ->
+                primer.sendMessageAsync(
+                    Contents.of(listOf(Content.AudioFile(silence.absolutePath), Content.Text("."))),
+                    emptyMap<String, Any>(),
+                ).take(1).collect()
+            }
+        }.onFailure { Log.w(TAG, "LiteRT audio encoder priming failed: ${compactError(it)}", it) }
+        audioEncoderReady = true
+        Log.i(TAG, "Primed LiteRT audio encoder in ${System.currentTimeMillis() - start} ms")
+    }
+
+    /** 16 kHz mono PCM16 WAV of [samples] zero samples. */
+    private fun silentWav(samples: Int): ByteArray {
+        val data = samples * 2
+        return java.nio.ByteBuffer.allocate(44 + data).order(java.nio.ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray()); putInt(36 + data); put("WAVE".toByteArray())
+            put("fmt ".toByteArray()); putInt(16); putShort(1); putShort(1); putInt(16_000); putInt(32_000)
+            putShort(2); putShort(16)
+            put("data".toByteArray()); putInt(data)
+        }.array()
     }
 
     override suspend fun cancelGeneration() {
@@ -369,7 +416,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             seed = config.seed,
         )
         return ConversationConfig(
-            systemInstruction = Contents.of(""),
+            systemInstruction = Contents.of(config.systemInstruction?.trim().orEmpty()),
             initialMessages = emptyList<Message>(),
             tools = emptyList<ToolProvider>(),
             samplerConfig = sampler,

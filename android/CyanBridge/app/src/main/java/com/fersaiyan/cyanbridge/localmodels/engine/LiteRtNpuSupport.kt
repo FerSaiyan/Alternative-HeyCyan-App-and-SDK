@@ -44,7 +44,11 @@ internal object LiteRtNpuSupport {
         return Status(true, soc, "Qualcomm $soc (Hexagon $hexagon)")
     }
 
-    /** Model files compiled for one SoC carry its name, e.g. `*_Qualcomm_SM8650.litertlm`. */
+    /**
+     * Model files compiled for one SoC carry its name, e.g. `*_Qualcomm_SM8650.litertlm` or
+     * Google's `*_qualcomm_sm8750.litertlm`.
+     */
     fun compiledFor(modelPath: String): String? =
-        Regex("""_Qualcomm_(SM\d{4})""").find(File(modelPath).name)?.groupValues?.get(1)
+        Regex("""_Qualcomm_(SM\d{4})""", RegexOption.IGNORE_CASE).find(File(modelPath).name)
+            ?.groupValues?.get(1)?.uppercase()
 }

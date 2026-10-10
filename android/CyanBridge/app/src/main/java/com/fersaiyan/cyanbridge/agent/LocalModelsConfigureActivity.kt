@@ -203,17 +203,21 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
             selectedInstalledModelId = selected?.id,
             catalog = LocalModelCatalogRepository.curatedModels.map { entry ->
                 val installed = installedByCatalogId[entry.id]
+                // Per-SoC NPU entries show this phone's file (size, source) or why there is none.
+                val resolved = NpuCatalogVariants.forDevice(this, entry).entry
+                val shown = resolved ?: entry
                 LocalModelCatalogUiItem(
                     id = entry.id,
                     title = entry.displayName,
-                    details = "${entry.quantization} • ${humanSize(entry.sizeBytes)} • ${entry.shortDescription}",
+                    details = "${entry.quantization} • ${humanSize(shown.sizeBytes)} • ${entry.shortDescription}",
                     status = statusText(entry, installed),
                     downloadLabel = when {
                         ModelDownloadForegroundService.isDownloading && ModelDownloadForegroundService.downloadingModelId == entry.id -> "Downloading…"
                         installed != null -> "Installed"
                         entry.comingSoon -> "Coming soon"
-                        entry.sourceUrl.isNullOrBlank() -> "Manual import"
-                        !assessCatalogEntry(entry).supported -> "Unavailable"
+                        resolved == null -> "Unavailable"
+                        shown.sourceUrl.isNullOrBlank() -> "Manual import"
+                        !assessCatalogEntry(shown).supported -> "Unavailable"
                         entry.gatedDownload -> "Download (token)"
                         else -> "Download"
                     },
@@ -802,10 +806,12 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
         return assessCatalogEntry(entry).supported
     }
 
-    private fun statusText(entry: LocalModelCatalogEntry, installed: InstalledLocalModel?): String {
+    private fun statusText(catalogEntry: LocalModelCatalogEntry, installed: InstalledLocalModel?): String {
         if (installed != null) return "Ready"
-        if (entry.comingSoon) return "Coming soon"
-        NpuCatalogVariants.forDevice(this, entry).reason?.let { return it }
+        if (catalogEntry.comingSoon) return "Coming soon"
+        val resolution = NpuCatalogVariants.forDevice(this, catalogEntry)
+        resolution.reason?.let { return it }
+        val entry = resolution.entry ?: catalogEntry
         val assessment = assessCatalogEntry(entry)
         if (!assessment.supported) return assessment.blockers.joinToString(" ")
         return assessment.warnings.joinToString(" ").ifBlank { "Compatible with this device" }

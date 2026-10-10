@@ -11,7 +11,7 @@ object NpuCatalogVariants {
     data class Resolution(val entry: LocalModelCatalogEntry?, val reason: String?)
 
     fun forDevice(context: Context, entry: LocalModelCatalogEntry): Resolution {
-        if (entry.npuVariants == null) return Resolution(entry, null)
+        if (entry.npuVariants.isEmpty()) return Resolution(entry, null)
         if (!BuildConfig.LITERT_NPU_RUNTIME) return Resolution(null, "This app build has no NPU runtime.")
         val soc = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else null
         val resolved = NpuVariantResolver.resolve(entry, soc)

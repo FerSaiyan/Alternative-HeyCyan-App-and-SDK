@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.localmodels.settings
 
+import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -32,5 +33,15 @@ class LocalGenerationSettingsTest {
             ),
         )
         assertEquals("Custom prompt", LocalGenerationSettings.migrateDefaultSystemPrompt("Custom prompt"))
+    }
+
+    @Test
+    fun npuOnlyCatalogModelsDefaultToTheNpuAndLiteRt() {
+        val npu = LocalGenerationSettings.defaultsFor(LocalModelCatalogRepository.findById("gemma4-e2b-it-npu"))
+        assertEquals(LocalComputeBackend.NPU_EXPERIMENTAL, npu.computeBackend)
+        assertEquals(LocalModelRuntime.LITERT, npu.modelRuntime)
+        assertEquals(4096, npu.contextSize)
+        val gpu = LocalGenerationSettings.defaultsFor(LocalModelCatalogRepository.findById("gemma4-e2b-it-litert"))
+        assertEquals(LocalComputeBackend.GPU, gpu.computeBackend)
     }
 }

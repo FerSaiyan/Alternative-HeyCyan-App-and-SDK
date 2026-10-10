@@ -125,7 +125,9 @@ object LocalChatSessionManager {
                 sizeBytes = model.sizeBytes,
                 quantization = model.quantization ?: "unknown",
                 contextSizeDefault = settings.contextSize,
-                promptTemplateId = model.promptTemplateId ?: "generic_chatml",
+                promptTemplateId = model.promptTemplateId
+                    ?: com.fersaiyan.cyanbridge.localmodels.templates.PromptTemplateRegistry.inferForFileName(model.fileName)
+                    ?: "generic_chatml",
                 minRamGb = 4.0,
                 minStorageGb = 0.5,
                 shortDescription = "Imported GGUF model",
@@ -237,6 +239,7 @@ object LocalChatSessionManager {
         audioPath: String? = null,
         requestPriority: LocalModelRequestPriority = LocalModelRequestPriority.HIGH,
         maxTokensOverride: Int? = null,
+        systemInstruction: String? = null,
     ): String {
         return generateInternal(
             settings = settings,
@@ -246,6 +249,7 @@ object LocalChatSessionManager {
             audioPath = audioPath,
             requestPriority = requestPriority,
             maxTokensOverride = maxTokensOverride,
+            systemInstruction = systemInstruction,
         ).text
     }
 
@@ -263,6 +267,7 @@ object LocalChatSessionManager {
         audioPath: String?,
         requestPriority: LocalModelRequestPriority,
         maxTokensOverride: Int? = null,
+        systemInstruction: String? = null,
     ): GenerationResult {
         val reqId = UUID.randomUUID().toString()
         val llm: LocalInferenceEngine
@@ -324,6 +329,7 @@ object LocalChatSessionManager {
                                     structuredJson = settings.experimentalStructuredJson,
                                     imagePaths = imagePaths,
                                     audioPath = audioPath,
+                                    systemInstruction = systemInstruction,
                                 ),
                                 onToken = { chunk ->
                                     if (chunk.isBlank() || guardTriggered) return@generate

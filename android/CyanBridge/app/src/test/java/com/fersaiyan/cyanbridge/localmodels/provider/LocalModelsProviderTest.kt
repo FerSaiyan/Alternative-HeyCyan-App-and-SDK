@@ -1,7 +1,7 @@
 package com.fersaiyan.cyanbridge.localmodels.provider
 
 import com.fersaiyan.cyanbridge.localmodels.templates.PromptMessage
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LocalModelsProviderTest {
@@ -16,8 +16,7 @@ class LocalModelsProviderTest {
             ),
         )
 
-        assertTrue(prompt.contains("Always answer in Russian."))
-        assertTrue(prompt.contains("Keep answers brief."))
-        assertTrue(prompt.contains("User request: Describe this image."))
+        assertEquals("Always answer in Russian.\n\nKeep answers brief.", prompt.systemInstruction)
+        assertEquals("Describe this image.", prompt.userRequest)
     }
 }

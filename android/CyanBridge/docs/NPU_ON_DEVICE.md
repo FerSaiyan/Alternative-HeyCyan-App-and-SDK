@@ -1,6 +1,6 @@
 # Running NPU models in CyanBridge: what is required
 
-Updated: 2026-10-08. Target first: Qualcomm SM8650 (Snapdragon 8 Gen 3, Hexagon
+Updated: 2026-10-10. Target first: Qualcomm SM8650 (Snapdragon 8 Gen 3, Hexagon
 V75; Galaxy Z Fold6 `RQCX700KSDF`, Android 15).
 
 **Status:** with the opt-in NPU runtime build, one QAIRT 2.50 runtime runs all of these on
@@ -15,6 +15,16 @@ multi-bucket package keeps short chats fast. Long-context answers are not reliab
 the feasibility builds degenerate past ~4k with 4k calibration (confirmed on the host as a
 calibration problem, not an HTP one), and long calibration restores coherence but not yet
 CPU-level retrieval. See "Gemma 4 LLMs on the NPU".
+
+**2026-10-10:**
+- **Downloads:** the Gemma 4 E2B NPU entry can be downloaded and selected from Local Models
+  settings, from a public Hugging Face repo (see "Per-SoC model downloads").
+- **Image and audio:** the NPU packages so far were text-only. Image + audio packages for E2B
+  and E4B are built and pass host checks, but have not run on a phone yet (see "Image and
+  audio on the NPU").
+- **Emulator:** image and audio pass on the Pixel 9a AVD through the app's own path, for
+  llama.cpp (Gemma 4 GGUF + mmproj) and LiteRT (Gemma 4 E2B). Three app bugs were found and
+  fixed along the way (see "Image and audio: emulator results").
 
 ## Device results (Galaxy Z Fold6, SM8650, QAIRT 2.50 runtime)
 
@@ -187,26 +197,135 @@ step attends over the whole cache:
 
 ## Per-SoC model downloads (Hugging Face)
 
-Plan: compile each model for every recent Snapdragon with an NPU and host the files in a
-public Hugging Face repo. The app reads `Build.SOC_MODEL` and downloads the matching file.
+Each model is compiled per Snapdragon SoC. The app reads `Build.SOC_MODEL`, downloads the
+matching file from a public Hugging Face repo, and checks its sha256.
 
-- **Naming contract:** `<repo>/resolve/main/<filePrefix>_Qualcomm_<SoC>.<format>`, e.g.
-  `gemma-4-E2B-it_Qualcomm_SM8650.litertlm`. The SoC suffix stays in the installed file
-  name; `LiteRtNpuSupport.compiledFor` checks it against the phone before loading.
-- **Catalog:** `LocalModelCatalogEntry.npuVariants = NpuVariantSet(repo, filePrefix, socs)`.
+**Live (2026-10-10):** catalog entry `gemma4-e2b-it-npu`, "Gemma 4 E2B IT (Snapdragon NPU)".
+
+| SoC | File | Source (pinned commit) | Input | sha256 |
+|---|---|---|---|---|
+| SM8650 (V75) | `gemma-4-E2B-it_Qualcomm_SM8650.litertlm` | [`Fertroll10/gemma-4-E2B-it-litert-lm-npu`](https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu) @ `947dafae` | text | `70c0223b…` |
+| SM8750 (V79) | `gemma-4-E2B-it_qualcomm_sm8750.litertlm` | Google's `litert-community/gemma-4-E2B-it-litert-lm` @ `b3ca0d2f` | text, image, audio | `41dd675f…` |
+
+- **SM8650 build:** the validated 4k package (`work_e2b_general`, QAIRT 2.50; benchmarks in
+  "Gemma 4 LLMs on the NPU"). The repo has a model card.
+- **SM8750 build:** Google's own. Not yet run on an SM8750 phone. Google's QCS8275 (IoT)
+  file is not listed.
+- **Catalog:** `npuVariants: List<NpuVariantSet(repo, filePrefix, files: SoC -> NpuVariantFile(sha256,
+  size), revision, lowercaseSoc)>`. The first set that publishes this SoC wins. `revision`
+  pins a commit, so a later upload can't change what a checksum pins. `lowercaseSoc` covers
+  Google's naming.
 - **Resolution:**
-  - `NpuVariantResolver.resolve(entry, socModel)` (shared, unit-tested) returns the
-    SoC-specific entry, or null when that SoC has no published file.
-  - In the app, `NpuCatalogVariants.forDevice` also requires the NPU runtime build and a
-    supported SoC. Otherwise it supplies the reason shown in place of the download button
-    (`LocalModelsConfigureActivity`, `ModelDownloadForegroundService`).
-- **Status:** the "Gemma 4 E2B (NPU - Coming Soon)" entry stays disabled until the repo
-  exists. To enable it, set `npuVariants`, `sourcePageUrl`, `enabled = true` and
-  `comingSoon = false`.
-- **Hexagon architecture per SoC:**
-  - SM8450 v69, SM8550 v73, SM8650 v75, SM8750 v79, SM8850 v81.
-  - The app's NPU runtime AAR must include each published architecture's stub and skel
-    (`package_npu_aar.py --hexagon`), or ship them per architecture.
+  - `NpuVariantResolver.resolve(entry, soc)` (shared, unit-tested) returns the SoC's URL,
+    file name, sha256 and size.
+  - `NpuCatalogVariants.forDevice` also requires the NPU runtime build and a supported SoC.
+    Otherwise it supplies the reason shown in place of the download button.
+  - The settings page shows the resolved size and status. Unsupported phones see the
+    entry with a disabled "Unavailable" button and the reason.
+- **Selection:**
+  - A downloaded NPU package is registered under the catalog id and selected.
+  - Its default settings are LiteRT on `NPU_EXPERIMENTAL` (`defaultsFor` with `npuOnly`).
+  - `LiteRtLocalInferenceEngine` forces the NPU backend for any `*_Qualcomm_<SoC>` file,
+    including imports, and does not fall back to GPU/CPU for such packages, which can't run
+    there. It reports the NPU error instead.
+- **Runtime AAR:** now `litert-npu-qualcomm-2.3.0-qairt2.50.0.260828-v75-v79.aar` (sha256
+  `524078fb…`, +4.5 MB) with the V75 and V79 stub/skel. Other Hexagon architectures
+  (SM8450 v69, SM8550 v73, SM8850 v81) need `package_npu_aar.py --hexagon` plus a published file.
+- **Upload new files** with the commit pinned in `LocalModelCatalog.kt` (`NPU_E2B_REVISION`)
+  and their sha256/size, then update the model card's table.
+
+## Image and audio on the NPU
+
+The first NPU packages held only the text model. A subagent added Google's vision and
+audio sections. The packages are built and pass host checks, but haven't run on a phone.
+
+- **Script:** `recipe/add_multimodal_sections.py` in `~/nvme_tmp/gemma4-sm8650-work`.
+  - Takes our package plus Google's generic `.litertlm` encoders: vision encoder, vision
+    adapter, audio encoder and adapter, end-of-vision and end-of-audio.
+  - No MTP drafter.
+  - Every output section is byte-identical to its source. The NPU main is unchanged; no
+    recompile.
+- **Metadata:** ours kept: template, stop strings, `max_num_tokens` 4096. Added from
+  Google's: image/audio boundary tokens, patch size 16, `max_num_patches` 2520, and stop id
+  50 (`<|tool_response>`).
+- **Contract checks pass:**
+  - adapter and end-of-media widths equal the main `embeddings` input (1536 E2B, 2560 E4B);
+  - the tokenizer is identical to Google's across all 262,144 pieces;
+  - the adapters hold our QAT checkpoints' projection weights byte for byte;
+  - the image attention is causal in both configs, which our aux mask matches.
+- **Packages** (`work_e2b_general_mm`, `work_e4b_general_mm`, `package_report.json` next to each):
+
+| Package | Size | sha256 |
+|---|---:|---|
+| E2B 4k image + audio | 2.65 GB | `78e120e4…` |
+| E4B 4k image + audio | 4.45 GB | `0fd6913e…` |
+
+- **Host check** (`recipe/host_mm_check.py`: pre-AOT A16 main on CPU, LiteRT-LM 0.18's
+  preprocessing, greedy):
+  - E2B: COCO bear → "The image features a bear."; `gemini_live_hello_5s.wav` → "Hello, I
+    like red flowers."; French clip → "Hello, how are you?"
+  - E4B: stop sign described correctly; the hello clip transcribed in full.
+- **App settings:** `Backend.NPU` main, vision GPU (or CPU), audio **CPU** (the audio
+  encoder is tagged cpu). This is what `initializeNpuWithFallback` already does. The
+  encoders stay out of the NPU process domain.
+- **Before shipping:**
+  1. Run `LocalMultimodalProviderTest` with the E2B package on the Fold6 NPU.
+  2. Upload it over the SM8650 file in the HF repo.
+  3. Bump `NPU_E2B_REVISION`, sha256 and size.
+
+## Image and audio: emulator results (Pixel 9a AVD, x86_64, CPU, 2026-10-10)
+
+`LocalMultimodalProviderTest` (`src/androidTest`) asks through `LocalModelsProvider.streamChat`,
+the call the glasses image/voice flow makes.
+- The model under test is the only installed model during the run.
+- The model registry, projector and settings preferences are restored afterwards.
+- Inputs: the Walking Aid `bus.jpg`; `gemini_live_hello_5s.wav` ("…I like red flowers").
+- Greedy decoding, the app's default system prompt.
+
+| Runtime / model | Image answer | Audio answer | Time to first token (image / audio) |
+|---|---|---|---|
+| llama.cpp, Gemma 4 E2B Q4_0 + mmproj Q8_0 (ggml-org) | "The vehicle in the picture is an electric bus." | The speaker says, "I like red flowers." | 76 s / 25 s |
+| LiteRT-LM 0.18, Google `gemma-4-E2B-it.litertlm` | "…a public transit bus." | The speaker says, "I like red flowers." | 22–30 s / 7 s |
+
+**Bugs found and fixed** (each reproduced on the emulator, then fixed and rerun):
+1. **Gemma 4 GGUF prompts used ChatML.**
+   - Imported models had no template, so they fell back to `generic_chatml`, and replies
+     leaked `<|im_end|>`.
+   - Added a `gemma4_it` template (Google's `<|turn>role … <turn|>` format) and file-name
+     inference for imports (`PromptTemplateRegistry.inferForFileName`).
+   - The old `gemma_it` (Gemma 2/3 `<start_of_turn>`) is unchanged.
+2. **LiteRT media requests inlined the system prompt after the attachment.**
+   - With the default prompt, Gemma 4 then answered "I need the recording…".
+   - The system prompt now goes to LiteRT-LM's `systemInstruction`
+     (`GenerationConfig.systemInstruction`, `buildMultimodalPrompt` returns system and user
+     parts).
+3. **Audio after an image failed in one LiteRT engine.**
+   - Error: XNNPack "Node 2184 failed to prepare", `audio_litert_compiled_model_executor.cc:887`.
+   - Audio before an image works, and keeps working afterwards.
+   - `LiteRtLocalInferenceEngine` now runs the audio encoder once, on a 0.5 s silent clip,
+     before an engine's first image request. That cost 7.6 s once on the emulator.
+   - Not yet checked whether phones show the same failure.
+
+Other notes:
+- Upstream `llama-mtmd-cli` at the same pin transcribes the clip correctly, so the llama.cpp
+  bridge and model are sound.
+- With the app's terse default system prompt, E2B refuses a literal "Transcribe this audio
+  exactly." (llama.cpp) but answers a natural question. The test asks "What does the speaker
+  say in this recording? Quote it."
+- `NpuCatalogSettingsTest` on the emulator: the entry is listed, Download is disabled, and the
+  reason "No NPU build for this processor (ranchu) yet." is shown.
+- Commands (push models to `/data/local/tmp/mm`):
+
+```bash
+adb shell am instrument -w -r -e class com.fersaiyan.cyanbridge.hil.LocalMultimodalProviderTest \
+  -e mm_model /data/local/tmp/mm/gemma-4-E2B-it-Q4_0.gguf -e mm_projector /data/local/tmp/mm/mmproj-gemma-4-E2B-it-Q8_0.gguf \
+  -e mm_image /data/local/tmp/mm/bus.jpg -e mm_audio /data/local/tmp/mm/gemini_live_hello_5s.wav \
+  com.fersaiyan.cyanbridge.test/androidx.test.runner.AndroidJUnitRunner
+# LiteRT: -e mm_model <gemma-4-E2B-it.litertlm> [-e mm_backend CPU|GPU|NPU] [-e mm_catalog_id gemma4-e2b-it-npu]
+# Options: -e mm_order image_first|audio_first|audio_image_audio, -e mm_system none|<text>, -e mm_audio_prompt <q>
+adb shell am instrument -w -r -e class com.fersaiyan.cyanbridge.hil.NpuCatalogSettingsTest [-e npu_download true] \
+  com.fersaiyan.cyanbridge.test/androidx.test.runner.AndroidJUnitRunner
+```
 
 ## One runtime stack: LiteRT 2.3.0 + QAIRT 2.50.0.260828
 
@@ -534,6 +653,18 @@ Done (2026-10-08): WeSpeaker, YOLO11n (detector, backend, 200-image COCO), YOLO-
 Done later the same day: Gemma 4 E2B/E4B NPU packages, decision LoRA, 8k–32k contexts and
 the multi-bucket package, EmbeddingGemma 2 740M, and a 90 s YOLO soak with memory and
 temperature sampling. See "Gemma 4 LLMs on the NPU".
+
+Next Fold6 session (2026-10-10 build in
+`/mnt/seagate/ML/cyanbridge-litert-npu-20261008/apks-arm64-mm-20261010/`, V75+V79 runtime):
+1. `NpuCatalogSettingsTest -e npu_download true`: download, register and select the SM8650
+   file from Hugging Face.
+2. `LocalMultimodalProviderTest`:
+   - with `-e mm_backend NPU` on the downloaded text package (expect image/audio to be
+     reported unsupported);
+   - then on `work_e2b_general_mm` (image + audio);
+   - then on `work_e4b_general_mm`.
+3. The same test on Google's stock E2B with GPU, including image→audio, to see whether
+   phones need the audio-priming workaround.
 
 Remaining:
 1. Long-calibrated ("_lc") 8k and 4k+16k multi-bucket builds: needle checks scored by

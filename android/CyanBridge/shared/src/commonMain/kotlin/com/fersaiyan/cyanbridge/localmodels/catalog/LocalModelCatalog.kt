@@ -25,41 +25,56 @@ data class LocalModelCatalogEntry(
     val npuSupported: Boolean = false,
     val npuOnly: Boolean = false,
     val comingSoon: Boolean = false,
-    /** Per-SoC NPU builds; resolve with [NpuVariantResolver] before downloading. */
-    val npuVariants: NpuVariantSet? = null,
+    /** Per-SoC NPU builds, first match wins; resolve with [NpuVariantResolver] before downloading. */
+    val npuVariants: List<NpuVariantSet> = emptyList(),
 )
 
 /**
- * NPU builds compiled per Snapdragon SoC and hosted in one public Hugging Face repo as
- * `<repo>/resolve/main/<filePrefix>_Qualcomm_<SoC>.<format>` (e.g. SM8650). [socs] lists the
- * SoC models (`Build.SOC_MODEL`) that have a published file. The SoC suffix is kept in the
- * installed file name, which the runtime checks against the phone before loading.
+ * NPU builds compiled per Snapdragon SoC and hosted in a Hugging Face repo as
+ * `<repo>/resolve/<revision>/<filePrefix>_Qualcomm_<SoC>.<format>` (e.g. SM8650), or in
+ * Google's litert-community naming `<filePrefix>_qualcomm_<soc>.<format>` when
+ * [lowercaseSoc] is set. [files] maps each published SoC model (`Build.SOC_MODEL`) to its
+ * file. The SoC stays in the installed file name, which the runtime checks against the
+ * phone before loading.
  */
 data class NpuVariantSet(
     val repo: String,
     val filePrefix: String,
-    val socs: Set<String>,
+    val files: Map<String, NpuVariantFile>,
+    /** Commit to download from, so a later upload cannot change what a checksum pins. */
+    val revision: String = "main",
+    val lowercaseSoc: Boolean = false,
 )
 
+data class NpuVariantFile(val sha256: String?, val sizeBytes: Long)
+
 object NpuVariantResolver {
-    fun fileName(entry: LocalModelCatalogEntry, socModel: String): String? =
-        entry.npuVariants?.let { "${it.filePrefix}_Qualcomm_$socModel.${entry.format}" }
+    fun fileName(entry: LocalModelCatalogEntry, set: NpuVariantSet, socModel: String): String =
+        if (set.lowercaseSoc) "${set.filePrefix}_qualcomm_${socModel.lowercase()}.${entry.format}"
+        else "${set.filePrefix}_Qualcomm_$socModel.${entry.format}"
 
     /**
      * The entry to download on a phone with [socModel]: itself when it has no per-SoC
      * variants, the SoC-specific file when one is published, or null when this SoC has none.
      */
     fun resolve(entry: LocalModelCatalogEntry, socModel: String?): LocalModelCatalogEntry? {
-        val variants = entry.npuVariants ?: return entry
-        if (socModel == null || socModel !in variants.socs) return null
-        val name = fileName(entry, socModel) ?: return null
+        if (entry.npuVariants.isEmpty()) return entry
+        if (socModel == null) return null
+        val set = entry.npuVariants.firstOrNull { socModel in it.files } ?: return null
+        val file = set.files.getValue(socModel)
+        val name = fileName(entry, set, socModel)
         return entry.copy(
-            sourceUrl = "https://huggingface.co/${variants.repo}/resolve/main/$name",
-            sourcePageUrl = "https://huggingface.co/${variants.repo}",
+            sourceUrl = "https://huggingface.co/${set.repo}/resolve/${set.revision}/$name",
+            sourcePageUrl = "https://huggingface.co/${set.repo}",
             expectedFilename = name,
+            sha256 = file.sha256,
+            sizeBytes = file.sizeBytes,
         )
     }
 }
+
+private const val NPU_E2B_REPO = "Fertroll10/gemma-4-E2B-it-litert-lm-npu"
+private const val NPU_E2B_REVISION = "947dafae00cf1d7034efa69c1aaec6c1b3200962"
 
 object LocalModelCatalogRepository {
     val curatedModels: List<LocalModelCatalogEntry> = listOf(
@@ -132,29 +147,58 @@ object LocalModelCatalogRepository {
             enabled = true,
         ),
         LocalModelCatalogEntry(
-            id = "gemma4-e2b-npu-coming-soon",
-            displayName = "Gemma 4 E2B (NPU - Coming Soon)",
+            id = "gemma4-e2b-it-npu",
+            displayName = "Gemma 4 E2B IT (Snapdragon NPU)",
             family = "gemma",
             engine = "litert",
             format = "litertlm",
+            // Resolved per phone by NpuVariantResolver; this page lists every published SoC.
             sourceUrl = null,
-            sourcePageUrl = "https://huggingface.co/litert-community",
-            expectedFilename = "gemma-4-E2B-npu.litertlm",
+            sourcePageUrl = "https://huggingface.co/$NPU_E2B_REPO",
+            expectedFilename = "gemma-4-E2B-it_Qualcomm_<SoC>.litertlm",
             sha256 = null,
-            sizeBytes = 2_400_000_000L,
-            quantization = "NPU AOT (QNN/INT4)",
+            sizeBytes = 3_016_294_400L,
+            quantization = "NPU AOT (QAT INT4/8, INT16 activations)",
             contextSizeDefault = 4096,
             promptTemplateId = "gemma_it",
             minRamGb = 6.0,
             minStorageGb = 4.0,
-            shortDescription = "Snapdragon NPU Ahead-of-Time (AOT) compiled package. Coming soon for supported Snapdragon devices.",
-            tags = listOf("npu", "gemma4", "coming_soon"),
+            shortDescription = "Gemma 4 E2B compiled for this phone's Snapdragon NPU: about 2x faster replies than GPU. " +
+                "4k context. Snapdragon 8 Gen 3 build is text-only for now; Snapdragon 8 Elite " +
+                "(Google's build) also takes images and audio.",
+            tags = listOf("litert", "gemma4", "npu", "offline"),
             gatedDownload = false,
-            licenseTermsNote = "Use under Gemma model license terms.",
-            enabled = false,
+            licenseTermsNote = "Apache-2.0 (Gemma 4). Community NPU build; SM8750 file published by Google (litert-community).",
+            enabled = true,
             npuSupported = true,
             npuOnly = true,
-            comingSoon = true,
+            npuVariants = listOf(
+                // Compiled and validated on a Galaxy Z Fold6 (docs/NPU_ON_DEVICE.md).
+                NpuVariantSet(
+                    repo = NPU_E2B_REPO,
+                    filePrefix = "gemma-4-E2B-it",
+                    revision = NPU_E2B_REVISION,
+                    files = mapOf(
+                        "SM8650" to NpuVariantFile(
+                            sha256 = "70c0223bdd24b3653b32b7ffb0c064babff86fd8e8697fe6cb9a0fecb127eed4",
+                            sizeBytes = 2_322_196_704L,
+                        ),
+                    ),
+                ),
+                // Google's own NPU build (text, image, audio); not yet run on an SM8750 phone.
+                NpuVariantSet(
+                    repo = "litert-community/gemma-4-E2B-it-litert-lm",
+                    filePrefix = "gemma-4-E2B-it",
+                    revision = "b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1",
+                    lowercaseSoc = true,
+                    files = mapOf(
+                        "SM8750" to NpuVariantFile(
+                            sha256 = "41dd675fbe735b6029012b5576a5716bac614fd8156de0128db4c9dff3cebd4e",
+                            sizeBytes = 3_016_294_400L,
+                        ),
+                    ),
+                ),
+            ),
         ),
     )
 

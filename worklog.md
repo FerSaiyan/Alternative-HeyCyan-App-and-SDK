@@ -1,5 +1,36 @@
 # Worklog — CyanBridge local agent
 
+## 2026-10-10 — Merge with protocol fixes; NPU downloads, multimodal NPU packages, image/audio on the emulator
+
+- **Commits and merge:**
+  - Committed the main checkout's 2–4 Oct work on `heycyan-eyevue-tunebuds-protocol-fixes` (`01035cb`) and the NPU/local-agent work on `jev-like-local-agent` (`e74cc98`).
+  - Merged them in `c05001e`, so `main` can fast-forward.
+  - `llama-runtime` was added on both branches: the protocol-fixes `cyan_llama` (llama.cpp + libmtmd) is kept, and the shared-Gemma bridge becomes an opt-in second library (`-PsharedGemmaPrototype=true`).
+  - Unit tests 938/938 once the emulator holding port 8554 was closed.
+- **NPU model downloadable and selectable** (catalog `gemma4-e2b-it-npu`):
+  - New public repo [`Fertroll10/gemma-4-E2B-it-litert-lm-npu`](https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu) @ `947dafae`: the validated 4k SM8650 text package (sha256 `70c0223b…`) with a model card.
+  - Google's SM8750 build (`litert-community` @ `b3ca0d2f`) is also listed.
+  - Variants are now a list of sources with per-SoC sha256/size and a pinned commit.
+  - NPU-only entries default to LiteRT on the NPU, and SoC-compiled packages never fall back to GPU.
+  - The runtime AAR adds Hexagon V79 (`…-v75-v79.aar`, `524078fb…`).
+  - `NpuCatalogSettingsTest` passes on the emulator (entry listed, disabled, reason shown). Downloading on a phone is pending.
+- **The NPU packages were text-only; fixed** (subagent, recipe `add_multimodal_sections.py`):
+  - E2B and E4B 4k packages now carry Google's vision/audio encoders and adapters next to the unchanged NPU main: `work_e2b_general_mm` (`78e120e4…`) and `work_e4b_general_mm` (`0fd6913e…`).
+  - Contract checks and a host CPU check pass: bear / stop sign / living room described; "Hello, I like red flowers."
+  - Not on a phone yet. The HF file will be replaced after the Fold6 check.
+- **Image + audio on the Pixel 9a AVD** (`LocalMultimodalProviderTest`, through `LocalModelsProvider.streamChat`):
+  - llama.cpp Gemma 4 E2B Q4_0 + mmproj: "…an electric bus." / The speaker says, "I like red flowers."
+  - LiteRT Gemma 4 E2B CPU: "…a public transit bus." / same audio answer.
+- **Bugs fixed on the way:**
+  1. Imported Gemma 4 GGUFs were prompted in ChatML. Added the `gemma4_it` template and file-name inference.
+  2. LiteRT media requests put the system prompt after the attachment, so the model said "I need the recording". It now goes to `systemInstruction`.
+  3. LiteRT-LM 0.18 audio fails after an image in the same engine (XNNPack prepare). The audio encoder is now run once on silence before the first image (7.6 s once on the emulator).
+- **Notes:**
+  - Upstream `llama-mtmd-cli` at the same pin transcribes the clip, which confirms the bridge.
+  - E2B with the terse app system prompt refuses a literal "transcribe exactly".
+  - The 2.8 GB `e2b-base-wi4b32.litertlm` emulator copy was removed for space (identical sha to the Seagate archive).
+- **Next (Fold6):** `NpuCatalogSettingsTest -e npu_download true`, then `LocalMultimodalProviderTest` with `mm_backend NPU` on the text and `_mm` packages, and stock E2B GPU image→audio. APKs: `/mnt/seagate/ML/cyanbridge-litert-npu-20261008/apks-arm64-mm-20261010/`. Details: `android/CyanBridge/docs/NPU_ON_DEVICE.md`.
+
 ## 2026-10-08 (afternoon) — Gemma 4 on the Fold6 NPU, context length study, per-SoC downloads
 
 - **Gemma 4 LLMs on the NPU** (packages from the recipe session: QAT, QAIRT 2.50, weight sharing; LiteRT-LM 0.18 `Backend.NPU`; stock E2B for CPU/GPU on the same phone):
