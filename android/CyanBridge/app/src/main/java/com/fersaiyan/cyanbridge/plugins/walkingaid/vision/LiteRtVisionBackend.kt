@@ -28,6 +28,7 @@ import kotlin.math.roundToInt
 class LiteRtVisionBackend(
     private val context: Context,
     private val computeBackend: LocalComputeBackend? = null,
+    private val loadDepth: Boolean = true,
 ) : VisionBackend {
 
     private var detectorInterpreter: Interpreter? = null
@@ -66,7 +67,7 @@ class LiteRtVisionBackend(
 
     init {
         initDetector()
-        initDepthModel()
+        if (loadDepth) initDepthModel()
     }
 
     private fun initDetector() {

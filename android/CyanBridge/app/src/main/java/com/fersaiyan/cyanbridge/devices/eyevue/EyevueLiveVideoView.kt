@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
+import com.fersaiyan.cyanbridge.media.rtsp.LibVlcVideoView
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
@@ -14,7 +15,7 @@ import org.videolan.libvlc.util.VLCVideoLayout
  * Swapping the inner layout's dimensions avoids scaling a portrait canvas (and
  * its black borders) to try to fit landscape video.
  */
-class EyevueLiveVideoView(context: Context) : FrameLayout(context) {
+class EyevueLiveVideoView(context: Context) : FrameLayout(context), LibVlcVideoView {
     private val videoLayout = VLCVideoLayout(context).apply { rotation = -90f }
     private var player: MediaPlayer? = null
 
@@ -25,7 +26,7 @@ class EyevueLiveVideoView(context: Context) : FrameLayout(context) {
         addView(videoLayout)
     }
 
-    fun bindPlayer(next: MediaPlayer?) {
+    override fun bindPlayer(next: MediaPlayer?) {
         if (player === next) return
         player?.let { if (!it.isReleased) it.detachViews() }
         player = next

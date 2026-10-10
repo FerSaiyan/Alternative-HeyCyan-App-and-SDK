@@ -27,6 +27,14 @@ class WalkingAidPreferencesTest {
     }
 
     @Test
+    fun existingUsersDefaultToWalkingAndInvalidModeFallsBack() {
+        assertEquals(WalkingAidMode.WALKING, WalkingAidPreferences.getMode(context))
+        context.getSharedPreferences("walking_aid_prefs", Context.MODE_PRIVATE).edit()
+            .putString("mode", "unknown_mode").apply()
+        assertEquals(WalkingAidMode.WALKING, WalkingAidPreferences.getMode(context))
+    }
+
+    @Test
     fun defaultEnabledIsFalse() {
         assertFalse(WalkingAidPreferences.isEnabled(context))
     }

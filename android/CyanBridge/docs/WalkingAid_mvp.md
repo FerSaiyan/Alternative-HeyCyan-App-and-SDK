@@ -2,6 +2,19 @@
 
 This document preserves the WalkingAid implementation review and proposed P0-P5 roadmap verbatim so later implementation work can be checked against the original findings.
 
+## Explore and Walking modes (October 3, 2026)
+
+Select the behavior independently of the camera source, while the plugin is stopped:
+
+- **Walking** (default) retains the existing obstacle/approaching-object alerts and optional depth/context settings.
+- **Explore** describes local YOLO detections one group at a time, e.g. "2 people ahead" or "chair on your right". It does not require cloud access or a depth model.
+
+Explore groups by detector class, direction, and count. Changes must appear in at least two fresh analyzed frames over 600 ms before being announced. Completed groups stay quiet until their count/direction changes or they disappear consistently and return. Track-ID changes alone do not repeat a description. Pending descriptions are checked against the newest detections and expire with stale frames; speech which is interrupted or fails is not recorded as heard. Empty detections do not produce a path-clear announcement.
+
+Output settings provide speech speed (0.5–2×, both modes) and an Explore pause between completed announcements (0–5 seconds, default one second). Explore waits for TTS completion rather than interrupting each sentence with the next detection. Object names, plural forms, directions, and Explore controls use resources for all nine app languages. Detector labels remain English internally for matching/tracking.
+
+This is simple class/count/position memory, not recognition of places or individual objects. Scenes with the same class counts and positions cannot be distinguished by this version. The photo interval still applies only to periodic photos; live video keeps the existing latest-frame processing.
+
 ## Continuous video sources (October 1, 2026)
 
 Walking Aid settings now offers **Periodic photos** plus a device-gated video

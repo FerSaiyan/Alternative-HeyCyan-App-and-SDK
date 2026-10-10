@@ -3,6 +3,8 @@ package com.fersaiyan.cyanbridge.devices.eyevue
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import com.fersaiyan.cyanbridge.media.rtsp.GlassesRtspRelay
+import com.fersaiyan.cyanbridge.media.rtsp.GlassesLiveConnection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -12,14 +14,11 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** Transport boundary shared by the visible preview and headless vision decoder. */
-internal interface EyevueLiveConnection {
-    suspend fun open(onStatus: (String, String) -> Unit): String
-    suspend fun close()
-}
+internal interface EyevueLiveConnection : GlassesLiveConnection
 
 internal class EyevueGlassesLiveConnection(context: Context, private val manager: EyevueManager) : EyevueLiveConnection {
     private val transport = EyevueWifiTransport(context)
-    private var proxy: RtspPlayRewriteProxy? = null
+    private var proxy: GlassesRtspRelay? = null
     private var commandAttempted = false
 
     override suspend fun open(onStatus: (String, String) -> Unit): String {
@@ -50,7 +49,7 @@ internal class EyevueGlassesLiveConnection(context: Context, private val manager
                 throw failure ?: IOException("Eyevue live HTTP request failed")
             }
         }
-        val relay = RtspPlayRewriteProxy(
+        val relay = GlassesRtspRelay(
             profile.baseIp, 554, streamPath = Uri.parse(profile.liveStreamUrl).path ?: "/xxx.mov",
             log = { Log.i("EyevueRtspProxy", it) },
         )

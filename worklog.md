@@ -1,5 +1,190 @@
 # Worklog — CyanBridge local agent
 
+## 2026-10-04 — Shared EyeVue/TuneBuds capture ownership and website rollout
+
+- Deployed the current website working tree to Vercel production. Deployment
+  `dpl_973D6gSkkNqKvBHuDPFcSLaWHqFB` is READY on `cyanbridgelabs.com` and
+  `cyanbridge.vercel.app`. Both vision endpoints correctly rejected unauthenticated
+  POSTs with 401; the production homepage returned 200. Deployment/inspection
+  logs: `/tmp/opencode/unified-photo-vercel-{deploy.log,inspect.json}`.
+- Added shared device-tagged `GlassesPhotoCapture` ownership across HeyCyan,
+  EyeVue and TuneBuds; background permits now carry a device class. Raw vendor
+  disconnects clear HeyCyan permits only. Native disconnect/reconnect cancels
+  only the matching capture and keeps ownership until cleanup finishes.
+- Added `NativeGlassesPhotoCapture` with one owned waiter, a deadline covering
+  command acknowledgement plus image transfer, complete JPEG validation, bounded
+  stream buffers and noncancellable late-packet draining. Native push paths do
+  not automatically take another photo on failure. Removed broadcast-flow waits
+  from both native managers and awaited EyeVue's actual command write.
+- Native manual AI streams reserve receive-only ownership at stream start and
+  pass an acquisition future to the device-filtered, identity-aware Live router.
+  Live records attempts before reception and sees failure outcomes; stopping or
+  superseding the handler cancels acquisition without another shutter. Shared
+  transfer diagnostics include native failures; send counts/limits stay common.
+- Added `GlassesAiPhotoCapture` as the selected-device adapter for Live, Walking
+  Aid periodic photos and auto/standalone visual notes, including native connection
+  checks. Dashboard camera commands and TuneBuds Detailed acquisition also hold
+  shared ownership; Detailed releases it after Wi-Fi/hotspot cleanup.
+- EyeVue ignores callbacks from replaced GATT objects and TuneBuds ignores data
+  returned by replaced RFCOMM sockets. Assemblers reset and reject overflow/orphan
+  tails; native stream attempt IDs remain unproven. TuneBuds Detailed's existing
+  newest-filename storage selection is not claimed as proven fresh correlation.
+- Verification: 208 focused tests passed (37 classes, zero failures/errors/skips),
+  covering ownership, native timeout/cancellation/draining/recovery, manual stream
+  diagnostics, adapter routing, Live send counters, device protocols and Walking
+  Aid. Integrated ARM64 debug APK built. Both repositories passed `git diff --check`.
+  Log: `/tmp/opencode/unified-native-photo-tests-build.log`.
+- Documented contract and hardware acceptance in
+  `android/CyanBridge/docs/UNIFIED_GLASSES_PHOTO_CAPTURE.md`. No ADB device was
+  connected; physical repeated captures, native manual streams, disconnect recovery
+  and TuneBuds Detailed regression remain pending. Android edits are local and
+  uncommitted; no APK was distributed.
+
+## 2026-10-04 — Implement HeyCyan Live photo ownership and transfer repair
+
+- Added `HeyCyanPhotoCapture`/`HeyCyanCaptureOwner` using the Android coordinator
+  for Live, Walking Aid and auto-loop. Programmatic captures register a fresh
+  photo-ready waiter before issuing commands; missing notifications fail rather
+  than reading stale thumbnails. MainActivity defers their owned notifications.
+- Restored physical-photo routing through the Live router's dedicated vendor
+  listener, including while MainActivity is stopped. MainActivity's own requested
+  capture retains precedence through the shared permit. Handler replacement and
+  unregister are identity-aware; UI/service work dispatches on main.
+- Added `HeyCyanThumbnailReceiver` for every Android HeyCyan thumbnail consumer.
+  It owns raw FD responses, validates total/index/order/size and full JPEG decode,
+  makes one bounded retry, freezes writes/chaining, drains late replies with a
+  bounded quiet window, and compare-removes only its owned map entry. Callers
+  release permits in finally after cleanup. MainActivity/auto-loop timeout permit
+  leaks are repaired. Vendor private packet-request helper is retained by ProGuard.
+- Live sends now return enqueue success, serialize counters/limit checks, and
+  update visual-context/sent status only after acceptance. Free/Economy respects
+  the proxy's ten-image cap; Private retains its existing visual-input cap.
+- Added nonbillable session diagnostics (attempts/completions/failures, photo-ready
+  timeouts, transfer failures, queued images and rejected sends). Website changes
+  in `/home/fertroll10/Documents/CyanBridgeLabs/Cyanbridge_website` add an authenticated
+  idempotent revision endpoint, proxy session correlation and separate admin table
+  diagnostics. Diagnostic events do not enter usage/quota/billing records.
+- Verification: 38 focused Android tests passed, including actual-AAR raw handler
+  ownership, truncated JPEG rejection, competing captures, missing ready event,
+  failure recovery, cancellation, disconnect invalidation, late tails and concurrent
+  send-limit enforcement.
+  Integrated ARM64 debug APK built. Website focused tests passed 7/7; lint, build
+  and Prisma validation passed. Both repositories passed `git diff --check`.
+- Full website E2E was run: 118 passed, 47 skipped, 4 not run, 19 failed. Failures
+  are in existing account-delete localized text, checkout/database setup and old
+  homepage/viewport assertions; the new vision endpoint E2E passed. Full output:
+  `/tmp/opencode/live-photo-website-e2e.log`. No unrelated checkout/homepage repair
+  was bundled into this task. Final smoke/vision endpoint rerun passed 23/23.
+- Documented implementation and hardware acceptance in
+  `android/CyanBridge/docs/HEYCYAN_LIVE_PHOTO_REPAIR.md` and website
+  `docs/GEMINI_LIVE_VISION_DIAGNOSTICS.md`. No ADB device was connected; W610
+  validation and arbitrarily delayed same-metadata packet timing remain pending.
+  Changes are local and uncommitted; no website/APK rollout performed.
+
+## 2026-10-04 — Gemini Live photo counts and capture ownership follow-up
+
+- Inspected `/home/fertroll10/Documents/CyanBridgeLabs/Cyanbridge_website` and
+  its Free/Economy proxy, Private usage/end API, analytics store/dashboard,
+  alongside Android Live preferences, capture, event routing and send counters.
+- Read-only production KV query over 30 days: 203 session rows, 163 with zero
+  images, 37 with one, 3 with more; excluding flagged test accounts, 189/190
+  had zero/one. Last 7 days: 47 rows, 38 zero/9 one. Free/Economy proxy counts
+  incoming video messages directly; the count is not artificially capped at
+  one. There were no Private per-turn records in the sample. Saved only
+  anonymized aggregates under `/tmp/opencode/issue23-live-production-summary.json`.
+- Vercel production alias READY, deployed October 1 18:13 UTC. CLI inspection
+  did not return source SHA, so local uncommitted website edits are not treated
+  as proven deployed source. Checked-in and local counting paths agree on the
+  relevant proxy image-counter behavior.
+- Default Live refresh mode is intentionally only-first-image; zero for voice
+  startup and one for image startup can be expected. Automatic every-turn
+  capture requires opt-in and locally detected speech.
+- Confirmed July 29 `62cbb17` removed the only call to
+  `GeminiLiveImageButtonRouter.handleImageButton()` while Live handlers still
+  register. Automatic HeyCyan Live captures use a separate shared coordinator
+  and fixed four-second wait, allowing MainActivity to treat their `0x02` as a
+  hardware request and start a competing read of the same singleton FD slot.
+- Found send statuses can claim success despite `sendVideoFrame()` silently
+  dropping a frame. The backend has no capture-attempt/transfer-failure counts
+  and cannot distinguish these from intentionally disabled vision. Latest 200
+  production debug-log submissions had no matching BLE failure lines.
+- Added `docs/GEMINI_LIVE_PHOTO_COUNT_AUDIT.md` with evidence and prioritized
+  capture ownership/router/receiver/send-result/telemetry repair requirements.
+  Existing focused preference/policy/coordinator unit tests passed 19/19;
+  those tests do not cover the cross-workflow defects. `git diff --check` passed.
+  Investigation only; no website deployment or Android logic patch. No ADB
+  device available for a physical repeat-capture run.
+
+## 2026-10-04 — HeyCyan BLE photo issue #23 investigation
+
+- Read issue #23 and its comments, compared remote main and v2.3.0 with the
+  local thumbnail path, and traced the official app, bundled vendor AAR,
+  firmware photo/cache evidence, and Git history. Findings are in
+  `android/CyanBridge/docs/HEYCYAN_BLE_PHOTO_ISSUE_23_AUDIT.md`.
+- Confirmed `559abe1` (July 17) removed the two-attempt thumbnail retry and
+  introduced completion-owned background-permit release with no bounded
+  timeout/cancellation recovery. The post-0x02 transport wait is absent, but
+  was not a 250 ms delay removed by that commit. The official app also has
+  no explicit post-notification delay; test 250 ms as a workaround, not a
+  firmware-proven requirement.
+- Inspected actual `glasses_sdk_20250723_v01.aar` with javap and executed a
+  standalone synthetic-frame Java probe. All three checks passed: total=0
+  suppresses the app callback; a final packet alone reports completion; the
+  callback accepts another final packet after completion. Artifacts and
+  results: `/tmp/opencode/issue23-sdk/`.
+- A safe repair must stop/freeze/detach the owned thumbnail handler and account
+  for late packets before releasing the permit or retrying. Separate files
+  alone cannot isolate wire responses because the SDK routes by opcode -3.
+- Found separate Android/shared session coordinators used by MainActivity
+  versus Gemini Live still capture, relevant to the assistant-active retest.
+  Existing September 29 AIMB-G3 logs show two successful BLE previews; the
+  W610 initial failure remains unproven without a failed raw-packet trace.
+- Documentation-only investigation; no production photo-transfer patch yet.
+  No ADB device was connected. `git diff --check` passed.
+
+## 2026-10-03 — Shared EyeVue/HeyCyan RTSP endpoint
+
+- User confirmed commit `3d7cfe5` streams successfully on their Samsung phone
+  and HeyCyan glasses. That resolves the pending October 2 playback retest.
+- Reviewed Vortex's M02S report again: official `02 01 14 01` P2P start,
+  `02 01 15 01` stop, `8554/ch0`, TCP RTP, in-band SPS/PPS with missing video
+  fmtp, five-second BLE heartbeat, and untested `02 01 14 02` AP start.
+- Promoted EyeVue's multi-viewer RTSP relay/wire parser to `media/rtsp/` and
+  used it for HeyCyan as well. Both now listen on phone loopback port 8554 and
+  publish `rtsp://127.0.0.1:8554/live/`. Port conflicts are explicit errors;
+  no random-port fallback. One upstream RTSP session forwards encoded video
+  and audio to all clients; independent viewer teardown stays local.
+- Retained EyeVue's zero-based PLAY rewrite; HeyCyan uses normal live PLAY.
+  Local SDP connection addresses are normalized to loopback. HeyCyan retains
+  its working BLE IP, full-MAC peer matching, pending-connect protection, and
+  normal-bind/verified-direct-route sequence. Added the vendor's live heartbeat
+  as a cancellable child covering startup and playback. Relay cleanup precedes
+  native player release and network teardown.
+- The local decompiled official app is `1.0.86_20260115` (manifest), older than
+  Vortex's 1.0.103. `wifi/ap/TempWifiHelper.java` confirms WPA2 Wi-Fi specifier
+  association and network callback/binding cleanup; the newer realtime activity
+  and its credential source are absent. Recorded AP investigation details;
+  live transport remains the validated P2P mode.
+- Added `docs/LIVE_STREAM_INTEGRATION.md` with VLC, USB/ADB TCP forwarding,
+  FFmpeg recording, fixed-port lifetime, latency and OEM/AP notes. Replaced
+  stale passive-probe instructions in `docs/LIVE_PREVIEW_TEST_MODE.md`.
+- Concurrent Walking Aid changes temporarily lacked resources during the
+  first build. Validated the stream patch against `3d7cfe5` in detached
+  `/tmp/opencode/shared-rtsp-validation` with its MYVU submodule initialized.
+  All 25 focused relay/P2P/control tests passed; ARM64 debug build passed.
+- Built/installed the x86_64 APK and instrumentation APK on emulator-5580.
+  `GlassesRtspRelayDecodeTest` passed in 11.827 s: actual fixture H.264 over
+  RTSP, no video fmtp, two production LibVLC frame sinks, both upstream profiles
+  at the fixed endpoint, one source connection/PLAY, surviving viewer after
+  the other closes. Evidence: `/tmp/opencode/shared-rtsp-20261003/`, including
+  `isolated-build.log`, `emulator-build.log`, `decode-test.txt` and the saved
+  `cyanbridge-shared-rtsp-arm64-debug.apk`.
+- Physical phone is not connected to ADB; sideload and new relay validation
+  on physical glasses remain pending. After the concurrent Walking Aid resources
+  landed, the integrated workspace ARM64 build passed in 1m15s with configuration
+  cache reused (`integrated-build.log`). The combined APK is saved as
+  `/tmp/opencode/shared-rtsp-20261003/cyanbridge-shared-rtsp-debug.apk`.
+
 ## 2026-10-02 — HeyCyan live preview hardware peer-matching failure
 
 - Captured the original attempts and a fresh user-driven retest on Samsung

@@ -159,6 +159,9 @@ class GeminiLiveVisionController(
         lastAutomaticStillMs = now
         client.deferAudioForVisualContext()
         stillJob = scope.launch {
+            client.recordVisionCaptureStarted()
+            var captured = false
+            var captureError: Throwable? = null
             try {
                 onStatus("Glasses vision: capturing a fresh still while you speak")
                 val result = withContext(Dispatchers.IO) {
@@ -169,14 +172,17 @@ class GeminiLiveVisionController(
                     }
                 }
                 result.onSuccess { jpeg ->
+                    captured = true
                     if (active) {
-                        client.sendVideoFrame(jpeg)
-                        onStatus("Glasses vision: fresh still sent")
+                        if (client.sendVideoFrame(jpeg)) onStatus("Glasses vision: fresh still queued")
+                        else onStatus("Glasses vision: image was not queued; Live connection is not ready")
                     }
                 }.onFailure { error ->
+                    captureError = error
                     if (active) onStatus("Glasses vision: ${error.message ?: "automatic still unavailable"}")
                 }
             } finally {
+                client.recordVisionCaptureFinished(captured, captureError)
                 captureInProgress.set(false)
                 if (active) client.releaseAudioAfterVisualContext()
                 else client.cancelDeferredVisualContext()
@@ -249,12 +255,11 @@ class GeminiLiveVisionController(
         )
         if (!due || !encodingInProgress.compareAndSet(false, true)) return
         metaFramePendingForSpeechWindow = false
-        lastVideoFrameSentMs = now
 
         frameJob = scope.launch {
             val jpeg = withContext(Dispatchers.Default) { frame.toGeminiLiveJpeg() }
             if (active && userSpeaking && jpeg.isNotEmpty()) {
-                client.sendVideoFrame(jpeg)
+                if (client.sendVideoFrame(jpeg)) lastVideoFrameSentMs = System.currentTimeMillis()
             }
             encodingInProgress.set(false)
         }

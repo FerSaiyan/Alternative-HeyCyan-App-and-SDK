@@ -1,7 +1,8 @@
-package com.fersaiyan.cyanbridge.devices.eyevue
+package com.fersaiyan.cyanbridge.media.rtsp
 
 import java.io.ByteArrayInputStream
 import java.io.EOFException
+import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -15,29 +16,88 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.*
 import org.junit.Test
 
-class EyevueRtspRelayTest {
+class GlassesRtspRelayTest {
+    @Test(timeout = 15_000)
+    fun fixedEndpointCanSwitchGlassesAndReportsPortConflicts() {
+        for (path in listOf("/xxx.mov", "/ch0", "/testH264VideoStreamer")) {
+            FakeGlasses(heycyan = path != "/xxx.mov").use { glasses ->
+                val relay = GlassesRtspRelay("127.0.0.1", glasses.port, streamPath = path,
+                    upstreamPlayRange = if (path != "/xxx.mov") null else "npt=0.000-")
+                assertEquals(8554, relay.start())
+                try {
+                    val conflicting = GlassesRtspRelay("127.0.0.1", glasses.port)
+                    try {
+                        conflicting.start()
+                        fail("Must not silently change the public port")
+                    } catch (expected: IOException) {
+                        assertTrue(expected.message.orEmpty().contains("8554"))
+                    } finally { conflicting.stop() }
+                    TestViewer(8554).use { first ->
+                        TestViewer(8554).use { second ->
+                            first.describe()
+                            first.setup(1, "RTP/AVP/TCP;unicast;interleaved=0-1")
+                            first.play()
+                            second.describe()
+                            second.setup(1, "RTP/AVP/TCP;unicast;interleaved=2-3")
+                            second.play()
+                            assertEquals(1, glasses.connections.get())
+                            val sourcePlay = glasses.requests.single { it.firstLine.startsWith("PLAY ") }
+                            assertEquals(if (path != "/xxx.mov") null else "npt=0.000-", sourcePlay.header("Range"))
+                            glasses.emit(0, FIRST_FRAME)
+                            assertFrame(first, 0, FIRST_FRAME)
+                            assertFrame(second, 2, FIRST_FRAME)
+                            first.command("TEARDOWN")
+                            glasses.emit(0, FIRST_FRAME)
+                            assertFrame(second, 2, FIRST_FRAME)
+                            assertFalse(glasses.requests.any { it.firstLine.startsWith("TEARDOWN ") })
+                            assertTrue(glasses.requests.any { it.firstLine == "DESCRIBE rtsp://127.0.0.1:${glasses.port}$path RTSP/1.0" })
+                        }
+                    }
+                } finally { relay.stop() }
+            }
+        }
+    }
+
+    @Test
+    fun allwinnerSdpWithoutVideoFmtpKeepsInBandParameterSetsAndLocalTrackUrls() {
+        val source = "rtsp://192.168.49.40:8554/ch0"
+        val sdp = SDP.replace("s=Nvt RTSP", "s=testH264VideoStreamer")
+            .replace("MPEG4-GENERIC/16000", "MPEG4-GENERIC/8000")
+            .replace("t=0 0", "c=IN IP4 192.168.49.40\r\nt=0 0")
+        val parsed = RtspDescription.from(RtspMessage(
+            listOf("RTSP/1.0 200 OK", "Content-Base: $source/"), sdp.toByteArray(),
+        ), source)
+        assertEquals("$source/track1", parsed.tracks[0].controlUrl)
+        assertEquals("$source/track2", parsed.tracks[1].controlUrl)
+        val localSdp = String(parsed.localSdp)
+        assertTrue(localSdp.contains("c=IN IP4 127.0.0.1"))
+        assertTrue(localSdp.contains("MPEG4-GENERIC/8000"))
+        assertFalse(localSdp.contains("sprop-parameter-sets"))
+        assertFalse(localSdp.contains("192.168.49.40"))
+    }
+
     @Test
     fun describeBodyIsConsumedOnceAndLeavesNextResponseIntact() {
-        val bytes = EyevueRtspMessage(listOf("RTSP/1.0 200 OK", "Content-Length: ${SDP.length}"), SDP.toByteArray()).bytes() +
-            EyevueRtspMessage(listOf("RTSP/1.0 200 OK", "CSeq: 3")).bytes()
+        val bytes = RtspMessage(listOf("RTSP/1.0 200 OK", "Content-Length: ${SDP.length}"), SDP.toByteArray()).bytes() +
+            RtspMessage(listOf("RTSP/1.0 200 OK", "CSeq: 3")).bytes()
         val input = object : ByteArrayInputStream(bytes) {
             override fun read(target: ByteArray, offset: Int, length: Int): Int =
                 super.read(target, offset, minOf(length, 3)) // TCP may split a body anywhere.
         }
-        val describe = readEyevueRtspMessage(input)!!
+        val describe = readRtspMessage(input)!!
         assertEquals(SDP, String(describe.body))
-        assertEquals("3", readEyevueRtspMessage(input)!!.header("CSeq"))
+        assertEquals("3", readRtspMessage(input)!!.header("CSeq"))
         assertEquals(-1, input.read())
     }
 
     @Test(expected = EOFException::class)
     fun incompleteBodyDoesNotBecomeACachedSdp() {
-        readEyevueRtspMessage(ByteArrayInputStream("RTSP/1.0 200 OK\r\nContent-Length: 10\r\n\r\nshort".toByteArray()))
+        readRtspMessage(ByteArrayInputStream("RTSP/1.0 200 OK\r\nContent-Length: 10\r\n\r\nshort".toByteArray()))
     }
 
     @Test
     fun sdpKeepsAudioConfigurationAndResolvesPortAndAggregate() {
-        val parsed = EyevueRtspDescription.from(EyevueRtspMessage(
+        val parsed = RtspDescription.from(RtspMessage(
             listOf("RTSP/1.0 200 OK", "Content-Base: rtsp://127.0.0.1:1234/00000005/"), SDP.toByteArray(),
         ), "rtsp://127.0.0.1:1234/xxx.mov")
         assertEquals("rtsp://127.0.0.1:1234/00000005/", parsed.aggregateUrl)
@@ -49,7 +109,7 @@ class EyevueRtspRelayTest {
     @Test(timeout = 10_000)
     fun twoViewersReceiveVideoAudioAndClosingOneDoesNotTouchGlassesSession() {
         FakeGlasses().use { glasses ->
-            val relay = RtspPlayRewriteProxy("127.0.0.1", glasses.port)
+            val relay = GlassesRtspRelay("127.0.0.1", glasses.port, listenPort = 0)
             val port = relay.start()
             try {
                 TestViewer(port).use { first ->
@@ -92,7 +152,7 @@ class EyevueRtspRelayTest {
     @Test(timeout = 10_000)
     fun udpVideoAndAudioComeFromTheAdvertisedRtpAndRtcpPorts() {
         FakeGlasses().use { glasses ->
-            val relay = RtspPlayRewriteProxy("127.0.0.1", glasses.port)
+            val relay = GlassesRtspRelay("127.0.0.1", glasses.port, listenPort = 0)
             val port = relay.start()
             try {
                 TestViewer(port).use { viewer ->
@@ -126,10 +186,10 @@ class EyevueRtspRelayTest {
     @Test(timeout = 10_000)
     fun stopCancelsBlockedDescribeWithoutWaitingForHandshakeLock() {
         FakeGlasses(blockDescribe = true).use { glasses ->
-            val relay = RtspPlayRewriteProxy("127.0.0.1", glasses.port)
+            val relay = GlassesRtspRelay("127.0.0.1", glasses.port, listenPort = 0)
             val port = relay.start()
             TestViewer(port).use { viewer ->
-                viewer.socket.getOutputStream().write(EyevueRtspMessage(listOf(
+                viewer.socket.getOutputStream().write(RtspMessage(listOf(
                     "DESCRIBE rtsp://127.0.0.1:$port/live/ RTSP/1.0", "CSeq: 1",
                 )).bytes())
                 assertTrue(glasses.describeReceived.await(2, TimeUnit.SECONDS))
@@ -145,7 +205,7 @@ class EyevueRtspRelayTest {
     fun mediaWaitsForPlayResponseAndSlowViewerCannotBlockOtherViewer() {
         FakeGlasses().use { glasses ->
             val prePlayPacketProcessed = CountDownLatch(1)
-            val relay = RtspPlayRewriteProxy("127.0.0.1", glasses.port, log = {
+            val relay = GlassesRtspRelay("127.0.0.1", glasses.port, listenPort = 0, log = {
                 if (it.startsWith("first upstream packet")) prePlayPacketProcessed.countDown()
             })
             val port = relay.start()
@@ -177,16 +237,16 @@ class EyevueRtspRelayTest {
     private fun assertFrame(viewer: TestViewer, channel: Int, payload: ByteArray) {
         val input = viewer.socket.getInputStream()
         assertEquals('$'.code, input.read())
-        val header = readEyevueBytes(input, 3)
+        val header = readRtspBytes(input, 3)
         assertEquals(channel, header[0].toInt() and 255)
         val size = ((header[1].toInt() and 255) shl 8) or (header[2].toInt() and 255)
-        assertArrayEquals(payload, readEyevueBytes(input, size))
+        assertArrayEquals(payload, readRtspBytes(input, size))
     }
 
     @Test(timeout = 10_000)
     fun firstFrameImmediatelyAfterSourcePlayIsNotDiscarded() {
         FakeGlasses(emitOnPlay = true).use { glasses ->
-            val relay = RtspPlayRewriteProxy("127.0.0.1", glasses.port)
+            val relay = GlassesRtspRelay("127.0.0.1", glasses.port, listenPort = 0)
             val port = relay.start()
             try {
                 TestViewer(port).use { viewer ->
@@ -204,17 +264,17 @@ class EyevueRtspRelayTest {
         private val url = "rtsp://127.0.0.1:$port/live/"
         var session: String? = null
         private var seq = 1
-        fun command(method: String, target: String = url, headers: List<String> = emptyList()): EyevueRtspMessage {
-            val request = EyevueRtspMessage(listOf("$method $target RTSP/1.0", "CSeq: ${seq++}") + headers)
+        fun command(method: String, target: String = url, headers: List<String> = emptyList()): RtspMessage {
+            val request = RtspMessage(listOf("$method $target RTSP/1.0", "CSeq: ${seq++}") + headers)
             socket.getOutputStream().apply { write(request.bytes()); flush() }
-            return readEyevueRtspMessage(socket.getInputStream())!!.requireOk()
+            return readRtspMessage(socket.getInputStream())!!.requireOk()
         }
         fun describe() {
             val response = command("DESCRIBE")
             assertEquals(url, response.header("Content-Base"))
             assertTrue(String(response.body).contains("m=audio"))
         }
-        fun setup(track: Int, transport: String): EyevueRtspMessage {
+        fun setup(track: Int, transport: String): RtspMessage {
             val response = command("SETUP", "${url}track$track", listOf("Transport: $transport"))
             session = response.header("Session")!!.substringBefore(';')
             return response
@@ -223,11 +283,15 @@ class EyevueRtspRelayTest {
         override fun close() { socket.close() }
     }
 
-    private class FakeGlasses(private val blockDescribe: Boolean = false, private val emitOnPlay: Boolean = false) : AutoCloseable {
+    private class FakeGlasses(
+        private val blockDescribe: Boolean = false,
+        private val emitOnPlay: Boolean = false,
+        private val heycyan: Boolean = false,
+    ) : AutoCloseable {
         private val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
         val port = server.localPort
         val connections = AtomicInteger()
-        val requests = CopyOnWriteArrayList<EyevueRtspMessage>()
+        val requests = CopyOnWriteArrayList<RtspMessage>()
         val describeReceived = CountDownLatch(1)
         @Volatile private var peer: Socket? = null
         private val outputLock = Any()
@@ -237,7 +301,7 @@ class EyevueRtspRelayTest {
                 peer = socket
                 connections.incrementAndGet()
                 while (!socket.isClosed) {
-                    val request = readEyevueRtspMessage(socket.getInputStream()) ?: break
+                    val request = readRtspMessage(socket.getInputStream()) ?: break
                     requests.add(request)
                     val method = request.firstLine.substringBefore(' ')
                     var headers = listOf("CSeq: ${request.header("CSeq")}")
@@ -247,13 +311,13 @@ class EyevueRtspRelayTest {
                         "DESCRIBE" -> {
                             describeReceived.countDown()
                             if (blockDescribe) continue
-                            headers += listOf("Content-Base: rtsp://127.0.0.1:$port/00000005/", "Content-Type: application/sdp")
-                            body = SDP.toByteArray()
+                            headers += listOf("Content-Base: rtsp://127.0.0.1:$port/${if (heycyan) "ch0" else "00000005"}/", "Content-Type: application/sdp")
+                            body = (if (heycyan) SDP.replace("MPEG4-GENERIC/16000", "MPEG4-GENERIC/8000") else SDP).toByteArray()
                         }
                         "SETUP" -> headers += listOf("Session: glasses;timeout=60", "Transport: ${request.header("Transport")}")
                         "PLAY", "GET_PARAMETER" -> headers += "Session: glasses"
                     }
-                    val response = EyevueRtspMessage(listOf("RTSP/1.0 200 OK") + headers + "Content-Length: ${body.size}", body)
+                    val response = RtspMessage(listOf("RTSP/1.0 200 OK") + headers + "Content-Length: ${body.size}", body)
                     synchronized(outputLock) { socket.getOutputStream().apply { write(response.bytes()); flush() } }
                     if (method == "PLAY" && emitOnPlay) emit(0, FIRST_FRAME)
                 }

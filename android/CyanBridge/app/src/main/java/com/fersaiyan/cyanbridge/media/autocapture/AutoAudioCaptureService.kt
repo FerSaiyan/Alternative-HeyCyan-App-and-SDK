@@ -197,7 +197,7 @@ class AutoAudioCaptureService : Service() {
                 }
 
                 if (!BleOperateManager.getInstance().isConnected) {
-                    GlassesSessionCoordinator.clearForDisconnectedDevice()
+                    GlassesSessionCoordinator.clearForDisconnectedDevice(com.fersaiyan.cyanbridge.shared.devices.DeviceClass.HEY_CYAN)
                     Log.w(TAG, "Waiting for glasses connection…")
                     delay(10_000)
                     continue

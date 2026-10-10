@@ -421,10 +421,11 @@ class EyevueFrameDecoder {
 }
 
 /** Reassembles the AA15 photo stream used by the vendor's AI-photo path. */
-class EyevuePhotoAssembler {
+class EyevuePhotoAssembler(private val maxImageBytes: Int = com.fersaiyan.cyanbridge.glasses.GlassesPhotoValidation.MAX_IMAGE_BYTES) {
     private val buffer = ByteArrayOutputStream()
     private var receiving = false
 
+    @Synchronized
     fun append(packet: ByteArray): ByteArray? {
         if (packet.size < 8) return null
         val commandId = packet[4].toInt() and 0xFF
@@ -442,6 +443,10 @@ class EyevuePhotoAssembler {
                 // Each photo-data payload starts with a four-byte chunk address.
                 val imageStart = 9
                 if (receiving && payloadEnd > imageStart) {
+                    if (buffer.size() + payloadEnd - imageStart > maxImageBytes) {
+                        reset()
+                        return null
+                    }
                     buffer.write(packet, imageStart, payloadEnd - imageStart)
                 }
                 null
@@ -457,6 +462,7 @@ class EyevuePhotoAssembler {
         }
     }
 
+    @Synchronized
     fun reset() {
         receiving = false
         buffer.reset()

@@ -65,6 +65,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.R
@@ -186,6 +189,7 @@ fun WalkingAidSettingsScreen(
     var enabled by remember { mutableStateOf(WalkingAidPreferences.isEnabled(context)) }
     var running by remember { mutableStateOf(WalkingAidService.isRunning()) }
     var videoMode by remember { mutableStateOf(WalkingAidPreferences.getVideoMode(context)) }
+    var aidMode by remember { mutableStateOf(WalkingAidPreferences.getMode(context)) }
     val selectedDevice = DeviceProfileStore.selectedClass(context)
     val serviceFailure by WalkingAidService.lastFailure.collectAsState()
     serviceFailure?.let { message ->
@@ -210,6 +214,8 @@ fun WalkingAidSettingsScreen(
     var depthSource by remember { mutableStateOf(WalkingAidPreferences.getDepthSource(context)) }
     var depthCloudModelId by remember { mutableStateOf(WalkingAidPreferences.getDepthCloudModelId(context)) }
     var ttsEnabled by remember { mutableStateOf(WalkingAidPreferences.isTtsEnabled(context)) }
+    var speechRate by remember { mutableFloatStateOf(WalkingAidPreferences.getSpeechRate(context)) }
+    var announcementPause by remember { mutableFloatStateOf(WalkingAidPreferences.getAnnouncementPauseMs(context) / 1000f) }
     var safetyDisclaimerEnabled by remember { mutableStateOf(WalkingAidPreferences.isSafetyDisclaimerEnabled(context)) }
     var historyMaxCount by remember { mutableIntStateOf(WalkingAidPreferences.getImageHistoryMaxCount(context)) }
     var customPrompt by remember { mutableStateOf(WalkingAidPreferences.getCustomPrompt(context)) }
@@ -339,6 +345,28 @@ fun WalkingAidSettingsScreen(
                         )
                     }
 
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(stringResource(R.string.walking_aid_mode_title), fontWeight = FontWeight.Medium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        WalkingAidMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = aidMode == mode,
+                                enabled = !enabled && !running,
+                                onClick = {
+                                    aidMode = mode
+                                    WalkingAidPreferences.setMode(context, mode)
+                                },
+                                label = { Text(stringResource(if (mode == WalkingAidMode.EXPLORE)
+                                    R.string.walking_aid_mode_explore else R.string.walking_aid_mode_walking)) },
+                            )
+                        }
+                    }
+                    Text(
+                        stringResource(if (aidMode == WalkingAidMode.EXPLORE)
+                            R.string.walking_aid_mode_explore_description else R.string.walking_aid_mode_walking_description),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
 
                     WalkingAidVideoSourceButtons(
@@ -676,47 +704,49 @@ fun WalkingAidSettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(R.string.compose_walking_safety_context),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = imageDescriptionSource == "local",
-                            onClick = {
-                                imageDescriptionSource = "local"
-                                WalkingAidPreferences.setImageDescriptionSource(context, "local")
-                            },
-                            label = { Text(stringResource(R.string.compose_walking_local_safety)) },
+                    if (aidMode == WalkingAidMode.WALKING) {
+                        Text(
+                            stringResource(R.string.compose_walking_safety_context),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
                         )
-                        FilterChip(
-                            selected = imageDescriptionSource == "cloud",
-                            onClick = {
-                                imageDescriptionSource = "cloud"
-                                WalkingAidPreferences.setImageDescriptionSource(context, "cloud")
-                                showImageModelPicker = true
-                            },
-                            label = { Text(stringResource(R.string.compose_walking_cloud_context)) },
-                        )
-                    }
-
-                    Text(
-                        stringResource(R.string.compose_walking_cloud_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
-                    if (imageDescriptionSource == "cloud") {
                         Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(onClick = { showImageModelPicker = true }) {
-                            Text(
-                                text = if (imageDescriptionCloudModelId.isNotBlank())
-                                    "Model: $imageDescriptionCloudModelId"
-                                else
-                                    stringResource(R.string.compose_walking_select_model),
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = imageDescriptionSource == "local",
+                                onClick = {
+                                    imageDescriptionSource = "local"
+                                    WalkingAidPreferences.setImageDescriptionSource(context, "local")
+                                },
+                                label = { Text(stringResource(R.string.compose_walking_local_safety)) },
                             )
+                            FilterChip(
+                                selected = imageDescriptionSource == "cloud",
+                                onClick = {
+                                    imageDescriptionSource = "cloud"
+                                    WalkingAidPreferences.setImageDescriptionSource(context, "cloud")
+                                    showImageModelPicker = true
+                                },
+                                label = { Text(stringResource(R.string.compose_walking_cloud_context)) },
+                            )
+                        }
+
+                        Text(
+                            stringResource(R.string.compose_walking_cloud_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        if (imageDescriptionSource == "cloud") {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TextButton(onClick = { showImageModelPicker = true }) {
+                                Text(
+                                    text = if (imageDescriptionCloudModelId.isNotBlank())
+                                        "Model: $imageDescriptionCloudModelId"
+                                    else
+                                        stringResource(R.string.compose_walking_select_model),
+                                )
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
@@ -781,6 +811,8 @@ fun WalkingAidSettingsScreen(
                             }
                         },
                     )
+
+                    if (aidMode == WalkingAidMode.EXPLORE) return@Column
 
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
@@ -908,8 +940,8 @@ fun WalkingAidSettingsScreen(
             }
 
             // Section: Depth Estimation
-            SectionTitle(stringResource(R.string.walking_aid_depth_estimation))
-            Card(
+            if (aidMode == WalkingAidMode.WALKING) SectionTitle(stringResource(R.string.walking_aid_depth_estimation))
+            if (aidMode == WalkingAidMode.WALKING) Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             ) {
@@ -1030,7 +1062,44 @@ fun WalkingAidSettingsScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(
+                    val speechRateLabel = stringResource(R.string.walking_aid_speech_rate)
+                    val speechRateValue = stringResource(R.string.walking_aid_speech_rate_value, speechRate)
+                    Text(speechRateLabel)
+                    Text(speechRateValue)
+                    Slider(
+                        modifier = Modifier.semantics {
+                            contentDescription = speechRateLabel
+                            stateDescription = speechRateValue
+                        },
+                        value = speechRate,
+                        onValueChange = {
+                            speechRate = it
+                            WalkingAidPreferences.setSpeechRate(context, it)
+                        },
+                        valueRange = 0.5f..2f,
+                        steps = 14,
+                    )
+                    if (aidMode == WalkingAidMode.EXPLORE) {
+                        val pauseLabel = stringResource(R.string.walking_aid_announcement_pause)
+                        val pauseValue = stringResource(R.string.walking_aid_announcement_pause_value, announcementPause)
+                        Text(pauseLabel)
+                        Text(pauseValue)
+                        Slider(
+                            modifier = Modifier.semantics {
+                                contentDescription = pauseLabel
+                                stateDescription = pauseValue
+                            },
+                            value = announcementPause,
+                            onValueChange = {
+                                announcementPause = it
+                                WalkingAidPreferences.setAnnouncementPauseMs(context, (it * 1000).toLong())
+                            },
+                            valueRange = 0f..5f,
+                            steps = 9,
+                        )
+                    }
+
+                    if (aidMode == WalkingAidMode.WALKING) Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
@@ -1048,8 +1117,8 @@ fun WalkingAidSettingsScreen(
             }
 
             // Section: Custom Instructions
-            SectionTitle(stringResource(R.string.compose_custom_instructions))
-            Card(
+            if (aidMode == WalkingAidMode.WALKING) SectionTitle(stringResource(R.string.compose_custom_instructions))
+            if (aidMode == WalkingAidMode.WALKING) Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             ) {

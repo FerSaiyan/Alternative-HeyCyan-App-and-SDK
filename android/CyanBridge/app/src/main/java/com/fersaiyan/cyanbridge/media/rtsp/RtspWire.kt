@@ -1,4 +1,4 @@
-package com.fersaiyan.cyanbridge.devices.eyevue
+package com.fersaiyan.cyanbridge.media.rtsp
 
 import java.io.EOFException
 import java.io.IOException
@@ -6,14 +6,14 @@ import java.io.InputStream
 import java.net.URI
 
 /** A complete RTSP message. Its body is consumed exactly once, with its headers. */
-internal data class EyevueRtspMessage(val lines: List<String>, val body: ByteArray = byteArrayOf()) {
+internal data class RtspMessage(val lines: List<String>, val body: ByteArray = byteArrayOf()) {
     val firstLine: String get() = lines.first()
 
     fun header(name: String): String? = lines.drop(1).firstOrNull {
         it.substringBefore(':').equals(name, ignoreCase = true)
     }?.substringAfter(':')?.trim()
 
-    fun requireOk(): EyevueRtspMessage {
+    fun requireOk(): RtspMessage {
         if (firstLine.split(' ').getOrNull(1) != "200") throw IOException(firstLine)
         return this
     }
@@ -22,7 +22,7 @@ internal data class EyevueRtspMessage(val lines: List<String>, val body: ByteArr
         (lines.joinToString("\r\n") + "\r\n\r\n").toByteArray(Charsets.US_ASCII) + body
 }
 
-internal fun readEyevueRtspMessage(input: InputStream, first: Int = input.read()): EyevueRtspMessage? {
+internal fun readRtspMessage(input: InputStream, first: Int = input.read()): RtspMessage? {
     if (first < 0) return null
     val lines = mutableListOf<String>()
     val line = StringBuilder().append(first.toChar())
@@ -40,15 +40,15 @@ internal fun readEyevueRtspMessage(input: InputStream, first: Int = input.read()
             line.append(byte.toChar())
         }
     }
-    val headers = EyevueRtspMessage(lines)
+    val headers = RtspMessage(lines)
     val size = headers.header("Content-Length")?.let {
         it.toIntOrNull()?.takeIf { count -> count in 0..1_048_576 }
             ?: throw IOException("Invalid RTSP Content-Length: $it")
     } ?: 0
-    return headers.copy(body = readEyevueBytes(input, size))
+    return headers.copy(body = readRtspBytes(input, size))
 }
 
-internal fun readEyevueBytes(input: InputStream, count: Int): ByteArray {
+internal fun readRtspBytes(input: InputStream, count: Int): ByteArray {
     val result = ByteArray(count)
     var offset = 0
     while (offset < count) {
@@ -59,23 +59,24 @@ internal fun readEyevueBytes(input: InputStream, count: Int): ByteArray {
     return result
 }
 
-internal data class EyevueRtspTrack(val controlUrl: String, val rtpChannel: Int, val rtcpChannel: Int, val mediaType: String)
+internal data class RtspTrack(val controlUrl: String, val rtpChannel: Int, val rtcpChannel: Int, val mediaType: String)
 
-internal data class EyevueRtspDescription(
+internal data class RtspDescription(
     val aggregateUrl: String,
     val localSdp: ByteArray,
-    val tracks: List<EyevueRtspTrack>,
+    val tracks: List<RtspTrack>,
 ) {
     companion object {
-        fun from(response: EyevueRtspMessage, requestedUrl: String): EyevueRtspDescription {
+        fun from(response: RtspMessage, requestedUrl: String): RtspDescription {
             val base = response.header("Content-Base") ?: response.header("Content-Location") ?: requestedUrl
-            val tracks = mutableListOf<EyevueRtspTrack>()
+            val tracks = mutableListOf<RtspTrack>()
             var mediaIndex = -1
             var mediaType = ""
             var aggregate = base
             val rewritten = String(response.body, Charsets.US_ASCII).lineSequence()
                 .filter { it.isNotBlank() }.map { line ->
                     when {
+                        line.startsWith("c=") -> "c=IN IP4 127.0.0.1"
                         line.startsWith("m=") -> {
                             mediaIndex++
                             mediaType = line.substringAfter("m=").substringBefore(' ')
@@ -88,7 +89,7 @@ internal data class EyevueRtspDescription(
                                 "a=control:*"
                             } else {
                                 if (tracks.size != mediaIndex) throw IOException("Missing SDP track control")
-                                tracks.add(EyevueRtspTrack(resolveControl(base, control), mediaIndex * 2, mediaIndex * 2 + 1, mediaType))
+                                tracks.add(RtspTrack(resolveControl(base, control), mediaIndex * 2, mediaIndex * 2 + 1, mediaType))
                                 "a=control:track${mediaIndex + 1}"
                             }
                         }
@@ -96,7 +97,7 @@ internal data class EyevueRtspDescription(
                     }
                 }.toList()
             if (tracks.isEmpty() || tracks.size != mediaIndex + 1) throw IOException("Missing SDP tracks")
-            return EyevueRtspDescription(aggregate, (rewritten.joinToString("\r\n") + "\r\n")
+            return RtspDescription(aggregate, (rewritten.joinToString("\r\n") + "\r\n")
                 .toByteArray(Charsets.US_ASCII), tracks)
         }
 

@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveVideoView
 import com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanVideoFrameOutput
 import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
+import com.fersaiyan.cyanbridge.media.rtsp.GlassesRtspRelay
 import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.bluetooth.DeviceManager
@@ -68,6 +69,7 @@ class LivePreviewManager(
     val uiState: StateFlow<LivePreviewState> = _uiState
 
     private var libVlc: LibVLC? = null
+    private var rtspRelay: GlassesRtspRelay? = null
     private var player: MediaPlayer? = null
     private var videoView: HeyCyanLiveVideoView? = null
     private var viewAttached: CompletableDeferred<Unit>? = null
@@ -205,6 +207,7 @@ class LivePreviewManager(
         mainJob?.cancel()
         mainJob = null
         liveCommandAttempted = false
+        releaseRelay()
         releasePlayer()
         unbindP2pNetwork()
         if (!cleanupComplete) {
@@ -222,6 +225,7 @@ class LivePreviewManager(
         if (liveCommandAttempted && BleOperateManager.getInstance().isConnected) sendStopLiveCommand()
         liveCommandAttempted = false
         val playerWasActive = player != null
+        releaseRelay()
         releasePlayer()
         if (playerWasActive) Log.i(TAG, "[${elapsed()}ms] cleanup: LibVLC released")
 
@@ -384,40 +388,23 @@ class LivePreviewManager(
             updateState("Starting live mode", "Starting the glasses realtime camera...", scanning = true)
             Log.i(TAG, "[${elapsed()}ms] Sending realtime-preview command 02 01 14 01")
             sendStartLiveCommand()
-            delay(350)
-            requestWifiIp()
-
-            val glassesIp = waitForBleIp(BLE_IP_TIMEOUT_MS)
-            if (glassesIp == null) {
-                updateState("No IP", "The glasses did not report their Wi-Fi Direct IP. Reconnect and try again.")
-                return
+            // Official preview keeps realtime mode alive independently of RTSP.
+            coroutineScope {
+                val heartbeat = launch {
+                    while (isActive) {
+                        delay(5_000)
+                        if (BleOperateManager.getInstance().isConnected) {
+                            runCatching { LargeDataHandler.getInstance().syncHeartBeat(4) }
+                                .onFailure { Log.w(TAG, "Live heartbeat failed: ${it.message}") }
+                        }
+                    }
+                }
+                try {
+                    runStreamAfterStart()
+                } finally {
+                    heartbeat.cancel()
+                }
             }
-            if (!waitForP2pConnection(P2P_CONNECT_TIMEOUT_MS)) {
-                updateState("P2P unavailable", "The glasses reported $glassesIp, but the Wi-Fi Direct group did not connect.")
-                return
-            }
-            if (!bindToP2pNetwork(glassesIp)) {
-                updateState("P2P route unavailable", "Could not route RTSP through the glasses Wi-Fi Direct network.")
-                return
-            }
-
-            updateState("Opening stream", "Trying the official HeyCyan RTSP endpoint...", scanning = true)
-            val streamUrl = probeRtsp(glassesIp)
-            if (streamUrl == null) {
-                updateState("No RTSP found", "Realtime mode is active, but no compatible RTSP endpoint answered.")
-                return
-            }
-
-            Log.i(TAG, "HEYCYAN LIVESTREAM SUCCESS url=$streamUrl total=${elapsed()}ms")
-            _uiState.value = LivePreviewState(
-                stateLabel = "Playing",
-                detail = streamUrl,
-                isPlaying = true,
-                streamUrl = streamUrl,
-                canStart = false,
-                canStop = true,
-            )
-            awaitCancellation()
         } catch (e: CancellationException) {
             Log.i(TAG, "[${elapsed()}ms] HEYCYAN LIVESTREAM CANCELLED")
             throw e
@@ -428,6 +415,43 @@ class LivePreviewManager(
             frameConsumer = null
             cleanup()
         }
+    }
+
+    private suspend fun runStreamAfterStart() {
+        delay(350)
+        requestWifiIp()
+
+        val glassesIp = waitForBleIp(BLE_IP_TIMEOUT_MS)
+        if (glassesIp == null) {
+            updateState("No IP", "The glasses did not report their Wi-Fi Direct IP. Reconnect and try again.")
+            return
+        }
+        if (!waitForP2pConnection(P2P_CONNECT_TIMEOUT_MS)) {
+            updateState("P2P unavailable", "The glasses reported $glassesIp, but the Wi-Fi Direct group did not connect.")
+            return
+        }
+        if (!bindToP2pNetwork(glassesIp)) {
+            updateState("P2P route unavailable", "Could not route RTSP through the glasses Wi-Fi Direct network.")
+            return
+        }
+
+        updateState("Opening stream", "Trying the official HeyCyan RTSP endpoint...", scanning = true)
+        val streamUrl = probeRtsp(glassesIp)
+        if (streamUrl == null) {
+            updateState("No RTSP found", "Realtime mode is active, but no compatible RTSP endpoint answered.")
+            return
+        }
+
+        Log.i(TAG, "HEYCYAN LIVESTREAM SUCCESS url=$streamUrl total=${elapsed()}ms")
+        _uiState.value = LivePreviewState(
+            stateLabel = "Playing",
+            detail = streamUrl,
+            isPlaying = true,
+            streamUrl = streamUrl,
+            canStart = false,
+            canStop = true,
+        )
+        awaitCancellation()
     }
 
     private fun sendStartLiveCommand() {
@@ -742,12 +766,25 @@ class LivePreviewManager(
                 _uiState.value = _uiState.value.copy(detail = "Trying: $url")
 
                 val attemptStartTime = System.currentTimeMillis()
-                val success = tryPlayUrl(url)
+                // Both the inline decoder and external clients use one local
+                // relay; only its upstream connection talks RTSP to the glasses.
+                val relay = GlassesRtspRelay(
+                    glassesIp, port, streamPath = "/$path", upstreamPlayRange = null,
+                    log = { Log.i(TAG, "[RTSP relay] $it") },
+                )
+                relay.start() // A port collision is explicit, never a random-port fallback.
+                rtspRelay = relay
+                var success = false
+                try {
+                    success = tryPlayUrl(GlassesRtspRelay.URL)
+                } finally {
+                    if (!success) releaseRelay()
+                }
                 val attemptElapsed = System.currentTimeMillis() - attemptStartTime
 
                 if (success) {
                     Log.i(TAG, "[${elapsed()}ms] [RTSP] *** SUCCESS: $url (${attemptElapsed}ms) ***")
-                    return url
+                    return GlassesRtspRelay.URL
                 } else {
                     Log.d(TAG, "[${elapsed()}ms] [RTSP] Failed: $url (${attemptElapsed}ms)")
                     updateState("Opening stream", "Trying the next HeyCyan RTSP endpoint...", scanning = true)
@@ -1002,6 +1039,11 @@ class LivePreviewManager(
                 runCatching { oldVlc?.release() }
             }
         }
+    }
+
+    private fun releaseRelay() {
+        rtspRelay?.stop()
+        rtspRelay = null
     }
 
     private fun updateState(label: String, detail: String, scanning: Boolean = false) {

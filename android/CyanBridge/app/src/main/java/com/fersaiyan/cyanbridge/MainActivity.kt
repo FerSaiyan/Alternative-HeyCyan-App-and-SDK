@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge
 import com.fersaiyan.cyanbridge.shared.devices.DeviceProfile
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
@@ -47,6 +48,7 @@ import com.fersaiyan.cyanbridge.ota.isExpectedFirmwareFilename
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionLease
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
+import com.fersaiyan.cyanbridge.glasses.GlassesPhotoCapture
 import com.fersaiyan.cyanbridge.glasses.BackgroundGlassesCommandPermit
 import com.fersaiyan.cyanbridge.wifiadb.DefaultWifiAdbDebugControllerFactory
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
@@ -115,6 +117,8 @@ import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungWifiCredentials
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
+import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLivePreviewManager
+import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLiveForegroundService
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLocalHotspot
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaSync
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaType
@@ -480,6 +484,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var otaSessionLease: GlassesSessionLease? = null
     private var livePreviewSessionLease: GlassesSessionLease? = null
     private var eyevueLivePreviewManager: EyevueLivePreviewManager? = null
+    private var tuneBudsLivePreviewManager: TuneBudsLivePreviewManager? = null
+    private var tuneBudsLivePreviewUiJob: Job? = null
+    private var tuneBudsLivePlayer by mutableStateOf<org.videolan.libvlc.MediaPlayer?>(null)
+    private var tuneBudsLiveAudioMuted by mutableStateOf(false)
+    private var tuneBudsLiveStopReceiver: android.content.BroadcastReceiver? = null
     private var eyevueLivePreviewUiJob: Job? = null
     // Inline EyeVue video: exposed to Compose so the dashboard shows video
     // in-screen (EyeVue only, after live starts). No popup dialog.
@@ -741,8 +750,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         val live = dashboardState.livePreview
                         val isEyevueLive = dashboardState.showEyevueControls
                         val isHeyCyanLive = dashboardState.showHeyCyanControls
-                        val livePlayer = if (isEyevueLive) eyevueLivePlayer else heyCyanLivePlayer
-                        if ((isEyevueLive || isHeyCyanLive) &&
+                        val isTuneBudsLive = dashboardState.showTuneBudsControls
+                        val livePlayer = when {
+                            isEyevueLive -> eyevueLivePlayer
+                            isTuneBudsLive -> tuneBudsLivePlayer
+                            else -> heyCyanLivePlayer
+                        }
+                        if ((isEyevueLive || isHeyCyanLive || isTuneBudsLive) &&
                             live.isPlaying &&
                             live.streamUrl != null &&
                             livePlayer != null
@@ -765,6 +779,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                             .fillMaxWidth()
                                             .aspectRatio(0.75f),
                                     )
+                                } else if (isTuneBudsLive) {
+                                    androidx.compose.ui.viewinterop.AndroidView(
+                                        factory = { ctx -> com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLiveVideoView(ctx) },
+                                        update = { view -> tuneBudsLivePreviewManager?.attachVideoView(view) },
+                                        onRelease = { view -> tuneBudsLivePreviewManager?.detachVideoView(view) },
+                                        modifier = androidx.compose.ui.Modifier.fillMaxWidth().aspectRatio(4f / 3f),
+                                    )
                                 } else {
                                     androidx.compose.ui.viewinterop.AndroidView(
                                         factory = { ctx ->
@@ -785,6 +806,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                androidx.compose.material3.Text(
+                                    text = "Shared local RTSP feed — keep Live preview running",
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                                 if (isEyevueLive) {
                                     androidx.compose.material3.TextButton(
                                         onClick = {
@@ -795,6 +821,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                         androidx.compose.material3.Text(
                                             if (eyevueLiveAudioMuted) "Listen to audio" else "Mute audio",
                                         )
+                                    }
+                                }
+                                if (isTuneBudsLive) {
+                                    androidx.compose.material3.TextButton(onClick = {
+                                        tuneBudsLiveAudioMuted = !tuneBudsLiveAudioMuted
+                                        tuneBudsLivePreviewManager?.setAudioMuted(tuneBudsLiveAudioMuted)
+                                    }) {
+                                        androidx.compose.material3.Text(if (tuneBudsLiveAudioMuted) "Listen to audio" else "Mute audio")
                                     }
                                 }
                                 androidx.compose.foundation.layout.Row(
@@ -828,6 +862,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                             if (isEyevueLive) {
                                                 eyevueLiveAudioMuted = true
                                                 eyevueLivePreviewManager?.setAudioMuted(true)
+                                            }
+                                            if (isTuneBudsLive) {
+                                                tuneBudsLiveAudioMuted = true
+                                                tuneBudsLivePreviewManager?.setAudioMuted(true)
                                             }
                                             val uri = android.net.Uri.parse(liveUrl)
                                             val vlcIntent = android.content.Intent(
@@ -955,7 +993,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (!bluetoothConnected &&
             GlassesSessionCoordinator.currentSession() == GlassesSession.WIFI_ADB_DEBUG
         ) {
-            GlassesSessionCoordinator.clearForDisconnectedDevice()
+            GlassesSessionCoordinator.clearForDisconnectedDevice(DeviceClass.HEY_CYAN)
             wifiAdbDebugSessionLease = null
         }
         registerMeetingCaptureReceiver()
@@ -979,7 +1017,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onStop() {
         if (BuildConfig.DEBUG) wifiAdbDebugController.stop()
-        // NOTE: EyeVue live keeps running in the background behind its
+        // Glasses live previews keep running in the background behind their
         // foreground service so other apps can use the relay. It stops only
         // via user Stop (dashboard, notification) or session end.
         super.onStop()
@@ -1019,6 +1057,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         livePreviewDialog = null
         livePreviewManager.release()
         eyevueLivePreviewManager?.release()
+        tuneBudsLivePreviewManager?.release()
+        tuneBudsLiveStopReceiver?.let { runCatching { unregisterReceiver(it) } }
+        tuneBudsLiveStopReceiver = null
         eyevueLiveStopReceiver?.let { runCatching { unregisterReceiver(it) } }
         eyevueLiveStopReceiver = null
         heyCyanLiveStopReceiver?.let { runCatching { unregisterReceiver(it) } }
@@ -1031,7 +1072,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         if (tuneBudsMediaJob?.isActive == true) {
             tuneBudsMediaCancelled = true
-            tuneBudsMediaHotspot?.stop()
             tuneBudsMediaJob?.cancel()
         }
         if (moyoungMediaJob?.isActive == true) {
@@ -1462,6 +1502,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     }
                 }
             }
+        }
+
+    private fun getOrCreateTuneBudsLivePreviewManager(): TuneBudsLivePreviewManager =
+        tuneBudsLivePreviewManager ?: TuneBudsLivePreviewManager(this, getOrCreateTuneBudsManager()).also { manager ->
+            tuneBudsLivePreviewManager = manager
+            tuneBudsLivePreviewUiJob = lifecycleScope.launch {
+                manager.uiState.collect { lp ->
+                    if (!isTuneBudsSelected()) return@collect
+                    dashboardState = dashboardState.copy(
+                        livePreview = com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState(
+                            isAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O,
+                            stateLabel = lp.stateLabel, detail = lp.detail,
+                            isScanning = lp.isScanning, isPlaying = lp.isPlaying,
+                            streamUrl = lp.streamUrl, canStart = lp.canStart, canStop = lp.canStop,
+                        ),
+                    )
+                    tuneBudsLivePlayer = if (lp.isPlaying) manager.getPlayer() else null
+                }
+            }
+            val receiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                    manager.stop()
+                }
+            }
+            tuneBudsLiveStopReceiver = receiver
+            androidx.core.content.ContextCompat.registerReceiver(this, receiver,
+                android.content.IntentFilter(TuneBudsLiveForegroundService.ACTION_TUNEBUDS_LIVE_STOP),
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         }
 
     private fun getOrCreateMoyoungW620Manager(): MoyoungW620Manager =
@@ -2123,6 +2191,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
             GlassesDashboardAction.StartLivePreview -> if (isEyevueSelected()) {
                 startEyevueLivePreview()
+            } else if (isTuneBudsSelected()) {
+                startTuneBudsLivePreview()
             } else if (isHeyCyanSelected()) {
                 startLivePreview()
             }
@@ -2135,6 +2205,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.stop(this)
                     releaseExclusiveGlassesSession(livePreviewSessionLease)
                     livePreviewSessionLease = null
+                } else if (isTuneBudsSelected()) {
+                    tuneBudsLivePreviewManager?.stop()
+                    // Release the session and foreground service only after cleanup.
                 } else {
                     stopLivePreview()
                 }
@@ -3889,6 +3962,50 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
     }
 
+    private fun startTuneBudsLivePreview() {
+        if (!isTuneBudsSelected()) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            Toast.makeText(this, "TuneBuds live preview requires Android 8 or newer.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
+            ensureGlassesTransportPermissions("TuneBuds live preview") { startTuneBudsLivePreview() }
+            return
+        }
+        if (!hasNotificationPermission(this)) {
+            ensureNotificationPermission(this, "TuneBuds live preview") { startTuneBudsLivePreview() }
+            return
+        }
+        val manager = getOrCreateTuneBudsManager()
+        if (!manager.isConnected()) {
+            Toast.makeText(this, "Connect to TuneBuds over Bluetooth first.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val liveManager = getOrCreateTuneBudsLivePreviewManager()
+        if (liveManager.isActive) return
+        if (tuneBudsMediaJob?.isActive == true || tuneBudsAiPhotoInProgress.get() || isImageQuestionWorkActive() || AutoAudioCaptureService.isRunning() ||
+            manager.state.value.isVideoRecording || manager.state.value.isAudioRecording
+        ) {
+            Toast.makeText(this, "Stop capture, recording, or media sync before starting live preview.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val lease = acquireExclusiveGlassesSession(GlassesSession.LIVE_PREVIEW) ?: return
+        livePreviewSessionLease = lease
+        if (!TuneBudsLiveForegroundService.start(this)) {
+            releaseExclusiveGlassesSession(lease)
+            Toast.makeText(this, "Could not start TuneBuds live service.", Toast.LENGTH_LONG).show()
+            return
+        }
+        tuneBudsLiveAudioMuted = false
+        liveManager.setAudioMuted(false)
+        liveManager.onRelayUrlChanged = { url -> TuneBudsLiveForegroundService.updateUrl(this, url) }
+        liveManager.start {
+            liveManager.onRelayUrlChanged = null
+            TuneBudsLiveForegroundService.stop(this)
+            releaseExclusiveGlassesSession(lease)
+        }
+    }
+
     private fun observeLivePreviewState() {
         lifecycleScope.launch {
             var lastLabel = ""
@@ -4098,6 +4215,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun onBluetoothEvent(event: BluetoothEvent) {
+        if (isEyevueSelected()) {
+            // Oudmon notifications cannot invalidate a native AA15 photo lease.
+            updateConnectionStatus(eyevueManager?.isConnected() == true)
+            return
+        }
+        if (isTuneBudsSelected()) {
+            // Vendor-AAR BLE events do not own AB Mate's Classic/SPP session.
+            // TuneBuds transport loss is monitored by its live connection.
+            updateConnectionStatus(tuneBudsManager?.isConnected() == true)
+            return
+        }
         updateConnectionStatus(event.connect)
         if (event.connect) {
             otaManager.onBluetoothConnected()
@@ -4120,7 +4248,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     Log.i("Ota", "Keeping the OTA lease until transport cleanup finishes after Bluetooth loss")
                 } else {
                     releaseExclusiveGlassesSession(otaSessionLease)
-                    GlassesSessionCoordinator.clearForDisconnectedDevice()
+                    GlassesSessionCoordinator.clearForDisconnectedDevice(DeviceClass.HEY_CYAN)
                 }
                 mediaSessionLease = null
                 livePreviewSessionLease = null
@@ -4947,6 +5075,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         )
                     }
                     delay(250)
+                    check(GlassesSessionCoordinator.isBackgroundCommandActive(permit)) {
+                        "Image capture ownership expired"
+                    }
                     LargeDataHandler.getInstance().glassesControl(
                         byteArrayOf(0x02, 0x01, 0x01),
                     ) { _, response ->
@@ -5060,7 +5191,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             try {
                 // Eyevue's AI-photo path streams over AA15 only for the 0x31 command.
                 val imageBytes = manager.capturePhotoForAi()
-                    ?: throw IOException("Eyevue photo transfer timed out")
                 val imageFile = File(cacheDir, "Eyevue_AI_${System.currentTimeMillis()}.jpg")
                 imageFile.writeBytes(imageBytes)
                 withContext(Dispatchers.Main) {
@@ -5117,7 +5247,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val imageBytes = manager.capturePhotoForAi()
-                    ?: throw IOException("TuneBuds photo transfer timed out")
                 val imageFile = File(cacheDir, "TuneBuds_AI_${System.currentTimeMillis()}.jpg")
                 imageFile.writeBytes(imageBytes)
                 withContext(Dispatchers.Main) {
@@ -5170,52 +5299,55 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         startParallelAudioQuestionIfEligible(offerSpokenQuestion)
         val startedAt = System.currentTimeMillis()
         lifecycleScope.launch(Dispatchers.IO) {
-            var hotspot: TuneBudsLocalHotspot? = null
-            var tempDir: File? = null
             try {
-                Log.i("AIHijack", "[$sourceTag] TuneBuds Detailed requested – using Wi-Fi high-quality path")
-                // Trigger a recording-mode capture and wait for the camera subsystem to finish saving.
-                withContext(Dispatchers.IO) { manager.takePhotoBlocking() }
-                Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds photo saved and camera closed")
+                GlassesPhotoCapture.withCapture(DeviceClass.TUNEBUDS) { lease ->
+                    var hotspot: TuneBudsLocalHotspot? = null
+                    var tempDir: File? = null
+                    try {
+                        Log.i("AIHijack", "[$sourceTag] TuneBuds Detailed requested – using Wi-Fi high-quality path")
+                        manager.takePhotoBlocking(lease)
+                        Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds photo saved and camera closed")
 
-                hotspot = TuneBudsLocalHotspot(this@MainActivity)
-                tempDir = File(cacheDir, "tunebuds_ai_high_${System.currentTimeMillis()}").apply { mkdirs() }
-                val credentials = withContext(Dispatchers.IO) { hotspot.start() }
-                Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds hotspot started ssid=${credentials.ssid}")
+                        hotspot = TuneBudsLocalHotspot(this@MainActivity)
+                        tempDir = File(cacheDir, "tunebuds_ai_high_${System.currentTimeMillis()}").apply { mkdirs() }
+                        val credentials = hotspot.start()
+                        Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds hotspot started ssid=${credentials.ssid}")
+                        val baseUrl = manager.startFileManager(credentials.ssid, credentials.password, credentials.channel)
+                            ?: throw IOException("TuneBuds did not report its media server address")
+                        Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds media endpoint $baseUrl")
 
-                val baseUrl = withContext(Dispatchers.IO) {
-                    manager.startFileManager(credentials.ssid, credentials.password, credentials.channel)
-                } ?: throw IOException("TuneBuds did not report its media server address")
-                Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds media endpoint $baseUrl")
-
-                val sync = TuneBudsMediaSync(manager, hotspot, tempDir)
-                // Poll manifest for a fresh photo (glasses may need a moment to index the new file)
-                var photoItem: com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaItem? = null
-                for (attempt in 0 until 12) {
-                    val items = withContext(Dispatchers.IO) { sync.fetchManifest(baseUrl) }
-                    val photos = items.filter { it.type == TuneBudsMediaType.PHOTO }
-                    Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds manifest attempt ${attempt + 1}: ${photos.size} photos")
-                    if (photos.isNotEmpty()) {
-                        // Pick the most recently created photo – manifest is typically newest-last;
-                        // sorting by remoteName descending is a best-effort for timestamped filenames.
-                        photoItem = photos.maxByOrNull { it.remoteName } ?: photos.last()
-                        break
+                        val sync = TuneBudsMediaSync(manager, hotspot, tempDir)
+                        var photoItem: com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaItem? = null
+                        for (attempt in 0 until 12) {
+                            val photos = sync.fetchManifest(baseUrl).filter { it.type == TuneBudsMediaType.PHOTO }
+                            Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds manifest attempt ${attempt + 1}: ${photos.size} photos")
+                            if (photos.isNotEmpty()) {
+                                // Existing Detailed storage selection is newest timestamped remote name.
+                                photoItem = photos.maxByOrNull { it.remoteName }
+                                break
+                            }
+                            if (attempt < 11) kotlinx.coroutines.delay(1000)
+                        }
+                        val item = photoItem ?: throw IOException("No photos found on TuneBuds after capture")
+                        Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds downloading ${item.remoteName} via Wi-Fi")
+                        val downloaded = sync.downloadSingle(baseUrl, item)
+                        lease.ensureActive()
+                        val imageFile = File(cacheDir, "TuneBuds_AI_HQ_${System.currentTimeMillis()}.jpg")
+                        downloaded.copyTo(imageFile, overwrite = true)
+                        withContext(Dispatchers.Main) {
+                            onImageReadyForQuestion(
+                                imagePath = imageFile.absolutePath,
+                                source = ImageQuestionSource.HIGH_QUALITY,
+                                transferDurationMs = System.currentTimeMillis() - startedAt,
+                            )
+                        }
+                    } finally {
+                        withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
+                            runCatching { manager.finishTransferBlocking() }
+                            runCatching { hotspot?.stop() }
+                            tempDir?.let { runCatching { it.deleteRecursively() } }
+                        }
                     }
-                    if (attempt < 11) kotlinx.coroutines.delay(1000)
-                }
-                val item = photoItem ?: throw IOException("No photos found on TuneBuds after capture")
-
-                Log.i("ImageQuestionTransfer", "[$sourceTag] TuneBuds downloading ${item.remoteName} via Wi-Fi")
-                val downloaded = withContext(Dispatchers.IO) { sync.downloadSingle(baseUrl, item) }
-                val imageFile = File(cacheDir, "TuneBuds_AI_HQ_${System.currentTimeMillis()}.jpg")
-                withContext(Dispatchers.IO) { downloaded.copyTo(imageFile, overwrite = true) }
-
-                withContext(Dispatchers.Main) {
-                    onImageReadyForQuestion(
-                        imagePath = imageFile.absolutePath,
-                        source = ImageQuestionSource.HIGH_QUALITY,
-                        transferDurationMs = System.currentTimeMillis() - startedAt,
-                    )
                 }
             } catch (error: Exception) {
                 Log.e("AIHijack", "[$sourceTag] TuneBuds high-quality photo failed", error)
@@ -5229,11 +5361,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     ).show()
                 }
             } finally {
-                withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
-                    runCatching { manager.finishTransferBlocking() }
-                    runCatching { hotspot?.stop() }
-                    tempDir?.let { runCatching { it.deleteRecursively() } }
-                }
                 tuneBudsAiPhotoInProgress.set(false)
             }
         }
@@ -5264,7 +5391,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 "quality=${pendingImageThumbnailQuality.label}/${pendingImageThumbnailQuality.sdkValue}",
         )
         CoroutineScope(Dispatchers.IO).launch {
-            var thumbnailTransferStarted = false
             try {
                 runCatching {
                     FileOutputStream(file, false).use { }
@@ -5272,7 +5398,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     Log.e("AIHijack", "[$sourceTag] Failed to prepare thumbnail file: ${error.message}", error)
                 }
 
-                thumbnailTransferStarted = true
                 if (receivePictureThumbnail(file, sourceTag, permit)) {
                     Log.i(
                         "AIHijack",
@@ -5298,11 +5423,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         Toast.LENGTH_LONG,
                     ).show()
                 }
+            } catch (error: Exception) {
+                file.delete()
+                clearPendingVoiceImageQuestion(sourceTag)
+                finishAiQuestionForegroundWork()
+                Log.w("ImageQuestionTransfer", "[$sourceTag] Thumbnail transfer failed", error)
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Fast preview transfer failed. Please try again.", Toast.LENGTH_LONG).show()
+                }
             } finally {
                 imageThumbnailRequestInProgress.set(false)
-                if (!thumbnailTransferStarted) {
-                    GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-                }
+                GlassesSessionCoordinator.releaseBackgroundCommand(permit)
             }
         }
     }
@@ -5312,78 +5443,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         sourceTag: String,
         permit: BackgroundGlassesCommandPermit,
     ): Boolean {
-        val gotChunk = java.util.concurrent.atomic.AtomicBoolean(false)
-        val completed = java.util.concurrent.atomic.AtomicBoolean(false)
-        val callbackCount = java.util.concurrent.atomic.AtomicInteger(0)
-        val totalBytes = java.util.concurrent.atomic.AtomicLong(0L)
-        val transferResult = CompletableDeferred<Boolean>()
-        val writeLock = Any()
-        val startedAtMs = android.os.SystemClock.elapsedRealtime()
-
-        val thumbCallback: (Int, Boolean, ByteArray?) -> Unit = { packetType, isComplete, data ->
-            val callbackIndex = callbackCount.incrementAndGet()
-            val dataBytes = data?.size ?: 0
-            if (data != null && data.isNotEmpty()) {
-                runCatching {
-                    synchronized(writeLock) {
-                        FileOutputStream(file, true).use { it.write(data) }
-                    }
-                    gotChunk.set(true)
-                    totalBytes.addAndGet(dataBytes.toLong())
-                }.onFailure { error ->
-                    Log.e("AIHijack", "[$sourceTag] Failed to write thumbnail chunk: ${error.message}", error)
-                }
-            }
-            if (callbackIndex == 1 || callbackIndex % 32 == 0 || isComplete) {
-                Log.i(
-                    "ImageQuestionTransfer",
-                    "[$sourceTag] Thumbnail callback #$callbackIndex packetType=$packetType complete=$isComplete " +
-                        "payloadBytes=$dataBytes totalBytes=${totalBytes.get()} " +
-                        "elapsedMs=${android.os.SystemClock.elapsedRealtime() - startedAtMs}",
-                )
-            }
-
-            if (isComplete && completed.compareAndSet(false, true)) {
-                Log.i(
-                    "ImageQuestionTransfer",
-                    "[$sourceTag] Thumbnail completion received chunks=${callbackCount.get()} " +
-                        "bytes=${totalBytes.get()} hasData=${gotChunk.get()}",
-                )
-                transferResult.complete(gotChunk.get())
-                GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-            }
-        }
-
-        Log.i("AIHijack", "[$sourceTag] Requesting BLE thumbnail")
-        if (isGlassesCommandBlocked("AI thumbnail request")) return false
-        try {
-            LargeDataHandler.getInstance().getPictureThumbnails(thumbCallback)
-            Log.i("ImageQuestionTransfer", "[$sourceTag] getPictureThumbnails request submitted")
-        } catch (e: Exception) {
-            GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-            throw e
-        }
-        val receivedAnyData = withTimeoutOrNull(IMAGE_THUMBNAIL_TRANSFER_TIMEOUT_MS) {
-            transferResult.await()
-        } ?: false
-        if (!receivedAnyData) {
-            Log.w(
-                "ImageQuestionTransfer",
-                "[$sourceTag] BLE thumbnail request timed out chunks=${callbackCount.get()} bytes=${totalBytes.get()} " +
-                    "completed=${completed.get()} connected=${BleOperateManager.getInstance().isConnected} " +
-                    "activeSession=${GlassesSessionCoordinator.currentSession()}; keeping SDK response slot isolated",
-            )
-            return false
-        }
-
-        return isDecodableImageFile(file).also { valid ->
-            if (!valid) {
-                Log.w(
-                    "AIHijack",
-                    "[$sourceTag] Thumbnail is not a decodable image (${file.length()} bytes)",
-                )
-            }
-        }
+        check(GlassesSessionCoordinator.isBackgroundCommandActive(permit))
+        val image = com.fersaiyan.cyanbridge.glasses.HeyCyanThumbnailReceiver(
+            valid = { GlassesSessionCoordinator.isBackgroundCommandActive(permit) },
+        ).receive()
+        file.writeBytes(image)
+        Log.i("ImageQuestionTransfer", "[$sourceTag] Ordered thumbnail fully decoded bytes=${image.size}")
+        return true
     }
 
     private data class ImageQuestionImageMetrics(
@@ -6803,15 +6869,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 ),
                 livePreview = when {
                     model.isVisible(GlassesManagerGating.Action.HEY_CYAN_EXTRAS) ->
-                        state.livePreview.copy(isAvailable = true)
+                        livePreviewUiState(livePreviewManager.uiState.value, isAvailable = true)
                     model.isVisible(GlassesManagerGating.Action.EYEVUE_CONTROLS) ->
-                        state.livePreview
-                    else -> state.livePreview.copy(
-                        isAvailable = false,
-                        isScanning = false,
-                        isPlaying = false,
-                        streamUrl = null,
-                    )
+                        livePreviewUiState(eyevueLivePreviewManager?.uiState?.value,
+                            isAvailable = EyevueLivePreviewPolicy.isSupported(Build.VERSION.SDK_INT))
+                    model.isVisible(GlassesManagerGating.Action.TUNEBUDS_CONTROLS) ->
+                        livePreviewUiState(tuneBudsLivePreviewManager?.uiState?.value,
+                            isAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    else -> com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState()
                 },
             )
         }
@@ -6856,11 +6921,26 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         if (model.isVisible(GlassesManagerGating.Action.TUNEBUDS_CONTROLS)) {
-            getOrCreateTuneBudsManager().takeIf { it.isConnected() }?.refreshStatus()
+            getOrCreateTuneBudsLivePreviewManager()
+            if (GlassesSessionCoordinator.currentSession() == null) {
+                getOrCreateTuneBudsManager().takeIf { it.isConnected() }?.refreshStatus()
+            }
         }
         if (isMoyoungW620Selected()) {
             getOrCreateMoyoungW620Manager().takeIf { it.isConnected() }?.requestMediaCount()
         }
+    }
+
+    private fun livePreviewUiState(
+        state: com.fersaiyan.cyanbridge.ota.LivePreviewState?,
+        isAvailable: Boolean,
+    ): com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState {
+        val live = state ?: com.fersaiyan.cyanbridge.ota.LivePreviewState()
+        return com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState(
+            isAvailable = isAvailable, stateLabel = live.stateLabel, detail = live.detail,
+            isScanning = live.isScanning, isPlaying = live.isPlaying, streamUrl = live.streamUrl,
+            canStart = live.canStart, canStop = live.canStop,
+        )
     }
 
     // --- Chapter 5: Meeting capture pipeline (start/stop, timer, indicator) ---
@@ -7787,7 +7867,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun startTuneBudsMediaSync() {
-        if (tuneBudsMediaJob?.isActive == true) return
+        if (tuneBudsMediaJob != null) return
         if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
             ensureGlassesTransportPermissions("TuneBuds media sync") {
                 startTuneBudsMediaSync()
@@ -7798,6 +7878,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val manager = getOrCreateTuneBudsManager()
         if (!manager.isConnected()) {
             Toast.makeText(this, "Connect TuneBuds glasses first.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (manager.state.value.isVideoRecording || manager.state.value.isAudioRecording ||
+            tuneBudsAiPhotoInProgress.get() || isImageQuestionWorkActive()
+        ) {
+            Toast.makeText(this, "Stop recording or photo capture before syncing TuneBuds media.", Toast.LENGTH_LONG).show()
             return
         }
         if (GlassesSessionCoordinator.currentSession() != null) {
@@ -7816,21 +7902,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val hotspot = TuneBudsLocalHotspot(this)
         tuneBudsMediaHotspot = hotspot
         val temporaryDirectory = File(cacheDir, "tunebuds_media_${System.currentTimeMillis()}")
-        tuneBudsMediaJob = lifecycleScope.launch(Dispatchers.IO) {
+        tuneBudsMediaJob = lifecycleScope.launch(Dispatchers.IO, start = kotlinx.coroutines.CoroutineStart.ATOMIC) {
             var result: Result<Int>? = null
             try {
-                val sync = TuneBudsMediaSync(manager, hotspot, temporaryDirectory)
+                val sync = TuneBudsMediaSync(manager, hotspot, temporaryDirectory, context = this@MainActivity)
                 result = sync.sync(
                     onState = { syncState ->
                         withContext(Dispatchers.Main) {
                             if (tuneBudsMediaCancelled) return@withContext
                             if (syncState.total > 0) {
-                                transferTotalJpg = syncState.total
-                                transferTotalMp4 = 0
-                                transferTotalOpus = 0
-                                transferDoneJpg = syncState.completed
-                                transferDoneMp4 = 0
-                                transferDoneOpus = 0
+                                transferTotalJpg = syncState.totalsByType[TuneBudsMediaType.PHOTO] ?: 0
+                                transferTotalMp4 = syncState.totalsByType[TuneBudsMediaType.VIDEO] ?: 0
+                                transferTotalOpus = syncState.totalsByType[TuneBudsMediaType.AUDIO] ?: 0
+                                transferDoneJpg = syncState.completedByType[TuneBudsMediaType.PHOTO] ?: 0
+                                transferDoneMp4 = syncState.completedByType[TuneBudsMediaType.VIDEO] ?: 0
+                                transferDoneOpus = syncState.completedByType[TuneBudsMediaType.AUDIO] ?: 0
                             }
                             renderTransferProgress()
                             setTransferDetail(
@@ -11970,6 +12056,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 Log.d("DeviceNotify", "Skipping general device-notify handling during OTA")
                 return
             }
+            if (response.loadData.size <= 6) return
             when (response.loadData[6].toInt()) {
                 //Glasses battery report
                 0x05 -> {
@@ -11981,11 +12068,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
                 //Glasses pass quick recognition / AI Photo
                 0x02 -> {
+                    if (com.fersaiyan.cyanbridge.glasses.HeyCyanPhotoCapture.isActive()) {
+                        Log.i("DeviceNotify", "Photo-ready belongs to the background capture owner")
+                        return
+                    }
                     if (WalkingAidImageCapture.isAwaitingPhotoReady()) {
                         Log.i("DeviceNotify", "Walking Aid consumed its requested photo-ready notification")
                         return
                     }
                     val appRequestedCapture = imageCaptureAwaitingNotification.get()
+                    // Live's dedicated listener delivers manual events even when this Activity
+                    // is stopped. A requested MainActivity capture retains precedence.
+                    if (!appRequestedCapture &&
+                        com.fersaiyan.cyanbridge.ai.live.GeminiLiveImageButtonRouter.isRegistered()
+                    ) return
                     val sourceTag = pendingImageCaptureSourceTag ?: "hardware_image_button"
                     Log.i(
                         "ImageQuestionTransfer",

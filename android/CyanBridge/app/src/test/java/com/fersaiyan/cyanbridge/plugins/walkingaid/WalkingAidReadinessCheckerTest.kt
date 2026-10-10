@@ -19,6 +19,7 @@ class WalkingAidReadinessCheckerTest {
 
     @Before
     fun setUp() {
+        WalkingAidPreferences.setMode(context, WalkingAidMode.WALKING)
         ProSubscriptionPrefs.clearEntitlement(context)
         WalkingAidPreferences.setImageDescriptionSource(context, "local")
         WalkingAidPreferences.setYoloModelType(context, WalkingAidPreferences.MODEL_TYPE_YOLO11)
@@ -26,6 +27,22 @@ class WalkingAidReadinessCheckerTest {
         WalkingAidPreferences.setDepthSource(context, "local")
         WalkingAidPreferences.setStateModelSource(context, "local")
         File(context.filesDir, "yolo11n_float16.tflite").delete()
+    }
+
+    @Test
+    fun exploreRequiresOnlyDetectorEvenWithSavedCloudSettings() {
+        WalkingAidPreferences.setMode(context, WalkingAidMode.EXPLORE)
+        WalkingAidPreferences.setImageDescriptionSource(context, "cloud")
+        WalkingAidPreferences.setDepthSource(context, "cloud")
+        val detector = File(context.filesDir, "yolo11n_float16.tflite")
+        detector.writeBytes(ByteArray(1024))
+        try {
+            val readiness = WalkingAidReadinessChecker.checkReadiness(context)
+            assertTrue(readiness.isReady)
+            assertFalse(readiness.requiresProForCloud)
+        } finally {
+            detector.delete()
+        }
     }
 
     @Test

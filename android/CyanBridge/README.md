@@ -75,6 +75,13 @@ bash tools/hil/build_debug_fast.sh :app:assembleDebug :app:testDebugUnitTest \
 Regular `./gradlew` builds keep their usual output locations. `-PtestAbi` also
 limits the native llama runtime to the selected ABI.
 
+### Livestream integration
+
+EyeVue and HeyCyan expose a shared local RTSP feed at
+`rtsp://127.0.0.1:8554/live/` while live preview is running. See
+[Livestream integration](docs/LIVE_STREAM_INTEGRATION.md) for VLC, USB/ADB,
+FFmpeg recording, and Android transport/AP notes.
+
 ### Native llama runtime
 
 The `:llama-runtime` dependency is built automatically with the app. No manual

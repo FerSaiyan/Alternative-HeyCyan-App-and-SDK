@@ -1,4 +1,4 @@
-package com.fersaiyan.cyanbridge.devices.eyevue
+package com.fersaiyan.cyanbridge.media.rtsp
 
 import java.io.IOException
 import java.net.DatagramPacket
@@ -17,12 +17,20 @@ import java.util.concurrent.atomic.AtomicInteger
  * tracks are preserved. Client control/RTCP never tears down the glasses session.
  * Network reads have one owner; slow viewers have bounded, independent writers.
  */
-internal class RtspPlayRewriteProxy(
+internal class GlassesRtspRelay(
     private val upstreamHost: String,
     private val upstreamPort: Int,
     private val streamPath: String = "/xxx.mov",
     private val log: (String) -> Unit = {},
+    private val listenPort: Int = PORT,
+    // EyeVue requires a zero-based PLAY range. HeyCyan uses ordinary live PLAY.
+    private val upstreamPlayRange: String? = "npt=0.000-",
 ) {
+    companion object {
+        const val PORT = 8554
+        const val URL = "rtsp://127.0.0.1:8554/live/"
+    }
+
     private val active = AtomicBoolean(false)
     private val upstreamLock = Any()
     private val upstreamWriteLock = Any()
@@ -31,7 +39,7 @@ internal class RtspPlayRewriteProxy(
     private val clients = CopyOnWriteArrayList<Viewer>()
     @Volatile private var server: ServerSocket? = null
     @Volatile private var upstream: Socket? = null
-    @Volatile private var description: EyevueRtspDescription? = null
+    @Volatile private var description: RtspDescription? = null
     @Volatile private var upstreamSession: String? = null
     private var streaming = false // Guarded by upstreamLock.
     private var keepaliveMethod = "OPTIONS"
@@ -44,7 +52,15 @@ internal class RtspPlayRewriteProxy(
 
     fun start(): Int {
         check(active.compareAndSet(false, true))
-        val listener = ServerSocket().apply { bind(InetSocketAddress(loopback, 0)) }
+        val listener = ServerSocket()
+        try {
+            listener.reuseAddress = true
+            listener.bind(InetSocketAddress(loopback, listenPort))
+        } catch (error: IOException) {
+            listener.close()
+            active.set(false)
+            throw IOException("Cannot open local RTSP port $listenPort. Stop the other live stream or app using that port, then retry.", error)
+        }
         server = listener
         worker("accept") {
             while (active.get()) {
@@ -96,7 +112,7 @@ internal class RtspPlayRewriteProxy(
         upstreamSession = null
     }
 
-    private fun ensureUpstream(): EyevueRtspDescription = synchronized(upstreamLock) {
+    private fun ensureUpstream(): RtspDescription = synchronized(upstreamLock) {
         description?.let { return@synchronized it }
         if (!active.get()) throw IOException("Relay stopped")
         val socket = Socket()
@@ -109,7 +125,7 @@ internal class RtspPlayRewriteProxy(
             val options = exchange(socket, "OPTIONS", upstreamUrl)
             val describe = exchange(socket, "DESCRIBE", upstreamUrl, listOf("Accept: application/sdp"))
             // exchange already read the body. Never read it a second time.
-            val parsed = EyevueRtspDescription.from(describe, upstreamUrl)
+            val parsed = RtspDescription.from(describe, upstreamUrl)
             log("SDP received ${describe.body.size} bytes, ${parsed.tracks.size} tracks")
             var session: String? = null
             parsed.tracks.forEach { track ->
@@ -140,12 +156,13 @@ internal class RtspPlayRewriteProxy(
         }
     }
 
-    private fun play(viewer: Viewer, message: EyevueRtspMessage) = synchronized(upstreamLock) {
+    private fun play(viewer: Viewer, message: RtspMessage) = synchronized(upstreamLock) {
         val parsed = ensureUpstream()
         val socket = upstream ?: throw IOException("Glasses disconnected")
         val session = upstreamSession ?: throw IOException("Missing glasses Session")
         if (!streaming) {
-            exchange(socket, "PLAY", parsed.aggregateUrl, listOf("Session: $session", "Range: npt=0.000-"))
+            exchange(socket, "PLAY", parsed.aggregateUrl,
+                listOf("Session: $session") + listOfNotNull(upstreamPlayRange?.let { "Range: $it" }))
         }
         // Serialize the complete PLAY response before any RTP, including the
         // very first keyframe already buffered in the upstream socket.
@@ -182,16 +199,16 @@ internal class RtspPlayRewriteProxy(
     }
 
     private fun request(method: String, url: String, headers: List<String> = emptyList()) =
-        EyevueRtspMessage(listOf("$method $url RTSP/1.0", "CSeq: ${cseq.getAndIncrement()}",
+        RtspMessage(listOf("$method $url RTSP/1.0", "CSeq: ${cseq.getAndIncrement()}",
             "User-Agent: CyanBridge LibVLC relay") + headers)
 
-    private fun sendUpstream(socket: Socket, message: EyevueRtspMessage) = synchronized(upstreamWriteLock) {
+    private fun sendUpstream(socket: Socket, message: RtspMessage) = synchronized(upstreamWriteLock) {
         socket.getOutputStream().apply { write(message.bytes()); flush() }
     }
 
-    private fun exchange(socket: Socket, method: String, url: String, headers: List<String> = emptyList()): EyevueRtspMessage {
+    private fun exchange(socket: Socket, method: String, url: String, headers: List<String> = emptyList()): RtspMessage {
         sendUpstream(socket, request(method, url, headers))
-        val response = readEyevueRtspMessage(socket.getInputStream()) ?: throw IOException("Glasses disconnected")
+        val response = readRtspMessage(socket.getInputStream()) ?: throw IOException("Glasses disconnected")
         log("glasses $method: ${response.firstLine}")
         return response.requireOk()
     }
@@ -203,17 +220,17 @@ internal class RtspPlayRewriteProxy(
                 val first = input.read()
                 if (first < 0) break
                 if (first == '$'.code) {
-                    val header = readEyevueBytes(input, 3)
+                    val header = readRtspBytes(input, 3)
                     val channel = header[0].toInt() and 255
                     val size = ((header[1].toInt() and 255) shl 8) or (header[2].toInt() and 255)
-                    val payload = readEyevueBytes(input, size)
+                    val payload = readRtspBytes(input, size)
                     if (channel == videoChannel) lastVideoPacketAt = System.nanoTime()
                     clients.forEach { it.media(channel, payload) }
                     if (seen.add(channel)) log("first upstream packet channel=$channel bytes=$size")
                 } else {
-                    val message = readEyevueRtspMessage(input, first) ?: break
+                    val message = readRtspMessage(input, first) ?: break
                     if (!message.firstLine.startsWith("RTSP/")) {
-                        sendUpstream(socket, EyevueRtspMessage(listOf("RTSP/1.0 200 OK",
+                        sendUpstream(socket, RtspMessage(listOf("RTSP/1.0 200 OK",
                             "CSeq: ${message.header("CSeq") ?: "0"}")))
                     }
                 }
@@ -251,7 +268,7 @@ internal class RtspPlayRewriteProxy(
             } catch (_: InterruptedException) {
             } catch (_: IOException) {
             } finally { close() }
-        }, "eyevue-rtsp-writer").apply { isDaemon = true }
+        }, "glasses-rtsp-writer").apply { isDaemon = true }
 
         init { writer.start() }
 
@@ -262,8 +279,8 @@ internal class RtspPlayRewriteProxy(
             }
         }
 
-        fun reply(request: EyevueRtspMessage, status: String = "200 OK", headers: List<String> = emptyList(), body: ByteArray = byteArrayOf()) {
-            send(EyevueRtspMessage(listOf("RTSP/1.0 $status", "CSeq: ${request.header("CSeq") ?: "0"}") +
+        fun reply(request: RtspMessage, status: String = "200 OK", headers: List<String> = emptyList(), body: ByteArray = byteArrayOf()) {
+            send(RtspMessage(listOf("RTSP/1.0 $status", "CSeq: ${request.header("CSeq") ?: "0"}") +
                 headers + "Content-Length: ${body.size}", body).bytes())
         }
 
@@ -290,7 +307,7 @@ internal class RtspPlayRewriteProxy(
     }
 
     private class Subscription(
-        val track: EyevueRtspTrack,
+        val track: RtspTrack,
         val channels: Pair<Int, Int>? = null,
         val udp: Pair<DatagramSocket, DatagramSocket>? = null,
     ) {
@@ -315,11 +332,11 @@ internal class RtspPlayRewriteProxy(
                 if (first < 0) break
                 if (first == '$'.code) {
                     // Drain local RTCP reports/BYE. A viewer must not end the shared session.
-                    val header = readEyevueBytes(input, 3)
-                    readEyevueBytes(input, ((header[1].toInt() and 255) shl 8) or (header[2].toInt() and 255))
+                    val header = readRtspBytes(input, 3)
+                    readRtspBytes(input, ((header[1].toInt() and 255) shl 8) or (header[2].toInt() and 255))
                     continue
                 }
-                val request = readEyevueRtspMessage(input, first) ?: break
+                val request = readRtspMessage(input, first) ?: break
                 val method = request.firstLine.substringBefore(' ')
                 log("viewer ${viewer.session}: ${request.firstLine}")
                 when (method) {
@@ -350,7 +367,7 @@ internal class RtspPlayRewriteProxy(
         } finally { viewer.close() }
     }
 
-    private fun setup(viewer: Viewer, request: EyevueRtspMessage) {
+    private fun setup(viewer: Viewer, request: RtspMessage) {
         val url = request.firstLine.split(' ').getOrNull(1).orEmpty()
         val index = url.substringAfterLast('/').removePrefix("track").toIntOrNull()?.minus(1)
         val track = index?.let { ensureUpstream().tracks.getOrNull(it) }
@@ -404,5 +421,5 @@ internal class RtspPlayRewriteProxy(
     }
 
     private fun worker(name: String, block: () -> Unit): Thread =
-        Thread(block, "eyevue-rtsp-$name").apply { isDaemon = true; start() }
+        Thread(block, "glasses-rtsp-$name").apply { isDaemon = true; start() }
 }

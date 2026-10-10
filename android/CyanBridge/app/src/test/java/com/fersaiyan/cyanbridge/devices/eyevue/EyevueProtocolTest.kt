@@ -196,4 +196,24 @@ class EyevueProtocolTest {
 
     private fun photoPacket(commandId: Int, payload: ByteArray = byteArrayOf()): ByteArray =
         byteArrayOf(0xAB.toByte(), 0x55, 0, 0, commandId.toByte()) + payload + byteArrayOf(0, 0, 0)
+
+    @Test fun photoOverflowAndCancelledStreamsRequireFreshStart() {
+        val assembler = EyevuePhotoAssembler(maxImageBytes = 4)
+        val start = photoPacket(EyevueProtocol.CMD_RECEIVE_PHOTO_DATA_START)
+        val data = photoPacket(EyevueProtocol.CMD_RECEIVE_PHOTO_DATA, byteArrayOf(0, 0, 0, 0, 1, 2, 3))
+        val end = photoPacket(EyevueProtocol.CMD_RECEIVE_PHOTO_DATA_END)
+        assertEquals(null, assembler.append(data))
+        assertEquals(null, assembler.append(end))
+        assembler.append(start)
+        assembler.append(data)
+        assembler.append(data) // Overflow drops the entire image.
+        assertEquals(null, assembler.append(end))
+        assembler.append(start)
+        assembler.append(data)
+        assembler.reset()
+        assertEquals(null, assembler.append(end))
+        assembler.append(start)
+        assembler.append(data)
+        assertArrayEquals(byteArrayOf(1, 2, 3), assembler.append(end))
+    }
 }

@@ -31,6 +31,7 @@ import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +43,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -49,6 +51,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -61,6 +64,11 @@ class WalkingAidService : Service() {
     private var visionWorkerJob: Job? = null
     private var enrichmentJob: Job? = null
     private var cleanupJob: Job? = null
+    private var exploreNarrationJob: Job? = null
+    private val exploreEngine = WalkingAidExploreEngine()
+    private var activeMode = WalkingAidMode.WALKING
+    private val speechCompletions = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+    private val utteranceSequence = AtomicLong(0L)
 
     private var visionBackend: VisionBackend? = null
     private val imageCapture by lazy { WalkingAidImageCapture(this) }
@@ -140,6 +148,17 @@ class WalkingAidService : Service() {
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
         }
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) { finishSpeech(utteranceId, true) }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) { finishSpeech(utteranceId, false) }
+            override fun onStop(utteranceId: String?, interrupted: Boolean) { finishSpeech(utteranceId, false) }
+        })
+    }
+
+    private fun finishSpeech(utteranceId: String?, completed: Boolean) {
+        if (utteranceId != null) speechCompletions.remove(utteranceId)?.complete(completed)
     }
 
     private fun initializeRuntimeIfNeeded() {
@@ -193,6 +212,7 @@ class WalkingAidService : Service() {
         }
         val isMetaRayban = isMetaRaybanSelected()
         val videoMode = WalkingAidPreferences.getVideoMode(this)
+        activeMode = WalkingAidPreferences.getMode(this)
         _lastFailure.value = null
         WalkingAidNotificationHelper.updateNotification(
             this,
@@ -232,6 +252,7 @@ class WalkingAidService : Service() {
 
         safetyDisclaimerSpoken = false
         hazardTracker.reset()
+        exploreEngine.reset()
         latestFrameSequence.set(0L)
         lastCaptureStartAtMs.set(0L)
         lastMeasuredCaptureMs.set(0L)
@@ -239,15 +260,34 @@ class WalkingAidService : Service() {
         if (!motionEstimator.start()) {
             Log.w(TAG, "Rotation-vector sensor unavailable; temporal tracking will run without camera-motion compensation")
         }
-        if (WalkingAidPreferences.isSafetyDisclaimerEnabled(this)) {
+        if (activeMode == WalkingAidMode.WALKING && WalkingAidPreferences.isSafetyDisclaimerEnabled(this)) {
             speakTts("Safety notice: check path carefully. ")
             safetyDisclaimerSpoken = true
         }
 
         // Initialize LiteRT Vision Backend (NPU -> GPU -> CPU hierarchy)
-        visionBackend = LiteRtVisionBackend(this)
+        visionBackend = LiteRtVisionBackend(this, loadDepth = activeMode == WalkingAidMode.WALKING)
         val accelInfo = visionBackend?.acceleratorInfo()
         Log.i(TAG, "Vision engine active: ${accelInfo?.details}")
+
+        if (activeMode == WalkingAidMode.EXPLORE) {
+            exploreNarrationJob = scope.launch {
+                while (isActive) {
+                    if (!WalkingAidPreferences.isTtsEnabled(this@WalkingAidService)) {
+                        delay(100)
+                        continue
+                    }
+                    val announcement = exploreEngine.nextAnnouncement()
+                    if (announcement == null) {
+                        delay(100)
+                        continue
+                    }
+                    val spoken = speakExplore(announcement)
+                    if (spoken) exploreEngine.complete(announcement)
+                    delay(if (spoken) WalkingAidPreferences.getAnnouncementPauseMs(this@WalkingAidService) else 500L)
+                }
+            }
+        }
 
         // 1. Launch dedicated Vision Worker (decoupled from camera acquisition rate)
         visionWorkerJob = scope.launch {
@@ -279,7 +319,7 @@ class WalkingAidService : Service() {
                     ?.let { "\nThe user especially wants help noticing: $it" }
                     .orEmpty()
 
-                // The critical path is always local: detect, track, evaluate, and speak immediately.
+                // Local detections feed either the alert rules or the paced Explore scene memory.
                 val rawDetection = backend.detect(frame)
                 val cameraMotion = motionEstimator.motionForFrame(frame.bitmap, frame.estimatedExposureAtMs)
                 val tracking = if (rawDetection.isError) {
@@ -292,13 +332,16 @@ class WalkingAidService : Service() {
                     objects = tracking.objects,
                     clearedTrackIds = tracking.clearedTrackIds,
                 )
-                val warningDecision = WalkingAidWarningEngine.evaluate(
+                val warningDecision = if (activeMode == WalkingAidMode.WALKING) WalkingAidWarningEngine.evaluate(
                     detection = detectionResult,
                     depth = null,
                     focusDescription = focusDescription,
                     frameTimestampMs = frame.timestampMs,
-                )
-                if (warningDecision.shouldWarn && isFrameCurrent(frameSequence, frame)) {
+                ) else null
+                if (activeMode == WalkingAidMode.EXPLORE) {
+                    exploreEngine.update(detectionResult, frame.timestampMs)
+                }
+                if (warningDecision?.shouldWarn == true && isFrameCurrent(frameSequence, frame)) {
                     speakWarning(warningDecision.message)
                 }
 
@@ -308,6 +351,14 @@ class WalkingAidService : Service() {
                 // Store historical entry for GUI thumbnail playback and Q&A
                 val descText = if (detectionResult.isError) {
                     "System Error: ${detectionResult.errorMessage ?: "Vision backend error"}"
+                } else if (activeMode == WalkingAidMode.EXPLORE && detectionResult.objects.isNotEmpty()) {
+                    detectionResult.objects.groupingBy { it.label to it.position }.eachCount()
+                        .map { (key, count) ->
+                            WalkingAidSceneFormatter.format(
+                                this@WalkingAidService,
+                                ExploreObjectGroup(key.first, key.second, count),
+                            )
+                        }.joinToString(" ")
                 } else if (detectionResult.objects.isNotEmpty()) {
                     "Detected: " + detectionResult.objects.joinToString(", ") { "${it.label} (${it.position})" }
                 } else {
@@ -330,7 +381,7 @@ class WalkingAidService : Service() {
                     imagePath = frame.sourcePath ?: "",
                     description = descText,
                     depthDescription = null,
-                    stateDecision = if (detectionResult.isError || warningDecision.shouldWarn) StateDecision.WARN else StateDecision.SKIP,
+                    stateDecision = if (detectionResult.isError || warningDecision?.shouldWarn == true) StateDecision.WARN else StateDecision.SKIP,
                 )
                 val maxHistory = WalkingAidPreferences.getImageHistoryMaxCount(this@WalkingAidService)
                 WalkingAidImageStore.addRecord(record, maxHistory)
@@ -350,6 +401,11 @@ class WalkingAidService : Service() {
                     "${analysisMs}ms analyze, ${captureToDecisionMs}ms total, " +
                     String.format("%.2f fps cadence", measuredFps)
                 WalkingAidNotificationHelper.updateNotification(this@WalkingAidService, statusMsg, (measuredCadenceMs / 1000).toInt().coerceAtLeast(1))
+
+                if (activeMode == WalkingAidMode.EXPLORE) {
+                    frameCount++
+                    continue
+                }
 
                 // Depth and cloud context are cancellable enrichments and never delay local TTS.
                 val processedFrameCount = frameCount
@@ -575,8 +631,33 @@ class WalkingAidService : Service() {
 
     @Synchronized
     private fun speakWarning(message: String) {
-        if (message.isBlank() || !WalkingAidPreferences.isTtsEnabled(this)) return
-        speakTts(message)
+        if (activeMode != WalkingAidMode.WALKING || message.isBlank() || !WalkingAidPreferences.isTtsEnabled(this)) return
+        scope.launch(Dispatchers.Main) { if (RUNNING.get()) speakTts(message) }
+    }
+
+    private suspend fun speakExplore(announcement: ExploreAnnouncement): Boolean {
+        val completion = CompletableDeferred<Boolean>()
+        val utteranceId = withContext(Dispatchers.Main) {
+            if (!RUNNING.get() || !WalkingAidPreferences.isTtsEnabled(this@WalkingAidService)) return@withContext null
+            speakTts(WalkingAidSceneFormatter.format(this@WalkingAidService, announcement.group), completion)
+        } ?: return false
+        return try {
+            withTimeoutOrNull(30_000) {
+                while (!completion.isCompleted) {
+                    // Do not finish describing an object after it leaves the newest scene or TTS is muted.
+                    if (!WalkingAidPreferences.isTtsEnabled(this@WalkingAidService) ||
+                        !exploreEngine.isCurrent(announcement)) {
+                        withContext(Dispatchers.Main) { tts?.stop() }
+                        return@withTimeoutOrNull false
+                    }
+                    delay(100)
+                }
+                completion.await()
+            } ?: false
+        } finally {
+            speechCompletions.remove(utteranceId)
+            if (!completion.isCompleted) withContext(NonCancellable + Dispatchers.Main) { tts?.stop() }
+        }
     }
 
     private suspend fun captureThumbnail(index: Int): WalkingAidImageCapture.CapturedThumbnail? {
@@ -596,6 +677,8 @@ class WalkingAidService : Service() {
 
     private fun areGlassesConnected(): Boolean = if (DeviceProfileStore.isEyevueSelected(this)) {
         com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager.getInstance(this).isConnected()
+    } else if (DeviceProfileStore.isTuneBudsSelected(this)) {
+        com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager.getInstance(this).isConnected()
     } else BleOperateManager.getInstance().isConnected
 
     /** Save only analyzed frames, keeping video history and cloud/Q&A attachments bounded. */
@@ -608,22 +691,22 @@ class WalkingAidService : Service() {
         return file.absolutePath
     }
 
-    private fun speakTts(text: String) {
+    private fun speakTts(text: String, completion: CompletableDeferred<Boolean>? = null): String? {
         if (!ttsReady || tts == null) {
             Log.w(TAG, "TTS not ready")
-            return
+            return null
         }
         val locale = Locale.forLanguageTag(ImageQuestionPreferences.get(this).appLanguageTag)
         tts?.language = locale
+        tts?.setSpeechRate(WalkingAidPreferences.getSpeechRate(this))
 
-        val utteranceId = "walking_aid_${System.currentTimeMillis()}"
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(uttId: String?) {}
-            override fun onDone(uttId: String?) {}
-            @Deprecated("Deprecated in Java")
-            override fun onError(uttId: String?) {}
-        })
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        val utteranceId = "walking_aid_${utteranceSequence.incrementAndGet()}"
+        if (completion != null) speechCompletions[utteranceId] = completion
+        if (tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) != TextToSpeech.SUCCESS) {
+            finishSpeech(utteranceId, false)
+            return null
+        }
+        return utteranceId
     }
 
     private fun stopLoop(reason: String) {
@@ -632,14 +715,17 @@ class WalkingAidService : Service() {
             return
         }
         Log.i(TAG, "Stopping: $reason")
-        val jobs = listOfNotNull(captureLoopJob, visionWorkerJob, enrichmentJob)
+        val jobs = listOfNotNull(captureLoopJob, visionWorkerJob, enrichmentJob, exploreNarrationJob)
         jobs.forEach(Job::cancel)
         captureLoopJob = null
         visionWorkerJob = null
         enrichmentJob = null
+        exploreNarrationJob = null
+        tts?.stop()
 
         motionEstimator.stop()
         hazardTracker.reset()
+        exploreEngine.reset()
         latestFrameSequence.set(0L)
 
         cleanupJob = scope.launch {

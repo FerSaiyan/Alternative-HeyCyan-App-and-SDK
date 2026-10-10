@@ -9,13 +9,24 @@ import android.os.Handler
 import android.os.Looper
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.launch
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -23,6 +34,7 @@ import java.io.IOException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 import kotlin.coroutines.coroutineContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -44,6 +56,9 @@ class TuneBudsLocalHotspot(context: Context) {
 
     @Volatile
     private var reservation: WifiManager.LocalOnlyHotspotReservation? = null
+    @Volatile private var generation = 0L
+    private val _isActive = MutableStateFlow(false)
+    val isActive = _isActive.asStateFlow()
 
     @SuppressLint("MissingPermission")
     suspend fun start(): TuneBudsHotspotCredentials {
@@ -51,17 +66,19 @@ class TuneBudsLocalHotspot(context: Context) {
             throw SecurityException("Nearby Wi-Fi or location permission is required")
         }
         stop()
+        val startedGeneration = generation
         return withTimeout(START_TIMEOUT_MS) {
             suspendCancellableCoroutine { continuation ->
                 continuation.invokeOnCancellation { stop() }
                 wifiManager.startLocalOnlyHotspot(
                     object : WifiManager.LocalOnlyHotspotCallback() {
                         override fun onStarted(startedReservation: WifiManager.LocalOnlyHotspotReservation) {
-                            if (!continuation.isActive) {
+                            if (!continuation.isActive || startedGeneration != generation) {
                                 startedReservation.close()
                                 return
                             }
                             reservation = startedReservation
+                            _isActive.value = true
                             val credentials = readCredentials(startedReservation)
                             if (credentials == null) {
                                 stop()
@@ -72,14 +89,18 @@ class TuneBudsLocalHotspot(context: Context) {
                         }
 
                         override fun onStopped() {
+                            if (startedGeneration != generation) return
                             reservation = null
+                            _isActive.value = false
                             if (continuation.isActive) {
                                 continuation.resumeWithException(IOException("Local hotspot stopped before it was ready"))
                             }
                         }
 
                         override fun onFailed(reason: Int) {
+                            if (startedGeneration != generation) return
                             reservation = null
+                            _isActive.value = false
                             if (continuation.isActive) {
                                 continuation.resumeWithException(IOException("Could not start local hotspot: $reason"))
                             }
@@ -92,8 +113,10 @@ class TuneBudsLocalHotspot(context: Context) {
     }
 
     fun stop() {
+        generation++
         val current = reservation
         reservation = null
+        _isActive.value = false
         runCatching { current?.close() }
     }
 
@@ -141,6 +164,8 @@ data class TuneBudsMediaSyncState(
     val completed: Int = 0,
     val total: Int = 0,
     val lastError: String? = null,
+    val totalsByType: Map<TuneBudsMediaType, Int> = emptyMap(),
+    val completedByType: Map<TuneBudsMediaType, Int> = emptyMap(),
 )
 
 /** Non-destructive TuneBuds HTTP media importer. Device files are never deleted. */
@@ -148,6 +173,7 @@ class TuneBudsMediaSync(
     private val manager: TuneBudsManager,
     private val hotspot: TuneBudsLocalHotspot,
     private val temporaryDirectory: File,
+    private val context: Context? = null,
 ) {
     companion object {
         private val CLIENT = OkHttpClient.Builder()
@@ -157,46 +183,68 @@ class TuneBudsMediaSync(
             .build()
     }
 
+    private var client = CLIENT
+    private var p2p: TuneBudsP2pTransport? = null
+
     suspend fun sync(
         onState: suspend (TuneBudsMediaSyncState) -> Unit = {},
         onProgress: suspend (TuneBudsMediaItem, Long, Long) -> Unit = { _, _, _ -> },
         onFile: suspend (TuneBudsMediaItem, File) -> Boolean,
     ): Result<Int> {
-        var state = TuneBudsMediaSyncState(detail = "Starting phone hotspot")
-        onState(state)
-        temporaryDirectory.mkdirs()
+        var state = TuneBudsMediaSyncState(detail = "Starting media sync")
         try {
-            val credentials = hotspot.start()
-            state = state.copy(detail = "Connecting TuneBuds to phone hotspot")
             onState(state)
-            val endpoint = manager.startFileManager(
-                hotspotSsid = credentials.ssid,
-                hotspotPassword = credentials.password,
-                channel = credentials.channel,
-            ) ?: throw IOException("TuneBuds did not report its media server address")
-            val baseUrl = normalizeBaseUrl(endpoint)
-            state = state.copy(detail = "Reading TuneBuds media list")
-            onState(state)
-            val items = fetchManifest(baseUrl)
-            state = state.copy(total = items.size, detail = if (items.isEmpty()) "No pending media" else "Downloading 0/${items.size}")
-            onState(state)
-
-            var completed = 0
-            for (item in items) {
-                coroutineContext.ensureActive()
-                val file = download(baseUrl, item, onProgress)
-                val imported = try {
-                    onFile(item, file)
-                } finally {
-                    file.delete()
+            temporaryDirectory.mkdirs()
+            return coroutineScope {
+                val endpoint = openTransport { detail ->
+                    state = state.copy(detail = detail)
+                    onState(state)
                 }
-                if (!imported) throw IOException("Could not import ${item.fileName}")
-                completed++
-                state = state.copy(completed = completed, detail = "Downloaded $completed/${items.size}")
-                onState(state)
+                val monitor = launch(start = CoroutineStart.UNDISPATCHED) {
+                    manager.state.first {
+                        it.protocolState != TuneBudsSppState.CONNECTED.name || it.wifiState in setOf(0, 4, 5)
+                    }
+                    throw IOException("TuneBuds Bluetooth or Wi-Fi disconnected during media sync")
+                }
+                val linkMonitor = launch(start = CoroutineStart.UNDISPATCHED) {
+                    (p2p?.isActive ?: hotspot.isActive).first { !it }
+                    throw IOException("TuneBuds media Wi-Fi link stopped")
+                }
+                try {
+                    val baseUrl = normalizeBaseUrl(endpoint)
+                    android.util.Log.i("TuneBudsMediaSync", "Media endpoint: $baseUrl")
+                    state = state.copy(detail = "Reading TuneBuds media list")
+                    onState(state)
+                    val items = fetchManifest(baseUrl)
+                    state = state.copy(
+                        total = items.size,
+                        totalsByType = items.groupingBy { it.type }.eachCount(),
+                        detail = if (items.isEmpty()) "No pending media" else "Downloading 0/${items.size}",
+                    )
+                    onState(state)
+
+                    var completed = 0
+                    for (item in items) {
+                        coroutineContext.ensureActive()
+                        val file = download(baseUrl, item, onProgress)
+                        val imported = try { onFile(item, file) } finally { file.delete() }
+                        if (!imported) throw IOException("Could not import ${item.fileName}")
+                        completed++
+                        state = state.copy(
+                            completed = completed,
+                            detail = "Downloaded $completed/${items.size}",
+                            completedByType = state.completedByType +
+                                (item.type to ((state.completedByType[item.type] ?: 0) + 1)),
+                        )
+                        onState(state)
+                    }
+                    onState(state.copy(detail = "Completed"))
+                    Result.success(completed)
+                } finally {
+                    monitor.cancel()
+                    linkMonitor.cancel()
+                }
             }
-            onState(state.copy(detail = "Completed"))
-            return Result.success(completed)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
@@ -209,21 +257,72 @@ class TuneBudsMediaSync(
                 } catch (error: Exception) {
                     android.util.Log.w("TuneBudsMediaSync", "Camera cleanup failed", error)
                 } finally {
-                    hotspot.stop()
-                    temporaryDirectory.deleteRecursively()
+                    try { p2p?.close() } catch (error: Exception) {
+                        android.util.Log.w("TuneBudsMediaSync", "P2P cleanup failed", error)
+                    } finally {
+                        p2p = null
+                        hotspot.stop()
+                        client.connectionPool.evictAll()
+                        client = CLIENT
+                        temporaryDirectory.deleteRecursively()
+                    }
                 }
             }
         }
     }
 
+    private suspend fun openTransport(onStatus: suspend (String) -> Unit): String {
+        // Unknown capabilities preserve the already validated local-hotspot path.
+        if (context != null && manager.state.value.wifiSupportMask?.and(4) == 4) {
+            val transport = TuneBudsP2pTransport(context)
+            p2p = transport
+            val ssid = "AiGlassDb_${Random.nextInt(10_000)}"
+            try {
+                onStatus("Starting TuneBuds Wi-Fi Direct")
+                val endpoint = manager.startP2pFileManager(ssid) { address ->
+                    onStatus("Connecting TuneBuds P2P peer $address")
+                    val network = transport.connect(address, ssid)
+                    client = CLIENT.newBuilder().connectionPool(ConnectionPool()).socketFactory(network.socketFactory)
+                        .dns(object : okhttp3.Dns {
+                            override fun lookup(hostname: String) = network.getAllByName(hostname).toList()
+                        }).build()
+                }
+                return endpoint
+            } catch (error: Exception) {
+                if (error is CancellationException && error !is TimeoutCancellationException) throw error
+                if (error is TuneBudsFileModeException) throw error
+                coroutineContext.ensureActive()
+                android.util.Log.w("TuneBudsMediaSync", "P2P startup failed; trying phone hotspot", error)
+                // Close camera and await group teardown before switching E6 topology.
+                manager.finishTransferBlocking()
+                transport.close()
+                p2p = null
+                client.connectionPool.evictAll()
+                client = CLIENT
+            }
+        }
+        onStatus("Starting phone hotspot")
+        val credentials = hotspot.start()
+        onStatus("Connecting TuneBuds to phone hotspot")
+        return manager.startFileManager(credentials.ssid, credentials.password, credentials.channel)
+            ?: throw IOException("TuneBuds did not report its media server address")
+    }
+
     suspend fun fetchManifest(baseUrl: String): List<TuneBudsMediaItem> = withContext(Dispatchers.IO) {
-        parseManifest(getText(normalizeBaseUrl(baseUrl) + "media.config"))
+        parseManifest(getText(mediaUrl(baseUrl, "media.config")))
     }
 
     suspend fun downloadSingle(baseUrl: String, item: TuneBudsMediaItem): File = download(normalizeBaseUrl(baseUrl), item) { _, _, _ -> }
 
     fun parseManifest(body: String): List<TuneBudsMediaItem> {
-        val trimmed = body.trim()
+        // Legacy firmware can include an HTTP header block inside the actual body.
+        val trimmed = body.lineSequence().filterNot { line ->
+            val text = line.trim()
+            text.startsWith("HTTP/", ignoreCase = true) ||
+                (text.contains(": ") &&
+                    Regex("^(Content-|Date:|Server:|Transfer-Encoding:|Connection:|Keep-Alive:|Accept|Cache-|Vary:|Set-Cookie:|Allow:)",
+                        RegexOption.IGNORE_CASE).containsMatchIn(text))
+        }.joinToString("\n").trim()
         val names = runCatching {
             when {
                 trimmed.startsWith("[") -> stringsFromArray(JSONArray(trimmed))
@@ -233,7 +332,7 @@ class TuneBudsMediaSync(
         }.getOrDefault(emptyList()).ifEmpty {
             trimmed.lineSequence()
                 .map(String::trim)
-                .filter { it.isNotBlank() && !it.startsWith("HTTP/") && !it.contains(": ") }
+                .filter(String::isNotBlank)
                 .toList()
         }
         return names.mapNotNull(::mediaItem).distinctBy { it.remoteName }
@@ -248,40 +347,53 @@ class TuneBudsMediaSync(
             parentFile?.mkdirs()
             delete()
         }
-        val request = Request.Builder().url(baseUrl + encodePath(item.remoteName)).get().build()
-        CLIENT.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("TuneBuds HTTP ${response.code} for ${item.fileName}")
-            val body = response.body ?: throw IOException("TuneBuds returned no data for ${item.fileName}")
-            val total = body.contentLength()
-            var copied = 0L
-            body.byteStream().use { input ->
-                output.outputStream().buffered(128 * 1024).use { target ->
-                    val buffer = ByteArray(128 * 1024)
-                    while (true) {
-                        coroutineContext.ensureActive()
-                        val count = input.read(buffer)
-                        if (count <= 0) break
-                        target.write(buffer, 0, count)
-                        copied += count
-                        onProgress(item, copied, total)
+        val request = mediaRequest(mediaUrl(baseUrl, item.remoteName))
+        try {
+            withResponse(request) { response ->
+                if (!response.isSuccessful) throw IOException("TuneBuds HTTP ${response.code} for ${item.fileName}")
+                val body = response.body ?: throw IOException("TuneBuds returned no data for ${item.fileName}")
+                val total = body.contentLength()
+                var copied = 0L
+                body.byteStream().use { input ->
+                    output.outputStream().buffered(128 * 1024).use { target ->
+                        val buffer = ByteArray(128 * 1024)
+                        while (true) {
+                            coroutineContext.ensureActive()
+                            val count = input.read(buffer)
+                            if (count <= 0) break
+                            target.write(buffer, 0, count)
+                            copied += count
+                            onProgress(item, copied, total)
+                        }
                     }
                 }
+                if (copied == 0L || (total >= 0L && copied != total)) {
+                    throw IOException("Incomplete TuneBuds download ${item.fileName}: $copied/$total bytes")
+                }
             }
+            output
+        } catch (error: Throwable) {
+            output.delete()
+            coroutineContext.ensureActive()
+            throw error
         }
-        output
     }
 
-    private fun getText(url: String): String {
-        val request = Request.Builder()
-            .url(url)
-            .header("Connection", "close")
-            .header("User-Agent", "TSClient/1.0")
-            .get()
-            .build()
-        CLIENT.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("TuneBuds HTTP ${response.code} for media.config")
-            return response.body?.string() ?: throw IOException("TuneBuds returned an empty media.config")
+    private suspend fun getText(url: String): String = withResponse(mediaRequest(url)) { response ->
+        if (!response.isSuccessful) throw IOException("TuneBuds HTTP ${response.code} for media.config")
+        response.body?.string() ?: throw IOException("TuneBuds returned an empty media.config")
+    }
+
+    private fun mediaRequest(url: String): Request = Request.Builder().url(url)
+        .header("Connection", "close").header("User-Agent", "TSClient/1.0").get().build()
+
+    private suspend fun <T> withResponse(request: Request, block: suspend (Response) -> T): T = coroutineScope {
+        val call = client.newCall(request)
+        // Interrupt both a blocked execute() and a stalled response-body read on Stop.
+        val cancellation = launch(start = CoroutineStart.UNDISPATCHED) {
+            try { awaitCancellation() } finally { call.cancel() }
         }
+        try { call.execute().use { block(it) } } finally { cancellation.cancel() }
     }
 
     private fun stringsFromArray(array: JSONArray): List<String> = buildList {
@@ -308,13 +420,22 @@ class TuneBudsMediaSync(
         return TuneBudsMediaItem(remote, fileName, type)
     }
 
-    private fun normalizeBaseUrl(value: String): String {
+    internal fun normalizeBaseUrl(value: String): String {
         val trimmed = value.trim()
-        require(trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-            "TuneBuds returned an invalid media server address"
-        }
-        return if (trimmed.endsWith('/')) trimmed else "$trimmed/"
+        val uri = java.net.URI(trimmed)
+        require(uri.scheme == "http" || uri.scheme == "https") { "TuneBuds returned an invalid media server address" }
+        trimmed.toHttpUrl() // Validate host, port and HTTP syntax before construction.
+        require(uri.rawUserInfo == null && uri.rawFragment == null) { "Invalid TuneBuds media server address" }
+        // Match MediaDownloadManager's URI.getPort() fallback, not OkHttp's port 80.
+        // Preserve explicit :80 across repeated normalization (OkHttp removes it).
+        val authority = uri.rawAuthority + if (uri.port == -1) ":8080" else ""
+        val path = uri.rawPath.orEmpty().ifEmpty { "/" }
+        return "${uri.scheme}://$authority" + (if (path.endsWith('/')) path else "$path/") +
+            (uri.rawQuery?.let { "?$it" } ?: "")
     }
+
+    private fun mediaUrl(base: String, remote: String): String = normalizeBaseUrl(base).toHttpUrl()
+        .newBuilder().addEncodedPathSegments(encodePath(remote)).build().toString()
 
     private fun encodePath(path: String): String = path.split('/')
         .filter(String::isNotBlank)

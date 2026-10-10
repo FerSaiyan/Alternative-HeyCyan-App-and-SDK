@@ -22,3 +22,8 @@
 
 # Shizuku creates this Binder user service by its class name outside the normal Android manifest.
 -keep class com.fersaiyan.cyanbridge.localagent.shizuku.LocalAgentShizukuUserService { <init>(...); *; }
+
+# HeyCyanThumbnailReceiver reuses the vendor's exact FD framing/queue implementation.
+-keepclassmembers class com.oudmon.ble.base.communication.LargeDataHandler {
+    private void syncPictureThumbnails(int);
+}

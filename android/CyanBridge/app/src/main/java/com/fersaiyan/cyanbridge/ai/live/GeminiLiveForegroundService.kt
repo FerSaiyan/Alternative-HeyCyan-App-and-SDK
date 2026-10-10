@@ -65,7 +65,9 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     private var announcementTtsReady = false
     private var pendingAnnouncement: GeminiLiveAnnouncement? = null
     private var terminalAnnouncementIssued = false
-    private val hardwareHandler: () -> Unit = { captureHardwareImageQuestion() }
+    private val hardwareHandler: (ManualGlassesPhoto) -> Unit = { photo ->
+        serviceScope.launch(Dispatchers.Main) { captureHardwareImageQuestion(photo) }
+    }
 
     internal val liveControlRouter: GeminiLiveControlRouter by lazy {
         GeminiLiveControlRouter(
@@ -311,7 +313,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
 
     private fun registerHardwareButton() {
         if (hardwareRegistered) return
-        GeminiLiveImageButtonRouter.register(hardwareHandler)
+        GeminiLiveImageButtonRouter.register(com.fersaiyan.cyanbridge.devices.DeviceProfileStore.selectedClass(this), hardwareHandler)
         hardwareRegistered = true
     }
 
@@ -321,26 +323,43 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         hardwareRegistered = false
     }
 
-    private fun captureHardwareImageQuestion() {
-        if (!isListening) return
+    private fun captureHardwareImageQuestion(photo: ManualGlassesPhoto) {
+        if (!isListening) { photo.acquisition?.cancel(); return }
+        val sessionClient = client ?: run { photo.acquisition?.cancel(); return }
         cancelResponseIdleTimeout("manual glasses image request")
-        if (!hardwareInProgress.compareAndSet(false, true)) return
+        if (!hardwareInProgress.compareAndSet(false, true)) { photo.acquisition?.cancel(); return }
         serviceScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching { GeminiLiveGlassesImageCapture(this@GeminiLiveForegroundService).captureFromHardwareButton() }
+            sessionClient.recordVisionCaptureStarted()
+            var captured = false
+            var captureError: Throwable? = null
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { GeminiLiveGlassesImageCapture(this@GeminiLiveForegroundService).captureFromHardwareButton(photo) }
+                }
+                result.onSuccess { image ->
+                    captured = true
+                    if (sessionClient.sendImage(image)) {
+                        visionController?.onVisualContextSent()
+                        visionStatus = "Glasses vision: manual AI-photo queued"
+                        currentDetail = "Image queued for Gemini Live"
+                    } else {
+                        visionStatus = "Glasses vision: image was not queued"
+                        currentDetail = "Live connection is not ready for an image"
+                    }
+                    if (client === sessionClient && isListening) updateNotification()
+                }.onFailure { error ->
+                    captureError = error
+                    Log.w(TAG, "Hardware image capture failed", error)
+                    if (client === sessionClient && isListening) {
+                        currentDetail = error.message ?: "Glasses image capture failed"
+                        updateNotification()
+                    }
+                }
+            } finally {
+                sessionClient.recordVisionCaptureFinished(captured, captureError)
+                photo.acquisition?.cancel()
+                hardwareInProgress.set(false)
             }
-            result.onSuccess { image ->
-                client?.sendImage(image)
-                visionController?.onVisualContextSent()
-                visionStatus = "Glasses vision: manual AI-photo sent"
-                currentDetail = "Image sent to Gemini Live"
-                updateNotification()
-            }.onFailure { error ->
-                Log.w(TAG, "Hardware image capture failed", error)
-                currentDetail = error.message ?: "Glasses image capture failed"
-                updateNotification()
-            }
-            hardwareInProgress.set(false)
         }
     }
 
@@ -454,8 +473,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
             serviceScope.launch(Dispatchers.IO) {
                 val image = runCatching { File(path).readBytes() }.getOrNull()
                 if (image != null && image.isNotEmpty()) {
-                    client?.sendImage(image)
-                    visionController?.onVisualContextSent()
+                    if (client?.sendImage(image) == true) visionController?.onVisualContextSent()
                 }
                 initialPrompt?.let { client?.sendTextTurn(it) }
             }

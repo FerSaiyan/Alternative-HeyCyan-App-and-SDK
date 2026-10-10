@@ -137,7 +137,11 @@ class GeminiLiveClient(
     private var liveAudioRouteConfigured = false
     private var inputAudioMs = 0L
     private var outputAudioMs = 0L
-    private var visualInputCount = 0
+    private val visionDiagnostics = GeminiLiveVisionDiagnostics()
+    private val visualInputCount: Int get() = visionDiagnostics.snapshot().imagesQueued
+    private var visionReportId = java.util.UUID.randomUUID().toString()
+    private var visionReportJob: Job? = null
+    private var visionReportConfig: LiveTokenConfig? = null
     private var lastBilledInputMs = 0L
     private var lastBilledOutputMs = 0L
     private var lastBilledImages = 0
@@ -185,7 +189,9 @@ class GeminiLiveClient(
         meteredConnectionAttempted.set(false)
         inputAudioMs = 0L
         outputAudioMs = 0L
-        visualInputCount = 0
+        visionDiagnostics.reset()
+        visionReportId = java.util.UUID.randomUUID().toString()
+        visionReportConfig = null
         lastBilledInputMs = 0L
         lastBilledOutputMs = 0L
         lastBilledImages = 0
@@ -206,6 +212,7 @@ class GeminiLiveClient(
                 .onSuccess {
                     if (!active.get()) return@onSuccess
                     tokenConfig = it
+                    visionReportConfig = it
                     Log.i(TAG, "Live token ok model=${it.model} reservation=${it.reservationId} url=${it.websocketUrl.take(80)} expires=${it.expiresAtMs} auth=${it.authorizationHeader?.take(20)} apiKey=${if (it.apiKey.isNullOrBlank()) "none" else "present"}")
                     connectOrReconnect()
                 }
@@ -226,6 +233,7 @@ class GeminiLiveClient(
     }
 
     fun stop() {
+        reportVisionDiagnostics()
         active.set(false)
         setupComplete.set(false)
         modelSpeaking.set(false)
@@ -307,13 +315,79 @@ class GeminiLiveClient(
     }
 
     /** Sends one JPEG frame through the current realtimeInput.video field. */
-    fun sendVideoFrame(jpegBytes: ByteArray) {
-        if (!active.get() || !setupComplete.get() || jpegBytes.isEmpty()) return
-        if (visualInputCount >= MAX_VISUAL_INPUTS_PER_SESSION) {
+    fun sendVideoFrame(jpegBytes: ByteArray): Boolean {
+        val limit = if (tokenConfig?.let { it.freeTier || it.economy } == true) 10 else MAX_VISUAL_INPUTS_PER_SESSION
+        if (visualInputCount >= limit) {
             setState(GeminiLiveState.LISTENING, "Live visual-input safety limit reached")
-            return
         }
-        if (sendRealtimeBlob("video", "image/jpeg", jpegBytes)) visualInputCount++
+        val accepted = visionDiagnostics.send(
+            ready = active.get() && setupComplete.get(),
+            bytes = jpegBytes,
+            limit = limit,
+        ) { sendRealtimeBlob("video", "image/jpeg", jpegBytes) }
+        Log.i(TAG, "Live image queued=$accepted diagnostics=${visionDiagnostics.snapshot()}")
+        scheduleVisionDiagnosticsReport()
+        return accepted
+    }
+
+    fun recordVisionCaptureStarted() {
+        visionDiagnostics.captureStarted()
+        scheduleVisionDiagnosticsReport()
+    }
+
+    fun recordVisionCaptureFinished(success: Boolean, error: Throwable? = null) {
+        visionDiagnostics.captureFinished(success, error)
+        Log.i(TAG, "Live capture success=$success diagnostics=${visionDiagnostics.snapshot()}")
+        scheduleVisionDiagnosticsReport()
+    }
+
+    private fun scheduleVisionDiagnosticsReport() {
+        synchronized(visionDiagnostics) {
+            visionReportJob?.cancel()
+            visionReportJob = scope.launch {
+                delay(1_000)
+                reportVisionDiagnostics()
+            }
+        }
+    }
+
+    private fun reportVisionDiagnostics() {
+        val config = tokenConfig ?: visionReportConfig ?: return
+        if (config.reservationId == "direct") return
+        val snapshot = visionDiagnostics.snapshot()
+        val reportId = visionReportId
+        val auth = ProSubscriptionServerPrefs.getApiToken(appContext).trim()
+        val base = AiProviderPrefs.getRelayBaseUrl(appContext).trim().trimEnd('/')
+        if (auth.isBlank() || !base.startsWith("https://")) return
+        val body = JSONObject()
+            .put("report_id", reportId)
+            .put("session_id", if (config.freeTier || config.economy) reportId else config.reservationId)
+            .put("mode", if (config.economy) "economy" else if (config.freeTier) "free" else "private")
+            .put("device_class", DeviceProfileStore.selectedClass(appContext).name)
+            .put("refresh_mode", if (GeminiLiveVisionPreferences.imageDelaySeconds(appContext) == 0) "initial_only" else "every_turn")
+            .put("revision", snapshot.revision)
+            .put("capture_attempts", snapshot.captureAttempts)
+            .put("captures_completed", snapshot.capturesCompleted)
+            .put("capture_failures", snapshot.captureFailures)
+            .put("images_queued", snapshot.imagesQueued)
+            .put("send_failures", snapshot.sendFailures)
+            .put("photo_ready_timeouts", snapshot.photoReadyTimeouts)
+            .put("transfer_failures", snapshot.transferFailures)
+            .toString()
+        scope.launch {
+            // Snapshots have deterministic revision IDs; retrying cannot double-count or bill.
+            repeat(2) { attempt ->
+                val ok = runCatching {
+                    val request = Request.Builder().url("$base/api/pro/live/vision")
+                        .header("Authorization", "Bearer $auth")
+                        .post(body.toRequestBody("application/json".toMediaType())).build()
+                    http.newCall(request).execute().use { it.isSuccessful }
+                }.getOrDefault(false)
+                if (ok) return@launch
+                if (attempt == 0) delay(1_000)
+            }
+            Log.w(TAG, "Live vision diagnostics report failed revision=${snapshot.revision}")
+        }
     }
 
     /** Prevents trailing silence from finalizing a turn before its fresh image is sent. */
@@ -402,7 +476,12 @@ class GeminiLiveClient(
             if (reconnectAttempt == 0) GeminiLiveState.CONNECTING else GeminiLiveState.RECONNECTING,
             "Connecting to Google",
         )
-        val builder = Request.Builder().url(config.websocketUrl)
+        val liveUrl = if (config.freeTier || config.economy) {
+            config.websocketUrl.replaceFirst("wss://", "https://").toHttpUrl().newBuilder()
+                .addQueryParameter("vision_session_id", visionReportId).build().toString()
+                .replaceFirst("https://", "wss://")
+        } else config.websocketUrl
+        val builder = Request.Builder().url(liveUrl)
         // A constrained Google URL already carries its ephemeral access_token.
         // Do not send the same credential in a second Authorization header.
         // Free/Economy proxies still require their own CyanBridge Bearer header.

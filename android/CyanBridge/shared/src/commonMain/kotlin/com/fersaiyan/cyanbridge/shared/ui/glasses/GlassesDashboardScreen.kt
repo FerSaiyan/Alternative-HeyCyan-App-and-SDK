@@ -752,17 +752,17 @@ private fun CoreGlassesControls(
         if (state.livePreview.isAvailable) {
             Spacer(Modifier.height(8.dp))
             SectionTitle(
-                if (state.showEyevueControls) {
-                    stringResource(Res.string.dashboard_eye_vue_live_preview)
-                } else {
-                    stringResource(Res.string.dashboard_heycyan_live_preview)
+                when {
+                    state.showEyevueControls -> stringResource(Res.string.dashboard_eye_vue_live_preview)
+                    state.showTuneBudsControls -> stringResource(Res.string.dashboard_tunebuds_live_preview)
+                    else -> stringResource(Res.string.dashboard_heycyan_live_preview)
                 },
             )
             Text(
-                text = if (state.showEyevueControls) {
-                    stringResource(Res.string.dashboard_eye_vue_description)
-                } else {
-                    stringResource(Res.string.dashboard_heycyan_live_description)
+                text = when {
+                    state.showEyevueControls -> stringResource(Res.string.dashboard_eye_vue_description)
+                    state.showTuneBudsControls -> stringResource(Res.string.dashboard_tunebuds_live_description)
+                    else -> stringResource(Res.string.dashboard_heycyan_live_description)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -796,9 +796,9 @@ private fun CoreGlassesControls(
                 secondaryEnabled = state.livePreview.canStop,
                 secondaryStyle = ActionButtonStyle.Destructive,
             )
-            // Both Eyevue and HeyCyan render live video inline; transport and
+            // Supported glasses render live video inline; transport and
             // orientation remain device-specific in the Android host.
-            if ((state.showEyevueControls || state.showHeyCyanControls) &&
+            if ((state.showEyevueControls || state.showHeyCyanControls || state.showTuneBudsControls) &&
                 state.livePreview.isPlaying &&
                 state.livePreview.streamUrl != null
             ) {

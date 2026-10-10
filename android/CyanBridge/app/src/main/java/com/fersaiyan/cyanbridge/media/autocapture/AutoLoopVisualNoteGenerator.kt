@@ -13,17 +13,12 @@ import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
-import com.oudmon.ble.base.bluetooth.BleOperateManager
-import com.oudmon.ble.base.communication.LargeDataHandler
-import kotlinx.coroutines.CompletableDeferred
+import com.fersaiyan.cyanbridge.glasses.GlassesAiPhotoCapture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -112,11 +107,6 @@ object AutoLoopVisualNoteGenerator {
         loopIndex: Int,
         promptOverride: String?,
     ) {
-        if (!BleOperateManager.getInstance().isConnected) {
-            Log.w(TAG, "Skipping visual note: glasses not connected")
-            return
-        }
-
         val image = captureThumbnail(context, loopIndex)
         if (image == null || !image.exists() || image.length() < 1024L) {
             Log.w(TAG, "Skipping visual note: no usable thumbnail")
@@ -210,61 +200,15 @@ object AutoLoopVisualNoteGenerator {
     }
 
     private suspend fun captureThumbnail(context: Context, loopIndex: Int): File? {
-        val permit = GlassesSessionCoordinator.tryAcquireBackgroundCommand()
-        if (permit == null) {
-            Log.i(TAG, "Skipping thumbnail capture because the glasses SDK is busy")
-            return null
-        }
-        var thumbnailTransferStarted = false
+        val outDir = context.getExternalFilesDir("DCIM") ?: context.filesDir
+        val file = File(outDir, "AUTO_LOOP_THUMB_${loopIndex}_${System.currentTimeMillis()}.jpg")
         try {
-            val outDir = context.getExternalFilesDir("DCIM") ?: context.filesDir
-            val file = File(outDir, "AUTO_LOOP_THUMB_${loopIndex}_${System.currentTimeMillis()}.jpg")
-            runCatching {
-                file.parentFile?.mkdirs()
-                if (file.exists()) file.delete()
-            }
-
-            val completed = AtomicBoolean(false)
-            val done = CompletableDeferred<File?>()
-
-            val thumbCallback: (Int, Boolean, ByteArray?) -> Unit = { _, isComplete, data ->
-                if (data != null && data.isNotEmpty()) {
-                    runCatching {
-                        FileOutputStream(file, true).use { out -> out.write(data) }
-                    }.onFailure {
-                        Log.e(TAG, "Failed writing thumbnail chunk: ${it.message}", it)
-                    }
-                }
-
-                if (isComplete && completed.compareAndSet(false, true)) {
-                    if (!done.isCompleted) {
-                        done.complete(if (file.exists() && file.length() >= 1024L) file else null)
-                    }
-                    GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-                }
-            }
-
-            runCatching {
-                LargeDataHandler.getInstance().glassesControl(byteArrayOf(0x02, 0x01, 0x06, 0x02, 0x02)) { _, _ -> }
-            }
-            delay(250)
-            runCatching {
-                LargeDataHandler.getInstance().glassesControl(byteArrayOf(0x02, 0x01, 0x01)) { _, _ -> }
-            }
-            delay(2500)
-
-            LargeDataHandler.getInstance().getPictureThumbnails(thumbCallback)
-            thumbnailTransferStarted = true
-
-            val result = withTimeoutOrNull(14_000) { done.await() }
-            if (result == null) {
-                Log.w(TAG, "Thumbnail transfer timed out; keeping the glasses SDK isolated until completion or reconnect")
-            }
-            return result
+            val photo = GlassesAiPhotoCapture(context).capture(quality = 2)
+            file.parentFile?.mkdirs()
+            file.writeBytes(photo.jpeg)
+            return file
         } catch (e: Exception) {
-            if (!thumbnailTransferStarted) {
-                GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-            }
+            file.delete()
             throw e
         }
     }

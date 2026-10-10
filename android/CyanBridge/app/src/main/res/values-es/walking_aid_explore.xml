@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="walking_aid_mode_title">Modo</string>
+    <string name="walking_aid_mode_walking">Caminar</string>
+    <string name="walking_aid_mode_explore">Explorar</string>
+    <string name="walking_aid_mode_walking_description">Anunciar los obstáculos seleccionados y los objetos que se acercan.</string>
+    <string name="walking_aid_mode_explore_description">Describir los objetos detectados de uno en uno. Si la escena no cambia, no se emiten anuncios.</string>
+    <string name="walking_aid_speech_rate">Velocidad de la voz</string>
+    <string name="walking_aid_speech_rate_value">%1$.1f×</string>
+    <string name="walking_aid_announcement_pause">Pausa entre anuncios de Explorar</string>
+    <string name="walking_aid_announcement_pause_value">%1$.1f s</string>
+    <string name="walking_aid_position_left">a tu izquierda</string>
+    <string name="walking_aid_position_center">delante de ti</string>
+    <string name="walking_aid_position_right">a tu derecha</string>
+    <string name="walking_aid_explore_single">%1$s %2$s.</string>
+    <string name="walking_aid_explore_multiple">%1$d %2$s %3$s.</string>
+
+    <plurals name="walking_aid_object_person"><item quantity="one">persona</item><item quantity="other">personas</item></plurals>
+    <plurals name="walking_aid_object_bicycle"><item quantity="one">bicicleta</item><item quantity="other">bicicletas</item></plurals>
+    <plurals name="walking_aid_object_car"><item quantity="one">coche</item><item quantity="other">coches</item></plurals>
+    <plurals name="walking_aid_object_motorcycle"><item quantity="one">motocicleta</item><item quantity="other">motocicletas</item></plurals>
+    <plurals name="walking_aid_object_airplane"><item quantity="one">avión</item><item quantity="other">aviones</item></plurals>
+    <plurals name="walking_aid_object_bus"><item quantity="one">autobús</item><item quantity="other">autobuses</item></plurals>
+    <plurals name="walking_aid_object_train"><item quantity="one">tren</item><item quantity="other">trenes</item></plurals>
+    <plurals name="walking_aid_object_truck"><item quantity="one">camión</item><item quantity="other">camiones</item></plurals>
+    <plurals name="walking_aid_object_boat"><item quantity="one">barco</item><item quantity="other">barcos</item></plurals>
+    <plurals name="walking_aid_object_traffic_light"><item quantity="one">semáforo</item><item quantity="other">semáforos</item></plurals>
+    <plurals name="walking_aid_object_fire_hydrant"><item quantity="one">boca de incendios</item><item quantity="other">bocas de incendios</item></plurals>
+    <plurals name="walking_aid_object_stop_sign"><item quantity="one">señal de stop</item><item quantity="other">señales de stop</item></plurals>
+    <plurals name="walking_aid_object_parking_meter"><item quantity="one">parquímetro</item><item quantity="other">parquímetros</item></plurals>
+    <plurals name="walking_aid_object_bench"><item quantity="one">banco</item><item quantity="other">bancos</item></plurals>
+    <plurals name="walking_aid_object_bird"><item quantity="one">pájaro</item><item quantity="other">pájaros</item></plurals>
+    <plurals name="walking_aid_object_cat"><item quantity="one">gato</item><item quantity="other">gatos</item></plurals>
+    <plurals name="walking_aid_object_dog"><item quantity="one">perro</item><item quantity="other">perros</item></plurals>
+    <plurals name="walking_aid_object_horse"><item quantity="one">caballo</item><item quantity="other">caballos</item></plurals>
+    <plurals name="walking_aid_object_sheep"><item quantity="one">oveja</item><item quantity="other">ovejas</item></plurals>
+    <plurals name="walking_aid_object_cow"><item quantity="one">vaca</item><item quantity="other">vacas</item></plurals>
+    <plurals name="walking_aid_object_elephant"><item quantity="one">elefante</item><item quantity="other">elefantes</item></plurals>
+    <plurals name="walking_aid_object_bear"><item quantity="one">oso</item><item quantity="other">osos</item></plurals>
+    <plurals name="walking_aid_object_zebra"><item quantity="one">cebra</item><item quantity="other">cebras</item></plurals>
+    <plurals name="walking_aid_object_giraffe"><item quantity="one">jirafa</item><item quantity="other">jirafas</item></plurals>
+    <plurals name="walking_aid_object_backpack"><item quantity="one">mochila</item><item quantity="other">mochilas</item></plurals>
+    <plurals name="walking_aid_object_umbrella"><item quantity="one">paraguas</item><item quantity="other">paraguas</item></plurals>
+    <plurals name="walking_aid_object_handbag"><item quantity="one">bolso</item><item quantity="other">bolsos</item></plurals>
+    <plurals name="walking_aid_object_tie"><item quantity="one">corbata</item><item quantity="other">corbatas</item></plurals>
+    <plurals name="walking_aid_object_suitcase"><item quantity="one">maleta</item><item quantity="other">maletas</item></plurals>
+    <plurals name="walking_aid_object_frisbee"><item quantity="one">disco volador</item><item quantity="other">discos voladores</item></plurals>
+    <plurals name="walking_aid_object_skis"><item quantity="one">par de esquís</item><item quantity="other">pares de esquís</item></plurals>
+    <plurals name="walking_aid_object_snowboard"><item quantity="one">tabla de snowboard</item><item quantity="other">tablas de snowboard</item></plurals>
+    <plurals name="walking_aid_object_sports_ball"><item quantity="one">pelota</item><item quantity="other">pelotas</item></plurals>
+    <plurals name="walking_aid_object_kite"><item quantity="one">cometa</item><item quantity="other">cometas</item></plurals>
+    <plurals name="walking_aid_object_baseball_bat"><item quantity="one">bate de béisbol</item><item quantity="other">bates de béisbol</item></plurals>
+    <plurals name="walking_aid_object_baseball_glove"><item quantity="one">guante de béisbol</item><item quantity="other">guantes de béisbol</item></plurals>
+    <plurals name="walking_aid_object_skateboard"><item quantity="one">monopatín</item><item quantity="other">monopatines</item></plurals>
+    <plurals name="walking_aid_object_surfboard"><item quantity="one">tabla de surf</item><item quantity="other">tablas de surf</item></plurals>
+    <plurals name="walking_aid_object_tennis_racket"><item quantity="one">raqueta de tenis</item><item quantity="other">raquetas de tenis</item></plurals>
+    <plurals name="walking_aid_object_bottle"><item quantity="one">botella</item><item quantity="other">botellas</item></plurals>
+    <plurals name="walking_aid_object_wine_glass"><item quantity="one">copa de vino</item><item quantity="other">copas de vino</item></plurals>
+    <plurals name="walking_aid_object_cup"><item quantity="one">taza</item><item quantity="other">tazas</item></plurals>
+    <plurals name="walking_aid_object_fork"><item quantity="one">tenedor</item><item quantity="other">tenedores</item></plurals>
+    <plurals name="walking_aid_object_knife"><item quantity="one">cuchillo</item><item quantity="other">cuchillos</item></plurals>
+    <plurals name="walking_aid_object_spoon"><item quantity="one">cuchara</item><item quantity="other">cucharas</item></plurals>
+    <plurals name="walking_aid_object_bowl"><item quantity="one">cuenco</item><item quantity="other">cuencos</item></plurals>
+    <plurals name="walking_aid_object_banana"><item quantity="one">plátano</item><item quantity="other">plátanos</item></plurals>
+    <plurals name="walking_aid_object_apple"><item quantity="one">manzana</item><item quantity="other">manzanas</item></plurals>
+    <plurals name="walking_aid_object_sandwich"><item quantity="one">sándwich</item><item quantity="other">sándwiches</item></plurals>
+    <plurals name="walking_aid_object_orange"><item quantity="one">naranja</item><item quantity="other">naranjas</item></plurals>
+    <plurals name="walking_aid_object_broccoli"><item quantity="one">brócoli</item><item quantity="other">brócolis</item></plurals>
+    <plurals name="walking_aid_object_carrot"><item quantity="one">zanahoria</item><item quantity="other">zanahorias</item></plurals>
+    <plurals name="walking_aid_object_hot_dog"><item quantity="one">perrito caliente</item><item quantity="other">perritos calientes</item></plurals>
+    <plurals name="walking_aid_object_pizza"><item quantity="one">pizza</item><item quantity="other">pizzas</item></plurals>
+    <plurals name="walking_aid_object_donut"><item quantity="one">rosquilla</item><item quantity="other">rosquillas</item></plurals>
+    <plurals name="walking_aid_object_cake"><item quantity="one">pastel</item><item quantity="other">pasteles</item></plurals>
+    <plurals name="walking_aid_object_chair"><item quantity="one">silla</item><item quantity="other">sillas</item></plurals>
+    <plurals name="walking_aid_object_couch"><item quantity="one">sofá</item><item quantity="other">sofás</item></plurals>
+    <plurals name="walking_aid_object_potted_plant"><item quantity="one">planta en maceta</item><item quantity="other">plantas en maceta</item></plurals>
+    <plurals name="walking_aid_object_bed"><item quantity="one">cama</item><item quantity="other">camas</item></plurals>
+    <plurals name="walking_aid_object_dining_table"><item quantity="one">mesa de comedor</item><item quantity="other">mesas de comedor</item></plurals>
+    <plurals name="walking_aid_object_toilet"><item quantity="one">inodoro</item><item quantity="other">inodoros</item></plurals>
+    <plurals name="walking_aid_object_tv"><item quantity="one">televisor</item><item quantity="other">televisores</item></plurals>
+    <plurals name="walking_aid_object_laptop"><item quantity="one">ordenador portátil</item><item quantity="other">ordenadores portátiles</item></plurals>
+    <plurals name="walking_aid_object_mouse"><item quantity="one">ratón de ordenador</item><item quantity="other">ratones de ordenador</item></plurals>
+    <plurals name="walking_aid_object_remote"><item quantity="one">mando a distancia</item><item quantity="other">mandos a distancia</item></plurals>
+    <plurals name="walking_aid_object_keyboard"><item quantity="one">teclado</item><item quantity="other">teclados</item></plurals>
+    <plurals name="walking_aid_object_cell_phone"><item quantity="one">teléfono móvil</item><item quantity="other">teléfonos móviles</item></plurals>
+    <plurals name="walking_aid_object_microwave"><item quantity="one">microondas</item><item quantity="other">microondas</item></plurals>
+    <plurals name="walking_aid_object_oven"><item quantity="one">horno</item><item quantity="other">hornos</item></plurals>
+    <plurals name="walking_aid_object_toaster"><item quantity="one">tostadora</item><item quantity="other">tostadoras</item></plurals>
+    <plurals name="walking_aid_object_sink"><item quantity="one">fregadero</item><item quantity="other">fregaderos</item></plurals>
+    <plurals name="walking_aid_object_refrigerator"><item quantity="one">frigorífico</item><item quantity="other">frigoríficos</item></plurals>
+    <plurals name="walking_aid_object_book"><item quantity="one">libro</item><item quantity="other">libros</item></plurals>
+    <plurals name="walking_aid_object_clock"><item quantity="one">reloj</item><item quantity="other">relojes</item></plurals>
+    <plurals name="walking_aid_object_vase"><item quantity="one">jarrón</item><item quantity="other">jarrones</item></plurals>
+    <plurals name="walking_aid_object_scissors"><item quantity="one">par de tijeras</item><item quantity="other">pares de tijeras</item></plurals>
+    <plurals name="walking_aid_object_teddy_bear"><item quantity="one">oso de peluche</item><item quantity="other">osos de peluche</item></plurals>
+    <plurals name="walking_aid_object_hair_drier"><item quantity="one">secador de pelo</item><item quantity="other">secadores de pelo</item></plurals>
+    <plurals name="walking_aid_object_toothbrush"><item quantity="one">cepillo de dientes</item><item quantity="other">cepillos de dientes</item></plurals>
+    <plurals name="walking_aid_object_unknown"><item quantity="one">objeto</item><item quantity="other">objetos</item></plurals>
+</resources>

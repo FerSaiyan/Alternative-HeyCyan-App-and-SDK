@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.glasses
 
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+
 /**
  * The vendor SDK exposes singleton BLE response/listener slots and a singleton P2P controller.
  * Only one workflow may control those resources at a time.
@@ -17,13 +19,13 @@ class GlassesSessionLease internal constructor(
     internal val id: Long,
 )
 
-class BackgroundGlassesCommandPermit internal constructor(internal val id: Long)
+class BackgroundGlassesCommandPermit internal constructor(internal val id: Long, val device: DeviceClass)
 
 object GlassesSessionCoordinator {
     private var activeLease: GlassesSessionLease? = null
     private var nextSessionId = 0L
     private var nextBackgroundCommandId = 0L
-    private val activeBackgroundCommandIds = mutableSetOf<Long>()
+    private val activeBackgroundCommandIds = mutableMapOf<Long, DeviceClass>()
 
     @Synchronized
     fun tryAcquire(session: GlassesSession): Boolean {
@@ -66,16 +68,16 @@ object GlassesSessionCoordinator {
 
     /** Atomically reserves the shared SDK response slot for a short one-shot command. */
     @Synchronized
-    fun tryAcquireBackgroundCommand(): BackgroundGlassesCommandPermit? {
+    fun tryAcquireBackgroundCommand(device: DeviceClass = DeviceClass.HEY_CYAN): BackgroundGlassesCommandPermit? {
         if (activeLease != null || activeBackgroundCommandIds.isNotEmpty()) return null
-        val permit = BackgroundGlassesCommandPermit(++nextBackgroundCommandId)
-        activeBackgroundCommandIds += permit.id
+        val permit = BackgroundGlassesCommandPermit(++nextBackgroundCommandId, device)
+        activeBackgroundCommandIds[permit.id] = device
         return permit
     }
 
     @Synchronized
     fun releaseBackgroundCommand(permit: BackgroundGlassesCommandPermit) {
-        activeBackgroundCommandIds -= permit.id
+        activeBackgroundCommandIds.remove(permit.id)
     }
 
     @Synchronized
@@ -84,14 +86,15 @@ object GlassesSessionCoordinator {
 
     /** A BLE reconnect discards any vendor callback slot that may have been left pending. */
     @Synchronized
-    fun clearBackgroundCommands() {
-        activeBackgroundCommandIds.clear()
+    fun clearBackgroundCommands(device: DeviceClass? = null) {
+        if (device == null) activeBackgroundCommandIds.clear()
+        else activeBackgroundCommandIds.entries.removeAll { it.value == device }
     }
 
     /** A real BLE disconnect invalidates every pending vendor response and P2P workflow. */
     @Synchronized
-    fun clearForDisconnectedDevice() {
+    fun clearForDisconnectedDevice(device: DeviceClass? = null) {
         activeLease = null
-        activeBackgroundCommandIds.clear()
+        clearBackgroundCommands(device)
     }
 }

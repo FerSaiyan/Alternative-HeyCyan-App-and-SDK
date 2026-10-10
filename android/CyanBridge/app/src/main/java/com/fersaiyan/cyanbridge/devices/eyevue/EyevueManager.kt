@@ -2,7 +2,10 @@ package com.fersaiyan.cyanbridge.devices.eyevue
 
 import android.content.Context
 import android.util.Log
-import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
+import com.fersaiyan.cyanbridge.glasses.GlassesPhotoCapture
+import com.fersaiyan.cyanbridge.glasses.NativeGlassesPhotoCapture
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveImageButtonRouter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -60,13 +63,37 @@ class EyevueManager private constructor(context: Context) {
     private val _state = MutableStateFlow(EyevueState())
     private val _wakeWordEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private var connectJob: Job? = null
+    private val photoCapture = NativeGlassesPhotoCapture(
+        device = DeviceClass.EYEVUE,
+        connected = client::isConnected,
+        trigger = {
+            // AA15 AI stream; await the actual write rather than launching a detached command.
+            if (!sendNow(EyevueProtocol.buildAiPhotoPacket(), "take AI photo")) {
+                throw IOException("Could not request the Eyevue photo")
+            }
+        },
+        resetStream = client::resetPhotoStream,
+        manualScope = scope,
+    )
 
     val state: StateFlow<EyevueState> = _state.asStateFlow()
     val wakeWordEvents: SharedFlow<Unit> = _wakeWordEvents.asSharedFlow()
 
     init {
+        client.photoPacketListener = { packet ->
+            photoCapture.onPacket()
+            if (packet.size > 4 && (packet[4].toInt() and 255) == EyevueProtocol.CMD_RECEIVE_PHOTO_DATA_START) {
+                GeminiLiveImageButtonRouter.nativePhotoReceiver(DeviceClass.EYEVUE)?.let { receiver ->
+                    photoCapture.onManualStreamStart(12_000, receiver)
+                }
+            }
+        }
+        client.photoListener = { image -> photoCapture.onPhoto(image) }
         scope.launch {
             client.state.collect { gattState ->
+                if (gattState == EyevueGattState.DISCONNECTED || gattState == EyevueGattState.ERROR) {
+                    GlassesPhotoCapture.invalidate(DeviceClass.EYEVUE)
+                }
                 val current = _state.value
                 val label = when (gattState) {
                     EyevueGattState.DISCONNECTED -> "Eyevue disconnected"
@@ -92,10 +119,7 @@ class EyevueManager private constructor(context: Context) {
             return
         }
         connectJob?.cancel()
-        // Eyevue uses its own transport, so any HeyCyan one-shot still holding the shared
-        // slot (e.g. an unanswered audio-loop command) can never complete. Drop it here
-        // instead of blocking sync/live forever. Active sessions are left untouched.
-        GlassesSessionCoordinator.clearBackgroundCommands()
+        GlassesPhotoCapture.invalidate(DeviceClass.EYEVUE)
         _state.value = EyevueState(
             connectionLabel = "Connecting to Eyevue",
             protocolState = EyevueGattState.CONNECTING.name,
@@ -123,6 +147,7 @@ class EyevueManager private constructor(context: Context) {
     }
 
     fun disconnect() {
+        GlassesPhotoCapture.invalidate(DeviceClass.EYEVUE)
         connectJob?.cancel()
         connectJob = null
         client.disconnect()
@@ -148,17 +173,7 @@ class EyevueManager private constructor(context: Context) {
         "take photo",
     )
 
-    suspend fun capturePhotoForAi(timeoutMs: Long = 12_000L): ByteArray? = coroutineScope {
-        val photo = async(start = CoroutineStart.UNDISPATCHED) { client.photos.first() }
-        // 0x31 is the only Eyevue command currently verified to return an AI image over AA15.
-        // 0x30 timed out without a photo stream in hardware tests, so all AI captures use the
-        // same working quality for now. Revisit this when other Eyevue quality modes are known.
-        // This intentionally uses the AI shutter, NOT the manual/dashboard shutter.
-        send(EyevueProtocol.buildAiPhotoPacket(), "take photo")
-        withTimeoutOrNull(timeoutMs) { photo.await() }.also {
-            if (it == null) photo.cancel()
-        }
-    }
+    suspend fun capturePhotoForAi(timeoutMs: Long = 12_000L): ByteArray = photoCapture.capture(timeoutMs)
 
     fun stopVoiceRecognition() = send(
         EyevueProtocol.buildStopVoiceRecognitionPacket(),
@@ -166,21 +181,21 @@ class EyevueManager private constructor(context: Context) {
     )
 
     fun toggleVideo() {
-        val start = !_state.value.isVideoRecording
-        _state.value = _state.value.copy(isVideoRecording = start)
-        send(
-            if (start) EyevueProtocol.buildStartVideoPacket() else EyevueProtocol.buildStopVideoPacket(),
-            if (start) "start video" else "stop video",
-        )
+        launchCameraCommand("toggle video") {
+            val start = !_state.value.isVideoRecording
+            if (sendNow(if (start) EyevueProtocol.buildStartVideoPacket() else EyevueProtocol.buildStopVideoPacket(), "toggle video")) {
+                _state.value = _state.value.copy(isVideoRecording = start)
+            }
+        }
     }
 
     fun toggleAudio() {
-        val start = !_state.value.isAudioRecording
-        _state.value = _state.value.copy(isAudioRecording = start)
-        send(
-            EyevueProtocol.buildAudioPacket(start),
-            if (start) "start audio" else "stop audio",
-        )
+        launchCameraCommand("toggle audio") {
+            val start = !_state.value.isAudioRecording
+            if (sendNow(EyevueProtocol.buildAudioPacket(start), "toggle audio")) {
+                _state.value = _state.value.copy(isAudioRecording = start)
+            }
+        }
     }
 
     fun requestBattery() = send(EyevueProtocol.buildGetBatteryPacket(), "get battery")
@@ -324,7 +339,18 @@ class EyevueManager private constructor(context: Context) {
     }
 
     private fun send(packet: ByteArray, operation: String) {
+        if (packet.size > 4 && (packet[4].toInt() and 255) == EyevueProtocol.CMD_TAKE_PHOTO) {
+            launchCameraCommand(operation) { sendNow(packet, operation) }
+            return
+        }
         scope.launch { sendNow(packet, operation) }
+    }
+
+    private fun launchCameraCommand(operation: String, block: suspend () -> Unit) {
+        scope.launch {
+            runCatching { GlassesPhotoCapture.withCapture(DeviceClass.EYEVUE) { block() } }
+                .onFailure { updateError("Could not $operation: ${it.message}") }
+        }
     }
 
     private suspend fun sendNow(packet: ByteArray, operation: String): Boolean {
