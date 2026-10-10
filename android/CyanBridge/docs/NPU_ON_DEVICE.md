@@ -233,6 +233,9 @@ matching file from a public Hugging Face repo, and checks its sha256.
   (SM8450 v69, SM8550 v73, SM8850 v81) need `package_npu_aar.py --hexagon` plus a published file.
 - **Upload new files** with the commit pinned in `LocalModelCatalog.kt` (`NPU_E2B_REVISION`)
   and their sha256/size, then update the model card's table.
+- **Publish only 4k builds for now.** The model card (commit `66c2f494`) states that
+  longer-context builds are not production quality. No ctx/multi-bucket package goes to the
+  repo until long-context retrieval is fixed, as agreed with the recipe owner.
 
 ## Image and audio on the NPU
 
