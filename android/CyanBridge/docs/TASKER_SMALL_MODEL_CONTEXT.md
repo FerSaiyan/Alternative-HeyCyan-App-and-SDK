@@ -1,5 +1,14 @@
 # Small decision models over Tasker accessibility observations
 
+Current plan (2026-10-03):
+[`JEV_PHONE_AGENT_ROADMAP.md`](JEV_PHONE_AGENT_ROADMAP.md). The replay numbers
+below are diagnostic September measurements, not a current deployment gate.
+
+For voice/device examples, actual Tasker field limits and paired model training
+rows, see [`JEV_VOICE_TASKER_TRAINING_FINDINGS.md`](JEV_VOICE_TASKER_TRAINING_FINDINGS.md).
+It adds Laya's voice-turn recipe and Needle's inspectable product toolsets, and
+separates voice routing from current-screen selection.
+
 For the upstream **fine-tuning recipes**, Ship With Jev browser examples and
 an episode-based Tasker training/evaluation plan, see
 [`LAYA_NEEDLE_PHONE_TRAINING.md`](LAYA_NEEDLE_PHONE_TRAINING.md).
@@ -112,6 +121,16 @@ Reports and traces are outside Git under `/tmp/opencode/`: baseline
 stay outside Git/default CI.
 
 ## Next validation gate
+
+Collection has since added an [Artemis pool](../training/artemis_real_v1/README.md)
+(29 episodes / 82 decisions, three connected screen families) and one
+separately [verified Tasker Settings tap](../training/tasker_real_v1/README.md).
+The latter confirms candidate retention and a distinct pre/post transition,
+not a training-ready Tasker corpus. Artemis actionability/focus metadata must
+not be attributed to the reduced Tasker contract. The production
+`UiActionDecisionState` now shortens state to 600 characters, and the brain
+preserves selected node bindings; these are distinct from the experimental
+Python renderer. Measure them on fresh episodes before revising thresholds.
 
 Collect **independent** Tasker snapshots across apps and phases, including
 ambiguous/missing controls, after-action DONE and mid-task negatives, unrelated

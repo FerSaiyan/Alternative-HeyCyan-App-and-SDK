@@ -29,6 +29,8 @@ captures/
 !android/CyanBridge/training/phone_ui_synthetic_v1/manifest.json
 !android/CyanBridge/training/artemis_real_v1/*.json
 !android/CyanBridge/training/tasker_real_v1/*.json
+!android/CyanBridge/training/laya_needle_dataset_sources_v1/catalog.json
+!android/CyanBridge/training/laya_needle_specialists_v1/*-summary.json
 !package.json
 firmware_dump/
 
@@ -125,6 +127,45 @@ tools/benchmarks/*
 !tools/benchmarks/audit_tasker_settings_episode.py
 !tools/benchmarks/test_audit_tasker_settings_episode.py
 !tools/benchmarks/export_tasker_settings_episode.py
+!tools/benchmarks/make_specialist_training.py
+!tools/benchmarks/specialist_metrics.py
+!tools/benchmarks/train_laya_specialist.py
+!tools/benchmarks/eval_laya_specialist.py
+!tools/benchmarks/eval_needle_specialist.py
+!tools/benchmarks/run_specialist_campaign.py
+!tools/benchmarks/audit_specialist_training.py
+!tools/benchmarks/baseline_specialist.py
+!tools/benchmarks/test_specialist_training.py
+!tools/benchmarks/make_specialist_stress.py
+!tools/benchmarks/summarize_specialist_campaign.py
+!tools/benchmarks/build_needle_offline.py
+!tools/benchmarks/rescore_needle_specialist.py
+!tools/benchmarks/probe_needle_specialist_contract.py
+!tools/benchmarks/probe_needle_teacher_forcing.py
+!tools/benchmarks/add_specialist_reasoning.py
+!tools/benchmarks/bounded_specialist_contract.py
+!tools/benchmarks/make_bounded_specialist_training.py
+!tools/benchmarks/make_bounded_specialist_flat.py
+!tools/benchmarks/test_bounded_specialist_contract.py
+!tools/benchmarks/eval_bounded_specialist.py
+!tools/benchmarks/audit_bounded_specialist.py
+!tools/benchmarks/run_bounded_campaign.py
+!tools/benchmarks/run_bounded_order_ablation.py
+!tools/benchmarks/summarize_bounded_campaign.py
+!tools/benchmarks/test_summarize_bounded_campaign.py
+!tools/benchmarks/train_needle_bounded.py
+!tools/benchmarks/compare_laya_precision.py
+!tools/benchmarks/export_laya_fixed_onnx.py
+!tools/benchmarks/bounded_embedding.py
+!tools/benchmarks/train_embedding_bounded.py
+!tools/benchmarks/test_bounded_embedding.py
+!tools/benchmarks/score_litert_bounded_eval.py
+!tools/benchmarks/test_score_litert_bounded_eval.py
+!tools/benchmarks/hf_bounded_decision.py
+!tools/benchmarks/gemma_decision_prompts.py
+!tools/benchmarks/train_gemma_decision_lora.py
+!tools/benchmarks/merge_gemma_decision_lora.py
+!tools/benchmarks/audio_speaker_*.py
 
 # Generated analysis and language caches
 **/.kotlin/

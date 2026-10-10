@@ -2,13 +2,15 @@ package com.fersaiyan.cyanbridge.localmodels.engine
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.BuildConfig
+import com.fersaiyan.cyanbridge.ai.decision.DecisionLogits
+import com.fersaiyan.cyanbridge.ai.decision.NextTokenDecisionRuntime
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpResolver
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.Capabilities
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
@@ -20,6 +22,7 @@ import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ToolProvider
+import com.google.ai.edge.litertlm.ThinkingConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.sync.Mutex
@@ -28,17 +31,22 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
-class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CONTEXT) : LocalInferenceEngine {
+class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CONTEXT) : LocalInferenceEngine, NextTokenDecisionRuntime {
     private val supportedAudioExtensions = setOf("wav", "mp3", "flac")
 
     private val mutex = Mutex()
+    private val operationMutex = Mutex()
     private var engine: Engine? = null
     private var activeConversation: Conversation? = null
     private var modelPath: String? = null
     private var activeLoadConfig: EngineLoadConfig? = null
     private var activeLoadResult: EngineLoadResult? = null
 
-    override suspend fun loadModel(modelPath: String, config: EngineLoadConfig): EngineLoadResult {
+    override suspend fun loadModel(modelPath: String, config: EngineLoadConfig): EngineLoadResult = operationMutex.withLock {
+        loadModelSerialized(modelPath, config)
+    }
+
+    private suspend fun loadModelSerialized(modelPath: String, config: EngineLoadConfig): EngineLoadResult {
         val effectiveConfig = resolveAutomaticMtp(modelPath, config)
         Log.i(
             TAG,
@@ -182,6 +190,11 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     ): Pair<Engine, EngineLoadResult> {
         val npuBackend = Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
         return runCatching {
+            val npu = LiteRtNpuSupport.status(context)
+            check(npu.available) { npu.reason }
+            LiteRtNpuSupport.compiledFor(modelPath)?.let { target ->
+                check(target == npu.socModel) { "model is compiled for $target, this phone is ${npu.socModel}" }
+            }
             createInitializedEngine(
                 modelPath = modelPath,
                 backend = npuBackend,
@@ -215,22 +228,26 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         maxNumTokens: Int,
         speculativeDecoding: Boolean?,
     ): Engine {
+        // Text-only bundles (custom exports, fine-tunes) must not get media backends.
+        val media = runCatching { LiteRtModelProbe.mediaSupport(modelPath) }.getOrNull()
+        val vision = visionBackend?.takeIf { media?.vision != false }
+        val audio = audioBackend?.takeIf { media?.audio != false }
         Log.i(
             TAG,
             "Initializing LiteRT engine backend=${backend.javaClass.simpleName} " +
-                "vision=${visionBackend?.javaClass?.simpleName ?: "none"} " +
-                "audio=${audioBackend?.javaClass?.simpleName ?: "none"} " +
+                "vision=${vision?.javaClass?.simpleName ?: "none"} " +
+                "audio=${audio?.javaClass?.simpleName ?: "none"} " +
                 "maxTokens=$maxNumTokens mtp=$speculativeDecoding",
         )
         val config = EngineConfig(
             modelPath = modelPath,
             backend = backend,
-            visionBackend = visionBackend,
-            audioBackend = audioBackend,
+            visionBackend = vision,
+            audioBackend = audio,
             maxNumTokens = maxNumTokens.coerceAtLeast(1024),
             cacheDir = context.cacheDir.path,
         )
-        return synchronized(engineCreationLock) {
+        val created = synchronized(engineCreationLock) {
             val previous = ExperimentalFlags.enableSpeculativeDecoding
             try {
                 ExperimentalFlags.enableSpeculativeDecoding = speculativeDecoding
@@ -239,9 +256,19 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 ExperimentalFlags.enableSpeculativeDecoding = previous
             }
         }
+        if (media != null || (vision == null && audio == null)) return created
+        // The runtime could not report modalities (0.16): media backends initialize
+        // but a text-only bundle fails on the first conversation. Probe once, cheaply.
+        val missingEncoder = runCatching {
+            created.createConversation(ConversationConfig(prefillPrefaceOnInit = false)).close()
+        }.exceptionOrNull()?.takeIf { MISSING_MEDIA_ENCODER.containsMatchIn(it.message.orEmpty()) }
+            ?: return created
+        Log.w(TAG, "LiteRT bundle has no media encoder; reloading text-only: ${compactError(missingEncoder)}")
+        created.close()
+        return createInitializedEngine(modelPath, backend, null, null, maxNumTokens, speculativeDecoding)
     }
 
-    override suspend fun unloadModel() {
+    override suspend fun unloadModel() = operationMutex.withLock {
         mutex.withLock {
             Log.i(TAG, "Unloading LiteRT model ${modelPath.orEmpty()}")
             closeConversationLocked()
@@ -252,7 +279,45 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         }
     }
 
-    override suspend fun generate(config: GenerationConfig, onToken: (String) -> Unit): GenerationResult {
+    override suspend fun generate(config: GenerationConfig, onToken: (String) -> Unit): GenerationResult = operationMutex.withLock {
+        generateSerialized(config, onToken)
+    }
+
+    override suspend fun score(userPrompt: String, labels: List<String>): DecisionLogits = operationMutex.withLock {
+        check(BuildConfig.LITERT_DECISION_PROTOTYPE) { "LiteRT decision prototype is disabled" }
+        withContext(Dispatchers.IO) {
+            val llm = mutex.withLock { engine } ?: error("LiteRT engine is not initialized")
+            LiteRtDecisionBinding.score(llm, renderDecisionPrompt(llm, userPrompt), labels)
+        }
+    }
+
+    /** Exact text scored for [userPrompt]; exposed for HIL prompt-rendering diagnostics. */
+    suspend fun renderedDecisionPrompt(userPrompt: String): String = operationMutex.withLock {
+        withContext(Dispatchers.IO) {
+            renderDecisionPrompt(mutex.withLock { engine } ?: error("LiteRT engine is not initialized"), userPrompt)
+        }
+    }
+
+    @OptIn(ExperimentalApi::class)
+    private fun renderDecisionPrompt(llm: Engine, userPrompt: String): String {
+        // Render with the model's own template, including BOS/assistant prefix.
+        // Rendering performs no prefill and the temporary conversation is closed
+        // before allocating the actual decision context on the same engine.
+        val rendered = llm.createConversation(
+            ConversationConfig(
+                prefillPrefaceOnInit = false,
+                thinkingConfig = ThinkingConfig(enableThinking = false),
+            ),
+        ).use { conversation ->
+            conversation.renderMessageIntoString(
+                Message.user(Contents.of(userPrompt)),
+                mapOf("enable_thinking" to false),
+            )
+        }
+        return rendered + "⊲"
+    }
+
+    private suspend fun generateSerialized(config: GenerationConfig, onToken: (String) -> Unit): GenerationResult {
         Log.i(
             TAG,
             "generate promptChars=${config.prompt.length} images=${config.imagePaths.size} " +
@@ -415,11 +480,13 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     companion object {
         private const val TAG = "LiteRtLocalEngine"
         private val engineCreationLock = Any()
+        // e.g. "NOT_FOUND: TF_LITE_AUDIO_ENCODER_HW not found in the model."
+        internal val MISSING_MEDIA_ENCODER = Regex("""NOT_FOUND: \S*(AUDIO|VISION)\S*ENCODER\S* not found in the model""")
 
         fun supportsSpeculativeDecoding(modelPath: String): Boolean {
             if (modelPath.isBlank()) return false
             return runCatching {
-                Capabilities(modelPath).use { it.hasSpeculativeDecodingSupport() }
+                LiteRtModelProbe.supportsSpeculativeDecoding(modelPath)
             }.getOrDefault(false)
         }
     }

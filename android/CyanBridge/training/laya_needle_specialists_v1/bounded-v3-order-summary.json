@@ -1,0 +1,215 @@
+{
+  "contract": "bounded-specialist-v3",
+  "complete": true,
+  "artifactHashesVerified": true,
+  "reversedOptions": true,
+  "evaluatedBackends": [
+    "laya",
+    "needle"
+  ],
+  "supervisedReasoningTargets": false,
+  "predictionModelHashesVerified": true,
+  "legacyV2MissingMetadata": [],
+  "results": [
+    {
+      "name": "laya-bounded-flat-v3-base-rollout",
+      "backend": "laya",
+      "view": "flat",
+      "modelSha256": "9d628fd971b700382ac6f65920a86f149777b2e748e0c955fb3b19695aa8f204",
+      "reportSha256": "36f26c8bb59a8c866505e5a4246bb0fd9087f31206a2867c4442fa1e81e0dec7",
+      "oracleTurns": 120,
+      "oracleCorrect": 34,
+      "oracleChoiceAccuracy": 0.2833333333333333,
+      "oracleControlFalseActionRate": 0.578125,
+      "invalidOracleChoices": 0,
+      "episodes": 120,
+      "correctEpisodes": 34,
+      "rolloutAccuracy": 0.2833333333333333,
+      "meanRolloutTurns": 1.0,
+      "evaluationModelCalls": 240,
+      "evaluationWallSeconds": 6.46211060101632
+    },
+    {
+      "name": "laya-bounded-flat-v3-tuned-rollout",
+      "backend": "laya",
+      "view": "flat",
+      "modelSha256": "31cfd585dc21d52c0fb7fec0dbc7cee9122062fd6e92f6149450eb11c12126f3",
+      "reportSha256": "01d4968080ac61c133338dd0207927ce90584d31cd3aa1615adb0b7deb1028bf",
+      "oracleTurns": 120,
+      "oracleCorrect": 92,
+      "oracleChoiceAccuracy": 0.7666666666666667,
+      "oracleControlFalseActionRate": 0.0,
+      "invalidOracleChoices": 0,
+      "episodes": 120,
+      "correctEpisodes": 92,
+      "rolloutAccuracy": 0.7666666666666667,
+      "meanRolloutTurns": 1.0,
+      "evaluationModelCalls": 240,
+      "evaluationWallSeconds": 6.465916468994692
+    },
+    {
+      "name": "laya-bounded-hierarchy-v3-base-rollout",
+      "backend": "laya",
+      "view": "hierarchical",
+      "modelSha256": "9d628fd971b700382ac6f65920a86f149777b2e748e0c955fb3b19695aa8f204",
+      "reportSha256": "63911336208f77defad1301a6c6d73d29a05dd0d8debb2a8dbd9006c783968e4",
+      "oracleTurns": 352,
+      "oracleCorrect": 161,
+      "oracleChoiceAccuracy": 0.45738636363636365,
+      "oracleControlFalseActionRate": 0.53125,
+      "invalidOracleChoices": 0,
+      "episodes": 120,
+      "correctEpisodes": 31,
+      "rolloutAccuracy": 0.25833333333333336,
+      "meanRolloutTurns": 1.7,
+      "evaluationModelCalls": 556,
+      "evaluationWallSeconds": 19.594942690921016
+    },
+    {
+      "name": "laya-bounded-hierarchy-v3-tuned-rollout",
+      "backend": "laya",
+      "view": "hierarchical",
+      "modelSha256": "b9cb0143c8898ccd55d32bfae85fe40d136c81c63388e6b1526714a222b080c0",
+      "reportSha256": "e100d5c363a4645bac0b73e93bf31a34af2bc93eda68d9f90fc63071f6d83b6b",
+      "oracleTurns": 352,
+      "oracleCorrect": 296,
+      "oracleChoiceAccuracy": 0.8409090909090909,
+      "oracleControlFalseActionRate": 0.171875,
+      "invalidOracleChoices": 0,
+      "episodes": 120,
+      "correctEpisodes": 82,
+      "rolloutAccuracy": 0.6833333333333333,
+      "meanRolloutTurns": 2.5,
+      "evaluationModelCalls": 652,
+      "evaluationWallSeconds": 14.19899299601093
+    },
+    {
+      "name": "needle-bounded-flat-v3-base-rollout",
+      "backend": "needle",
+      "view": "flat",
+      "modelSha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+      "reportSha256": "fece581f6fb02d35c4679d8980f798779bdb51f7fa2bdd5bda9dc046578d6101",
+      "oracleTurns": 120,
+      "oracleCorrect": 13,
+      "oracleChoiceAccuracy": 0.10833333333333334,
+      "oracleControlFalseActionRate": 0.59375,
+      "invalidOracleChoices": 18,
+      "episodes": 120,
+      "correctEpisodes": 13,
+      "rolloutAccuracy": 0.10833333333333334,
+      "meanRolloutTurns": 1.0,
+      "evaluationModelCalls": 240,
+      "evaluationWallSeconds": 224.8196071749553
+    },
+    {
+      "name": "needle-bounded-flat-v3-tuned-rollout",
+      "backend": "needle",
+      "view": "flat",
+      "modelSha256": "3aa2ad1ae0bbb146db0ada9222031d5b0cae02d482283593d231797716e0d13d",
+      "reportSha256": "2176985fc6babb60467e2aaab337efe183f79719b70be96194634e667f9f6205",
+      "oracleTurns": 120,
+      "oracleCorrect": 16,
+      "oracleChoiceAccuracy": 0.13333333333333333,
+      "oracleControlFalseActionRate": 0.640625,
+      "invalidOracleChoices": 2,
+      "episodes": 120,
+      "correctEpisodes": 16,
+      "rolloutAccuracy": 0.13333333333333333,
+      "meanRolloutTurns": 1.0,
+      "evaluationModelCalls": 240,
+      "evaluationWallSeconds": 345.379695881973
+    },
+    {
+      "name": "needle-bounded-hierarchy-v3-base-rollout",
+      "backend": "needle",
+      "view": "hierarchical",
+      "modelSha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+      "reportSha256": "8cb6773fda53e189387589f7b1e1e6235e0c92946590c0055584890876fdbe18",
+      "oracleTurns": 352,
+      "oracleCorrect": 62,
+      "oracleChoiceAccuracy": 0.17613636363636365,
+      "oracleControlFalseActionRate": 0.3125,
+      "invalidOracleChoices": 56,
+      "episodes": 120,
+      "correctEpisodes": 18,
+      "rolloutAccuracy": 0.15,
+      "meanRolloutTurns": 1.25,
+      "evaluationModelCalls": 502,
+      "evaluationWallSeconds": 526.1388327910099
+    },
+    {
+      "name": "needle-bounded-hierarchy-v3-tuned-rollout",
+      "backend": "needle",
+      "view": "hierarchical",
+      "modelSha256": "e384f1210901ae825952fbb8f53a39610fa84179c3743fd797440caa765e6f30",
+      "reportSha256": "e32992276d730ef066719c2d9b813c1e451a85ad1b0427c9e5d64e46144a5d97",
+      "oracleTurns": 352,
+      "oracleCorrect": 78,
+      "oracleChoiceAccuracy": 0.2215909090909091,
+      "oracleControlFalseActionRate": 0.359375,
+      "invalidOracleChoices": 22,
+      "episodes": 120,
+      "correctEpisodes": 20,
+      "rolloutAccuracy": 0.16666666666666666,
+      "meanRolloutTurns": 1.1583333333333334,
+      "evaluationModelCalls": 491,
+      "evaluationWallSeconds": 328.0693370549707
+    }
+  ],
+  "dataset": {
+    "hierarchy": {
+      "episodes": {
+        "train": 300,
+        "development": 120,
+        "calibration": 60,
+        "sealed": 60
+      },
+      "counts": {
+        "train": 880,
+        "development": 352,
+        "calibration": 176,
+        "sealed": 176
+      },
+      "maxOptions": 9
+    },
+    "flat": {
+      "episodes": {
+        "train": 300,
+        "development": 120,
+        "calibration": 60,
+        "sealed": 60
+      },
+      "counts": {
+        "train": 300,
+        "development": 120,
+        "calibration": 60,
+        "sealed": 60
+      },
+      "maxOptions": 12
+    }
+  },
+  "budgets": {
+    "laya": {
+      "updates": 180,
+      "effectiveBatch": 16,
+      "encoder": "full",
+      "selection": "best of three development checkpoints"
+    },
+    "needle": {
+      "updates": 180,
+      "batch": 8,
+      "valSplit": 0,
+      "selection": "fixed final adapter"
+    }
+  },
+  "calibrationEvaluated": false,
+  "finalTestEvaluated": false,
+  "hostVerifiedMutation": false,
+  "limits": [
+    "Generated written examples and hypothetical app state; shared concepts/catalog and only two development phrasing families",
+    "Oracle-turn accuracy is not self-routed episode accuracy; one wrong ancestor is never replaced by gold scope",
+    "Leaf effects are proposed setting changes/download offers; no actual execution, download, setting readback or Tasker completion",
+    "Optimizer updates match within each model; turn/goal exposure and total per-episode inference cost differ",
+    "This is a bounded local-model/AI-route/Live-refresh slice, not the complete plugin/settings manifest"
+  ]
+}

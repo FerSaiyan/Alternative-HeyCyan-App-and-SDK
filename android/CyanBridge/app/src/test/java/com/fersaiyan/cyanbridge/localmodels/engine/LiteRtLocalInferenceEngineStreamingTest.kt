@@ -2,6 +2,8 @@ package com.fersaiyan.cyanbridge.localmodels.engine
 
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,5 +38,14 @@ class LiteRtLocalInferenceEngineStreamingTest {
     @Test
     fun overlappingFragmentsDoNotRepeatSharedText() {
         assertEquals(" ahead", engine.incrementalDelta("Door is", "is ahead"))
+    }
+
+    @Test
+    fun textOnlyBundleDetectionMatchesOnlyMissingMediaEncoders() {
+        val pattern = LiteRtLocalInferenceEngine.MISSING_MEDIA_ENCODER
+        assertTrue(pattern.containsMatchIn("Failed to create conversation: NOT_FOUND: TF_LITE_AUDIO_ENCODER_HW not found in the model."))
+        assertTrue(pattern.containsMatchIn("NOT_FOUND: TF_LITE_VISION_ENCODER not found in the model."))
+        assertFalse(pattern.containsMatchIn("NOT_FOUND: TF_LITE_PREFILL_DECODE not found in the model."))
+        assertFalse(pattern.containsMatchIn("INTERNAL: audio encoder failed to allocate"))
     }
 }

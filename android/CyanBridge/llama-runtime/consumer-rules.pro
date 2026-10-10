@@ -1,0 +1,2 @@
+-keep class com.fersaiyan.cyanbridge.llama.SharedGemmaBridge { *; }
+-keep class com.fersaiyan.cyanbridge.llama.SharedGemmaBridge$TokenSink { *; }

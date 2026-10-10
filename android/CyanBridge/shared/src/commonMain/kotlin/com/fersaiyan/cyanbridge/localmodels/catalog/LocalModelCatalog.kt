@@ -25,7 +25,41 @@ data class LocalModelCatalogEntry(
     val npuSupported: Boolean = false,
     val npuOnly: Boolean = false,
     val comingSoon: Boolean = false,
+    /** Per-SoC NPU builds; resolve with [NpuVariantResolver] before downloading. */
+    val npuVariants: NpuVariantSet? = null,
 )
+
+/**
+ * NPU builds compiled per Snapdragon SoC and hosted in one public Hugging Face repo as
+ * `<repo>/resolve/main/<filePrefix>_Qualcomm_<SoC>.<format>` (e.g. SM8650). [socs] lists the
+ * SoC models (`Build.SOC_MODEL`) that have a published file. The SoC suffix is kept in the
+ * installed file name, which the runtime checks against the phone before loading.
+ */
+data class NpuVariantSet(
+    val repo: String,
+    val filePrefix: String,
+    val socs: Set<String>,
+)
+
+object NpuVariantResolver {
+    fun fileName(entry: LocalModelCatalogEntry, socModel: String): String? =
+        entry.npuVariants?.let { "${it.filePrefix}_Qualcomm_$socModel.${entry.format}" }
+
+    /**
+     * The entry to download on a phone with [socModel]: itself when it has no per-SoC
+     * variants, the SoC-specific file when one is published, or null when this SoC has none.
+     */
+    fun resolve(entry: LocalModelCatalogEntry, socModel: String?): LocalModelCatalogEntry? {
+        val variants = entry.npuVariants ?: return entry
+        if (socModel == null || socModel !in variants.socs) return null
+        val name = fileName(entry, socModel) ?: return null
+        return entry.copy(
+            sourceUrl = "https://huggingface.co/${variants.repo}/resolve/main/$name",
+            sourcePageUrl = "https://huggingface.co/${variants.repo}",
+            expectedFilename = name,
+        )
+    }
+}
 
 object LocalModelCatalogRepository {
     val curatedModels: List<LocalModelCatalogEntry> = listOf(

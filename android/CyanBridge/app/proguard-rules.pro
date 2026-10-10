@@ -22,3 +22,8 @@
 
 # Shizuku creates this Binder user service by its class name outside the normal Android manifest.
 -keep class com.fersaiyan.cyanbridge.localagent.shizuku.LocalAgentShizukuUserService { <init>(...); *; }
+
+# Optional LiteRT-LM fork API is looked up by name; stock SDK has no such method.
+-keepclassmembers class com.google.ai.edge.litertlm.Engine {
+    public float[] scoreDecision(byte[], java.lang.String[]);
+}

@@ -13,6 +13,9 @@ import org.tensorflow.lite.Tensor
 import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate
 import org.tensorflow.lite.nnapi.NnApiDelegate
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuModel
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuModelFactory
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuSupport
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import java.io.File
@@ -31,6 +34,10 @@ class LiteRtVisionBackend(
 ) : VisionBackend {
 
     private var detectorInterpreter: Interpreter? = null
+    // Qualcomm NPU detector (AOT model for this SoC). detectorInterpreter stays loaded on CPU for
+    // tensor metadata and as the fallback.
+    @Volatile
+    private var npuDetector: LiteRtNpuModel? = null
     private var depthInterpreter: Interpreter? = null
 
     private var gpuDelegate: GpuDelegate? = null
@@ -96,7 +103,12 @@ class LiteRtVisionBackend(
             var details = "Defaulting to XNNPACK CPU acceleration"
             var delegatedOps = 0
             when (targetBackend) {
-                LocalComputeBackend.NPU_EXPERIMENTAL -> {
+                LocalComputeBackend.NPU_EXPERIMENTAL -> openNpuDetector(modelFile)?.let { (npu, aotName) ->
+                    npuDetector = npu
+                    accelType = AcceleratorType.NPU_ON_DEVICE
+                    details = "Qualcomm NPU via LiteRT CompiledModel ($aotName)"
+                    Log.i(TAG, details)
+                } ?: run {
                     try {
                         val nnApi = NnApiDelegate(
                             NnApiDelegate.Options().apply {
@@ -136,9 +148,11 @@ class LiteRtVisionBackend(
                 options.setUseXNNPACK(true)
                 options.setNumThreads(4)
                 detectorInterpreter = Interpreter(modelBuffer, options)
-                accelType = AcceleratorType.XNNPACK_CPU
-                details = "LiteRT XNNPACK CPU engine initialized (4 threads)"
-                Log.i(TAG, details)
+                if (npuDetector == null) {
+                    accelType = AcceleratorType.XNNPACK_CPU
+                    details = "LiteRT XNNPACK CPU engine initialized (4 threads)"
+                    Log.i(TAG, details)
+                }
             }
 
             // Read model dimensions if available
@@ -173,6 +187,27 @@ class LiteRtVisionBackend(
             detectorInitError = "Failed initializing YOLO detector in LiteRT: ${e.message}"
             Log.e(TAG, "Failed initializing YOLO detector in LiteRT: ${e.message}", e)
         }
+    }
+
+    /**
+     * The NPU detector is `<detector name>_Qualcomm_<SoC>.tflite` next to the plain model, compiled
+     * for this phone's SoC with the QAIRT version the app ships (docs/NPU_ON_DEVICE.md).
+     */
+    private fun openNpuDetector(modelFile: File): Pair<LiteRtNpuModel, String>? {
+        if (!LiteRtNpuModelFactory.AVAILABLE) return null
+        val npu = LiteRtNpuSupport.status(context)
+        if (!npu.available) {
+            Log.i(TAG, "NPU detector skipped: ${npu.reason}")
+            return null
+        }
+        val aotName = "${modelFile.nameWithoutExtension}_Qualcomm_${npu.socModel}.tflite"
+        val aotFile = locateModel(aotName) ?: run {
+            Log.i(TAG, "NPU detector skipped: $aotName is not installed")
+            return null
+        }
+        return runCatching { LiteRtNpuModelFactory.open(context, aotFile.absolutePath) to aotName }
+            .onFailure { Log.w(TAG, "NPU detector failed to load; using NNAPI/GPU/CPU: ${it.message}", it) }
+            .getOrNull()
     }
 
     private fun tryGpuDelegate(
@@ -287,7 +322,11 @@ class LiteRtVisionBackend(
 
         inputBuffer.rewind()
         val output = try {
-            runDetector(interp, inputBuffer)
+            npuDetector?.let { npu ->
+                runCatching { runNpuDetector(npu, interp, inputBuffer) }
+                    .onFailure { disableNpuDetector(it) }
+                    .getOrNull()
+            } ?: runDetector(interp, inputBuffer.apply { rewind() })
         } catch (error: Exception) {
             val message = "YOLO detector output is unsupported: ${error.message ?: error.javaClass.simpleName}"
             Log.e(TAG, message, error)
@@ -427,9 +466,38 @@ class LiteRtVisionBackend(
             index to ByteBuffer.allocateDirect(tensor.numBytes()).order(ByteOrder.nativeOrder())
         }.toMap()
         interpreter.runForMultipleInputsOutputs(arrayOf(input), outputBuffers)
+        return decodeDetectorOutputs(outputTensors, outputTensors.indices.map(outputBuffers::getValue))
+    }
 
+    /** Same model on the NPU; the CPU interpreter supplies output shapes and quantization. */
+    private fun runNpuDetector(npu: LiteRtNpuModel, interpreter: Interpreter, input: ByteBuffer): DetectorOutput {
+        val outputTensors = (0 until interpreter.outputTensorCount).map(interpreter::getOutputTensor)
+        val outputBuffers = npu.run(
+            input,
+            inputIsFloat = detectorInputType == DataType.FLOAT32,
+            outputIsFloat = outputTensors.map { it.dataType() == DataType.FLOAT32 },
+        )
+        outputTensors.zip(outputBuffers).forEach { (tensor, buffer) ->
+            require(buffer.capacity() == tensor.numBytes()) {
+                "NPU output ${tensor.name()} has ${buffer.capacity()} bytes, expected ${tensor.numBytes()}"
+            }
+        }
+        return decodeDetectorOutputs(outputTensors, outputBuffers)
+    }
+
+    private fun disableNpuDetector(error: Throwable) {
+        Log.w(TAG, "NPU detector failed; continuing on CPU: ${error.message}", error)
+        npuDetector?.close()
+        npuDetector = null
+        activeAcceleratorInfo = activeAcceleratorInfo.copy(
+            type = AcceleratorType.XNNPACK_CPU,
+            details = "NPU failed (${error.message}); LiteRT XNNPACK CPU",
+        )
+    }
+
+    private fun decodeDetectorOutputs(outputTensors: List<Tensor>, outputBuffers: List<ByteBuffer>): DetectorOutput {
         val decodedOutputs = outputTensors.indices.map { index ->
-            outputTensors[index] to readDetectorOutput(outputTensors[index], outputBuffers.getValue(index))
+            outputTensors[index] to readDetectorOutput(outputTensors[index], outputBuffers[index])
         }
         val primaryEntry = decodedOutputs.firstOrNull { (tensor, output) ->
             tensor.name().contains("box", ignoreCase = true) && output.channelCount == 4
@@ -477,12 +545,42 @@ class LiteRtVisionBackend(
 
         val channels = primary.channelCount + scores.channelCount
         val values = FloatArray(channels * primary.boxCount)
-        primary.values.copyInto(values)
+        decodeAnchorDistancesIfNeeded(primary.values, primary.boxCount).copyInto(values)
         scores.values.copyInto(
             destination = values,
             destinationOffset = primary.channelCount * primary.boxCount,
         )
         return DetectorOutput(channels, primary.boxCount, values, boxesAreCorners = true)
+    }
+
+    /**
+     * Some YOLO-World exports (the catalog's `yolo_world_x_coco_zeroshot_rep_integer_quant`)
+     * output undecoded left/top/right/bottom distances in stride units (at most reg_max 16)
+     * instead of boxes; read as corners they collapse into the top-left corner. Converts them
+     * to pixel corners on the stride 8/16/32 anchor grid. Pixel boxes always exceed 16 somewhere
+     * on the grid and normalised boxes stay below 1.5, so other formats pass through unchanged.
+     */
+    private fun decodeAnchorDistancesIfNeeded(boxes: FloatArray, boxCount: Int): FloatArray {
+        val strides = intArrayOf(8, 16, 32)
+        if (strides.sumOf { (modelWidth / it) * (modelHeight / it) } != boxCount) return boxes
+        val maxValue = boxes.maxOrNull() ?: return boxes
+        if (maxValue <= 1.5f || maxValue > 16.5f || boxes.any { it < 0f }) return boxes
+        val decoded = FloatArray(boxes.size)
+        var anchor = 0
+        for (stride in strides) {
+            for (row in 0 until modelHeight / stride) {
+                for (column in 0 until modelWidth / stride) {
+                    val centerX = column + 0.5f
+                    val centerY = row + 0.5f
+                    decoded[anchor] = (centerX - boxes[anchor]) * stride
+                    decoded[boxCount + anchor] = (centerY - boxes[boxCount + anchor]) * stride
+                    decoded[2 * boxCount + anchor] = (centerX + boxes[2 * boxCount + anchor]) * stride
+                    decoded[3 * boxCount + anchor] = (centerY + boxes[3 * boxCount + anchor]) * stride
+                    anchor++
+                }
+            }
+        }
+        return decoded
     }
 
     private fun readDetectorOutput(tensor: Tensor, rawOutput: ByteBuffer): DetectorOutput {
@@ -521,11 +619,13 @@ class LiteRtVisionBackend(
         val values = FloatArray(tensor.numBytes() / tensor.dataType().byteSize())
         val scale = tensor.quantizationParams().scale
         val zeroPoint = tensor.quantizationParams().zeroPoint
+        // Scale 0 means "not quantized" (e.g. the uint8 class_idx output): keep the raw value.
+        val quantized = scale != 0f
         for (index in values.indices) {
             values[index] = when (tensor.dataType()) {
                 DataType.FLOAT32 -> buffer.float
-                DataType.UINT8 -> ((buffer.get().toInt() and 0xFF) - zeroPoint) * scale
-                DataType.INT8 -> (buffer.get().toInt() - zeroPoint) * scale
+                DataType.UINT8 -> (buffer.get().toInt() and 0xFF).let { if (quantized) (it - zeroPoint) * scale else it.toFloat() }
+                DataType.INT8 -> buffer.get().toInt().let { if (quantized) (it - zeroPoint) * scale else it.toFloat() }
                 DataType.INT32 -> buffer.int.toFloat()
                 DataType.INT64 -> buffer.long.toFloat()
                 else -> throw IllegalStateException("Unsupported YOLO output type: ${tensor.dataType()}")
@@ -711,6 +811,8 @@ class LiteRtVisionBackend(
     override fun acceleratorInfo(): AcceleratorInfo = activeAcceleratorInfo
 
     override fun close() {
+        npuDetector?.close()
+        npuDetector = null
         detectorInterpreter?.close()
         depthInterpreter?.close()
         gpuDelegate?.close()

@@ -32,6 +32,13 @@ def metaGithubToken = System.getenv("META_GITHUB_TOKEN")
         ?: localProperties.getProperty("github_token")
 def metaDatEnabled = metaGithubToken != null && !metaGithubToken.trim().isEmpty()
 def testAbi = providers.gradleProperty("testAbi").orNull
+// LiteRT-LM runtime line. 0.18.0 adds EmbeddingEngine (EmbeddingGemma 2 text/audio)
+// and ModelInfo; version-specific calls live in src/litertlm<version>/java.
+def liteRtLmVersion = providers.gradleProperty("liteRtLmVersion").getOrElse("0.16.0")
+if (!(liteRtLmVersion in ["0.16.0", "0.18.0"])) throw new GradleException("Unsupported liteRtLmVersion: $liteRtLmVersion")
+// Qualcomm NPU runtime AAR from tools/litert-npu/package_npu_aar.py (LiteRT CompiledModel,
+// dispatch library and one QAIRT runtime). Opt-in: Qualcomm binaries are not committed.
+def localLiteRtNpuAarPath = providers.gradleProperty("localLiteRtNpuAarPath").orNull
 
 android {
     namespace = "com.fersaiyan.cyanbridge"
@@ -53,6 +60,9 @@ android {
                 mwdat_client_token: "AR|1057183300587462|77e92a3d9f02778279c80f220a2d81a2",
         ]
         buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "false"
+        buildConfigField "boolean", "SHARED_GEMMA_PROTOTYPE", (providers.gradleProperty("sharedGemmaPrototype").orNull == "true").toString()
+        buildConfigField "boolean", "LITERT_DECISION_PROTOTYPE", (providers.gradleProperty("liteRtDecisionPrototype").orNull == "true").toString()
+        buildConfigField "boolean", "LITERT_NPU_RUNTIME", (localLiteRtNpuAarPath != null).toString()
 
         // Chapter 6: optional transcription API key (do not commit secrets).
         def openAiKey = project.findProperty("OPENAI_API_KEY") ?: ""
@@ -149,12 +159,32 @@ android {
             java.exclude("com/myvu/client/ui/**")
             java.exclude("com/myvu/client/service/MyvuService.java")
             java.exclude("com/myvu/client/service/MirrorNotificationListener.java")
+            java.srcDir("src/litertlm${liteRtLmVersion.replace(".", "")}/java")
+            // CompiledModel NPU models need the NPU runtime AAR; otherwise a stub reports "unavailable".
+            java.srcDir(localLiteRtNpuAarPath != null ? "src/litertnpu/java" : "src/litertnpuoff/java")
         }
     }
 
     testOptions {
         unitTests {
             includeAndroidResources = true
+        }
+    }
+
+    if (localLiteRtNpuAarPath != null) {
+        sourceSets {
+            androidTest {
+                java.srcDir("src/androidTestLitertNpu/java")
+            }
+        }
+        packaging {
+            jniLibs {
+                // The DSP loads the Hexagon skel through FastRPC from a real file, so
+                // native libraries must be extracted to nativeLibraryDir.
+                useLegacyPackaging = true
+                // Hexagon ELF: the NDK strip cannot process it.
+                keepDebugSymbols += ["**/libQnnHtpV*Skel.so"]
+            }
         }
     }
 }
@@ -168,6 +198,7 @@ dependencies {
     def coreConnectivityVersion = project.findProperty("heycyanCoreConnectivityVersion") ?: "0.1.0-SNAPSHOT"
     implementation("com.heycyan.core:core-connectivity:${coreConnectivityVersion}")
     implementation project(":shared")
+    implementation project(":llama-runtime")
     implementation files("libs/glasses_sdk_20250723_v01.aar")
     implementation files("libs/moyoung_glasses_sdk_0.0.7_20260624.aar")
     implementation "com.google.protobuf:protobuf-java:4.29.3"
@@ -216,7 +247,37 @@ dependencies {
     }
 
     // LiteRT-LM local multimodal/chat runtime.
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.0")
+    def liteRtDecisionPrototype = providers.gradleProperty("liteRtDecisionPrototype").orNull == "true"
+    def localLiteRtDecisionAarPath = providers.gradleProperty("localLiteRtDecisionAarPath").orNull
+    // A local scoring AAR must be built from the same LiteRT-LM line (-PliteRtLmVersion).
+    if (localLiteRtDecisionAarPath != null) {
+        if (!liteRtDecisionPrototype) throw new GradleException("Custom scoring AAR requires -PliteRtDecisionPrototype=true")
+        def aar = rootProject.file(localLiteRtDecisionAarPath)
+        if (!aar.isFile()) throw new GradleException("Missing LiteRT decision AAR: ${aar.absolutePath}")
+        if (!aar.name.startsWith("litertlm-$liteRtLmVersion-")) {
+            throw new GradleException("AAR ${aar.name} does not match -PliteRtLmVersion=$liteRtLmVersion")
+        }
+        implementation files(aar)
+        // Local AARs have no Maven transitive dependency metadata (versions from the stock POM).
+        if (liteRtLmVersion == "0.18.0") {
+            implementation "com.google.code.gson:gson:2.14.0"
+            implementation "org.jetbrains.kotlin:kotlin-reflect:2.4.0"
+        } else {
+            implementation "com.google.code.gson:gson:2.13.2"
+        }
+    } else {
+        implementation("com.google.ai.edge.litertlm:litertlm-android:$liteRtLmVersion")
+    }
+
+    if (localLiteRtNpuAarPath != null) {
+        def npuAar = rootProject.file(localLiteRtNpuAarPath)
+        if (!npuAar.isFile()) throw new GradleException("Missing LiteRT NPU AAR: ${npuAar.absolutePath}")
+        // The dispatch library must match LiteRT-LM's LiteRT (0.18 pins LiteRT 2.3.0 / QAIRT 2.50).
+        if (!npuAar.name.startsWith("litert-npu-qualcomm-") || liteRtLmVersion != "0.18.0") {
+            throw new GradleException("NPU AAR ${npuAar.name} requires a litert-npu-qualcomm-* AAR and -PliteRtLmVersion=0.18.0")
+        }
+        implementation files(npuAar)
+    }
 
     // Walking Aid uses the Interpreter API retained by LiteRT. These artifacts package
     // flexible-page-size native libraries for Android 15+ 16 KB devices.

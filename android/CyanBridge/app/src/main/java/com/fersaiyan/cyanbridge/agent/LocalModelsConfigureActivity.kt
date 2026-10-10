@@ -25,6 +25,7 @@ import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceSnapshot
 import com.fersaiyan.cyanbridge.localmodels.download.ModelDownloadForegroundService
 import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtLocalInferenceEngine
+import com.fersaiyan.cyanbridge.localmodels.engine.NpuCatalogVariants
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiClient
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
@@ -783,7 +784,8 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
         requireDownloadHeadroom = !entry.sourceUrl.isNullOrBlank(),
     )
 
-    private fun canDownload(entry: LocalModelCatalogEntry, installed: InstalledLocalModel?): Boolean {
+    private fun canDownload(catalogEntry: LocalModelCatalogEntry, installed: InstalledLocalModel?): Boolean {
+        val entry = NpuCatalogVariants.forDevice(this, catalogEntry).entry ?: return false
         if (installed != null || !entry.enabled || entry.comingSoon || entry.sourceUrl.isNullOrBlank()) return false
         if (ModelDownloadForegroundService.isDownloading) return false
         if (entry.gatedDownload && generationDraft.huggingFaceToken.isBlank()) return false
@@ -793,6 +795,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
     private fun statusText(entry: LocalModelCatalogEntry, installed: InstalledLocalModel?): String {
         if (installed != null) return "Ready"
         if (entry.comingSoon) return "Coming soon"
+        NpuCatalogVariants.forDevice(this, entry).reason?.let { return it }
         val assessment = assessCatalogEntry(entry)
         if (!assessment.supported) return assessment.blockers.joinToString(" ")
         return assessment.warnings.joinToString(" ").ifBlank { "Compatible with this device" }

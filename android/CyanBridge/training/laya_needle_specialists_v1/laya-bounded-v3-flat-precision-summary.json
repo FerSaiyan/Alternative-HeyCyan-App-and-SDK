@@ -1,0 +1,320 @@
+{
+  "contract": "bounded-specialist-v3",
+  "view": "flat_state_matched",
+  "split": "development",
+  "checkpoint": "tuned Laya bounded v3 flat view",
+  "modelSha256": "31cfd585dc21d52c0fb7fec0dbc7cee9122062fd6e92f6149450eb11c12126f3",
+  "modelBytes": 643835524,
+  "modelOnDiskMiB": 614.0094032287598,
+  "developmentCanonicalSha256": "4f26ac1f0c3bd269e451bb1e5e6181ff5b2a302b9d6fa7cd20b2041703e44d65",
+  "developmentEpisodesSha256": "e363ee6b3b66ec05deb65d4ab824b5b66bca0ed4138e5c94d4923abf00aa3f68",
+  "fixedOnnxInputShape": {
+    "batch": 1,
+    "sequenceLength": 512,
+    "maxOptions": 12
+  },
+  "fp32OnnxBytes": 1290252004,
+  "fp32OnnxSha256": "6be9ac67f54ce5d3c0f4232b2b6a04c2adc8d91fb39130d65047bd0b5b2c3639",
+  "q8OnnxBytes": 914805203,
+  "q8OnnxMiB": 872.4262266159058,
+  "q8OnnxSha256": "d90207746ae39c5654a7e937f19e53e8656ca8bd83a85400e18a1a0c8557f141",
+  "fp32ToQ8SizeRatio": 1.4104117464229158,
+  "q8VsOriginalFp16SafetensorsSizeRatio": 1.4208678597237514,
+  "priorRemoteA4000Reference": {
+    "oracleCorrect": 91,
+    "episodesCorrect": 91,
+    "local4060TiReferenceOracleCorrect": 93,
+    "localReferenceLabelChanges": 2,
+    "note": "Two reference choices differ by GPU/driver execution; format comparisons here all use the 4060 Ti reference."
+  },
+  "modes": [
+    {
+      "mode": "reference_fp32_weights_bf16_autocast",
+      "oracleCorrect": 93,
+      "oracleCases": 120,
+      "substantiveChoiceAccuracy": 0.8214285714285714,
+      "controlCases": 64,
+      "controlFalseActionRate": 0.0,
+      "invalidChoices": 0,
+      "correctEpisodes": 93,
+      "episodes": 120,
+      "agreementWithLocalReference": 1.0,
+      "changedTurnsVsReference": 0,
+      "meanAbsoluteLogitDifferenceVsReference": 0.0,
+      "residentAllocatedMiB": 1247.25,
+      "peakAllocatedMiB": 1514.54,
+      "cpuRssAfterMiB": null,
+      "cpuRssHighWaterMiB": null,
+      "provider": "NVIDIA GeForce RTX 4060 Ti",
+      "p50ForwardMs": 35.38564266636968,
+      "p95ForwardMs": 41.16468084976077,
+      "inputCoverage": {
+        "maxUnpaddedTokens": 438,
+        "meanUnpaddedTokens": 412.4166666666667,
+        "maxOptions": 12,
+        "paddedSequenceLength": 512,
+        "paddedMarkerCount": 12
+      },
+      "changedCases": []
+    },
+    {
+      "mode": "fp16_resident",
+      "oracleCorrect": 91,
+      "oracleCases": 120,
+      "substantiveChoiceAccuracy": 0.8035714285714286,
+      "controlCases": 64,
+      "controlFalseActionRate": 0.0,
+      "invalidChoices": 0,
+      "correctEpisodes": 91,
+      "episodes": 120,
+      "agreementWithLocalReference": 0.9833333333333333,
+      "changedTurnsVsReference": 2,
+      "meanAbsoluteLogitDifferenceVsReference": 0.04133306856724971,
+      "residentAllocatedMiB": 625.5,
+      "peakAllocatedMiB": 644.64,
+      "cpuRssAfterMiB": null,
+      "cpuRssHighWaterMiB": null,
+      "provider": "NVIDIA GeForce RTX 4060 Ti",
+      "p50ForwardMs": 34.46977771818638,
+      "p95ForwardMs": 42.00972197577357,
+      "inputCoverage": {
+        "maxUnpaddedTokens": 438,
+        "meanUnpaddedTokens": 412.4166666666667,
+        "maxOptions": 12,
+        "paddedSequenceLength": 512,
+        "paddedMarkerCount": 12
+      },
+      "changedCases": [
+        {
+          "turnId": "model-gemma4-e2b-it-litert-6-3:0",
+          "reference": "option_0",
+          "precision": "option_4",
+          "expected": "option_0"
+        },
+        {
+          "turnId": "voice-none-5-1:0",
+          "reference": "option_1",
+          "precision": "option_5",
+          "expected": "option_1"
+        }
+      ]
+    },
+    {
+      "mode": "bf16_resident",
+      "oracleCorrect": 94,
+      "oracleCases": 120,
+      "substantiveChoiceAccuracy": 0.8392857142857143,
+      "controlCases": 64,
+      "controlFalseActionRate": 0.0,
+      "invalidChoices": 0,
+      "correctEpisodes": 94,
+      "episodes": 120,
+      "agreementWithLocalReference": 0.9916666666666667,
+      "changedTurnsVsReference": 1,
+      "meanAbsoluteLogitDifferenceVsReference": 0.06018907625861409,
+      "residentAllocatedMiB": 625.5,
+      "peakAllocatedMiB": 644.64,
+      "cpuRssAfterMiB": null,
+      "cpuRssHighWaterMiB": null,
+      "provider": "NVIDIA GeForce RTX 4060 Ti",
+      "p50ForwardMs": 33.48866896703839,
+      "p95ForwardMs": 35.43367376551032,
+      "inputCoverage": {
+        "maxUnpaddedTokens": 438,
+        "meanUnpaddedTokens": 412.4166666666667,
+        "maxOptions": 12,
+        "paddedSequenceLength": 512,
+        "paddedMarkerCount": 12
+      },
+      "changedCases": [
+        {
+          "turnId": "voice-none-6-2:0",
+          "reference": "option_7",
+          "precision": "option_5",
+          "expected": "option_5"
+        }
+      ]
+    },
+    {
+      "mode": "q8_int8_matmul_per_tensor_cpu",
+      "oracleCorrect": 79,
+      "oracleCases": 120,
+      "substantiveChoiceAccuracy": 0.7321428571428571,
+      "controlCases": 64,
+      "controlFalseActionRate": 0.125,
+      "invalidChoices": 0,
+      "correctEpisodes": 79,
+      "episodes": 120,
+      "agreementWithLocalReference": 0.8083333333333333,
+      "changedTurnsVsReference": 23,
+      "meanAbsoluteLogitDifferenceVsReference": 1.7804173662414229,
+      "residentAllocatedMiB": null,
+      "peakAllocatedMiB": null,
+      "cpuRssAfterMiB": 1967.92,
+      "cpuRssHighWaterMiB": 6648.61,
+      "provider": [
+        "CPUExecutionProvider"
+      ],
+      "p50ForwardMs": 597.1923158504069,
+      "p95ForwardMs": 611.9213458150625,
+      "inputCoverage": {
+        "maxUnpaddedTokens": 438,
+        "meanUnpaddedTokens": 412.4166666666667,
+        "maxOptions": 12,
+        "paddedSequenceLength": 512,
+        "paddedMarkerCount": 12
+      },
+      "changedCases": [
+        {
+          "turnId": "ambiguous-none-5-0:0",
+          "reference": "option_4",
+          "precision": "option_5",
+          "expected": "option_4"
+        },
+        {
+          "turnId": "ambiguous-none-5-2:0",
+          "reference": "option_9",
+          "precision": "option_0",
+          "expected": "option_9"
+        },
+        {
+          "turnId": "image-none-5-2:0",
+          "reference": "option_7",
+          "precision": "option_8",
+          "expected": "option_7"
+        },
+        {
+          "turnId": "image-none-5-3:0",
+          "reference": "option_0",
+          "precision": "option_1",
+          "expected": "option_0"
+        },
+        {
+          "turnId": "live-none-5-2:0",
+          "reference": "option_7",
+          "precision": "option_0",
+          "expected": "option_3"
+        },
+        {
+          "turnId": "model-gemma4-e2b-it-litert-6-3:0",
+          "reference": "option_0",
+          "precision": "option_5",
+          "expected": "option_0"
+        },
+        {
+          "turnId": "model-gemma4-e4b-it-litert-5-3:0",
+          "reference": "option_7",
+          "precision": "option_3",
+          "expected": "option_7"
+        },
+        {
+          "turnId": "model-gemma4-e4b-it-litert-6-1:0",
+          "reference": "option_6",
+          "precision": "option_4",
+          "expected": "option_6"
+        },
+        {
+          "turnId": "model-gemma4-e4b-it-litert-6-2:0",
+          "reference": "option_6",
+          "precision": "option_7",
+          "expected": "option_6"
+        },
+        {
+          "turnId": "model-gemma4-e4b-it-litert-6-3:0",
+          "reference": "option_1",
+          "precision": "option_4",
+          "expected": "option_1"
+        },
+        {
+          "turnId": "model-qwen3.5-0.8b-q4-5-2:0",
+          "reference": "option_8",
+          "precision": "option_3",
+          "expected": "option_8"
+        },
+        {
+          "turnId": "model-qwen3.5-0.8b-q4-5-3:0",
+          "reference": "option_5",
+          "precision": "option_1",
+          "expected": "option_5"
+        },
+        {
+          "turnId": "refresh-every_turn-5-3:0",
+          "reference": "option_6",
+          "precision": "option_2",
+          "expected": "option_6"
+        },
+        {
+          "turnId": "refresh-initial_only-6-0:0",
+          "reference": "option_10",
+          "precision": "option_3",
+          "expected": "option_10"
+        },
+        {
+          "turnId": "refresh-initial_only-6-2:0",
+          "reference": "option_2",
+          "precision": "option_3",
+          "expected": "option_2"
+        },
+        {
+          "turnId": "route-image-5-0:0",
+          "reference": "option_10",
+          "precision": "option_1",
+          "expected": "option_10"
+        },
+        {
+          "turnId": "route-image-6-2:0",
+          "reference": "option_2",
+          "precision": "option_3",
+          "expected": "option_3"
+        },
+        {
+          "turnId": "unsupported-none-5-1:0",
+          "reference": "option_0",
+          "precision": "option_5",
+          "expected": "option_5"
+        },
+        {
+          "turnId": "unsupported-none-6-0:0",
+          "reference": "option_1",
+          "precision": "option_2",
+          "expected": "option_8"
+        },
+        {
+          "turnId": "unsupported-none-6-1:0",
+          "reference": "option_9",
+          "precision": "option_11",
+          "expected": "option_5"
+        },
+        {
+          "turnId": "voice-none-5-1:0",
+          "reference": "option_1",
+          "precision": "option_5",
+          "expected": "option_1"
+        },
+        {
+          "turnId": "voice-none-6-0:0",
+          "reference": "option_9",
+          "precision": "option_6",
+          "expected": "option_6"
+        },
+        {
+          "turnId": "voice-none-6-3:0",
+          "reference": "option_4",
+          "precision": "option_10",
+          "expected": "option_4"
+        }
+      ]
+    }
+  ],
+  "fullReportSha256": "ba20484cc8bcb6e27af061a46f0003dabd2586cc0e8d409d9732918c819cf708",
+  "calibrationOpened": false,
+  "finalTestOpened": false,
+  "hostVerifiedMutation": false,
+  "limits": [
+    "120 generated dev episodes; no real ASR or state mutation",
+    "The pinned dynamic-axis ONNX export failed variable-length reshape; comparison used an exact-shape 512-token/12-option fixed ONNX graph and identical masks/padding in all modes",
+    "Q8 is upstream-style per-tensor dynamic INT8 MatMul weights on Linux CPU, not Android/NNAPI/LiteRT",
+    "Forward latency excludes tokenization and host sequence construction; GPU and CPU providers/hardware differ",
+    "No quantized precision was calibrated; dev is not a deployment test"
+  ]
+}

@@ -1,0 +1,132 @@
+{
+  "diagnostic": "quant_aware_teacher_forcing_only",
+  "results": [
+    {
+      "name": "needle-bounded-flat-v3-base-teacher-forcing",
+      "rows": 12,
+      "caseIds": [
+        "model-qwen3.5-0.8b-q4-5-0:0",
+        "model-qwen3.5-0.8b-q4-5-1:0",
+        "model-qwen3.5-0.8b-q4-5-2:0",
+        "model-qwen3.5-0.8b-q4-5-3:0",
+        "model-qwen3.5-0.8b-q4-6-0:0",
+        "model-qwen3.5-0.8b-q4-6-1:0",
+        "model-qwen3.5-0.8b-q4-6-2:0",
+        "model-qwen3.5-0.8b-q4-6-3:0",
+        "model-gemma4-e2b-it-litert-5-0:0",
+        "model-gemma4-e2b-it-litert-5-1:0",
+        "model-gemma4-e2b-it-litert-5-2:0",
+        "model-gemma4-e2b-it-litert-5-3:0"
+      ],
+      "correctTokens": 128,
+      "targetTokens": 163,
+      "teacherForcedTokenAccuracy": 0.7852760736196319,
+      "exactTargets": 0,
+      "expectedFirstToken": "<tool_call>",
+      "firstTokenPredictions": {
+        "<think>": 12
+      },
+      "checkpointSha256": "c234c70dccc7a9115e7c41ac2e41d3655fea3b85c245dd898b46179fb90c6c0c",
+      "adapterSha256": null,
+      "developmentRowsSha256": "d0ff3c3f6479a1df51c0b72963a4f2f4d20a89bdfaed0031aa9c06831b3b5925",
+      "reportSha256": "dea2f3c8521cbfc86a6f67412a54f9cfec6f2e8ca43a45887efad95efad6cb92"
+    },
+    {
+      "name": "needle-bounded-flat-v3-tuned-teacher-forcing",
+      "rows": 12,
+      "caseIds": [
+        "model-qwen3.5-0.8b-q4-5-0:0",
+        "model-qwen3.5-0.8b-q4-5-1:0",
+        "model-qwen3.5-0.8b-q4-5-2:0",
+        "model-qwen3.5-0.8b-q4-5-3:0",
+        "model-qwen3.5-0.8b-q4-6-0:0",
+        "model-qwen3.5-0.8b-q4-6-1:0",
+        "model-qwen3.5-0.8b-q4-6-2:0",
+        "model-qwen3.5-0.8b-q4-6-3:0",
+        "model-gemma4-e2b-it-litert-5-0:0",
+        "model-gemma4-e2b-it-litert-5-1:0",
+        "model-gemma4-e2b-it-litert-5-2:0",
+        "model-gemma4-e2b-it-litert-5-3:0"
+      ],
+      "correctTokens": 140,
+      "targetTokens": 163,
+      "teacherForcedTokenAccuracy": 0.8588957055214724,
+      "exactTargets": 0,
+      "expectedFirstToken": "<tool_call>",
+      "firstTokenPredictions": {
+        "<think>": 12
+      },
+      "checkpointSha256": "c234c70dccc7a9115e7c41ac2e41d3655fea3b85c245dd898b46179fb90c6c0c",
+      "adapterSha256": "bc333b0f92cd082abe7f62f8992b2e7847c972d12d1875053da06ff04b5e00f1",
+      "developmentRowsSha256": "d0ff3c3f6479a1df51c0b72963a4f2f4d20a89bdfaed0031aa9c06831b3b5925",
+      "reportSha256": "516a6c263d04b53394dde5971a02a47a86360ba891b94ad1c405ca584936dcf8"
+    },
+    {
+      "name": "needle-bounded-hierarchy-v3-base-teacher-forcing",
+      "rows": 12,
+      "caseIds": [
+        "model-qwen3.5-0.8b-q4-5-0:0",
+        "model-qwen3.5-0.8b-q4-5-0:1",
+        "model-qwen3.5-0.8b-q4-5-0:2",
+        "model-qwen3.5-0.8b-q4-5-0:3",
+        "model-qwen3.5-0.8b-q4-5-0:4",
+        "model-qwen3.5-0.8b-q4-5-0:5",
+        "model-qwen3.5-0.8b-q4-5-1:0",
+        "model-qwen3.5-0.8b-q4-5-1:1",
+        "model-qwen3.5-0.8b-q4-5-1:2",
+        "model-qwen3.5-0.8b-q4-5-1:3",
+        "model-qwen3.5-0.8b-q4-5-1:4",
+        "model-qwen3.5-0.8b-q4-5-1:5"
+      ],
+      "correctTokens": 124,
+      "targetTokens": 158,
+      "teacherForcedTokenAccuracy": 0.7848101265822784,
+      "exactTargets": 0,
+      "expectedFirstToken": "<tool_call>",
+      "firstTokenPredictions": {
+        "<think>": 12
+      },
+      "checkpointSha256": "c234c70dccc7a9115e7c41ac2e41d3655fea3b85c245dd898b46179fb90c6c0c",
+      "adapterSha256": null,
+      "developmentRowsSha256": "19ef816fc92208acf0778bfd11bdf406fc00b0ca7872077c3fcef3783b813484",
+      "reportSha256": "940cb738200f0668507f7f0d2dfb344f78100409008a62bb44ecca8e2dfe0246"
+    },
+    {
+      "name": "needle-bounded-hierarchy-v3-tuned-teacher-forcing",
+      "rows": 12,
+      "caseIds": [
+        "model-qwen3.5-0.8b-q4-5-0:0",
+        "model-qwen3.5-0.8b-q4-5-0:1",
+        "model-qwen3.5-0.8b-q4-5-0:2",
+        "model-qwen3.5-0.8b-q4-5-0:3",
+        "model-qwen3.5-0.8b-q4-5-0:4",
+        "model-qwen3.5-0.8b-q4-5-0:5",
+        "model-qwen3.5-0.8b-q4-5-1:0",
+        "model-qwen3.5-0.8b-q4-5-1:1",
+        "model-qwen3.5-0.8b-q4-5-1:2",
+        "model-qwen3.5-0.8b-q4-5-1:3",
+        "model-qwen3.5-0.8b-q4-5-1:4",
+        "model-qwen3.5-0.8b-q4-5-1:5"
+      ],
+      "correctTokens": 142,
+      "targetTokens": 158,
+      "teacherForcedTokenAccuracy": 0.8987341772151899,
+      "exactTargets": 0,
+      "expectedFirstToken": "<tool_call>",
+      "firstTokenPredictions": {
+        "<think>": 6,
+        "<tool_call>": 6
+      },
+      "checkpointSha256": "c234c70dccc7a9115e7c41ac2e41d3655fea3b85c245dd898b46179fb90c6c0c",
+      "adapterSha256": "935f5c73cc843fbb1a5f71422e9b20ad0b3a9d6daf9fda73d108c9c4df7196ec",
+      "developmentRowsSha256": "19ef816fc92208acf0778bfd11bdf406fc00b0ca7872077c3fcef3783b813484",
+      "reportSha256": "93d181a27dc86a067f24bd88efaeef5b8b6bde8b5cb04c07ef551bde3c48dc44"
+    }
+  ],
+  "maxLen": 768,
+  "rowsPerView": 12,
+  "calibrationOpened": false,
+  "finalTestOpened": false,
+  "nativeGenerationMeasured": false,
+  "limits": "First twelve open development rows per view; teacher-forced syntax/token accuracy is not native free-generation, full-choice, or episode accuracy. Reasoning-target ablation tests a hypothesis, not an established cause."
+}
