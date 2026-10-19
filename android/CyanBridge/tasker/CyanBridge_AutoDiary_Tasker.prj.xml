@@ -51,7 +51,7 @@
         <nme>CyanBridge AutoDiary Periodic Capture</nme>
         <Share sr="Share">
             <b>false</b>
-            <d>Default every 10 minutes. Edit this Time context in Tasker to change periodicity. Excluded packages are read from the Tasker global variable %CB_AutoDiaryExcluded as comma, semicolon, space or newline separated package names.</d>
+            <d>Default every 10 minutes. Each capture is also appended to Documents/CyanBridgeMirror/autodiary/YYYY-MM-DD.jsonl (survives app reinstalls; set %CB_MirrorEnabled to 0 to stop, %CB_MirrorDir to move it). Edit this Time context in Tasker to change periodicity. Excluded packages are read from the Tasker global variable %CB_AutoDiaryExcluded as comma, semicolon, space or newline separated package names.</d>
             <g>CyanBridge,AutoDiary,Schedule,Privacy</g>
             <p>true</p>
             <t></t>
@@ -171,7 +171,8 @@ var response = JSON.stringify(envelope).replace(/\\/g, "\\\\");</Str>
         <Action sr="act0" ve="7">
             <code>129</code>
             <Str sr="arg0" ve="3">setGlobal("CB_AutoDiaryEnabled", "1");
-if (global("CB_AutoDiaryExcluded") == null) setGlobal("CB_AutoDiaryExcluded", "");</Str>
+if (global("CB_AutoDiaryExcluded") == null) setGlobal("CB_AutoDiaryExcluded", "");
+if (global("CB_MirrorEnabled") == null) setGlobal("CB_MirrorEnabled", "1");</Str>
             <Str sr="arg1" ve="3"/>
             <Int sr="arg2" val="1"/>
             <Int sr="arg3" val="45"/>
@@ -294,7 +295,30 @@ var observation = {created_at_ms:Date.now(),package_name:pkg,text_summary:summar
 // Tasker decodes one backslash-escape level inside Send Intent extra values, which would
 // turn JSON \n sequences into raw newlines and corrupt the payload for org.json. Escape
 // for transport so CyanBridge receives exactly JSON.stringify output.
-var capture_payload = JSON.stringify(observation).replace(/\\/g, "\\\\");</Str>
+var capture_payload = JSON.stringify(observation).replace(/\\/g, "\\\\");
+// Durable mirror: CyanBridge data lives in its app sandbox and is wiped whenever the app is
+// uninstalled or its data cleared (e.g. a debug reflash with a different signing key). Append the
+// same observation as one JSON line to a shared folder that survives that, which Syncthing copies
+// to the PC (MyClone: scripts/import_cyanbridge_mirror.py). %CB_MirrorEnabled = 0 turns it off;
+// %CB_MirrorDir changes the folder (default Documents/CyanBridgeMirror under shared storage).
+// writeFile() receives a plain JS string, so no Send Intent escaping is involved here.
+var mirror_status = "off";
+if (global("CB_MirrorEnabled") !== "0") {
+    try {
+        var md = new Date();
+        var pad2 = function(n) { return (n &lt; 10 ? "0" : "") + n; };
+        var mirrorDay = md.getFullYear() + "-" + pad2(md.getMonth() + 1) + "-" + pad2(md.getDate());
+        var mirrorDir = clean(global("CB_MirrorDir")) || "Documents/CyanBridgeMirror";
+        if (mirrorDir.charAt(0) !== "/") mirrorDir = "/sdcard/" + mirrorDir;
+        try { shell("mkdir -p '" + mirrorDir + "/autodiary'", false, 5); } catch (ignored) {}
+        var mirrorLine = JSON.stringify({mirror_version: 1, source: "tasker_autodiary", tz_offset_min: -md.getTimezoneOffset(), observation: observation});
+        writeFile(mirrorDir + "/autodiary/" + mirrorDay + ".jsonl", mirrorLine + "\n", true);
+        mirror_status = "ok";
+    } catch (e) {
+        mirror_status = "error";
+        setGlobal("CB_MirrorLastError", String(e));
+    }
+}</Str>
             <Str sr="arg1" ve="3"/>
             <Int sr="arg2" val="1"/>
             <Int sr="arg3" val="45"/>

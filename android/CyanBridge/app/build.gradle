@@ -167,6 +167,14 @@ android {
 
     buildTypes {
         debug {
+            // Sign debug builds with the release key when it is available, so debug and release
+            // builds can replace each other with `adb install -r` and keep app data. A signing-key
+            // change forces an uninstall, which wipes local_agent_memory, the recordings/DCIM files
+            // and the Keystore-wrapped Memory Vault key (encrypted screen OCR becomes unreadable).
+            // Use scripts/install_debug_keep_data.sh to install; opt out with -PcyanbridgeDefaultDebugKey.
+            if (keystorePropertiesFile.exists() && !project.hasProperty("cyanbridgeDefaultDebugKey")) {
+                signingConfig = signingConfigs.release
+            }
             manifestPlaceholders = [
                     mwdat_application_id: "0",
                     mwdat_client_token: "0",
