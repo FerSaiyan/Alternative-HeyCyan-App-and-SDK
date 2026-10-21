@@ -37,6 +37,8 @@ The seam can also be configured with `configureHotspot` when the host has creden
 
 The KMP host target includes the Hotspot Configuration and Wi-Fi information entitlements, plus the CoreBluetooth and NetworkExtension link flags required by the iOS adapters. These capabilities do not turn iOS into an Android-style Wi-Fi Direct peer; `supportsTrueWifiDirect` remains false on the iOS adapter.
 
+Signing: the `CyanBridgeKMPHost` scheme (Debug/Release) uses the bundle ID `com.fersaiyan.cyanbridge`, the same as the Android `applicationId`, and the paid team `MZ7DJZ88T2`, which the Hotspot and Wi-Fi information entitlements require. The `CyanBridgeKMPHost-Free` scheme (`Debug-Free`) keeps `com.murilosampaio.cyanbridge.kmp.free` on a free personal team and joins the glasses hotspot manually. `QCSDKDemo` uses `com.fersaiyan.cyanbridge.qcsdkdemo` so it doesn't claim the app's ID.
+
 ## Vendor SDK bridge
 
 HeyCyan glasses are driven through QCSDK, the iOS counterpart of Android's `glasses_sdk` AAR:
