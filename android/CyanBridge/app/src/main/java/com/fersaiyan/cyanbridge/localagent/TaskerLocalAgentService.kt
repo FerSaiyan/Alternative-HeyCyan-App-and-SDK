@@ -12,19 +12,27 @@ import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
+import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.ai.decision.EmbeddingDecisionEngine
 import com.fersaiyan.cyanbridge.ai.decision.FallbackDecisionEngine
 import com.fersaiyan.cyanbridge.ai.decision.LocalDecisionEngine
+import com.fersaiyan.cyanbridge.ai.decision.LocalDecision
+import com.fersaiyan.cyanbridge.ai.decision.DecisionCandidate
 import com.fersaiyan.cyanbridge.ai.decision.SingleTokenDecisionEngine
 import com.fersaiyan.cyanbridge.ai.decision.DecisionPromptBuilder
 import com.fersaiyan.cyanbridge.ai.router.AgentInferenceRouter
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtEmbeddingFactory
 import com.fersaiyan.cyanbridge.localmodels.engine.LlamaCppTextEmbeddingEngine
+import com.fersaiyan.cyanbridge.localmodels.engine.TextEmbeddingEngine
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
+import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentActionManager
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalClarifier
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalCoordinator
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -64,7 +72,7 @@ class TaskerLocalAgentService : Service() {
             promptBuilder = DecisionPromptBuilder::buildUiActionStatePrompt,
         )
     }
-    private var embeddingEngine: LlamaCppTextEmbeddingEngine? = null
+    private var embeddingEngine: TextEmbeddingEngine? = null
 
     /**
      * Opt-in fast path: a lifecycle-owned EmbeddingGemma cosine gate ahead of
@@ -74,8 +82,23 @@ class TaskerLocalAgentService : Service() {
      */
     private fun sessionDecisionEngine(): LocalDecisionEngine {
         val single: LocalDecisionEngine = decisionEngine
-        val gate = newEmbeddingDecisionEngine() ?: return single
-        return FallbackDecisionEngine(gate, single)
+        val gate = newEmbeddingDecisionEngine()
+        val active = if (gate == null) single else FallbackDecisionEngine(gate, single)
+        if (!BuildConfig.SHARED_GEMMA_PROTOTYPE && !BuildConfig.LITERT_DECISION_PROTOTYPE) return active
+        return object : LocalDecisionEngine {
+            override suspend fun choose(state: String, candidates: List<DecisionCandidate>, debugTag: String): LocalDecision {
+                val selected = active.choose(state, candidates, debugTag)
+                try {
+                    val shadow = LocalChatSessionManager.scoreSharedGemmaShadow(state, candidates)
+                    if (shadow != null) Log.i(TAG, "SHARED_GEMMA_SHADOW active=${selected.label} shadow=${shadow.label} margin=${shadow.margin} ${shadow.rawOutput}")
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.w(TAG, "SHARED_GEMMA_SHADOW unavailable: ${error.message}")
+                }
+                return selected
+            }
+        }
     }
 
     private fun newEmbeddingDecisionEngine(): LocalDecisionEngine? {
@@ -84,11 +107,24 @@ class TaskerLocalAgentService : Service() {
         if (modelPath.isBlank()) return null
         val modelFile = java.io.File(modelPath)
         if (!modelFile.isFile) {
-            Log.w(TAG, "Embedding gate disabled: missing GGUF at $modelPath")
+            Log.w(TAG, "Embedding gate disabled: missing model at $modelPath")
             return null
         }
         val margin = AutomationPrefs.getEmbeddingMarginThreshold(applicationContext)
-        val embedder = LlamaCppTextEmbeddingEngine(applicationContext, modelFile)
+        // Dual strategy: EmbeddingGemma 2 `.litertlm` on LiteRT-LM 0.18 (CPU) for users
+        // without a LiteRT chat model; GGUF embedders keep the llama.cpp path. The
+        // margin threshold was calibrated on EmbeddingGemma 1 and must be refit per model.
+        val embedder: TextEmbeddingEngine = if (modelFile.name.endsWith(".litertlm")) {
+            if (!LiteRtEmbeddingFactory.AVAILABLE) {
+                Log.w(TAG, "Embedding gate disabled: .litertlm embeddings need LiteRT-LM 0.18")
+                return null
+            }
+            LiteRtEmbeddingFactory.create(
+                modelPath, LocalComputeBackend.CPU, cacheDir.path, applicationInfo.nativeLibraryDir,
+            )
+        } else {
+            LlamaCppTextEmbeddingEngine(applicationContext, modelFile)
+        }
         embeddingEngine = embedder
         Log.i(TAG, "Embedding gate enabled model=${modelFile.name} margin>=$margin")
         // Gemma classification protocol from the calibration benchmark: the

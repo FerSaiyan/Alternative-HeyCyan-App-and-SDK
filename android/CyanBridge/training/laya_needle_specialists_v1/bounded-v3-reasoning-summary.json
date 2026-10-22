@@ -1,0 +1,136 @@
+{
+  "contract": "bounded-specialist-v3",
+  "complete": true,
+  "artifactHashesVerified": true,
+  "reversedOptions": false,
+  "evaluatedBackends": [
+    "needle"
+  ],
+  "supervisedReasoningTargets": true,
+  "predictionModelHashesVerified": true,
+  "legacyV2MissingMetadata": [],
+  "results": [
+    {
+      "name": "needle-bounded-flat-v3-base-rollout",
+      "backend": "needle",
+      "view": "flat",
+      "modelSha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+      "reportSha256": "ef4c9ca5f908f11b5876eeb1afbdeaab8057b75ae61961c40a05a3c5afa1cafd",
+      "oracleTurns": 120,
+      "oracleCorrect": 11,
+      "oracleChoiceAccuracy": 0.09166666666666666,
+      "oracleControlFalseActionRate": 0.53125,
+      "invalidOracleChoices": 26,
+      "episodes": 120,
+      "correctEpisodes": 11,
+      "rolloutAccuracy": 0.09166666666666666,
+      "meanRolloutTurns": 1.0,
+      "evaluationModelCalls": 240,
+      "evaluationWallSeconds": 232.19007655489258
+    },
+    {
+      "name": "needle-bounded-flat-v3-tuned-rollout",
+      "backend": "needle",
+      "view": "flat",
+      "modelSha256": "790d98828911880af47e612455ab95262419788871ae3dc21f17c171a3048030",
+      "reportSha256": "05b63cedc06b72382ede8c81deb8807c52a942b7b5eb84fa0e4aa9b9058c5034",
+      "oracleTurns": 120,
+      "oracleCorrect": 18,
+      "oracleChoiceAccuracy": 0.15,
+      "oracleControlFalseActionRate": 0.609375,
+      "invalidOracleChoices": 18,
+      "episodes": 120,
+      "correctEpisodes": 18,
+      "rolloutAccuracy": 0.15,
+      "meanRolloutTurns": 1.0,
+      "evaluationModelCalls": 240,
+      "evaluationWallSeconds": 244.45645143406
+    },
+    {
+      "name": "needle-bounded-hierarchy-v3-base-rollout",
+      "backend": "needle",
+      "view": "hierarchical",
+      "modelSha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+      "reportSha256": "bafd4eb9d8d21e38f6db9d3f3ab451c227e88513190852262ea6e0ef06eccec2",
+      "oracleTurns": 352,
+      "oracleCorrect": 61,
+      "oracleChoiceAccuracy": 0.17329545454545456,
+      "oracleControlFalseActionRate": 0.4375,
+      "invalidOracleChoices": 40,
+      "episodes": 120,
+      "correctEpisodes": 14,
+      "rolloutAccuracy": 0.11666666666666667,
+      "meanRolloutTurns": 1.15,
+      "evaluationModelCalls": 490,
+      "evaluationWallSeconds": 316.37794048001524
+    },
+    {
+      "name": "needle-bounded-hierarchy-v3-tuned-rollout",
+      "backend": "needle",
+      "view": "hierarchical",
+      "modelSha256": "4197314a53127d3bc2cfe782a16337f04b6bd79d55095aa06b87c86e8ce83789",
+      "reportSha256": "dea2b01a39ec9e2ae29959d5cd556517e7ef51a35e1df702a40d5613a145f0c8",
+      "oracleTurns": 352,
+      "oracleCorrect": 76,
+      "oracleChoiceAccuracy": 0.2159090909090909,
+      "oracleControlFalseActionRate": 0.515625,
+      "invalidOracleChoices": 3,
+      "episodes": 120,
+      "correctEpisodes": 7,
+      "rolloutAccuracy": 0.058333333333333334,
+      "meanRolloutTurns": 1.2333333333333334,
+      "evaluationModelCalls": 500,
+      "evaluationWallSeconds": 318.77287639293354
+    }
+  ],
+  "dataset": {
+    "hierarchy": {
+      "episodes": {
+        "train": 300,
+        "development": 120,
+        "calibration": 60,
+        "sealed": 60
+      },
+      "counts": {
+        "train": 880,
+        "development": 352,
+        "calibration": 176,
+        "sealed": 176
+      },
+      "maxOptions": 9
+    },
+    "flat": {
+      "episodes": {
+        "train": 300,
+        "development": 120,
+        "calibration": 60,
+        "sealed": 60
+      },
+      "counts": {
+        "train": 300,
+        "development": 120,
+        "calibration": 60,
+        "sealed": 60
+      },
+      "maxOptions": 12
+    }
+  },
+  "budgets": {
+    "needle": {
+      "updates": 180,
+      "batch": 8,
+      "valSplit": 0,
+      "selection": "fixed final adapter"
+    }
+  },
+  "calibrationEvaluated": false,
+  "finalTestEvaluated": false,
+  "hostVerifiedMutation": false,
+  "limits": [
+    "Generated written examples and hypothetical app state; shared concepts/catalog and only two development phrasing families",
+    "Oracle-turn accuracy is not self-routed episode accuracy; one wrong ancestor is never replaced by gold scope",
+    "Leaf effects are proposed setting changes/download offers; no actual execution, download, setting readback or Tasker completion",
+    "Optimizer updates match within each model; turn/goal exposure and total per-episode inference cost differ",
+    "This is a bounded local-model/AI-route/Live-refresh slice, not the complete plugin/settings manifest"
+  ]
+}

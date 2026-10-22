@@ -30,6 +30,8 @@ data class GenerationConfig(
     val structuredJson: Boolean,
     val imagePaths: List<String> = emptyList(),
     val audioPath: String? = null,
+    /** System turn for runtimes that apply the model's own chat template (LiteRT-LM). */
+    val systemInstruction: String? = null,
 )
 
 data class GenerationResult(

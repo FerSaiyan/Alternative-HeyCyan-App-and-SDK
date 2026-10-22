@@ -5,6 +5,8 @@ plugins {
 
 val testAbi = providers.gradleProperty("testAbi").orNull?.trim()?.takeIf { it.isNotEmpty() }
 val fastBuildRoot = providers.gradleProperty("cyanbridgeBuildRoot").orNull
+// Also build the shared-Gemma decision prototype bridge (cyan_shared_gemma).
+val sharedGemma = providers.gradleProperty("sharedGemmaPrototype").orNull == "true"
 
 android {
     namespace = "com.fersaiyan.cyanbridge.llama"
@@ -22,6 +24,10 @@ android {
                     arguments += "-DCYAN_LLAMA_SOURCE_DIR=$it"
                 }
                 targets += "cyan_llama"
+                if (sharedGemma) {
+                    arguments += "-DCYAN_SHARED_GEMMA=ON"
+                    targets += "cyan_shared_gemma"
+                }
             }
         }
     }

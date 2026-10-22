@@ -1,5 +1,210 @@
 # Worklog — CyanBridge local agent
 
+## 2026-10-10 — Merge with protocol fixes; NPU downloads, multimodal NPU packages, image/audio on the emulator
+
+- **Commits and merge:**
+  - Committed the main checkout's 2–4 Oct work on `heycyan-eyevue-tunebuds-protocol-fixes` (`01035cb`) and the NPU/local-agent work on `jev-like-local-agent` (`e74cc98`).
+  - Merged them in `c05001e`, so `main` can fast-forward.
+  - `llama-runtime` was added on both branches: the protocol-fixes `cyan_llama` (llama.cpp + libmtmd) is kept, and the shared-Gemma bridge becomes an opt-in second library (`-PsharedGemmaPrototype=true`).
+  - Unit tests 938/938 once the emulator holding port 8554 was closed.
+- **NPU model downloadable and selectable** (catalog `gemma4-e2b-it-npu`):
+  - New public repo [`Fertroll10/gemma-4-E2B-it-litert-lm-npu`](https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu) @ `947dafae`: the validated 4k SM8650 text package (sha256 `70c0223b…`) with a model card.
+  - Google's SM8750 build (`litert-community` @ `b3ca0d2f`) is also listed.
+  - Variants are now a list of sources with per-SoC sha256/size and a pinned commit.
+  - NPU-only entries default to LiteRT on the NPU, and SoC-compiled packages never fall back to GPU.
+  - The runtime AAR adds Hexagon V79 (`…-v75-v79.aar`, `524078fb…`).
+  - `NpuCatalogSettingsTest` passes on the emulator (entry listed, disabled, reason shown). Downloading on a phone is pending.
+- **The NPU packages were text-only; fixed** (subagent, recipe `add_multimodal_sections.py`):
+  - E2B and E4B 4k packages now carry Google's vision/audio encoders and adapters next to the unchanged NPU main: `work_e2b_general_mm` (`78e120e4…`) and `work_e4b_general_mm` (`0fd6913e…`).
+  - Contract checks and a host CPU check pass: bear / stop sign / living room described; "Hello, I like red flowers."
+  - Not on a phone yet. The HF file will be replaced after the Fold6 check.
+- **Image + audio on the Pixel 9a AVD** (`LocalMultimodalProviderTest`, through `LocalModelsProvider.streamChat`):
+  - llama.cpp Gemma 4 E2B Q4_0 + mmproj: "…an electric bus." / The speaker says, "I like red flowers."
+  - LiteRT Gemma 4 E2B CPU: "…a public transit bus." / same audio answer.
+- **Bugs fixed on the way:**
+  1. Imported Gemma 4 GGUFs were prompted in ChatML. Added the `gemma4_it` template and file-name inference.
+  2. LiteRT media requests put the system prompt after the attachment, so the model said "I need the recording". It now goes to `systemInstruction`.
+  3. LiteRT-LM 0.18 audio fails after an image in the same engine (XNNPack prepare). The audio encoder is now run once on silence before the first image (7.6 s once on the emulator).
+- **Notes:**
+  - Upstream `llama-mtmd-cli` at the same pin transcribes the clip, which confirms the bridge.
+  - E2B with the terse app system prompt refuses a literal "transcribe exactly".
+  - The 2.8 GB `e2b-base-wi4b32.litertlm` emulator copy was removed for space (identical sha to the Seagate archive).
+- **Next (Fold6):** `NpuCatalogSettingsTest -e npu_download true`, then `LocalMultimodalProviderTest` with `mm_backend NPU` on the text and `_mm` packages, and stock E2B GPU image→audio. APKs: `/mnt/seagate/ML/cyanbridge-litert-npu-20261008/apks-arm64-mm-20261010/`. Details: `android/CyanBridge/docs/NPU_ON_DEVICE.md`.
+
+## 2026-10-08 (afternoon) — Gemma 4 on the Fold6 NPU, context length study, per-SoC downloads
+
+- **Gemma 4 LLMs on the NPU** (packages from the recipe session: QAT, QAIRT 2.50, weight sharing; LiteRT-LM 0.18 `Backend.NPU`; stock E2B for CPU/GPU on the same phone):
+  - **E2B:** prefill 2,250–2,900 tok/s, decode 32–35 tok/s, init 6–8 s, PSS 1.31 GB. GPU: 540–1,050 / 14–16 (init 13–16 s). CPU: 110–205 / 11–19.
+  - **E4B:** 585–622 / 11.6 tok/s, init 25–31 s, PSS 2.43 GB.
+  - **Decision LoRA** (retrained on the QAT base) with annotated prompts: **118/120**, 0 control false actions, **1.34 s p50**. Our earlier INT4 LoRA exports scored 109 (15.2 s, CPU) and 110 (4.6 s, GPU).
+- **Three blockers found on the phone, all fixed by the recipe session:**
+  - **Chat template:** LiteRT-LM 0.18 rejects HF's newer Gemma template ("map has no method named get"); packages now carry Google's template.
+  - **One NPU process domain per app:** E4B's 3.77 GiB estimate failed with `Failed to find available PD`, and extra PDs are `Permission denied` for apps. Weight sharing brought E4B to 2.26 GB.
+  - **INT2 per-layer embedding tables:** the NPU's hardware lookup only accepts INT4/INT8 (`INVALID_ARGUMENT` in prefill); widened losslessly to INT4.
+- **Context length** (the user asked whether 4k is a Qualcomm limit): it isn't. Research agent: Qualcomm's 2026 FAQ supports 8192, and LiteRT-LM added NPU multi-cache buckets in Aug–Sep 2026. E2B 8k/16k/32k all compile and load, but speed falls with the compiled cache:
+
+  | Cache | Prefill tok/s | Decode tok/s | Init |
+  |---|---:|---:|---:|
+  | 8k | 1,110–1,250 | 15–16 | 12–18 s |
+  | 16k | 560–660 | 11.5–12 | 21–27 s |
+  | 32k | 113–116 | 4.7–4.8 | 42–70 s |
+
+  - 32k is slower than CPU; 16k is the practical limit.
+  - The 4k+16k **multi-bucket** package keeps short chats at 30 tok/s decode and switches buckets past 4,096 tokens (`CopyKVCache` 87–91 ms); init is 27–36 s.
+- **Limitation:** the long-context feasibility builds use 4k calibration and **degenerate past ~4k** in the new `LiteRtLongContextProbeTest` (multi-turn, greedy). Long-calibrated builds (`_lc`, 8k ready) and a held-out needle set (3.5k–30k) are waiting for the next phone session (`#needleEval`).
+- **Host follow-up (recipe session):** the cause is calibration, not the HTP. The FP32 16k export matches transformers' QAT text at 3.5k/7.5k/15k tokens; quantized A16 16k with 4k calibration degenerates on the host CPU exactly like the device; 16k long calibration is coherent but misses a needle FP32 finds. E2B misses 3/5 needles even in FP32, so device needle runs are scored by agreement with `work/needle_eval/host/hf_ref.log`. Next phone package: `work_e2b_mb4k16k_lc` (sha256 98ca4d916aa27354…, both buckets on 16k long calibration). The 32k long build is cancelled.
+- **Other device results:**
+  - EmbeddingGemma 2 740M on NPU: 8 ms per embedding, 125 ms per decision (CPU 60 / 1,144 ms), 47/120 on both.
+  - YOLO11n 90 s soak: NPU steady at 11–14.5 ms with a flat skin temperature; CPU slows from 41 to 58 ms as it heats.
+- **Per-SoC downloads (user plan: compile for all recent Snapdragons and host on a public Hugging Face repo):**
+  - Shared `NpuVariantSet` / `NpuVariantResolver` resolve `<repo>/resolve/main/<prefix>_Qualcomm_<SoC>.<format>` (unit-tested).
+  - The app's `NpuCatalogVariants` gates downloads on the NPU build and the phone's SoC, with a reason shown otherwise.
+  - The NPU "coming soon" entry stays disabled until the repo exists.
+- **Tests:** `LiteRtBackendBenchmarkTest` (new NPU option), `LiteRtBoundedDecisionEvalTest` (NPU), `LiteRtEmbeddingRuntimeTest` (740M), `LiteRtLongContextProbeTest` (new), and `WalkingAidNpuDetectorTest` soak mode (new). Shared `NpuVariantResolverTest` 3/3. The app compiles with the decision AAR plus the NPU AAR.
+- **Coordination:** the Gemma recipe belongs to another session (`/mnt/seagate/ML/gemma4-sm8650-port`); its packages were used read-only. Long host jobs ran under `nice` at the request of a third session sharing the CPU.
+- **Phone state:** the CyanBridge debug build with the decision and NPU runtime AARs is installed (`install -r`).
+  - Test packages are in the app's external `files/litert-eval/` (multi-GB): E2B 4k/8k/16k/mb4k16k, LoRA, E4B ple4, EmbeddingGemma 2 270M/740M.
+  - Walking-aid and speaker fixtures are in `/data/local/tmp/npu`.
+
+## 2026-10-08 — First NPU runs on the Fold6: speaker, Walking Aid YOLO, EmbeddingGemma 2
+
+- **Opt-in NPU build on the Galaxy Z Fold6 (SM8650, Android 15, `install -r`, data kept).** Results:
+
+  | Model | NPU | CPU | Speedup | Accuracy |
+  |---|---:|---:|---:|---|
+  | WeSpeaker | 12.3 ms | 226 ms | 18× | parity cos ≥ 0.99993 |
+  | YOLO11n | 10.4–11.4 ms | 47–61 ms | ≈5× | COCO-200 mAP 0.297 vs CPU 0.290 |
+  | YOLO-World | 74 ms | 1,650 ms | 22× | mAP 0.508 vs 0.507 |
+  | EmbeddingGemma 2 text | 8 ms/embedding, 123 ms/decision | 1,320 ms/decision | ≈11× | dev 47/120 both, same choice 107/120 |
+
+  Google's EmbeddingGemma 2 bundle is a **QAIRT 2.49 context running on our 2.50 runtime**, so one runtime covers everything.
+- **Walking Aid on the NPU:**
+  - Both detectors compile fully for SM8650 (YOLO11n 369/369 ops, YOLO-World 487/487, one partition each).
+  - `LiteRtVisionBackend` now runs `<detector>_Qualcomm_<SoC>.tflite` via `LiteRtNpuModelFactory` (CompiledModel) when the NPU backend is selected, keeping the Interpreter as metadata and fallback.
+  - `WalkingAidNpuBackendTest` passes end to end on the Fold6 (NPU = host emulation 1.0/1.0; 11 ms vs 46 ms per frame).
+- **Two existing Walking Aid bugs fixed (all backends):**
+  - YOLO-World's catalog export outputs undecoded anchor distances, so its boxes collapsed to the top-left corner. Now decoded; CPU mAP 0.51.
+  - YOLO11n's unquantized uint8 `class_idx` was multiplied by scale 0, so every label was "person".
+- **Testing policy (user):** NPU tests run on the Fold6 when attached. The device dumps raw outputs (`-e yolo_dump_dir`) and `yolo_htp_parity.py --npu-raws` scores them. 200 frames take 8 s / 65 s on the phone vs about 12 min / 6–7 h in the x86 emulator. The phone matched the emulator exactly (YOLO11n 16-image detections and 200-image COCO metrics), so the emulator is the no-phone fallback.
+- **Tests run:**
+  - Fold6: `LiteRtNpuSpeakerTest` 2/2, `WalkingAidNpuDetectorTest` 2/2 plus two 200-image dump runs, `WalkingAidNpuBackendTest` 1/1, `LiteRtEmbeddingRuntimeTest` NPU and CPU with the dev set.
+  - AVD: CPU parts, `WalkingAidVisionStackIntegrationTest`, `AudioSpeakerLiteRtProbeTest`.
+  - Unit: 548/548 on 0.16 and 0.18+NPU.
+- **New tools:** `tools/litert-npu/{yolo_htp_parity.py, make_yolo_fixture.py}`. Artifacts: `/mnt/seagate/ML/cyanbridge-walking-aid-npu-20261008/` and final APKs in `cyanbridge-litert-npu-20261008/apks-arm64/` (SHA256SUMS verified).
+- **Not done yet:** `dumpsys meminfo`/thermals per backend, Gemma 4 E2B NPU package on the phone, EmbeddingGemma 2 740M audio NPU, Depth Anything on the NPU, distribution and licensing of per-SoC models.
+
+## 2026-10-08 — One NPU runtime (QAIRT 2.50) in the app; WeSpeaker NPU graph fixed via HTP emulation
+
+- **Single QNN runtime:** QAIRT **2.50.0.260828**.
+  - LiteRT-LM 0.18 pins LiteRT `26895c9f`, which is QAIRT 2.50. LiteRT v2.3.0 is 16 commits later with no Qualcomm or dispatch changes.
+  - The 2.3.0 dispatch library (`qnn_manager.cc`) rejects QNN libraries older than its headers, so the 2.47 runtime cannot work with LiteRT-LM 0.18.
+  - The recipe's 2.47 was a minimum, not a pin.
+- **App (opt-in, `-PlocalLiteRtNpuAarPath`, needs `-PliteRtLmVersion=0.18.0`):** `tools/litert-npu/package_npu_aar.py` builds one AAR with:
+  - LiteRT 2.3.0 `CompiledModel` classes and natives (the Interpreter classes are left out, so `litert:1.4.2`'s NNAPI/GPU delegates for walking-aid stay);
+  - Google Maven `litert-npu-runtime-qualcomm:2.3.0` (`libLiteRtDispatch_Qualcomm.so`, so no Bazel build);
+  - QAIRT 2.50 `libQnnHtp`/`libQnnSystem`/V75 stub and skel;
+  - a `uses-native-library libcdsprpc.so` declaration, which neither the app nor LiteRT-LM had.
+
+  Gradle switches to extracted native libraries and keeps the Hexagon skel unstripped. `LiteRtNpuSupport` checks the runtime, `Build.SOC_MODEL` and the libraries before `Backend.NPU`, and rejects a `_Qualcomm_<SoC>` model meant for another SoC. Cost: 11.0 MB compressed / 27.8 MB extracted (V75 only).
+- **Verified:**
+  - Pixel 9a AVD (16 KB pages): `LiteRtNpuSpeakerTest` CPU `CompiledModel` parity 0.99999999 at 227 ms per 2 s; the NPU test skips cleanly ("SoC ranchu"). `AudioSpeakerLiteRtProbeTest` (Interpreter 1.4.2) passes in the same APK.
+  - All 546 unit tests pass on 0.16 and 0.18+NPU.
+  - arm64 APK has every library 16 KB-aligned.
+- **The earlier "fp16-safe whole model on NPU" was wrong.** The QAIRT x86 HTP emulator (`htp_emulator_parity.py`) gives cosine ≈ 0.06 vs CPU on 2.47 and 2.50. The emulator itself is sound: it runs the split head at 0.999997. Stage bisection: HTP mis-computes the 400-tap stride-160 DFT conv1d.
+  - `KaldiFbankNpu` (160-sample blocks, stride-1 kernel-3 conv; identical features) compiles 94/94 ops in one partition.
+  - Emulated-HTP EER 0.25% = CPU over 1,200 crops; context SoC 57 / V75 / v2.50.0.260828221209.
+  - Export `wespeaker_resnet34_lm_2s_npu.tflite` + `fixture-npu`, in `wespeaker-litert-20261007/npu-qairt250/`.
+- **Recipe on 2.50 (`~/nvme_tmp/npu-litert230/env`, QAIRT zip downloaded by hand):** Gemma 4 E2B main graph recompiled read-only from the other agent's `main_quant_preaot.tflite`.
+  - 897/897 and 1,694/1,694 ops, as with 2.47; 220 s, 9.2 GB peak RSS (2.47: 12.5 GB).
+  - Context SoC 57 / V75, same two graphs, loads in the emulator.
+  - In emulation the 2.50 runtime runs our 2.47 context with identical outputs.
+  - Google's 2.49 EmbeddingGemma 2 contexts can't be created by the x86 emulator with 2.49 *or* 2.50 (shared weights across four graphs), so 2.49-on-2.50 compatibility is a phone check.
+- **Pending (needs the Fold6):** NPU latency/parity of WeSpeaker, EmbeddingGemma 2 via `Backend.NPU` on the 2.50 runtime, the 2.50 E2B package. Artifacts: `/mnt/seagate/ML/cyanbridge-litert-npu-20261008/` (AAR, Maven inputs, arm64 APKs, SHA256SUMS). Doc: `android/CyanBridge/docs/NPU_ON_DEVICE.md`.
+
+## 2026-10-08 — Whole-model NPU compile, app NPU requirements, Luciano cleaned
+
+- **fp16-safe WeSpeaker front end** (`KaldiFbankFp16Safe`: DFT gain 0.5, fp16-normal mel floor, saturation, post-log offset). The single graph AOT-compiles fully for SM8650 (91/91, 1 partition); fp16 simulation EER 0.25% = fp32, 0 non-finite (the original graph: 50%, all non-finite). Embeddings differ from the CPU model (mean cos 0.97), so use one variant for enrol and verify. Artifacts in `wespeaker-litert-20261007/npu-aot-litert220/`.
+- New `android/CyanBridge/docs/NPU_ON_DEVICE.md`: two runtimes (LiteRT-LM NPU vs LiteRT 2.x `CompiledModel`); missing dispatch/QNN libraries (the app's NPU option always falls back today); QAIRT version matching (ours 2.47, EmbeddingGemma 2 bundles 2.49/2.50); extracted native packaging and `ADSP_LIBRARY_PATH`; per-SoC artifacts and fallbacks; fp16 numerics rules; validation pipeline; memory; first-device-run checklist.
+- **Luciano:** deleted the four backed-up project dirs (121 GB; root disk 91% → 37% used, partly from others' cleanup). The verified backup is in `/mnt/seagate/ML/luciano-cyanbridge-backup-20261007/`.
+
+## 2026-10-08 — Speaker models on the SM8650 NPU (host-side), Luciano backup verified
+
+- AOT-compiled for SM8650 with the NVMe `recipe_env` (LiteRT 2.2.0, QAIRT 2.47). WeSpeaker and ECAPA fp32 single graphs offload fully (88/88, 467/467), but HTP computes in fp16 and the in-graph front end overflows: GPU fp16 simulation gives 100% non-finite WeSpeaker embeddings (EER 50%). Weight-only int8 fails to compile (per-channel DEQUANTIZE); fully static W8A16 offloads 87/92 ops in 6 partitions.
+- **Working layout:** fp32 front end on CPU plus the AOT ResNet head on the NPU (71/71 ops, 1 partition, 13.5 MB). fp16 simulation keeps EER at 0.25% (= fp32); the composed host graphs match at cosine 0.9999998. Artifacts are in `wespeaker-litert-20261007/npu-aot-litert220/` (SHA256SUMS). Device run pending: it needs LiteRT 2.2.0 `CompiledModel`, `libLiteRtDispatch_Qualcomm.so` (not in the pip SDK) and the QAIRT 2.47 Android libraries. EmbeddingGemma 2's SM8650 bundles use QAIRT 2.49/2.50.
+- **Luciano backup:** the first pass missed files in nested folders (`--files-from` does not recurse with `-a`); re-run with `-r`. Now `VERIFY_OK` for all 885 main files and `AUDIO_VERIFY_OK` for all 3,252 audio files (23 GB) in `/mnt/seagate/ML/luciano-cyanbridge-backup-20261007/`. The Luciano directories listed for cleanup are safe to delete.
+
+## 2026-10-07 (evening) — Fold6 CPU/GPU bench, WeSpeaker on LiteRT, compute policy
+
+- **Fold6 matched decision latency** (same bundle, 10 turns): stock E2B CPU 8.2 s vs GPU 1.58 s (5.2×). Fine-tuned export: 15.6 s vs 3.9 s. Our INT4 export is ~2× slower than Google's stock bundle.
+- **WeSpeaker ResNet34-LM converted locally with LiteRT Torch.** Kaldi fbank in-graph; host parity: fbank 6e-4, ONNX 0.999994, LiteRT 0.99999999999. Dynamic int8 is broken (0.015); ResNet-only weight-only int8 works (0.994, 11.6 MB).
+- **Pixel 9a AVD, `AudioSpeakerLiteRtProbeTest`:** WeSpeaker fp32 241 ms, int8 227 ms, ECAPA 238 ms per 2 s window; device/host cosine ≈1. Recommendation updated: WeSpeaker int8 as default (7× smaller than ECAPA, more accurate), ECAPA as fallback.
+- **Policy:** no more runtime patch builds or Gemma fine-tunes/exports on Luciano (shared NVMe). Local defaults: `JOBS=20`, Bazel RAM cap, `BAZEL_OUTPUT_ROOT` on NVMe; documented in `AGENTS.md`, `LITERT_SHARED_DECISIONS.md`, `BOUNDED_SPECIALIST_DECISIONS.md` and the campaign README.
+- **Luciano backup:** non-regenerable work (14 GB: Laya/Needle/EG checkpoints, reports, datasets, logs, scripts, the baseline LoRA bundle, the latest 0.16 AARs) is being copied to `/mnt/seagate/ML/luciano-cyanbridge-backup-20261007/` with SHA-256 verification before any cleanup.
+- **Disk findings:** the Seagate scheduler is `mq-deadline`, so `ionice` has no effect (BFQ needed). Gradle on the HDD is I/O-bound: a 92-min x86_64 build at about 50% system I/O pressure. The NVMe build-dir init script helps only the outputs.
+
+## 2026-10-07 — Single-pass scorer, fine-tuned E2B on device, LiteRT 0.18 + EmbeddingGemma 2
+
+- **Single pass:** `Tasks::Score` optionally returns a final-step full-vocabulary log-softmax for candidate ids (`RunCandidateScoring`); the JNI scores `⊲`+first label once, self-checks it against teacher forcing and falls back to per-label clones on Unimplemented. A first build read the step predicting the delimiter's last byte (mass ≈1e-8, caught on the AVD). AVD full run: 120/120 identical choices (max Δp 6e-8), p50 18.7 → 11.4 s.
+- **Control false actions:** failures are "set X to its current value" with only the other value offered. Prompt rules/examples barely help (train 190 → ≤196 with host-annotated current values). LoRA on train (same budget as Laya/EG2): host dev 114/120 (current prompt), 118/120 (annotated options), 0% control false actions. Merged and exported to `.litertlm` (blockwise INT4 JSON recipe, 2.84 GB) after fixing config/tensor skew and a quantizer recipes-dir bug. On device the annotated LoRA scores 109/120 (AVD CPU and Fold6 CPU) and 110/120 (Fold6 GPU), all 0% control false actions, versus stock E2B 80/78.
+- **App fixes:** text-only bundles no longer get audio/vision backends (failed every conversation before). LiteRT-LM version is a Gradle property (`-PliteRtLmVersion`), with per-version source sets; 0.16 stays default.
+- **LiteRT-LM 0.18 patch** builds (dual ABI, OpenCL accelerator bundled). Fold6 GPU E2B scoring works (0.93 s vs 3.7 s smoke). `LiteRtEmbeddingEngine` runs EmbeddingGemma 2 text on CPU at 96 ms/embedding; GPU SIGSEGVs in the OpenCL delegate (factory keeps CPU); NPU bundle needs QNN libs. Fine-tuned EG2 has no LiteRT export path yet.
+- **Memory (Fold6, measured properly with `dumpsys meminfo`):** CPU 2.15 GB steady PSS (1.42 GB reclaimable model mmap), GPU 3.02 GB (2.21 GB non-reclaimable GPU buffers). Earlier single `Debug.getPss()` snapshots were misleading.
+- The Samsung's CyanBridge 2.3.0 debug build was replaced by this branch's debug build for testing (`install -r`, data kept). Details: `android/CyanBridge/docs/LITERT_SHARED_DECISIONS.md`.
+
+## 2026-10-07 — Audio speaker filter (user-voice enrollment), parallel agent
+
+- Benchmarked EmbeddingGemma 2 audio, the Gemma 4 E2B audio encoder, SpeechBrain ECAPA-TDNN and WeSpeaker ResNet34-LM on matched LibriSpeech test-clean trials (40 speakers, 3/5 enrollment phrases, 1/2/3.5 s; MUSAN noise/music negatives; wearer mixed with noise/babble at 0/5/10 dB). Gemma models are unusable for speaker filtering: EmbeddingGemma 2 final 38.7% EER, Gemma 4 soft tokens 35.7% (2 s, 5 phrases). Their audio towers are byte-identical (751/752 tensors), and the best internal layer reaches 9.4%. ECAPA 0.4%, WeSpeaker 0.2%. ECAPA is exported to LiteRT (84 MB, raw 2 s PCM → 192-d, host parity 0.9999998); device probe written, not run. Speaker templates are biometric data and stay on device. Doc: `android/CyanBridge/docs/AUDIO_SPEAKER_FILTER.md`.
+- Shared-encoder follow-up (frozen Gemma audio encoder, LibriSpeech train-clean-100/360, 1,172 speakers disjoint from test): a 0.92M-param head (learned weights over conv + layers 0–3, attentive statistics pooling, 0.95 MB int8) reaches 0.8% EER on the matched trials (ECAPA 0.4%, WeSpeaker 0.2%; previous best mean-pooled 9.4%) and 1.3% on out-of-domain VCTK (ECAPA 0.5%), but accepts only 47% of the wearer in 0 dB noise (ECAPA 95%). Later layers, the encoder output (4.6–5.8%) and a LoRA branch (1.2%) do worse; a log-mel-only head reaches 1.5%. The E2B bundle's audio encoder section (94 MB INT2/INT4) runs standalone in a LiteRT Interpreter but only exposes final states; the useful layers 0–3 would need a ≈31 MB truncated copy, no RAM saving over int8 ECAPA. Decision unchanged: dedicated speaker model (ECAPA int8; WeSpeaker upgrade). No public Gemma/USM speaker head exists as of 2026-10-07. Artifacts: `/mnt/seagate/ML/cyanbridge-audio-speaker-20261007/head/` (SHA256SUMS verified).
+
+## 2026-10-07 — LiteRT E2B classification working on the Pixel 9a AVD
+
+- Moved the patched LiteRT-LM build to Luciano (48 cores; ~15× faster than local 4-job Bazel, which was stopped with its cache kept). NDK r28b downloaded there and SHA-1 checked against Google's repository manifest; Bazel binary SHA-256 matched; minimal SDK subset copied. `build_aar.sh` now takes `ABIS`/`JOBS`, builds `:litertlm-android_kt` (the old `:litertlm-android` target only yields an empty wrapper jar) and uses NDK `llvm-nm`/`llvm-readelf`; `package_aar.py` packages several ABIs with per-ABI ELF checks.
+- First compile of the patched JNI failed: `Engine::GetTokenizer()` is const but `TextToTokenIds` is not. Applied the same `const_cast` upstream uses in `c/engine.cc`. Link then failed on Git LFS pointer files; copied real `prebuilt/android_{x86_64,arm64}` binaries after matching each LFS SHA-256. The open-source build links `libGemmaModelConstraintProvider.so` dynamically, so the AAR now bundles that verified upstream prebuilt (platform deps only, 16-KB aligned).
+- AVD smoke (`LiteRtSharedDecisionRuntimeTest`, E2B CPU) passed but showed label mass ≈1e-5. Host diagnosis with stock `litert-lm` 0.16.0 Python and an HF `transformers` reference proved native `RunTextScoring` scores the first target token with the stale pre-last-prefill distribution; later tokens are correct (greedy decode picked the right answer). Patch now prefills the context before `⊲`, scores `⊲`+label and keeps the label token. Label mass is now 0.97–0.997. Rebuilt both ABIs (AAR SHA-256 `099c3dd1…`); the superseded AARs are kept separately.
+- Added `LiteRtBoundedDecisionEvalTest` (device never sees expected labels), `renderedDecisionPrompt()` diagnostics and `score_litert_bounded_eval.py`. Full bounded-flat-v3 development run, stock E2B zero-shot on the AVD CPU: **80/120**, substantive 0.786, control false actions 34.4%; margin ≥0.9 accepts 47 at 46/47 correct. Decision p50 18.7 s (emulator). Best untuned option measured; tuned EG2 (110) and Laya (91) remain ahead on controls.
+- 41 JVM decision/engine tests pass in default and prototype builds; 31 Python contract/new tests pass. Details: `android/CyanBridge/docs/LITERT_SHARED_DECISIONS.md`.
+
+## 2026-10-06 — EmbeddingGemma 2 versus tuned Laya
+
+- EmbeddingGemma 2 released today (`google/embeddinggemma-2` `914f7f89`, Apache 2.0; 270M text-only of 740M). Added an `embedding` backend to `eval_bounded_specialist.py` and a matched-budget `train_embedding_bounded.py` (180 updates, batch 16, best-of-60/120/180 development snapshot, in-menu softmax over cosine). Isolated `eg2-venv` on Luciano; EmbeddingGemma 1 fetched there with the token piped over stdin, never stored.
+- `bounded-flat-v3` development, 120 turns: tuned EG2 (status+request, 768 or 256-d) **110/120, 0% control false actions**, versus tuned Laya 91/120 (rerun on the same A4000, identical to the published result) and tuned EmbeddingGemma 1 103/120. Zero-shot is unusable: 20/120 with status JSON, 50/120 request-only with 77% control false actions. EG2 query encode p50 35 ms A4000 / 223 ms CPU-4T. Development-set snapshot selection for both models; calibration/sealed untouched.
+- Reports, tuned checkpoint (SHA-256 verified) and log on Seagate under `cyanbridge-specialists-20261003-artifacts/`. Details: `android/CyanBridge/docs/BOUNDED_SPECIALIST_DECISIONS.md`.
+
+## 2026-10-04 — Same-engine LiteRT-LM decision scoring fork
+
+- Found existing native `RunTextScoring` in pinned LiteRT-LM v0.16.0 (`924e79c91542761242244e4f1651851f822e4cbb`). It computes full-vocabulary **log probabilities**, despite the interface comment describing negative log probabilities. Added experimental Kotlin `Engine.scoreDecision` and JNI wrapping the existing scoring implementation: full-prefix single-token checks, configured-context overflow rejection, prefill once, isolated cloned context per candidate, finite score/mass validation. All contexts use the existing engine; no model loader is invoked.
+- Added opt-in `-PliteRtDecisionPrototype=true` shadow calls and `-PlocalLiteRtDecisionAarPath=...` dependency override. The app renders the loaded model's template with thinking disabled, feeds the delimited assistant prefix and serializes LiteRT chat/scoring/load/unload. Existing normal/reversed-menu alignment and incumbent Tasker output are retained. Stock 0.16 remains the default; flag-only stock builds report that the patched API is missing if scoring is attempted.
+- Preserved the pinned source patch and matching Kotlin/JNI ARM64 AAR build/packaging helpers under `android/CyanBridge/tools/litert-decisions/`. Source and native build/download cache are under `/mnt/seagate/ML/cyanbridge-litert-decision-20261004/`. No libraries were installed in base conda.
+- **9 selected JVM tests passed** (5 fork-binding + 4 shared-menu tests); opt-in debug app and instrumentation APK built against stock 0.16.0. The default build also passes **13 selected JVM tests**, adding the four existing LiteRT streaming checks. This verifies app integration, not actual fork-native inference. Added provisioned `LiteRtSharedDecisionRuntimeTest` for scoring→chat→scoring reset, invalid-label/overflow/unloaded rejection and smoke timing/PSS. ADB reports no attached device; E2B/E4B/GPU inference and phone memory remain pending. Native fork build status is recorded in `docs/LITERT_SHARED_DECISIONS.md`.
+- First scoring implementation requires one prefill and N clone/decode operations per menu, repeated for reversed presentation. It adds temporary context memory and synchronous scoring can delay cancellation. A single native logit pass for all labels is an optimization target after correctness/backend parity. Evidence and reproduction: `android/CyanBridge/docs/LITERT_SHARED_DECISIONS.md`.
+- Recovered after server restart: retained completed app/test results and the pinned source patch, resumed the interrupted NDK download, verified its size and upstream SHA-1, and extracted NDK r28b on Seagate. Resumed matching Kotlin/JNI ARM64 build using the saved Bazel cache; log `build-arm64-resumed.log`. Corrected the packager's hashing helper to work with the restarted server's Python 3.10 and added ARM64, JNI-symbol, native-dependency and 16-KB-load-segment checks.
+- The resumed source build first failed during toolchain discovery because Python ZIP extraction had materialized NDK symlinks as text. Restored all 35 symlinks from the verified archive, confirmed Clang 19 launches and resumed the cached build (`build-arm64-ndk-links.log`). Added compiler-launch preflight to the build helper. This failure occurred before native source compilation.
+
+## 2026-10-04 — Shared chat-model System-One prototype (Jev branch)
+
+- Verified the supplied external discussion against current upstream sources: dedicated `/v1/systemone` PR #29818 merged October 2; ordinary-chat-model PR #29832 remains an open draft with E4B/Qwen3.5 examples and no E2B/phone-action accuracy evidence. PocketPal depends on llama.rn; its backend documents Adreno OpenCL and experimental Hexagon, not universal phone acceleration. Gallery's referenced bundles recommend 8 GB for E2B / 12 GB for E4B; MobileActions has a 289-MB artifact and 6-GB recommendation. These are bundle configurations, not measured CyanBridge RAM requirements.
+- User selected **current Jev branch** as the implementation target. Added an opt-in `llama-runtime` text/CPU prototype, pinned to the same verified upstream revision as the Eyevue adapter (`0c1e57098bba43ac29e6e3b677cdceebdd22334f`). `-PsharedGemmaPrototype=true` selects one native GGUF/context for both ordinary chat and real next-token-logit decisions. Native scoring uses the model Jinja template with thinking disabled, validates one-token labels and full-prefix delimiter boundaries, rejects overflow and reports full-vocabulary label mass. No server/localhost API is included.
+- `SharedGemmaDecisionEngine` compares normal/reversed menus with position-label reassignment and aligns results to original bound candidate indices. Decisions always abstain; Tasker records `SHARED_GEMMA_SHADOW` while returning the incumbent cascade's choice. The session serializes inference/reload/unload, and scoring borrows an already-loaded engine without loading weights. LiteRT/legacy-wrapper sessions do not produce raw-logit shadow results; the existing short-decoded-choice path still works for LiteRT. No GPU, multimodal, calibration or deployment result is claimed.
+- Verification: **48 JVM decision/candidate/UTF-8 tests passed**; host checked-JNI smoke passed with the existing Qwen2.5 0.5B Q4_K_M file, including actual logits, chat/scoring state reset, concurrent calls, streaming/grammar and malformed-label/overflow/unloaded-handle rejection. ARM64 native AAR, debug app and Android-test APK built successfully. Opt-in ARM64 `.so`: 6,352,000 bytes; default runtime AAR verified to contain no native libraries. No ADB device was attached, so the provisioned `SharedGemmaRuntimeTest` was compiled but not run. E2B/E4B quality, memory and device latency remain to be measured.
+- Source/usage/evidence: `android/CyanBridge/docs/SHARED_GEMMA_DECISIONS.md`; native/test logs under `/tmp/opencode/shared-gemma-*`. No calibration/sealed cohort or phone credentials were touched.
+
+## 2026-10-04 — Resumed bounded ablations and verified campaign summaries
+
+- Compared precisions on the best tuned v3 flat Laya checkpoint using the local RTX 4060 Ti and same padded inputs (1×512 tokens / 12 option slots): existing FP32-weight/BF16-autocast reference **93/120**; FP16-resident **91/120**, BF16-resident **94/120**. Resident 16-bit variants each use **625.5 MiB allocated / 644.6 MiB peak VRAM**, versus reference **1,247 / 1,514.5 MiB**. BF16 p50 forward 33.49 ms and FP16 34.47 ms; the single 120-example development-set difference is not validation evidence. Two reference choices differ between the prior A4000 and local GPU; the fixed-input local reference matches the local variable-length run exactly.
+- Upstream-style Q8 per-tensor dynamic INT8 ONNX scored **79/120** (80.8% choice agreement to local reference), flips 23 choices (3 fixes, 17 regressions, 3 both-wrong changes), and causes **8/64 control false actions**. Its static FP32 ONNX source is 1,290,252,004 bytes; Q8 is 914,805,203 bytes (1.41× smaller than FP32 graph but 1.42× larger than the original 614-MiB FP16 checkpoint). ONNX Runtime CPU with four threads p50 **597 ms**; process RSS after run 1,968 MiB and high-water 6,649 MiB. This is not competitive for this selector.
+- The campaign-pinned dynamic-axis ONNX export fails at variable sequence lengths because the traced attention reshape bakes in dummy length 16. To complete the Q8 comparison, exported a fixed 512-token / 12-option graph and fed identical padding/attention/marker masks to all modes; reference labels are unchanged from variable-length local inference. Full report: `/tmp/opencode/cyanbridge-specialists-20261003/reports/bounded-v3-laya-flat-precision-fixed512-comparison.json`; hashes/results summarized in `training/laya_needle_specialists_v1/laya-bounded-v3-flat-precision-summary.json`. No Android/NNAPI/LiteRT measurement, calibration, sealed inference or setting mutation occurred.
+- Checked upstream Laya current main (`8a6e1328cce2460a0e5aa348ad465bb1b5821cd2`) against our older campaign source pin (`4066d5d5fbf08b66c6757ddeedbd797bd7655bc0`). Upstream now has ONNX dynamic weight-only INT8 Q8 export, CPU-only, default per-tensor; documented 1.4–2.8× size reduction is vs FP32 ONNX, with ~83% eager-output agreement for multilingual; per-channel is much worse. No Q4 or prequantized multilingual Hub artifact. `laya-java` ONNX/JVM port explicitly lists Android as not implemented; not a supported drop-in Android build. HF current multilingual weights are FP16. Documented links and constraints in `docs/BOUNDED_SPECIALIST_DECISIONS.md`.
+- Measured Laya bounded-v3 hierarchy inference memory on Luciano's RTX A4000 using the isolated PyTorch environment: one checkpoint is 614.01 MiB/321.9M FP16 values; the inference module loads FP32 parameters and runs BF16 autocast. One 438-token, 12-option batch-1 forward used 1,515 MiB peak allocated / 1,538 MiB reserved VRAM; resident after transfer was 1,247/1,272 MiB. Whole Python RSS was 1.78 GiB after model transfer / 2.08 GiB after inference, with ~3.10 GiB transient load high-water. Linux Python/GPU only; Android export/phone PSS and runtime buffers remain unmeasured. Recorded in `android/CyanBridge/docs/BOUNDED_SPECIALIST_DECISIONS.md`.
+- ICproj migration was interrupted by a termination signal during copying; its NVMe original remained intact. Confirmed the LTFS web service and tape mount were still running. Resumed only the previously audited partial destination `/mnt/seagate/ML/ICproj` at idle I/O priority, in a detached process that survives the initiating shell. Original deletion remains gated on full checksum/worktree verification. Migration completion is pending.
+- Resumed remote work on idle Luciano GPU 1. Executed both corrected v3 Needle fixed-budget fits, 20-layer exports, base/tuned oracle evaluation and self-routed rollouts. Hierarchy: oracle **61/352 → 68/352**, episodes **14/120 → 9/120**; flat: **11/120 → 12/120**. Hierarchical root tuned **16/120**; tuned invalid choices **41/352 hierarchy / 2/120 flat**, oracle control false-action rates **35.9% / 79.7%**. Final training losses **0.202 / 0.267** do not establish runtime accuracy.
+- Published complete eight-report `bounded-v2-summary.json` and `bounded-v3-summary.json` in the compact campaign training directory. Tightened publication checks for exact required variants, contracts/views, held-out scope flags, recomputed metrics/effects and referenced model SHA-256; summary also hashes each full report. V3 has all prediction/model hashes; the two earliest v2 Laya hierarchical reports lack embedded hashes, explicitly recorded rather than retroactively claimed verified.
+- Retrieved bounded Needle v2/v3 adapters, archives, training records and full baseline reports directly to Seagate at `/mnt/seagate/ML/cyanbridge-specialists-20261003-artifacts/`; verified **28 files** against a remote SHA-256/size manifest. Large new model copies do not consume the local NVMe.
+- Completed reversed-presentation evaluation preserving host IDs/effects and original request/status. Tuned Laya flat **91→92/120**, hierarchy **86→82/120**; tuned Needle flat **12→16/120**, hierarchy **9→20/120**. A staging omission of the flat builder's transitive generator import failed after hierarchical reports completed in both lanes; preserved failed logs, staged an isolated complete directory, and reran only missing flat reports. Published an independently verified eight-report order summary.
+- Completed the first-12-development-turns/view base/tuned CUDA teacher-forcing diagnostic. Base predicts `<think>` first on all 24 rows despite `<tool_call>` targets; tuned flat also 12/12 `<think>`, hierarchy 6/12 `<tool_call>`. Teacher-forced token counts improve (hierarchy 124/158→142/158; flat 128/163→140/163) with no entirely correct 12-row target in any variant. Published a compact diagnostic with case IDs, report/adapter/base/data hashes and explicit non-native scope.
+- Completed the matched Needle reasoning-target ablation in an isolated script directory. Only `train.needle.jsonl` gains short synthetic bound-label-derived reasoning; requests/status/menus/answers/groups and all other cohort files are preserved. Full token/binding/mask audits passed (training maxima 652 hierarchy / 753 flat, cap 768), followed by both 180-update/batch-8 fits and native oracle/rollout evaluations. Tuned hierarchy **76/352 oracle / 7/120 episodes**, flat **18/120 episodes**. Hierarchical invalid choices drop 41→3 while root accuracy falls 16→12/120 and control false actions rise 35.9%→51.6%; flat invalids rise 2→18 and control false actions fall 79.7%→60.9%, still worse than base. Longer-target losses are not directly comparable. This diagnostic does not identify a complete parity fix or justify promotion.
+- Published `bounded-v3-reasoning-summary.json`, explicitly complete for its four Needle variants; regenerated the main v2/v3 and order summaries with current strict checks and per-ablation flags/budgets. Retrieved new artifacts/reports/logs directly to Seagate; all **50 model/adapter/training/report files** passed remote/local SHA-256 and byte-size verification.
+- **26 contract/metric tests + 10 campaign publication tests pass**, including reasoning-input preservation, unchanged bindings under reversed order, strict eight-report main campaigns and deliberate four-report single-model ablations. Documentation links and Python/JSON parsing passed; `git diff --check` passed after the prior changes. No real ASR, calibration/sealed inference, phone action/readback, device model download or email send was performed. All models remain shadow-only.
+
 ## 2026-10-04 — Shared EyeVue/TuneBuds capture ownership and website rollout
 
 - Deployed the current website working tree to Vercel production. Deployment
@@ -141,6 +346,60 @@
   W610 initial failure remains unproven without a failed raw-packet trace.
 - Documentation-only investigation; no production photo-transfer patch yet.
   No ADB device was connected. `git diff --check` passed.
+
+## 2026-10-03 — Paused for local NVMe audit and progress review
+
+- User requested an explanation of NVMe usage before continuing. Paused new training; both Luciano GPUs are idle. Needle version-2 bounded fits/evaluations completed; version-3 Needle has **not** started. Laya version-3 fits and rollout reports are complete.
+- Earlier local disk check was 99% with 9.6 GiB available; current filesystem reports ~862 GiB used / 914 GiB capacity, 5.76 GiB available to ordinary processes, and ~46.5 GiB free-but-reserved/unavailable blocks. `df` rounds displayed usage to 100%; it does not mean literally zero free bytes.
+- This session's local `/tmp/opencode/cyanbridge-specialists-20261003/` is ~4.2 GiB, including ~3.99 GiB models. Six full Laya safetensors copies at 614 MiB each account for ~3.60 GiB, plus Needle artifacts and small corpora/reports. The training environments/checkpoints were built on Luciano (campaign ~15 GiB there); local copies for verification consumed avoidable NVMe headroom. Seagate has ~157 GiB available and is the appropriate artifact-storage destination before more work.
+- Measured existing large local occupants include Documents ~308 GiB (ICproj 100 GiB; CyanBridgeLabs 77 GiB including gemma4-sm8650-port 61 GiB), anaconda3 65 GiB, cache folders ~62 GiB, `/tmp/opencode` 55 GiB including this session, Android AVDs/backups ~47 GiB, and OpenCode data ~23 GiB. Per-path totals can overlap/share hardlinks; this is not a complete privileged filesystem accounting. The audit was read-only apart from its small log; no cleanup or artifact move was performed.
+- Completed Needle version-2 bounded comparison: hierarchical oracle turns 62/352 base → 87/352 tuned, but self-routed episodes remain 12/120; flat 10/120 → 11/120. Those inputs lacked the explicit v3 running/readiness facts and are diagnostic. No checkpoint is promoted; actual ASR/native readback/Tasker collection and Android runtime verification remain pending.
+
+## 2026-10-03 — Remote training and state-bounded specialist contracts
+
+- Used Luciano's two idle RTX A4000 16 GB GPUs; PhotoBioPC's GPU was occupied. Created isolated Laya/Needle environments and transferred/hash-checked existing pinned models. No local GPU training or base-conda package installation.
+- Executed six Laya head/encoder fits and four Needle LoRA fits on paired public-operation/generated-config pilot views. Preserved source-family groups and official Mobile Actions exclusions, independent calibration/sealed cohorts, exact typed calls, native suppressed-call/error evidence and model hashes. Laya voice encoder+head reached 469/480 open development calls, config 191/210; config hand-written challenges only 11/24. Needle mixed fits did not improve runtime refusal (voice 216/480 versus 218 base; config 66/210 versus 67 base). Full ablation record: `training/laya_needle_specialists_v1/README.md`.
+- Incorporated the user's correction: status-defined, turn-eligible action families → settings categories → settings → valid installed model/value/download offer. Implemented a versioned offline host menu/transition contract, paired Laya choices / Needle zero-argument bound-choice tools, freshness/membership/reachable-scope checks and explicit clarify/no-change/defer choices. Root options and every offered leaf/control now have positive supervision; missing/unusable/incompatible models are not offered for selection.
+- Added state-matched flat-versus-hierarchical dataset views (300 train / 120 development episodes in both; 880 vs 300 training turns), grouped before state variants. Added per-turn and self-routed rollout evaluation so wrong ancestors cannot be replaced by gold scope, plus audits for bound-label coverage, eligibility, hashes and unclipped inputs/target masks. Initial incomplete root-label coverage runs were archived before final fitting. A large Needle batch exhausted VRAM; switched to a small fixed-update trainer reusing upstream quant-aware LoRA routines.
+- The contract is reference training/evaluation tooling, not an Android dispatcher. It proposes download offers and setting effects without executing or claiming readback; actual plugin/state/Tasker evidence integration remains necessary. No phone action, model download to the phone or email was performed. Details: `docs/BOUNDED_SPECIALIST_DECISIONS.md`.
+- Executed the initial version-2 state-matched Laya ablation from base: flat 31/120→90/120 proposed-effect episodes; hierarchical 37/120→85/120, despite oracle-turn choices improving 167/352→301/352. Mean hierarchy cost is 2.75 model decisions/episode versus one flat call. Narrow final installed/download choices each pass 6/6 gold-scope turns; root routing and ancestor errors dominate. These are open written development results, not verified setting outcomes.
+- A further status audit found that omitting Live running/readiness facts forces inference from an absent Start choice. Version 3 exposes Live running/availability, Tasker readiness and download-in-flight explicitly; version-2 inputs/results remain diagnostic artifacts. Version-3 fitting starts again from original base weights, preserves the same goal cohorts and uses identical per-turn/rollout status rendering. The paired tooling checks now include that state-visibility regression.
+- Completed the corrected version-3 Laya fits: flat 39/120→91/120, hierarchical 36/120→86/120 self-routed episodes; hierarchical oracle turns 176/352→305/352. Smaller final menus help local choices but do not yet beat the flat complete-path control. Audited all model inputs/loss masks without clipping (v3 maxima: Laya hierarchy/flat 393/442, Needle 632/727), all offered choices have positive training labels, and 24 contract/metric tests pass. No calibration or sealed inference was performed.
+
+## 2026-10-03 — Laya/Needle specialist variants and public dataset inventory
+
+- Adopted the user's focus on Laya/Needle with separate voice-router, native configuration/plugin selector and phone-UI contracts. Voice/config training can progress from typed app capabilities and readback without waiting for the broad Tasker UI corpus. No larger generative-model training is proposed.
+- Reviewed primary MASSIVE, SLURP, CLINC OOS, home-domain NLU Evaluation, AndroidControl, updated GUIOdyssey and AndroidWorld sources; added pinned access/licensing/split metadata in `training/laya_needle_dataset_sources_v1/catalog.json`. MASSIVE 1.1 has 52 locales vs 1.0's 51; SLURP text/audio terms differ; Fluent Speech Commands' publisher expressly excludes product training/testing/development. AndroidControl is the preferred text/a11y UI auxiliary; screenshot descriptions/boxes from GUIOdyssey are not Tasker evidence.
+- Parsed pinned Google Mobile Actions in memory: 9,654 rows, 8,693 metadata-train / 961 eval; train is 5,794 single-call / 2,899 multi-call / zero no-call. HF exposes the whole file as train, so internal metadata filtering is mandatory. Seven gold action names give limited settings scope. Evaluation rows were counted, not replayed or used for tuning.
+- Parsed pinned DroidCall structured training: 10,071 rows, 7,435 single-call / 2,636 multi-call / zero no-call. Inspected schema conversion needs, answer-name anomalies and one ungrounded address/prose example. Plan reviewed supported/grounded subsets plus product-specific negatives; neither pool is Tasker supervision or already suitable for blind fine-tuning.
+- Mapped proposed product labels to existing dashboard enums/actions, native plugin IDs and preferences. Preserved distinctions between AI image wake-word route and image invocation, plugin enable and start, settings navigation and mutation. Gemini Live refresh 2 is an every-speech-turn sentinel, not two seconds; Visual Diary intervals are 1–240 minutes. The proposed voice manifest/dispatcher is not yet implemented.
+- Added `docs/LAYA_NEEDLE_SPECIALISTS_AND_DATASETS.md`, source inventory README/catalog, and cross-links; revised roadmap priority toward voice/config data and paired Laya/Needle specialists alongside UI collection. Kept each specialist's split/calibration/runtime gate, current approvals/fallback and provenance separation. No new model training or phone action was run.
+- Verification: parsed the source catalog, checked nine revision pins and measured row-count sums, and resolved 26 local links across the five linked documents; `git diff --check` passed. Rechecked publisher licensing/action-space notes. These are inventory/documentation checks, not model-quality or device-runtime results.
+
+## 2026-10-03 — Closer voice/device references and Tasker training findings
+
+- Followed the user's Robotics & devices reference and reviewed its ten catalog entries. Prioritized Evoke's installed recipes/closed inputs, smart-home control-vs-conversation routing, Fusion 360's command detector and RoboJEV's intent/action separation with independent outcomes. Inspected Evoke `0c61ee5`, RoboJEV `2c920c2` and EmbodiedJev's integration review `f08de2e`; report-only demos and simulator evidence are identified explicitly.
+- Found a closer Laya worked training example at source `fa9a2a7`: Spanish telephone voice-turn routing, rebuildable 4,740 examples, unseen menus, negation in both directions, corrections, ASR-like text and full encoder/head training. Its author-reported 0.396→0.912 over 217 written fixtures still includes 12 wrong actions and weak confidence gating; later variants used inspected errors. Its random question-level calibration and 1024/256 token configuration must be adapted to our grouped episodes/mobile export.
+- Inspected Needle `9571a58` media/wearable/smart-home schemas and their acceptance harness. They are stub environments with no-call/invalid/negation cases, not Tasker training trajectories; harness masking, string case-folding and call sorting must not become our raw/exact/order metrics. Current local trainer supports W4 exact-call scoring and `--val-split 0`, but defaults to random examples. Official DroidCall/Mobile Actions tuning plots force calls and do not prove refusal; the MicroDuck demo did not supply a verified reproducible dataset in this review.
+- Documented separate linked voice-route and UI-action datasets: actual ASR provenance/literals, command/chatter/clarification, supported capability menus, current subgoal, fresh Tasker evidence and verified outcome. Proposed contrast pairs distinguish negation from a positive request containing negative words, corrections from blanket refusal, and filled-field DONE from unfinished goals.
+- Rechecked our wire/parser: first 160 nodes, bounded text/ID/summary, array-index pairing, unreported flags written as false, zero-area tap points and invalid coordinates defaulting to `(0,0)`. Proposed explicit unknown/provenance/clipping/coordinate-validity records and recall audits; these are design requirements, not implemented new metadata. Identified page-wide literal visibility as distinct from verified field value.
+- Added `android/CyanBridge/docs/JEV_VOICE_TASKER_TRAINING_FINDINGS.md` with source pins, concrete model-format examples and collection/training changes; linked it from the roadmap, training recipe, Tasker context and embedding findings. Kept Laya/Needle shadow-only and the existing Gemma/planner/approval boundaries. This research update adds no model training or live device-action result.
+- Verification: checked local Markdown link targets, illustrative JSON parsing/choice-tool label consistency, and `git diff --check`. These checks validate the research document, not model accuracy or runtime compatibility.
+
+## 2026-10-03 — Evidence-based phone-agent plan
+
+Current planning entry point: `android/CyanBridge/docs/JEV_PHONE_AGENT_ROADMAP.md`.
+This supersedes older next-agent ordering and handoff recommendations below;
+historical measurements retain their dates. Reviewed clean baseline `160299c`.
+
+- Re-read Ship With Jev's engineering guide, Browser Use flight search, Hunch and task-done checker, plus the October 1 Jev Layer and Playwright integration entries. Adopt operational questions, explicit unclear/defer, fresh host-approved options, host-owned execution/approvals and attached outcomes. Catalog numbers are author-reported browser evidence, not Android acceptance targets.
+- Consolidated results: Gemma margin ≥0.10 remains the conservative incumbent; its 48/48 calibration and 16/16 accepted test choices do not establish ≥98% real-phone precision. Laya/Needle synthetic gains did not transfer reliably; their uncalibrated probabilities/confidence do not authorize actions. Keep both shadow-only. Pro/Gemma YouTube playback previously passed twice, latest 22.9 s; Gmail send/delivery remains unverified because Tasker composer observation is blocked.
+- Dataset readiness: Artemis has 29 real emulator episodes / 82 decisions but only three connected families and no missing-control supervision. The six YouTube Tasker frames and all earlier frozen/pilot tests have been inspected. One distinct Tasker Settings episode took 1,821 ms pre-observation-to-post-observation (1,734 ms action-to-verification). None supplies a new train/calibration/final-test split.
+- Prioritized next batch: restore/pin Pixel and re-establish Pro baseline → version a complete Tasker episode/candidate collector and stage timers → collect roughly 100–150 fresh episodes / 500–1,000 decisions across at least six independent families, including negative/unfinished/DONE cases → audit recall and reserve grouped holdouts → compare deterministic/compact-Gemma/planner baselines before retraining. Counts are planning targets, not a statistical release guarantee.
+- Runtime lane: verify pinned patched GGUF artifact acquisition/build; retain Gemma CPU as baseline, defer Qwen embedding optimization. Needle's small ARM Android runtime makes it the first new device feasibility probe once an ARM64 target exists; host Linux timing is not Android timing. Laya LiteRT comes after a clean development candidate, with tokenizer/head/output parity and actual-device timing. The selected-node mapping, bound-field focus and short production state builder already exist; do not reopen them as missing implementations.
+- Promotion plan: separate accuracy/calibration from ABI/runtime parity, and separate inference latency from verified task time. Use a new locked final test, report uncertainty and episode-grouped metrics, require useful reversible-action coverage at the declared precision target and matched planner task-completion results. Keep Gmail as a read-only observation repair track until fresh composer verification works.
+- Server-restart notices cancelled historical emulator processes. `adb devices -l` showed no attached target during this review. This planning work did not boot/wipe an AVD, retrain, run a new live workflow or send email. Revalidate local artifacts and device identity before the next HIL; serial reuse is not device provenance.
+- Documentation checks: all local Markdown links in the planning/training/model docs resolve; saved Artemis source/pool SHA-256 values match the manifest. Read-only audits confirm 29 Artemis episodes / 82 decisions / three components (`readyForIndependentSplit=false`) and the saved Tasker diagnostic (`readyForTraining=false`).
 
 ## 2026-10-03 — Shared EyeVue/HeyCyan RTSP endpoint
 

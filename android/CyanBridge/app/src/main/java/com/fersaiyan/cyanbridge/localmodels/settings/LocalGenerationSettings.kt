@@ -121,7 +121,8 @@ data class LocalGenerationSettings(
                 systemPromptOverride = DEFAULT_SYSTEM_PROMPT,
                 templateOverrideId = null,
                 experimentalStructuredJson = false,
-                computeBackend = LocalComputeBackend.GPU,
+                // NPU-compiled packages run only on the NPU.
+                computeBackend = if (entry?.npuOnly == true) LocalComputeBackend.NPU_EXPERIMENTAL else LocalComputeBackend.GPU,
                 cpuThreads = defaultCpuThreads(),
                 gpuLayers = -1,
                 modelRuntime = defaultRuntime,

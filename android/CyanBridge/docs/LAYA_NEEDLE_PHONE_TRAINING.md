@@ -1,6 +1,9 @@
 # Training Laya and Needle for Tasker-driven phone automation
 
-Status: research/training recipe, **not a trained phone model** (2026-09-27).
+Status: training recipe and pilot record; **no promoted phone checkpoint**.
+Planning reviewed 2026-10-03. See
+[`JEV_PHONE_AGENT_ROADMAP.md`](JEV_PHONE_AGENT_ROADMAP.md) for the ordered work
+packages, dataset gates, runtime priorities and verified-task acceptance plan.
 The six captured YouTube screens are a diagnostic replay, not a training set.
 The generated `local_agent_mobile_actions_v1.jsonl` corpus is a useful frozen
 baseline, not evidence of generalization to live Tasker screens. See
@@ -16,10 +19,34 @@ The separate [Tasker Settings episode](../training/tasker_real_v1/README.md)
 verifies one reversible tap and demonstrates why a pre-action home-screen
 check matters; one episode is diagnostic, not a trainable Tasker corpus.
 
+The [specialist/dataset plan](LAYA_NEEDLE_SPECIALISTS_AND_DATASETS.md) adds
+separate **voice-router**, **configuration-selector** and **phone-UI** variants
+of Laya/Needle. Native mode/plugin/settings data can be built from typed app
+state independently of broad UI collection. The
+[public source catalog](../training/laya_needle_dataset_sources_v1/README.md)
+includes reviewed access revisions and conversion requirements. Mobile Actions
+and DroidCall's inspected training files contain **no no-call rows**; they
+need scoped negatives before training an abstaining selector.
+The [remote specialist pilot](../training/laya_needle_specialists_v1/README.md)
+now records executed Laya/Needle fits on public operation-only voice subsets
+and generated native configuration requests. Encoder/head, negative-data,
+depth, order and opaque-binding ablations remain development evidence; these
+results are separate from the earlier synthetic phone-UI pilot below.
+
 ## Transferable examples and what they establish
+
+For closer voice/device references and concrete Tasker parsing requirements,
+see [`JEV_VOICE_TASKER_TRAINING_FINDINGS.md`](JEV_VOICE_TASKER_TRAINING_FINDINGS.md).
+The key addition is separate supervision for **utterance → supported task**
+and **current observation/subgoal → bound UI action**. Telephone voice routing
+and Android Intent invocation are relevant to the first; neither supplies
+Tasker node-grounding labels for the second.
 
 | Source | Useful mechanism | Limit for CyanBridge |
 |---|---|---|
+| [Laya Spanish voice-turn training](https://github.com/NandhaKishorM/laya/blob/fa9a2a7070b1789912a49ae24603bbfb1a78b001/research/benchmarks/es_phone_turns/README.md) | Rebuildable 4,740 cases; unseen destination menus, order shuffling, refusals vs negative-word needs, correction/redirect pairs, ASR-like rewrites; encoder+head trainer consuming `state/questions/gold`. | Telephone routing, not Android UI. Author-reported 91.2% on 217 written fixtures still has 12 wrong actions; later variants were developed after inspecting tests. Trainer's random question calibration split needs grouped-cohort adaptation. |
+| [Needle product environments](https://github.com/cactus-compute/needle/tree/9571a58b0ad3d0e4500afa6f4e00cffb8d6d1818/needle/environments), [DroidCall](https://github.com/UbiquitousLearning/DroidCall), [Mobile Actions](https://huggingface.co/datasets/google/mobile-actions) | Media/wearable/home schemas with grounded strings, enums, bounded numbers, missing/negated no-call cases; Android Intent/system-tool data-generation patterns. | Environment callbacks are stubs and acceptance harness applies validation masking/case-folding/call sorting. Cactus tuning plots use forced calls. None measures missing Tasker controls, exact UI order or verified outcomes. |
+| [Ship With Jev devices](https://www.shipwithjev.com/categories/robotics-and-devices): [Evoke](https://www.shipwithjev.com/builds/evoke-natural-language-reflexes), [voice fast path](https://www.shipwithjev.com/builds/smart-home-assistant-fast-path), [RoboJEV](https://www.shipwithjev.com/builds/robojev) | Sentence-to-installed-recipe selection and grounded inputs; device-control vs chatter; immediate intent/compatible action and independent outcome oracle. | Architecture references with differing evidence maturity; no Laya/Needle Tasker training corpus. Keep our host-owned approvals and thresholds. |
 | [Laya browser fine-tune](https://nandhakishorm.github.io/laya/finetune_browser_agent/), [current v17s card](https://huggingface.co/cklxx/laya-browser) and [pipeline artifacts](https://huggingface.co/cklxx/laya-browser/tree/main/code/finetune) | Early recipe: 421 real pages, 5,244 reverse-generated goals, 700 **executed** DONE states, 659 mid-task negatives, 7,296 Mind2Web steps. Newer v17s also uses NNetNav, scripted trajectories, ~70k synthetic webgym steps, plus harness fixes; puts element role/label/current value in option criteria, not duplicated state. | The older write-up's 62% browser live completion is **superseded**. The current card reports 54/54 on 18 unseen-site short tasks, 41/48 on the older suite, but only 2/10 flights and 3/10 hotels on long synthetic forms. Earlier DAgger samples included **evaluation-suite goals**; the v15s clean retrain removed them. None are Android measurements. |
 | [Jev Ultrafast](https://github.com/browser-use/jev-ultrafast) (also [cataloged on Ship With Jev](https://www.shipwithjev.com/builds/jev-ultrafast)) | One fresh indexed action space per observation; operation and *compatible* targets decided together; separate small LLM writes field text; recheck target freshness and independently verify DONE. | Its DOM knows roles/field values/visibility and can keep node references atomically; our compact AutoInput contract does **not** expose the same metadata. Its [Flights timing](https://www.shipwithjev.com/builds/browser-use-flights) is three repeats of one browser task, not phone latency or reliability. |
 | [Ship With Jev engineering guide](https://www.shipwithjev.com/guides/jev-engineering) and [Hunch catalog entry](https://www.shipwithjev.com/builds/hunch-browser-agent) | Closed operational questions, an honest unclear/blocked answer, versioned criteria, code-checked outcomes and escalation for uncertain/irreversible steps. | Ship With Jev is an **independent, author-reported catalog**, not a source of model-training weights or our own benchmark. |
@@ -160,7 +187,11 @@ trains rank-16 4-bit-aware LoRA at 20 layers, then exports smaller depths; its
 default validation split is 0.1, which is **not** episode-aware. Prepare
 separate train/validation/test episode groups beforehand, and verify the CLI's
 exact split/eval behavior before fitting (validation loss alone is not task
-accuracy). Start with hundreds of clean examples for tool selection and expand
+accuracy). The October 3 inspected source also scores random held-out calls
+under W4 export numerics and exposes `--val-split 0`; disable its row-random
+split for externally grouped training and evaluate development/calibration
+files separately. See the source pin and harness caveats in the voice findings.
+Start with hundreds of clean examples for tool selection and expand
 to thousands of varied grounded-value examples if argument errors dominate.
 Local fine-tuning leaves `confidence` **unset**; separately calibrate an
 application-level abstention rule on untouched phone cases, or compare the
@@ -173,6 +204,12 @@ checkpoint; a JSONL line fitting the trainer's default 1024-token limit does
 not prove it fits the previously probed 256-token native context.
 
 ## Promotion experiment (ordered)
+
+The existing synthetic checkpoints have been trained and evaluated: template
+gains did not transfer reliably, and tuned Needle missed all synthetic
+missing-control cases. The steps below apply only after new real Tasker
+episodes and grouped splits are ready; do not rerun the pilot against its
+already-inspected tests to select another checkpoint.
 
 1. Freeze label/renderer/action-policy versions; establish a zero-shot and
    deterministic-filter baseline. Report how often the correct current action

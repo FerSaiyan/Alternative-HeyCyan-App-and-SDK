@@ -3,10 +3,10 @@ package com.fersaiyan.cyanbridge.ai.decision
 /**
  * Jev-like decision via constrained single/few-token decoding.
  *
- * True zero-token logit scoring (read next-token logits for A/B/C/D without
- * generating) is the long-term goal, but the current llama.cpp Kotlin wrapper
+ * The default llama.cpp Kotlin wrapper
  * (llamacpp-kotlin 0.4.0 via LlamaAndroid) only exposes prompt completion, not
- * raw logits. So this engine asks for maxTokens=[maxTokens] with temperature 0
+ * raw logits. The opt-in [SharedGemmaDecisionEngine] provides true native
+ * logit scoring; this fallback asks for a few tokens with temperature 0
  * and parses the first valid option letter, tolerating <think>/reasoning
  * preamble from thinking models.
  *
@@ -59,12 +59,10 @@ class SingleTokenDecisionEngine(
 }
 
 /**
- * Zero-token logit path (future): same interface, documents intent.
+ * Legacy delegate alias; this class does not read native logits.
  *
- * When the llama.cpp JNI exposes next-token logits, implement scoring there and
- * keep SingleTokenDecisionEngine as the fallback for remote/thinking models.
- * Today it simply delegates, so call sites can already depend on the Jev-like
- * abstraction without caring which scoring path is active.
+ * Use [SharedGemmaDecisionEngine] for the opt-in real-logit shadow prototype.
+ * SingleTokenDecisionEngine remains the decoding fallback for other runtimes.
  */
 class LlamaLogitDecisionEngine(
     private val delegate: LocalDecisionEngine,

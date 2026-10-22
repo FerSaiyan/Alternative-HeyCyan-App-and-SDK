@@ -84,6 +84,13 @@ path remain authoritative.
 
 ## Data-readiness audit after the pilot
 
+Planning update (2026-10-03): the
+[current roadmap](../../docs/JEV_PHONE_AGENT_ROADMAP.md) incorporates the later
+29-episode Artemis collection and one verified Tasker Settings diagnostic.
+They have explicit, different provenance and do not resolve the independent
+Tasker-data shortage described below. Prioritize collection, candidate recall
+and a fresh final holdout before another fine-tune.
+
 This is **not a successful phone fine-tune**. A search of the available local
 Tasker logs found only six structured `JEV_SHADOW_STATE` decision frames, all
 from one YouTube episode. Older Chrome HIL logs contain repeated candidate

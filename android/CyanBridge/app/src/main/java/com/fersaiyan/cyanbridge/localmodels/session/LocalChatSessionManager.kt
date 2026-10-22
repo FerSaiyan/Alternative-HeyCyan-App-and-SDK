@@ -2,6 +2,12 @@ package com.fersaiyan.cyanbridge.localmodels.session
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.BuildConfig
+import com.fersaiyan.cyanbridge.ai.decision.DecisionCandidate
+import com.fersaiyan.cyanbridge.ai.decision.LocalDecision
+import com.fersaiyan.cyanbridge.ai.decision.NextTokenDecisionRuntime
+import com.fersaiyan.cyanbridge.ai.decision.SharedGemmaDecisionEngine
+import com.fersaiyan.cyanbridge.localmodels.engine.SharedGemmaInferenceEngine
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.engine.EngineLoadConfig
@@ -96,7 +102,7 @@ object LocalChatSessionManager {
         catalogEntry: LocalModelCatalogEntry?,
         settings: LocalGenerationSettings,
     ): LocalModelLoadDetails {
-        return mutex.withLock {
+        return generationMutex.withLock { mutex.withLock {
             Log.i(
                 TAG,
                 "ensureModelLoaded model=${model.displayName} runtime=${settings.modelRuntime} backend=${settings.computeBackend} context=${settings.contextSize} gpuLayers=${settings.gpuLayers}",
@@ -119,7 +125,9 @@ object LocalChatSessionManager {
                 sizeBytes = model.sizeBytes,
                 quantization = model.quantization ?: "unknown",
                 contextSizeDefault = settings.contextSize,
-                promptTemplateId = model.promptTemplateId ?: "generic_chatml",
+                promptTemplateId = model.promptTemplateId
+                    ?: com.fersaiyan.cyanbridge.localmodels.templates.PromptTemplateRegistry.inferForFileName(model.fileName)
+                    ?: "generic_chatml",
                 minRamGb = 4.0,
                 minStorageGb = 0.5,
                 shortDescription = "Imported GGUF model",
@@ -209,6 +217,17 @@ object LocalChatSessionManager {
                 },
                 fallbackReason = gpuFallbackMessage,
             )
+        } }
+    }
+
+    /** Scores only with an already-loaded capable chat engine; never loads weights. */
+    suspend fun scoreSharedGemmaShadow(state: String, candidates: List<DecisionCandidate>): LocalDecision? {
+        if (!BuildConfig.SHARED_GEMMA_PROTOTYPE && !BuildConfig.LITERT_DECISION_PROTOTYPE) return null
+        waitForHighPriorityRequestsToDrain()
+        return generationMutex.withLock {
+            val runtime = mutex.withLock { engine as? NextTokenDecisionRuntime } ?: return@withLock null
+            if (runtime is LiteRtLocalInferenceEngine && !BuildConfig.LITERT_DECISION_PROTOTYPE) return@withLock null
+            SharedGemmaDecisionEngine(runtime).choose(state, candidates, "shared-gemma-shadow")
         }
     }
 
@@ -220,6 +239,7 @@ object LocalChatSessionManager {
         audioPath: String? = null,
         requestPriority: LocalModelRequestPriority = LocalModelRequestPriority.HIGH,
         maxTokensOverride: Int? = null,
+        systemInstruction: String? = null,
     ): String {
         return generateInternal(
             settings = settings,
@@ -229,6 +249,7 @@ object LocalChatSessionManager {
             audioPath = audioPath,
             requestPriority = requestPriority,
             maxTokensOverride = maxTokensOverride,
+            systemInstruction = systemInstruction,
         ).text
     }
 
@@ -246,6 +267,7 @@ object LocalChatSessionManager {
         audioPath: String?,
         requestPriority: LocalModelRequestPriority,
         maxTokensOverride: Int? = null,
+        systemInstruction: String? = null,
     ): GenerationResult {
         val reqId = UUID.randomUUID().toString()
         val llm: LocalInferenceEngine
@@ -275,6 +297,7 @@ object LocalChatSessionManager {
         try {
             return generationMutex.withLock {
                 mutex.withLock {
+                    check(engine === llm && loadedModelId == modelId) { "Chat model changed while request was queued" }
                     if (requestPriority == LocalModelRequestPriority.HIGH) {
                         pendingHighPriorityRequests = (pendingHighPriorityRequests - 1).coerceAtLeast(0)
                         highPendingConsumed = true
@@ -306,6 +329,7 @@ object LocalChatSessionManager {
                                     structuredJson = settings.experimentalStructuredJson,
                                     imagePaths = imagePaths,
                                     audioPath = audioPath,
+                                    systemInstruction = systemInstruction,
                                 ),
                                 onToken = { chunk ->
                                     if (chunk.isBlank() || guardTriggered) return@generate
@@ -405,7 +429,7 @@ object LocalChatSessionManager {
     }
 
     suspend fun unload() {
-        mutex.withLock {
+        generationMutex.withLock { mutex.withLock {
             Log.i(TAG, "Unloading local chat session modelId=${loadedModelId.orEmpty()}")
             runCatching { engine?.unloadModel() }
             loadedModelId = null
@@ -416,7 +440,7 @@ object LocalChatSessionManager {
             gpuFallbackMessage = null
             activeRequestId = null
             state = LocalSessionState.ModelNotLoaded
-        }
+        } }
     }
 
     suspend fun runWarmupProbe(
@@ -506,7 +530,7 @@ object LocalChatSessionManager {
     private fun isEngineCompatibleWithRuntime(runtime: LocalModelRuntime): Boolean {
         val currentEngine = engine ?: return false
         return when (runtime) {
-            LocalModelRuntime.LLAMA_CPP -> currentEngine is LlamaCppLocalInferenceEngine
+            LocalModelRuntime.LLAMA_CPP -> if (BuildConfig.SHARED_GEMMA_PROTOTYPE) currentEngine is SharedGemmaInferenceEngine else currentEngine is LlamaCppLocalInferenceEngine
             LocalModelRuntime.LITERT -> currentEngine is LiteRtLocalInferenceEngine
             LocalModelRuntime.REMOTE_OPENAI -> false
         }
@@ -514,7 +538,7 @@ object LocalChatSessionManager {
 
     private fun createEngine(runtime: LocalModelRuntime, context: Context): LocalInferenceEngine {
         return when (runtime) {
-            LocalModelRuntime.LLAMA_CPP -> LlamaCppLocalInferenceEngine()
+            LocalModelRuntime.LLAMA_CPP -> if (BuildConfig.SHARED_GEMMA_PROTOTYPE) SharedGemmaInferenceEngine() else LlamaCppLocalInferenceEngine()
             LocalModelRuntime.LITERT -> LiteRtLocalInferenceEngine(context)
             LocalModelRuntime.REMOTE_OPENAI -> throw IllegalStateException(
                 "REMOTE_OPENAI does not use a local engine. Requests go through RemoteOpenAiClient."

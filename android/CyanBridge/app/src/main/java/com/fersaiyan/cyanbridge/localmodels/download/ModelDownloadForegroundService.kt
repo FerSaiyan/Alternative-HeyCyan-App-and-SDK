@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
+import com.fersaiyan.cyanbridge.localmodels.engine.NpuCatalogVariants
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -148,12 +149,16 @@ class ModelDownloadForegroundService : Service() {
     }
 
     private suspend fun performDownload(modelId: String, hfToken: String?) {
-        val entry = LocalModelCatalogRepository.findById(modelId) ?: run {
-            Log.w(TAG, "Model $modelId not found in catalog")
-            _lastResult = DownloadResult(false, modelId, "Model not found in catalog")
+        val catalogEntry = LocalModelCatalogRepository.findById(modelId)
+        // Per-SoC NPU builds resolve to this phone's file (or fail with the reason).
+        val resolution = catalogEntry?.let { NpuCatalogVariants.forDevice(this, it) }
+        val entry = resolution?.entry ?: run {
+            val reason = resolution?.reason ?: "Model not found in catalog"
+            Log.w(TAG, "Model $modelId cannot be downloaded: $reason")
+            _lastResult = DownloadResult(false, modelId, reason)
             _isDownloading = false
             _downloadingModelId = null
-            sendFinishedBroadcast(success = false, error = "Model not found")
+            sendFinishedBroadcast(success = false, error = reason)
             delay(2000)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()

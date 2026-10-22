@@ -1,0 +1,571 @@
+diff --git a/kotlin/java/com/google/ai/edge/litertlm/Engine.kt b/kotlin/java/com/google/ai/edge/litertlm/Engine.kt
+index 669e2061..ca7a1600 100644
+--- a/kotlin/java/com/google/ai/edge/litertlm/Engine.kt
++++ b/kotlin/java/com/google/ai/edge/litertlm/Engine.kt
+@@ -200,6 +200,28 @@ class Engine(val engineConfig: EngineConfig) : AutoCloseable {
+     }
+   }
+ 
++  /**
++   * Scores single-token decision labels after a fully rendered text prompt.
++   * Returns full-vocabulary log probabilities, followed by total label mass.
++   * Uses temporary sessions on this engine; weights are not reloaded. The caller
++   * must serialize this operation with chat/session work and keep the engine alive.
++   * Unsupported token boundaries, context overflow and backends throw.
++   */
++  @ExperimentalApi
++  fun scoreDecision(renderedPromptUtf8: ByteArray, labels: Array<String>): FloatArray {
++    synchronized(lock) {
++      checkInitialized()
++      require(renderedPromptUtf8.isNotEmpty()) { "Empty decision prompt" }
++      require(labels.size in 2..26 && labels.distinct().size == labels.size) {
++        "Need 2..26 distinct labels"
++      }
++      require(labels.all { it.length == 1 && it[0] in 'A'..'Z' }) {
++        "Decision labels must be ASCII A..Z"
++      }
++      return LiteRtLmJni.nativeScoreDecision(handle!!, renderedPromptUtf8, labels)
++    }
++  }
++
+   /** Throws [IllegalStateException] if the engine is not initialized. */
+   private fun checkInitialized() {
+     check(isInitialized()) { "Engine is not initialized." }
+diff --git a/kotlin/java/com/google/ai/edge/litertlm/LiteRtLmJni.kt b/kotlin/java/com/google/ai/edge/litertlm/LiteRtLmJni.kt
+index 4902fb85..c22bc11a 100644
+--- a/kotlin/java/com/google/ai/edge/litertlm/LiteRtLmJni.kt
++++ b/kotlin/java/com/google/ai/edge/litertlm/LiteRtLmJni.kt
+@@ -100,6 +100,12 @@ internal object LiteRtLmJni {
+    */
+   external fun nativeDeleteEngine(enginePointer: Long)
+ 
++  external fun nativeScoreDecision(
++    enginePointer: Long,
++    renderedPromptUtf8: ByteArray,
++    labels: Array<String>,
++  ): FloatArray
++
+   /**
+    * Creates a new LiteRT-LM session.
+    *
+diff --git a/kotlin/java/com/google/ai/edge/litertlm/jni/litertlm.cc b/kotlin/java/com/google/ai/edge/litertlm/jni/litertlm.cc
+index 5c9f3822..8a961845 100644
+--- a/kotlin/java/com/google/ai/edge/litertlm/jni/litertlm.cc
++++ b/kotlin/java/com/google/ai/edge/litertlm/jni/litertlm.cc
+@@ -15,7 +15,9 @@
+ #include <jni.h>
+ #include <sys/stat.h>
+ 
++#include <algorithm>
+ #include <cerrno>
++#include <cmath>
+ #include <cstddef>
+ #include <cstdint>
+ #include <cstring>
+@@ -31,7 +33,9 @@
+ #include "absl/log/absl_log.h"  // from @com_google_absl
+ #include "absl/status/status.h"  // from @com_google_absl
+ #include "absl/status/statusor.h"  // from @com_google_absl
++#include "absl/strings/match.h"  // from @com_google_absl
+ #include "absl/strings/str_cat.h"  // from @com_google_absl
++#include "absl/strings/string_view.h"  // from @com_google_absl
+ #include "absl/time/time.h"  // from @com_google_absl
+ #include "nlohmann/json_fwd.hpp"  // from @nlohmann_json
+ #include "litert/cc/internal/scoped_file.h"  // from @litert
+@@ -739,6 +743,179 @@ JNI_METHOD(nativeDeleteEngine)(JNIEnv* env, jclass thiz, jlong engine_pointer) {
+   delete reinterpret_cast<Engine*>(engine_pointer);
+ }
+ 
++// Decision scoring uses existing native teacher-forcing, which returns log p
++// (not negative log p, despite the SessionInterface comment in this revision).
++// Clone one prefilled session per label so every score has identical context.
++// Only one clone is alive at a time; all sessions share this engine's executor.
++//
++// In this revision RunTextScoring scores the FIRST target token against the
++// stale distribution that predicted the last prefilled token; later target
++// tokens are conditioned correctly (verified on Gemma 4 E2B against greedy
++// decode and HF transformers). The prompt must therefore end with the decision
++// delimiter: we prefill everything before it, score delimiter + label, and keep
++// only the label token's score, so the mis-scored position is a discarded
++// delimiter token.
++constexpr absl::string_view kDecisionDelimiter = "\xE2\x8A\xB2";  // U+22B2
++LITERTLM_JNIEXPORT jfloatArray JNICALL JNI_METHOD(nativeScoreDecision)(
++    JNIEnv* env, jclass thiz, jlong engine_pointer, jbyteArray prompt_bytes,
++    jobjectArray label_array) {
++  if (engine_pointer == 0 || prompt_bytes == nullptr || label_array == nullptr) {
++    ThrowLiteRtLmJniException(env, "Missing decision engine, prompt or labels");
++    return nullptr;
++  }
++  auto* engine = reinterpret_cast<Engine*>(engine_pointer);
++  const int count = env->GetArrayLength(label_array);
++  const int prompt_size = env->GetArrayLength(prompt_bytes);
++  if (count < 2 || count > 26 || prompt_size == 0) {
++    ThrowLiteRtLmJniException(env, "Need a nonempty prompt and 2..26 labels");
++    return nullptr;
++  }
++  std::string prompt(prompt_size, '\0');
++  env->GetByteArrayRegion(prompt_bytes, 0, prompt_size,
++                         reinterpret_cast<jbyte*>(prompt.data()));
++  if (env->ExceptionCheck()) return nullptr;
++  if (!absl::EndsWith(prompt, kDecisionDelimiter) ||
++      prompt.size() == kDecisionDelimiter.size()) {
++    ThrowLiteRtLmJniException(env, "Decision prompt must end with the U+22B2 delimiter");
++    return nullptr;
++  }
++  const std::string context = prompt.substr(0, prompt.size() - kDecisionDelimiter.size());
++  // Engine exposes a const tokenizer; encoding is non-const. Same cast as c/engine.cc.
++  auto& tokenizer =
++      const_cast<::litert::support::Tokenizer&>(engine->GetTokenizer());
++  auto context_ids = tokenizer.TextToTokenIds(context);
++  auto prefix_ids = tokenizer.TextToTokenIds(prompt);
++  if (!context_ids.ok() || !prefix_ids.ok()) {
++    ThrowLiteRtLmJniException(env, (context_ids.ok() ? prefix_ids.status() : context_ids.status()).ToString());
++    return nullptr;
++  }
++  // The delimiter must append whole tokens without retokenizing the context.
++  const int delimiter_tokens = static_cast<int>(prefix_ids->size() - context_ids->size());
++  if (context_ids->empty() || delimiter_tokens <= 0 ||
++      !std::equal(context_ids->begin(), context_ids->end(), prefix_ids->begin())) {
++    ThrowLiteRtLmJniException(env, "Delimiter retokenizes the decision context");
++    return nullptr;
++  }
++  const int capacity =
++      engine->GetEngineSettings().GetMainExecutorSettings().GetMaxNumTokens();
++  if (capacity <= 0 || prefix_ids->size() + 1 >= capacity) {
++    ThrowLiteRtLmJniException(env, "Decision prompt exceeds configured context");
++    return nullptr;
++  }
++  std::vector<std::string> labels;
++  std::vector<int> label_ids;
++  absl::flat_hash_set<int> token_ids;
++  for (int i = 0; i < count; ++i) {
++    auto label = static_cast<jstring>(env->GetObjectArrayElement(label_array, i));
++    if (env->ExceptionCheck()) return nullptr;
++    if (label == nullptr || env->GetStringLength(label) != 1) {
++      if (label != nullptr) env->DeleteLocalRef(label);
++      ThrowLiteRtLmJniException(env, "Labels must be ASCII A..Z");
++      return nullptr;
++    }
++    jchar ch;
++    env->GetStringRegion(label, 0, 1, &ch);
++    env->DeleteLocalRef(label);
++    if (env->ExceptionCheck()) return nullptr;
++    if (ch < 'A' || ch > 'Z') {
++      ThrowLiteRtLmJniException(env, "Labels must be ASCII A..Z");
++      return nullptr;
++    }
++    std::string text(1, static_cast<char>(ch));
++    auto standalone = tokenizer.TextToTokenIds(text);
++    auto joined = tokenizer.TextToTokenIds(prompt + text);
++    if (!standalone.ok() || !joined.ok() || standalone->size() != 1 ||
++        joined->size() != prefix_ids->size() + 1 ||
++        !std::equal(prefix_ids->begin(), prefix_ids->end(), joined->begin()) ||
++        joined->back() != standalone->front() ||
++        !token_ids.insert(standalone->front()).second) {
++      ThrowLiteRtLmJniException(env,
++          "Label is not a distinct single-token continuation of full prompt");
++      return nullptr;
++    }
++    labels.push_back(std::string(kDecisionDelimiter) + text);
++    label_ids.push_back(standalone->front());
++  }
++  auto config = SessionConfig::CreateDefault();
++  auto base = engine->CreateSession(config);
++  if (!base.ok()) {
++    ThrowLiteRtLmJniException(env, base.status().ToString());
++    return nullptr;
++  }
++  std::vector<InputData> contents;
++  contents.emplace_back(InputText(context));
++  auto status = (*base)->RunPrefill(contents);
++  if (!status.ok()) {
++    ThrowLiteRtLmJniException(env, status.ToString());
++    return nullptr;
++  }
++  // Single pass: score delimiter + first label once. The final step's logits
++  // predict the label position, so every candidate is read from that one
++  // full-vocabulary log-softmax (the delimiter's first token absorbs the
++  // stale-first-step behaviour). Runtimes without it report Unimplemented,
++  // and we fall back to one cloned session per label.
++  std::vector<float> values;
++  auto single = (*base)->RunCandidateScoring(labels.front(), label_ids);
++  if (single.ok()) {
++    const auto& candidates = single->GetCandidateLogProbs();
++    const auto& token_scores = single->GetTokenScores();
++    if (!candidates.has_value() || candidates->size() != label_ids.size() ||
++        !token_scores.has_value() || token_scores->size() != 1 ||
++        (*token_scores)[0].size() != delimiter_tokens + 1) {
++      ThrowLiteRtLmJniException(env, "Unexpected single-pass candidate scores");
++      return nullptr;
++    }
++    // Self-check: the runtime's own teacher-forced score for the first label
++    // must equal the same quantity read from the candidate log-softmax.
++    if (!(std::abs((*token_scores)[0].back() - candidates->front()) <= 1e-3f)) {
++      ThrowLiteRtLmJniException(env, "Single-pass candidate scores disagree with teacher forcing");
++      return nullptr;
++    }
++    values = *candidates;
++  } else if (single.status().code() != absl::StatusCode::kUnimplemented) {
++    ThrowLiteRtLmJniException(env, single.status().ToString());
++    return nullptr;
++  } else {
++    for (const auto& label : labels) {
++      auto fork = (*base)->Clone();
++      if (!fork.ok()) {
++        ThrowLiteRtLmJniException(env, fork.status().ToString());
++        return nullptr;
++      }
++      auto response = (*fork)->RunTextScoring({label}, true);
++      if (!response.ok()) {
++        ThrowLiteRtLmJniException(env, response.status().ToString());
++        return nullptr;
++      }
++      const auto& token_scores = response->GetTokenScores();
++      if (!token_scores.has_value() || token_scores->size() != 1 ||
++          (*token_scores)[0].size() != delimiter_tokens + 1) {
++        ThrowLiteRtLmJniException(env, "Unexpected delimiter + label token scores");
++        return nullptr;
++      }
++      // log p(label | context + delimiter); the leading delimiter scores are discarded.
++      values.push_back((*token_scores)[0].back());
++    }
++  }
++  double mass = 0;
++  for (float score : values) {
++    if (!std::isfinite(score) || score > 0) {
++      ThrowLiteRtLmJniException(env, "Invalid single-token log probability");
++      return nullptr;
++    }
++    mass += std::exp(static_cast<double>(score));
++  }
++  if (!std::isfinite(mass) || mass > 1.0001) {
++    ThrowLiteRtLmJniException(env, "Invalid full-vocabulary label mass");
++    return nullptr;
++  }
++  values.push_back(static_cast<float>(std::min(1.0, mass)));
++  auto result = env->NewFloatArray(values.size());
++  if (result == nullptr) return nullptr;
++  env->SetFloatArrayRegion(result, 0, values.size(), values.data());
++  return result;
++}
++
+ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateSession)(
+     JNIEnv* env, jclass thiz, jlong engine_pointer, jobject sampler_config_obj,
+     jstring lora_path_str, jstring audio_lora_path_str,
+diff --git a/runtime/core/session_advanced.cc b/runtime/core/session_advanced.cc
+index 114a8aa9..730f3900 100644
+--- a/runtime/core/session_advanced.cc
++++ b/runtime/core/session_advanced.cc
+@@ -339,6 +339,35 @@ absl::StatusOr<Responses> SessionAdvanced::RunTextScoring(
+   return collected_responses;
+ }
+ 
++absl::StatusOr<Responses> SessionAdvanced::RunCandidateScoring(
++    absl::string_view target_text, const std::vector<int>& candidate_ids) {
++  if (candidate_ids.empty()) {
++    return absl::InvalidArgumentError("Candidate ids must not be empty.");
++  }
++  absl::StatusOr<Responses> collected_responses;
++  std::unique_ptr<SessionInterface::TaskController> task_controller;
++  {
++    absl::MutexLock lock(mutex_);
++    auto execution_manager_lock = execution_manager_.lock();
++    if (execution_manager_lock == nullptr) {
++      return absl::FailedPreconditionError("Execution manager is not available.");
++    }
++    auto cancelled = std::make_shared<std::atomic<bool>>(false);
++    ABSL_ASSIGN_OR_RETURN(auto task_id, execution_manager_lock->GetNewTaskId());
++    ABSL_RETURN_IF_ERROR(execution_manager_lock->AddTextScoringTask(
++        session_id_, task_id, last_task_ids_, {target_text},
++        /*store_token_lengths=*/true, cancelled,
++        [&collected_responses](absl::StatusOr<Responses> responses) {
++          collected_responses = std::move(responses);
++        },
++        candidate_ids));
++    task_controller = std::make_unique<AdvancedTaskController>(
++        task_id, cancelled, execution_manager_);
++  }
++  ABSL_RETURN_IF_ERROR(task_controller->WaitUntilDone(Engine::kDefaultTimeout));
++  return collected_responses;
++}
++
+ absl::StatusOr<std::unique_ptr<SessionInterface::TaskController>>
+ SessionAdvanced::RunTextScoringAsync(
+     const std::vector<absl::string_view>& target_text,
+diff --git a/runtime/core/session_advanced.h b/runtime/core/session_advanced.h
+index 8af70c95..8143496a 100644
+--- a/runtime/core/session_advanced.h
++++ b/runtime/core/session_advanced.h
+@@ -137,6 +137,10 @@ class SessionAdvanced : public SessionInterface {
+ 
+   absl::Status RunPrefill(const std::vector<InputData>& contents) override;
+ 
++  absl::StatusOr<Responses> RunCandidateScoring(
++      absl::string_view target_text,
++      const std::vector<int>& candidate_ids) override ABSL_LOCKS_EXCLUDED(mutex_);
++
+   absl::StatusOr<std::unique_ptr<TaskController>> RunPrefillAsync(
+       const std::vector<InputData>& contents,
+       absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) override
+diff --git a/runtime/core/tasks.cc b/runtime/core/tasks.cc
+index 4ea8174f..ef751fd6 100644
+--- a/runtime/core/tasks.cc
++++ b/runtime/core/tasks.cc
+@@ -16,6 +16,7 @@
+ 
+ #include <algorithm>
+ #include <atomic>
++#include <cmath>
+ #include <cstddef>
+ #include <limits>
+ #include <memory>
+@@ -379,7 +380,9 @@ class DecodeOneStep {
+   // TODO: b/499304966 - Add tests for the float16 path.
+   absl::StatusOr<std::vector<float>> RunScoreStep(
+       const float temperature, const std::vector<int>& step_input_ids,
+-      litert::TensorBuffer decoded_ids) {
++      litert::TensorBuffer decoded_ids,
++      const std::vector<int>* candidates = nullptr,
++      std::vector<float>* candidate_log_probs = nullptr) {
+     LITERT_ASSIGN_OR_RETURN(auto duplicate_decoded_ids,
+                             decoded_ids.Duplicate());
+     const ExecutorInputs inputs(
+@@ -434,6 +437,29 @@ class DecodeOneStep {
+     }
+     RET_CHECK_EQ(logits_data.size(), batch_size * logits_dims[2])
+         << "Logits buffer size does not match logits tensor shape.";
++    if (candidates != nullptr) {
++      // Single-pass candidate scoring: one stable log-softmax over the whole
++      // vocabulary, then read each candidate. Batch 1 only.
++      RET_CHECK_EQ(batch_size, 1) << "Candidate scoring requires batch 1.";
++      const int vocab_size = logits_dims[2];
++      float max_logit = -std::numeric_limits<float>::infinity();
++      for (int v = 0; v < vocab_size; ++v) {
++        max_logit = std::max(max_logit, logits_data[v] / temperature);
++      }
++      double sum = 0;
++      for (int v = 0; v < vocab_size; ++v) {
++        sum += std::exp(static_cast<double>(logits_data[v] / temperature - max_logit));
++      }
++      const double log_normalizer = max_logit + std::log(sum);
++      candidate_log_probs->clear();
++      for (int id : *candidates) {
++        if (id < 0 || id >= vocab_size) {
++          return absl::InvalidArgumentError(absl::StrCat("Invalid candidate id: ", id));
++        }
++        candidate_log_probs->push_back(
++            static_cast<float>(logits_data[id] / temperature - log_normalizer));
++      }
++    }
+     return ComputeLogLikelihood(logits_data, step_input_ids, temperature);
+   }
+ 
+@@ -854,8 +880,13 @@ absl::StatusOr<Responses> Decode(
+ absl::StatusOr<Responses> Score(
+     LlmExecutor& executor, Tokenizer& tokenizer,
+     const std::vector<absl::string_view>& target_texts, const float temperature,
+-    litert::TensorBuffer decoded_ids, bool store_token_lengths) {
++    litert::TensorBuffer decoded_ids, bool store_token_lengths,
++    const std::vector<int>& final_step_candidates) {
+   const int num_output_candidates = target_texts.size();
++  if (!final_step_candidates.empty() && num_output_candidates != 1) {
++    return absl::InvalidArgumentError("Candidate scoring requires one target.");
++  }
++  std::vector<float> candidate_log_probs;
+   const int max_num_tokens = TryGetMaxNumTokens(executor);
+   std::optional<BenchmarkInfo> benchmark_info;
+   // Create a dummy StopTokenDetector as it's not used in ScoreCustomSampling.
+@@ -910,7 +941,12 @@ absl::StatusOr<Responses> Score(
+     ABSL_ASSIGN_OR_RETURN(std::vector<float> step_log_likelihoods,
+                           run_one_step->RunScoreStep(
+                               temperature, decoded_ids_for_each_target_in_batch,
+-                              std::move(decoded_ids_copy)));
++                              std::move(decoded_ids_copy),
++                              !final_step_candidates.empty() &&
++                                      i == max_num_tokens_of_target_texts - 1
++                                  ? &final_step_candidates
++                                  : nullptr,
++                              &candidate_log_probs));
+     for (int j = 0; j < num_output_candidates; ++j) {
+       const int size_of_jth_target = ids_for_each_target_in_batch[j].size();
+       // Only add the log likelihood of the non-padded tokens to the score.
+@@ -933,6 +969,9 @@ absl::StatusOr<Responses> Score(
+                              std::move(scores), std::move(token_lengths),
+                              std::move(ids_for_each_target_in_batch));
+   responses.GetMutableTokenScores() = std::move(token_scores);
++  if (!final_step_candidates.empty()) {
++    responses.GetMutableCandidateLogProbs() = std::move(candidate_log_probs);
++  }
+   return responses;
+ }
+ 
+diff --git a/runtime/core/tasks.h b/runtime/core/tasks.h
+index 7b7e1e70..55f1ba7c 100644
+--- a/runtime/core/tasks.h
++++ b/runtime/core/tasks.h
+@@ -63,7 +63,8 @@ absl::StatusOr<Responses> Decode(
+ absl::StatusOr<Responses> Score(
+     LlmExecutor& executor, Tokenizer& tokenizer,
+     const std::vector<absl::string_view>& target_texts, float temperature,
+-    litert::TensorBuffer decoded_ids, bool store_token_lengths = false);
++    litert::TensorBuffer decoded_ids, bool store_token_lengths = false,
++    const std::vector<int>& final_step_candidates = {});
+ 
+ }  // namespace litert::lm::Tasks
+ 
+diff --git a/runtime/engine/engine.h b/runtime/engine/engine.h
+index 2498df8d..727a4952 100644
+--- a/runtime/engine/engine.h
++++ b/runtime/engine/engine.h
+@@ -202,6 +202,14 @@ class SessionInterface {
+   // process is done.
+   virtual absl::Status RunPrefill(const std::vector<InputData>& contents) = 0;
+ 
++  // Scores `target_text` after the prefilled context and returns, from that
++  // single pass, the final-step log p of every `candidate_ids` entry in
++  // Responses::GetCandidateLogProbs(). Advances session state like scoring.
++  virtual absl::StatusOr<Responses> RunCandidateScoring(
++      absl::string_view target_text, const std::vector<int>& candidate_ids) {
++    return absl::UnimplementedError("Candidate scoring is not implemented.");
++  }
++
+   // This is a not blocking call and the function will return right away. The
+   // processing status will be signaled through the callback.
+   virtual absl::StatusOr<std::unique_ptr<TaskController>> RunPrefillAsync(
+diff --git a/runtime/engine/io_types.h b/runtime/engine/io_types.h
+index 722fe340..3c970826 100644
+--- a/runtime/engine/io_types.h
++++ b/runtime/engine/io_types.h
+@@ -162,6 +162,14 @@ class Responses {
+     return token_scores_;
+   };
+ 
++  // Final-step log p(candidate) when candidate scoring was requested.
++  const std::optional<std::vector<float>>& GetCandidateLogProbs() const {
++    return candidate_log_probs_;
++  }
++  std::optional<std::vector<float>>& GetMutableCandidateLogProbs() {
++    return candidate_log_probs_;
++  }
++
+  private:
+   // The state of the task.
+   TaskState task_state_;
+@@ -181,6 +189,9 @@ class Responses {
+ 
+   // The output vector of token ids for each response text.
+   std::vector<std::vector<int>> token_ids_;
++
++  // Final-step log probabilities of requested candidate token ids. Optional.
++  std::optional<std::vector<float>> candidate_log_probs_;
+ };
+ std::ostream& operator<<(std::ostream& os, const Responses& responses);
+ 
+diff --git a/runtime/framework/resource_management/execution_manager.h b/runtime/framework/resource_management/execution_manager.h
+index 2d0ec3d4..0e86836d 100644
+--- a/runtime/framework/resource_management/execution_manager.h
++++ b/runtime/framework/resource_management/execution_manager.h
+@@ -244,7 +244,8 @@ class ExecutionManager {
+       const std::vector<absl::string_view>& target_text,
+       bool store_token_lengths,
+       std::shared_ptr<std::atomic<bool>> absl_nonnull cancelled,
+-      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) = 0;
++      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
++      std::vector<int> final_step_candidates = {}) = 0;
+ 
+   // Returns the current step of the session.
+   // - session_info: The session info of the session.
+diff --git a/runtime/framework/resource_management/serial_execution_manager.cc b/runtime/framework/resource_management/serial_execution_manager.cc
+index a7959afe..e109ba3c 100644
+--- a/runtime/framework/resource_management/serial_execution_manager.cc
++++ b/runtime/framework/resource_management/serial_execution_manager.cc
+@@ -1076,7 +1076,8 @@ absl::Status SerialExecutionManager::AddTextScoringTask(
+     SessionId session_id, TaskId task_id, absl::flat_hash_set<TaskId> dep_tasks,
+     const std::vector<absl::string_view>& target_text, bool store_token_lengths,
+     std::shared_ptr<std::atomic<bool>> absl_nonnull cancelled,
+-    absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) {
++    absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
++    std::vector<int> final_step_candidates) {
+   if (callback == nullptr) {
+     callback = [](absl::StatusOr<Responses>) {};
+   }
+@@ -1088,7 +1089,8 @@ absl::Status SerialExecutionManager::AddTextScoringTask(
+   }
+ 
+   auto task = [this, task_id, target_text_str = std::move(target_text_str),
+-               store_token_lengths]() mutable {
++               store_token_lengths,
++               final_step_candidates = std::move(final_step_candidates)]() mutable {
+     auto task_info_or = StartTask(task_id);
+     if (!task_info_or.ok()) {
+       FinishTaskAndLogErrors(task_id, task_info_or.status(),
+@@ -1130,7 +1132,8 @@ absl::Status SerialExecutionManager::AddTextScoringTask(
+     auto temperature = 1.0f;
+     auto responses = Tasks::Score(
+         *llm_executor.value(), *tokenizer_, target_text_views, temperature,
+-        std::move(decoded_ids_buffer.Value()), store_token_lengths);
++        std::move(decoded_ids_buffer.Value()), store_token_lengths,
++        final_step_candidates);
+ 
+     if (cancelled != nullptr && cancelled->load()) {
+       responses = Responses(TaskState::kCancelled);
+diff --git a/runtime/framework/resource_management/serial_execution_manager.h b/runtime/framework/resource_management/serial_execution_manager.h
+index 388f198d..f2c46f75 100644
+--- a/runtime/framework/resource_management/serial_execution_manager.h
++++ b/runtime/framework/resource_management/serial_execution_manager.h
+@@ -206,7 +206,8 @@ class SerialExecutionManager : public ExecutionManager {
+       const std::vector<absl::string_view>& target_text,
+       bool store_token_lengths,
+       std::shared_ptr<std::atomic<bool>> absl_nonnull cancelled,
+-      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) override;
++      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
++      std::vector<int> final_step_candidates = {}) override;
+ 
+   // Returns the current step of the session.
+   // - session_info: The session info of the session.
+diff --git a/runtime/framework/resource_management/threaded_execution_manager.cc b/runtime/framework/resource_management/threaded_execution_manager.cc
+index 0a11da4a..e1894a52 100644
+--- a/runtime/framework/resource_management/threaded_execution_manager.cc
++++ b/runtime/framework/resource_management/threaded_execution_manager.cc
+@@ -1216,13 +1216,14 @@ absl::Status ThreadedExecutionManager::AddTextScoringTask(
+     SessionId session_id, TaskId task_id, absl::flat_hash_set<TaskId> dep_tasks,
+     const std::vector<absl::string_view>& target_text, bool store_token_lengths,
+     std::shared_ptr<std::atomic<bool>> absl_nonnull cancelled,
+-    absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) {
++    absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
++    std::vector<int> final_step_candidates) {
+   if (callback == nullptr) {
+     callback = [](absl::StatusOr<Responses> responses) {};
+   }
+ 
+-  auto task = [this, task_id, target_text,
+-               store_token_lengths]() mutable -> void {
++  auto task = [this, task_id, target_text, store_token_lengths,
++               final_step_candidates = std::move(final_step_candidates)]() mutable -> void {
+     auto task_info = StartTask(task_id);
+     if (!task_info.ok()) {
+       FinishTaskAndLogErrors(task_id, task_info.status(),
+@@ -1277,7 +1278,8 @@ absl::Status ThreadedExecutionManager::AddTextScoringTask(
+     auto temperature = 1.0f;
+     auto responses = Tasks::Score(
+         *llm_executor.value(), *tokenizer_, target_text, temperature,
+-        std::move(decoded_ids_buffer.Value()), store_token_lengths);
++        std::move(decoded_ids_buffer.Value()), store_token_lengths,
++        final_step_candidates);
+ 
+     if (cancelled != nullptr && cancelled->load()) {
+       responses = Responses(TaskState::kCancelled);
+diff --git a/runtime/framework/resource_management/threaded_execution_manager.h b/runtime/framework/resource_management/threaded_execution_manager.h
+index 1c312e3d..1a013f13 100644
+--- a/runtime/framework/resource_management/threaded_execution_manager.h
++++ b/runtime/framework/resource_management/threaded_execution_manager.h
+@@ -224,7 +224,8 @@ class ThreadedExecutionManager : public ExecutionManager {
+       const std::vector<absl::string_view>& target_text,
+       bool store_token_lengths,
+       std::shared_ptr<std::atomic<bool>> absl_nonnull cancelled,
+-      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) override
++      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
++      std::vector<int> final_step_candidates = {}) override
+       ABSL_LOCKS_EXCLUDED(session_and_task_lookup_mutex_);
+ 
+   // Returns the current step of the session.

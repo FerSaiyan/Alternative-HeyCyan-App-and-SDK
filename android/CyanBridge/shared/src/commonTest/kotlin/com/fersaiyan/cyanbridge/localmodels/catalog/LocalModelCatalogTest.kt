@@ -11,15 +11,18 @@ class LocalModelCatalogTest {
         val models = LocalModelCatalogRepository.curatedModels
 
         assertEquals(models.size, models.map(LocalModelCatalogEntry::id).toSet().size)
-        assertEquals("gemma4-e2b-npu-coming-soon", models.last().id)
+        assertEquals("gemma4-e2b-it-npu", models.last().id)
         assertTrue(models.all { entry ->
             val hasDownloadSource = entry.sourceUrl?.startsWith("https://") == true
             val isDisabledComingSoonPlaceholder =
                 entry.comingSoon && !entry.enabled && entry.sourceUrl == null
+            // Per-SoC NPU entries get their URL and checksum when resolved for a phone.
+            val hasPerSocSources = entry.npuVariants.isNotEmpty() && entry.npuOnly &&
+                entry.npuVariants.all { set -> set.files.values.all { it.sha256?.length == 64 && it.sizeBytes > 0 } }
 
             entry.id.isNotBlank() &&
                 entry.expectedFilename.isNotBlank() &&
-                (hasDownloadSource || isDisabledComingSoonPlaceholder) &&
+                (hasDownloadSource || isDisabledComingSoonPlaceholder || hasPerSocSources) &&
                 entry.sizeBytes > 0 &&
                 entry.contextSizeDefault > 0 &&
                 entry.minRamGb > 0.0 &&

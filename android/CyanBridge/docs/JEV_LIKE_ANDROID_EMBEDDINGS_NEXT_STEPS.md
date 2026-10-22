@@ -1,13 +1,39 @@
 # Jev-like Android embeddings: considerations and next steps
 
-**Status:** handoff document for the `jev-like-local-agent` branch  
-**Date:** 2026-09-19  
+**Status:** historical runtime/benchmark record for `jev-like-local-agent`
+
+**Planning update:** 2026-10-03; measurements below retain their original dates
 **Scope:** Android-first investigation; emulator CPU tests remain the release gate, with separate opt-in host-GPU and emulator-acceleration probes  
 **Constraint:** do not make default CI or correctness conclusions depend on a GPU or downloaded model weights.
 
 ## Executive summary
 
-The next experiment should be an **Android embedding probe**, not another generated-token classifier.
+**2026-10-07:** a fine-tuned EmbeddingGemma 2 bi-encoder (270M text tower)
+scores 110/120 on the bounded-flat-v3 development set versus 91/120 for tuned
+Laya ([details](BOUNDED_SPECIALIST_DECISIONS.md#embeddinggemma-2-bi-encoder-versus-tuned-laya-2026-10-06)).
+Stock `.litertlm` chat models now score bounded menus on the same loaded engine,
+verified on the Pixel 9a AVD after fixing a native first-token scoring bug
+([details](LITERT_SHARED_DECISIONS.md)).
+
+The 2026-10-04 [shared-Gemma prototype](SHARED_GEMMA_DECISIONS.md) adds an opt-in
+native next-token-logit path using the already-loaded GGUF chat model. It is
+shadow-only; the upstream generic API remains a draft and E2B/E4B phone quality
+and memory are unmeasured. This is the first new runtime direction to evaluate
+for the user's 4–6-GB-phone requirement.
+
+The current prioritized plan is
+[`JEV_PHONE_AGENT_ROADMAP.md`](JEV_PHONE_AGENT_ROADMAP.md). The embedding
+probes below have already run. Next: pin the preserved Pixel, extend real
+Tasker episode collection and candidate-recall auditing, compare compact-state
+Gemma in shadow, then retrain only after independent grouped splits exist.
+Needle ARM and Laya LiteRT feasibility remain separate runtime gates.
+
+Closer voice/device references and the Tasker-specific training adaptation are
+in [`JEV_VOICE_TASKER_TRAINING_FINDINGS.md`](JEV_VOICE_TASKER_TRAINING_FINDINGS.md),
+including the Robotics & devices category, Laya Spanish voice-turn training,
+Needle product schemas and evidence-preserving candidate parsing.
+
+The original embedding-probe sequence was:
 
 The intended sequence is:
 
@@ -757,8 +783,10 @@ engine is production-wired.
    truncation defect is fixed in source and both ABIs were rebuilt from
    `/tmp/opencode/kotlinllamacpp-fixed` (x86_64 + arm64-v8a) and repackaged;
    on-device validation shows Gemma 768 → Qwen 1024 dims in one process.
-   Still needed: a reproducible build script pinned to an upstream revision
-   before this AAR can be a real dependency (currently a local artifact).
+    A pinned build script and patch manifest now exist in
+    `tools/hil/build_embedding_runtime_aar.sh` and `tools/hil/embedding-runtime/`.
+    Reproducible release artifacts, dependency selection and distribution are
+    still required; do not treat the local tested AAR as a shipped dependency.
 2. **Production engine wiring.** Partially done 2026-09-20 for the Tasker
    service path: opt-in `LocalAgentPrefs` embedding keys (default off),
    lifecycle-owned `LlamaCppTextEmbeddingEngine` in `TaskerLocalAgentService`,
@@ -771,9 +799,10 @@ engine is production-wired.
    starting phone control. Corpus result: Gemma margin≥0.10. Live YouTube UI
    shows near-tie abstentions (margin ~0.001–0.013) that correctly cascade;
    production thresholds need a re-fit on production candidate descriptions.
-4. **Correct UI candidate identity.** Preserve the selected node index in each
-   `click_text` candidate. The current production mapping can resolve every
-   selected click to the first clickable node.
+4. **Correct UI candidate identity.** The current builder retains `nodeIndices`
+   and the brain resolves `click_node` by the chosen index. Literal entry also
+   focuses its bound node. These fixes need freshness/duplicate-label coverage;
+   the older first-node defect is not still an implementation task.
 5. **Embedding model contract.** Resolved 2026-09-20: the "Qwen returns 768"
    observation was the runtime `static n_embd` defect, not the model. Qwen
    reports its documented 1024 dims with the fixed runtime.
@@ -928,21 +957,24 @@ Before production routing is enabled, address these existing issues:
 
 1. `AssistantRequestRouter` does not yet have a production `decisionEngineProvider` wired by default; the new decision path is currently dormant unless injected.
 2. `LocalAgentDecisionBridge.engineProvider` is not yet wired to a real production embedder or single-token engine.
-3. `LocalAgentBrain.mapCandidateKeyToAction()` currently resolves every `click_text` candidate to the first clickable node. Candidate metadata must retain the selected node index.
+3. Selected node-index mapping and focus-before-type are implemented; verify binding freshness and duplicate-label behavior on independent Tasker episodes.
 4. Pseudo-softmax values in `DecisionMath` are not calibrated confidence.
 5. Keep embeddings and generation behind separate interfaces and feature flags.
 
 ## Recommended next-agent order
 
-1. ~~Add `TextEmbeddingEngine`, `EmbeddingResult`, `EmbeddingRouter`, and pure math tests.~~ Done as `TextEmbeddingEngine`, `TextEmbeddingResult`, `EmbeddingDecisionEngine`, and `EmbeddingDecisionMath`.
-2. Add synthetic emulator HIL coverage using a fake embedder.
-3. ~~Add model-path/checksum plumbing for an opt-in Android probe.~~ Done for the GGUF probe; tokenizer/checksum plumbing remains for a future LiteRT path.
-4. Integrate EmbeddingGemma through standalone LiteRT `CompiledModel` plus SentencePiece.
-5. ~~Run CPU-only emulator correctness tests and capture `JEV_EMBED` logs.~~ Done for both GGUFs.
-6. ~~Add Qwen3 GGUF embedding probing through `LlamaAndroid.getEmbedding()`/`embedding()` if a compatible artifact is available.~~ Done with the patched wrapper AAR; permanent dependency repair remains.
-7. Compare real model routing margins on a held-out multilingual fixture.
-8. Only then wire the best model behind an opt-in front-door router.
-9. Test Qwen3.5-Embedding-0.8B later, preferably on PC or after a verified mobile conversion; do not assume it is multilingual.
+Superseded by the [October 3 roadmap](JEV_PHONE_AGENT_ROADMAP.md). The GGUF
+probes and frozen calibration already exist. The critical path is now:
+
+1. Restore the authenticated AVD and pin HIL by AVD name; re-establish the planner baseline.
+2. Freeze the exact Tasker decision renderer and collect independent positive/negative episodes with verified outcomes.
+3. Audit target recall and grouped splits; compare compact Gemma, deterministic and planner baselines in shadow.
+4. Retrain/calibrate Laya and Needle only after these data gates; keep a new final test sealed.
+5. Measure Needle on ARM and Laya on a compatible LiteRT phone before a narrowly scoped reversible-action promotion.
+
+Keep the current margin ≥0.10 and existing planner fallback. The successful
+Pro YouTube runs and later Tasker Settings diagnostic are recorded in the
+roadmap; the earlier failures in this document remain historical measurements.
 
 ## Do not do
 
