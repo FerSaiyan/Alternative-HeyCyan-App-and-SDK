@@ -106,7 +106,7 @@
     <string name="compose_walking_ask_placeholder">Ask about the current scene...</string>
     <string name="compose_walking_send">Send</string>
     <string name="compose_walking_enabled">Walking Aid enabled</string>
-    <string name="compose_walking_camera_description">Walking Aid requires glasses with a point-of-view camera (such as HeyCyan or Meta Ray-Ban). %1$s</string>
+    <string name="compose_walking_camera_description">Walking Aid requires glasses with a point-of-view camera (such as HeyCyan). %1$s</string>
     <string name="compose_walking_benchmark_running">Running Benchmark...</string>
     <string name="compose_walking_latency_benchmark">Test End-to-End Latency</string>
     <string name="compose_walking_acquisition_running">Running Acquisition Benchmark...</string>

@@ -21,12 +21,6 @@ class DeviceClassifierTest {
     }
 
     @Test
-    fun metaRayban_detectedByName() {
-        assertEquals(DeviceClass.META_RAYBAN, DeviceClassifier.guessDeviceClass("Ray-Ban Meta"))
-        assertEquals(DeviceClass.META_RAYBAN, DeviceClassifier.guessDeviceClass("rayban"))
-    }
-
-    @Test
     fun meizuMyvu_detectedByName() {
         assertEquals(DeviceClass.MEIZU_MYVU, DeviceClassifier.guessDeviceClass("MYVU Star Air"))
         assertEquals(DeviceClass.MEIZU_MYVU, DeviceClassifier.guessDeviceClass("myvu_xga010c"))

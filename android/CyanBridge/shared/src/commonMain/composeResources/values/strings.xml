@@ -11,7 +11,6 @@
     <string name="action_connect">Connect</string>
     <string name="device_bind_title">Connect glasses</string>
     <string name="device_bind_scan">Scan for devices</string>
-    <string name="device_bind_pair_meta">Pair Meta Glasses</string>
     <string name="device_bind_scanning">Scanning...</string>
     <string name="device_bind_looking">Looking for named Bluetooth devices...</string>
     <string name="device_bind_empty">No devices found. Start a scan to pair your glasses.</string>
@@ -84,29 +83,5 @@
     <string name="onboarding_continue">Continue</string>
     <string name="onboarding_not_now">Not now</string>
     <string name="onboarding_dont_show_again">Don't show this again</string>
-
-    <!-- Meta Ray-Ban diagnostics -->
-    <string name="meta_rayban_title">Meta Ray-Ban</string>
-    <string name="meta_rayban_device_summary">Device: %1$s (%2$d available)</string>
-    <string name="meta_rayban_no_device">No DAT device</string>
-    <string name="meta_rayban_last_error">Last DAT error</string>
-    <string name="meta_rayban_send_diagnostics">Send Meta diagnostics</string>
-    <string name="meta_rayban_registration_status">Registration: %1$s</string>
-    <string name="meta_rayban_session_status">Session: %1$s</string>
-    <string name="meta_rayban_stream_status">Stream: %1$s</string>
-    <string name="meta_rayban_display_status">Display: %1$s</string>
-    <string name="meta_rayban_register">Register</string>
-    <string name="meta_rayban_unregister">Unregister</string>
-    <string name="meta_rayban_open_meta_ai">Open Meta AI</string>
     <string name="dashboard_open_pairing">Open pairing</string>
-    <string name="meta_rayban_start_session">Start session</string>
-    <string name="meta_rayban_stop_session">Stop session</string>
-    <string name="meta_rayban_start_stream">Start stream</string>
-    <string name="meta_rayban_stop_stream">Stop stream</string>
-    <string name="meta_rayban_capture_photo">Capture photo</string>
-    <string name="meta_rayban_view_last_photo">View last photo</string>
-    <string name="meta_rayban_active">Active</string>
-    <string name="meta_rayban_inactive">Inactive</string>
-    <string name="meta_rayban_start_display">Start display</string>
-    <string name="meta_rayban_stop_display">Stop display</string>
 </resources>

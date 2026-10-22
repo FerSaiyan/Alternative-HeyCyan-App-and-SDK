@@ -7,7 +7,7 @@ plugins {
 
 configurations.configureEach {
     // Full protobuf includes GeneratedMessageLite and is required by the MoYoung SDK's
-    // GeneratedMessage classes. Do not package Meta DAT's duplicate javalite runtime.
+    // GeneratedMessage classes.
     exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
     resolutionStrategy {
         force 'androidx.core:core:1.15.0'
@@ -22,15 +22,6 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localProperties.load(new FileInputStream(localPropertiesFile))
-}
-def metaGithubToken = System.getenv("META_GITHUB_TOKEN")
-        ?: System.getenv("GITHUB_TOKEN")
-        ?: localProperties.getProperty("github_token")
-def metaDatEnabled = metaGithubToken != null && !metaGithubToken.trim().isEmpty()
 def testAbi = providers.gradleProperty("testAbi").orNull
 
 android {
@@ -39,8 +30,7 @@ android {
 
     defaultConfig {
         applicationId = "com.fersaiyan.cyanbridge"
-        // Meta DAT declares minSdk 29. Keep the regular build on API 24 if Meta SDK is skipped.
-        minSdk = metaDatEnabled ? 29 : 28
+        minSdk = 28
         targetSdk = 36
         versionCode = 31
         versionName = "2.3.0"
@@ -48,12 +38,6 @@ android {
             ndk.abiFilters.add(testAbi.trim())
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        manifestPlaceholders = [
-                mwdat_application_id: "1057183300587462",
-                mwdat_client_token: "AR|1057183300587462|77e92a3d9f02778279c80f220a2d81a2",
-        ]
-        buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "false"
-
         // Chapter 6: optional transcription API key (do not commit secrets).
         def openAiKey = project.findProperty("OPENAI_API_KEY") ?: ""
         buildConfigField "String", "OPENAI_API_KEY", "\"${openAiKey}\""
@@ -108,13 +92,6 @@ android {
     }
 
     buildTypes {
-        debug {
-            manifestPlaceholders = [
-                    mwdat_application_id: "0",
-                    mwdat_client_token: "0",
-            ]
-            buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "true"
-        }
         release {
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.release
@@ -244,16 +221,6 @@ dependencies {
     testImplementation 'org.robolectric:robolectric:4.12.2'
     testImplementation 'androidx.test:core:1.7.0'
     testImplementation "androidx.room:room-testing:$room_version"
-
-    def metaDatVersion = "0.8.0"
-    if (metaDatEnabled) {
-        implementation("com.meta.wearable:mwdat-core:${metaDatVersion}")
-        implementation("com.meta.wearable:mwdat-camera:${metaDatVersion}")
-        implementation("com.meta.wearable:mwdat-display:${metaDatVersion}")
-        implementation("com.meta.wearable:mwdat-mockdevice:${metaDatVersion}")
-    } else {
-        logger.warn("No GitHub package token configured - Meta Wearables DAT SDK dependencies will be skipped.")
-    }
 
     androidTestImplementation 'androidx.test:core-ktx:1.7.0'
     androidTestImplementation 'androidx.test.ext:junit:1.3.0'

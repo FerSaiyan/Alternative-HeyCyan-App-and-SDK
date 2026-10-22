@@ -97,7 +97,7 @@ Tasker owns only the periodic trigger. Glasses I/O and vision processing stay in
 ### CyanBridge owns
 
 - selected-device capability checks
-- Meta DAT / HeyCyan/native glasses communication
+- HeyCyan/native glasses communication
 - photo acquisition and persistence
 - custom visual prompt
 - vision inference / visual-note generation
@@ -141,7 +141,7 @@ The package-enumerating `AppBlacklistActivity` and the obsolete `requestAllPermi
 These changes intentionally do **not** modify:
 
 - `SyncedMediaFolder` / `SyncedMediaQuery`
-- Meta image saving into `DCIM/CyanBridge`
+- Image saving into `DCIM/CyanBridge`
 - `LocalAgentMemoryStore`
 - `MemoryVaultService`
 - candidate/confirmed daily-facts processing
@@ -159,7 +159,7 @@ These changes intentionally do **not** modify:
 5. Verify allowed captures appear in screen memory and remain retrievable through RAG.
 6. Verify candidate facts, confirmed facts and summaries still consume those captures.
 7. Verify synced photos/videos still appear in `DCIM/CyanBridge` and the CyanBridge gallery.
-8. Validate Visual Diary 15-minute Tasker trigger on Meta and non-Meta supported glasses.
+8. Validate Visual Diary 15-minute Tasker trigger on supported glasses.
 9. Validate manual Visual Diary "Capture now" separately.
 10. Build/test the branch and remove any remaining dead legacy Accessibility-specific diary capture code only after on-device parity is confirmed.
 

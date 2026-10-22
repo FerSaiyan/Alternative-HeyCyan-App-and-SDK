@@ -178,7 +178,6 @@
     <string name="device_class_heycyan">HeyCyan</string>
     <string name="device_class_eye_vue">Eyevue</string>
     <string name="device_class_tunebuds">TuneBuds / AB Mate</string>
-    <string name="device_class_meta_rayban">Meta Ray-Ban</string>
     <string name="device_class_meizu_myvu">Meizu MYVU / Star Air</string>
     <string name="device_class_generic_audio">Fones / oculos somente de audio</string>
     <string name="device_class_unknown">Desconhecido</string>

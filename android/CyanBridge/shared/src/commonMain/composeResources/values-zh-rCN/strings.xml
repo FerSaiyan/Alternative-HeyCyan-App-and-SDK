@@ -71,25 +71,4 @@
     <string name="onboarding_continue">继续</string>
     <string name="onboarding_not_now">暂时不要</string>
     <string name="onboarding_dont_show_again">不再显示</string>
-    <string name="meta_rayban_title">Meta Ray-Ban</string>
-    <string name="meta_rayban_device_summary">设备：%1$s（%2$d 个可用）</string>
-    <string name="meta_rayban_no_device">没有 DAT 设备</string>
-    <string name="meta_rayban_last_error">最近的 DAT 错误</string>
-    <string name="meta_rayban_send_diagnostics">发送 Meta 诊断信息</string>
-    <string name="meta_rayban_registration_status">注册：%1$s</string>
-    <string name="meta_rayban_session_status">会话：%1$s</string>
-    <string name="meta_rayban_stream_status">视频流：%1$s</string>
-    <string name="meta_rayban_display_status">显示：%1$s</string>
-    <string name="meta_rayban_register">注册</string>
-    <string name="meta_rayban_unregister">取消注册</string>
-    <string name="meta_rayban_start_session">开始会话</string>
-    <string name="meta_rayban_stop_session">停止会话</string>
-    <string name="meta_rayban_start_stream">开始视频流</string>
-    <string name="meta_rayban_stop_stream">停止视频流</string>
-    <string name="meta_rayban_capture_photo">拍照</string>
-    <string name="meta_rayban_view_last_photo">查看上一张照片</string>
-    <string name="meta_rayban_active">已启用</string>
-    <string name="meta_rayban_inactive">未启用</string>
-    <string name="meta_rayban_start_display">启动显示</string>
-    <string name="meta_rayban_stop_display">停止显示</string>
 </resources>

@@ -8,34 +8,6 @@ import org.junit.Test
 
 class GeminiLiveVisionPolicyTest {
     @Test
-    fun `meta rayban uses live frames capped at one fps`() {
-        val capabilities = GeminiLiveVisionPolicy.forDevice(DeviceClass.META_RAYBAN)
-
-        assertEquals(GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES, capabilities.mode)
-        assertEquals(1.0, capabilities.maxVideoFps, 0.0)
-        assertTrue(
-            GeminiLiveVisionPolicy.shouldSendVideoFrame(
-                capabilities = capabilities,
-                userSpeaking = true,
-                nowMs = 2_000L,
-                lastFrameSentMs = 1_000L,
-                encodingInProgress = false,
-                refreshIntervalMs = 1_000L,
-            ),
-        )
-        assertFalse(
-            GeminiLiveVisionPolicy.shouldSendVideoFrame(
-                capabilities = capabilities,
-                userSpeaking = false,
-                nowMs = 3_000L,
-                lastFrameSentMs = 1_000L,
-                encodingInProgress = false,
-                refreshIntervalMs = 1_000L,
-            ),
-        )
-    }
-
-    @Test
     fun `hey cyan still capture is opportunistic and rate limited`() {
         val capabilities = GeminiLiveVisionPolicy.forDevice(DeviceClass.HEY_CYAN)
 
@@ -71,23 +43,13 @@ class GeminiLiveVisionPolicyTest {
     }
 
     @Test
-    fun `only first disables automatic stills and live frames`() {
+    fun `only first disables automatic stills`() {
         assertFalse(
             GeminiLiveVisionPolicy.shouldCaptureAutomaticStill(
                 capabilities = GeminiLiveVisionPolicy.forDevice(DeviceClass.HEY_CYAN),
                 nowMs = 20_000L,
                 lastAutomaticStillMs = 1_000L,
                 captureInProgress = false,
-                refreshIntervalMs = null,
-            ),
-        )
-        assertFalse(
-            GeminiLiveVisionPolicy.shouldSendVideoFrame(
-                capabilities = GeminiLiveVisionPolicy.forDevice(DeviceClass.META_RAYBAN),
-                userSpeaking = true,
-                nowMs = 20_000L,
-                lastFrameSentMs = 1_000L,
-                encodingInProgress = false,
                 refreshIntervalMs = null,
             ),
         )
@@ -109,7 +71,6 @@ class GeminiLiveVisionPolicyTest {
     fun `mentra live uses speech gated still images`() {
         val caps = GeminiLiveVisionPolicy.forDevice(DeviceClass.MENTRA_LIVE)
         assertEquals(GeminiLiveVisionCapabilities.Mode.OPPORTUNISTIC_STILL, caps.mode)
-        assertEquals(0.0, caps.maxVideoFps, 0.0)
         assertTrue(caps.supportsAutomaticVision)
     }
 

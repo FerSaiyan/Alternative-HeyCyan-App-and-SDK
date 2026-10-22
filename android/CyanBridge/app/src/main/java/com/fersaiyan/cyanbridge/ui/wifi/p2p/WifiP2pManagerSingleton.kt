@@ -42,6 +42,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     private val wifiP2pManager: WifiP2pManager = context.getSystemService(Context.WIFI_P2P_SERVICE) as WifiP2pManager
     private var wifiP2pChannel: WifiP2pManager.Channel? = null
     private var wifiP2pDevice: WifiP2pDevice? = null
+    private var connectionGroupOwnerIntent: Int? = null
     private val handler = Handler(Looper.getMainLooper())
     private val callbacks = CopyOnWriteArrayList<WifiP2pCallback>()
 
@@ -174,7 +175,10 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     }
 
     @SuppressLint("MissingPermission")
-    fun connectToDevice(device: WifiP2pDevice) {
+    fun connectToDevice(device: WifiP2pDevice, groupOwnerIntent: Int? = null) {
+        require(groupOwnerIntent == null || groupOwnerIntent in 0..15) {
+            "Wi-Fi Direct group owner intent must be between 0 and 15"
+        }
         if (!p2pOperationsEnabled) {
             Log.d(TAG, "Ignoring P2P connect while operations are stopped")
             return
@@ -202,10 +206,15 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         handler.postDelayed(connectTimeOut, connectTimeoutMs)
 
         wifiP2pDevice = device
+        connectionGroupOwnerIntent = groupOwnerIntent
         val config = WifiP2pConfig().apply {
             deviceAddress = device.deviceAddress
             // Match decompiled vendor app: WPS PBC.
             wps.setup = 0
+            groupOwnerIntent?.let { this.groupOwnerIntent = it }
+        }
+        if (groupOwnerIntent != null) {
+            Log.i(TAG, "Connecting with groupOwnerIntent=$groupOwnerIntent")
         }
 
         connectionState.setConnecting(true)
@@ -454,7 +463,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
             if (retryState.shouldRetryConnect()) {
                 wifiP2pDevice?.let { device ->
                     Log.d(TAG, "Internal connection retry connection once")
-                    connectToDevice(device)
+                    connectToDevice(device, connectionGroupOwnerIntent)
                 }
             } else {
                 Log.d(TAG, "Do not reconnect, wait for external timeout")

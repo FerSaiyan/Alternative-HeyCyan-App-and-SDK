@@ -16,7 +16,6 @@ import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.localagent.LocalAgentAccessibilityBridge
 import com.fersaiyan.cyanbridge.localagent.LocalAgentDeviceState
@@ -71,9 +70,6 @@ object DebugLogSupport {
         "LocalAgentService",
         "LocalAgentSteps",
         "MainActivity",
-        "MetaRaybanManager",
-        "DAT:CORE:RegistrationManager",
-        "DAT:CORE:BluetoothDeviceDetection",
         "MeizuMyvu",
         "MeizuMyvuService",
         "myvu",
@@ -221,13 +217,9 @@ object DebugLogSupport {
 
     fun collectLogcat(): String {
         val collected = try {
-            // Do not build logcat filter specs from LOG_TAGS. Android's filter syntax uses
-            // ':' as the tag/priority delimiter, while Meta DAT emits tags which themselves
-            // contain colons (for example DAT:CORE:RegistrationManager). Passing those tags
-            // as "tag:*" makes logcat reject the complete command and previously left every
-            // submitted report without log lines. The app can only read its own process logs
-            // on production Android, so a PID-scoped dump is both valid and appropriately
-            // narrow while retaining colon-bearing tags.
+            // Do not build logcat filter specs from LOG_TAGS: tags containing colons can make
+            // logcat reject the complete command. A PID-scoped dump is valid and appropriately
+            // narrow while retaining those tags.
             val process = ProcessBuilder(buildLogcatCommand(android.os.Process.myPid()))
                 .redirectErrorStream(true)
                 .start()
@@ -276,13 +268,6 @@ object DebugLogSupport {
                 append("Remote base URL: ${RemoteOpenAiPrefs.getBaseUrl(context)}\n")
             }
             appendAutomationDiagnostics(context)
-
-            if (DeviceProfileStore.isMetaSelected(context)) {
-                append("Meta Ray-Ban profile: selected\n")
-                append("Meta DAT diagnostics:\n")
-                append(MetaRaybanManager.getInstance(context).diagnosticsSnapshot())
-                append("\n")
-            }
 
             if (DeviceProfileStore.isMeizuMyvuSelected(context)) {
                 append("Meizu MYVU profile: selected\n")

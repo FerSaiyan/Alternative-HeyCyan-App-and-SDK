@@ -6,7 +6,6 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
-import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.localagent.userfacts.CandidateUserFactsStorage
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelRequestPriority
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
@@ -40,10 +39,6 @@ object AutoLoopVisualNoteGenerator {
     fun enqueue(context: Context, loopIndex: Int) {
         val appContext = context.applicationContext
         if (!AutoAudioCapturePrefs.isVisualNotesEnabled(appContext)) return
-        if (DeviceProfileStore.isMetaSelected(appContext)) {
-            Log.i(TAG, "Skipping HeyCyan thumbnail visual note for Meta; use DAT photo capture")
-            return
-        }
         enqueueInternal(appContext, loopIndex, promptOverride = null)
     }
 
@@ -56,7 +51,7 @@ object AutoLoopVisualNoteGenerator {
         )
     }
 
-    /** Processes a photo supplied by a platform camera adapter, such as Meta DAT. */
+    /** Processes a photo supplied by a glasses camera adapter. */
     fun enqueueCapturedPhoto(
         context: Context,
         loopIndex: Int,

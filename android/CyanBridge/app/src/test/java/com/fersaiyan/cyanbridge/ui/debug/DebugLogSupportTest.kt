@@ -76,13 +76,6 @@ class DebugLogSupportTest {
     }
 
     @Test
-    fun `collector includes Meta registration and device detection tags`() {
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("MetaRaybanManager"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("DAT:CORE:RegistrationManager"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("DAT:CORE:BluetoothDeviceDetection"))
-    }
-
-    @Test
     fun `logcat collection is pid scoped instead of using malformed colon tag filters`() {
         val command = DebugLogSupport.buildLogcatCommand(4321)
 

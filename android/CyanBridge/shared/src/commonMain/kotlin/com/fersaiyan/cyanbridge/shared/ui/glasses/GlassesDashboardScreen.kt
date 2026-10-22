@@ -71,9 +71,6 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.FirmwarePatchRequestUiState
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
-import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
-import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
-import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
@@ -271,10 +268,6 @@ fun GlassesDashboardScreen(
             }
             if (state.showHeyCyanControls || state.showEyevueControls || state.showTuneBudsControls) {
                 item { CoreGlassesControls(state, onAction) }
-            }
-            if (state.showMetaRaybanControls) {
-                item { MetaRaybanControls(state.metaRayban, onAction) }
-                item { GlassesAssistantControls(state, onAction) }
             }
             if (state.showMeizuMyvuControls) {
                 item { MeizuMyvuControls(state.meizuMyvu, onAction) }
@@ -1043,94 +1036,6 @@ private fun AssistantModeChip(
 }
 
 @Composable
-private fun MetaRaybanControls(
-    state: MetaRaybanUiState,
-    onAction: (GlassesDashboardAction) -> Unit,
-) {
-    val pairingIssue = resolveMetaPairingIssue(
-        metaAiInstalled = state.metaAiInstalled,
-        lastError = state.lastError,
-        setupGuidance = state.setupGuidance,
-    )
-    var showPairingIssue by remember(state.lastError) { mutableStateOf(pairingIssue != null) }
-    if (pairingIssue != null && showPairingIssue) {
-        AlertDialog(
-            onDismissRequest = { showPairingIssue = false },
-            icon = { WarningDialogIcon() },
-            title = { Text(pairingIssue.title) },
-            text = { Text(pairingIssue.message) },
-            confirmButton = {
-                TextButton(
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    onClick = {
-                        showPairingIssue = false
-                        onAction(
-                            when (pairingIssue.action) {
-                                MetaPairingIssueAction.INSTALL_META_AI -> GlassesDashboardAction.MetaOpenMetaAi
-                                MetaPairingIssueAction.OPEN_PAIRING -> GlassesDashboardAction.MetaOpenPairing
-                                MetaPairingIssueAction.REQUEST_ACCESS -> GlassesDashboardAction.MetaOpenPairing
-                            },
-                        )
-                    },
-                ) {
-                    Text(pairingIssue.primaryLabel)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    onClick = {
-                        showPairingIssue = false
-                        onAction(GlassesDashboardAction.MetaSendDiagnostics)
-                    },
-                ) {
-                    Text("Details")
-                }
-            },
-        )
-    }
-
-    Column(
-        modifier = Modifier.testTag("meta_rayban_controls"),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        SectionTitle(stringResource(Res.string.meta_rayban_title), accented = true)
-        Text(
-            text = stringResource(
-                Res.string.meta_rayban_device_summary,
-                state.selectedDeviceName ?: stringResource(Res.string.meta_rayban_no_device),
-                state.availableDeviceCount,
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.testTag("meta_rayban_device_summary"),
-        )
-        state.setupGuidance?.takeIf { it.isNotBlank() }?.let { guidance ->
-            Text(
-                text = guidance,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.testTag("meta_rayban_setup_guidance"),
-            )
-        }
-        // All pairing flows live in DeviceBindScreen (Scan → Pair Meta Glasses) → MetaPairingActivity.
-        // Keep dashboard read-only: errors surface via the AlertDialog above (with Details → Send diagnostics).
-        // Camera is consumed via Test image AI / Test voice in GlassesAssistantControls (capturePhotoOnce),
-        // not via manual session/stream controls (stream is only for future Gemini Live, not yet implemented).
-        Text(
-            text = stringResource(Res.string.meta_rayban_registration_status, state.registrationLabel),
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.testTag("meta_rayban_registration_status"),
-        )
-        Text(
-            text = stringResource(Res.string.dashboard_meta_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
 private fun MeizuMyvuControls(
     state: MeizuMyvuUiState,
     onAction: (GlassesDashboardAction) -> Unit,
@@ -1193,29 +1098,6 @@ private fun MeizuMyvuControls(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-}
-
-@Composable
-private fun MetaControlRow(
-    status: String,
-    startLabel: String,
-    onStart: () -> Unit,
-    startEnabled: Boolean,
-    stopLabel: String,
-    onStop: () -> Unit,
-    stopEnabled: Boolean,
-) {
-    Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    ActionRow(
-        primaryLabel = startLabel,
-        onPrimary = onStart,
-        primaryEnabled = startEnabled,
-        primaryStyle = ActionButtonStyle.Primary,
-        secondaryLabel = stopLabel,
-        onSecondary = onStop,
-        secondaryEnabled = stopEnabled,
-        secondaryStyle = ActionButtonStyle.Destructive,
-    )
 }
 
 @Composable

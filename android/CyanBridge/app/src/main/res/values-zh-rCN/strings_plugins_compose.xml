@@ -106,7 +106,7 @@
     <string name="compose_walking_ask_placeholder">询问当前场景...</string>
     <string name="compose_walking_send">发送</string>
     <string name="compose_walking_enabled">Walking Aid 已启用</string>
-    <string name="compose_walking_camera_description">Walking Aid 需要带第一视角摄像头的眼镜，例如 HeyCyan 或 Meta Ray-Ban。%1$s</string>
+    <string name="compose_walking_camera_description">Walking Aid 需要带第一视角摄像头的眼镜，例如 HeyCyan。%1$s</string>
     <string name="compose_walking_benchmark_running">正在运行基准测试...</string>
     <string name="compose_walking_latency_benchmark">测试端到端延迟</string>
     <string name="compose_walking_acquisition_running">正在运行采集基准测试...</string>

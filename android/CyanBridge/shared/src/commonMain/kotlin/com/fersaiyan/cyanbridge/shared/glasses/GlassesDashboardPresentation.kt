@@ -47,12 +47,10 @@ data class GlassesDashboardUiState(
     val showAdvancedImageQuality: Boolean = false,
     val showAdvancedDeveloperTools: Boolean = false,
     val showAdvancedOta: Boolean = false,
-    val showMetaRaybanControls: Boolean = false,
     val showMeizuMyvuControls: Boolean = false,
     val advancedExpanded: Boolean = false,
     val agentStatus: String = "Unknown",
     val agentLastError: String = "(none)",
-    val metaRayban: MetaRaybanUiState = MetaRaybanUiState(),
     val meizuMyvu: MeizuMyvuUiState = MeizuMyvuUiState(),
     val ota: OtaSectionUiState = OtaSectionUiState(),
     val firmwarePatchRequest: FirmwarePatchRequestUiState? = null,
@@ -110,27 +108,6 @@ enum class AiWakeWordRoute {
             entries.firstOrNull { it.name == raw?.trim()?.uppercase() } ?: VOICE_QUESTION
     }
 }
-
-data class MetaRaybanUiState(
-    val registrationLabel: String = "Not registered",
-    val sessionLabel: String = "Idle",
-    val streamLabel: String = "Stopped",
-    val selectedDeviceName: String? = null,
-    val availableDeviceCount: Int = 0,
-    val setupGuidance: String? = null,
-    val lastError: String? = null,
-    val metaAiInstalled: Boolean = true,
-    val displayCapable: Boolean = false,
-    val displayActive: Boolean = false,
-    val canRegister: Boolean = true,
-    val canUnregister: Boolean = false,
-    val canStartSession: Boolean = true,
-    val canStopSession: Boolean = false,
-    val canStartStream: Boolean = true,
-    val canStopStream: Boolean = false,
-    val canCapturePhoto: Boolean = false,
-    val hasCapturedPhoto: Boolean = false,
-)
 
 data class MeizuMyvuUiState(
     val connectionLabel: String = "Disconnected",
@@ -260,19 +237,6 @@ sealed interface GlassesDashboardAction {
     data object StopLivePreview : GlassesDashboardAction
     data object RequestStartWifiAdbDebug : GlassesDashboardAction
     data object StopWifiAdbDebug : GlassesDashboardAction
-    data object MetaRegister : GlassesDashboardAction
-    data object MetaOpenPairing : GlassesDashboardAction
-    data object MetaOpenMetaAi : GlassesDashboardAction
-    data object MetaUnregister : GlassesDashboardAction
-    data object MetaStartSession : GlassesDashboardAction
-    data object MetaStopSession : GlassesDashboardAction
-    data object MetaStartStream : GlassesDashboardAction
-    data object MetaStopStream : GlassesDashboardAction
-    data object MetaCapturePhoto : GlassesDashboardAction
-    data object MetaViewPhoto : GlassesDashboardAction
-    data object MetaStartDisplay : GlassesDashboardAction
-    data object MetaStopDisplay : GlassesDashboardAction
-    data object MetaSendDiagnostics : GlassesDashboardAction
     data object MeizuConnect : GlassesDashboardAction
     data object MeizuDisconnect : GlassesDashboardAction
     data object MeizuSendTestNotification : GlassesDashboardAction

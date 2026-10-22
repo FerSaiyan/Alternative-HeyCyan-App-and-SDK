@@ -37,8 +37,6 @@
     <string name="onboarding_back">返回</string>
     <string name="onboarding_next">下一步</string>
     <string name="onboarding_get_started">开始使用</string>
-    <string name="meta_diagnostics_title">Meta Ray-Ban 诊断</string>
-    <string name="meta_diagnostics_description">CyanBridge 将收集最近的 Meta DAT 状态、错误、设备详情和筛选后的 logcat 日志，以便调查问题。</string>
     <string name="nav_transcriptions_recordings">媒体</string>
     <string name="text_1">扫描</string>
     <string name="text_2">重新连接</string>
@@ -100,8 +98,6 @@
     <string name="onboarding_accessibility_disclosure_body">CyanBridge 仅在您启用后才会使用 Android 无障碍功能。无障碍功能允许 CyanBridge 读取屏幕上应用的文字和界面结构，用于保存可选的屏幕记忆，并让本地智能体代您点按、输入、滚动和导航。屏幕内容会在本地存储，用于屏幕记忆。当您请求本地智能体执行操作时，您当前的屏幕内容可能会由您选择的 AI 提供商处理；如果您选择了云端提供商，也可能由云端处理。本地智能体的可选屏幕截图需要单独设置，除非您另行允许远程上传，否则绝不会发送给远程规划器。黑名单中的应用会被跳过。CyanBridge 不会自动启用无障碍功能，您可以随时关闭无障碍功能、屏幕记忆或本地智能体。</string>
     <string name="onboarding_local_agent_toggle">启用本地智能体手机控制</string>
     <string name="onboarding_open_accessibility_settings">查看并启用无障碍功能</string>
-    <string name="meta_pairing_title">配对 Meta 眼镜</string>
-
     <string name="onboarding_audio_capture_title">连续音频录制</string>
     <string name="onboarding_audio_capture_desc">在“插件”中启用后，Auto Audio 可以录制眼镜音频，用于转录和每日摘要。</string>
     <string name="onboarding_audio_capture_details">Auto Audio 会录制 15 分钟的片段，然后将其转录为可选摘要。您可以随时查看和删除录音。只有在您选择的选项需要时，CyanBridge 才会说明并请求通知或麦克风访问权限。</string>

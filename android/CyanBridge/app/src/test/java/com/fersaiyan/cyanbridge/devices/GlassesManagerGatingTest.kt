@@ -37,25 +37,6 @@ class GlassesManagerGatingTest {
     }
 
     @Test
-    fun metaRayban_hidesHeyCyanExtras() {
-        val profile = DeviceProfile(
-            macAddress = "00:11:22:33:44:55",
-            advertisedName = "Ray-Ban Meta",
-            detectedClass = DeviceClass.META_RAYBAN,
-            selectedClass = DeviceClass.META_RAYBAN,
-            userOverridden = false,
-        )
-
-        val model = GlassesManagerGating.uiModel(profile)
-        assertTrue(model.isVisible(GlassesManagerGating.Action.MEETING_CAPTURE))
-        assertTrue(model.isVisible(GlassesManagerGating.Action.META_RAYBAN_CONTROLS))
-        assertTrue(model.isVisible(GlassesManagerGating.Action.META_RAYBAN_REGISTRATION))
-        assertFalse(model.isVisible(GlassesManagerGating.Action.HEY_CYAN_EXTRAS))
-        assertFalse(model.isVisible(GlassesManagerGating.Action.STATUS_BATTERY))
-        assertFalse(model.isVisible(GlassesManagerGating.Action.STATUS_STORAGE))
-    }
-
-    @Test
     fun meizuMyvu_showsDisplayControlsAndBatteryOnly() {
         val profile = DeviceProfile(
             macAddress = "00:11:22:33:44:55",

@@ -7,9 +7,8 @@ the MentraOS miniapp HTTP relay. The default version is 3.2.0-dev.227; the
 glasses firmware must match the SDK version. Override the dependency via
 -PmentraSdkVersion=matching-version only after checking the Android API.
 
-The non-Meta Android minimum is 28. When Meta DAT is configured, the required
-minimum remains 29. SDK usage analytics are disabled in both the manager and
-the Android manifest.
+The Android minimum is 28. SDK usage analytics are disabled in both the
+manager and the Android manifest.
 
 Open Pair Mentra Live from the pairing screen; grant Bluetooth permissions and
 choose the correct glasses. Gemini Live then uses continuous Mentra SDK PCM
@@ -22,6 +21,6 @@ This can be slower than Wi-Fi; live video streaming is not implemented.
 
 Hardware acceptance checks: verify pairing and reconnect, firmware compatibility,
 audio output and microphone route, image upload and request-ID correlation,
-timeouts and cancellations, disabled SDK telemetry, dependency conflicts and
-existing Meta DAT and HeyCyan functionality with real glasses and an Android phone.
+timeouts and cancellations, disabled SDK telemetry, dependency conflicts, and
+HeyCyan functionality with real glasses and an Android phone.
 The Android emulator cannot establish physical compatibility.

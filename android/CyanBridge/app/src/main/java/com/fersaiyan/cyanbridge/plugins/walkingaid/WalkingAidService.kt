@@ -15,7 +15,6 @@ import androidx.core.app.ServiceCompat
 import androidx.fragment.app.FragmentActivity
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
 import com.fersaiyan.cyanbridge.audio.MeetingCapturePrefs
@@ -180,14 +179,13 @@ class WalkingAidService : Service() {
             Log.i(TAG, "Already running")
             return
         }
-        val isMetaRayban = isMetaRaybanSelected()
         WalkingAidNotificationHelper.updateNotification(
             this,
             "Walking Aid active — starting LiteRT Vision Engine...",
             WalkingAidPreferences.getCaptureIntervalSeconds(this),
         )
 
-        if (!isMetaRayban && !BleOperateManager.getInstance().isConnected) {
+        if (!BleOperateManager.getInstance().isConnected) {
             Log.w(TAG, "Glasses not connected")
             showToast(this, getString(com.fersaiyan.cyanbridge.R.string.walking_aid_not_connected))
             RUNNING.set(false)
@@ -195,11 +193,6 @@ class WalkingAidService : Service() {
             stopSelf()
             return
         }
-        if (isMetaRayban) {
-            val metaManager = MetaRaybanManager.getInstance(this)
-            if (!metaManager.isInitialized.value) metaManager.initialize()
-        }
-
         if (MeetingCapturePrefs.getState(this).isRecording) {
             Log.w(TAG, "Meeting capture is active")
             showToast(this, getString(com.fersaiyan.cyanbridge.R.string.walking_aid_meeting_active))
@@ -362,22 +355,11 @@ class WalkingAidService : Service() {
         // 2. Launch Camera Capture Loop
         captureLoopJob = scope.launch {
             var captureIndex = 0
-            if (isMetaRayban) {
-                val metaManager = MetaRaybanManager.getInstance(this@WalkingAidService)
-                if (!metaManager.awaitCameraReady()) {
-                    val detail = metaManager.lastError.value ?: "Register and connect a Meta camera before using Walking Aid"
-                    Log.e(TAG, "Meta Walking Aid cannot start: $detail\n${metaManager.diagnosticsSnapshot()}")
-                    WalkingAidNotificationHelper.updateNotification(this@WalkingAidService, "Meta camera unavailable: ${detail.take(120)}", 0)
-                    stopLoop(reason = "meta_camera_unavailable")
-                    return@launch
-                }
-            }
-
             while (isActive && WalkingAidPreferences.isEnabled(this@WalkingAidService)) {
                 val intervalMs = WalkingAidPreferences.getCaptureIntervalSeconds(this@WalkingAidService) * 1000L
                 val captureStartMs = System.currentTimeMillis()
 
-                if (!isMetaRayban && !BleOperateManager.getInstance().isConnected) {
+                if (!BleOperateManager.getInstance().isConnected) {
                     Log.w(TAG, "Glasses disconnected during loop; waiting...")
                     WalkingAidNotificationHelper.updateNotification(
                         this@WalkingAidService,
@@ -525,8 +507,6 @@ class WalkingAidService : Service() {
             )
         }.getOrNull()
     }
-
-    private fun isMetaRaybanSelected(): Boolean = DeviceProfileStore.isMetaSelected(this)
 
     private fun speakTts(text: String) {
         if (!ttsReady || tts == null) {

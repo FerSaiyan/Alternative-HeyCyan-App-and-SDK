@@ -53,9 +53,6 @@ object DeviceProfileStore {
     fun selectedClass(context: Context): DeviceClass =
         loadLastSelected(context)?.selectedClass ?: DeviceClass.UNKNOWN
 
-    fun isMetaSelected(context: Context): Boolean =
-        selectedClass(context) == DeviceClass.META_RAYBAN
-
     fun isMeizuMyvuSelected(context: Context): Boolean =
         selectedClass(context) == DeviceClass.MEIZU_MYVU
 

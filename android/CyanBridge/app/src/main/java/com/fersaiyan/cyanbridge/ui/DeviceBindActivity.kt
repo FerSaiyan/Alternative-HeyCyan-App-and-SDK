@@ -23,7 +23,6 @@ import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.devices.DeviceClassifier
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
-import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
@@ -90,7 +89,6 @@ class DeviceBindActivity : BaseActivity() {
                     connectingDevice = connectingDevice?.toShared(),
                     selectedClass = selectedDeviceClass,
                     onScan = ::startScan,
-                    onPairMetaGlasses = ::openMetaPairing,
                     onPairMentraGlasses = ::openMentraPairing,
                     onSelectDevice = { sharedDevice ->
                         val device = deviceList.firstOrNull {
@@ -127,22 +125,6 @@ class DeviceBindActivity : BaseActivity() {
         stopScan()
         startActivity(Intent(this, MentraPairingActivity::class.java))
         finish()
-    }
-
-    /** Meta wearables are registered through DAT, never through the Oudmon Bluetooth connector. */
-    private fun openMetaPairing() {
-        stopScan()
-        DeviceProfileStore.saveLastSelected(
-            this,
-            DeviceProfile(
-                macAddress = META_DAT_PROFILE_ID,
-                advertisedName = "Meta glasses",
-                detectedClass = DeviceClass.META_RAYBAN,
-                selectedClass = DeviceClass.META_RAYBAN,
-                userOverridden = false,
-            ),
-        )
-        startActivity(Intent(this, MetaPairingActivity::class.java))
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -216,11 +198,6 @@ class DeviceBindActivity : BaseActivity() {
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
 
         when (selectedDeviceClass) {
-            DeviceClass.META_RAYBAN -> {
-                // Selecting Meta in the normal scan flow now routes directly into DAT pairing.
-                openMetaPairing()
-            }
-
             DeviceClass.MEIZU_MYVU -> {
                 saveSelectedProfile(device, DeviceClass.MEIZU_MYVU, userOverridden = true)
                 connectMeizuMyvu(device)
@@ -617,8 +594,6 @@ class DeviceBindActivity : BaseActivity() {
         val now = System.currentTimeMillis()
         if (!force && now - lastDeviceListPublishAtMs < DEVICE_LIST_PUBLISH_INTERVAL_MS) return
         lastDeviceListPublishAtMs = now
-        // Meta is intentionally kept in the normal scan list now. Choosing the Meta type routes
-        // to MetaPairingActivity instead of attempting a direct Bluetooth connection.
         scannedDevices = deviceList.toList()
     }
 
@@ -730,7 +705,6 @@ class DeviceBindActivity : BaseActivity() {
     private companion object {
         const val TAG = "DeviceBindActivity"
         const val REQUEST_ENABLE_BLUETOOTH = 300
-        const val META_DAT_PROFILE_ID = "META_DAT"
         const val DEVICE_LIST_PUBLISH_INTERVAL_MS = 1_000L
         const val HEY_CYAN_PROBE_CALLBACK = "device_bind_protocol_probe"
         const val EYEVUE_PROBE_TIMEOUT_MS = 30_000L

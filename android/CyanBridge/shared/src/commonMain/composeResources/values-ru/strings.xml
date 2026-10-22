@@ -71,25 +71,4 @@
     <string name="onboarding_continue">Продолжить</string>
     <string name="onboarding_not_now">Не сейчас</string>
     <string name="onboarding_dont_show_again">Больше не показывать</string>
-    <string name="meta_rayban_title">Meta Ray-Ban</string>
-    <string name="meta_rayban_device_summary">Устройство: %1$s (доступно: %2$d)</string>
-    <string name="meta_rayban_no_device">Нет устройства DAT</string>
-    <string name="meta_rayban_last_error">Последняя ошибка DAT</string>
-    <string name="meta_rayban_send_diagnostics">Отправить диагностику Meta</string>
-    <string name="meta_rayban_registration_status">Регистрация: %1$s</string>
-    <string name="meta_rayban_session_status">Сеанс: %1$s</string>
-    <string name="meta_rayban_stream_status">Поток: %1$s</string>
-    <string name="meta_rayban_display_status">Дисплей: %1$s</string>
-    <string name="meta_rayban_register">Зарегистрировать</string>
-    <string name="meta_rayban_unregister">Отменить регистрацию</string>
-    <string name="meta_rayban_start_session">Начать сеанс</string>
-    <string name="meta_rayban_stop_session">Остановить сеанс</string>
-    <string name="meta_rayban_start_stream">Запустить поток</string>
-    <string name="meta_rayban_stop_stream">Остановить поток</string>
-    <string name="meta_rayban_capture_photo">Сделать фото</string>
-    <string name="meta_rayban_view_last_photo">Открыть последнее фото</string>
-    <string name="meta_rayban_active">Активен</string>
-    <string name="meta_rayban_inactive">Неактивен</string>
-    <string name="meta_rayban_start_display">Запустить дисплей</string>
-    <string name="meta_rayban_stop_display">Остановить дисплей</string>
 </resources>

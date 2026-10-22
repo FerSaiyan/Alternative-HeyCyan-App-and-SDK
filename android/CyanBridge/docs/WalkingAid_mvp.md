@@ -466,7 +466,7 @@ Experiments should include:
 - Measuring image size versus transfer time and detection recall.
 - Investigating whether the glasses expose a lower-latency preview or Wi-Fi stream.
 
-If HeyCyan hardware cannot deliver at least several fresh frames per second, the feature should be positioned as a “Scene Advisor” rather than a collision-avoidance WalkingAid. Meta DAT or a phone-camera mode may support a genuinely continuous version.
+If HeyCyan hardware cannot deliver at least several fresh frames per second, the feature should be positioned as a “Scene Advisor” rather than a collision-avoidance WalkingAid.
 
 ## Product Recommendation
 

@@ -126,15 +126,6 @@ class AutoAudioCaptureService : Service() {
             return
         }
 
-        if (DeviceProfileStore.isMetaSelected(this)) {
-            Log.w(TAG, "Meta Ray-Ban does not support HeyCyan onboard audio-file recording")
-            AutoAudioCapturePrefs.setLastPauseReason(this, "meta_dat_no_onboard_audio_file_api")
-            AutoAudioCapturePrefs.setEnabled(this, false)
-            RUNNING.set(false)
-            stopSelf()
-            return
-        }
-
         if (DeviceProfileStore.isEyevueSelected(this)) {
             Log.w(TAG, "Eyevue uses its own media protocol; legacy auto-audio capture is disabled")
             AutoAudioCapturePrefs.setLastPauseReason(this, "eyevue_uses_native_media_protocol")
@@ -158,15 +149,6 @@ class AutoAudioCaptureService : Service() {
             while (isActive) {
                 if (!AutoAudioCapturePrefs.isEnabled(this@AutoAudioCaptureService)) {
                     Log.i(TAG, "Pref disabled, stopping")
-                    break
-                }
-                if (DeviceProfileStore.isMetaSelected(this@AutoAudioCaptureService)) {
-                    Log.w(TAG, "Meta Ray-Ban selected; stopping HeyCyan audio-file capture")
-                    AutoAudioCapturePrefs.setLastPauseReason(
-                        this@AutoAudioCaptureService,
-                        "meta_dat_no_onboard_audio_file_api",
-                    )
-                    AutoAudioCapturePrefs.setEnabled(this@AutoAudioCaptureService, false)
                     break
                 }
                 if (DeviceProfileStore.isEyevueSelected(this@AutoAudioCaptureService)) {
@@ -537,11 +519,6 @@ class AutoAudioCaptureService : Service() {
         const val ACTION_STOP = "com.fersaiyan.cyanbridge.action.AUTO_AUDIO_CAPTURE_STOP"
 
         fun start(context: Context) {
-            if (DeviceProfileStore.isMetaSelected(context)) {
-                AutoAudioCapturePrefs.setLastPauseReason(context, "meta_dat_no_onboard_audio_file_api")
-                AutoAudioCapturePrefs.setEnabled(context, false)
-                return
-            }
             if (!hasBluetooth(context)) {
                 if (context is FragmentActivity) {
                     ensureBluetoothRuntimePermission(context, "Auto Audio") {

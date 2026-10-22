@@ -18,7 +18,6 @@ import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
-import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
 import com.fersaiyan.cyanbridge.shared.glasses.WifiAdbDebugUiState
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
@@ -211,124 +210,6 @@ class GlassesDashboardScreenTest {
         composeRule.onAllNodesWithTag("advanced_developer_tools").assertCountEquals(0)
         composeRule.onAllNodesWithTag("advanced_ota").assertCountEquals(0)
         composeRule.onAllNodesWithText("Volume").assertCountEquals(0)
-    }
-
-    @Test
-    fun metaKeepsAssistantActionsButHidesHeyCyanMediaControls() {
-        composeRule.setContent {
-            CyanBridgeTheme {
-                GlassesDashboardScreen(
-                    state = GlassesDashboardUiState(
-                        connectionLabel = "Meta Ray-Ban ready",
-                        deviceClassLabel = "Meta Rayban",
-                        showMetaRaybanControls = true,
-                        metaRayban = MetaRaybanUiState(canCapturePhoto = true),
-                    ),
-                    onAction = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithTag("glasses_assistant_controls").assertExists()
-        composeRule.onNodeWithText("Test voice").assertExists()
-        // Pairing is via Scan → Pair Meta Glasses; dashboard is read-only status only
-        composeRule.onAllNodesWithText("Register").assertCountEquals(0)
-        composeRule.onAllNodesWithText("Open pairing").assertCountEquals(0)
-        composeRule.onAllNodesWithText("Unregister").assertCountEquals(0)
-        composeRule.onAllNodesWithText("Open Meta AI").assertCountEquals(0)
-        composeRule.onNodeWithTag("meta_rayban_registration_status").assertExists()
-        composeRule.onAllNodesWithText("Video").assertCountEquals(0)
-        composeRule.onAllNodesWithText("Sync data over Wi-Fi").assertCountEquals(0)
-        // Video stream reserved for Gemini Live; photo via Test image AI (assistant controls)
-        composeRule.onAllNodesWithText("Start session").assertCountEquals(0)
-        composeRule.onAllNodesWithText("Start stream").assertCountEquals(0)
-        composeRule.onAllNodesWithText("Capture photo").assertCountEquals(0)
-        composeRule.onNodeWithTag("meta_rayban_controls").assertIsDisplayed()
-        composeRule.onNodeWithText("Scan → Pair Meta Glasses for setup. Use Test image AI / Test voice for photos. Video stream is reserved for future Gemini Live.").assertExists()
-    }
-
-    @Test
-    fun metaDashboardIsReadOnlyNoDirectPairingCta() {
-        composeRule.setContent {
-            CyanBridgeTheme {
-                GlassesDashboardScreen(
-                    state = GlassesDashboardUiState(
-                        showMetaRaybanControls = true,
-                        metaRayban = MetaRaybanUiState(metaAiInstalled = false),
-                    ),
-                    onAction = {},
-                )
-            }
-        }
-
-        // No direct CTA - pairing via Scan, errors show Details dialog with Send diagnostics
-        composeRule.onAllNodesWithText("Register").assertCountEquals(0)
-        composeRule.onNodeWithTag("meta_rayban_controls").assertIsDisplayed()
-    }
-
-    @Test
-    fun metaErrorKeepsDiagnosticsActionVisible() {
-        var action: GlassesDashboardAction? = null
-        composeRule.setContent {
-            CyanBridgeTheme {
-                GlassesDashboardScreen(
-                    state = GlassesDashboardUiState(
-                        showMetaRaybanControls = true,
-                        metaRayban = MetaRaybanUiState(lastError = "startSession: registration required"),
-                    ),
-                    onAction = { action = it },
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("Meta glasses are not ready").assertIsDisplayed()
-        composeRule.onNodeWithText("Details").performClick()
-        composeRule.runOnIdle { assertEquals(GlassesDashboardAction.MetaSendDiagnostics, action) }
-    }
-
-    @Test
-    fun missingMetaAiShowsInstallDialog() {
-        var action: GlassesDashboardAction? = null
-        composeRule.setContent {
-            CyanBridgeTheme {
-                GlassesDashboardScreen(
-                    state = GlassesDashboardUiState(
-                        showMetaRaybanControls = true,
-                        metaRayban = MetaRaybanUiState(
-                            metaAiInstalled = false,
-                            lastError = "registration: The Meta AI app is not installed on the device",
-                        ),
-                    ),
-                    onAction = { action = it },
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("Meta AI is required").assertIsDisplayed()
-        composeRule.onNodeWithText("Install Meta AI").performClick()
-        composeRule.runOnIdle { assertEquals(GlassesDashboardAction.MetaOpenMetaAi, action) }
-    }
-
-    @Test
-    fun metaUnavailableShowsActionableSetupGuidance() {
-        composeRule.setContent {
-            CyanBridgeTheme {
-                GlassesDashboardScreen(
-                    state = GlassesDashboardUiState(
-                        showMetaRaybanControls = true,
-                        metaRayban = MetaRaybanUiState(
-                            registrationLabel = "UNAVAILABLE",
-                            setupGuidance = "Pair supported glasses in Meta AI first.",
-                            canRegister = true,
-                        ),
-                    ),
-                    onAction = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithTag("meta_rayban_setup_guidance").assertIsDisplayed()
-        composeRule.onNodeWithText("Pair supported glasses in Meta AI first.").assertIsDisplayed()
     }
 
     @Test

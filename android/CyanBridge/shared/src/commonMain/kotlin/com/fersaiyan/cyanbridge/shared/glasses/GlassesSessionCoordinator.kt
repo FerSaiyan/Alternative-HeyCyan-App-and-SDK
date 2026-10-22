@@ -10,7 +10,6 @@ enum class GlassesSession(val label: String) {
     MEDIA_SYNC("media sync"),
     LIVE_PREVIEW("live preview"),
     OTA("firmware update"),
-    META_CAMERA("Meta camera"),
 }
 
 class GlassesSessionLease internal constructor(

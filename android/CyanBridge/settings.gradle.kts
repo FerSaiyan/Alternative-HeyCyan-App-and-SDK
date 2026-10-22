@@ -23,25 +23,6 @@ dependencyResolutionManagement {
             }
         }
 
-        // Meta Wearables DAT SDK (requires GitHub token with read:packages scope)
-        val localProps = java.util.Properties()
-        val localPropsFile = rootDir.resolve("local.properties")
-        if (localPropsFile.exists()) {
-            localProps.load(localPropsFile.inputStream())
-        }
-        val githubToken = System.getenv("META_GITHUB_TOKEN")
-            ?.takeIf { it.isNotBlank() }
-            ?: System.getenv("GITHUB_TOKEN")?.takeIf { it.isNotBlank() }
-            ?: localProps.getProperty("github_token")?.takeIf { it.isNotBlank() }
-        if (!githubToken.isNullOrBlank()) {
-            maven {
-                url = uri("https://maven.pkg.github.com/facebook/meta-wearables-dat-android")
-                credentials {
-                    username = ""
-                    password = githubToken
-                }
-            }
-        }
     }
 }
 rootProject.name = "CyanBridgeManagerApp"

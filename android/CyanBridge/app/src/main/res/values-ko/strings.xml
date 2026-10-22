@@ -86,10 +86,6 @@
     <string name="onboarding_back">뒤로</string>
     <string name="onboarding_next">다음</string>
     <string name="onboarding_get_started">시작하기</string>
-    <string name="meta_diagnostics_title">Meta Ray-Ban 진단</string>
-    <string name="meta_diagnostics_description">문제 조사를 위해 CyanBridge가 최근 Meta DAT 상태, 오류, 기기 세부 정보 및 필터링된 logcat 항목을 수집합니다.</string>
-    <string name="meta_pairing_title">Meta 안경 페어링</string>
-
     <string name="onboarding_audio_capture_title">연속 오디오 녹음</string>
     <string name="onboarding_audio_capture_desc">Auto Audio는 플러그인에서 활성화하면 전사 및 일일 요약을 위해 안경 오디오를 녹음할 수 있습니다.</string>
     <string name="onboarding_audio_capture_details">Auto Audio는 15분 단위로 녹음한 다음 선택적 요약을 위해 전사합니다. 언제든지 녹음을 검토하고 삭제할 수 있습니다. 선택한 옵션에 필요한 경우에만 CyanBridge가 설명을 표시하고 알림 또는 마이크 액세스 권한을 요청합니다.</string>
