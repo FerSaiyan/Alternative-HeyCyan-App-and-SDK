@@ -16,7 +16,6 @@ import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.localagent.LocalAgentAccessibilityBridge
 import com.fersaiyan.cyanbridge.localagent.LocalAgentDeviceState
 import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
@@ -70,9 +69,6 @@ object DebugLogSupport {
         "LocalAgentService",
         "LocalAgentSteps",
         "MainActivity",
-        "MeizuMyvu",
-        "MeizuMyvuService",
-        "myvu",
         "VisualDiaryService",
         "WalkingAidService",
         "CommunityPluginsActivity",
@@ -268,13 +264,6 @@ object DebugLogSupport {
                 append("Remote base URL: ${RemoteOpenAiPrefs.getBaseUrl(context)}\n")
             }
             appendAutomationDiagnostics(context)
-
-            if (DeviceProfileStore.isMeizuMyvuSelected(context)) {
-                append("Meizu MYVU profile: selected\n")
-                append("MYVU diagnostics:\n")
-                append(MeizuMyvuManager.getInstance(context).diagnosticsSnapshot())
-                append("\n")
-            }
 
             val selectedModel = runCatching {
                 LocalModelStorageRepository.resolveSelectedModel(context)

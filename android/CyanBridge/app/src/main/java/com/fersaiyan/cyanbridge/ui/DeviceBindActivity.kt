@@ -23,7 +23,6 @@ import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.devices.DeviceClassifier
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
-import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsProtocol
@@ -198,11 +197,6 @@ class DeviceBindActivity : BaseActivity() {
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
 
         when (selectedDeviceClass) {
-            DeviceClass.MEIZU_MYVU -> {
-                saveSelectedProfile(device, DeviceClass.MEIZU_MYVU, userOverridden = true)
-                connectMeizuMyvu(device)
-            }
-
             DeviceClass.GENERIC_AUDIO -> {
                 saveSelectedProfile(device, DeviceClass.GENERIC_AUDIO, userOverridden = true)
                 Toast.makeText(this, "Audio device selected.", Toast.LENGTH_SHORT).show()
@@ -495,41 +489,6 @@ class DeviceBindActivity : BaseActivity() {
         DeviceClass.UNKNOWN,
         -> DeviceClass.HEY_CYAN
         else -> detected
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun connectMeizuMyvu(device: ScannedDevice) {
-        val bonded = runCatching {
-            BluetoothAdapter.getDefaultAdapter()
-                ?.getRemoteDevice(device.macAddress)
-                ?.bondState == BluetoothDevice.BOND_BONDED
-        }.getOrDefault(false)
-        if (!bonded) {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Pair MYVU in Android first")
-                .setMessage(
-                    "The upstream MYVU client expects a Classic Bluetooth bond before opening its RFCOMM relay. " +
-                        "Pair the glasses in Android Bluetooth settings, then force-stop the official MYVU app because the glasses accept only one app connection at a time.",
-                )
-                .setNegativeButton("Cancel", null)
-                .setNeutralButton("Bluetooth settings") { _, _ ->
-                    startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                }
-                .setPositiveButton("Connect anyway") { _, _ -> startMeizuMyvuConnection(device.macAddress) }
-                .show()
-            return
-        }
-        startMeizuMyvuConnection(device.macAddress)
-    }
-
-    private fun startMeizuMyvuConnection(address: String) {
-        MeizuMyvuManager.getInstance(this).connect(address, this, userInitiated = true)
-        Toast.makeText(
-            this,
-            "Connecting to Meizu MYVU. Force-stop the official MYVU app while using CyanBridge.",
-            Toast.LENGTH_LONG,
-        ).show()
-        finish()
     }
 
     private fun upsertDevice(
