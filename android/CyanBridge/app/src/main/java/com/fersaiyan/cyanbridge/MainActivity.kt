@@ -1471,7 +1471,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             action is GlassesDashboardAction.SelectImageThumbnailQuality ||
             action is GlassesDashboardAction.SetGeminiLiveImageDelay ||
             action is GlassesDashboardAction.SetAiWakeWordRoute ||
-            action == GlassesDashboardAction.DismissFirmwarePatchRequest ||
+            action == GlassesDashboardAction.DismissFirmwarePatchRequest
         ) {
             return false
         }
@@ -2428,7 +2428,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun dumpOtaServerInfo() {
-        if (("HeyCyan OTA")) return
         if (!BleOperateManager.getInstance().isConnected) {
             Log.e("OTAProbe", "Bluetooth not connected. Please connect to glasses first.")
             Toast.makeText(
@@ -2572,7 +2571,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
      * yourself and point TEST_PULL_OTA_URL at it.
      */
     private fun testPullModeOta() {
-        if (("HeyCyan pull-mode OTA")) return
         if (!BuildConfig.DEBUG) {
             Log.w("PullOtaTest", "Pull-mode OTA testing is disabled outside debug builds")
             Toast.makeText(this, "Pull-mode OTA testing is available only in debug builds.", Toast.LENGTH_LONG).show()
@@ -2645,7 +2643,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun requestOtaFirmware(source: OtaFirmwareSource) {
-        if (("HeyCyan OTA")) return
         if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
             ensureGlassesTransportPermissions("Wi-Fi OTA") {
                 requestOtaFirmware(source)
@@ -3312,8 +3309,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun startLivePreview() {
         Log.i("LivePreview", "========================================")
 
-        if (("Live preview")) return
-
         if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
             ensureGlassesTransportPermissions("live preview") {
                 startLivePreview()
@@ -3555,7 +3550,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
     
     private fun controlVideoRecording(start: Boolean) {
-        if (("Video recording")) return
         if (isGlassesCommandBlocked("video recording command")) return
         val permit = acquireBackgroundGlassesCommand("video recording command") ?: return
         val value = if (start) 0x02 else 0x03
@@ -3605,7 +3599,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
     
     private fun controlAudioRecording(start: Boolean) {
-        if (("On-glasses audio recording")) return
         if (isGlassesCommandBlocked("audio recording command")) return
         val permit = acquireBackgroundGlassesCommand("audio recording command") ?: return
         val value = if (start) 0x08 else 0x0c
@@ -6752,7 +6745,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun requestBatteryStatus(showToast: Boolean) {
-        if (("Battery status")) return
         if (isGlassesCommandBlocked("battery status request")) return
         if (showToast) {
             pendingBatteryToast = true
@@ -7435,8 +7427,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         afterP2pTeardown: Boolean = false,
         purpose: MediaDownloadPurpose = MediaDownloadPurpose.FULL_SYNC,
     ) {
-        if (("Wi-Fi media sync")) return
-
         if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
             ensureGlassesTransportPermissions("Wi-Fi media sync") {
                 startDataDownload(
