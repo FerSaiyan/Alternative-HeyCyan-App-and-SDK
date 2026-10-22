@@ -16,8 +16,8 @@ class NpuVariantResolverTest {
         assertTrue(resolved.sourceUrl!!.startsWith("https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu/resolve/"))
         assertTrue(resolved.sourceUrl!!.endsWith("/gemma-4-E2B-it_Qualcomm_SM8650.litertlm"))
         assertTrue("/resolve/main/" !in resolved.sourceUrl!!, "pinned to a commit")
-        assertEquals("70c0223bdd24b3653b32b7ffb0c064babff86fd8e8697fe6cb9a0fecb127eed4", resolved.sha256)
-        assertEquals(2_322_196_704L, resolved.sizeBytes)
+        assertEquals("2f2e0e64bb56d592f520e379e2b4456e8f02f78c67fe3c42c0c0871f73a3beba", resolved.sha256)
+        assertEquals(2_311_186_656L, resolved.sizeBytes)
     }
 
     @Test

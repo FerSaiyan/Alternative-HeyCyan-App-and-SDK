@@ -50,7 +50,7 @@ class LiteRtLongContextProbeTest {
     private val maxDecode get() = args.getString("lc_max_decode")?.toInt() ?: 48
 
     @Test
-    fun multiTurnChatAcrossTheFirstKvBucket() = runBlocking {
+    fun multiTurnChatAcrossTheFirstKvBucket(): Unit = runBlocking {
         val model = args.getString("lc_model").orEmpty()
         assumeTrue("pass -e lc_model", model.isNotBlank() && File(model).isFile)
         assumeTrue("needle mode runs in needleEval", args.getString("lc_needle_file") == null)
@@ -97,7 +97,7 @@ class LiteRtLongContextProbeTest {
     }
 
     @Test
-    fun needleEval() = runBlocking {
+    fun needleEval(): Unit = runBlocking {
         val model = args.getString("lc_model").orEmpty()
         val needles = args.getString("lc_needle_file").orEmpty()
         assumeTrue("pass -e lc_model and -e lc_needle_file", File(model).isFile && File(needles).isFile)

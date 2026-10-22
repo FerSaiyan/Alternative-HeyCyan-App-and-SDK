@@ -74,7 +74,7 @@ object NpuVariantResolver {
 }
 
 private const val NPU_E2B_REPO = "Fertroll10/gemma-4-E2B-it-litert-lm-npu"
-private const val NPU_E2B_REVISION = "947dafae00cf1d7034efa69c1aaec6c1b3200962"
+private const val NPU_E2B_REVISION = "2f5d066822497f5561b2d86a55bf9e94bd9b65bc"
 
 object LocalModelCatalogRepository {
     val curatedModels: List<LocalModelCatalogEntry> = listOf(
@@ -180,8 +180,8 @@ object LocalModelCatalogRepository {
                     revision = NPU_E2B_REVISION,
                     files = mapOf(
                         "SM8650" to NpuVariantFile(
-                            sha256 = "70c0223bdd24b3653b32b7ffb0c064babff86fd8e8697fe6cb9a0fecb127eed4",
-                            sizeBytes = 2_322_196_704L,
+                            sha256 = "2f2e0e64bb56d592f520e379e2b4456e8f02f78c67fe3c42c0c0871f73a3beba",
+                            sizeBytes = 2_311_186_656L,
                         ),
                     ),
                 ),

@@ -204,11 +204,15 @@ matching file from a public Hugging Face repo, and checks its sha256.
 
 | SoC | File | Source (pinned commit) | Input | sha256 |
 |---|---|---|---|---|
-| SM8650 (V75) | `gemma-4-E2B-it_Qualcomm_SM8650.litertlm` | [`Fertroll10/gemma-4-E2B-it-litert-lm-npu`](https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu) @ `947dafae` | text | `70c0223b…` |
+| SM8650 (V75) | `gemma-4-E2B-it_Qualcomm_SM8650.litertlm` | [`Fertroll10/gemma-4-E2B-it-litert-lm-npu`](https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu) @ `2f5d0668` | text | `2f2e0e64…` |
 | SM8750 (V79) | `gemma-4-E2B-it_qualcomm_sm8750.litertlm` | Google's `litert-community/gemma-4-E2B-it-litert-lm` @ `b3ca0d2f` | text, image, audio | `41dd675f…` |
 
-- **SM8650 build:** the validated 4k package (`work_e2b_general`, QAIRT 2.50; benchmarks in
-  "Gemma 4 LLMs on the NPU"). The repo has a model card.
+- **SM8650 build (2026-10-22):** the 4k package `work_srq_a16_4k` (QAIRT 2.50): QAT 8-bit
+  activation rounding (SRQ) restored, 16k long calibration, INT16 attention. On the Fold6
+  it finds 12/12 held-out facts up to 3.8k tokens (the first revision, `947dafae`, found
+  4/12 and emitted junk past about 3k). Prefill 2,370-2,720 tok/s, decode 29-31 tok/s.
+  The repo also has a 4k-16k file and a model card; details in the recipe repo's
+  WORKLOG (2026-10-22).
 - **SM8750 build:** Google's own. Not yet run on an SM8750 phone. Google's QCS8275 (IoT)
   file is not listed.
 - **Catalog:** `npuVariants: List<NpuVariantSet(repo, filePrefix, files: SoC -> NpuVariantFile(sha256,
