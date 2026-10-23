@@ -108,7 +108,7 @@ class LensMooActivity : Activity(), SurfaceHolder.Callback {
             return
         }
         if (!LensMooAiGate.ready(this)) {
-            report("Сначала настройте свой AI-сервер")
+            report("Выберите локальную Gemma LiteRT или настройте облачную модель")
             startActivity(android.content.Intent(this, com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity::class.java))
             return
         }
@@ -206,7 +206,7 @@ class LensMooActivity : Activity(), SurfaceHolder.Callback {
     private fun capture(forChat: Boolean = false, prompt: String = "Что изображено на фото?", voiceRequest: Boolean = false) {
         if (forChat && !LensMooAiGate.ready(this)) {
             runOnUiThread {
-                report("Настройте и включите свой AI-сервер, модель и ключ; выберите Local Agent")
+                report("Выберите локальную Gemma LiteRT или настройте облачную модель")
                 startActivity(android.content.Intent(this, com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity::class.java))
             }
             return
@@ -218,8 +218,23 @@ class LensMooActivity : Activity(), SurfaceHolder.Callback {
         if (destroyed || io.isShutdown || !capturePending.compareAndSet(false,true)) return
         io.execute {
             try {
-                ensureConnected()
-                val jpeg=session!!.capture()
+                val jpeg = if (forChat) kotlinx.coroutines.runBlocking {
+                    LensMooQuestionFlow.run(
+                        freshSession = {
+                            val previous = session
+                            session = null
+                            connected = false
+                            previous?.close()
+                            ensureConnected()
+                            session ?: error("Подключение отменено")
+                        },
+                        captureOnce = { it.capture() },
+                        answer = { it },
+                    )
+                } else {
+                    ensureConnected()
+                    session!!.capture()
+                }
                 video.clear()
                 report("Снимок получен; камера выключена")
                 val values=ContentValues().apply {

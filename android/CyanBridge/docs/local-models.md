@@ -38,6 +38,19 @@ This app supports fully offline on-device chat inference with both GGUF (llama.c
 3. Select "Local Models" as provider.
 4. Open Chat and send a message.
 
+## LensMoo photo and voice questions
+
+LensMoo Lab uses the same Local Models backend for photo chat and hands-free
+questions. With **Use remote OpenAI-compatible server** off, select an installed
+Gemma model with the LiteRT runtime. With it on, configure the cloud endpoint,
+model name, and any required API key, then Save. A failed cloud request is not
+silently retried on the phone or another cloud provider.
+
+Voice questions use Android speech recognition and speech synthesis; selecting
+an on-device LLM does not guarantee offline speech recognition. The hands-free
+answer deadline allows ten minutes for first-use model initialization. LensMoo
+photo chats skip background title generation and automatic memory extraction.
+
 ## Runtime states shown in UI
 
 - not downloaded

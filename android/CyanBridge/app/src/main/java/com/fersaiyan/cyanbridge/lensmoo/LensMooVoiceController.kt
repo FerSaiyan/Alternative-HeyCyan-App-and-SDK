@@ -167,7 +167,7 @@ class LensMooVoiceController(
         listening=true
         runCatching { recognizer?.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE,Locale.getDefault().toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ru-RU")
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,1)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,30_000L)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,false)
@@ -179,7 +179,7 @@ class LensMooVoiceController(
         if(ttsFailed) { terminal("Озвучивание недоступно: движок синтеза речи не запустился"); return }
         if(!ttsReady) { pendingSpeech=answer; return }
         val engine=tts ?: return
-        val language=engine.setLanguage(Locale.getDefault())
+        val language=engine.setLanguage(Locale.forLanguageTag("ru-RU"))
         if(language==TextToSpeech.LANG_MISSING_DATA || language==TextToSpeech.LANG_NOT_SUPPORTED) {
             terminal("Ответ получен, но для озвучивания не установлен голос выбранного языка"); return
         }

@@ -1062,7 +1062,7 @@ class ChatThreadActivity : AppCompatActivity() {
 
     private fun sendMessage(text: String, speakReply: Boolean = false) {
         if (lensMooOrigin && !com.fersaiyan.cyanbridge.lensmoo.LensMooAiGate.ready(this)) {
-            android.widget.Toast.makeText(this, "Включите свой AI-сервер и выберите Local Agent", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(this, "Выберите локальную Gemma LiteRT или настройте облачную модель", android.widget.Toast.LENGTH_LONG).show()
             startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
             return
         }
@@ -1178,7 +1178,12 @@ class ChatThreadActivity : AppCompatActivity() {
             try {
                 val assistantReply = withContext(Dispatchers.IO) {
                     val messages = buildRelayMessages(chatId = chatId, lastUserPrompt = userPrompt)
-                    RelayAiAssistantRouter.chatReplyStreaming(
+                    if (lensMooOrigin) LocalModelsProvider().streamChat(
+                        context = this@ChatThreadActivity,
+                        messages = com.fersaiyan.cyanbridge.lensmoo.lensMooMessages(messages),
+                        imagePaths = imagePaths,
+                        audioPath = audioPath,
+                    ) else RelayAiAssistantRouter.chatReplyStreaming(
                         context = this@ChatThreadActivity,
                         chatId = chatId,
                         userPrompt = userPrompt,
@@ -1246,12 +1251,12 @@ class ChatThreadActivity : AppCompatActivity() {
                         voice.speak(finalReplyWithCapNotice)
                     }
 
-                    if (requestSmartTitleAfterReply) {
+                    if (requestSmartTitleAfterReply && !lensMooOrigin) {
                         maybeGenerateSmartThreadTitle(chatId = chatId, firstUserPrompt = userPrompt)
                     }
 
                     // Proactive memory: extract candidate facts from normal chats.
-                    lifecycleScope.launch {
+                    if (!lensMooOrigin) lifecycleScope.launch {
                         withContext(Dispatchers.IO) {
                             ChatMemoryAutoUpdater.extractAndStore(
                                 context = this@ChatThreadActivity,

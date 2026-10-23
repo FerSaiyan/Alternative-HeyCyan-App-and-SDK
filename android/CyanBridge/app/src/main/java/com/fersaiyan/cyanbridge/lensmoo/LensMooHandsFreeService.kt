@@ -12,7 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.chat.ChatStore
-import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiClient
+import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.shared.chat.ChatRole
 import kotlinx.coroutines.*
 import java.io.File
@@ -222,7 +222,7 @@ class LensMooHandsFreeService : Service() {
             android.util.Log.i("LensMooHandsFree", "Physical question ignored ready=$ready destroyed=$destroyed")
             return
         }
-        if (!LensMooAiGate.ready(this)) { retainedError="Настройки AI изменились; настройте свой сервер заново"; report(retainedError!!); stopSelf(); return }
+        if (!LensMooAiGate.ready(this)) { retainedError="Настройки AI изменились; выберите локальную Gemma или облачную модель"; report(retainedError!!); stopSelf(); return }
         val token = gate.begin() ?: run {
             android.util.Log.i("LensMooHandsFree", "Physical question ignored busy phase=${gate.phase}")
             return
@@ -297,7 +297,7 @@ class LensMooHandsFreeService : Service() {
     private fun handleQuestion(token: Long, question: String) {
         android.util.Log.i("LensMooHandsFree", "Transcript received token=$token length=${question.length} phase=${gate.phase}")
         if (!gate.advance(token, LensMooTurnGate.Phase.LISTENING, LensMooTurnGate.Phase.WORKING)) return
-        armDeadline(token, 120_000L)
+        armDeadline(token, 600_000L)
         scope.launch {
             var stage = LensMooFailureMessage.Stage.CAPTURE
             try {
@@ -315,16 +315,16 @@ class LensMooHandsFreeService : Service() {
                     ChatStore.addMessage(thread.id, ChatRole.USER, "$question\n[Фото очков: ${image.name}]")
                     ensureActive()
                     check(LensMooAiGate.ready(this@LensMooHandsFreeService)) { "Настройки AI изменились" }
-                    // Use only the explicitly configured remote endpoint. No relay, mock or local fallback.
+                    // Use the selected on-device model or explicitly enabled cloud endpoint.
                     stage = LensMooFailureMessage.Stage.REMOTE
-                    android.util.Log.i("LensMooHandsFree", "Sending configured remote image request token=$token")
-                    val result = RemoteOpenAiClient.chatCompletionStreaming(
+                    android.util.Log.i("LensMooHandsFree", "Sending selected model image request token=$token")
+                    val result = LocalModelsProvider().streamChat(
                         context = this@LensMooHandsFreeService,
-                        messages = listOf(mapOf("role" to "user", "content" to question)),
+                        messages = lensMooMessages(listOf(mapOf("role" to "user", "content" to question))),
                         imagePaths = listOf(image.absolutePath))
                     ensureActive()
                     check(result.isNotBlank()) { "AI вернул пустой ответ" }
-                    android.util.Log.i("LensMooHandsFree", "Remote answer received token=$token length=${result.length}")
+                    android.util.Log.i("LensMooHandsFree", "Model answer received token=$token length=${result.length}")
                     ChatStore.addMessage(thread.id, ChatRole.ASSISTANT, result)
                     result
                     } },
