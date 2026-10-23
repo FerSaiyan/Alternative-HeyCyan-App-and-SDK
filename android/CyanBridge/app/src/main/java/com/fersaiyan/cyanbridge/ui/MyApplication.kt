@@ -67,7 +67,9 @@ class MyApplication : Application(){
         if (isLocalModelBenchmarkWorkerProcess()) return
         AppLanguagePreferences.applyStoredLocale(this)
         ProductAnalyticsLifecycle.register(this)
-        initBle()
+        val lensMooSelected = DeviceProfileStore.selectedClass(this) ==
+            com.fersaiyan.cyanbridge.shared.devices.DeviceClass.LENSMOO
+        if (!lensMooSelected) initBle()
 
         // Keep the BLE control channel connected while the app process is alive.
         // This matches user expectations from the official HeyCyan companion app.
@@ -82,7 +84,7 @@ class MyApplication : Application(){
         LocalAgentPlugin.syncNativePluginState(this)
 
         // Auto audio capture (glasses recording loop)
-        if (AutoAudioCapturePrefs.isEnabled(this) &&
+        if (!lensMooSelected && AutoAudioCapturePrefs.isEnabled(this) &&
             !DeviceProfileStore.isEyevueSelected(this) &&
             !DeviceProfileStore.isTuneBudsSelected(this) &&
             !AutoAudioCaptureService.isRunning()
@@ -92,11 +94,11 @@ class MyApplication : Application(){
 
         runCatching { MemoryVaultBootstrap.ensureInitialized(this) }
 
-        if (AutoDiaryService.isEnabled(this) && !AutoDiaryService.isRunning()) {
+        if (!lensMooSelected && AutoDiaryService.isEnabled(this) && !AutoDiaryService.isRunning()) {
             AutoDiaryService.startIfEnabled(this)
         }
 
-        if (VisualDiaryPreferences.isEnabled(this) && !VisualDiaryService.isRunning()) {
+        if (!lensMooSelected && VisualDiaryPreferences.isEnabled(this) && !VisualDiaryService.isRunning()) {
             VisualDiaryService.startIfEnabled(this)
         }
 

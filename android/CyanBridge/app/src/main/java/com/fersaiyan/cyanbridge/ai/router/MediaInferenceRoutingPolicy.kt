@@ -7,12 +7,14 @@ import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
+import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 
 object MediaInferenceRoutingPolicy {
     fun resolve(context: Context): AgentProviderType {
         return resolve(
             preferred = LocalAgentPrefs.getProviderType(context),
             localMediaAvailable = hasLocalMultimodalModel(context),
+            remoteBackendActive = RemoteOpenAiPrefs.isActive(context),
             proAvailable = ProSubscriptionPrefs.isActiveLocally(context),
             taskerUsesLocalModels = AiProviderPrefs.getProvider(context) == AiProviderType.LOCAL_MODELS,
         )
@@ -23,7 +25,14 @@ object MediaInferenceRoutingPolicy {
         localMediaAvailable: Boolean,
         proAvailable: Boolean,
         taskerUsesLocalModels: Boolean = false,
+        remoteBackendActive: Boolean = false,
     ): AgentProviderType {
+        // Remote multimodal requests must stay on the explicitly configured server.
+        // A server/model rejecting images is an error, never consent to a cloud fallback.
+        if (remoteBackendActive && (preferred == AgentProviderType.LOCAL_AGENT ||
+                (preferred == AgentProviderType.TASKER && taskerUsesLocalModels))) {
+            return AgentProviderType.LOCAL_AGENT
+        }
         return when (preferred) {
             AgentProviderType.LOCAL_AGENT -> when {
                 localMediaAvailable -> AgentProviderType.LOCAL_AGENT

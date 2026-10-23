@@ -38,6 +38,8 @@ object GlassesManagerGating {
     }
 
     fun visibleActions(deviceClass: DeviceClass): Set<Action> {
+        // LensMoo controls live in its independent SPP activity.
+        if (deviceClass == DeviceClass.LENSMOO) return emptySet()
         val base = linkedSetOf(Action.MEETING_CAPTURE)
         when (deviceClass) {
             DeviceClass.HEY_CYAN -> {

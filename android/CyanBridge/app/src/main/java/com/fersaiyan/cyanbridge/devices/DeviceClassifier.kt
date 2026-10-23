@@ -31,6 +31,8 @@ object DeviceClassifier {
         val name = advertisedName?.trim().orEmpty()
         val lower = name.lowercase()
 
+        if (lower.contains("lensmoo") || lower.startsWith("xkoenpro")) return DeviceClass.LENSMOO
+
         // Eyevue devices may omit their local name while still advertising the
         // vendor service. Check the UUID before name-based fallbacks.
         if (serviceUuids.any { it.uuid == EyevueProtocol.SERVICE_UUID }) {

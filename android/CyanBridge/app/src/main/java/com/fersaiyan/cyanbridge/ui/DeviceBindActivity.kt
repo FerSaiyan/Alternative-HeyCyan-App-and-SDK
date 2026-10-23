@@ -216,6 +216,11 @@ class DeviceBindActivity : BaseActivity() {
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
 
         when (selectedDeviceClass) {
+            DeviceClass.LENSMOO -> {
+                saveSelectedProfile(device, DeviceClass.LENSMOO, userOverridden = true)
+                startActivity(Intent(this, com.fersaiyan.cyanbridge.lensmoo.LensMooActivity::class.java).putExtra("address", device.connectionAddress))
+                finish()
+            }
             DeviceClass.META_RAYBAN -> {
                 // Selecting Meta in the normal scan flow now routes directly into DAT pairing.
                 openMetaPairing()

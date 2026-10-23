@@ -1,0 +1,323 @@
+package com.fersaiyan.cyanbridge.lensmoo
+
+import android.Manifest
+import android.app.Activity
+import android.app.AlertDialog
+import android.bluetooth.BluetoothAdapter
+import android.content.ContentValues
+import android.content.pm.PackageManager
+import android.media.MediaCodec
+import android.media.MediaFormat
+import android.os.Build
+import android.os.Bundle
+import android.provider.MediaStore
+import android.view.SurfaceHolder
+import android.view.SurfaceView
+import android.view.WindowManager
+import android.widget.*
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** LensMoo uses its own RFCOMM session; no HeyCyan GATT or OTA calls enter this screen. */
+class LensMooActivity : Activity(), SurfaceHolder.Callback {
+    private val io = Executors.newSingleThreadExecutor()
+    private val video = ArrayBlockingQueue<ByteArray>(16)
+    private val decoderGeneration = java.util.concurrent.atomic.AtomicInteger(0)
+    private val timeoutExecutor = Executors.newSingleThreadScheduledExecutor()
+    private val capturePending = AtomicBoolean(false)
+    @Volatile private var session: LensMooSession? = null
+    @Volatile private var connected = false
+    @Volatile private var destroyed = false
+    @Volatile private var previewFrames: java.util.concurrent.CountDownLatch? = null
+    private lateinit var status: TextView
+    private lateinit var owner: EditText
+    private lateinit var surface: SurfaceView
+    private var address: String? = null
+    private var reconnectAfterChat = false
+    private lateinit var voice: LensMooVoiceController
+    private val prefs by lazy { getSharedPreferences("lensmoo_private", MODE_PRIVATE) }
+
+    override fun onCreate(state: Bundle?) {
+        super.onCreate(state)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        address = intent.getStringExtra("address") ?: prefs.getString("address", null)
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(20,20,20,20) }
+        layout.addView(TextView(this).apply { text = "LensMoo / XKOENPRO — предпросмотр 320×240" })
+        owner = EditText(this).apply {
+            hint = "ID владельца LensMoo (из вашей учётной записи)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(prefs.getString("owner", ""))
+        }
+        layout.addView(owner)
+        fun button(label: String, action: () -> Unit) { layout.addView(Button(this).apply { text=label; setOnClickListener { action() } }) }
+        button("Выбрать сопряжённые очки") { chooseDevice() }
+        button("Подключить очки") { connect() }
+        button("Включить предпросмотр") { setPreview(true) }
+        button("Выключить предпросмотр") { setPreview(false) }
+        button("Сохранить оригинальное фото") { capture() }
+        button("Настроить AI") { startActivity(android.content.Intent(this, com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity::class.java)) }
+        button("Фото → AI-чат") { capture(forChat = true) }
+        voice = LensMooVoiceController(this, onTranscript = { text ->
+            capture(forChat = true, prompt = text, voiceRequest = true)
+        }, onStatus = { report(it) })
+        button("Голосовой вопрос о фото") {
+            io.execute {
+                runCatching { ensureConnected() }.onSuccess {
+                    runOnUiThread { if (!destroyed) voice.startListening() }
+                }.onFailure { report("Подключение: ${it.message}") }
+            }
+        }
+        button("Включить помощника в кармане") { enableHandsFree() }
+        button("Выключить помощника в кармане") {
+            stopService(android.content.Intent(this, LensMooHandsFreeService::class.java))
+            report("Выключение помощника…")
+        }
+        button("Отключить") { disconnect() }
+        status = TextView(this).apply { text = address ?: "Выберите сопряжённые очки" }
+        layout.addView(status)
+        surface = SurfaceView(this)
+        surface.holder.addCallback(this)
+        layout.addView(surface, LinearLayout.LayoutParams(-1,0,1f))
+        setContentView(layout)
+    }
+    private fun report(message: String) { android.util.Log.i("LensMooUI", message); runOnUiThread { if (!destroyed) status.text=message } }
+    private fun permission(): Boolean {
+        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN),91)
+            return false
+        }
+        return true
+    }
+    @Suppress("MissingPermission")
+    private fun chooseDevice() {
+        if (!permission()) return
+        val devices = BluetoothAdapter.getDefaultAdapter()?.bondedDevices?.toList().orEmpty()
+        AlertDialog.Builder(this).setTitle("Сопряжённые устройства")
+            .setItems(devices.map { "${it.name ?: "Bluetooth"} — ${it.address}" }.toTypedArray()) { _, i ->
+                address=devices[i].address
+                prefs.edit().putString("address",address).apply()
+                report("Выбрано: ${devices[i].name}")
+            }.show()
+    }
+    private fun enableHandsFree() {
+        if (!permission()) return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), LensMooVoiceController.MICROPHONE_PERMISSION_REQUEST)
+            report("Разрешите микрофон и снова включите помощника")
+            return
+        }
+        if (!LensMooAiGate.ready(this)) {
+            report("Сначала настройте свой AI-сервер")
+            startActivity(android.content.Intent(this, com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity::class.java))
+            return
+        }
+        val target=address?.takeIf { it.isNotBlank() } ?: return report("Сначала выберите очки")
+        val id=owner.text.toString().trim()
+        if (id.isBlank()) return report("Введите ID владельца")
+        prefs.edit().putString("address",target).putString("owner",id).apply()
+        reconnectAfterChat = false
+        voice.cancelListening()
+        disconnect()
+        val intent=android.content.Intent(this, LensMooHandsFreeService::class.java)
+        runCatching {
+            if (Build.VERSION.SDK_INT>=26) startForegroundService(intent) else startService(intent)
+        }.onSuccess { report("Помощник включается. После подключения можно заблокировать телефон") }
+            .onFailure { report("Помощник: ${it.message}") }
+    }
+    private fun connect() {
+        if (!permission()) return
+        val target = address?.takeIf { it.isNotBlank() } ?: return report("Сначала выберите очки")
+        val id=owner.text.toString().trim()
+        if (id.isEmpty()) return report("Введите ID владельца, использованный для LensMoo")
+        prefs.edit().putString("owner",id).putString("address",target).apply()
+        io.execute {
+            runCatching { ensureConnected(target, id) }
+                .onFailure { disconnect(); report("Ошибка: ${it.message}") }
+        }
+    }
+    private fun ensureConnected(
+        target: String = address ?: prefs.getString("address", null) ?: error("Сначала выберите очки"),
+        id: String = prefs.getString("owner", "").orEmpty(),
+    ) {
+        check(!destroyed) { "Экран закрыт" }
+        check(!LensMooHandsFreeService.running) { "Сначала выключите помощника в кармане" }
+        if (connected && session?.isConnected == true) return
+        connected=false
+        check(id.isNotBlank()) { "Сначала подключите очки с ID владельца" }
+        session?.close()
+        lateinit var next: LensMooSession
+        next=LensMooSession(this,onVideo={ bytes ->
+            previewFrames?.countDown()
+            if (!video.offer(bytes)) { disconnect(); report("Декодер не успевает; подключите видео снова") }
+        },onButton={ capture() },onStatus={ report(it) },onDisconnected={
+            if (session === next) {
+                connected=false
+                session=null
+                video.clear()
+                report("Связь закрыта; следующее действие подключится заново")
+            }
+        })
+        session=next
+        val timeout=timeoutExecutor.schedule({
+            if (session === next) { next.close(); connected=false; report("Время подключения истекло") }
+        },45,java.util.concurrent.TimeUnit.SECONDS)
+        try {
+            next.connect(target,id)
+            check(session === next && next.isConnected && !destroyed) { "Подключение отменено" }
+            connected=true
+            report("Очки подключены; камера выключена")
+        } catch (failure: Throwable) {
+            if (session === next) { connected=false; session=null }
+            next.close()
+            throw failure
+        } finally { timeout.cancel(false) }
+    }
+    private fun setPreview(enabled: Boolean) {
+        if (enabled && !surface.holder.surface.isValid) return report("Дождитесь готовности окна видео")
+        if (destroyed || io.isShutdown) return
+        io.execute {
+            runCatching {
+                ensureConnected()
+                val current=session ?: error("Соединение закрыто")
+                if (enabled) {
+                    val frames=java.util.concurrent.CountDownLatch(1)
+                    previewFrames=frames
+                    video.clear()
+                    current.startPreview()
+                    val deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(12)
+                    while (!frames.await(100,java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                        check(session === current && !destroyed) { "Предпросмотр отменён" }
+                        check(System.nanoTime()<deadline) { "Нет первого кадра предпросмотра" }
+                    }
+                    report("Предпросмотр включён")
+                } else {
+                    current.stopPreview()
+                    video.clear()
+                    report("Предпросмотр выключен; камера выключена")
+                }
+            }.onFailure { failure ->
+                runCatching { session?.stopPreview() }
+                report("Предпросмотр: ${failure.message}")
+            }
+            previewFrames=null
+        }
+    }
+    private fun capture(forChat: Boolean = false, prompt: String = "Что изображено на фото?", voiceRequest: Boolean = false) {
+        if (forChat && !LensMooAiGate.ready(this)) {
+            runOnUiThread {
+                report("Настройте и включите свой AI-сервер, модель и ключ; выберите Local Agent")
+                startActivity(android.content.Intent(this, com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity::class.java))
+            }
+            return
+        }
+        if (Build.VERSION.SDK_INT <= 28 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            runOnUiThread { requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),92) }
+            return
+        }
+        if (destroyed || io.isShutdown || !capturePending.compareAndSet(false,true)) return
+        io.execute {
+            try {
+                ensureConnected()
+                val jpeg=session!!.capture()
+                video.clear()
+                report("Снимок получен; камера выключена")
+                val values=ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME,"LensMoo-${System.currentTimeMillis()}.jpg")
+                    put(MediaStore.Images.Media.MIME_TYPE,"image/jpeg")
+                    if (Build.VERSION.SDK_INT>=29) { put(MediaStore.Images.Media.RELATIVE_PATH,"DCIM/CyanBridge"); put(MediaStore.Images.Media.IS_PENDING,1) }
+                }
+                val uri=contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values) ?: error("Не удалось создать фото")
+                try {
+                    contentResolver.openOutputStream(uri)?.use { it.write(jpeg) } ?: error("Не удалось записать фото")
+                    if (Build.VERSION.SDK_INT>=29) contentResolver.update(uri,ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING,0) },null,null)
+                } catch (e: Exception) { contentResolver.delete(uri,null,null); throw e }
+                report("Оригинальное фото сохранено: ${jpeg.size} байт")
+                if (forChat && !destroyed) runOnUiThread {
+                    if (!destroyed) {
+                        reconnectAfterChat = connected
+                        startActivity(android.content.Intent(this, com.fersaiyan.cyanbridge.ui.ChatThreadActivity::class.java)
+                            .putExtra(com.fersaiyan.cyanbridge.ui.ChatThreadActivity.EXTRA_LENSMOO_IMAGE_URI, uri.toString())
+                            .putExtra("lensmoo_voice_request", voiceRequest)
+                            .putExtra(com.fersaiyan.cyanbridge.ui.ChatThreadActivity.EXTRA_CREATE_THREAD_TITLE, "LensMoo — фото")
+                            .putExtra(com.fersaiyan.cyanbridge.ui.ChatThreadActivity.EXTRA_PREFILL_MESSAGE, prompt))
+                    }
+                }
+            } catch (e: Exception) { report("Фото: ${e.message}") }
+            finally { capturePending.set(false) }
+        }
+    }
+    private fun disconnect() { connected=false; runCatching { session?.close() }; session=null; video.clear(); report("Отключено") }
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        if (reconnectAfterChat) { reconnectAfterChat = false; surface.post { if (!destroyed) connect() } }
+        val generation = decoderGeneration.incrementAndGet()
+        Thread({
+            var codec: MediaCodec?=null
+            try {
+                codec=MediaCodec.createDecoderByType("video/avc")
+                codec.configure(MediaFormat.createVideoFormat("video/avc",320,240),holder.surface,null,0)
+                codec.start()
+                val info=MediaCodec.BufferInfo()
+                var decodedFrames=0L
+                fun frameDecoded() {
+                    decodedFrames++
+                    if(decodedFrames%30L==0L) android.util.Log.i("LensMooUI", "Decoded preview frames=$decodedFrames")
+                }
+                while (!destroyed && decoderGeneration.get() == generation) {
+                    val bytes=video.poll(20,java.util.concurrent.TimeUnit.MILLISECONDS)
+                    if (bytes!=null) {
+                        val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2)
+                        var index = codec.dequeueInputBuffer(10000)
+                        while (index < 0 && System.nanoTime() < deadline && decoderGeneration.get() == generation) {
+                            var output = codec.dequeueOutputBuffer(info, 0)
+                            while (output >= 0) {
+                                codec.releaseOutputBuffer(output, true); frameDecoded()
+                                output = codec.dequeueOutputBuffer(info, 0)
+                            }
+                            index = codec.dequeueInputBuffer(10000)
+                        }
+                        if (decoderGeneration.get() != generation) break
+                        check(index>=0) { "Нет входного буфера декодера" }
+                        val input=codec.getInputBuffer(index)!!
+                        check(bytes.size<=input.capacity()) { "Слишком большой H264 пакет" }
+                        input.clear(); input.put(bytes)
+                        codec.queueInputBuffer(index,0,bytes.size,System.nanoTime()/1000,0)
+                    }
+                    var index=codec.dequeueOutputBuffer(info,0)
+                    while(index>=0) { codec.releaseOutputBuffer(index,true); frameDecoded(); index=codec.dequeueOutputBuffer(info,0) }
+                }
+            } catch(e:Exception) {
+                if (!destroyed && decoderGeneration.get() == generation) {
+                    disconnect()
+                    report("Видео: ${e.message}")
+                }
+            } finally { runCatching { codec?.stop() }; runCatching { codec?.release() } }
+        },"LensMooDecoder").start()
+    }
+    override fun surfaceChanged(holder: SurfaceHolder,format:Int,width:Int,height:Int) = Unit
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+        decoderGeneration.incrementAndGet()
+        disconnect()
+    }
+    override fun onResume() {
+        super.onResume()
+        if (reconnectAfterChat && surface.holder.surface.isValid) {
+            reconnectAfterChat = false
+            surface.post { if (!destroyed) connect() }
+        }
+    }
+    override fun onStop() {
+        if (::voice.isInitialized) voice.cancelListening()
+        disconnect()
+        super.onStop()
+    }
+    override fun onDestroy() {
+        if (::voice.isInitialized) voice.close()
+        destroyed=true
+        decoderGeneration.incrementAndGet()
+        disconnect()
+        timeoutExecutor.shutdownNow()
+        io.shutdownNow()
+        super.onDestroy()
+    }
+}

@@ -6,7 +6,8 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <exclude domain="sharedpref" path="remote_openai_secrets.xml"/>
+    <exclude domain="sharedpref" path="lensmoo_private.xml"/>
+        <exclude domain="sharedpref" path="remote_openai_secrets.xml"/>
     <exclude domain="sharedpref" path="pro_subscription_server_prefs.xml"/>
     <exclude domain="sharedpref" path="pro_subscription_server_secrets.xml"/>
     <exclude domain="sharedpref" path="pending_donation_prefs.xml"/>

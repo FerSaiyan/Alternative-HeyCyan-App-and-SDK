@@ -100,9 +100,11 @@ fun localizedDestinationSubtitle(destination: AppDestination): String = stringRe
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 fun localizedDeviceClass(deviceClass: DeviceClass): String {
+    if (deviceClass == DeviceClass.LENSMOO) return "LensMoo / XKOENPRO"
     if (deviceClass == DeviceClass.MENTRA_LIVE) return "Mentra Live"
     return stringResource(
         when (deviceClass) {
+            DeviceClass.LENSMOO -> Res.string.device_class_unknown
             DeviceClass.HEY_CYAN -> Res.string.device_class_heycyan
             DeviceClass.EYEVUE -> Res.string.device_class_eye_vue
             DeviceClass.TUNEBUDS -> Res.string.device_class_tunebuds

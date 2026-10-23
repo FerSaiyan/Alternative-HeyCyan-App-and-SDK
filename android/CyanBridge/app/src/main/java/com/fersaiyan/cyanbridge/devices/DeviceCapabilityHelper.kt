@@ -31,6 +31,7 @@ object DeviceCapabilityHelper {
 
     fun unavailableCameraReason(context: Context): String? {
         return when (selectedClass(context)) {
+            DeviceClass.LENSMOO -> "Open the LensMoo screen for preview and original photo capture."
             DeviceClass.MEIZU_MYVU -> "Selected device profile (Meizu MYVU) has no camera."
             DeviceClass.GENERIC_AUDIO -> "Selected device profile (Earbuds / Audio-only glasses) has no camera."
             DeviceClass.MOYOUNG_W620 -> "The MoYoung / W620 adapter supports media sync, but direct camera capture is not validated yet."

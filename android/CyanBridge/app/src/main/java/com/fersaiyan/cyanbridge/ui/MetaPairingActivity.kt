@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaCameraPermissionLauncher
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -64,9 +65,6 @@ import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
-import com.meta.wearable.dat.core.Wearables
-import com.meta.wearable.dat.core.types.Permission
-import com.meta.wearable.dat.core.types.PermissionStatus
 import kotlinx.coroutines.launch
 
 data class MetaPairingScreenState(
@@ -158,8 +156,7 @@ class MetaPairingActivity : AppCompatActivity() {
         }
 
     private val glassesCameraPermissionLauncher =
-        registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
-            val granted = result.getOrDefault(PermissionStatus.Denied) == PermissionStatus.Granted
+        MetaCameraPermissionLauncher(this) { granted ->
             refreshState(checkGlassesCamera = false)
             screenState = screenState.copy(
                 glassesCameraGranted = granted,
@@ -296,7 +293,7 @@ class MetaPairingActivity : AppCompatActivity() {
                 ).show()
             }
             !screenState.glassesCameraGranted ->
-                glassesCameraPermissionLauncher.launch(Permission.CAMERA)
+                glassesCameraPermissionLauncher.launch()
             else -> startActivity(
                 Intent(this, MainActivity::class.java).apply {
                     putExtra(MainActivity.EXTRA_START_META_IMAGE_QUESTION, true)
@@ -320,7 +317,7 @@ class MetaPairingActivity : AppCompatActivity() {
                 refreshState()
             }
             !screenState.glassesCameraGranted ->
-                glassesCameraPermissionLauncher.launch(Permission.CAMERA)
+                glassesCameraPermissionLauncher.launch()
             else -> refreshState()
         }
     }

@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge
 import com.fersaiyan.cyanbridge.shared.devices.DeviceProfile
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaCameraPermissionLauncher
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
@@ -275,9 +276,6 @@ import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.CyanBridgeApp
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import android.content.ClipboardManager
-import com.meta.wearable.dat.core.Wearables
-import com.meta.wearable.dat.core.types.Permission
-import com.meta.wearable.dat.core.types.PermissionStatus
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -671,11 +669,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
     private val metaWearablePermissionLauncher =
-        registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
+        MetaCameraPermissionLauncher(this) { granted ->
             val action = pendingMetaCameraAction
             pendingMetaCameraAction = null
             enabledMetaCameraCheckActive = false
-            if (result.getOrDefault(PermissionStatus.Denied) == PermissionStatus.Granted) {
+            if (granted) {
                 action?.invoke()
             } else {
                 showMetaError("DAT camera permission", "Meta camera permission was denied")
@@ -684,8 +682,23 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     // Transcription UI moved to the "Transcriptions & recordings" section
 
+    private var lensMooOnlyLaunch = false
+
+    private fun isLensMooSelected(): Boolean =
+        DeviceProfileStore.selectedClass(this) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.LENSMOO
+
+    private fun openLensMooIfSelected(): Boolean {
+        if (!isLensMooSelected()) return false
+        startActivity(Intent(this, com.fersaiyan.cyanbridge.lensmoo.LensMooActivity::class.java)
+            .putExtra("address", DeviceProfileStore.loadLastSelected(this)?.macAddress.orEmpty()))
+        finish()
+        return true
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lensMooOnlyLaunch = isLensMooSelected()
+        if (openLensMooIfSelected()) return
         binding = AcitivytMainBinding.inflate(layoutInflater)
         aiAssistantMode = when (AutomationPrefs.getGlassesAssistantMode(this)) {
             GlassesAssistantMode.PHONE_ASSISTANT -> AI_MODE_PHONE_ASSISTANT
@@ -801,6 +814,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onStart() {
         super.onStart()
+        if (lensMooOnlyLaunch || openLensMooIfSelected()) return
         if (!EventBus.getDefault().isRegistered(this)) {
             EventBus.getDefault().register(this)
         }
@@ -832,6 +846,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onStop() {
+        if (lensMooOnlyLaunch) {
+            super.onStop()
+            return
+        }
         if (BuildConfig.DEBUG) wifiAdbDebugController.stop()
         if (eyevueLivePreviewManager?.isActive == true) {
             eyevueLivePreviewManager?.stop()
@@ -855,6 +873,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        if (lensMooOnlyLaunch) {
+            super.onDestroy()
+            return
+        }
         cancelLocalStreamingSpeech("activity destroyed")
         val voiceQueryWasActive = voiceQueryInProgress.getAndSet(null) != null
         activeVoiceRecognizer.getAndSet(null)?.let { recognizer ->
@@ -953,6 +975,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onResume() {
         super.onResume()
+        if (lensMooOnlyLaunch || isFinishing || openLensMooIfSelected()) return
         if (isMeizuMyvuSelected()) getOrCreateMeizuMyvuManager()
         showPendingMeizuMyvuFailureIfNeeded()
         handleExternalImageAutomationStatus()
@@ -1090,6 +1113,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (openLensMooIfSelected()) return
         if (handleMetaRegistrationIntent(intent)) {
             updateMetaRaybanUiState()
         }
@@ -1421,7 +1445,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 onGranted = action,
                 onRequestNeeded = {
                     pendingMetaCameraAction = action
-                    metaWearablePermissionLauncher.launch(Permission.CAMERA)
+                    metaWearablePermissionLauncher.launch()
                 },
                 onError = { error ->
                     showMetaError("DAT camera permission", error)
@@ -1700,6 +1724,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun handleDashboardAction(action: GlassesDashboardAction) {
+        if (openLensMooIfSelected()) return
         if (isDashboardActionBlockedByExclusiveSession(action)) return
         if (isTuneBudsSelected() && !action.isSupportedForTuneBudsDashboard()) {
             Log.i("Dashboard", "Ignoring unsupported TuneBuds dashboard action: $action")
