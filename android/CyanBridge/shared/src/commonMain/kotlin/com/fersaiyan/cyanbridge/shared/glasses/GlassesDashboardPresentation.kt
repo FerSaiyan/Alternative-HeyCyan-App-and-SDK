@@ -60,7 +60,26 @@ data class GlassesDashboardUiState(
     val wifiAdbDebug: WifiAdbDebugUiState = WifiAdbDebugUiState(),
     val showTransportPermissionDialog: Boolean = false,
     val transportPermissionFeature: String? = null,
+    val lensMoo: LensMooUiState? = null,
 )
+
+data class LensMooUiState(
+    val isConnected: Boolean = false,
+    val isBusy: Boolean = false,
+    val assistantRunning: Boolean = false,
+    val assistantReady: Boolean = false,
+    val previewRunning: Boolean = false,
+    val hasOwnerId: Boolean = false,
+    val status: String = "",
+    val deviceName: String? = null,
+)
+
+enum class LensMooDashboardCommand {
+    CONFIGURE,
+    ENABLE_ASSISTANT,
+    DISABLE_ASSISTANT,
+    OPEN_AI_SETTINGS,
+}
 
 data class GlassesTransferUiState(
     val isVisible: Boolean = false,
@@ -215,6 +234,7 @@ data class WifiAdbDebugUiState(
 
 /** User intents emitted by the portable dashboard presentation. */
 sealed interface GlassesDashboardAction {
+    data class LensMoo(val command: LensMooDashboardCommand) : GlassesDashboardAction
     data class Navigate(val destination: AppDestination) : GlassesDashboardAction
     data object Scan : GlassesDashboardAction
     data object Reconnect : GlassesDashboardAction

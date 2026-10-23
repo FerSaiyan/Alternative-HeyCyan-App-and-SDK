@@ -1,12 +1,12 @@
 # Experimental LensMoo / XKOENPRO support
 
-This adds a separate Classic Bluetooth SPP transport and Android screen for LensMoo glasses. It does not use the HeyCyan BLE/Wi-Fi protocol or vendor AAR for this device family.
+This adds a Classic Bluetooth SPP transport for LensMoo glasses, using the same CyanBridge dashboard, appearance settings, and five-tab navigation as the other device families. It does not use the HeyCyan BLE/Wi-Fi protocol or vendor AAR for this device family.
 
 ## Setup
 
 1. Pair the glasses in Android Bluetooth settings. Enable the calls profile for microphone and speaker use.
 2. Select the LensMoo device profile in CyanBridge. Device names containing `XKOEN` or `LensMoo` are recognized automatically.
-3. In the LensMoo screen, select the bonded device and enter its existing LensMoo owner ID. This is the device authorization ID, not the LensMoo account password. Provisioning or discovering that ID is outside this implementation; it currently requires manual configuration.
+3. In the glasses dashboard, select the bonded device and open LensMoo device settings to enter its existing owner ID. This is the device authorization ID, not the LensMoo account password. Provisioning or discovering that ID is outside this implementation; it currently requires manual configuration.
 4. For AI, configure and enable your own OpenAI-compatible endpoint and select Local Agent. The image and transcript are sent only to that configured backend; the LensMoo path does not silently fall back to another provider.
 5. Enable the pocket assistant while the application is visible and grant microphone/Bluetooth permissions. Its foreground notification has a stop action. It can then receive the physical AI button while the phone screen is locked.
 
@@ -62,6 +62,6 @@ Validated with XKOENPRO-12 firmware 1.0.2 and a Pixel 11 Pro XL running Android 
 - Consecutive questions and a successful question after over 10 minutes idle. Earlier runs exposed intermittent media/camera failures; the shutdown wait fix was subsequently exercised with an actual `2` then `0` transition.
 - 51 seconds of continuous test speech through SCO, followed by a complete 49-second real AI answer heard in the glasses. Android reported CyanBridge as the active playback owner throughout the test.
 
-No firmware flashing, OTA, native video download, high-resolution live preview, wake-word recognition, or all-day battery validation is included. Other firmware, phone models, BLE headsets, Meta-enabled builds, and vendor SDK compatibility have not been hardware-validated here. The initial LensMoo screen is a separate Russian-language experimental UI rather than a complete localized shared dashboard integration.
+No firmware flashing, OTA, native video download, high-resolution live preview, wake-word recognition, or all-day battery validation is included. Other firmware, phone models, BLE headsets, Meta-enabled builds, and vendor SDK compatibility have not been hardware-validated here. The LensMoo controls are localized in English and Russian and use the shared dashboard. The owner-ID field is only exposed in a password-style device-settings dialog; preview opens explicitly in a separate video window and is cancelled when that window closes.
 
 Raw Bluetooth captures, original images/audio, credentials, owner IDs, API keys, and locally built APKs are intentionally not part of this change. The owner preference is excluded from Android backup; runtime diagnostics log protocol metadata and lengths rather than credential or speech payloads.

@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import com.fersaiyan.cyanbridge.shared.icons.AppIcon
 import com.fersaiyan.cyanbridge.shared.icons.imageVector
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
@@ -47,6 +48,7 @@ fun CyanBridgeNavShell(
                 AppDestination.entries.forEach { destination ->
                     val selected = destination == currentDestination
                     NavigationBarItem(
+                        modifier = Modifier.testTag("nav_${destination.name.lowercase()}"),
                         selected = selected,
                         onClick = { onNavigate(destination) },
                         icon = {

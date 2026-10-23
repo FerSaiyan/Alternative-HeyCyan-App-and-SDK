@@ -23,6 +23,8 @@ class LensMooHandsFreeService : Service() {
     companion object {
         @Volatile var running = false
             private set
+        private val mutableUiState=kotlinx.coroutines.flow.MutableStateFlow(LensMooServiceUiState())
+        val uiState:kotlinx.coroutines.flow.StateFlow<LensMooServiceUiState> = mutableUiState
         const val ACTION_CHECK = "com.fersaiyan.cyanbridge.lensmoo.CHECK_CONNECTION"
         const val ACTION_STOP = "com.fersaiyan.cyanbridge.lensmoo.STOP_HANDSFREE"
         private const val CHANNEL = "lensmoo_handsfree"
@@ -194,6 +196,11 @@ class LensMooHandsFreeService : Service() {
             .apply { if (ongoing) { addAction(0, "Проверить связь", check); addAction(0, "Выключить", stop) } }.build()
     }
     private fun report(text: String) {
+        mutableUiState.value=LensMooServiceUiState(
+            running=running,ready=ready,busy=gate.phase!=LensMooTurnGate.Phase.IDLE,
+            batteryPercent=batteryStatus.latest()?.takeIf { batteryStatus.isFresh(SystemClock.elapsedRealtime(),ready) }?.percent,
+            message=text,
+        )
         // Only locally generated status/error messages enter this method; never transcript or model output.
         android.util.Log.i("LensMooHandsFree", "phase=${gate.phase} ready=$ready status=$text")
         if (foreground && !destroyed) getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification(text))
@@ -384,6 +391,7 @@ class LensMooHandsFreeService : Service() {
     }
     override fun onDestroy() {
         destroyed = true; ready = false; running = false; gate.close()
+        mutableUiState.value=LensMooServiceUiState(message=retainedError ?: "Помощник выключен")
         session?.close(); session = null
         voice?.close(); voice = null
         deadline?.cancel(); healthJob?.cancel(); connectionJob?.cancel(); scope.cancel()

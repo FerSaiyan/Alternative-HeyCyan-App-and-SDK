@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.devices.tunebuds
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 
 internal fun GlassesDashboardAction.isSupportedForTuneBudsDashboard(): Boolean = when (this) {
+    is GlassesDashboardAction.LensMoo -> false
     is GlassesDashboardAction.Navigate,
     GlassesDashboardAction.Scan,
     GlassesDashboardAction.Reconnect,

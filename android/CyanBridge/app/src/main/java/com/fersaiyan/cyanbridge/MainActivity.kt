@@ -690,6 +690,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun openLensMooIfSelected(): Boolean {
         if (!isLensMooSelected()) return false
         startActivity(Intent(this, com.fersaiyan.cyanbridge.lensmoo.LensMooActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra("address", DeviceProfileStore.loadLastSelected(this)?.macAddress.orEmpty()))
         finish()
         return true
@@ -1731,6 +1732,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
         when (action) {
+            is GlassesDashboardAction.LensMoo -> Unit // Handled by the LensMoo dashboard host.
             is GlassesDashboardAction.Navigate -> navigateToDestination(action.destination)
             GlassesDashboardAction.Scan -> {
                 if (isMoyoungW620Selected()) {

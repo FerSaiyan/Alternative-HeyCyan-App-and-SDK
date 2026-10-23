@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lensmoo_camera_on_demand">Камера выключена, пока не запрошено фото или предпросмотр. Остановите предпросмотр, чтобы выключить камеру.</string>
+    <string name="lensmoo_owner_required">Настройте ID владельца перед использованием очков.</string>
+    <string name="lensmoo_configure">Настройки подключения LensMoo</string>
+    <string name="lensmoo_assistant">Ассистент очков</string>
+    <string name="lensmoo_assistant_ready">Ассистент готов</string>
+    <string name="lensmoo_assistant_starting">Ассистент подключается</string>
+    <string name="lensmoo_assistant_stopped">Ассистент остановлен</string>
+    <string name="lensmoo_enable_assistant">Включить</string>
+    <string name="lensmoo_ai_settings">Настройки ИИ-провайдера</string>
+</resources>
