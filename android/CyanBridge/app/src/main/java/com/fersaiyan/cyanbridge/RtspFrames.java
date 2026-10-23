@@ -46,6 +46,7 @@ public final class RtspFrames implements Closeable {
     private static final int MAX_ACCESS_UNIT_BYTES = 4 * 1024 * 1024;
     private static final int MAX_JPEG_BYTES = 1_000_000;
     private static final long MAX_DECODED_PIXELS = 4_000_000L;
+    private static final int MAX_FRAME_DIMENSION = 960;
 
     private final String host;
     private final String streamUrl;
@@ -470,40 +471,37 @@ public final class RtspFrames implements Closeable {
         ByteBuffer yPlane = planes[0].getBuffer();
         ByteBuffer uPlane = planes[1].getBuffer();
         ByteBuffer vPlane = planes[2].getBuffer();
-        int[] rgb = new int[width * height];
-        for (int row = 0; row < height; row++) {
-            int sourceY = (row + crop.top) * planes[0].getRowStride() +
+        double scale = Math.min(1.0, MAX_FRAME_DIMENSION / (double) Math.max(width, height));
+        int outputWidth = Math.max(1, (int) Math.round(width * scale));
+        int outputHeight = Math.max(1, (int) Math.round(height * scale));
+        int[] rgb = new int[outputWidth * outputHeight];
+        for (int row = 0; row < outputHeight; row++) {
+            int sourceRow = Math.min(height - 1, (int) ((long) row * height / outputHeight));
+            int sourceY = (sourceRow + crop.top) * planes[0].getRowStride() +
                     crop.left * planes[0].getPixelStride();
-            int sourceU = ((row + crop.top) / 2) * planes[1].getRowStride() +
+            int sourceU = ((sourceRow + crop.top) / 2) * planes[1].getRowStride() +
                     (crop.left / 2) * planes[1].getPixelStride();
-            int sourceV = ((row + crop.top) / 2) * planes[2].getRowStride() +
+            int sourceV = ((sourceRow + crop.top) / 2) * planes[2].getRowStride() +
                     (crop.left / 2) * planes[2].getPixelStride();
-            for (int column = 0; column < width; column++) {
-                int y = yPlane.get(sourceY + column * planes[0].getPixelStride()) & 0xff;
-                int u = uPlane.get(sourceU + (column / 2) * planes[1].getPixelStride()) & 0xff;
-                int v = vPlane.get(sourceV + (column / 2) * planes[2].getPixelStride()) & 0xff;
+            for (int column = 0; column < outputWidth; column++) {
+            int sourceColumn = Math.min(width - 1, (int) ((long) column * width / outputWidth));
+            int y = yPlane.get(sourceY + sourceColumn * planes[0].getPixelStride()) & 0xff;
+            int u = uPlane.get(sourceU + (sourceColumn / 2) * planes[1].getPixelStride()) & 0xff;
+            int v = vPlane.get(sourceV + (sourceColumn / 2) * planes[2].getPixelStride()) & 0xff;
                 int luminance = Math.max(0, y - 16);
                 int red = clamp((298 * luminance + 409 * (v - 128) + 128) >> 8);
                 int green = clamp((298 * luminance - 100 * (u - 128) - 208 * (v - 128) + 128) >> 8);
                 int blue = clamp((298 * luminance + 516 * (u - 128) + 128) >> 8);
-                rgb[row * width + column] = 0xff000000 | (red << 16) | (green << 8) | blue;
+                rgb[row * outputWidth + column] = 0xff000000 | (red << 16) | (green << 8) | blue;
             }
         }
 
-        Bitmap bitmap = Bitmap.createBitmap(rgb, width, height, Bitmap.Config.ARGB_8888);
-        if (width > 1600 || height > 1200) {
-            float scale = Math.min(1600f / width, 1200f / height);
-            Bitmap resized = Bitmap.createScaledBitmap(
-                    bitmap, Math.max(1, Math.round(width * scale)),
-                    Math.max(1, Math.round(height * scale)), true);
-            bitmap.recycle();
-            bitmap = resized;
-        }
+        Bitmap bitmap = Bitmap.createBitmap(rgb, outputWidth, outputHeight, Bitmap.Config.ARGB_8888);
 
         try {
             ByteArrayOutputStream compressed = new ByteArrayOutputStream();
             while (true) {
-                for (int quality = 85; quality >= 35; quality -= 10) {
+                for (int quality = 75; quality >= 45; quality -= 10) {
                     compressed.reset();
                     if (!bitmap.compress(Bitmap.CompressFormat.JPEG, quality, compressed)) {
                         throw new IOException("JPEG encoder rejected a decoded frame");

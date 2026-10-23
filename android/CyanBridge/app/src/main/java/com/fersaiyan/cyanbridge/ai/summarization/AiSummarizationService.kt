@@ -28,17 +28,17 @@ class AiSummarizationService(
         }
 
         val prompt = buildString {
-            append("Analyze the following meeting transcript and generate factual Markdown-ready notes.\n")
-            request.hintTitle?.let { append("Title context: $it\n") }
-            append("Use ${request.minSummaryBullets}-${request.maxSummaryBullets} concise bullet points for the key summary. ")
-            append("Do not invent details, speakers, decisions, or tasks.\n")
-            append("Respond with:\n")
-            append("Title: <concise summary title>\n")
-            append("Key Bullets:\n- <bullet 1>\n- <bullet 2>\n")
-            append("Action Items:\n- <action 1>\n")
-            append("Key Decisions:\n- <decision 1>\n")
-            append("Open Questions:\n- <question 1>\n\n")
-            append("Transcript:\n$transcript")
+            append("متن زیر را تحلیل کن و یادداشت‌هایی دقیق و مبتنی بر واقعیت به زبان فارسی تولید کن.\n")
+            request.hintTitle?.let { append("زمینهٔ عنوان: $it\n") }
+            append("خلاصه را با ${request.minSummaryBullets} تا ${request.maxSummaryBullets} نکتهٔ کوتاه و فهرست‌وار بنویس. ")
+            append("جزئیات، گویندگان، تصمیم‌ها یا کارهایی را که در متن نیستند اضافه نکن.\n")
+            append("پاسخ را با ساختار زیر و با حفظ دقیق عنوان‌های انگلیسی ارائه کن:\n")
+            append("Title: <عنوان کوتاه خلاصه>\n")
+            append("Key Bullets:\n- <نکتهٔ اول>\n- <نکتهٔ دوم>\n")
+            append("Action Items:\n- <اقدام اول>\n")
+            append("Key Decisions:\n- <تصمیم اول>\n")
+            append("Open Questions:\n- <پرسش اول>\n\n")
+            append("رونوشت:\n$transcript")
         }
 
         val response = CliRelayClient.chat(

@@ -31,7 +31,8 @@ internal fun GlassesDashboardAction.isSupportedForTuneBudsDashboard(): Boolean =
     GlassesDashboardAction.DismissTransportPermissionDialog,
     GlassesDashboardAction.RequestTransportPermission,
     is GlassesDashboardAction.SelectImageThumbnailQuality,
-    is GlassesDashboardAction.SetGeminiLiveImageDelay -> true
+    is GlassesDashboardAction.SetGeminiLiveImageDelay,
+    is GlassesDashboardAction.SetPhotoLedSimulation -> false
 
     is GlassesDashboardAction.SetAiWakeWordRoute,
     GlassesDashboardAction.RefreshRecordingSettings,

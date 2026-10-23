@@ -352,9 +352,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun speakVision(text: String, onDone: (() -> Unit)? = null) {
+        val languageResult = tts?.setLanguage(
+            Locale.forLanguageTag(ImageQuestionDefaults.RESPONSE_LANGUAGE_TAG),
+        )
+        if (
+            languageResult == TextToSpeech.LANG_MISSING_DATA ||
+            languageResult == TextToSpeech.LANG_NOT_SUPPORTED
+        ) {
+            Log.w(TAG, "Persian text-to-speech voice is unavailable")
+            Toast.makeText(
+                this,
+                "صدای فارسی نصب نیست؛ پاسخ را می‌توانید روی صفحه بخوانید.",
+                Toast.LENGTH_LONG,
+            ).show()
+            try {
+                onDone?.invoke()
+            } finally {
+                AudioSessionCoordinator.markIdle()
+            }
+            return
+        }
         speak(
             text = text,
-            languageTag = ImageQuestionPreferences.get(this).appLanguageTag,
+            languageTag = null,
             utteranceId = null,
             onDone = onDone,
             streamType = null,
@@ -418,7 +438,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val QUERY_MAX_TOTAL_CONTEXT_CHARS = 6500
 
         private const val IMAGE_QUESTION_MAX_IMAGE_AGE_MS = 3L * 60L * 1000L
-        private const val LIVE_PREVIEW_AI_INTERVAL_MS = 5_000L
+        private const val LIVE_PREVIEW_AI_INTERVAL_MS = 2_000L
         private const val P2P_GROUP_REMOVAL_RETRY_MS = 1_000L
         private const val P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS = 5_000L
         private const val P2P_GROUP_DISCONNECT_TIMEOUT_MS = 5_000L
@@ -1406,6 +1426,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             action is GlassesDashboardAction.SelectImageThumbnailQuality ||
             action is GlassesDashboardAction.SetGeminiLiveImageDelay ||
             action is GlassesDashboardAction.SetAiWakeWordRoute ||
+            action is GlassesDashboardAction.SetPhotoLedSimulation ||
             action == GlassesDashboardAction.DismissFirmwarePatchRequest
         ) {
             return false
@@ -1517,6 +1538,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             is GlassesDashboardAction.SetGeminiLiveImageDelay -> {
                 val seconds = GeminiLiveVisionPreferences.setImageDelaySeconds(this, action.seconds)
                 updateDashboardState { state -> state.copy(geminiLiveImageDelaySeconds = seconds) }
+            }
+            is GlassesDashboardAction.SetPhotoLedSimulation -> {
+                com.fersaiyan.cyanbridge.media.GlassesMediaPrefs
+                    .setPhotoLedSimulationEnabled(this, action.enabled)
+                updateDashboardState { state -> state.copy(photoLedSimulationEnabled = action.enabled) }
             }
             GlassesDashboardAction.TestVoiceQuestion -> binding.btnTestHijackVoice.performClick()
             GlassesDashboardAction.TestImageQuestion -> binding.btnTestHijackImage.performClick()
@@ -3321,10 +3347,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun stopLivePreview() {
-        livePreviewManager.stop()
-        livePreviewDialog?.let { dialog ->
-            livePreviewDialog = null
-            dialog.dismiss()
+        try {
+            livePreviewManager.stop()
+        } catch (error: Exception) {
+            Log.e("LivePreview", "Failed to stop live preview", error)
+            Toast.makeText(this, "Could not fully stop Live Preview.", Toast.LENGTH_LONG).show()
+        } finally {
+            livePreviewDialog?.let { dialog ->
+                livePreviewDialog = null
+                dialog.dismiss()
+            }
         }
     }
 
@@ -3378,7 +3410,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun showRtspPlayerDialog(
         streamUrl: String,
         player: androidx.media3.exoplayer.ExoPlayer? = null,
-        onClose: () -> Unit = livePreviewManager::stop,
+        onClose: () -> Unit = ::stopLivePreview,
     ) {
         Log.i("LivePreview", "showRtspPlayerDialog: $streamUrl")
         if (livePreviewDialog?.isShowing == true) {
@@ -3474,19 +3506,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         analyzeWithAiSwitch.setOnCheckedChangeListener { _, enabled ->
             if (enabled) {
                 aiResponseView.visibility = View.VISIBLE
-                aiResponseView.text = if (RemoteOpenAiPrefs.isActive(this)) {
-                    "Disable the remote AI endpoint to analyze with the local model."
-                } else {
-                    "Waiting for the first frame..."
-                }
-                if (!RemoteOpenAiPrefs.isActive(this)) {
-                    startLivePreviewAiAnalysis(
-                        streamUrl = streamUrl,
-                        responseView = aiResponseView,
-                        analyzeSwitch = analyzeWithAiSwitch,
-                        dialogProvider = { dialogForAnalysis },
-                    )
-                }
+                aiResponseView.text = "Waiting for the first frame..."
+                startLivePreviewAiAnalysis(
+                    streamUrl = streamUrl,
+                    responseView = aiResponseView,
+                    analyzeSwitch = analyzeWithAiSwitch,
+                    dialogProvider = { dialogForAnalysis },
+                )
             } else {
                 stopLivePreviewAiAnalysis()
                 aiResponseView.visibility = View.GONE
@@ -3501,20 +3527,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             .create()
         dialogForAnalysis = dialog
         dialog.setOnDismissListener {
-            stopLivePreviewAiAnalysis()
-            localStreamView?.apply {
-                stopLoading()
-                destroy()
+            runLivePreviewCleanupStep("stop AI analysis") {
+                stopLivePreviewAiAnalysis()
+            }
+            localStreamView?.let { webView ->
+                runLivePreviewCleanupStep("stop WebView loading") { webView.stopLoading() }
+                runLivePreviewCleanupStep("destroy WebView") { webView.destroy() }
             }
             if (livePreviewDialog === dialog) {
                 Log.i("LivePreview", "Dialog: dismissed")
                 livePreviewDialog = null
-                onClose()
+                runLivePreviewCleanupStep("stop preview resources", onClose)
             }
         }
         livePreviewDialog = dialog
         dialog.show()
         Log.i("LivePreview", "Dialog: shown")
+    }
+
+    private inline fun runLivePreviewCleanupStep(step: String, cleanup: () -> Unit) {
+        try {
+            cleanup()
+        } catch (error: Exception) {
+            Log.e("LivePreview", "Failed to $step during dialog cleanup", error)
+        }
     }
 
     private fun startLivePreviewAiAnalysis(
@@ -3526,21 +3562,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         stopLivePreviewAiAnalysis()
         val previewJob = lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                var nextCaptureAt = android.os.SystemClock.elapsedRealtime()
+                val priorSceneObservations = mutableListOf<String>()
                 var analysisJob: Job? = null
+                var hasAttemptedCapture = false
                 while (isActive && analyzeSwitch.isChecked && dialogProvider()?.isShowing == true) {
-                    val waitMs = nextCaptureAt - android.os.SystemClock.elapsedRealtime()
-                    if (waitMs > 0) delay(waitMs)
                     analysisJob?.join()
-                    nextCaptureAt =
-                        android.os.SystemClock.elapsedRealtime() + LIVE_PREVIEW_AI_INTERVAL_MS
+                    if (hasAttemptedCapture) delay(LIVE_PREVIEW_AI_INTERVAL_MS)
+                    hasAttemptedCapture = true
                     try {
-                        if (RemoteOpenAiPrefs.isActive(this@MainActivity)) {
-                            responseView.text =
-                                "Disable the remote AI endpoint to analyze with the local model."
-                            continue
-                        }
                         val jpeg = MjpegSnapshotCapture.capture(streamUrl)
+                        val previousObservations = priorSceneObservations.toList()
                         responseView.text = "Analyzing live frame..."
                         analysisJob = launch(Dispatchers.IO) {
                             var snapshot: File? = null
@@ -3548,8 +3579,27 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                 val snapshotFile = File.createTempFile("live-preview-ai-", ".jpg", cacheDir)
                                 snapshot = snapshotFile
                                 snapshotFile.writeBytes(jpeg)
-                                val prompt = resolveImageQuestionPrompt(userQuestion = null)
+                                val basePrompt = resolveImageQuestionPrompt(userQuestion = null)
                                     .forRoute(ImageQuestionRoute.LOCAL_GEMMA)
+                                val prompt = buildString {
+                                    append(basePrompt)
+                                    append(
+                                        "\n\nYou are observing a continuous live scene. For this frame, " +
+                                            "give an integer count of visible people, identify recognizable objects, " +
+                                            "and summarize meaningful changes from recent frames. Note occlusion or " +
+                                            "uncertainty instead of guessing. Do not claim people are the same person " +
+                                            "across frames unless the visual evidence is clear. Keep the answer concise.\n",
+                                    )
+                                    if (previousObservations.isNotEmpty()) {
+                                        append("Recent frame observations, oldest first:\n")
+                                        previousObservations.forEachIndexed { index, observation ->
+                                            append("${index + 1}. ")
+                                            append(observation)
+                                            append('\n')
+                                        }
+                                    }
+                                    append("Analyze the attached image as the current frame.")
+                                }
                                 val streamedResponse = StringBuilder()
                                 val reply = runChosenProviderQuery(
                                     userPrompt = prompt,
@@ -3571,6 +3621,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                 )
                                 coroutineContext.ensureActive()
                                 withContext(Dispatchers.Main) {
+                                    val observation = reply.trim().take(500)
+                                    if (observation.isNotEmpty()) {
+                                        priorSceneObservations.add(observation)
+                                        while (priorSceneObservations.size > 3) {
+                                            priorSceneObservations.removeAt(0)
+                                        }
+                                    }
                                     if (analyzeSwitch.isChecked && dialogProvider()?.isShowing == true) {
                                         responseView.text = reply.ifBlank {
                                             "The local model returned an empty response."
@@ -4196,7 +4253,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         onLaunched: (() -> Unit)? = null,
     ) {
         val languageTag = recognitionLanguageTag()
-        // Base image question without strict "Answer only in X" - Live systemInstruction handles 97-language switching permissively.
+        // Live uses the base image question; its systemInstruction enforces Persian responses.
         // Single-shot paths keep strict Resolver; Live uses baseQuestion as imagePrompt, while initialPrompt is the user's actual turn.
         val baseImagePrompt = ImageQuestionPromptResolver.baseQuestion(
             settings = ImageQuestionPreferences.get(this),
@@ -4272,8 +4329,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         Log.i("AIHijack", "Running image query with RAG disabled for chosen provider $providerType: $imagePath")
 
         if (shouldUseGeminiLiveQuestions(providerType)) {
-            // Live systemInstruction is permissive (97 languages, switch on request) - use base question
-            // without strict "Answer only in X". Single-shot PRO_RELAY keeps strict via forRoute.
+            // Live uses the base question; single-shot routes also append the Persian response instruction.
             val liveBasePrompt = ImageQuestionPromptResolver.baseQuestion(
                 settings = ImageQuestionPreferences.get(this),
                 userQuestion = null,
@@ -4296,7 +4352,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         val localSpeechSessionId = if (providerType == AgentProviderType.LOCAL_AGENT) {
             localSpeechSessionManager.startNewSession(
-                languageTag = ImageQuestionPreferences.get(this).appLanguageTag,
+                languageTag = ImageQuestionDefaults.RESPONSE_LANGUAGE_TAG,
                 onSpeechCompleted = onSpeechCompleted,
             )
         } else {
@@ -4318,23 +4374,28 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         )
                         if (visionResult.isFailure) {
                             val throwable = visionResult.exceptionOrNull() ?: Exception("unknown error")
-                            val localized = RelayErrorLocalizer.localizedMessage(this@MainActivity, throwable)
                             val isQuota = RelayErrorLocalizer.isQuotaError(throwable)
                             Log.e("AIHijack", "Image query failed: ${throwable.message}")
                             runOnUiThread {
-                                Toast.makeText(this@MainActivity, if (isQuota) localized else "Vision error: ${throwable.message?.take(80) ?: "unknown error"}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    if (isQuota) "سهمیه یا اعتبار حساب برای تحلیل تصویر کافی نیست."
+                                    else "خطا در تحلیل تصویر. لطفاً دوباره تلاش کنید.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
                             }
-                            if (isQuota) localized else "I couldn't analyze the image. Please try again."
+                            if (isQuota) "سهمیه یا اعتبار حساب برای تحلیل تصویر کافی نیست."
+                            else "متأسفانه نتوانستم تصویر را تحلیل کنم. لطفاً دوباره تلاش کنید."
                         } else {
                             val visionReply = visionResult.getOrNull()?.trim() ?: ""
                             if (visionReply.isBlank()) {
-                                "I couldn't analyze that image right now. Please try again."
+                                "پاسخی از مدل دریافت نشد. لطفاً دوباره تلاش کنید."
                             } else if (looksLikeVisionFailed(visionReply)) {
                                 Log.w("AIHijack", "Vision relay couldn't process image. Reply: ${visionReply.take(100)}")
                                 runOnUiThread {
-                                    Toast.makeText(this@MainActivity, "Vision model couldn't process image", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(this@MainActivity, "مدل هوش مصنوعی نتوانست تصویر را پردازش کند.", Toast.LENGTH_LONG).show()
                                 }
-                                "I couldn't analyze the image. Please try again."
+                                "مدل هوش مصنوعی نتوانست تصویر را تحلیل کند. لطفاً دوباره تلاش کنید."
                             } else {
                                 visionReply
                             }
@@ -4372,17 +4433,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         )
                         if (visionResult.isFailure) {
                             val throwable = visionResult.exceptionOrNull() ?: Exception("unknown error")
-                            val localized = RelayErrorLocalizer.localizedMessage(this@MainActivity, throwable)
                             val isQuota = RelayErrorLocalizer.isQuotaError(throwable)
                             Log.e("AIHijack", "Image query failed: ${throwable.message}")
                             runOnUiThread {
-                                Toast.makeText(this@MainActivity, if (isQuota) localized else "Vision error: ${throwable.message?.take(80) ?: "unknown error"}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    if (isQuota) "سهمیه یا اعتبار حساب برای تحلیل تصویر کافی نیست."
+                                    else "خطا در تحلیل تصویر. لطفاً دوباره تلاش کنید.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
                             }
-                            if (isQuota) localized else "I couldn't analyze the image. Please try again."
+                            if (isQuota) "سهمیه یا اعتبار حساب برای تحلیل تصویر کافی نیست."
+                            else "متأسفانه نتوانستم تصویر را تحلیل کنم. لطفاً دوباره تلاش کنید."
                         } else {
                             val visionReply = visionResult.getOrNull()?.trim() ?: ""
                             if (visionReply.isBlank()) {
-                                "I couldn't analyze that image right now. Please try again."
+                                "پاسخی از مدل دریافت نشد. لطفاً دوباره تلاش کنید."
                             } else {
                                 visionReply
                             }
@@ -4391,7 +4457,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
 
                 val replyToSpeak = finalReply.ifBlank {
-                    "I couldn't generate an answer for that image. Please try again."
+                    "پاسخی برای این تصویر تولید نشد. لطفاً دوباره تلاش کنید."
                 }
                 if (providerType == AgentProviderType.LOCAL_AGENT && finalReply.isBlank()) {
                     localSpeechSessionId?.let { sessionId ->
@@ -4403,10 +4469,31 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     "Image query completed provider=$providerType replyLength=${replyToSpeak.length}",
                 )
                 runOnUiThread {
+                    showImageQuestionResponse(replyToSpeak)
                     if (providerType == AgentProviderType.LOCAL_AGENT) {
                         localSpeechSessionId?.let(localSpeechSessionManager::onModelGenerationCompleted)
                     } else {
                         speakVision(replyToSpeak, onDone = onSpeechCompleted)
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                Log.i("AIHijack", "Image query cancelled provider=$providerType")
+                runOnUiThread { finishAiQuestionForegroundWork() }
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e("AIHijack", "Image query crashed provider=$providerType", error)
+                val failureReply = "متأسفانه در تحلیل تصویر مشکلی پیش آمد. لطفاً دوباره تلاش کنید."
+                runOnUiThread {
+                    finishAiQuestionForegroundWork()
+                    error.message?.take(500)?.takeIf { it.isNotBlank() }?.let { diagnostic ->
+                        Toast.makeText(this@MainActivity, diagnostic, Toast.LENGTH_LONG).show()
+                    }
+                    showImageQuestionResponse(failureReply)
+                    if (localSpeechSessionId != null) {
+                        localSpeechSessionManager.onModelTokenDelta(failureReply, localSpeechSessionId)
+                        localSpeechSessionManager.onModelGenerationCompleted(localSpeechSessionId)
+                    } else {
+                        speakVision(failureReply, onDone = onSpeechCompleted)
                     }
                 }
             } finally {
@@ -4416,6 +4503,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         localSpeechSessionId?.let { sessionId ->
             localSpeechSessionManager.attachGenerationJob(sessionId, queryJob)
         }
+    }
+
+    private fun showImageQuestionResponse(response: String) {
+        if (isFinishing || isDestroyed || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+
+        AlertDialog.Builder(this)
+            .setTitle("توضیح تصویر")
+            .setMessage(response)
+            .setPositiveButton("بستن", null)
+            .show()
     }
 
     private fun cancelLocalStreamingSpeech(reason: String) {
@@ -6490,6 +6587,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 showEyevueControls = model.isVisible(GlassesManagerGating.Action.EYEVUE_CONTROLS),
                 showTuneBudsControls = model.isVisible(GlassesManagerGating.Action.TUNEBUDS_CONTROLS),
                 showCaptureSettings = model.isVisible(GlassesManagerGating.Action.CAPTURE_SETTINGS),
+                photoLedSimulationEnabled = com.fersaiyan.cyanbridge.media.GlassesMediaPrefs
+                    .isPhotoLedSimulationEnabled(this),
                 showMediaSync = true,
                 showAiWakeWordRouting = model.isVisible(GlassesManagerGating.Action.AI_WAKE_WORD_ROUTING),
                 showAdvancedControls = model.isVisible(GlassesManagerGating.Action.ADVANCED_CONTROLS),
@@ -11236,10 +11335,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 Log.i("DataDownload", "Ignoring error=255 reset (source=$source) outside download session")
                 return
             }
-            lastP2pResetAtMs = now
-            stopOfficialFlowForRetry(
-                "The glasses reported Wi-Fi Direct error 255.",
-                resetDeviceP2p = true,
+            Log.i(
+                "DataDownload",
+                "HeyCyan-compatible flow observed noisy error=255 (source=$source); " +
+                    "keeping the session alive for subsequent IP/P2P recovery",
             )
             return
         }

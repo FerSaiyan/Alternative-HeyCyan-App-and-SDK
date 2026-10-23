@@ -76,7 +76,7 @@ data class SettingsUiState(
     val appLanguageLabel: String = "System default",
     val providerType: AgentProviderType = AgentProviderType.PRO_SUBSCRIPTION,
     val taskerIntegrationsAvailable: Boolean = false,
-    val defaultImageQuestion: String = "Give me a concise description of the image",
+    val defaultImageQuestion: String = "این تصویر را دقیق و جامع به زبان فارسی توصیف کن.",
     val memoryMode: MemoryPrivacyMode = MemoryPrivacyMode.PRIVATE_LOCAL,
     val memoryModeAvailability: String = "",
     val memorySyncStatus: String = "",

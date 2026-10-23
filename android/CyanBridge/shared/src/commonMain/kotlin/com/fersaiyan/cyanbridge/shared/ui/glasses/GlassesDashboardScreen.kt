@@ -710,6 +710,10 @@ private fun CoreGlassesControls(
         if (state.showCaptureSettings) {
             WearingDetectionControl(state, onAction)
             Spacer(Modifier.height(8.dp))
+            if (state.showHeyCyanControls) {
+                PhotoLedSimulationControl(state, onAction)
+                Spacer(Modifier.height(8.dp))
+            }
         }
         SectionTitle(stringResource(Res.string.dashboard_media_controls))
         ActionRow(
@@ -790,6 +794,35 @@ private fun CoreGlassesControls(
                 secondaryStyle = ActionButtonStyle.Destructive,
             )
         }
+    }
+}
+
+@Composable
+private fun PhotoLedSimulationControl(
+    state: GlassesDashboardUiState,
+    onAction: (GlassesDashboardAction) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("photo_led_simulation_control"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(stringResource(Res.string.dashboard_photo_led_simulation), style = MaterialTheme.typography.titleSmall)
+            Text(
+                stringResource(Res.string.dashboard_photo_led_simulation_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = state.photoLedSimulationEnabled,
+            onCheckedChange = { enabled ->
+                onAction(GlassesDashboardAction.SetPhotoLedSimulation(enabled))
+            },
+            modifier = Modifier.testTag("photo_led_simulation_switch"),
+        )
     }
 }
 

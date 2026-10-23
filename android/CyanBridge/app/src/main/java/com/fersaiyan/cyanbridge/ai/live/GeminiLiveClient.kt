@@ -24,6 +24,7 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalGenerationSettings
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -636,18 +637,18 @@ class GeminiLiveClient(
             // must include the same systemInstruction + contextWindowCompression to avoid hanging in CONNECTING
             // (seen when setup omitted these and server waited for matching setup).
             val cleanPrompt = lastImagePrompt.trim().replace(Regex("\\s+"), " ").take(400)
-                .ifBlank { "Describe what you can see and answer the user's question." }
+                .ifBlank { "این تصویر را دقیق و کوتاه به زبان فارسی توصیف کن و به پرسش کاربر پاسخ بده." }
             val systemPrompt = lastSystemPrompt.ifBlank { ProSubscriptionAiPrefs.getSystemPrompt(appContext) }
             // Replicate resolveAssistantSystemPrompt + buildLiveSystemInstruction
             val assistantPrompt = systemPrompt.trim().take(4000).ifBlank {
-                "You are CyanBridge's assistant for smart glasses. Answer the user's request directly. Give the most useful answer first in one clear sentence, then stop when the request is fully answered. For simple spoken requests, usually use 1-3 short sentences; for complex requests, include the important explanation, steps, caveats, and safety information needed. Use the shortest complete answer. Avoid filler, long preambles, repetition, and unnecessary formatting unless the user asks for them. Use the latest glasses image as visual context when the user refers to what they see."
+                LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT
             }
             val systemInstructionText = listOf(
                 assistantPrompt,
-                "You are Gemini Live in CyanBridge smart glasses.",
-                "You support 97 languages. Respond in the language the user is currently speaking, defaulting to ${lastLanguage} only when unclear. Switch immediately when the user asks to speak another language.",
-                "Keep spoken answers concise, helpful, and safe for a hands-free conversation.",
-                "Default image question when the user gives no specific question and you have a fresh glasses image: $cleanPrompt"
+                "شما دستیار زندهٔ سیان‌بریج برای عینک هوشمند هستید.",
+                "همیشه و منحصراً به زبان فارسی (Farsi) پاسخ بده و توصیف کن.",
+                "پاسخ‌های گفتاری را برای مکالمهٔ بدون دخالت دست کوتاه، مفید و ایمن نگه دار.",
+                "پرسش پیش‌فرض دربارهٔ تصویر هنگام نبود پرسش مشخص و وجود تصویر تازه از عینک: $cleanPrompt"
             ).joinToString(" ")
             val systemInstruction = JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstructionText)))
             val contextWindowCompression = JSONObject()

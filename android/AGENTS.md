@@ -125,6 +125,10 @@ The same APK passed a Clearer regression with a valid 192x144, 10,221-byte JPEG 
 ## Error handling notes
 
 - `loadData[6] == 0x09` with error 255 is common and not necessarily fatal.
+- On Samsung Android 10+, P2P first negotiates with the automatic group-owner band, then
+  tries 5 GHz as a bounded fallback. The AIMB-G1 remains on the automatic-band path first.
+- Discovery timeouts retry up to two scans without resetting the glasses when the active flow
+  has disabled device resets (as live preview does).
 - Resetting P2P while an HTTP transfer is active can drop the connection; CyanBridge suppresses aggressive resets during active transfer.
 - Disconnect/retry logic is split between:
   - Wi-Fi P2P state machine (`WifiP2pManagerSingleton`).
@@ -138,7 +142,7 @@ The same APK passed a Clearer regression with a valid 192x144, 10,221-byte JPEG 
   - MediaStore saves: images/videos/audio saved to `DCIM/CyanBridge`.
 
 - P2P controller: `android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ui/wifi/p2p/WifiP2pManagerSingleton.kt`
-  - Includes discovery/connect timeouts and uses WPS PBC.
+  - Includes bounded discovery/connect recovery, Samsung 5 GHz fallback, and WPS PBC.
   - `resetDeviceP2p()` sends `glassesControl([0x02,0x01,0x0F])`.
 
 - Network policy: `android/CyanBridge/app/src/main/res/xml/network_security_config.xml`

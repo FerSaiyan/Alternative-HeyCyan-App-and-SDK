@@ -63,6 +63,8 @@ class LivePreviewManager(
     private var heartbeatJob: Job? = null
     private var mainJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val streamCleanupScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var streamReleaseJob: Job? = null
 
     private var p2pManager: WifiP2pManagerSingleton? = null
     private var p2pCallback: WifiP2pManagerSingleton.WifiP2pCallback? = null
@@ -88,7 +90,7 @@ class LivePreviewManager(
         private const val RTSP_PORT = 8554
         private const val MJPEG_PORT = 8080
         private const val BLE_IP_TIMEOUT_MS = 45_000L
-        private const val P2P_CONNECT_TIMEOUT_MS = 30_000L
+        private const val P2P_CONNECT_TIMEOUT_MS = 65_000L
         private const val STREAM_START_TIMEOUT_MS = 30_000L
         private const val P2P_GROUP_REMOVAL_RETRY_MS = 1_000L
         private const val P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS = 5_000L
@@ -99,6 +101,10 @@ class LivePreviewManager(
     private fun elapsed(): Long = System.currentTimeMillis() - flowStartTimeMs
 
     fun start(onSessionFinished: () -> Unit) {
+        if (cleanupInProgress) {
+            Log.w(TAG, "start() called while Live Preview cleanup is still in progress, ignoring")
+            return
+        }
         if (mainJob?.isActive == true) {
             Log.w(TAG, "start() called but flow already active, ignoring")
             return
@@ -131,6 +137,7 @@ class LivePreviewManager(
         releaseScopeAfterCleanup = true
         stop()
         if (cleanupComplete) {
+            cancelStreamCleanupAfterRelease()
             scope.cancel()
         }
     }
@@ -142,13 +149,28 @@ class LivePreviewManager(
         heartbeatJob?.cancel()
         heartbeatJob = null
         liveCommandSent = false
-        releaseStream()
-        unbindP2pNetwork()
-        if (!cleanupComplete) {
+        val streamCloseJob = releaseStream()
+        try {
+            unbindP2pNetwork()
+        } catch (error: Exception) {
+            Log.e(TAG, "[${elapsed()}ms] Failed to unbind P2P network after Bluetooth disconnect", error)
+        }
+        if (!cleanupComplete && !cleanupInProgress) {
             cleanupInProgress = true
-            p2pManager?.stopP2pOperations()
-            p2pManager?.cancelP2pConnection()
-            finishCleanup()
+            scope.launch {
+                streamCloseJob?.join()
+                try {
+                    p2pManager?.stopP2pOperations()
+                } catch (error: Exception) {
+                    Log.e(TAG, "[${elapsed()}ms] Failed to stop P2P operations after Bluetooth disconnect", error)
+                }
+                try {
+                    p2pManager?.cancelP2pConnection()
+                } catch (error: Exception) {
+                    Log.e(TAG, "[${elapsed()}ms] Failed to cancel P2P connection after Bluetooth disconnect", error)
+                }
+                finishCleanup()
+            }
         }
     }
 
@@ -156,20 +178,43 @@ class LivePreviewManager(
         if (cleanupComplete || cleanupInProgress) return
         cleanupInProgress = true
         Log.i(TAG, "[${elapsed()}ms] cleanup: releasing resources...")
-        releaseStream()
-        sendStopLiveCommand()
+        val streamCloseJob = releaseStream()
+        scope.launch {
+            streamCloseJob?.join()
+            try {
+                sendStopLiveCommand()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to send live stream stop command during cleanup", error)
+            }
+            try {
+                unbindP2pNetwork()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to unbind P2P network during cleanup", error)
+            }
 
-        unbindP2pNetwork()
-
-        val manager = p2pManager
-        if (manager == null) {
-            finishCleanup()
-            return
+            val manager = p2pManager
+            if (manager == null) {
+                finishCleanup()
+                return@launch
+            }
+            try {
+                manager.stopP2pOperations()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to stop P2P operations during cleanup", error)
+            }
+            try {
+                manager.cancelP2pConnection()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to cancel P2P connection during cleanup", error)
+            }
+            if (!cleanupInProgress) return@launch
+            try {
+                removeP2pGroup(manager, attempt = 1)
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to remove P2P group during cleanup", error)
+                finishCleanup()
+            }
         }
-        manager.stopP2pOperations()
-        manager.cancelP2pConnection()
-        if (!cleanupInProgress) return
-        removeP2pGroup(manager, attempt = 1)
     }
 
     private fun removeP2pGroup(manager: WifiP2pManagerSingleton, attempt: Int) {
@@ -240,7 +285,11 @@ class LivePreviewManager(
 
     private fun finishCleanup() {
         if (!cleanupInProgress) return
-        p2pCallback?.let { callback -> p2pManager?.removeCallback(callback) }
+        try {
+            p2pCallback?.let { callback -> p2pManager?.removeCallback(callback) }
+        } catch (error: Exception) {
+            Log.w(TAG, "[${elapsed()}ms] cleanup: P2P callback removal failed", error)
+        }
         if (p2pReceiverRegistered) {
             try {
                 p2pManager?.unregisterReceiver()
@@ -270,6 +319,7 @@ class LivePreviewManager(
         notifySessionFinished()
         Log.i(TAG, "[${elapsed()}ms] cleanup: done")
         if (releaseScopeAfterCleanup) {
+            cancelStreamCleanupAfterRelease()
             scope.cancel()
         }
     }
@@ -277,7 +327,11 @@ class LivePreviewManager(
     private fun notifySessionFinished() {
         if (sessionFinishNotified) return
         sessionFinishNotified = true
-        onSessionFinished()
+        try {
+            onSessionFinished()
+        } catch (error: Exception) {
+            Log.e(TAG, "[${elapsed()}ms] Failed to notify that the preview session finished", error)
+        }
     }
 
     private suspend fun runLivestream() {
@@ -661,6 +715,10 @@ class LivePreviewManager(
                 Log.i(TAG, "[${elapsed()}ms] [P2P] P2P group is ready: $p2pInfo")
                 return true
             }
+            p2pFailure?.let { failure ->
+                Log.e(TAG, "[${elapsed()}ms] [P2P] Stopping connection wait after failure: $failure")
+                return false
+            }
             delay(250)
         }
         Log.e(TAG, "[${elapsed()}ms] [P2P] Timed out waiting for a P2P group after ${timeoutMs}ms")
@@ -846,11 +904,35 @@ class LivePreviewManager(
         }
     }
 
-    private fun releaseStream() {
-        rtspFrames?.close()
+    private fun releaseStream(): Job? {
+        val frames = rtspFrames
         rtspFrames = null
-        mjpegServer?.close()
+        val server = mjpegServer
         mjpegServer = null
+        if (frames == null && server == null) return streamReleaseJob
+
+        streamReleaseJob = streamCleanupScope.launch {
+            try {
+                frames?.close()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to close the RTSP connection", error)
+            }
+            try {
+                server?.close()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to close the MJPEG server", error)
+            }
+        }
+        return streamReleaseJob
+    }
+
+    private fun cancelStreamCleanupAfterRelease() {
+        val closeJob = streamReleaseJob
+        if (closeJob == null || closeJob.isCompleted) {
+            streamCleanupScope.cancel()
+        } else {
+            closeJob.invokeOnCompletion { streamCleanupScope.cancel() }
+        }
     }
 
     private fun updateState(label: String, detail: String, scanning: Boolean = false) {

@@ -6,6 +6,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.MacAddress
+import android.net.wifi.WpsInfo
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pDeviceList
@@ -48,12 +50,20 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
 
     private val discoveryTimeoutMs = 16_000L
     private val connectTimeoutMs = 30_000L
+    private val discoveryTimeoutRetryDelayMs = 1_000L
+    private val maxDiscoveryTimeoutRetries = 2
     private val busyDiscoveryRetryDelayMs = 1_000L
     private val maxBusyDiscoveryRetries = 3
     private val busyConnectRetryDelayMs = 1_000L
     private var busyDiscoveryRetryCount = 0
+    private var discoveryTimeoutRetryCount = 0
+    private var connectionGroupOperatingBand = WifiP2pConfig.GROUP_OWNER_BAND_AUTO
+    private var triedSamsungFiveGhzFallback = false
     private val delayedPeerDiscoveryRestart = Runnable {
-        startPeerDiscovery(allowDeviceResetOnTimeout = allowDeviceResetOnDiscoveryTimeout)
+        startPeerDiscoveryInternal(
+            allowDeviceResetOnTimeout = allowDeviceResetOnDiscoveryTimeout,
+            resetTimeoutRetryCount = false,
+        )
     }
     private val busyConnectRetry = Runnable {
         wifiP2pDevice?.let { device ->
@@ -142,7 +152,18 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
 
     @SuppressLint("MissingPermission")
     fun startPeerDiscovery(allowDeviceResetOnTimeout: Boolean = true) {
+        startPeerDiscoveryInternal(allowDeviceResetOnTimeout, resetTimeoutRetryCount = true)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startPeerDiscoveryInternal(
+        allowDeviceResetOnTimeout: Boolean,
+        resetTimeoutRetryCount: Boolean,
+    ) {
         allowDeviceResetOnDiscoveryTimeout = allowDeviceResetOnTimeout
+        if (resetTimeoutRetryCount) {
+            discoveryTimeoutRetryCount = 0
+        }
         if (!p2pOperationsEnabled) {
             Log.d(TAG, "Ignoring peer discovery while P2P operations are stopped")
             return
@@ -159,6 +180,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
                 busyDiscoveryRetryCount = 0
                 Log.d(TAG, "Peer discovery started successfully")
                 callbacks.forEach { it.onPeerDiscoveryStarted() }
+                requestPeers()
             }
 
             override fun onFailure(reason: Int) {
@@ -239,20 +261,20 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         }
 
         // Arm internal connect timeout (vendor app uses ~5s).
+        handler.removeCallbacks(connectTimeOut)
         handler.postDelayed(connectTimeOut, connectTimeoutMs)
 
         wifiP2pDevice = device
         connectionGroupOwnerIntent = groupOwnerIntent
         val peerAddress = device.deviceAddress
-        val config = WifiP2pConfig().apply {
-            deviceAddress = peerAddress
-            // Match decompiled vendor app: WPS PBC.
-            wps.setup = 0
-            groupOwnerIntent?.let { this.groupOwnerIntent = it }
-        }
+        val config = buildConnectionConfig(peerAddress, groupOwnerIntent)
 
         connectionState.setConnecting(true)
-        Log.i(TAG, "Calling WifiP2pManager.connect for ${device.deviceName} at $peerAddress")
+        Log.i(
+            TAG,
+            "Calling WifiP2pManager.connect for ${device.deviceName} at $peerAddress " +
+                "(groupOwnerBand=$connectionGroupOperatingBand)",
+        )
 
         wifiP2pManager.connect(wifiP2pChannel, config, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
@@ -272,9 +294,59 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
                     handler.postDelayed(busyConnectRetry, busyConnectRetryDelayMs)
                     return
                 }
+                if (trySamsungFiveGhzFallback(device, reason)) {
+                    return
+                }
                 callbacks.forEach { it.onConnectRequestFailed(reason) }
             }
         })
+    }
+
+    @SuppressLint("NewApi")
+    private fun buildConnectionConfig(peerAddress: String, groupOwnerIntent: Int?): WifiP2pConfig {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val builder = WifiP2pConfig.Builder()
+                .setDeviceAddress(MacAddress.fromString(peerAddress))
+                .setGroupOperatingBand(connectionGroupOperatingBand)
+            val effectiveGroupOwnerIntent = groupOwnerIntent ?: if (
+                connectionGroupOperatingBand == WifiP2pConfig.GROUP_OWNER_BAND_5GHZ
+            ) {
+                15
+            } else {
+                null
+            }
+            return builder.build().apply {
+                effectiveGroupOwnerIntent?.let { this.groupOwnerIntent = it }
+            }
+        }
+
+        return WifiP2pConfig().apply {
+            deviceAddress = peerAddress
+            wps.setup = WpsInfo.PBC
+            groupOwnerIntent?.let { this.groupOwnerIntent = it }
+        }
+    }
+
+    private fun trySamsungFiveGhzFallback(device: WifiP2pDevice, reason: Int): Boolean {
+        if (
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            !Build.MANUFACTURER.equals("samsung", ignoreCase = true) ||
+            connectionGroupOperatingBand != WifiP2pConfig.GROUP_OWNER_BAND_AUTO ||
+            triedSamsungFiveGhzFallback
+        ) {
+            return false
+        }
+
+        triedSamsungFiveGhzFallback = true
+        connectionGroupOperatingBand = WifiP2pConfig.GROUP_OWNER_BAND_5GHZ
+        retryState.shouldRetryConnect()
+        Log.w(
+            TAG,
+            "P2P connect failed on Samsung with reason=$reason; retrying ${device.deviceName} " +
+                "on the 5 GHz group-owner band after the automatic-band attempt",
+        )
+        handler.postDelayed(busyConnectRetry, busyConnectRetryDelayMs)
+        return true
     }
 
     @SuppressLint("MissingPermission")
@@ -323,6 +395,9 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         p2pOperationsEnabled = true
         retryState.reset()
         busyDiscoveryRetryCount = 0
+        discoveryTimeoutRetryCount = 0
+        connectionGroupOperatingBand = WifiP2pConfig.GROUP_OWNER_BAND_AUTO
+        triedSamsungFiveGhzFallback = false
         connectionState.reset()
         cancelPendingRetries()
     }
@@ -356,6 +431,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         }
         Log.d(TAG, "restartPeerDiscovery: stopping current discovery and reinitializing")
         cancelPendingRetries()
+        discoveryTimeoutRetryCount = 0
         initP2P()
         // Stabilization delay: give the P2P stack time to settle after reset
         // before starting discovery. Prevents "Connect request failed: 2" when
@@ -470,9 +546,14 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     }
 
     internal fun onConnectionInfoAvailable(info: WifiP2pInfo) {
-        connectionState.markConnectionInfoAvailable(info.groupFormed)
-        handler.removeCallbacks(connectTimeOut)
-        lastGroupOwnerIp = info.groupOwnerAddress?.hostAddress
+        if (info.groupFormed) {
+            connectionState.markConnectionInfoAvailable(true)
+            handler.removeCallbacks(connectTimeOut)
+            lastGroupOwnerIp = info.groupOwnerAddress?.hostAddress
+        } else if (!connectionState.isConnecting()) {
+            connectionState.setConnected(false)
+            lastGroupOwnerIp = null
+        }
         callbacks.forEach { it.onConnected(info) }
     }
 
@@ -487,17 +568,23 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     private val discoveryTimeOut = object : Runnable {
         override fun run() {
             if (!p2pOperationsEnabled) return
-            Log.d(TAG, "Internal scan retry connection: ${retryState.discoveryRetryCount()}")
-            if (!allowDeviceResetOnDiscoveryTimeout) {
-                Log.d(TAG, "Discovery timeout reached with device reset disabled")
+            if (discoveryTimeoutRetryCount >= maxDiscoveryTimeoutRetries) {
+                Log.d(TAG, "Peer discovery timed out after $discoveryTimeoutRetryCount recovery scans")
                 return
             }
-            if (retryState.shouldRetryDiscovery()) {
-                Log.d(TAG, "Internal scan retry connection once")
+            discoveryTimeoutRetryCount++
+            Log.d(
+                TAG,
+                "Peer discovery timeout; starting recovery scan " +
+                    "$discoveryTimeoutRetryCount/$maxDiscoveryTimeoutRetries",
+            )
+            if (allowDeviceResetOnDiscoveryTimeout && retryState.shouldRetryDiscovery()) {
+                Log.d(TAG, "Resetting glasses P2P before the recovery scan")
                 resetDeviceP2p()
                 initP2P()
-                startPeerDiscovery(allowDeviceResetOnTimeout = true)
             }
+            discoverPeersStable()
+            handler.postDelayed(delayedPeerDiscoveryRestart, discoveryTimeoutRetryDelayMs)
         }
     }
 
@@ -505,11 +592,16 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         override fun run() {
             connectionState.setConnecting(false)
             if (!p2pOperationsEnabled) return
+            val device = wifiP2pDevice ?: run {
+                callbacks.forEach { it.retryAlsoFailed() }
+                return
+            }
+            if (trySamsungFiveGhzFallback(device, WifiP2pManager.ERROR)) {
+                return
+            }
             if (retryState.shouldRetryConnect()) {
-                wifiP2pDevice?.let { device ->
-                    Log.d(TAG, "Internal connection retry connection once")
-                    connectToDevice(device, connectionGroupOwnerIntent)
-                }
+                Log.d(TAG, "Internal connection retry connection once")
+                connectToDevice(device, connectionGroupOwnerIntent)
             } else {
                 Log.d(TAG, "Do not reconnect, wait for external timeout")
                 callbacks.forEach { it.retryAlsoFailed() }

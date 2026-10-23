@@ -9,25 +9,30 @@ import org.junit.Test
 class ImageQuestionPromptResolverTest {
 
     @Test
-    fun builtInDefaultIsTheConciseImageDescriptionPrompt() {
+    fun builtInDefaultIsPersianRegardlessOfAppLanguage() {
         assertEquals(
-            "Give me a concise description of the image",
+            "این تصویر را دقیق و جامع به زبان فارسی توصیف کن.",
             ImageQuestionDefaults.questionForLanguage("en"),
         )
         assertEquals(
-            "Dê-me uma descrição concisa da imagem",
+            "این تصویر را دقیق و جامع به زبان فارسی توصیف کن.",
             ImageQuestionDefaults.questionForLanguage("pt-BR"),
         )
     }
 
     @Test
-    fun noUserQuestionUsesLocalizedBuiltInDefault() {
+    fun noUserQuestionUsesPersianDefaultAndResponseInstruction() {
         val settings = builtInSettings(languageTag = "pt-BR")
 
         val prompt = ImageQuestionPromptResolver.resolve(settings, userQuestion = null).text
 
-        assertTrue(prompt.startsWith(ImageQuestionDefaults.questionForLanguage("pt-BR")))
-        assertTrue(prompt.contains("Answer only in Portuguese (pt-BR)."))
+        assertTrue(prompt.startsWith("این تصویر را دقیق و جامع به زبان فارسی توصیف کن."))
+        assertTrue(prompt.contains("همیشه و منحصراً به زبان فارسی (Farsi) پاسخ بده و توصیف کن."))
+    }
+
+    @Test
+    fun responseSpeechUsesPersianLocale() {
+        assertEquals("fa-IR", ImageQuestionDefaults.RESPONSE_LANGUAGE_TAG)
     }
 
     @Test
@@ -64,14 +69,27 @@ class ImageQuestionPromptResolverTest {
     }
 
     @Test
-    fun changingAppLanguageChangesBuiltInDefaultAndOutputInstruction() {
+    fun legacyEnglishBuiltInDefaultUsesPersianDescription() {
+        val prompt = ImageQuestionPromptResolver.resolve(
+            settings = ImageQuestionSettings(
+                appLanguageTag = "en",
+                defaultQuestion = "Give me a concise description of the image",
+                usesBuiltInDefault = false,
+            ),
+            userQuestion = null,
+        ).text
+
+        assertTrue(prompt.startsWith("این تصویر را دقیق و جامع به زبان فارسی توصیف کن."))
+    }
+
+    @Test
+    fun changingAppLanguageDoesNotChangePersianDefaultOrOutputInstruction() {
         val english = ImageQuestionPromptResolver.resolve(builtInSettings("en"), null).text
         val spanish = ImageQuestionPromptResolver.resolve(builtInSettings("es"), null).text
 
-        assertTrue(english.startsWith(ImageQuestionDefaults.questionForLanguage("en")))
-        assertTrue(spanish.startsWith(ImageQuestionDefaults.questionForLanguage("es")))
-        assertTrue(english.contains("Answer only in English (en)."))
-        assertTrue(spanish.contains("Answer only in Spanish (es)."))
+        assertEquals(english, spanish)
+        assertTrue(english.startsWith("این تصویر را دقیق و جامع به زبان فارسی توصیف کن."))
+        assertTrue(english.contains("همیشه و منحصراً به زبان فارسی (Farsi) پاسخ بده و توصیف کن."))
     }
 
     @Test

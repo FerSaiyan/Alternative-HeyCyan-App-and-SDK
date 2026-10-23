@@ -1,11 +1,15 @@
 package com.fersaiyan.cyanbridge.localmodels.remote
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -26,6 +30,9 @@ object RemoteOpenAiClient {
     private const val TAG = "RemoteOpenAiClient"
     private const val CONNECT_TIMEOUT_MS = 10_000
     private const val READ_TIMEOUT_MS = 120_000
+    private const val MAX_IMAGE_DIMENSION = 1024
+    private const val JPEG_QUALITY = 85
+    private const val MAX_ERROR_BODY_LENGTH = 4_000
 
     /**
      * Non-streaming chat completion.
@@ -60,7 +67,9 @@ object RemoteOpenAiClient {
         val url = buildChatCompletionsUrl(baseUrl)
         Log.i(TAG, "chatCompletion -> $url model=$model")
 
-        return postJson(url, apiKey, payload)
+        return postWithImageFallback(payload) { attempt ->
+            postJson(url, apiKey, attempt)
+        }
             .let { response ->
                 val choices = response.optJSONArray("choices")
                     ?: throw IllegalStateException("No choices in remote response")
@@ -107,7 +116,9 @@ object RemoteOpenAiClient {
         val url = buildChatCompletionsUrl(baseUrl)
         Log.i(TAG, "chatCompletionStreaming -> $url model=$model")
 
-        return postJsonStreaming(url, apiKey, payload, onToken)
+        return postWithImageFallback(payload) { attempt ->
+            postJsonStreaming(url, apiKey, attempt, onToken)
+        }
     }
 
     /**
@@ -271,6 +282,154 @@ object RemoteOpenAiClient {
             }
     }
 
+    internal fun payloadForLogging(payload: JSONObject): String {
+        val redactedPayload = JSONObject(payload.toString())
+        val imageBase64Lengths = mutableListOf<Int>()
+        val topLevelImage = redactedPayload.optString("image")
+        if (topLevelImage.isNotBlank()) {
+            imageBase64Lengths += topLevelImage.length
+            redactedPayload.put("image", "<redacted>")
+        }
+        val messages = redactedPayload.optJSONArray("messages") ?: JSONArray()
+        for (messageIndex in 0 until messages.length()) {
+            val message = messages.optJSONObject(messageIndex) ?: continue
+            val rawContent = message.opt("content")
+            if (rawContent is String) {
+                message.put("content", "<redacted>")
+                continue
+            }
+            val content = rawContent as? JSONArray ?: continue
+            for (partIndex in 0 until content.length()) {
+                val part = content.optJSONObject(partIndex) ?: continue
+                if (part.optString("type") == "text") {
+                    part.put("text", "<redacted>")
+                    continue
+                }
+                if (part.optString("type") != "image_url") continue
+
+                val imageUrl = part.optJSONObject("image_url") ?: continue
+                val dataUrl = imageUrl.optString("url")
+                val commaIndex = dataUrl.indexOf(',')
+                val base64Length = if (
+                    dataUrl.startsWith("data:image/") &&
+                    dataUrl.substringBefore(',').endsWith(";base64") &&
+                    commaIndex >= 0
+                ) {
+                    dataUrl.length - commaIndex - 1
+                } else {
+                    null
+                }
+                imageBase64Lengths += base64Length ?: 0
+                val redactedUrl = if (commaIndex >= 0) {
+                    "${dataUrl.substring(0, commaIndex + 1)}<redacted>"
+                } else {
+                    "<redacted>"
+                }
+                imageUrl.put("url", redactedUrl)
+            }
+        }
+
+        Log.i(TAG, "Outgoing image attachment Base64 lengths=$imageBase64Lengths")
+        return redactedPayload.toString()
+    }
+
+    internal fun imageFallbackPayloads(payload: JSONObject): List<JSONObject> {
+        val messages = payload.optJSONArray("messages") ?: return emptyList()
+        val userMessageIndex = (messages.length() - 1 downTo 0)
+            .firstOrNull { messages.optJSONObject(it)?.optString("role") == "user" }
+            ?: return emptyList()
+        val content = messages.optJSONObject(userMessageIndex)?.optJSONArray("content")
+            ?: return emptyList()
+        if ((0 until content.length()).any {
+                content.optJSONObject(it)?.optString("type") == "input_audio"
+            }
+        ) {
+            return emptyList()
+        }
+
+        val text = mutableListOf<String>()
+        var base64Image: String? = null
+        for (index in 0 until content.length()) {
+            val part = content.optJSONObject(index) ?: continue
+            when (part.optString("type")) {
+                "text" -> part.optString("text").takeIf { it.isNotBlank() }?.let(text::add)
+                "image_url" -> {
+                    if (base64Image != null) return emptyList()
+                    val dataUrl = part.optJSONObject("image_url")?.optString("url").orEmpty()
+                    val commaIndex = dataUrl.indexOf(',')
+                    if (!dataUrl.startsWith("data:image/") ||
+                        !dataUrl.substringBefore(',').endsWith(";base64") ||
+                        commaIndex < 0
+                    ) {
+                        return emptyList()
+                    }
+                    base64Image = dataUrl.substring(commaIndex + 1)
+                }
+                else -> return emptyList()
+            }
+        }
+        val image = base64Image?.takeIf { it.isNotBlank() } ?: return emptyList()
+        val prompt = text.joinToString("\n")
+
+        val separateImagePayload = JSONObject(payload.toString())
+        separateImagePayload.optJSONArray("messages")
+            ?.getJSONObject(userMessageIndex)
+            ?.put("content", prompt)
+        separateImagePayload.put("image", image)
+
+        val imageInPromptPayload = JSONObject(payload.toString())
+        imageInPromptPayload.optJSONArray("messages")
+            ?.getJSONObject(userMessageIndex)
+            ?.put("content", "$prompt\n\nImage as base64 (JPEG):\n$image")
+
+        return listOf(separateImagePayload, imageInPromptPayload)
+    }
+
+    private fun <T> postWithImageFallback(
+        payload: JSONObject,
+        postRequest: (JSONObject) -> T,
+    ): T {
+        val fallbacks = imageFallbackPayloads(payload)
+        try {
+            return postRequest(payload)
+        } catch (error: RemoteOpenAiHttpException) {
+            if (!error.shouldTryImageFallback() || fallbacks.isEmpty()) throw error
+            Log.w(TAG, "HTTP ${error.statusCode}; retrying image request with alternate payloads")
+        }
+
+        var lastError: RemoteOpenAiHttpException? = null
+        for ((index, fallback) in fallbacks.withIndex()) {
+            try {
+                Log.i(TAG, "Retrying image request with alternate payload ${index + 1}/${fallbacks.size}")
+                return postRequest(fallback)
+            } catch (error: RemoteOpenAiHttpException) {
+                lastError = error
+                if (!error.shouldTryImageFallback() || index == fallbacks.lastIndex) throw error
+                Log.w(TAG, "HTTP ${error.statusCode}; trying the next image payload format")
+            }
+        }
+        throw checkNotNull(lastError) { "Image fallback failed without an HTTP response" }
+    }
+
+    private fun RemoteOpenAiHttpException.shouldTryImageFallback(): Boolean {
+        return statusCode == 400 || statusCode == 415 || statusCode == 422 || statusCode in 500..599
+    }
+
+    private fun logOutgoingPayload(requestType: String, payload: JSONObject) {
+        val safePayload = payloadForLogging(payload)
+        val chunkSize = 3_000
+        val chunkCount = (safePayload.length + chunkSize - 1) / chunkSize
+        for (chunkIndex in 0 until chunkCount) {
+            val start = chunkIndex * chunkSize
+            val end = minOf(start + chunkSize, safePayload.length)
+            Log.d(
+                TAG,
+                "$requestType payload JSON (${chunkIndex + 1}/$chunkCount): " +
+                    safePayload.substring(start, end),
+            )
+        }
+    }
+
     private data class EncodedAttachment(
         val base64: String,
         val mimeType: String,
@@ -289,19 +448,12 @@ object RemoteOpenAiClient {
             "$kind attachment is empty: ${file.path}"
         }
 
+        if (kind == "image") {
+            return readImageAttachment(file)
+        }
+
         val extension = file.extension.lowercase(Locale.US)
         val mimeType = when (kind) {
-            "image" -> when (extension) {
-                "jpg", "jpeg" -> "image/jpeg"
-                "png" -> "image/png"
-                "webp" -> "image/webp"
-                "gif" -> "image/gif"
-                "bmp" -> "image/bmp"
-                "heic" -> "image/heic"
-                else -> throw IllegalArgumentException(
-                    "Unsupported image format '.$extension'. Use JPEG, PNG, WebP, GIF, BMP, or HEIC.",
-                )
-            }
             "audio" -> when (extension) {
                 "wav", "wave" -> "wav"
                 "mp3", "mpeg" -> "mp3"
@@ -318,6 +470,55 @@ object RemoteOpenAiClient {
         )
     }
 
+    private fun readImageAttachment(file: File): EncodedAttachment {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        require(bounds.outWidth > 0 && bounds.outHeight > 0) {
+            "Cannot decode image attachment: ${file.path}"
+        }
+
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = calculateImageSampleSize(bounds.outWidth, bounds.outHeight)
+        }
+        val decoded = BitmapFactory.decodeFile(file.absolutePath, options)
+            ?: throw IllegalArgumentException("Cannot decode image attachment: ${file.path}")
+        val resized = resizeImageIfNeeded(decoded)
+        val jpegBytes = try {
+            ByteArrayOutputStream().use { output ->
+                check(resized.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)) {
+                    "Cannot encode image attachment as JPEG: ${file.path}"
+                }
+                output.toByteArray()
+            }
+        } finally {
+            if (resized !== decoded) resized.recycle()
+            decoded.recycle()
+        }
+
+        return EncodedAttachment(
+            base64 = Base64.getEncoder().encodeToString(jpegBytes),
+            mimeType = "image/jpeg",
+        )
+    }
+
+    private fun calculateImageSampleSize(width: Int, height: Int): Int {
+        var sampleSize = 1
+        while (maxOf(width, height) / (sampleSize * 2) >= MAX_IMAGE_DIMENSION) {
+            sampleSize *= 2
+        }
+        return sampleSize
+    }
+
+    private fun resizeImageIfNeeded(bitmap: Bitmap): Bitmap {
+        val largestDimension = maxOf(bitmap.width, bitmap.height)
+        if (largestDimension <= MAX_IMAGE_DIMENSION) return bitmap
+
+        val scale = MAX_IMAGE_DIMENSION.toFloat() / largestDimension
+        val width = (bitmap.width * scale).toInt().coerceAtLeast(1)
+        val height = (bitmap.height * scale).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(bitmap, width, height, true)
+    }
+
     private fun postJson(url: String, apiKey: String, payload: JSONObject): JSONObject {
         val conn = (URL(url).openConnection() as HttpURLConnection)
         conn.requestMethod = "POST"
@@ -328,13 +529,15 @@ object RemoteOpenAiClient {
         if (apiKey.isNotBlank()) {
             conn.setRequestProperty("Authorization", "Bearer $apiKey")
         }
+        logOutgoingPayload("Non-streaming", payload)
         OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload.toString()) }
         val code = conn.responseCode
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        val body = BufferedReader(InputStreamReader(stream ?: conn.inputStream)).use { it.readText() }
+        val body = readResponseBody(stream)
         conn.disconnect()
         if (code !in 200..299) {
-            throw IllegalStateException("Remote server HTTP $code: ${body.take(500)}")
+            Log.e(TAG, "Remote server HTTP $code; response body: ${body.take(MAX_ERROR_BODY_LENGTH)}")
+            throw RemoteOpenAiHttpException(code, body.take(MAX_ERROR_BODY_LENGTH))
         }
         return JSONObject(body)
     }
@@ -358,14 +561,15 @@ object RemoteOpenAiClient {
         if (apiKey.isNotBlank()) {
             conn.setRequestProperty("Authorization", "Bearer $apiKey")
         }
+        logOutgoingPayload("Streaming", payload)
         OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload.toString()) }
 
         val code = conn.responseCode
         if (code !in 200..299) {
-            val errBody = BufferedReader(InputStreamReader(conn.errorStream ?: conn.inputStream))
-                .use { it.readText() }
+            val errBody = readResponseBody(conn.errorStream)
             conn.disconnect()
-            throw IllegalStateException("Remote server HTTP $code: ${errBody.take(500)}")
+            Log.e(TAG, "Remote server HTTP $code; response body: ${errBody.take(MAX_ERROR_BODY_LENGTH)}")
+            throw RemoteOpenAiHttpException(code, errBody.take(MAX_ERROR_BODY_LENGTH))
         }
 
         val result = StringBuilder()
@@ -393,5 +597,32 @@ object RemoteOpenAiClient {
         }
         conn.disconnect()
         return result.toString()
+    }
+}
+
+internal class RemoteOpenAiHttpException(
+    val statusCode: Int,
+    val responseBody: String,
+) : IOException("Remote server HTTP $statusCode: $responseBody")
+
+private fun readResponseBody(stream: java.io.InputStream?): String {
+    if (stream == null) return ""
+    val maxLength = 4_000
+    val body = stream.use { input ->
+        BufferedReader(InputStreamReader(input)).use { reader ->
+            val result = StringBuilder()
+            val buffer = CharArray(1024)
+            while (result.length <= maxLength) {
+                val count = reader.read(buffer, 0, minOf(buffer.size, maxLength + 1 - result.length))
+                if (count < 0) break
+                result.append(buffer, 0, count)
+            }
+            result.toString()
+        }
+    }
+    return if (body.length > maxLength) {
+        "${body.take(maxLength)} …(response body truncated)"
+    } else {
+        body
     }
 }

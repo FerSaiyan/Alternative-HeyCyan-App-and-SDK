@@ -25,6 +25,7 @@ data class GlassesDashboardUiState(
     val imageQueryLabel: String = "Test image AI description",
     val imageThumbnailQualitySdkValue: Int = 4,
     val imageThumbnailQualityLabel: String = "Clearer",
+    val photoLedSimulationEnabled: Boolean = false,
     val showGeminiLiveImageDelay: Boolean = false,
     val geminiLiveImageDelaySeconds: Int = 0,
     val wearingDetectionEnabled: Boolean? = null,
@@ -203,6 +204,7 @@ sealed interface GlassesDashboardAction {
     data class SelectAssistantMode(val mode: GlassesAssistantMode) : GlassesDashboardAction
     data class SetAiWakeWordRoute(val route: AiWakeWordRoute) : GlassesDashboardAction
     data class SelectImageThumbnailQuality(val sdkValue: Int) : GlassesDashboardAction
+    data class SetPhotoLedSimulation(val enabled: Boolean) : GlassesDashboardAction
     data class SetGeminiLiveImageDelay(val seconds: Int) : GlassesDashboardAction
     data object RefreshRecordingSettings : GlassesDashboardAction
     data class SetWearingDetection(val enabled: Boolean) : GlassesDashboardAction

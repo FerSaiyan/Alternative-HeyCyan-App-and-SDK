@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.localmodels.templates
 
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalGenerationSettings
+
 data class PromptMessage(
     val role: String,
     val content: String,
@@ -21,7 +23,7 @@ object PromptTemplateRegistry {
             render = { systemPrompt, messages ->
                 buildString {
                     append("<|im_start|>system\n")
-                    append(if (systemPrompt.isBlank()) "You are a helpful assistant." else systemPrompt.trim())
+                    append(systemPrompt.effectiveSystemPrompt())
                     append("\n<|im_end|>\n")
                     messages.forEach { msg ->
                         val role = msg.role.lowercase()
@@ -46,11 +48,9 @@ object PromptTemplateRegistry {
             description = "Gemma instruction turn tags.",
             render = { systemPrompt, messages ->
                 buildString {
-                    if (systemPrompt.isNotBlank()) {
-                        append("<start_of_turn>system\n")
-                        append(systemPrompt.trim())
-                        append("<end_of_turn>\n")
-                    }
+                    append("<start_of_turn>system\n")
+                    append(systemPrompt.effectiveSystemPrompt())
+                    append("<end_of_turn>\n")
                     messages.forEach { msg ->
                         val role = msg.role.lowercase()
                         val wireRole = when (role) {
@@ -75,7 +75,7 @@ object PromptTemplateRegistry {
             render = { systemPrompt, messages ->
                 buildString {
                     append("<|im_start|>system\n")
-                    append(if (systemPrompt.isBlank()) "You are a helpful assistant." else systemPrompt.trim())
+                    append(systemPrompt.effectiveSystemPrompt())
                     append("\n<|im_end|>\n")
                     messages.forEach { msg ->
                         val role = when (msg.role.lowercase()) {
@@ -99,11 +99,9 @@ object PromptTemplateRegistry {
             description = "Plain transcript completion, no chat tags.",
             render = { systemPrompt, messages ->
                 buildString {
-                    if (systemPrompt.isNotBlank()) {
-                        append("System: ")
-                        append(systemPrompt.trim())
-                        append("\n\n")
-                    }
+                    append("System: ")
+                    append(systemPrompt.effectiveSystemPrompt())
+                    append("\n\n")
                     messages.forEach { msg ->
                         val role = when (msg.role.lowercase()) {
                             "assistant", "model" -> "Assistant"
@@ -134,4 +132,7 @@ object PromptTemplateRegistry {
         val template = findById(templateId) ?: findById("generic_chatml")!!
         return template.render(systemPrompt, messages)
     }
+
+    private fun String.effectiveSystemPrompt(): String =
+        trim().ifBlank { LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT }
 }

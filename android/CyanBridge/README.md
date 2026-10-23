@@ -61,7 +61,7 @@ These defaults are controlled by `privacy/PrivacyPrefs.kt` and applied through
 
 CyanBridge keeps **two** prompt bases and composes them per-request:
 
-*   **Default image question** `ai/vision/ImageQuestionPrompt.kt:72` `questionForLanguage` (`Give me a concise description of the image` localized `en/pt/es/de/fr/it/zh/ko/ru`) stored in `ImageQuestionPreferences.kt` `defaultQuestion`. `ImageQuestionPromptResolver.kt:95` `resolve()` for **single-shot** (`CliRelayClient.imageQuery` Pro `3.7 flash` / local Gemma / Tasker) appends strict `ImageQuestionPrompt.kt:86` `Answer only in ${label} (${tag}).` so the one-turn answer locks to the app language. For **Gemini Live** callers use `ImageQuestionPromptResolver.baseQuestion()` (no language lock) and let the Live `systemInstruction` handle language permissively.
+*   **Default image question** `ai/vision/ImageQuestionPrompt.kt` `questionForLanguage` returns `این تصویر را دقیق و جامع به زبان فارسی توصیف کن.` and is stored in `ImageQuestionPreferences.kt` `defaultQuestion`. `ImageQuestionPromptResolver.kt` `resolve()` for **single-shot** (`CliRelayClient.imageQuery` Pro `3.7 flash` / local Gemma / Tasker) appends the Persian response-language instruction. For **Gemini Live** callers use `ImageQuestionPromptResolver.baseQuestion()` and let the Live `systemInstruction` enforce Persian responses.
 
 *   **Assistant system prompt** `localmodels/settings/LocalGenerationSettings.kt:63` `DEFAULT_SYSTEM_PROMPT` mirrored in `Cyanbridge_website/lib/assistant-prompt.ts:1` `DEFAULT_ASSISTANT_SYSTEM_PROMPT`:
     > You are CyanBridge's assistant for smart glasses. Answer the user's request directly... Use the latest glasses image as visual context when the user refers to what they see.

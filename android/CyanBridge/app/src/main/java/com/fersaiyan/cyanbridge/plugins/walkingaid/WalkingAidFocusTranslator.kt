@@ -64,13 +64,13 @@ class WalkingAidFocusTranslator internal constructor(
 
         private fun translationPrompt(text: String): String = buildString {
             appendLine(TRANSLATION_SYSTEM_PROMPT)
-            appendLine("Return only the English translation, without quotes or commentary.")
-            append("User text: ")
+            appendLine("فقط ترجمهٔ انگلیسی را بدون گیومه یا توضیح برگردان.")
+            append("متن کاربر: ")
             append(text)
         }
 
         private const val TRANSLATION_SYSTEM_PROMPT =
-            "Translate the user's walking-aid focus request into concise English. " +
-                "Preserve every requested object, category, and safety concept. Do not add objects."
+            "درخواست تمرکز کاربر برای کمک‌یار پیاده‌روی را به انگلیسی کوتاه و روان ترجمه کن. " +
+                "همهٔ اشیا، دسته‌ها و مفاهیم ایمنی درخواستی را حفظ کن و چیزی اضافه نکن."
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalGenerationSettings
 import java.time.Instant
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -160,7 +161,15 @@ class DirectGeminiApiKeyLiveTokenProvider(
             .put("bidiGenerateContentSetup", JSONObject()
                 .put("model", "models/gemini-3.1-flash-live-preview")
                 .put("generationConfig", JSONObject().put("responseModalities", org.json.JSONArray().put("AUDIO")))
-                .put("systemInstruction", JSONObject().put("parts", org.json.JSONArray().put(JSONObject().put("text", "You are Gemini Live in CyanBridge smart glasses. Reply in $language."))))
+                .put(
+                    "systemInstruction",
+                    JSONObject().put(
+                        "parts",
+                        org.json.JSONArray().put(
+                            JSONObject().put("text", LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT),
+                        ),
+                    ),
+                )
                 .put("realtimeInputConfig", JSONObject()
                     .put("automaticActivityDetection", JSONObject()
                         .put("disabled", false)

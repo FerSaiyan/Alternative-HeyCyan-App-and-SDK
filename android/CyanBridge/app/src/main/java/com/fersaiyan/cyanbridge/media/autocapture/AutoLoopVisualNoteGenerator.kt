@@ -182,7 +182,7 @@ object AutoLoopVisualNoteGenerator {
                 mapOf(
                     "role" to "User",
                     "content" to (promptOverride?.takeIf { it.isNotBlank() }
-                        ?: "Describe this scene in one concise sentence focusing on meaningful context (people, activity, location, tools, text on screen)."),
+                        ?: "این صحنه را در یک جملهٔ کوتاه توصیف کن و بر افراد، فعالیت، مکان، ابزارها و متنِ قابل مشاهده تمرکز کن."),
                 ),
             ),
             imagePaths = listOf(image.absolutePath),

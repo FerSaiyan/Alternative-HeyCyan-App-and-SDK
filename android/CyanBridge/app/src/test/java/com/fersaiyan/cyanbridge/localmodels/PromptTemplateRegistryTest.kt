@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.localmodels
 
 import com.fersaiyan.cyanbridge.localmodels.templates.PromptMessage
 import com.fersaiyan.cyanbridge.localmodels.templates.PromptTemplateRegistry
+import com.fersaiyan.cyanbridge.localmodels.settings.LocalGenerationSettings
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,5 +33,18 @@ class PromptTemplateRegistryTest {
 
         assertTrue(prompt.contains("User: Write one line"))
         assertTrue(prompt.endsWith("Assistant: "))
+    }
+
+    @Test
+    fun blank_system_prompt_uses_persian_only_default_for_every_template() {
+        PromptTemplateRegistry.templates.forEach { template ->
+            val prompt = PromptTemplateRegistry.renderPrompt(
+                templateId = template.id,
+                systemPrompt = "",
+                messages = emptyList(),
+            )
+
+            assertTrue(prompt.contains(LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT))
+        }
     }
 }

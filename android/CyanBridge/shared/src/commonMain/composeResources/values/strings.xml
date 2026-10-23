@@ -84,4 +84,6 @@
     <string name="onboarding_not_now">Not now</string>
     <string name="onboarding_dont_show_again">Don't show this again</string>
     <string name="dashboard_open_pairing">Open pairing</string>
+    <string name="dashboard_photo_led_simulation">Photo LED (app simulation)</string>
+    <string name="dashboard_photo_led_simulation_note">App-only preference. The connected glasses SDK does not expose LED control.</string>
 </resources>

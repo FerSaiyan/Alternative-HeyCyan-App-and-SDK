@@ -418,7 +418,7 @@ class WalkingAidService : Service() {
         val depthResult = if (depthSource == "cloud") {
             val imagePath = frame.sourcePath?.takeIf { it.isNotBlank() && File(it).exists() } ?: return
             val modelOverride = WalkingAidPreferences.getDepthModelOverride(this)
-            val prompt = "Analyze relative depth, ground steps, curbs, and drop-offs in this image for a walking aid assistant.$focusSuffix$promptSuffix"
+            val prompt = "عمق نسبی، سطح زمین، پله‌ها، جدول‌ها و پرتگاه‌ها را در این تصویر برای کمک‌یار پیاده‌روی بررسی کن.$focusSuffix$promptSuffix"
             val reply = CliRelayClient.imageQuery(this, imagePath, prompt, modelOverride = modelOverride)
                 .getOrNull()
                 ?.takeIf { it.isNotBlank() }
@@ -467,7 +467,7 @@ class WalkingAidService : Service() {
         val imagePath = frame.sourcePath?.takeIf { it.isNotBlank() && File(it).exists() } ?: return
         if (!isFrameCurrent(frameSequence, frame)) return
         val modelOverride = WalkingAidPreferences.getImageDescriptionModelOverride(this)
-        val prompt = "Describe visible obstacles, vehicles, people, and walking hazards concisely.$focusSuffix$promptSuffix"
+        val prompt = "موانع، وسایل نقلیه، افراد و خطرهای مسیر قابل مشاهده را دقیق و کوتاه توصیف کن.$focusSuffix$promptSuffix"
         val reply = CliRelayClient.imageQuery(this, imagePath, prompt, modelOverride = modelOverride)
             .getOrNull()
             ?.trim()
