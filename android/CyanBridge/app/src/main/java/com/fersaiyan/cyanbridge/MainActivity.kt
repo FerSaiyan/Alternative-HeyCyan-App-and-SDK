@@ -342,7 +342,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         ttsReady = status == TextToSpeech.SUCCESS
         Log.i("ImageQuestionAudio", "TTS initialization status=$status ready=$ttsReady")
         if (status == TextToSpeech.SUCCESS) {
-            tts?.language = Locale.getDefault()
+            val languageResult = tts?.setLanguage(Locale("fa", "IR"))
+            if (
+                languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                languageResult == TextToSpeech.LANG_NOT_SUPPORTED
+            ) {
+                Log.w(TAG, "Persian text-to-speech voice is unavailable (result=$languageResult)")
+            } else {
+                Log.i(TAG, "Persian text-to-speech language result=$languageResult")
+            }
         }
         localSpeechSessionManager.attachTtsEngine(tts, ttsReady)
     }
@@ -353,24 +361,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun speakVision(text: String, onDone: (() -> Unit)? = null) {
         val languageResult = tts?.setLanguage(
-            Locale.forLanguageTag(ImageQuestionDefaults.RESPONSE_LANGUAGE_TAG),
+            Locale("fa", "IR"),
         )
         if (
             languageResult == TextToSpeech.LANG_MISSING_DATA ||
             languageResult == TextToSpeech.LANG_NOT_SUPPORTED
         ) {
-            Log.w(TAG, "Persian text-to-speech voice is unavailable")
-            Toast.makeText(
-                this,
-                "صدای فارسی نصب نیست؛ پاسخ را می‌توانید روی صفحه بخوانید.",
-                Toast.LENGTH_LONG,
-            ).show()
-            try {
-                onDone?.invoke()
-            } finally {
-                AudioSessionCoordinator.markIdle()
-            }
-            return
+            Log.w(TAG, "Persian text-to-speech voice is unavailable; attempting system speech anyway")
         }
         speak(
             text = text,
