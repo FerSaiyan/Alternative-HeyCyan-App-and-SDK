@@ -67,6 +67,8 @@ import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
+import com.fersaiyan.cyanbridge.shared.glasses.LensMooUiState
+import com.fersaiyan.cyanbridge.shared.glasses.LensMooDashboardCommand
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.FirmwarePatchRequestUiState
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
@@ -249,19 +251,25 @@ fun GlassesDashboardScreen(
                             primaryLabel = stringResource(Res.string.dashboard_scan),
                             onPrimary = { onAction(GlassesDashboardAction.Scan) },
                             primaryStyle = ActionButtonStyle.Primary,
+                            primaryEnabled = state.lensMoo?.let { !it.isBusy && !it.assistantRunning } ?: true,
+                            secondaryEnabled = state.lensMoo?.let { !it.isBusy && !it.assistantRunning } ?: true,
                             secondaryLabel = stringResource(Res.string.dashboard_reconnect),
                             onSecondary = { onAction(GlassesDashboardAction.Reconnect) },
                         )
                         ActionButton(
                             label = stringResource(Res.string.dashboard_disconnect),
                             onClick = { onAction(GlassesDashboardAction.Disconnect) },
+                            enabled = state.lensMoo?.let { it.isConnected && !it.isBusy && !it.assistantRunning } ?: true,
                             style = ActionButtonStyle.Destructive,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
             }
-            if (state.nativePluginShortcut != null) {
+            state.lensMoo?.let { lensMoo ->
+                item { LensMooControls(lensMoo, onAction) }
+            }
+            if (state.lensMoo == null && state.nativePluginShortcut != null) {
                 item {
                     NativePluginShortcutSection(
                         shortcut = state.nativePluginShortcut,
@@ -269,18 +277,18 @@ fun GlassesDashboardScreen(
                     )
                 }
             }
-            if (state.showHeyCyanControls || state.showEyevueControls || state.showTuneBudsControls) {
+            if (state.lensMoo == null && (state.showHeyCyanControls || state.showEyevueControls || state.showTuneBudsControls)) {
                 item { CoreGlassesControls(state, onAction) }
             }
-            if (state.showMetaRaybanControls) {
+            if (state.lensMoo == null && state.showMetaRaybanControls) {
                 item { MetaRaybanControls(state.metaRayban, onAction) }
                 item { GlassesAssistantControls(state, onAction) }
             }
-            if (state.showMeizuMyvuControls) {
+            if (state.lensMoo == null && state.showMeizuMyvuControls) {
                 item { MeizuMyvuControls(state.meizuMyvu, onAction) }
                 item { GlassesAssistantControls(state, onAction) }
             }
-            if (state.wifiAdbDebug.isAvailable) {
+            if (state.lensMoo == null && state.wifiAdbDebug.isAvailable) {
                 item {
                     WifiAdbDebugSection(
                         state = state.wifiAdbDebug,
@@ -289,7 +297,7 @@ fun GlassesDashboardScreen(
                     )
                 }
             }
-            if (state.showAdvancedControls) {
+            if (state.lensMoo == null && state.showAdvancedControls) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -368,6 +376,89 @@ fun GlassesDashboardScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LensMooControls(
+    state: LensMooUiState,
+    onAction: (GlassesDashboardAction) -> Unit,
+) {
+    val manualEnabled = state.hasOwnerId && !state.isBusy && !state.assistantRunning
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("lensmoo_controls"),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionTitle("LensMoo", accented = true)
+            state.deviceName?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
+            if (state.status.isNotBlank()) {
+                Text(state.status, style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(
+                stringResource(Res.string.lensmoo_camera_on_demand),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!state.hasOwnerId) {
+                Text(stringResource(Res.string.lensmoo_owner_required), style = MaterialTheme.typography.bodySmall)
+            }
+            ActionButton(
+                label = stringResource(Res.string.lensmoo_configure),
+                onClick = { onAction(GlassesDashboardAction.LensMoo(LensMooDashboardCommand.CONFIGURE)) },
+                enabled = !state.isBusy && !state.assistantRunning,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            SectionTitle(stringResource(Res.string.lensmoo_assistant))
+            StatusPill(stringResource(when {
+                state.assistantRunning && state.assistantReady -> Res.string.lensmoo_assistant_ready
+                state.assistantRunning -> Res.string.lensmoo_assistant_starting
+                else -> Res.string.lensmoo_assistant_stopped
+            }))
+            ActionRow(
+                primaryLabel = stringResource(Res.string.lensmoo_enable_assistant),
+                onPrimary = { onAction(GlassesDashboardAction.LensMoo(LensMooDashboardCommand.ENABLE_ASSISTANT)) },
+                primaryEnabled = state.hasOwnerId && !state.isBusy && !state.assistantRunning && !state.previewRunning,
+                primaryStyle = ActionButtonStyle.Primary,
+                secondaryLabel = stringResource(Res.string.dashboard_stop),
+                onSecondary = { onAction(GlassesDashboardAction.LensMoo(LensMooDashboardCommand.DISABLE_ASSISTANT)) },
+                secondaryEnabled = state.assistantRunning,
+                secondaryStyle = ActionButtonStyle.Destructive,
+            )
+            ActionButton(
+                label = stringResource(Res.string.lensmoo_ai_settings),
+                onClick = { onAction(GlassesDashboardAction.LensMoo(LensMooDashboardCommand.OPEN_AI_SETTINGS)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            SectionTitle(stringResource(Res.string.dashboard_media_controls))
+            ActionButton(
+                label = stringResource(Res.string.dashboard_photo),
+                onClick = { onAction(GlassesDashboardAction.CapturePhoto) },
+                enabled = manualEnabled,
+                modifier = Modifier.fillMaxWidth().testTag("lensmoo_capture"),
+            )
+            ActionRow(
+                primaryLabel = stringResource(Res.string.dashboard_test_image),
+                onPrimary = { onAction(GlassesDashboardAction.TestImageQuestion) },
+                primaryEnabled = manualEnabled,
+                secondaryLabel = stringResource(Res.string.dashboard_test_voice),
+                onSecondary = { onAction(GlassesDashboardAction.TestVoiceQuestion) },
+                secondaryEnabled = manualEnabled,
+            )
+            ActionRow(
+                primaryLabel = stringResource(Res.string.dashboard_start_live_preview),
+                onPrimary = { onAction(GlassesDashboardAction.StartLivePreview) },
+                primaryEnabled = manualEnabled && !state.previewRunning,
+                secondaryLabel = stringResource(Res.string.dashboard_stop),
+                onSecondary = { onAction(GlassesDashboardAction.StopLivePreview) },
+                secondaryEnabled = state.previewRunning && !state.isBusy && !state.assistantRunning,
+                secondaryStyle = ActionButtonStyle.Destructive,
+            )
         }
     }
 }

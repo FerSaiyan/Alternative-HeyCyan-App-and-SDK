@@ -35,6 +35,9 @@ def testAbi = providers.gradleProperty("testAbi").orNull
 
 android {
     namespace = "com.fersaiyan.cyanbridge"
+    // Compile the real DAT adapter only when its authenticated SDK dependency is available.
+    sourceSets.main.java.srcDir(metaDatEnabled ? "src/metaDat/java" : "src/noMetaDat/java")
+    if (metaDatEnabled) sourceSets.androidTest.java.srcDir("src/metaDatAndroidTest/java")
     compileSdk = 36
 
     defaultConfig {
@@ -109,6 +112,7 @@ android {
 
     buildTypes {
         debug {
+            if (providers.gradleProperty("lensMooLab").orNull == "true") applicationIdSuffix ".lensmoolab"
             manifestPlaceholders = [
                     mwdat_application_id: "0",
                     mwdat_client_token: "0",

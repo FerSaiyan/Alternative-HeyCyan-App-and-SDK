@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.devices
 
 enum class DeviceClass {
+    LENSMOO,
     HEY_CYAN,
     EYEVUE,
     TUNEBUDS,
@@ -12,6 +13,7 @@ enum class DeviceClass {
     UNKNOWN;
 
     fun displayName(): String = when (this) {
+        LENSMOO -> "LensMoo / XKOENPRO"
         HEY_CYAN -> "HeyCyan"
         EYEVUE -> "Eyevue"
         TUNEBUDS -> "TuneBuds / AB Mate"

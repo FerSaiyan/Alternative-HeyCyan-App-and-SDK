@@ -57,6 +57,7 @@ import org.jetbrains.compose.resources.stringResource
  * is performed. The concrete choice is persisted as the selected class.
  */
 private val pairingChoices = listOf(
+    DeviceClass.LENSMOO,
     DeviceClass.HEY_CYAN,
     DeviceClass.META_RAYBAN,
     DeviceClass.MEIZU_MYVU,

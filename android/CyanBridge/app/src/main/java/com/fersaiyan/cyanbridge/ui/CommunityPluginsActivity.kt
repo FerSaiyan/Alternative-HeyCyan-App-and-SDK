@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaCameraPermissionLauncher
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -53,9 +55,6 @@ import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListActivity
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
-import com.meta.wearable.dat.core.Wearables
-import com.meta.wearable.dat.core.types.Permission
-import com.meta.wearable.dat.core.types.PermissionStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -116,11 +115,11 @@ class CommunityPluginsActivity : AppCompatActivity() {
     }
 
     private val metaWearablePermissionLauncher =
-        registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
+        MetaCameraPermissionLauncher(this) { granted ->
             val pluginId = pendingMetaCameraPlugin
             pendingMetaCameraPlugin = null
-            if (pluginId == null) return@registerForActivityResult
-            if (result.getOrDefault(PermissionStatus.Denied) == PermissionStatus.Granted) {
+            if (pluginId == null) return@MetaCameraPermissionLauncher
+            if (granted) {
                 applyNativePluginToggle(pluginId, enabled = true)
             } else {
                 val manager = MetaRaybanManager.getInstance(this)
@@ -378,7 +377,7 @@ class CommunityPluginsActivity : AppCompatActivity() {
                     onGranted = { applyNativePluginToggle(pluginId, enabled = true) },
                     onRequestNeeded = {
                         pendingMetaCameraPlugin = pluginId
-                        metaWearablePermissionLauncher.launch(Permission.CAMERA)
+                        metaWearablePermissionLauncher.launch()
                     },
                     onError = { error ->
                         android.util.Log.e(

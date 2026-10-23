@@ -10,6 +10,12 @@ import org.junit.Test
 class GlassesManagerGatingTest {
 
     @Test
+    fun lensMoo_exposesNoVendorOrOtaActions() {
+        assertTrue(GlassesManagerGating.visibleActions(DeviceClass.LENSMOO).isEmpty())
+    }
+
+
+    @Test
     fun heyCyan_showsExtrasAndStatusPlaceholders() {
         val profile = DeviceProfile(
             macAddress = "AA:BB:CC:DD:EE:FF",

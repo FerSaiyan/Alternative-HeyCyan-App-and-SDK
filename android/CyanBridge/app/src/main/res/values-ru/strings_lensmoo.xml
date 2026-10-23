@@ -1,0 +1,10 @@
+<resources>
+    <string name="lensmoo_owner_title">Настройки очков LensMoo</string>
+    <string name="lensmoo_owner_hint">ID владельца LensMoo. Сохраняется только на телефоне. Это не пароль учётной записи.</string>
+    <string name="lensmoo_settings_saved">Настройки устройства сохранены</string>
+    <string name="lensmoo_close_preview">Остановить предпросмотр и закрыть</string>
+    <string name="lensmoo_preview_title">Предпросмотр LensMoo · 320×240</string>
+    <string name="lensmoo_connected">Подключено</string>
+    <string name="lensmoo_connecting">Подключение…</string>
+    <string name="lensmoo_disconnected">Не подключено</string>
+</resources>

@@ -13,6 +13,14 @@ import org.robolectric.annotation.Config
 class DeviceClassifierTest {
 
     @Test
+    fun lensMooRoutesSeparatelyFromSimilarlyNamedTuneBuds() {
+        assertEquals(DeviceClass.LENSMOO, DeviceClassifier.guessDeviceClass("XKOENPRO_97D2"))
+        assertEquals(DeviceClass.LENSMOO, DeviceClassifier.guessDeviceClass("LensMoo"))
+        assertEquals(DeviceClass.TUNEBUDS, DeviceClassifier.guessDeviceClass("xk one Pro"))
+    }
+
+
+    @Test
     fun heyCyan_detectedByName() {
         assertEquals(DeviceClass.HEY_CYAN, DeviceClassifier.guessDeviceClass("HeyCyan-123"))
         assertEquals(DeviceClass.HEY_CYAN, DeviceClassifier.guessDeviceClass("cyan glasses"))

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lensmoo_camera_on_demand">The camera stays off until a photo or preview is requested. Stop preview to turn it off.</string>
+    <string name="lensmoo_owner_required">Configure the owner ID before using the glasses.</string>
+    <string name="lensmoo_configure">LensMoo connection settings</string>
+    <string name="lensmoo_assistant">Glasses assistant</string>
+    <string name="lensmoo_assistant_ready">Assistant ready</string>
+    <string name="lensmoo_assistant_starting">Assistant connecting</string>
+    <string name="lensmoo_assistant_stopped">Assistant stopped</string>
+    <string name="lensmoo_enable_assistant">Enable</string>
+    <string name="lensmoo_ai_settings">AI provider settings</string>
+</resources>

@@ -26,6 +26,7 @@ import org.greenrobot.eventbus.EventBus
  */
 class BluetoothReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (DeviceProfileStore.selectedClass(context) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.LENSMOO) return
         when (intent.action) {
             BluetoothAdapter.ACTION_STATE_CHANGED -> {
                 val connectState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)

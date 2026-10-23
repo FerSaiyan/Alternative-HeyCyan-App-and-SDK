@@ -182,7 +182,15 @@ class ChatThreadActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        configureThreadFromIntent(intent)
+        if (savedInstanceState != null && savedInstanceState.getBoolean("lensmoo_origin", false)) {
+            chatId = savedInstanceState.getString("lensmoo_chat_id")
+            lensMooOrigin = true
+            pendingImagePaths.addAll(savedInstanceState.getStringArrayList("lensmoo_pending_images").orEmpty())
+            pendingLensMooVoice = savedInstanceState.getBoolean("lensmoo_pending_voice", false)
+            updateComposerText(savedInstanceState.getString("lensmoo_composer").orEmpty())
+            updatePendingAttachmentsUi()
+            scheduleLensMooVoiceSend()
+        } else configureThreadFromIntent(intent)
 
         val appearancePreferences = AppearancePreferences(this)
         setContent {
@@ -249,7 +257,33 @@ class ChatThreadActivity : AppCompatActivity() {
         refreshDailyReviewQueueStatusAsync()
     }
 
+    private var lensMooOrigin = false
+    private var pendingLensMooVoice = false
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        if (lensMooOrigin) {
+            outState.putBoolean("lensmoo_origin", true)
+            outState.putString("lensmoo_chat_id", chatId)
+            outState.putStringArrayList("lensmoo_pending_images", ArrayList(pendingImagePaths))
+            outState.putBoolean("lensmoo_pending_voice", pendingLensMooVoice)
+            outState.putString("lensmoo_composer", chatThreadUiState.composerText)
+        }
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun scheduleLensMooVoiceSend() {
+        mainHandler.post {
+            if (pendingLensMooVoice && !isFinishing && !isDestroyed && pendingImagePaths.isNotEmpty()) {
+                pendingLensMooVoice = false
+                sendMessage(chatThreadUiState.composerText, speakReply = true)
+            }
+        }
+    }
+
+    private var lensMooVoice: com.fersaiyan.cyanbridge.lensmoo.LensMooVoiceController? = null
+
     override fun onDestroy() {
+        lensMooVoice?.close(); lensMooVoice=null
         recordStopRunnable?.let(mainHandler::removeCallbacks)
         if (isMediaRecording) {
             stopAudioRecording(saveAsAttachment = true)
@@ -296,9 +330,35 @@ class ChatThreadActivity : AppCompatActivity() {
         }
         updateChatThreadState(ChatThreadEvent.Loaded(thread = null, messages = emptyList()))
         dailyReviewQueueStatus = null
+        lensMooOrigin = source.hasExtra(EXTRA_LENSMOO_IMAGE_URI)
+        val voiceRequest=source.getBooleanExtra(EXTRA_LENSMOO_VOICE_REQUEST,false)
+        source.removeExtra(EXTRA_LENSMOO_VOICE_REQUEST)
+        var lensMooPhotoAttached=false
+        source.getStringExtra(EXTRA_LENSMOO_IMAGE_URI)?.let { uriText ->
+            // Consume once: rotating/resuming this Activity must not duplicate the attachment.
+            source.removeExtra(EXTRA_LENSMOO_IMAGE_URI)
+            runCatching {
+                val uri = Uri.parse(uriText)
+                check(uri.scheme == "content" && uri.authority == "media") { "Expected a MediaStore photo" }
+                val input = contentResolver.openInputStream(uri) ?: error("Cannot open captured photo")
+                com.fersaiyan.cyanbridge.lensmoo.LensMooChatAttachment.copyOriginal(input, chatAttachmentDir())
+            }.onSuccess { file ->
+                pendingImagePaths += file.absolutePath
+                lensMooPhotoAttached=true
+                updatePendingAttachmentsUi()
+            }.onFailure {
+                android.widget.Toast.makeText(this, "Не удалось прикрепить фото очков", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
         source.getStringExtra(EXTRA_PREFILL_MESSAGE)
             ?.takeIf { it.isNotBlank() }
             ?.let(::updateComposerText)
+        if(voiceRequest && lensMooPhotoAttached) {
+            val prompt=source.getStringExtra(EXTRA_PREFILL_MESSAGE)?.trim().orEmpty()
+            source.removeExtra(EXTRA_PREFILL_MESSAGE)
+            pendingLensMooVoice = prompt.isNotBlank()
+            scheduleLensMooVoiceSend()
+        }
     }
 
     private fun openChatList() {
@@ -1000,7 +1060,12 @@ class ChatThreadActivity : AppCompatActivity() {
         return dir
     }
 
-    private fun sendMessage(text: String) {
+    private fun sendMessage(text: String, speakReply: Boolean = false) {
+        if (lensMooOrigin && !com.fersaiyan.cyanbridge.lensmoo.LensMooAiGate.ready(this)) {
+            android.widget.Toast.makeText(this, "Выберите локальную Gemma LiteRT или настройте облачную модель", android.widget.Toast.LENGTH_LONG).show()
+            startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
+            return
+        }
         val images = pendingImagePaths.toList()
         val audio = pendingAudioPath
         val promptText = text.ifBlank {
@@ -1033,6 +1098,7 @@ class ChatThreadActivity : AppCompatActivity() {
                 imagePaths = images,
                 audioPath = audio,
                 requestSmartTitleAfterReply = shouldGenerateSmartTitle,
+                speakReply = speakReply,
             )
         }
     }
@@ -1096,6 +1162,7 @@ class ChatThreadActivity : AppCompatActivity() {
         audioPath: String? = null,
         requestSmartTitleAfterReply: Boolean,
         onFinished: (() -> Unit)? = null,
+        speakReply: Boolean = false,
     ) {
         lifecycleScope.launch {
             onAssistantRequestStarted()
@@ -1111,7 +1178,12 @@ class ChatThreadActivity : AppCompatActivity() {
             try {
                 val assistantReply = withContext(Dispatchers.IO) {
                     val messages = buildRelayMessages(chatId = chatId, lastUserPrompt = userPrompt)
-                    RelayAiAssistantRouter.chatReplyStreaming(
+                    if (lensMooOrigin) LocalModelsProvider().streamChat(
+                        context = this@ChatThreadActivity,
+                        messages = com.fersaiyan.cyanbridge.lensmoo.lensMooMessages(messages),
+                        imagePaths = imagePaths,
+                        audioPath = audioPath,
+                    ) else RelayAiAssistantRouter.chatReplyStreaming(
                         context = this@ChatThreadActivity,
                         chatId = chatId,
                         userPrompt = userPrompt,
@@ -1172,13 +1244,19 @@ class ChatThreadActivity : AppCompatActivity() {
                         nowMs = System.currentTimeMillis(),
                     )
                     updateChatThreadState(ChatThreadEvent.GenerationFinished())
+                    if(speakReply && (assistantReply.isNotBlank() || streamed.isNotBlank())) {
+                        val voice=lensMooVoice ?: com.fersaiyan.cyanbridge.lensmoo.LensMooVoiceController(
+                            this@ChatThreadActivity,onTranscript={},onStatus={ message -> android.widget.Toast.makeText(this@ChatThreadActivity,message,android.widget.Toast.LENGTH_LONG).show() }
+                        ).also { lensMooVoice=it }
+                        voice.speak(finalReplyWithCapNotice)
+                    }
 
-                    if (requestSmartTitleAfterReply) {
+                    if (requestSmartTitleAfterReply && !lensMooOrigin) {
                         maybeGenerateSmartThreadTitle(chatId = chatId, firstUserPrompt = userPrompt)
                     }
 
                     // Proactive memory: extract candidate facts from normal chats.
-                    lifecycleScope.launch {
+                    if (!lensMooOrigin) lifecycleScope.launch {
                         withContext(Dispatchers.IO) {
                             ChatMemoryAutoUpdater.extractAndStore(
                                 context = this@ChatThreadActivity,
@@ -2426,6 +2504,8 @@ class ChatThreadActivity : AppCompatActivity() {
         private const val AUDIO_SAMPLE_RATE_HZ = 16_000
         private const val WAV_HEADER_BYTES = 44
 
+        const val EXTRA_LENSMOO_VOICE_REQUEST = "lensmoo_voice_request"
+        const val EXTRA_LENSMOO_IMAGE_URI = "lensmoo_image_uri"
         const val EXTRA_CHAT_ID = "chat_id"
 
         // If EXTRA_CHAT_ID is missing, ChatThreadActivity can create a new thread.

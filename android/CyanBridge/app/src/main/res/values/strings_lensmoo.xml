@@ -1,0 +1,10 @@
+<resources>
+    <string name="lensmoo_owner_title">LensMoo device settings</string>
+    <string name="lensmoo_owner_hint">Existing LensMoo owner ID. Stored only on this phone; this is not your account password.</string>
+    <string name="lensmoo_settings_saved">Device settings saved</string>
+    <string name="lensmoo_close_preview">Stop preview and close</string>
+    <string name="lensmoo_preview_title">LensMoo live preview · 320×240</string>
+    <string name="lensmoo_connected">Connected</string>
+    <string name="lensmoo_connecting">Connecting…</string>
+    <string name="lensmoo_disconnected">Disconnected</string>
+</resources>
