@@ -20,6 +20,7 @@ import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ToolProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.sync.Mutex
@@ -274,7 +275,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 runCatching {
                     generateFromConversation(conversation, config.prompt, userContents, onToken)
                 }.recoverCatching {
-                    if (userContents == null) throw it
+                    if (userContents == null || it is CancellationException) throw it
                     generateFromConversation(conversation, config.prompt, null, onToken)
                 }.getOrThrow()
             }

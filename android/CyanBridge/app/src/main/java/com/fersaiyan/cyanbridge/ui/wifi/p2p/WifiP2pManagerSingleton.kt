@@ -47,9 +47,18 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     private val callbacks = CopyOnWriteArrayList<WifiP2pCallback>()
 
     private val discoveryTimeoutMs = 16_000L
-    private val connectTimeoutMs = 5_000L
+    private val connectTimeoutMs = 30_000L
+    private val busyDiscoveryRetryDelayMs = 1_000L
+    private val maxBusyDiscoveryRetries = 3
+    private val busyConnectRetryDelayMs = 1_000L
+    private var busyDiscoveryRetryCount = 0
     private val delayedPeerDiscoveryRestart = Runnable {
         startPeerDiscovery(allowDeviceResetOnTimeout = allowDeviceResetOnDiscoveryTimeout)
+    }
+    private val busyConnectRetry = Runnable {
+        wifiP2pDevice?.let { device ->
+            connectToDevice(device, connectionGroupOwnerIntent)
+        }
     }
 
     private val connectionState = WifiP2pConnectionState()
@@ -104,14 +113,21 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     }
 
     fun registerReceiver() {
-        receiver = WifiP2pBroadcastReceiver(this)
+        if (receiver != null) {
+            Log.d(TAG, "P2P broadcast receiver is already registered")
+            return
+        }
+        val p2pReceiver = WifiP2pBroadcastReceiver(this)
         // Use compat API to avoid calling the API 33+ registerReceiver overload on older devices.
+        // Wi-Fi P2P broadcasts can originate from the privileged Wi-Fi process, so this
+        // receiver must be exported to receive them on recent Android versions.
         ContextCompat.registerReceiver(
             context,
-            receiver,
+            p2pReceiver,
             intentFilter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
+            ContextCompat.RECEIVER_EXPORTED
         )
+        receiver = p2pReceiver
     }
 
     fun unregisterReceiver() {
@@ -119,6 +135,8 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
             receiver?.let { context.unregisterReceiver(it) }
         } catch (e: Exception) {
             Log.e(TAG, "Error unregistering receiver", e)
+        } finally {
+            receiver = null
         }
     }
 
@@ -134,9 +152,11 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
             callbacks.forEach { it.onPeerDiscoveryFailed(WifiP2pManager.ERROR) }
             return
         }
+        handler.removeCallbacks(discoveryTimeOut)
         handler.postDelayed(discoveryTimeOut, discoveryTimeoutMs)
         wifiP2pManager.discoverPeers(wifiP2pChannel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
+                busyDiscoveryRetryCount = 0
                 Log.d(TAG, "Peer discovery started successfully")
                 callbacks.forEach { it.onPeerDiscoveryStarted() }
             }
@@ -145,6 +165,22 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
                 Log.e(TAG, "Peer discovery failed: $reason")
                 if (!p2pOperationsEnabled) {
                     Log.d(TAG, "Ignoring discovery failure after P2P operations stopped")
+                    return
+                }
+                if (
+                    reason == WifiP2pManager.BUSY &&
+                    busyDiscoveryRetryCount < maxBusyDiscoveryRetries
+                ) {
+                    busyDiscoveryRetryCount++
+                    Log.w(
+                        TAG,
+                        "Wi-Fi P2P is busy during discovery; retrying " +
+                            "($busyDiscoveryRetryCount/$maxBusyDiscoveryRetries) " +
+                            "in ${busyDiscoveryRetryDelayMs}ms",
+                    )
+                    handler.removeCallbacks(discoveryTimeOut)
+                    discoverPeersStable()
+                    handler.postDelayed(delayedPeerDiscoveryRestart, busyDiscoveryRetryDelayMs)
                     return
                 }
                 // Mirror vendor behavior: reschedule the internal timeout and stop discovery
@@ -207,18 +243,16 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
 
         wifiP2pDevice = device
         connectionGroupOwnerIntent = groupOwnerIntent
+        val peerAddress = device.deviceAddress
         val config = WifiP2pConfig().apply {
-            deviceAddress = device.deviceAddress
+            deviceAddress = peerAddress
             // Match decompiled vendor app: WPS PBC.
             wps.setup = 0
             groupOwnerIntent?.let { this.groupOwnerIntent = it }
         }
-        if (groupOwnerIntent != null) {
-            Log.i(TAG, "Connecting with groupOwnerIntent=$groupOwnerIntent")
-        }
 
         connectionState.setConnecting(true)
-        Log.d(TAG, "Already connecting device: ${device.deviceName}---${device.deviceAddress}")
+        Log.i(TAG, "Calling WifiP2pManager.connect for ${device.deviceName} at $peerAddress")
 
         wifiP2pManager.connect(wifiP2pChannel, config, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
@@ -229,6 +263,15 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
             override fun onFailure(reason: Int) {
                 Log.e(TAG, "Connect request failed: $reason")
                 connectionState.markConnectRequestFailed()
+                handler.removeCallbacks(connectTimeOut)
+                if (
+                    reason == WifiP2pManager.BUSY &&
+                    retryState.shouldRetryConnect()
+                ) {
+                    Log.w(TAG, "Wi-Fi P2P is busy; retrying connect in ${busyConnectRetryDelayMs}ms")
+                    handler.postDelayed(busyConnectRetry, busyConnectRetryDelayMs)
+                    return
+                }
                 callbacks.forEach { it.onConnectRequestFailed(reason) }
             }
         })
@@ -279,6 +322,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     fun resetFailCount() {
         p2pOperationsEnabled = true
         retryState.reset()
+        busyDiscoveryRetryCount = 0
         connectionState.reset()
         cancelPendingRetries()
     }
@@ -287,6 +331,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     fun cancelPendingRetries() {
         handler.removeCallbacks(discoveryTimeOut)
         handler.removeCallbacks(connectTimeOut)
+        handler.removeCallbacks(busyConnectRetry)
         handler.removeCallbacks(delayedPeerDiscoveryRestart)
     }
 

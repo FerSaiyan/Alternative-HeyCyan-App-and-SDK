@@ -35,6 +35,7 @@ import com.fersaiyan.cyanbridge.media.AdaptiveP2pSyncSession
 import com.fersaiyan.cyanbridge.media.AdaptiveSyncCheckpoint
 import com.fersaiyan.cyanbridge.ota.FirmwareClient
 import com.fersaiyan.cyanbridge.ota.InstalledFirmwareVersions
+import com.fersaiyan.cyanbridge.ota.MjpegSnapshotCapture
 import com.fersaiyan.cyanbridge.ota.FirmwareResult
 import com.fersaiyan.cyanbridge.ota.OtaManager
 import com.fersaiyan.cyanbridge.ota.OtaReadinessStage
@@ -62,7 +63,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.Permission as HjqPermission
 import com.hjq.permissions.XXPermissions
@@ -415,6 +418,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val QUERY_MAX_TOTAL_CONTEXT_CHARS = 6500
 
         private const val IMAGE_QUESTION_MAX_IMAGE_AGE_MS = 3L * 60L * 1000L
+        private const val LIVE_PREVIEW_AI_INTERVAL_MS = 5_000L
         private const val P2P_GROUP_REMOVAL_RETRY_MS = 1_000L
         private const val P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS = 5_000L
         private const val P2P_GROUP_DISCONNECT_TIMEOUT_MS = 5_000L
@@ -495,6 +499,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     private val livePreviewManager by lazy { com.fersaiyan.cyanbridge.ota.LivePreviewManager(this) }
     private var livePreviewDialog: AlertDialog? = null
+    private var livePreviewAiJob: Job? = null
     private val wifiAdbDebugController by lazy { DefaultWifiAdbDebugControllerFactory.create(this) }
 
     // AI Hijack settings
@@ -861,6 +866,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         } catch (e: Exception) {
             Log.w("DeviceNotify", "Failed to unregister SDK callbacks", e)
         }
+        localSpeechSessionManager.attachTtsEngine(null, false)
+        tts?.setOnUtteranceProgressListener(null)
         super.onDestroy()
         tts?.stop()
         tts?.shutdown()
@@ -3301,7 +3308,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 )
 
                 if (lp.isPlaying && lp.streamUrl != null) {
-                    Log.i("LivePreview", "Stream playing, showing ExoPlayer dialog: ${lp.streamUrl}")
+                    Log.i("LivePreview", "Stream ready, showing live preview dialog: ${lp.streamUrl}")
                     showRtspPlayerDialog(lp.streamUrl)
                 } else {
                     livePreviewDialog?.let { dialog ->
@@ -3379,13 +3386,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        val dialogView = android.widget.FrameLayout(this).apply {
-            layoutParams = android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+        val dialogView = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
             )
         }
 
+        val canAnalyzeWithAi = player == null && streamUrl == "http://127.0.0.1:8080/mjpeg"
+        val analyzeWithAiSwitch = androidx.appcompat.widget.SwitchCompat(this).apply {
+            text = "Analyze with AI"
+            isEnabled = canAnalyzeWithAi
+            setPadding(16, 8, 16, 8)
+        }
+        dialogView.addView(
+            analyzeWithAiSwitch,
+            android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
+        val previewFrame = android.widget.FrameLayout(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                600,
+            )
+        }
         var localStreamView: android.webkit.WebView? = null
         if (player != null) {
             val playerView = androidx.media3.ui.PlayerView(this).apply {
@@ -3393,10 +3421,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 useController = true
                 layoutParams = android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    600,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 )
             }
-            dialogView.addView(playerView)
+            previewFrame.addView(playerView)
         } else {
             val streamView = android.webkit.WebView(this).apply {
                 settings.javaScriptEnabled = false
@@ -3415,20 +3443,65 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 )
                 layoutParams = android.widget.FrameLayout.LayoutParams(
                     android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    600,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 )
             }
             localStreamView = streamView
-            dialogView.addView(streamView)
+            previewFrame.addView(streamView)
+        }
+
+        val aiResponseView = android.widget.TextView(this).apply {
+            textSize = 13f
+            setTextColor(android.graphics.Color.WHITE)
+            setPadding(12, 8, 12, 8)
+            maxLines = 4
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setBackgroundColor(0xcc101820.toInt())
+            visibility = View.GONE
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.BOTTOM,
+            ).apply {
+                val margin = (10 * resources.displayMetrics.density).toInt()
+                setMargins(margin, margin, margin, margin)
+            }
+        }
+        previewFrame.addView(aiResponseView)
+        dialogView.addView(previewFrame)
+
+        var dialogForAnalysis: AlertDialog? = null
+        analyzeWithAiSwitch.setOnCheckedChangeListener { _, enabled ->
+            if (enabled) {
+                aiResponseView.visibility = View.VISIBLE
+                aiResponseView.text = if (RemoteOpenAiPrefs.isActive(this)) {
+                    "Disable the remote AI endpoint to analyze with the local model."
+                } else {
+                    "Waiting for the first frame..."
+                }
+                if (!RemoteOpenAiPrefs.isActive(this)) {
+                    startLivePreviewAiAnalysis(
+                        streamUrl = streamUrl,
+                        responseView = aiResponseView,
+                        analyzeSwitch = analyzeWithAiSwitch,
+                        dialogProvider = { dialogForAnalysis },
+                    )
+                }
+            } else {
+                stopLivePreviewAiAnalysis()
+                aiResponseView.visibility = View.GONE
+                aiResponseView.text = ""
+            }
         }
 
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Live Preview")
-            .setMessage(streamUrl)
             .setView(dialogView)
             .setPositiveButton("Close", null)
             .create()
+        dialogForAnalysis = dialog
         dialog.setOnDismissListener {
+            stopLivePreviewAiAnalysis()
             localStreamView?.apply {
                 stopLoading()
                 destroy()
@@ -3442,6 +3515,98 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         livePreviewDialog = dialog
         dialog.show()
         Log.i("LivePreview", "Dialog: shown")
+    }
+
+    private fun startLivePreviewAiAnalysis(
+        streamUrl: String,
+        responseView: android.widget.TextView,
+        analyzeSwitch: androidx.appcompat.widget.SwitchCompat,
+        dialogProvider: () -> AlertDialog?,
+    ) {
+        stopLivePreviewAiAnalysis()
+        val previewJob = lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                var nextCaptureAt = android.os.SystemClock.elapsedRealtime()
+                var analysisJob: Job? = null
+                while (isActive && analyzeSwitch.isChecked && dialogProvider()?.isShowing == true) {
+                    val waitMs = nextCaptureAt - android.os.SystemClock.elapsedRealtime()
+                    if (waitMs > 0) delay(waitMs)
+                    analysisJob?.join()
+                    nextCaptureAt =
+                        android.os.SystemClock.elapsedRealtime() + LIVE_PREVIEW_AI_INTERVAL_MS
+                    try {
+                        if (RemoteOpenAiPrefs.isActive(this@MainActivity)) {
+                            responseView.text =
+                                "Disable the remote AI endpoint to analyze with the local model."
+                            continue
+                        }
+                        val jpeg = MjpegSnapshotCapture.capture(streamUrl)
+                        responseView.text = "Analyzing live frame..."
+                        analysisJob = launch(Dispatchers.IO) {
+                            var snapshot: File? = null
+                            try {
+                                val snapshotFile = File.createTempFile("live-preview-ai-", ".jpg", cacheDir)
+                                snapshot = snapshotFile
+                                snapshotFile.writeBytes(jpeg)
+                                val prompt = resolveImageQuestionPrompt(userQuestion = null)
+                                    .forRoute(ImageQuestionRoute.LOCAL_GEMMA)
+                                val streamedResponse = StringBuilder()
+                                val reply = runChosenProviderQuery(
+                                    userPrompt = prompt,
+                                    providerType = AgentProviderType.LOCAL_AGENT,
+                                    ragProfile = RagProfile.NONE,
+                                    imagePaths = listOf(snapshotFile.absolutePath),
+                                    onToken = { token ->
+                                        streamedResponse.append(token)
+                                        runOnUiThread {
+                                            if (livePreviewAiJob?.isActive == true &&
+                                                lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+                                                analyzeSwitch.isChecked &&
+                                                dialogProvider()?.isShowing == true
+                                            ) {
+                                                responseView.text = streamedResponse.toString()
+                                            }
+                                        }
+                                    },
+                                )
+                                coroutineContext.ensureActive()
+                                withContext(Dispatchers.Main) {
+                                    if (analyzeSwitch.isChecked && dialogProvider()?.isShowing == true) {
+                                        responseView.text = reply.ifBlank {
+                                            "The local model returned an empty response."
+                                        }
+                                    }
+                                }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                Log.e("LivePreviewAI", "Live frame analysis failed", error)
+                                withContext(Dispatchers.Main) {
+                                    if (analyzeSwitch.isChecked && dialogProvider()?.isShowing == true) {
+                                        responseView.text =
+                                            "AI analysis failed: ${error.localizedMessage ?: error.javaClass.simpleName}"
+                                    }
+                                }
+                            } finally {
+                                snapshot?.delete()
+                            }
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.e("LivePreviewAI", "Could not capture an MJPEG frame", error)
+                        responseView.text =
+                            "Could not capture live frame: ${error.localizedMessage ?: error.javaClass.simpleName}"
+                    }
+                }
+            }
+        }
+        livePreviewAiJob = previewJob
+    }
+
+    private fun stopLivePreviewAiAnalysis() {
+        livePreviewAiJob?.cancel()
+        livePreviewAiJob = null
     }
     
     private fun controlVideoRecording(start: Boolean) {

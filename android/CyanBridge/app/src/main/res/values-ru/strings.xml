@@ -133,4 +133,13 @@
     <string name="donation_intro_dialog_title">Информация о поддержке CyanBridge через Asaas</string>
     <string name="donation_intro_dialog_message">Здравствуйте, спасибо, что рассматриваете возможность поддержать CyanBridge пожертвованием! Я работаю над этим проектом параллельно с учёбой в докторантуре, и ваша поддержка очень важна для меня. Мне пока не удалось настроить Stripe из-за особых требований к бразильским компаниям, поэтому сейчас я использую платёжный сервис Asaas. Страница оплаты на португальском языке; при необходимости воспользуйтесь Google Переводчиком. Я активно ищу более удобную альтернативу. Ещё раз спасибо за поддержку!</string>
     <string name="donation_intro_open_button">Открыть форму оплаты Asaas</string>
+    <string name="onboarding_device_ram">На устройстве: %.1f ГБ ОЗУ</string>
+    <string name="onboarding_ram_warning_title">Недостаточно памяти</string>
+    <string name="onboarding_ram_limited">На этом устройстве %.1f ГБ ОЗУ. Рекомендуются только компактные локальные модели ИИ; более крупные модели могут работать медленно или неожиданно закрываться.</string>
+    <string name="onboarding_ram_too_low">На этом устройстве всего %.1f ГБ ОЗУ. Для локального ИИ требуется не менее 4 ГБ, поэтому сейчас нет совместимых локальных моделей. Вы можете продолжить и позже настроить облачного или удалённого провайдера.</string>
+    <string name="onboarding_bluetooth_skip_title">Продолжить без Bluetooth?</string>
+    <string name="onboarding_bluetooth_skip_body">Это разрешение можно предоставить позже. До этого CyanBridge не сможет найти, выполнить сопряжение или подключиться к вашим очкам.</string>
+    <string name="onboarding_bluetooth_skip_confirm">Всё равно продолжить</string>
+    <string name="onboarding_bluetooth_skip_cancel">Назад</string>
+    <string name="onboarding_find_glasses">Найти доступные очки</string>
 </resources>

@@ -435,12 +435,11 @@
     <string name="dashboard_count">Nombre</string>
     <string name="dashboard_sync_wifi">Synchroniser les donnees par Wi-Fi</string>
     <string name="dashboard_eye_vue_live_preview">Apercu en direct Eyevue</string>
-    <string name="dashboard_passive_rtsp_probe">Sonde RTSP passive de laboratoire</string>
+    <string name="dashboard_rtsp_live_preview">Apercu RTSP en direct HeyCyan</string>
     <string name="dashboard_eye_vue_description">Demarre le mode direct du fournisseur, rejoint le reseau Wi-Fi Eyevue renvoye et lit le flux de la camera.</string>
-    <string name="dashboard_passive_probe_description">N'envoie aucune commande de mode BLE. Activez separement le mode 8 avec la procedure materielle approuvee.</string>
+    <string name="dashboard_rtsp_live_preview_description">Demarre le mode en direct des lunettes par BLE, se connecte automatiquement via Wi-Fi Direct si possible, puis affiche le flux RTSP.</string>
     <string name="dashboard_connecting">Connexion...</string>
     <string name="dashboard_start_live_preview">Demarrer l'apercu en direct</string>
-    <string name="dashboard_arm_passive_probe">Armer la sonde passive</string>
     <string name="dashboard_glasses_capture_settings">Parametres de capture des lunettes</string>
     <string name="dashboard_capture_settings_description">Lisez les parametres des lunettes connectees avant de modifier ces valeurs stockees dans l'appareil.</string>
     <string name="dashboard_wearing_detection">Detection du port</string>

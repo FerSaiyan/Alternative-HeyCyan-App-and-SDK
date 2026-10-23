@@ -7,6 +7,8 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.chat.ChatMessage
@@ -14,25 +16,19 @@ import com.fersaiyan.cyanbridge.shared.chat.ChatRole
 import com.fersaiyan.cyanbridge.databinding.ItemMessageReceivedBinding
 import com.fersaiyan.cyanbridge.databinding.ItemMessageSentBinding
 
-class ChatMessageAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+class ChatMessageAdapter : ListAdapter<ChatMessage, RecyclerView.ViewHolder>(DIFF_CALLBACK) {
 
-    private var items: List<ChatMessage> = emptyList()
     private var userBubbleColor: Int? = null
     private var assistantBubbleColor: Int? = null
-
-    fun submitList(newItems: List<ChatMessage>) {
-        items = newItems
-        notifyDataSetChanged()
-    }
 
     fun applyAppearance(userColor: Int, assistantColor: Int) {
         userBubbleColor = userColor
         assistantBubbleColor = assistantColor
-        notifyDataSetChanged()
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
     }
 
     override fun getItemViewType(position: Int): Int {
-        return when (items[position].role) {
+        return when (getItem(position).role) {
             ChatRole.USER -> TYPE_SENT
             ChatRole.ASSISTANT -> TYPE_RECEIVED
         }
@@ -53,10 +49,8 @@ class ChatMessageAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
     }
 
-    override fun getItemCount(): Int = items.size
-
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        val item = items[position]
+        val item = getItem(position)
         when (holder) {
             is SentVH -> holder.bind(item, userBubbleColor)
             is ReceivedVH -> holder.bind(item, assistantBubbleColor)
@@ -82,6 +76,14 @@ class ChatMessageAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     companion object {
         private const val TYPE_SENT = 1
         private const val TYPE_RECEIVED = 2
+
+        private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<ChatMessage>() {
+            override fun areItemsTheSame(oldItem: ChatMessage, newItem: ChatMessage): Boolean =
+                oldItem.id == newItem.id
+
+            override fun areContentsTheSame(oldItem: ChatMessage, newItem: ChatMessage): Boolean =
+                oldItem == newItem
+        }
 
         private fun tintBubble(textView: TextView, bubbleColor: Int) {
             textView.backgroundTintList = ColorStateList.valueOf(bubbleColor)

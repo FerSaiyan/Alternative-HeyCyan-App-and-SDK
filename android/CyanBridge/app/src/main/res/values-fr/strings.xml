@@ -133,4 +133,13 @@
     <string name="donation_intro_dialog_title">Note de soutien CyanBridge via Asaas</string>
     <string name="donation_intro_dialog_message">Bonjour, merci d\'envisager un don à CyanBridge ! Je travaille sur ce projet en parallèle de mon doctorat, et votre soutien compte beaucoup pour moi. Je n\'ai pas encore pu configurer Stripe en raison de ses exigences particulières pour les entreprises brésiliennes. J\'utilise donc pour le moment un prestataire de paiement appelé Asaas. La page de paiement est en portugais ; utilisez Google Traduction si nécessaire. Je cherche activement une meilleure solution. Merci encore pour votre soutien !</string>
     <string name="donation_intro_open_button">Ouvrir le formulaire de carte Asaas</string>
+    <string name="onboarding_device_ram">Cet appareil : %.1f Go de RAM</string>
+    <string name="onboarding_ram_warning_title">Mémoire limitée</string>
+    <string name="onboarding_ram_limited">Cet appareil dispose de %.1f Go de RAM. Seuls les modèles d\'IA locaux compacts sont recommandés ; les modèles plus volumineux peuvent être lents ou se fermer de manière inattendue.</string>
+    <string name="onboarding_ram_too_low">Cet appareil ne dispose que de %.1f Go de RAM. L\'IA locale nécessite au moins 4 Go ; aucun modèle local n\'est donc compatible pour le moment. Vous pouvez continuer et configurer ultérieurement un fournisseur cloud ou distant.</string>
+    <string name="onboarding_bluetooth_skip_title">Continuer sans Bluetooth ?</string>
+    <string name="onboarding_bluetooth_skip_body">Vous pourrez accorder cette autorisation plus tard. En attendant, CyanBridge ne pourra pas détecter, associer ni connecter vos lunettes.</string>
+    <string name="onboarding_bluetooth_skip_confirm">Continuer quand même</string>
+    <string name="onboarding_bluetooth_skip_cancel">Retour</string>
+    <string name="onboarding_find_glasses">Rechercher les lunettes disponibles</string>
 </resources>

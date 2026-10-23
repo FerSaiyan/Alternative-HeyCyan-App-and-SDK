@@ -435,12 +435,11 @@
     <string name="dashboard_count">개수</string>
     <string name="dashboard_sync_wifi">Wi-Fi로 데이터 동기화</string>
     <string name="dashboard_eye_vue_live_preview">Eyevue 실시간 미리보기</string>
-    <string name="dashboard_passive_rtsp_probe">수동 RTSP 실험실 프로브</string>
+    <string name="dashboard_rtsp_live_preview">HeyCyan RTSP 실시간 미리보기</string>
     <string name="dashboard_eye_vue_description">공급업체 실시간 모드를 시작하고 반환된 Eyevue Wi-Fi 네트워크에 연결한 다음 카메라 스트림을 재생합니다.</string>
-    <string name="dashboard_passive_probe_description">BLE 모드 명령을 보내지 않습니다. 승인된 하드웨어 절차를 사용하여 모드 8을 별도로 활성화하세요.</string>
+    <string name="dashboard_rtsp_live_preview_description">BLE로 안경 라이브 모드를 시작하고, 가능하면 Wi-Fi Direct로 자동 연결한 다음 RTSP 스트림을 표시합니다.</string>
     <string name="dashboard_connecting">연결 중...</string>
     <string name="dashboard_start_live_preview">실시간 미리보기 시작</string>
-    <string name="dashboard_arm_passive_probe">수동 프로브 준비</string>
     <string name="dashboard_glasses_capture_settings">안경 캡처 설정</string>
     <string name="dashboard_capture_settings_description">기기에 저장된 설정을 변경하기 전에 연결된 안경에서 설정을 읽으세요.</string>
     <string name="dashboard_wearing_detection">착용 감지</string>

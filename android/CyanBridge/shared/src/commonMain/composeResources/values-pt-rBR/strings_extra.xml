@@ -435,12 +435,11 @@
     <string name="dashboard_count">Quantidade</string>
     <string name="dashboard_sync_wifi">Sincronizar dados por Wi-Fi</string>
     <string name="dashboard_eye_vue_live_preview">Visualizacao ao vivo do Eyevue</string>
-    <string name="dashboard_passive_rtsp_probe">Sonda RTSP passiva de laboratorio</string>
+    <string name="dashboard_rtsp_live_preview">Pre-visualizacao RTSP ao vivo HeyCyan</string>
     <string name="dashboard_eye_vue_description">Inicia o modo ao vivo do fornecedor, entra na rede Wi-Fi retornada pelo Eyevue e reproduz o fluxo da camera.</string>
-    <string name="dashboard_passive_probe_description">Nao envia comando de modo BLE. Ative o modo 8 separadamente usando o procedimento de hardware aprovado.</string>
+    <string name="dashboard_rtsp_live_preview_description">Inicia o modo ao vivo dos oculos por BLE, conecta automaticamente via Wi-Fi Direct quando disponivel e exibe o fluxo RTSP.</string>
     <string name="dashboard_connecting">Conectando...</string>
     <string name="dashboard_start_live_preview">Iniciar visualizacao ao vivo</string>
-    <string name="dashboard_arm_passive_probe">Preparar sonda passiva</string>
     <string name="dashboard_glasses_capture_settings">Configuracoes de captura dos oculos</string>
     <string name="dashboard_capture_settings_description">Leia os oculos conectados antes de alterar estas configuracoes armazenadas no dispositivo.</string>
     <string name="dashboard_wearing_detection">Deteccao de uso</string>

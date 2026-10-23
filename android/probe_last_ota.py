@@ -22,21 +22,32 @@ def dedupe(seq: list[str]) -> list[str]:
 
 
 def build_version_variants(version: str) -> list[str]:
-    variants = [version]
-    m = re.match(r"^(\d+\.\d+\.\d+)_(\d{10})$", version)
+    raw = (version or "").strip()
+    if not raw:
+        return []
+    variants = [raw]
+    m = re.match(r"^(?:v)?(?P<base>\d+\.\d+\.\d+)(?:[_-](?P<stamp>\d{6,10}))?$", raw, re.IGNORECASE)
     if m:
-        variants.append(f"{m.group(1)}_{m.group(2)[:6]}")
-        variants.append(m.group(1))
-    m = re.match(r"^(\d+\.\d+\.\d+)_(\d{6})$", version)
-    if m:
-        variants.append(m.group(1))
+        base = m.group("base")
+        stamp = m.group("stamp")
+        if stamp:
+            variants.append(f"{base}_{stamp[:6]}")
+            variants.append(base)
+        else:
+            variants.append(base)
     return dedupe(variants)
 
 
 def build_hw_variants(hw: str) -> list[str]:
-    variants = [hw]
-    if hw == "WIFIA03BV":
+    raw = (hw or "").strip()
+    if not raw:
+        return []
+    normalized = raw.upper()
+    variants = [normalized]
+    if normalized == "WIFIA03BV":
         variants.extend(["WIFIA03B", "WIFIA03"])
+    elif normalized == "WIFIA03B":
+        variants.append("WIFIA03")
     return dedupe(variants)
 
 

@@ -99,17 +99,28 @@ def choose(controls: list[dict], label: str) -> dict | None:
 
 
 def merge_verified_rows(prior: list[dict], new: list[dict]) -> list[dict]:
-    """Retain verified episodes across disconnected collection attempts."""
-    by_episode = {}
-    for row in prior:
-        if row.get("observation", {}).get("screenSignature") and row.get("outcomeVerified"):
-            by_episode.setdefault(row["episodeId"], []).append(row)
-    current = {}
-    for row in new:
-        current.setdefault(row["episodeId"], []).append(row)
-    by_episode.update(current)
-    return [row for episode in sorted(by_episode)
-            for row in sorted(by_episode[episode], key=lambda item: item["step"])]
+    """Retain verified rows across disconnected collection attempts.
+
+    A retry may revisit the same episode and step with a weaker or failed result.
+    We keep only verified rows and never replace an earlier verified row with a
+    non-verified retry.
+    """
+    by_episode: dict[str, dict[int, dict]] = {}
+    for row in [*prior, *new]:
+        if not row.get("episodeId"):
+            continue
+        if not row.get("observation", {}).get("screenSignature") or not row.get("outcomeVerified"):
+            continue
+        episode = row["episodeId"]
+        step = int(row.get("step", 0))
+        bucket = by_episode.setdefault(episode, {})
+        existing = bucket.get(step)
+        if existing is None or not existing.get("outcomeVerified"):
+            bucket[step] = row
+    rows = []
+    for episode in sorted(by_episode):
+        rows.extend(row for _, row in sorted(by_episode[episode].items()))
+    return rows
 
 
 def exported(snapshot, controls):

@@ -4,6 +4,7 @@ import android.content.Context
 
 object ProSubscriptionPrefs {
     private const val PREFS_NAME = "pro_subscription_prefs"
+    private const val FREE_PRO_ACCESS_ENABLED = true
     private const val KEY_IS_SUBSCRIBED = "is_subscribed"
     private const val KEY_PLAN = "plan"
     private const val KEY_EXPIRES_AT = "expires_at"
@@ -50,6 +51,7 @@ object ProSubscriptionPrefs {
     }
 
     fun isActiveLocally(context: Context, nowMs: Long = System.currentTimeMillis()): Boolean {
+        if (FREE_PRO_ACCESS_ENABLED) return true
         if (!isSubscribed(context)) return false
         val expires = getExpiresAt(context)
         return expires <= 0L || expires > nowMs

@@ -228,11 +228,12 @@ class MyApplication : Application(){
         BleOperateManager.getInstance().init()
         val deviceFilter: IntentFilter = BleAction.getDeviceIntentFilter()
         val deviceReceiver = BluetoothReceiver()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            registerReceiver(deviceReceiver, deviceFilter, RECEIVER_EXPORTED)
-        } else {
-            registerReceiver(deviceReceiver, deviceFilter)
-        }
+        ContextCompat.registerReceiver(
+            this,
+            deviceReceiver,
+            deviceFilter,
+            ContextCompat.RECEIVER_EXPORTED,
+        )
 
     }
 

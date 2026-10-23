@@ -88,7 +88,7 @@ class LivePreviewManager(
         private const val RTSP_PORT = 8554
         private const val MJPEG_PORT = 8080
         private const val BLE_IP_TIMEOUT_MS = 45_000L
-        private const val P2P_CONNECT_TIMEOUT_MS = 20_000L
+        private const val P2P_CONNECT_TIMEOUT_MS = 30_000L
         private const val STREAM_START_TIMEOUT_MS = 30_000L
         private const val P2P_GROUP_REMOVAL_RETRY_MS = 1_000L
         private const val P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS = 5_000L
@@ -434,21 +434,43 @@ class LivePreviewManager(
                 }
 
                 val pairedName = try { DeviceManager.getInstance().deviceName } catch (_: Exception) { null }
+                    ?.trim()
+                    ?.takeIf(String::isNotEmpty)
                 val pairedMac = try { DeviceManager.getInstance().deviceAddress } catch (_: Exception) { null }
+                    ?.filter(Char::isLetterOrDigit)
+                    ?.uppercase()
+                    ?.takeIf(String::isNotEmpty)
                 Log.d(TAG, "[${elapsed()}ms] [P2P] Looking for paired device: name='$pairedName' mac=$pairedMac")
 
+                val macSuffix = pairedMac?.takeLast(5).orEmpty()
                 val target = peers.firstOrNull { peer ->
-                    peer.deviceName == pairedName ||
-                        peer.deviceAddress == pairedMac ||
-                        peer.deviceName?.endsWith("_${pairedMac?.takeLast(5)?.replace(":", "")}") == true
+                    val peerName = peer.deviceName.orEmpty()
+                    val peerAddress = peer.deviceAddress.orEmpty()
+                    peerName.equals(pairedName, ignoreCase = true) ||
+                        peerAddress.filter(Char::isLetterOrDigit)
+                            .equals(pairedMac, ignoreCase = true) ||
+                        (macSuffix.length == 5 &&
+                            peerName.filter(Char::isLetterOrDigit)
+                                .uppercase()
+                                .endsWith(macSuffix))
+                } ?: peers.singleOrNull()?.also { peer ->
+                    Log.w(
+                        TAG,
+                        "[${elapsed()}ms] [P2P] No name/address match for the Bluetooth-paired glasses; " +
+                            "connecting to the only discovered peer '${peer.deviceName}' (${peer.deviceAddress})",
+                    )
                 }
 
                 if (target != null) {
                     Log.i(TAG, "[${elapsed()}ms] [P2P] Matched glasses peer: '${target.deviceName}' (${target.deviceAddress})")
-                    Log.i(TAG, "[${elapsed()}ms] [P2P] Sending connect request (WPS PBC)...")
+                    Log.i(TAG, "[${elapsed()}ms] [P2P] Calling WifiP2pManager.connect (WPS PBC)...")
                     p2pManager?.connectToDevice(target, groupOwnerIntent = 15)
                 } else {
-                    Log.w(TAG, "[${elapsed()}ms] [P2P] No matching glasses peer among ${peers.size} peers")
+                    Log.w(
+                        TAG,
+                        "[${elapsed()}ms] [P2P] No safe peer match among ${peers.size} discovered peers; " +
+                            "will not connect to an arbitrary device",
+                    )
                     Log.w(TAG, "[${elapsed()}ms] [P2P]   Paired: '$pairedName' / $pairedMac")
                     peers.forEach { peer ->
                         Log.w(TAG, "[${elapsed()}ms] [P2P]   Available: '${peer.deviceName}' / ${peer.deviceAddress}")

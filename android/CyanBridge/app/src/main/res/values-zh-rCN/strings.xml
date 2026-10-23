@@ -133,4 +133,13 @@
     <string name="donation_intro_dialog_title">CyanBridge Asaas 支持说明</string>
     <string name="donation_intro_dialog_message">您好，感谢您考虑向 CyanBridge 捐赠！我在攻读博士的同时维护这个项目，您的支持对我意义重大。由于巴西企业有特殊要求，我还没能配置 Stripe，因此目前使用名为 Asaas 的支付处理商。结账页面是葡萄牙语，如有需要请使用 Google 翻译。我正在积极寻找更好的替代方案。再次感谢您的支持！</string>
     <string name="donation_intro_open_button">打开 Asaas 银行卡表单</string>
+    <string name="onboarding_device_ram">此设备：%.1f GB RAM</string>
+    <string name="onboarding_ram_warning_title">内存有限</string>
+    <string name="onboarding_ram_limited">此设备有 %.1f GB RAM。建议仅使用小型本地 AI 模型；较大的模型可能运行缓慢或意外关闭。</string>
+    <string name="onboarding_ram_too_low">此设备仅有 %.1f GB RAM。本地 AI 至少需要 4 GB，因此目前没有兼容的本地模型。您可以继续设置，并稍后配置云端或远程服务提供方。</string>
+    <string name="onboarding_bluetooth_skip_title">不使用 Bluetooth 继续？</string>
+    <string name="onboarding_bluetooth_skip_body">您可以稍后授予此权限。在此之前，CyanBridge 将无法查找、配对或连接眼镜。</string>
+    <string name="onboarding_bluetooth_skip_confirm">仍然继续</string>
+    <string name="onboarding_bluetooth_skip_cancel">返回</string>
+    <string name="onboarding_find_glasses">查找可用的眼镜</string>
 </resources>
