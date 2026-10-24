@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.devices.tunebuds
 
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
+import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
@@ -38,7 +40,7 @@ class TuneBudsDashboardActionPolicyTest {
             GlassesDashboardAction.SetGeminiLiveImageDelay(10),
         )
 
-        actions.forEach { action -> assertTrue(action.toString(), action.isSupportedForTuneBudsDashboard()) }
+        actions.forEach { action -> assertTrue(action.toString(), GlassesManagerGating.isActionSupported(GlassesFamilyProfiles.tuneBuds, action)) }
     }
 
     @Test
@@ -61,6 +63,6 @@ class TuneBudsDashboardActionPolicyTest {
             GlassesDashboardAction.MeizuShowTestTeleprompter,
         )
 
-        actions.forEach { action -> assertFalse(action.toString(), action.isSupportedForTuneBudsDashboard()) }
+        actions.forEach { action -> assertFalse(action.toString(), GlassesManagerGating.isActionSupported(GlassesFamilyProfiles.tuneBuds, action)) }
     }
 }

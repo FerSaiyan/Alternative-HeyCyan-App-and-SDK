@@ -111,6 +111,26 @@ enum class GlassesCapability {
     NOTIFICATIONS,
     DASHBOARD,
     PAGINATION,
+
+    // Glasses-side media and maintenance capabilities. Device profiles declare these, and the
+    // shared dashboard gating derives its sections from them.
+    AI_PHOTO_CAPTURE,
+    VIDEO_RECORDING,
+    ONBOARD_AUDIO_RECORDING,
+    MEDIA_COUNT,
+    MEDIA_SYNC,
+    LIVE_PREVIEW,
+    STORAGE_STATUS,
+    DEVICE_INFO,
+    TIME_SYNC,
+    VOLUME_STATUS,
+    IMAGE_QUALITY_SELECTION,
+    RECORDING_SETTINGS,
+    WEARING_DETECTION,
+    WAKE_WORD,
+    DEVELOPER_TOOLS,
+    FIRMWARE_UPDATE,
+    WIFI_ADB_DEBUG,
 }
 
 sealed class GlassesBridgeState {

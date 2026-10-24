@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.ui.main
 
 import android.util.Log
 import android.widget.Toast
-import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.audio.MeetingCapturePrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
@@ -26,13 +25,12 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutButton
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
-import kotlinx.coroutines.launch
+import com.fersaiyan.cyanbridge.ui.main.glasses.AndroidGlassesDevices
 
 /** The native plugin shortcut card on the glasses tab and the plugin start/stop it drives. */
 internal class NativePluginShortcutController(
     host: MainScreenHost,
-    private val devices: DeviceManagerRegistry,
-    private val metaRaybanUi: MetaRaybanUiController,
+    private val glasses: AndroidGlassesDevices,
     private val meetingCaptureUi: MeetingCaptureUiController,
     private val transportPermissions: GlassesTransportPermissions,
 ) : MainScreenController(host) {
@@ -198,25 +196,8 @@ internal class NativePluginShortcutController(
     }
 
     private fun startNativePlugin(pluginId: String) {
-        if (devices.isMeizuMyvuSelected() && pluginId in setOf(
-                NativePluginIds.AUTO_AUDIO,
-                NativePluginIds.VISUAL_DIARY,
-                NativePluginIds.WALKING_AID,
-            )
-        ) {
-            Toast.makeText(
-                activity,
-                "This plugin requires a camera or HeyCyan onboard media. MYVU supports display and microphone plugins only.",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
-        if (devices.isMetaRaybanSelected() && pluginId == NativePluginIds.AUTO_AUDIO) {
-            Toast.makeText(
-                activity,
-                "Auto Audio records HeyCyan onboard files and is unavailable for Meta Ray-Ban.",
-                Toast.LENGTH_LONG,
-            ).show()
+        glasses.selectedProfile().unsupportedNativePlugins[pluginId]?.let { message ->
+            Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
             return
         }
         val start = {
@@ -261,22 +242,11 @@ internal class NativePluginShortcutController(
             refreshNativePluginShortcutState()
         }
 
-        if (devices.isMetaRaybanSelected() &&
+        val cameraPluginGate = glasses.selected().cameraPluginGate
+        if (cameraPluginGate != null &&
             pluginId in setOf(NativePluginIds.WALKING_AID, NativePluginIds.VISUAL_DIARY)
         ) {
-            val manager = devices.getOrCreateMetaRaybanManager()
-            if (!manager.isInitialized.value) manager.initialize()
-            activity.lifecycleScope.launch {
-                if (!manager.awaitCameraReady()) {
-                    Toast.makeText(
-                        activity,
-                        "Register and connect a Meta camera before starting this plugin.",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    return@launch
-                }
-                metaRaybanUi.ensureMetaCameraReady(start)
-            }
+            cameraPluginGate.runWhenCameraReady(start)
             return
         }
 

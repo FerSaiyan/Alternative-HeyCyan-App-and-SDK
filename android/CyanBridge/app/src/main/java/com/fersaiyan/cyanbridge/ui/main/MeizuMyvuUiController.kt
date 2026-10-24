@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.ui.main
 
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
+import com.fersaiyan.cyanbridge.shared.devices.GlassesControlPanel
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 
@@ -13,7 +14,7 @@ internal class MeizuMyvuUiController(
 
     fun showPendingMeizuMyvuFailureIfNeeded() {
         val failure = pendingMeizuMyvuFailure ?: devices.meizuMyvuManager?.failurePrompt?.value ?: return
-        if (!devices.isMeizuMyvuSelected()) {
+        if (devices.selectedProfile().controlPanel != GlassesControlPanel.MEIZU_MYVU) {
             pendingMeizuMyvuFailure = null
             devices.meizuMyvuManager?.consumeFailurePrompt()
             return
