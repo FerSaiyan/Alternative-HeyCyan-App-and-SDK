@@ -8,6 +8,7 @@ import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
 import com.fersaiyan.cyanbridge.plugins.settings.nextStartedServiceIntent
 import com.fersaiyan.cyanbridge.plugins.settings.nextStoppedServiceIntent
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
+import com.fersaiyan.cyanbridge.shared.plugins.settings.MeetingSparkNotesSettingsState
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -45,8 +46,7 @@ class MeetingSparkNotesSettingsActivityTest {
             maxHistory = 120,
             customPrompt = "Focus on decisions",
         )
-        assertEquals(expected, MeetingSparkNotesSettingsState.load(context))
-        assertEquals(expected, createSettingsActivity<MeetingSparkNotesSettingsActivity>().state)
+        assertEquals(expected, createSettingsActivity<MeetingSparkNotesSettingsActivity>().viewModel.state)
     }
 
     @Test
@@ -55,9 +55,9 @@ class MeetingSparkNotesSettingsActivityTest {
         CommunityPluginPrefs.setNativePluginEnabled(context, NativePluginIds.MEETING_SPARK_NOTES, true)
         val activity = createSettingsActivity<MeetingSparkNotesSettingsActivity>()
 
-        activity.onEnabledChange(false)
+        activity.viewModel.onEnabledChange(false)
 
-        assertFalse(activity.state.enabled)
+        assertFalse(activity.viewModel.state.enabled)
         assertFalse(MeetingSparkNotesPreferences.isEnabled(context))
         assertFalse(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.MEETING_SPARK_NOTES))
         val stopped = activity.nextStoppedServiceIntent()
@@ -70,9 +70,9 @@ class MeetingSparkNotesSettingsActivityTest {
     fun enablingPersistsBothFlagsWithoutTouchingService() {
         val activity = createSettingsActivity<MeetingSparkNotesSettingsActivity>()
 
-        activity.onEnabledChange(true)
+        activity.viewModel.onEnabledChange(true)
 
-        assertTrue(activity.state.enabled)
+        assertTrue(activity.viewModel.state.enabled)
         assertTrue(MeetingSparkNotesPreferences.isEnabled(context))
         assertTrue(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.MEETING_SPARK_NOTES))
         assertNull(activity.nextStartedServiceIntent())
@@ -83,26 +83,26 @@ class MeetingSparkNotesSettingsActivityTest {
     fun styleContentAndHistoryActionsPersist() {
         val activity = createSettingsActivity<MeetingSparkNotesSettingsActivity>()
 
-        activity.onSummaryStyleSelected("action_focused")
-        activity.onIncludeParticipantsChange(false)
-        activity.onIncludeActionItemsChange(false)
-        activity.onMaxHistoryChange(30)
+        activity.viewModel.onSummaryStyleSelected("action_focused")
+        activity.viewModel.onIncludeParticipantsChange(false)
+        activity.viewModel.onIncludeActionItemsChange(false)
+        activity.viewModel.onMaxHistoryChange(30)
 
         assertEquals("action_focused", MeetingSparkNotesPreferences.getSummaryStyle(context))
         assertFalse(MeetingSparkNotesPreferences.isIncludeParticipants(context))
         assertFalse(MeetingSparkNotesPreferences.isIncludeActionItems(context))
         assertEquals(30, MeetingSparkNotesPreferences.getMaxHistory(context))
-        assertEquals(MeetingSparkNotesSettingsState.load(context), activity.state)
+        assertEquals(createSettingsActivity<MeetingSparkNotesSettingsActivity>().viewModel.state, activity.viewModel.state)
     }
 
     @Test
     fun customPromptOverTheLimitIsIgnored() {
         val activity = createSettingsActivity<MeetingSparkNotesSettingsActivity>()
 
-        activity.onCustomPromptChange("x".repeat(1500))
-        activity.onCustomPromptChange("y".repeat(1501))
+        activity.viewModel.onCustomPromptChange("x".repeat(1500))
+        activity.viewModel.onCustomPromptChange("y".repeat(1501))
 
-        assertEquals("x".repeat(1500), activity.state.customPrompt)
+        assertEquals("x".repeat(1500), activity.viewModel.state.customPrompt)
         assertEquals("x".repeat(1500), MeetingSparkNotesPreferences.getCustomPrompt(context))
     }
 }
