@@ -25,14 +25,6 @@ class LiveCaptionRelayStore {
         }
     }
 
-    fun getCaptions(maxCount: Int): List<CaptionEntry> {
-        synchronized(lock) {
-            if (captions.isEmpty()) return emptyList()
-            val takeCount = maxCount.coerceIn(1, captions.size)
-            return captions.takeLast(takeCount).toList()
-        }
-    }
-
     fun clear(context: Context) {
         synchronized(lock) {
             captions.clear()

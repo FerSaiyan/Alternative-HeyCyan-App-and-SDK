@@ -12,6 +12,4 @@ object AudioSessionCoordinator {
     fun markBusy() = ProcessAudioSessions.markSpeechBusy()
 
     fun markIdle() = ProcessAudioSessions.markSpeechIdle()
-
-    suspend fun waitUntilIdle(timeoutMs: Long = 5_000L) = ProcessAudioSessions.awaitSpeechIdle(timeoutMs)
 }

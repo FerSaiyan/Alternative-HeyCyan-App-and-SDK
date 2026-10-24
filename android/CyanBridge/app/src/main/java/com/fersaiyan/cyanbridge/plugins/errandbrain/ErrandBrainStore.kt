@@ -26,29 +26,6 @@ class ErrandBrainStore {
         }
     }
 
-    fun getTasks(maxCount: Int): List<TaskEntry> {
-        synchronized(lock) {
-            if (tasks.isEmpty()) return emptyList()
-            val takeCount = maxCount.coerceIn(1, tasks.size)
-            return tasks.takeLast(takeCount).toList()
-        }
-    }
-
-    fun updateTask(taskId: String, isCompleted: Boolean) {
-        synchronized(lock) {
-            val index = tasks.indexOfFirst { it.id == taskId }
-            if (index >= 0) {
-                tasks[index] = tasks[index].copy(isCompleted = isCompleted)
-            }
-        }
-    }
-
-    fun deleteTask(taskId: String) {
-        synchronized(lock) {
-            tasks.removeAll { it.id == taskId }
-        }
-    }
-
     fun addReminder(reminder: ReminderEntry, maxHistory: Int) {
         synchronized(lock) {
             reminders.add(reminder)
@@ -73,12 +50,6 @@ class ErrandBrainStore {
             if (index >= 0) {
                 reminders[index] = reminders[index].copy(isTriggered = true)
             }
-        }
-    }
-
-    fun deleteReminder(reminderId: String) {
-        synchronized(lock) {
-            reminders.removeAll { it.id == reminderId }
         }
     }
 

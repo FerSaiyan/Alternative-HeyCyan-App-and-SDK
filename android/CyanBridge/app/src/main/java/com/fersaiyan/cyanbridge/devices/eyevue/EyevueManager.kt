@@ -202,8 +202,6 @@ class EyevueManager private constructor(context: Context) {
 
     fun requestBattery() = send(EyevueProtocol.buildGetBatteryPacket(), "get battery")
 
-    fun requestStorage() = send(EyevueProtocol.buildGetCapacityPacket(), "get capacity")
-
     fun requestMediaCount() = send(
         EyevueProtocol.valuePacket(EyevueProtocol.CMD_GET_MEDIA_COUNT, 0),
         "get media count",

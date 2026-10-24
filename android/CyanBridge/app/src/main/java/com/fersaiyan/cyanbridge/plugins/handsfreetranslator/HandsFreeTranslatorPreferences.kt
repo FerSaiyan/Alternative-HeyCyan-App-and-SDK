@@ -24,12 +24,6 @@ object HandsFreeTranslatorPreferences {
         HandsFreeTranslator.targetLanguage[context] = language
     }
 
-    fun getTranslationMode(context: Context): String = HandsFreeTranslator.translationMode[context]
-
-    fun setTranslationMode(context: Context, mode: String) {
-        HandsFreeTranslator.translationMode[context] = mode
-    }
-
     fun isAutoDetect(context: Context): Boolean = HandsFreeTranslator.autoDetect[context]
 
     fun setAutoDetect(context: Context, autoDetect: Boolean) {

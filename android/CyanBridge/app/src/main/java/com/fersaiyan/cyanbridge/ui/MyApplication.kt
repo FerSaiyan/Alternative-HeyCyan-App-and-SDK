@@ -42,7 +42,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.io.File
 
 /**
  * @Author: Hzy
@@ -245,17 +244,6 @@ class MyApplication : Application(){
         return intentFilter
     }
 
-    fun getAppRootFile(context: Context): File {
-        // /storage/emulated/0/Android/data/pack_name/files
-        return if(context.getExternalFilesDir("")!=null){
-            context.getExternalFilesDir("")!!
-        }else{
-            val externalSaveDir = context.externalCacheDir
-            externalSaveDir ?: context.cacheDir
-        }
-
-    }
-
 
     companion object {
         private var application: Application? = null
@@ -295,11 +283,6 @@ class MyApplication : Application(){
                 summarizationService = summarizationService,
                 context = CONTEXT,
             )
-        }
-
-        fun getApplication(): Application {
-            return application
-                ?: throw RuntimeException("Application not initialized. onCreate not yet called.")
         }
 
         fun getInstance(): MyApplication {

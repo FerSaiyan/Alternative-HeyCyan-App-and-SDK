@@ -30,12 +30,6 @@ object ErrandBrainPreferences {
         ErrandBrain.reminderEnabled[context] = enabled
     }
 
-    fun getReminderIntervalMinutes(context: Context): Int = ErrandBrain.reminderIntervalMinutes[context]
-
-    fun setReminderIntervalMinutes(context: Context, minutes: Int) {
-        ErrandBrain.reminderIntervalMinutes[context] = minutes
-    }
-
     fun getDefaultPriority(context: Context): String = ErrandBrain.defaultPriority[context]
 
     fun setDefaultPriority(context: Context, priority: String) {

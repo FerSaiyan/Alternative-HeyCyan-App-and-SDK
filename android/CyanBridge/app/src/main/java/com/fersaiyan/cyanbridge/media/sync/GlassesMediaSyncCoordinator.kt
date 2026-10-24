@@ -105,7 +105,6 @@ internal class GlassesMediaSyncCoordinator(
     private var downloadStartedAtMs: Long = 0L
     private var noMatchPeerCount = 0
     private var downloadP2pRestartCount = 0
-    private val maxP2pRestarts = 3
     private val seenP2pPeers = mutableSetOf<String>()
     private var lastPeerSetHash: Int = 0
     private var officialSystemSuccess = false
@@ -1112,84 +1111,6 @@ internal class GlassesMediaSyncCoordinator(
         )
     }
     
-    private fun showP2pPeerConflictDialog(
-        seenPeers: List<String>,
-        pairedDevice: String,
-    ) {
-        if (isHighQualityImageTransfer()) {
-            finishHighQualityImageFailure(
-                "Could not find the glasses Wi-Fi Direct peer for the full-resolution image.",
-            )
-            return
-        }
-        if (downloadSupportDialogShown || activity.isFinishing || activity.isDestroyed) return
-        downloadSupportDialogShown = true
-
-        val reason = buildString {
-            appendLine("CyanBridge found other Wi‑Fi Direct devices but could not find the glasses ($pairedDevice) among them.")
-            appendLine()
-            appendLine("IMPORTANT: If the official HeyCyan app is installed, force-stop it now (Settings → Apps → HeyCyan → Force Stop). It may be holding the P2P connection and preventing CyanBridge from discovering the glasses.")
-            appendLine()
-            appendLine("Also try turning OFF the following devices or moving away from them, then tap Try Again:")
-            appendLine()
-            for (peer in seenPeers) {
-                appendLine("  • $peer")
-            }
-            appendLine()
-            appendLine("If the problem persists, send the logs to the CyanBridge server.")
-        }
-
-        AlertDialog.Builder(activity)
-            .setTitle("P2P sync failed")
-            .setMessage(reason)
-            .setNegativeButton("Later", null)
-            .setNeutralButton("Send to server") { _, _ ->
-                DebugLogSupport.showSupportOptionsDialog(
-                    activity = activity,
-                    title = "P2P sync failed (${downloadFlowMode.label})",
-                    issueType = "P2P/WiFi sync issue",
-                    description = "Flow: ${downloadFlowMode.label}\n\nP2P sync could not find glasses after $maxP2pRestarts attempts. Bluetooth is connected but glasses did not appear as a Wi‑Fi Direct peer. Seen P2P peers: ${seenPeers.joinToString(", ")}",
-                    extraInfo = linkedMapOf(
-                        "transfer_detail" to host.dashboardTransferState().detail,
-                        "transfer_counts" to host.dashboardTransferState().countsLabel,
-                        "download_flow_mode" to downloadFlowMode.label,
-                        "download_ble_ip" to (downloadBleIp ?: ""),
-                        "download_wifi_ip" to (downloadWifiIp ?: ""),
-                        "download_http_ip" to (downloadResolvedHttpIp ?: ""),
-                        "download_p2p_connected" to downloadP2pConnected.toString(),
-                        "download_in_progress" to downloadInProgress.toString(),
-                        "download_phone_is_group_owner" to (downloadPhoneIsGroupOwner?.toString() ?: "unknown"),
-                        "transfer_mode_command_attempt" to transferModeCommandAttempt.toString(),
-                        "transfer_mode_command_sequence" to transferModeCommandSequence.toString(),
-                        "transfer_mode_callback_received" to transferModeCommandCallbackReceived.toString(),
-                        "transfer_mode_callback_latency_ms" to (transferModeCommandCallbackLatencyMs?.toString() ?: ""),
-                        "transfer_mode_callback_data_type" to (transferModeCommandCallbackDataType?.toString() ?: ""),
-                        "transfer_mode_callback_error" to (transferModeCommandCallbackError?.toString() ?: ""),
-                        "transfer_mode_evidence_received" to transferModeCommandEvidenceReceived.toString(),
-                        "expected_official_p2p_name" to GlassesP2pPeerSelector.expectedOfficialP2pName(),
-                        "selected_download_network" to p2pNetwork.selectedDownloadNetworkSummary,
-                        "seen_p2p_peers" to seenPeers.joinToString(", "),
-                        "active_glasses_session" to (GlassesSessionCoordinator.currentSession()?.name ?: "none"),
-                        "ota_active" to host.isOtaActive().toString(),
-                        "adaptive_route" to (adaptiveActiveRoute?.name ?: ""),
-                        "adaptive_warmup_ms" to (adaptiveSuccessfulWarmupMs?.toString() ?: ""),
-                        "adaptive_profile_key" to (adaptiveSyncSession?.profileKey ?: ""),
-                        "adaptive_command_sends" to (adaptiveSyncSession?.transferCommandSends?.toString() ?: "0"),
-                        "adaptive_discovery_restarts" to (adaptiveSyncSession?.discoveryRestarts?.toString() ?: "0"),
-                        "adaptive_device_resets" to (adaptiveSyncSession?.deviceResets?.toString() ?: "0"),
-                        "vpn_active" to p2pNetwork.isVpnActive().toString(),
-                        "official_heycyan_installed" to OfficialHeyCyanApp.isInstalled(activity).toString(),
-                        "adaptive_trace" to (adaptiveSyncSession?.traceSummary() ?: ""),
-                    ),
-                )
-            }
-            .setPositiveButton("Try Again") { _, _ ->
-                downloadSupportDialogShown = false
-                startDataDownload()
-            }
-            .show()
-    }
-
     private suspend fun downloadMediaList(deviceIp: String, sessionId: Long) {
         if (!isDownloadSessionActive(sessionId)) return
         if (downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN) {

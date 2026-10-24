@@ -971,11 +971,6 @@ class OtaManager(
         private const val HTTP_PORT = 8080
         private const val P2P_CONNECT_TIMEOUT_MS = 40_000L
         private const val LOCAL_P2P_IP_TIMEOUT_MS = 5_000L
-        private const val P2P_GROUP_REMOVAL_RETRY_MS = 1_000L
-        private const val P2P_QUARANTINE_RETRY_MS = 5_000L
-        private const val P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS = 5_000L
-        private const val P2P_GROUP_DISCONNECT_TIMEOUT_MS = 5_000L
-        private const val P2P_GROUP_REMOVAL_MAX_ATTEMPTS = 3
         private const val P2P_TEARDOWN_TIMEOUT_MS = 25_000L
         // The official OTAActivity uses listener slot 1; slot 2 is used by media/P2P flows.
         private const val OTA_NOTIFY_CMD_TYPE = 1

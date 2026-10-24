@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -38,16 +37,7 @@ object GlassesBridge {
         Log.i(TAG, "Registered adapter: ${adapter.adapterId} (${adapter.displayName})")
     }
 
-    fun unregisterAdapter(adapterId: String) {
-        adapters.remove(adapterId)
-        if (activeAdapter?.adapterId == adapterId) {
-            activeAdapter = null
-        }
-    }
-
     fun getAdapter(adapterId: String): GlassesDeviceAdapter? = adapters[adapterId]
-
-    fun listAdapters(): List<GlassesDeviceAdapter> = adapters.values.toList()
 
     // --- Active adapter ---
 
@@ -62,8 +52,6 @@ object GlassesBridge {
         emit(BridgeEvent.AdapterChanged(adapterId))
         return true
     }
-
-    fun getActiveAdapter(): GlassesDeviceAdapter? = activeAdapter
 
     // --- Display commands ---
 
@@ -114,6 +102,5 @@ sealed class BridgeEvent {
     data class AdapterChanged(val adapterId: String) : BridgeEvent()
     data class DisplayRequested(val adapterId: String, val command: DisplayCommand) : BridgeEvent()
     data class InputReceived(val adapterId: String, val event: InputEvent) : BridgeEvent()
-    data class DeviceStateChanged(val adapterId: String, val state: GlassesBridgeState) : BridgeEvent()
     data class Error(val source: String, val message: String, val throwable: Throwable? = null) : BridgeEvent()
 }

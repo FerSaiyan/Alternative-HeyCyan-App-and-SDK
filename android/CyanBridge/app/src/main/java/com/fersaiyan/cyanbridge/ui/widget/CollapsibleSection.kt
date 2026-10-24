@@ -102,10 +102,6 @@ class CollapsibleSection @JvmOverloads constructor(
         contentContainer.addView(view)
     }
     
-    fun addContent(view: View) {
-        contentContainer.addView(view)
-    }
-    
     fun toggle() {
         if (isExpanded) {
             collapse()
@@ -176,6 +172,4 @@ class CollapsibleSection @JvmOverloads constructor(
             contentContainer.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
         }
     }
-    
-    fun isExpandedState(): Boolean = isExpanded
 }

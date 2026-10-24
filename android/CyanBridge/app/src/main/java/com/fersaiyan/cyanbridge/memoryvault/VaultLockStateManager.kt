@@ -65,11 +65,6 @@ object VaultLockStateManager {
         persist(context)
     }
 
-    fun ensureUnlockedForRead(context: Context): Boolean {
-        if (isLocked(context)) return false
-        return VaultKeyManager.getUnlockedMasterKey(context) != null
-    }
-
     fun clearAll(context: Context) {
         VaultLock.clear(context)
         VaultKeyManager.clearAll(context)

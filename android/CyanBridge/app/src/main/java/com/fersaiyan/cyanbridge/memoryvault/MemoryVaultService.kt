@@ -166,14 +166,6 @@ object MemoryVaultService {
         }.getOrNull()
     }
 
-    suspend fun hasMemoryRef(memoryRef: String): Boolean = withContext(Dispatchers.IO) {
-        MyApplication.database.memoryVaultDao().getVaultItem(memoryRef) != null
-    }
-
-    fun hasMemoryRefBlocking(memoryRef: String): Boolean {
-        return runCatching { runBlocking(Dispatchers.IO) { hasMemoryRef(memoryRef) } }.getOrDefault(false)
-    }
-
     suspend fun getUpdatedAt(memoryRef: String): Long? = withContext(Dispatchers.IO) {
         MyApplication.database.memoryVaultDao().getUpdatedAt(memoryRef)
     }
@@ -192,18 +184,8 @@ object MemoryVaultService {
         MemorySyncPreparationService.cancelQueuedForMemoryRef(memoryRef, "Memory deleted locally")
     }
 
-    fun deleteMemoryRefBlocking(memoryRef: String) {
-        runCatching { runBlocking(Dispatchers.IO) { deleteMemoryRef(memoryRef) } }
-    }
-
     suspend fun listMemoryRefsByPrefix(prefix: String): List<String> = withContext(Dispatchers.IO) {
         MyApplication.database.memoryVaultDao().listMemoryRefsByPrefix("$prefix%")
-    }
-
-    fun listMemoryRefsByPrefixBlocking(prefix: String): List<String> {
-        return runCatching {
-            runBlocking(Dispatchers.IO) { listMemoryRefsByPrefix(prefix) }
-        }.getOrDefault(emptyList())
     }
 
     suspend fun deleteAllScreenOcrArtifacts() = withContext(Dispatchers.IO) {

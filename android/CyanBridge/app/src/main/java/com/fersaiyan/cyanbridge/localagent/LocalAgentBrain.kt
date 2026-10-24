@@ -25,16 +25,6 @@ data class LocalAgentBrainOutput(
     val isComplete: Boolean = false,
 )
 
-class NoOpLocalAgentBrain : LocalAgentBrain {
-    override suspend fun next(
-        context: Context,
-        taskState: LocalAgentTaskState,
-        observation: LocalAgentObservation,
-    ): LocalAgentBrainOutput {
-        return LocalAgentBrainOutput(actions = emptyList(), note = "noop", isComplete = false)
-    }
-}
-
 class RemoteUiControlLocalAgentBrain(
     private val decisionEngineProvider: (() -> com.fersaiyan.cyanbridge.ai.decision.LocalDecisionEngine?)? = null,
 ) : LocalAgentBrain {

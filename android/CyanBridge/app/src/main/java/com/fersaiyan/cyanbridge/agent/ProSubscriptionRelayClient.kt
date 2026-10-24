@@ -83,9 +83,6 @@ object ProSubscriptionRelayClient {
     ) {
         val isEmailMatchFallback: Boolean
             get() = method == "email_match"
-
-        val hasDirectVerificationLink: Boolean
-            get() = verificationUrl != null
     }
 
     private const val CONNECT_TIMEOUT_MS = 7000

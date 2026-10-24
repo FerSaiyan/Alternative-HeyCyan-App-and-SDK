@@ -42,7 +42,6 @@ object VersionUpdateChecker {
 
     private const val CHECK_INTERVAL_HOURS = 6
     private const val PLAY_STORE_FALLBACK_URL = "https://play.google.com/store/apps/details?id=com.fersaiyan.cyanbridge"
-    private const val GITHUB_FALLBACK_URL = "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases"
 
     fun checkForUpdates(context: Context) {
         val lastCheck = AppPrefs.VersionCheck.lastCheckTime[context]
@@ -225,49 +224,6 @@ object VersionUpdateChecker {
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     OutlinedButton(onClick = onLater) { Text(stringResource(R.string.compose_update_later)) }
-                }
-            }
-        }
-    }
-
-    fun forceCheckForUpdates(context: Context) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val relayUrl = AiProviderPrefs.getRelayBaseUrl(context)
-                val url = java.net.URL("$relayUrl/version/latest")
-                val connection = url.openConnection() as java.net.HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 5000
-                connection.readTimeout = 5000
-
-                if (connection.responseCode == 200) {
-                    val response = connection.inputStream.bufferedReader().readText()
-                    val json = org.json.JSONObject(response)
-                    val latestVersion = json.optString("version", "")
-                    val downloadUrl = json.optString("download_url", "")
-                    val playStoreUrl = json.optString("play_store_url", "").ifBlank {
-                        json.optString("playStoreUrl", "")
-                    }.ifBlank { downloadUrl }
-                    val githubUrl = json.optString("github_url", "").ifBlank {
-                        json.optString("githubUrl", "")
-                    }
-
-                    withContext(Dispatchers.Main) {
-                        if (latestVersion.isNotBlank()) {
-                            showUpdateDialog(context, latestVersion, playStoreUrl, githubUrl)
-                        } else {
-                             Toast.makeText(context, context.getString(R.string.compose_update_check_failed), Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                         Toast.makeText(context, context.getString(R.string.compose_update_server_unavailable), Toast.LENGTH_SHORT).show()
-                    }
-                }
-                connection.disconnect()
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, context.getString(R.string.compose_update_check_failed), Toast.LENGTH_SHORT).show()
                 }
             }
         }

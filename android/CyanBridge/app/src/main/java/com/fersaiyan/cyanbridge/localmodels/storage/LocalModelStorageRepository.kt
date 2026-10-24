@@ -69,11 +69,6 @@ object LocalModelStorageRepository {
             .sortedByDescending { it.importedAtMs }
     }
 
-    fun getInstalled(context: Context, id: String?): InstalledLocalModel? {
-        if (id.isNullOrBlank()) return null
-        return listInstalled(context).firstOrNull { it.id == id }
-    }
-
     fun findByCatalogId(context: Context, catalogId: String): InstalledLocalModel? {
         return listInstalled(context).firstOrNull { it.catalogId == catalogId }
     }

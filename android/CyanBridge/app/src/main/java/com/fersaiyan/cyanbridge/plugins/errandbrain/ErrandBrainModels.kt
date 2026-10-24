@@ -26,12 +26,3 @@ enum class TaskPriority {
     HIGH,
     URGENT,
 }
-
-enum class TaskCategory {
-    PERSONAL,
-    WORK,
-    SHOPPING,
-    HEALTH,
-    FINANCE,
-    OTHER,
-}

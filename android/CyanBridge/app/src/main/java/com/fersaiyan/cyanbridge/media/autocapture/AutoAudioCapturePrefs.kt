@@ -20,10 +20,6 @@ object AutoAudioCapturePrefs {
         return next
     }
 
-    fun resetSuccessfulLoops(context: Context) {
-        AutoAudioCapture.successfulLoops[context] = 0
-    }
-
     fun getLoopsPerSync(context: Context): Int = AutoAudioCapture.loopsPerSync[context]
 
     fun setLoopsPerSync(context: Context, loops: Int) {
@@ -59,15 +55,6 @@ object AutoAudioCapturePrefs {
     fun pauseForMs(context: Context, durationMs: Long) {
         val now = System.currentTimeMillis()
         AutoAudioCapture.pauseUntilMs[context] = (now + durationMs).coerceAtLeast(now)
-    }
-
-    fun clearPauseUntil(context: Context) {
-        AutoAudioCapture.pauseUntilMs[context] = 0L
-    }
-
-    fun shouldPauseNow(context: Context): Boolean {
-        val now = System.currentTimeMillis()
-        return isPausedForMeeting(context) || isPausedForVideo(context) || getPauseUntilMs(context) > now
     }
 
     fun getLastPauseReason(context: Context): String = AutoAudioCapture.lastPauseReason[context]

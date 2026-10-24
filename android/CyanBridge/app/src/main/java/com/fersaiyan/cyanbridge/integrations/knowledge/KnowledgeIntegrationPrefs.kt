@@ -32,11 +32,6 @@ object KnowledgeIntegrationPrefs {
         )
     }
 
-    /** Existing vault: the selected tree itself is the vault root. */
-    fun setObsidianTree(context: Context, uri: Uri?) {
-        setObsidianVault(context, uri, rootDocumentId = null, displayName = null)
-    }
-
     /**
      * Store the scoped tree permission plus an optional logical root document id. The latter is
      * used when CyanBridge creates a new vault folder under a user-selected parent directory.
@@ -56,10 +51,6 @@ object KnowledgeIntegrationPrefs {
 
     fun importInboxTree(context: Context): Uri? =
         Knowledge.importInboxTreeUri[context]?.takeIf { it.isNotBlank() }?.let(Uri::parse)
-
-    fun setImportInboxTree(context: Context, uri: Uri?) {
-        Knowledge.importInboxTreeUri[context] = uri?.toString()
-    }
 
     fun autoSyncEnabled(context: Context): Boolean = Knowledge.autoSync[context]
 

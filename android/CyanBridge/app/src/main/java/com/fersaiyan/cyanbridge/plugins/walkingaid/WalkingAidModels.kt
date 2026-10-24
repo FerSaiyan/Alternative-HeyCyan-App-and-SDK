@@ -14,11 +14,6 @@ enum class StateDecision {
     SKIP,
 }
 
-data class StateModelOutput(
-    val decision: StateDecision,
-    val message: String,
-)
-
 data class WalkingAidImageEntry(
     val timestampMs: Long,
     val imagePath: String,

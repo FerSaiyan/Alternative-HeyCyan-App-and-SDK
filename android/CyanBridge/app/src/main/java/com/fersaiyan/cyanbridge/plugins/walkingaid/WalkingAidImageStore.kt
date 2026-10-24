@@ -39,13 +39,6 @@ object WalkingAidImageStore {
         }
     }
 
-    fun getRecentDescriptions(count: Int = 5): List<SceneRecord> {
-        synchronized(lock) {
-            val takeCount = count.coerceIn(1, recentDescriptions.size)
-            return recentDescriptions.takeLast(takeCount).toList()
-        }
-    }
-
     fun getImageHistory(maxCount: Int): List<WalkingAidImageEntry> {
         synchronized(lock) {
             if (imageHistory.isEmpty()) return emptyList()

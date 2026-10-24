@@ -16,9 +16,3 @@ data class TranslationPreset(
     val targetLanguage: String,
     val phrases: List<String>,
 )
-
-enum class TranslationMode {
-    REAL_TIME,
-    ON_DEMAND,
-    PHRASE_BOOK,
-}

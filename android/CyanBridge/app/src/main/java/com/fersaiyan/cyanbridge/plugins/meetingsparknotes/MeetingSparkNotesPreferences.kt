@@ -13,12 +13,6 @@ object MeetingSparkNotesPreferences {
         MeetingSparkNotes.enabled[context] = enabled
     }
 
-    fun isAutoRecord(context: Context): Boolean = MeetingSparkNotes.autoRecord[context]
-
-    fun setAutoRecord(context: Context, autoRecord: Boolean) {
-        MeetingSparkNotes.autoRecord[context] = autoRecord
-    }
-
     fun getSummaryStyle(context: Context): String = MeetingSparkNotes.summaryStyle[context]
 
     fun setSummaryStyle(context: Context, style: String) {
@@ -35,12 +29,6 @@ object MeetingSparkNotesPreferences {
 
     fun setIncludeActionItems(context: Context, include: Boolean) {
         MeetingSparkNotes.includeActionItems[context] = include
-    }
-
-    fun isIncludeTimestamps(context: Context): Boolean = MeetingSparkNotes.includeTimestamps[context]
-
-    fun setIncludeTimestamps(context: Context, include: Boolean) {
-        MeetingSparkNotes.includeTimestamps[context] = include
     }
 
     fun getCloudModelId(context: Context): String = MeetingSparkNotes.cloudModelId[context]

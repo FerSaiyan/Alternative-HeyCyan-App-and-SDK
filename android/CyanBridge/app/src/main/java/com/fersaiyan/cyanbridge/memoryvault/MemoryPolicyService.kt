@@ -117,12 +117,6 @@ object MemoryPolicyService {
         MyApplication.database.memoryVaultDao().upsertPolicy(policy.toEntity())
     }
 
-    fun upsertPolicyBlocking(policy: MemoryPolicyMetadata) {
-        runCatching {
-            runBlocking(Dispatchers.IO) { upsertPolicy(policy) }
-        }
-    }
-
     suspend fun getPolicy(memoryRef: String): MemoryPolicyMetadata? = withContext(Dispatchers.IO) {
         MyApplication.database.memoryVaultDao().getPolicy(memoryRef)?.toModel()
     }
