@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <declare-styleable name="CollapsibleSection">
-        <attr name="section_title" format="string" />
-        <attr name="initially_expanded" format="boolean" />
-    </declare-styleable>
-</resources>
