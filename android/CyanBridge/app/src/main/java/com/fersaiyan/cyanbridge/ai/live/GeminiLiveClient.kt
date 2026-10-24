@@ -162,8 +162,7 @@ class GeminiLiveClient(
         socket = null
         stopCapture()
         audio.stopPlayback()
-        audio.restoreAudioRoute()
-        audio.abandonAudioFocus()
+        audio.endSession()
         session.sessionResumptionHandle = null
         session.tokenConfig?.reservationId?.takeUnless { it == "free-proxy" || it == "direct" }?.let { reservationId ->
             scope.launch {
@@ -563,6 +562,12 @@ class GeminiLiveClient(
         }
         if (!audio.captureEnabled.compareAndSet(false, true)) return
         audio.requestAudioFocus()
+        if (!audio.microphoneAvailable) {
+            // A spoken prompt owns the microphone; capture starts when it hands it back.
+            audio.captureEnabled.set(false)
+            Log.i(TAG, "Live capture waiting for the microphone")
+            return
+        }
         if (audio.isMentraSelected()) {
             audio.startMentraInput(::offerMentraPcm)
             return
