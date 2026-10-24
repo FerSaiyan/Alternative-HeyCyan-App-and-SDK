@@ -25,7 +25,6 @@ Line counts are per file; "before" is cyan-refactor at f908faf. CI legend:
 | HeyCyan connect / control / photo | HeyCyanThumbnailReceiverTest (170), HeyCyanCaptureOwnerTest (115), NativeGlassesPhotoCaptureTest (192), GlassesAiPhotoCaptureRoutingTest (57), GlassesSessionCoordinatorTest (110), BatteryResponseParserTest (44), DeviceClassifierTest (91) | U | BLE thumbnail framing is byte-level |
 | Eyevue | shared EyevueProtocolTest (220), EyevuePeerMatchingTest (21), EyevueSetTimeCalendarTest (40, P); EyevueLiveVideoViewTest (31), EyevueMediaProfileTest (30), EyevueReleaseSafetyTest (58) | P, U | Byte-exact packets |
 | MYVU / Mentra / Moyoung | MeizuMyvuConnectionPolicyTest (44), MentraPhotoCaptureTest (24), MoyoungW620ManagerTest (18) | U | Thin (see gaps) |
-| MemoMind | shared MemoMindPacketEncoderTest (140) | P | Byte-exact, but the encoder has no production caller |
 | TuneBuds | app devices/tunebuds/* (939), shared tunebuds/* (455) | U, P | Owned by the TuneBuds agent; untouched |
 | Device gating / dashboard | GlassesManagerGatingMatrixTest (93), GlassesDashboardGatingTest (97), DashboardSessionPolicyTest (243), GlassesDeviceTest (83), GlassesFamilyProfileTest (138), GlassesDashboardPresentationTest (45); GlassesDashboardScreenTest (479, androidTest) | P, — | |
 | Media sync / glasses network | GlassesNetworkSessionCoreTest (307), GlassesLinkArbiterTest (196), GlassesWifiErrorPolicyTest (41), GlassesNetworkAddressingTest (95), GlassesWifiNotifyTest (46), HeyCyanP2pPeerMatchingTest (76), AdaptiveP2pSyncTest (98), GlassesMediaSyncHelpersTest (57), OggOpusWrapperTest (127), OggOpusWrapperDigestTest (36), GlassesNetworkOwnershipSourceTest (75) | P, U | |
@@ -59,7 +58,7 @@ These were left untouched, or tidied without dropping any assertion.
   - run_pro_live_audio.sh: `AudioEmulatorHarnessTest#geminiLive_real_ifPro_repliesWithRedFlowers`.
   - Also RealDecisionCalibrationEmulatorTest, RealEmbeddingModelEmulatorTest and LocalAiTaskerYouTubeHilTest.
 - **Support and fixtures:** HilTestSupport, hil/audio/{FakeGeminiLiveTokenProvider, TestAudioAssets, TestMeetingCaptureSeeder}, androidTest assets (audio, walkingaid, meta).
-- **Data and safety:** AppDatabaseSchemaTest, SharedAppDatabaseTest, the four source-safety tests above, and the byte-exact protocol tests (Eyevue, MemoMind, Ogg/Opus, RTSP wire, Wi-Fi notify, HeyCyan thumbnail).
+- **Data and safety:** AppDatabaseSchemaTest, SharedAppDatabaseTest, the four source-safety tests above, and the byte-exact protocol tests (Eyevue, Ogg/Opus, RTSP wire, Wi-Fi notify, HeyCyan thumbnail).
 
 ## Parked refactor scaffolding (delete after hardware validation)
 
@@ -73,7 +72,6 @@ These were left untouched, or tidied without dropping any assertion.
 
 - **Gemini Live client end to end:** once the parked characterization test goes, only `geminiLive_pcmInjectionDoesNotCrash` exercises `GeminiLiveClient` itself. Its parts (protocol, session state, vision, socket policy) are covered separately.
 - **TaskerLocalAgentService task loop:** the live local-agent loop has no JVM test. Only the HILs exercise it, and only when a Tasker target is present.
-- **MemoMind:** the GATT/RFCOMM clients and the audio bridge are untested, and the tested packet encoder is unused.
 - **Mentra, Moyoung, Meizu MYVU:** one small policy or parse test each, and no connect/control flow test.
 - **HeyCyan Wi-Fi media download** (the DataDownload transfer loop): only helpers, addressing and the network session are tested.
 - **AI question foreground service orchestration** (record → route → speak): only its parts are tested.

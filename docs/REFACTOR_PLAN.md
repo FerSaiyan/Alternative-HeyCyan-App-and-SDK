@@ -28,7 +28,7 @@ Nada disso foi testado com os óculos ainda. A compilação do app Android tamb�
 | Meta Ray-Ban | `meta-wearables-dat-ios` 1.0.0. Registro pelo Meta AI (modo desenvolvedor, retorno por `cyanbridge://`); a câmera responde "Testar imagem" e "Testar voz". O deployment target subiu de 16.4 para 17.2. | Testar; para publicar, pegar o app ID e o client token no Wearables Developer Center. |
 | Mentra Live | `mentra-bluetooth-sdk-ios` 3.2.0-dev.227 (mesma versão do Android). O botão faz uma pergunta com foto; a foto vem por BLE para um receptor local em 127.0.0.1. | Testar. |
 | Meizu MYVU | Não dá: depois do BLE, o relay do app é só RFCOMM. O cartão explica isso, e a pergunta por voz funciona pelo áudio Bluetooth dos óculos. | — |
-| MemoMind | Não entrou: no Android ele não está ligado ao app (sem `DeviceClass`, adaptador nem tela; o adaptador ficou na branch arquivada `memomind-adapter`). | Decidir se volta nos dois apps. |
+| MemoMind | Não entrou: no Android ele não está ligado ao app (sem `DeviceClass`, adaptador nem tela; o adaptador ficou na branch arquivada `memomind-adapter`). Os clientes, a ponte de áudio e o codificador, sem uso, foram apagados; as notas do protocolo estão em `android/CyanBridge/docs/memomind/`. | Decidir se volta nos dois apps. |
 
 ## 3. Refactor do iOS (feito)
 
