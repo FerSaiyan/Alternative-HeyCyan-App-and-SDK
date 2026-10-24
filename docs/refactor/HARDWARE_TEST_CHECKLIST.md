@@ -234,3 +234,21 @@ Filter logcat with: `adb logcat -s TuneBudsManager TuneBudsSpp TuneBudsSession T
 9. **iOS (needs a Mac build)**
    - AI photos use the strict JPEG assembler, so malformed streams are dropped.
    - A camera-close notification clears the recording flags.
+
+## Wave 4: typed shared preferences
+
+Every prefs file, key, type and default is declared once in `shared/prefs`, and `PrefsInventoryTest` pins them. Run the upgrade check once:
+1. Install the previous build and change several settings:
+   - language, wake-word route, thumbnail quality, assistant mode and provider;
+   - relay URL, Pro Live economy;
+   - one plugin's settings, appearance and accent;
+   - remote server with an API key, the Telegram token, and Pro login.
+2. Install this build over it (`adb install -r`).
+3. Check:
+   - Every setting is unchanged.
+   - The remote API key and Pro token still work, which proves the encrypted prefs are still read.
+4. Optional: diff `run-as … shared_prefs/*.xml` before and after. File names, keys and value types must be identical.
+
+**iOS (needs a Mac build):**
+- Wake word route, thumbnail quality, assistant mode, language and the remote server settings keep their existing NSUserDefaults names.
+- The appearance and welcome flags still load.
