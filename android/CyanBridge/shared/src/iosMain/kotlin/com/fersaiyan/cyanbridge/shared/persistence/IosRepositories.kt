@@ -11,7 +11,16 @@ import kotlinx.serialization.Serializable
  * iOS implementation of persistence repositories using PlatformPreferences
  * (NSUserDefaults) for simple storage.
  *
- * For production, this should use SQLDelight or a proper SQLite wrapper.
+ * Chats moved to the shared Room database (`RoomChatRepository`, the Android `chats` and
+ * `messages` tables); [IosChatRepository] is now only the legacy store that
+ * `LegacyImportingChatRepository` imports once and keeps as a backup.
+ *
+ * The others stay here because their models don't match an Android table:
+ * - Notes: [NoteEntity] has a String id, one `content` field and a `source`; Android's
+ *   `notes` table has an autoincrement Long id, `summary`/`transcript`/tags and no source.
+ * - Memory vault: [MemoryVaultItemEntity] is plain text with an optional embedding; Android
+ *   stores encrypted `vault_items` (nonce, ciphertext, key reference) plus `memory_chunks`.
+ * - Device profiles and media records: Android keeps no Room table for them.
  */
 
 @Serializable
