@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.autodiary
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
@@ -28,63 +29,87 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.daily.DailyFactsReminderScheduler
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyBulletsSettings
 import com.fersaiyan.cyanbridge.localagent.tasker.TaskerAgentBridge
+import com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs
 import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultService
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
 import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
-import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
-import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
+import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class AutoDiarySettingsActivity : AppCompatActivity() {
-    private var autoDiaryEnabled by mutableStateOf(false)
-    private var taskerObserverAvailable by mutableStateOf(false)
+data class AutoDiarySettingsState(
+    /** Refreshed from [AutoDiaryService] on create, resume and every enable/disable. */
+    val enabled: Boolean,
+    /** Refreshed together with [enabled]. */
+    val taskerObserverAvailable: Boolean,
+    val dailyFactsReminder: Boolean,
+    val autoSaveDailyFacts: Boolean,
+    val extractUserFactCandidates: Boolean,
+    val maxTokensPerBullet: Int,
+    val screenOcrRetentionDays: Int,
+    val bulletPrompt: String,
+) {
+    companion object {
+        fun load(context: Context) = AutoDiarySettingsState(
+            enabled = AutoDiaryService.isEnabled(context),
+            taskerObserverAvailable = TaskerAgentBridge.isTaskerUiObserverAvailable(context),
+            dailyFactsReminder = LocalAgentPrefs.isDailyFactsReminderEnabled(context),
+            autoSaveDailyFacts = ChatMemoryPrefs.isAutoSaveDailyFactsEnabled(context),
+            extractUserFactCandidates = ChatMemoryPrefs.isExtractUserFactCandidatesEnabled(context),
+            maxTokensPerBullet = DailyBulletsSettings.getMaxTokensPerBullet(context),
+            screenOcrRetentionDays = MemoryModeManager.getScreenOcrRetentionDays(context),
+            bulletPrompt = DailyBulletsSettings.getBulletPrompt(context),
+        )
+    }
+}
+
+interface AutoDiarySettingsActions {
+    fun onBack()
+    fun onEnabledChange(enabled: Boolean)
+    fun onOpenTasker()
+    fun onOpenCaptures()
+    fun onScreenOcrRetentionDaysChange(days: Int)
+    fun onDailyFactsReminderChange(enabled: Boolean)
+    fun onAutoSaveDailyFactsChange(enabled: Boolean)
+    fun onExtractUserFactCandidatesChange(enabled: Boolean)
+    fun onOpenSummary()
+    fun onOpenDailyFactsDraft()
+    fun onOpenConfirmedDailyFacts()
+    fun onBulletPromptChange(prompt: String)
+    fun onRestoreDefaultBulletPrompt()
+    fun onMaxTokensPerBulletChange(maxTokens: Int)
+}
+
+class AutoDiarySettingsActivity : AppCompatActivity(), AutoDiarySettingsActions {
+    private lateinit var uiState: MutableState<AutoDiarySettingsState>
+
+    internal val state: AutoDiarySettingsState get() = uiState.value
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        uiState = mutableStateOf(AutoDiarySettingsState.load(this))
         refreshUi()
-        val composeView = installComposeHostWithLegacyAdapter(R.layout.activity_auto_diary_settings)
-        setThemedComposeContent(composeView) {
-            AutoDiarySettingsScreen(
-                enabled = autoDiaryEnabled,
-                taskerObserverAvailable = taskerObserverAvailable,
-                onBack = ::finish,
-                onEnabledChanged = ::setEnabled,
-                onOpenTasker = ::openTasker,
-                onOpenCaptures = { startActivity(Intent(this, ScreenCapturesActivity::class.java)) },
-                onOpenSummary = { startActivity(Intent(this, DailySummaryActivity::class.java)) },
-                onOpenDailyFactsDraft = {
-                    startActivity(
-                        Intent(this, DailyFactsActivity::class.java)
-                            .putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_DRAFT),
-                    )
-                },
-                onOpenConfirmedDailyFacts = {
-                    startActivity(
-                        Intent(this, DailyFactsActivity::class.java)
-                            .putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_CONFIRMED),
-                    )
-                },
-            )
+        setThemedComposeScreen {
+            AutoDiarySettingsScreen(state = uiState.value, actions = this)
         }
     }
 
@@ -93,51 +118,102 @@ class AutoDiarySettingsActivity : AppCompatActivity() {
         refreshUi()
     }
 
-    private fun setEnabled(enabled: Boolean) {
+    private inline fun update(transform: AutoDiarySettingsState.() -> AutoDiarySettingsState) {
+        uiState.value = uiState.value.transform()
+    }
+
+    override fun onBack() = finish()
+
+    override fun onEnabledChange(enabled: Boolean) {
         if (enabled) AutoDiaryService.enable(this) else AutoDiaryService.disable(this)
         refreshUi()
     }
 
     private fun refreshUi() {
-        taskerObserverAvailable = TaskerAgentBridge.isTaskerUiObserverAvailable(this)
-        autoDiaryEnabled = AutoDiaryService.isEnabled(this)
+        val taskerObserverAvailable = TaskerAgentBridge.isTaskerUiObserverAvailable(this)
+        val enabled = AutoDiaryService.isEnabled(this)
+        update { copy(taskerObserverAvailable = taskerObserverAvailable, enabled = enabled) }
         AutoDiaryService.startIfEnabled(this)
     }
 
-    private fun openTasker() {
+    override fun onOpenTasker() {
         packageManager.getLaunchIntentForPackage("net.dinglisch.android.taskerm")?.let(::startActivity)
+    }
+
+    override fun onOpenCaptures() {
+        startActivity(Intent(this, ScreenCapturesActivity::class.java))
+    }
+
+    override fun onScreenOcrRetentionDaysChange(days: Int) {
+        update { copy(screenOcrRetentionDays = days) }
+        MemoryModeManager.setScreenOcrRetentionDays(this, days)
+        lifecycleScope.launch(Dispatchers.Main) { MemoryVaultService.enforceScreenOcrRetention(this@AutoDiarySettingsActivity) }
+    }
+
+    override fun onDailyFactsReminderChange(enabled: Boolean) {
+        update { copy(dailyFactsReminder = enabled) }
+        LocalAgentPrefs.setDailyFactsReminderEnabled(this, enabled)
+        DailyFactsReminderScheduler.scheduleIfEnabled(this, enabled)
+    }
+
+    override fun onAutoSaveDailyFactsChange(enabled: Boolean) {
+        update { copy(autoSaveDailyFacts = enabled) }
+        ChatMemoryPrefs.setAutoSaveDailyFactsEnabled(this, enabled)
+    }
+
+    override fun onExtractUserFactCandidatesChange(enabled: Boolean) {
+        update { copy(extractUserFactCandidates = enabled) }
+        ChatMemoryPrefs.setExtractUserFactCandidatesEnabled(this, enabled)
+    }
+
+    override fun onOpenSummary() {
+        startActivity(Intent(this, DailySummaryActivity::class.java))
+    }
+
+    override fun onOpenDailyFactsDraft() {
+        startActivity(
+            Intent(this, DailyFactsActivity::class.java)
+                .putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_DRAFT),
+        )
+    }
+
+    override fun onOpenConfirmedDailyFacts() {
+        startActivity(
+            Intent(this, DailyFactsActivity::class.java)
+                .putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_CONFIRMED),
+        )
+    }
+
+    override fun onBulletPromptChange(prompt: String) {
+        update { copy(bulletPrompt = prompt) }
+        DailyBulletsSettings.setCustomBulletPrompt(this, prompt)
+    }
+
+    override fun onRestoreDefaultBulletPrompt() {
+        DailyBulletsSettings.restoreDefaultBulletPrompt(this)
+        update { copy(bulletPrompt = DailyBulletsSettings.DEFAULT_BULLET_PROMPT) }
+    }
+
+    override fun onMaxTokensPerBulletChange(maxTokens: Int) {
+        update { copy(maxTokensPerBullet = maxTokens) }
+        DailyBulletsSettings.setMaxTokensPerBullet(this, maxTokens)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AutoDiarySettingsScreen(
-    enabled: Boolean,
-    taskerObserverAvailable: Boolean,
-    onBack: () -> Unit,
-    onEnabledChanged: (Boolean) -> Unit,
-    onOpenTasker: () -> Unit,
-    onOpenCaptures: () -> Unit,
-    onOpenSummary: () -> Unit,
-    onOpenDailyFactsDraft: () -> Unit,
-    onOpenConfirmedDailyFacts: () -> Unit,
+    state: AutoDiarySettingsState,
+    actions: AutoDiarySettingsActions,
 ) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
-    var reminder by remember { mutableStateOf(LocalAgentPrefs.isDailyFactsReminderEnabled(context)) }
-    var autoSaveFacts by remember { mutableStateOf(com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.isAutoSaveDailyFactsEnabled(context)) }
-    var extractFacts by remember { mutableStateOf(com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.isExtractUserFactCandidatesEnabled(context)) }
-    var maxTokens by remember { mutableIntStateOf(DailyBulletsSettings.getMaxTokensPerBullet(context)) }
-    var retentionDays by remember { mutableIntStateOf(MemoryModeManager.getScreenOcrRetentionDays(context)) }
-    var prompt by remember { mutableStateOf(DailyBulletsSettings.getBulletPrompt(context)) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.compose_plugin_settings_title, stringResource(R.string.compose_plugin_name_autodiary))) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = actions::onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.compose_back))
                     }
                 },
@@ -159,8 +235,8 @@ fun AutoDiarySettingsScreen(
             )
             SwitchSetting(
                 label = stringResource(R.string.compose_plugin_enabled, stringResource(R.string.compose_plugin_name_autodiary)),
-                checked = enabled,
-                onCheckedChange = onEnabledChanged,
+                checked = state.enabled,
+                onCheckedChange = actions::onEnabledChange,
             )
             NativePluginShortcutPreference(
                 pluginId = com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds.AUTO_DIARY,
@@ -169,12 +245,12 @@ fun AutoDiarySettingsScreen(
             Text(stringResource(R.string.compose_screen_capture), style = MaterialTheme.typography.titleMedium)
             Text(
                 when {
-                    taskerObserverAvailable -> "Tasker and AutoInput are installed. The imported profile captures every 10 minutes by default. Edit the Time profile in Tasker to change the schedule."
-                    enabled -> "AutoDiary is enabled, but Tasker or AutoInput is not detected. Install/import the Tasker profile before expecting screen captures."
+                    state.taskerObserverAvailable -> "Tasker and AutoInput are installed. The imported profile captures every 10 minutes by default. Edit the Time profile in Tasker to change the schedule."
+                    state.enabled -> "AutoDiary is enabled, but Tasker or AutoInput is not detected. Install/import the Tasker profile before expecting screen captures."
                     else -> "Tasker + AutoInput are required for screen observation. CyanBridge Accessibility and installed-app visibility are not required."
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = if (taskerObserverAvailable) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                color = if (state.taskerObserverAvailable) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
             )
             Text(
                 "Excluded apps are configured in Tasker with the global variable %CB_AutoDiaryExcluded. " +
@@ -182,77 +258,58 @@ fun AutoDiarySettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = onOpenTasker, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = actions::onOpenTasker, modifier = Modifier.fillMaxWidth()) {
                 Text("Open Tasker schedule / exclusions")
             }
-            OutlinedButton(onClick = onOpenCaptures, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = actions::onOpenCaptures, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.compose_view_screen_captures))
             }
             NumberSetting(
                 label = "Screen OCR retention (days)",
-                value = retentionDays,
+                value = state.screenOcrRetentionDays,
                 range = 1..365,
-                onValueChanged = { days ->
-                    retentionDays = days
-                    MemoryModeManager.setScreenOcrRetentionDays(context, days)
-                    coroutineScope.launch { MemoryVaultService.enforceScreenOcrRetention(context) }
-                },
+                onValueChanged = actions::onScreenOcrRetentionDaysChange,
             )
             Text(stringResource(R.string.compose_daily_processing), style = MaterialTheme.typography.titleMedium)
-            SwitchSetting(stringResource(R.string.compose_daily_facts_reminder), reminder) {
-                reminder = it
-                LocalAgentPrefs.setDailyFactsReminderEnabled(context, it)
-                DailyFactsReminderScheduler.scheduleIfEnabled(context, it)
-            }
-            SwitchSetting(stringResource(R.string.compose_auto_save_daily_facts), autoSaveFacts) {
-                autoSaveFacts = it
-                com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.setAutoSaveDailyFactsEnabled(context, it)
-            }
-            SwitchSetting(stringResource(R.string.compose_extract_user_fact_candidates), extractFacts) {
-                extractFacts = it
-                com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs.setExtractUserFactCandidatesEnabled(context, it)
-            }
+            SwitchSetting(stringResource(R.string.compose_daily_facts_reminder), state.dailyFactsReminder, actions::onDailyFactsReminderChange)
+            SwitchSetting(stringResource(R.string.compose_auto_save_daily_facts), state.autoSaveDailyFacts, actions::onAutoSaveDailyFactsChange)
+            SwitchSetting(
+                stringResource(R.string.compose_extract_user_fact_candidates),
+                state.extractUserFactCandidates,
+                actions::onExtractUserFactCandidatesChange,
+            )
             Text(
                 stringResource(R.string.compose_nightly_enrichment_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = onOpenSummary, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = actions::onOpenSummary, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.compose_open_daily_summary))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onOpenDailyFactsDraft, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = actions::onOpenDailyFactsDraft, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.compose_edit_daily_facts))
                 }
-                OutlinedButton(onClick = onOpenConfirmedDailyFacts, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = actions::onOpenConfirmedDailyFacts, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.compose_view_confirmed_facts))
                 }
             }
             Text(stringResource(R.string.compose_bulletization), style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
-                value = prompt,
-                onValueChange = {
-                    prompt = it
-                    DailyBulletsSettings.setCustomBulletPrompt(context, it)
-                },
+                value = state.bulletPrompt,
+                onValueChange = actions::onBulletPromptChange,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.compose_bullet_prompt)) },
                 minLines = 3,
                 maxLines = 7,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = {
-                    DailyBulletsSettings.restoreDefaultBulletPrompt(context)
-                    prompt = DailyBulletsSettings.DEFAULT_BULLET_PROMPT
-                }) { Text(stringResource(R.string.compose_restore_default_prompt)) }
+                TextButton(onClick = actions::onRestoreDefaultBulletPrompt) { Text(stringResource(R.string.compose_restore_default_prompt)) }
                 NumberSetting(
                     label = stringResource(R.string.compose_max_tokens_per_bullet),
-                    value = maxTokens,
+                    value = state.maxTokensPerBullet,
                     range = 0..100_000,
-                    onValueChanged = {
-                        maxTokens = it
-                        DailyBulletsSettings.setMaxTokensPerBullet(context, it)
-                    },
+                    onValueChanged = actions::onMaxTokensPerBulletChange,
                     modifier = Modifier.weight(1f),
                 )
             }
