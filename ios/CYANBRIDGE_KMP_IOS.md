@@ -50,6 +50,8 @@ HeyCyan glasses are driven through QCSDK, the iOS counterpart of Android's `glas
 
 ## Other glasses SDKs
 
+Every family is a shared `GlassesDevice` (`IosGlassesDevice`): `IosHeyCyanGlasses` (also used for unclassified and audio-only glasses, like Android), `IosEyevueGlasses`, and the TuneBuds, SDK and Meizu devices of `IosOtherGlasses`. Dashboard actions go through the shared `GlassesDashboardController` (session policy, family gating, device capabilities); `IosDashboardHost` runs the iOS effects, and `withIosFamilyGating` applies Android's gating with the iOS differences (sections need a live link; QCSDK-only sections show for HeyCyan alone).
+
 TuneBuds, MoYoung, Meta Ray-Ban, Mentra Live and Meizu run through `IosOtherGlasses.kt`:
 
 - **TuneBuds**: the shared `TuneBudsSession` (AB Mate frames) over BLE service `FDB3` (write `FF17`, notify `FF18`), through `IosBleManager`.
