@@ -53,7 +53,6 @@ import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelRequestPriority
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
-import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
 import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +68,7 @@ class WalkingAidChatActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        composeView = installComposeHostWithLegacyAdapter(R.layout.activity_walking_aid_settings)
+        composeView = ComposeView(this).also(::setContentView)
 
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
