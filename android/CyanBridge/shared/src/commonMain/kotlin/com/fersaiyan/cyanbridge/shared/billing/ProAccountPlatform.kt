@@ -173,3 +173,21 @@ data class ProStorePurchase(
     val purchaseToken: String,
     val handle: Any? = null,
 )
+
+/** Where a verified browser return leads: Pro settings when [success], else the checkout, with [message]. */
+data class CheckoutReturn(val success: Boolean, val message: String)
+
+/** A browser redirect is never proof of payment: only a fresh, strict server answer activates Pro. Blocks. */
+fun ProAccountPlatform.verifySubscriptionReturn(): CheckoutReturn {
+    val verified = verifyNow(strict = true, applyActivationRouting = true)
+    return CheckoutReturn(
+        success = verified.active,
+        message = if (verified.active) "Subscription verified" else "Payment returned, but no active subscription was confirmed.",
+    )
+}
+
+/** The donation page returned; the checkout screen asks the user to confirm the payment. */
+fun ProAccountPlatform.acceptDonationReturn(): CheckoutReturn {
+    setAwaitingDonationReturn(true)
+    return CheckoutReturn(false, "Return received. Check the donation status to confirm payment.")
+}
