@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.ai.live
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
-import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.Request
 import okhttp3.WebSocket
 import okio.ByteString
@@ -471,10 +470,14 @@ class GeminiLiveClientCharacterizationTest {
         private fun method(owner: Any, name: String, vararg types: Class<*>) =
             owner.javaClass.getDeclaredMethod(name, *types).apply { isAccessible = true }
 
+        private fun session(client: GeminiLiveClient) = field(client, "session").get(client) as GeminiLiveSessionState
+
+        private fun audio(client: GeminiLiveClient) = field(client, "audio").get(client) as GeminiLiveAudioIo
+
         fun setPrompts(client: GeminiLiveClient, language: String, imagePrompt: String, systemPrompt: String) {
-            field(client, "lastLanguage").set(client, language)
-            field(client, "lastImagePrompt").set(client, imagePrompt)
-            field(client, "lastSystemPrompt").set(client, systemPrompt)
+            session(client).language = language
+            session(client).imagePrompt = imagePrompt
+            session(client).systemPrompt = systemPrompt
         }
 
         fun sendSetup(client: GeminiLiveClient, socket: WebSocket, config: LiveTokenConfig) {
@@ -492,19 +495,19 @@ class GeminiLiveClientCharacterizationTest {
 
         fun makeLive(client: GeminiLiveClient, socket: WebSocket, config: LiveTokenConfig, setupComplete: Boolean = true) {
             field(client, "socket").set(client, socket)
-            field(client, "tokenConfig").set(client, config)
+            session(client).tokenConfig = config
             setActive(client, true)
-            (field(client, "setupComplete").get(client) as AtomicBoolean).set(setupComplete)
+            session(client).setupComplete.set(setupComplete)
         }
 
         fun setActive(client: GeminiLiveClient, active: Boolean) {
-            (field(client, "active").get(client) as AtomicBoolean).set(active)
+            session(client).active.set(active)
         }
 
         fun setCaptureEnabled(client: GeminiLiveClient, enabled: Boolean) {
-            (field(client, "captureEnabled").get(client) as AtomicBoolean).set(enabled)
+            audio(client).captureEnabled.set(enabled)
         }
 
-        fun inputAudioMs(client: GeminiLiveClient): Long = field(client, "inputAudioMs").getLong(client)
+        fun inputAudioMs(client: GeminiLiveClient): Long = session(client).inputAudioMs
     }
 }

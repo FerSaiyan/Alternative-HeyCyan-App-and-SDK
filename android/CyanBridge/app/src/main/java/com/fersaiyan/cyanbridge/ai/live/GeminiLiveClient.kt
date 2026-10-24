@@ -1,41 +1,19 @@
 package com.fersaiyan.cyanbridge.ai.live
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
-import android.media.AudioAttributes
-import android.media.AudioDeviceCallback
-import android.media.AudioDeviceInfo
-import android.media.AudioFocusRequest
-import android.media.AudioFormat
-import android.media.AudioManager
-import android.media.AudioRecord
-import android.media.AudioTrack
-import android.media.MediaRecorder
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.os.Build
 import android.util.Log
-import androidx.core.content.ContextCompat
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
-import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
-import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
-import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -46,6 +24,11 @@ import org.json.JSONObject
  *
  * This client is instantiated only by the explicit Gemini Live flow. Being a Pro user does not
  * activate Live Mode or change routing for any other model/provider.
+ *
+ * It is the façade over [GeminiLiveProtocol] (wire format), [GeminiLiveAudioIo] (microphone,
+ * playback, routing, focus), [GeminiLiveSessionState] (conversation state and metering),
+ * [GeminiLiveVisualAudioHold] (turn-tail hold for fresh images) and [GeminiLiveRelayReporter]
+ * (relay billing/diagnostics). It owns the socket, the timers and the lifecycle decisions.
  */
 class GeminiLiveClient(
     context: Context,
@@ -71,24 +54,25 @@ class GeminiLiveClient(
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
         .build()
-    private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val session = GeminiLiveSessionState()
+    private val audio = GeminiLiveAudioIo(
+        context = appContext,
+        scope = scope,
+        onFocusLost = { stop() },
+        onFocusLostTransiently = { pauseCapture() },
+        onFocusGained = { resumeCapture() },
+        onRouteChanged = { notifyRouteChange() },
+        onCaptureError = { detail -> setState(GeminiLiveState.ERROR, detail) },
+    )
+    private val relay = GeminiLiveRelayReporter(appContext, http, scope)
     private val connectivity = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    private val active = AtomicBoolean(false)
-    private val captureEnabled = AtomicBoolean(false)
-    private val setupComplete = AtomicBoolean(false)
-    private val speechActive = AtomicBoolean(false)
-    private val modelSpeaking = AtomicBoolean(false)
-    private val audioDelayLock = Any()
-    private val delayedAudio = ArrayDeque<ByteArray>()
-    private var audioDeferredForVisualContext = false
-    private var visualAudioHoldStarted = false
-    private var heldVisualSilenceChunks = 0
+    private val visualAudioHold = GeminiLiveVisualAudioHold()
     private val speechDetector = GeminiLiveSpeechActivityDetector { speaking ->
         // Always retain the local energy state. During Gemini playback we suppress the
         // vision callback to avoid speaker echo triggering a picture, but the state is
         // still used to confirm that a server-side interruption was backed by local speech.
-        speechActive.set(speaking)
-        if (modelSpeaking.get()) {
+        session.speechActive.set(speaking)
+        if (session.modelSpeaking.get()) {
             Log.d(TAG, "Local speech energy during Gemini playback active=$speaking (callback suppressed)")
         } else {
             Log.d(TAG, "Local speech energy active=$speaking")
@@ -96,50 +80,19 @@ class GeminiLiveClient(
         }
     }
 
-    private var state = GeminiLiveState.IDLE
-    private var tokenConfig: LiveTokenConfig? = null
     private val effectiveTokenProvider: GeminiLiveTokenProvider by lazy {
         tokenProvider ?: DefaultGeminiLiveTokenProvider(appContext, http)
     }
-    // Stored for building the Live setup systemInstruction to match the token's bidiGenerateContentSetup.
-    // The token's setup is built server-side via buildLiveSystemInstruction(language, imagePrompt, systemPrompt)
-    // and the Live setup we send must include the same systemInstruction + contextWindowCompression
-    // to avoid 1008 or hanging in CONNECTING (seen when setup omitted these).
-    private var lastLanguage: String = "en"
-    private var lastImagePrompt: String = ""
-    private var lastSystemPrompt: String = ""
     private var socket: WebSocket? = null
-    private var recorder: AudioRecord? = null
-    @Volatile private var mentraMicActive = false
-    private var recorderJob: Job? = null
-    private var playback: AudioTrack? = null
     private var reconnectJob: Job? = null
     private var sessionResumptionJob: Job? = null
     private var meteredSessionLimitJob: Job? = null
-    private val meteredConnectionAttempted = AtomicBoolean(false)
-    private var sessionResumptionHandle: String? = null
-    private var reconnectAttempt = 0
-    private var audioFocusRequest: AudioFocusRequest? = null
-    private var previousAudioMode: Int? = null
-    private var previousCommunicationDevice: AudioDeviceInfo? = null
-    private var liveAudioRouteConfigured = false
-    private var inputAudioMs = 0L
-    private var outputAudioMs = 0L
-    private val visionDiagnostics = GeminiLiveVisionDiagnostics()
-    private val visualInputCount: Int get() = visionDiagnostics.snapshot().imagesQueued
-    private var visionReportId = java.util.UUID.randomUUID().toString()
     private var visionReportJob: Job? = null
-    private var visionReportConfig: LiveTokenConfig? = null
-    private var lastBilledInputMs = 0L
-    private var lastBilledOutputMs = 0L
-    private var lastBilledImages = 0
-    private var lastUsageTotalTokens = 0
-    private var socketListeningStartedAtMs = 0L
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             listener.onNetworkChanged(true)
-            if (active.get() && socket == null) connectOrReconnect()
+            if (session.active.get() && socket == null) connectOrReconnect()
         }
 
         override fun onLost(network: Network) {
@@ -150,63 +103,36 @@ class GeminiLiveClient(
         }
     }
 
-    private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { focus ->
-        when (focus) {
-            AudioManager.AUDIOFOCUS_LOSS -> stop()
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> pauseCapture()
-            AudioManager.AUDIOFOCUS_GAIN -> resumeCapture()
-        }
-    }
-
-    private val audioDeviceCallback = object : AudioDeviceCallback() {
-        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = notifyRouteChange()
-        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) = notifyRouteChange()
-    }
-
     init {
         connectivity.registerDefaultNetworkCallback(networkCallback)
-        audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
+        audio.registerDeviceCallback()
     }
 
     fun start(language: String, imagePrompt: String) {
-        if (!active.compareAndSet(false, true)) return
+        if (!session.active.compareAndSet(false, true)) return
         meteredSessionLimitJob?.cancel()
         meteredSessionLimitJob = null
-        reconnectAttempt = 0
-        meteredConnectionAttempted.set(false)
-        inputAudioMs = 0L
-        outputAudioMs = 0L
-        visionDiagnostics.reset()
-        visionReportId = java.util.UUID.randomUUID().toString()
-        visionReportConfig = null
-        lastBilledInputMs = 0L
-        lastBilledOutputMs = 0L
-        lastBilledImages = 0
-        lastUsageTotalTokens = 0
-        setupComplete.set(false)
-        speechActive.set(false)
-        modelSpeaking.set(false)
+        session.resetForStart()
         clearDelayedAudio()
         speechDetector.reset()
         // Store for setup to match token's bidiGenerateContentSetup
-        lastLanguage = language.ifBlank { "en" }
-        lastImagePrompt = imagePrompt
-        lastSystemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(appContext)
+        session.language = language.ifBlank { "en" }
+        session.imagePrompt = imagePrompt
+        session.systemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(appContext)
         setState(GeminiLiveState.REQUESTING_TOKEN, "Requesting secure Live session")
         Log.i(TAG, "Live start requested language=$language prompt=${imagePrompt.take(80)}")
         scope.launch {
             runCatching { requestToken(language, imagePrompt) }
                 .onSuccess {
-                    if (!active.get()) return@onSuccess
-                    tokenConfig = it
-                    visionReportConfig = it
+                    if (!session.active.get()) return@onSuccess
+                    session.tokenConfig = it
+                    session.visionReportConfig = it
                     Log.i(TAG, "Live token ok model=${it.model} reservation=${it.reservationId} url=${it.websocketUrl.take(80)} expires=${it.expiresAtMs} auth=${it.authorizationHeader?.take(20)} apiKey=${if (it.apiKey.isNullOrBlank()) "none" else "present"}")
                     connectOrReconnect()
                 }
                 .onFailure {
-                    if (!active.get()) return@onFailure
-                    active.set(false)
+                    if (!session.active.get()) return@onFailure
+                    session.active.set(false)
                     Log.e(TAG, "Live token failed", it)
                     val rejection = it as? LiveTokenRequestException
                     val announcement = when (rejection?.errorCode) {
@@ -222,9 +148,9 @@ class GeminiLiveClient(
 
     fun stop() {
         reportVisionDiagnostics()
-        active.set(false)
-        setupComplete.set(false)
-        modelSpeaking.set(false)
+        session.active.set(false)
+        session.setupComplete.set(false)
+        session.modelSpeaking.set(false)
         clearDelayedAudio()
         reconnectJob?.cancel()
         reconnectJob = null
@@ -235,40 +161,40 @@ class GeminiLiveClient(
         socket?.close(1000, "user_stopped")
         socket = null
         stopCapture()
-        stopPlayback()
-        restoreAudioRoute()
-        abandonAudioFocus()
-        sessionResumptionHandle = null
-        tokenConfig?.reservationId?.takeUnless { it == "free-proxy" || it == "direct" }?.let { reservationId ->
+        audio.stopPlayback()
+        audio.restoreAudioRoute()
+        audio.abandonAudioFocus()
+        session.sessionResumptionHandle = null
+        session.tokenConfig?.reservationId?.takeUnless { it == "free-proxy" || it == "direct" }?.let { reservationId ->
             scope.launch {
-                releaseRelayReservation(
+                relay.releaseReservation(
                     reservationId = reservationId,
-                    inputAudioMs = inputAudioMs,
-                    outputAudioMs = outputAudioMs,
-                    imageCount = visualInputCount,
+                    inputAudioMs = session.inputAudioMs,
+                    outputAudioMs = session.outputAudioMs,
+                    imageCount = session.visualInputCount,
                 )
             }
         }
-        tokenConfig = null
+        session.tokenConfig = null
         setState(GeminiLiveState.STOPPED, "Stopped")
     }
 
     fun close() {
         stop()
         connectivity.unregisterNetworkCallback(networkCallback)
-        audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
+        audio.unregisterDeviceCallback()
     }
 
     fun pauseForBackground() = pauseCapture()
 
     fun resumeAfterForeground() {
-        if (active.get() && setupComplete.get() && state == GeminiLiveState.LISTENING) resumeCapture()
+        if (session.active.get() && session.setupComplete.get() && session.state == GeminiLiveState.LISTENING) resumeCapture()
     }
 
     /** Accepts raw glasses PCM if a device SDK exposes it. */
     fun offerGlassesPcm(pcm: ShortArray, sampleRateHz: Int) {
-        if (!active.get() || !setupComplete.get() || !captureEnabled.get()) return
-        val normalized = PcmResampler.resampleMono16(pcm, sampleRateHz, INPUT_SAMPLE_RATE_HZ)
+        if (!session.active.get() || !session.setupComplete.get() || !audio.captureEnabled.get()) return
+        val normalized = PcmResampler.resampleMono16(pcm, sampleRateHz, GeminiLiveProtocol.INPUT_SAMPLE_RATE_HZ)
         val bytes = ByteArray(normalized.size * 2)
         normalized.forEachIndexed { index, sample ->
             bytes[index * 2] = (sample.toInt() and 0xff).toByte()
@@ -279,8 +205,8 @@ class GeminiLiveClient(
 
     /** Direct 16 kHz mono signed little-endian PCM; no second AudioRecord. */
     fun offerMentraPcm(pcm: ByteArray) {
-        if (mentraMicActive && active.get() && setupComplete.get() &&
-            captureEnabled.get() && pcm.isNotEmpty() && pcm.size % 2 == 0
+        if (audio.mentraMicActive && session.active.get() && session.setupComplete.get() &&
+            audio.captureEnabled.get() && pcm.isNotEmpty() && pcm.size % 2 == 0
         ) sendPcm(pcm)
     }
 
@@ -288,41 +214,41 @@ class GeminiLiveClient(
     fun sendImage(jpegBytes: ByteArray) = sendVideoFrame(jpegBytes)
 
     fun sendTextTurn(text: String) {
-        if (!active.get() || !setupComplete.get() || text.isBlank()) return
+        if (!session.active.get() || !session.setupComplete.get() || text.isBlank()) return
         socket?.send(GeminiLiveProtocol.buildClientTextTurn(text))
     }
 
     /** Sends one JPEG frame through the current realtimeInput.video field. */
     fun sendVideoFrame(jpegBytes: ByteArray): Boolean {
-        val limit = if (tokenConfig?.let { it.freeTier || it.economy } == true) 10 else MAX_VISUAL_INPUTS_PER_SESSION
-        if (visualInputCount >= limit) {
+        val limit = if (session.tokenConfig?.let { it.freeTier || it.economy } == true) 10 else MAX_VISUAL_INPUTS_PER_SESSION
+        if (session.visualInputCount >= limit) {
             setState(GeminiLiveState.LISTENING, "Live visual-input safety limit reached")
         }
-        val accepted = visionDiagnostics.send(
-            ready = active.get() && setupComplete.get(),
+        val accepted = session.visionDiagnostics.send(
+            ready = session.active.get() && session.setupComplete.get(),
             bytes = jpegBytes,
             limit = limit,
         ) {
             sendRealtimeBlob(GeminiLiveProtocol.REALTIME_VIDEO_FIELD, GeminiLiveProtocol.IMAGE_MIME_TYPE, jpegBytes)
         }
-        Log.i(TAG, "Live image queued=$accepted diagnostics=${visionDiagnostics.snapshot()}")
+        Log.i(TAG, "Live image queued=$accepted diagnostics=${session.visionDiagnostics.snapshot()}")
         scheduleVisionDiagnosticsReport()
         return accepted
     }
 
     fun recordVisionCaptureStarted() {
-        visionDiagnostics.captureStarted()
+        session.visionDiagnostics.captureStarted()
         scheduleVisionDiagnosticsReport()
     }
 
     fun recordVisionCaptureFinished(success: Boolean, error: Throwable? = null) {
-        visionDiagnostics.captureFinished(success, error)
-        Log.i(TAG, "Live capture success=$success diagnostics=${visionDiagnostics.snapshot()}")
+        session.visionDiagnostics.captureFinished(success, error)
+        Log.i(TAG, "Live capture success=$success diagnostics=${session.visionDiagnostics.snapshot()}")
         scheduleVisionDiagnosticsReport()
     }
 
     private fun scheduleVisionDiagnosticsReport() {
-        synchronized(visionDiagnostics) {
+        synchronized(session.visionDiagnostics) {
             visionReportJob?.cancel()
             visionReportJob = scope.launch {
                 delay(1_000)
@@ -332,70 +258,21 @@ class GeminiLiveClient(
     }
 
     private fun reportVisionDiagnostics() {
-        val config = tokenConfig ?: visionReportConfig ?: return
+        val config = session.tokenConfig ?: session.visionReportConfig ?: return
         if (config.reservationId == "direct") return
-        val snapshot = visionDiagnostics.snapshot()
-        val reportId = visionReportId
-        val auth = ProSubscriptionServerPrefs.getApiToken(appContext).trim()
-        val base = AiProviderPrefs.getRelayBaseUrl(appContext).trim().trimEnd('/')
-        if (auth.isBlank() || !base.startsWith("https://")) return
-        val body = JSONObject()
-            .put("report_id", reportId)
-            .put("session_id", if (config.freeTier || config.economy) reportId else config.reservationId)
-            .put("mode", if (config.economy) "economy" else if (config.freeTier) "free" else "private")
-            .put("device_class", DeviceProfileStore.selectedClass(appContext).name)
-            .put("refresh_mode", if (GeminiLiveVisionPreferences.imageDelaySeconds(appContext) == 0) "initial_only" else "every_turn")
-            .put("revision", snapshot.revision)
-            .put("capture_attempts", snapshot.captureAttempts)
-            .put("captures_completed", snapshot.capturesCompleted)
-            .put("capture_failures", snapshot.captureFailures)
-            .put("images_queued", snapshot.imagesQueued)
-            .put("send_failures", snapshot.sendFailures)
-            .put("photo_ready_timeouts", snapshot.photoReadyTimeouts)
-            .put("transfer_failures", snapshot.transferFailures)
-            .toString()
-        scope.launch {
-            // Snapshots have deterministic revision IDs; retrying cannot double-count or bill.
-            repeat(2) { attempt ->
-                val ok = runCatching {
-                    val request = Request.Builder().url("$base/api/pro/live/vision")
-                        .header("Authorization", "Bearer $auth")
-                        .post(body.toRequestBody("application/json".toMediaType())).build()
-                    http.newCall(request).execute().use { it.isSuccessful }
-                }.getOrDefault(false)
-                if (ok) return@launch
-                if (attempt == 0) delay(1_000)
-            }
-            Log.w(TAG, "Live vision diagnostics report failed revision=${snapshot.revision}")
-        }
+        relay.reportVisionDiagnostics(config, session.visionReportId, session.visionDiagnostics.snapshot())
     }
 
     /** Prevents trailing silence from finalizing a turn before its fresh image is sent. */
     fun deferAudioForVisualContext() {
-        synchronized(audioDelayLock) {
-            if (!active.get() || !setupComplete.get()) return
-            if (!audioDeferredForVisualContext) {
-                audioDeferredForVisualContext = true
-                visualAudioHoldStarted = false
-                heldVisualSilenceChunks = 0
-                Log.i(TAG, "Deferring Live turn completion until fresh visual context is ready")
-            }
+        visualAudioHold.defer(isLive = { session.isLive }) {
+            Log.i(TAG, "Deferring Live turn completion until fresh visual context is ready")
         }
     }
 
     /** Sends the image first, then releases the held turn tail in socket order. */
     fun releaseAudioAfterVisualContext() {
-        synchronized(audioDelayLock) {
-            if (!audioDeferredForVisualContext) return
-            audioDeferredForVisualContext = false
-            visualAudioHoldStarted = false
-            heldVisualSilenceChunks = 0
-            if (!active.get() || !setupComplete.get()) {
-                delayedAudio.clear()
-                return
-            }
-            val chunks = delayedAudio.size
-            while (delayedAudio.isNotEmpty()) sendAudioPacket(delayedAudio.removeFirst())
+        visualAudioHold.release(isLive = { session.isLive }, send = ::sendAudioPacket) { chunks ->
             Log.i(TAG, "Released deferred Live audio chunks=$chunks after visual context")
         }
     }
@@ -405,41 +282,15 @@ class GeminiLiveClient(
     private fun requestToken(language: String, imagePrompt: String): LiveTokenConfig =
         kotlinx.coroutines.runBlocking { effectiveTokenProvider.requestToken(language, imagePrompt) }
 
-    private fun releaseRelayReservation(
-        reservationId: String,
-        inputAudioMs: Long,
-        outputAudioMs: Long,
-        imageCount: Int,
-    ) {
-        val authToken = ProSubscriptionServerPrefs.getApiToken(appContext).trim()
-        val base = AiProviderPrefs.getRelayBaseUrl(appContext).trim().trimEnd('/')
-        if (authToken.isBlank() || !base.startsWith("https://")) return
-        val request = Request.Builder()
-            .url("$base/api/pro/live/end")
-            .header("Authorization", "Bearer $authToken")
-            .post(
-                JSONObject()
-                    .put("reservation_id", reservationId)
-                    .put("input_audio_ms", inputAudioMs)
-                    .put("output_audio_ms", outputAudioMs)
-                    .put("image_count", imageCount)
-                    .toString()
-                    .toRequestBody("application/json".toMediaType()),
-            )
-            .build()
-        runCatching { http.newCall(request).execute().use { } }
-            .onFailure { Log.w(TAG, "Could not release Gemini Live reservation", it) }
-    }
-
     private fun connectOrReconnect() {
-        if (!active.get()) return
-        val config = tokenConfig ?: return
-        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) && meteredConnectionAttempted.get()) {
+        if (!session.active.get()) return
+        val config = session.tokenConfig ?: return
+        if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) && session.meteredConnectionAttempted.get()) {
             Log.i(TAG, "Prevented repeat Free/Economy socket connection without new user request")
             return
         }
         if (System.currentTimeMillis() >= config.expiresAtMs) {
-            active.set(false)
+            session.active.set(false)
             listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
             setState(GeminiLiveState.ERROR, "Live session expired. Start a new session.")
             return
@@ -449,207 +300,161 @@ class GeminiLiveClient(
             return
         }
 
-        setupComplete.set(false)
+        session.setupComplete.set(false)
         clearDelayedAudio()
         socket?.cancel()
         setState(
-            if (reconnectAttempt == 0) GeminiLiveState.CONNECTING else GeminiLiveState.RECONNECTING,
+            if (session.reconnectAttempt == 0) GeminiLiveState.CONNECTING else GeminiLiveState.RECONNECTING,
             "Connecting to Google",
         )
-        val request = GeminiLiveProtocol.buildConnectRequest(config, visionReportId) {
+        val request = GeminiLiveProtocol.buildConnectRequest(config, session.visionReportId) {
             com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences.selected(appContext).languageTag
                 .ifBlank { java.util.Locale.getDefault().toLanguageTag() }
         }
         if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) &&
-            !meteredConnectionAttempted.compareAndSet(false, true)
+            !session.meteredConnectionAttempted.compareAndSet(false, true)
         ) {
             Log.i(TAG, "Blocked racing duplicate Free/Economy WebSocket attempt")
             return
         }
-        socket = http.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                if (!active.get()) {
-                    webSocket.close(1000, "stopped")
-                    return
-                }
-                socket = webSocket
-                reconnectAttempt = 0
-                sendSetup(webSocket, config)
-                if (!GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) scheduleSessionResumption(webSocket)
-                setState(GeminiLiveState.CONNECTING, "Connected; waiting for Gemini setup")
-            }
+        socket = http.newWebSocket(request, SocketListener(config))
+    }
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                handleServerMessage(text)
+    private inner class SocketListener(private val config: LiveTokenConfig) : WebSocketListener() {
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            if (!session.active.get()) {
+                webSocket.close(1000, "stopped")
+                return
             }
+            socket = webSocket
+            session.reconnectAttempt = 0
+            sendSetup(webSocket, config)
+            if (!GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) scheduleSessionResumption(webSocket)
+            setState(GeminiLiveState.CONNECTING, "Connected; waiting for Gemini setup")
+        }
 
-            override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
-                // Google's direct endpoint can send UTF-8 JSON in binary frames.
-                // The free proxy converts these to text, which hid this missing callback.
-                handleServerMessage(bytes.utf8())
+        override fun onMessage(webSocket: WebSocket, text: String) {
+            handleServerMessage(text)
+        }
+
+        override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+            // Google's direct endpoint can send UTF-8 JSON in binary frames.
+            // The free proxy converts these to text, which hid this missing callback.
+            handleServerMessage(bytes.utf8())
+        }
+
+        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            Log.w(TAG, "Gemini Live socket closing code=$code reason=$reason")
+            webSocket.close(code, reason)
+        }
+
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            val wasSetupComplete = session.setupComplete.get()
+            val listeningDurationMs = session.listeningDurationMs(System.currentTimeMillis())
+            Log.w(TAG, "Gemini Live socket closed code=$code reason=$reason active=${session.active.get()} setupComplete=$wasSetupComplete")
+            if (socket === webSocket) socket = null
+            session.setupComplete.set(false)
+            if (failedBeforeSetup(config, wasSetupComplete, "Gemini Live connection failed ($code). Please try again.")) return
+            if (session.active.get() && GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) {
+                Log.i(TAG, "Metered Live socket closed; a new connection requires a user action")
+                stop()
+                return
             }
+            reconnectAfterDrop(config, wasSetupComplete, listeningDurationMs, reason)
+        }
 
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.w(TAG, "Gemini Live socket closing code=$code reason=$reason")
-                webSocket.close(code, reason)
-            }
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                val wasSetupComplete = setupComplete.get()
-                val listeningDurationMs = if (socketListeningStartedAtMs > 0L) {
-                    System.currentTimeMillis() - socketListeningStartedAtMs
-                } else 0L
-                Log.w(TAG, "Gemini Live socket closed code=$code reason=$reason active=${active.get()} setupComplete=$wasSetupComplete")
-                if (socket === webSocket) socket = null
-                setupComplete.set(false)
-                if (!wasSetupComplete && active.get() && config.reservationId != "free-proxy" && config.reservationId != "direct") {
-                    active.set(false)
-                    scope.launch {
-                        releaseRelayReservation(
-                            reservationId = config.reservationId,
-                            inputAudioMs = inputAudioMs,
-                            outputAudioMs = outputAudioMs,
-                            imageCount = visualInputCount,
-                        )
-                    }
-                    tokenConfig = null
-                    setState(GeminiLiveState.ERROR, "Gemini Live connection failed ($code). Please try again.")
-                    return
-                }
-                if (active.get() && GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) {
-                    Log.i(TAG, "Metered Live socket closed; a new connection requires a user action")
-                    stop()
-                    return
-                }
-                if (active.get()) {
-                    val announcement = GeminiLiveReconnectAnnouncementPolicy.resolve(
-                        proxySession = config.reservationId == "free-proxy",
-                        freeTier = config.freeTier,
-                        setupCompleted = wasSetupComplete,
-                        listeningDurationMs = listeningDurationMs,
-                        reason = reason,
-                    )
-                    announcement?.let(listener::onAnnouncement)
-                    scheduleReconnect(GeminiLiveReconnectAnnouncementPolicy.detail(announcement))
-                }
-            }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                val wasSetupComplete = setupComplete.get()
-                val listeningDurationMs = if (socketListeningStartedAtMs > 0L) {
-                    System.currentTimeMillis() - socketListeningStartedAtMs
-                } else 0L
-                if (socket === webSocket) socket = null
-                setupComplete.set(false)
-                Log.w(TAG, "Gemini Live socket failed code=${response?.code} msg=${response?.message} err=${t.message}", t)
-                val responseBody = if (response?.code == 429) {
-                    try { response.body?.string().orEmpty() } catch (_: Exception) { "" }
-                } else ""
-                if (response?.code == 429 && config.freeTier && responseBody.contains("live_free_daily_limit")) {
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            val wasSetupComplete = session.setupComplete.get()
+            val listeningDurationMs = session.listeningDurationMs(System.currentTimeMillis())
+            if (socket === webSocket) socket = null
+            session.setupComplete.set(false)
+            Log.w(TAG, "Gemini Live socket failed code=${response?.code} msg=${response?.message} err=${t.message}", t)
+            val responseBody = if (GeminiLiveSocketFailurePolicy.shouldReadBody(response?.code)) {
+                try { response?.body?.string().orEmpty() } catch (_: Exception) { "" }
+            } else ""
+            when (val outcome = GeminiLiveSocketFailurePolicy.classify(config, response?.code, responseBody, t.message)) {
+                is GeminiLiveSocketFailurePolicy.Outcome.FreeDailyLimit -> {
                     listener.onAnnouncement(GeminiLiveAnnouncement.FREE_DAILY_LIMIT_REACHED)
-                    active.set(false)
-                    val detail = runCatching {
-                        JSONObject(responseBody.ifBlank { "{}" }).optString("message", "")
-                            .takeIf { it.isNotBlank() }
-                    }.getOrNull() ?: "You've used your 25 free Live minutes for today. Come back tomorrow, or use Pro quota for more access."
-                    setState(GeminiLiveState.ERROR, detail)
+                    session.active.set(false)
+                    setState(GeminiLiveState.ERROR, outcome.detail)
                     return
                 }
-                if (config.economy && response != null && response.code in 400..499) {
+                is GeminiLiveSocketFailurePolicy.Outcome.EconomyRejected -> {
                     stop()
-                    setState(GeminiLiveState.ERROR, when (response.code) {
-                        402 -> "Live quota exhausted. Please wait for quota reset or upgrade."
-                        429 -> "Live is busy or another session is active. Please try again shortly."
-                        else -> "Unable to start Economy Live. Check your Pro subscription and try again."
-                    })
+                    setState(GeminiLiveState.ERROR, outcome.detail)
                     return
                 }
-                // Free queue: only the CyanBridge free proxy returns localized live_free_queued.
-                if (response?.code == 429 && config.reservationId == "free-proxy") {
-                    val raw = responseBody
-                    val isQueued = raw.contains("live_free_queued") || raw.contains("live_rate_limited") || t.message?.contains("429") == true
-                    if (isQueued || raw.contains("live_free_queued")) {
-                        val queuedDetail = runCatching {
-                            val json = JSONObject(raw.ifBlank { "{}" })
-                            json.optString("message", "").takeIf { it.isNotBlank() }
-                        }.getOrNull() ?: localizedFreeQueueMessage()
-                        active.set(false)
-                        listener.onAnnouncement(GeminiLiveAnnouncement.FREE_BUSY)
-                        setState(GeminiLiveState.ERROR, queuedDetail)
-                        return
-                    }
-                    // Also treat any 429 during free as queue for UX
-                    if (config.reservationId == "free-proxy") {
-                        active.set(false)
-                        listener.onAnnouncement(GeminiLiveAnnouncement.FREE_BUSY)
-                        setState(GeminiLiveState.ERROR, localizedFreeQueueMessage())
-                        return
-                    }
-                }
-                if (!wasSetupComplete && active.get() && config.reservationId != "free-proxy" && config.reservationId != "direct") {
-                    active.set(false)
-                    scope.launch {
-                        releaseRelayReservation(
-                            reservationId = config.reservationId,
-                            inputAudioMs = inputAudioMs,
-                            outputAudioMs = outputAudioMs,
-                            imageCount = visualInputCount,
-                        )
-                    }
-                    tokenConfig = null
-                    setState(GeminiLiveState.ERROR, "Gemini Live connection failed. Please try again.")
+                is GeminiLiveSocketFailurePolicy.Outcome.FreeQueued -> {
+                    val queuedDetail = outcome.detail ?: localizedFreeQueueMessage()
+                    session.active.set(false)
+                    listener.onAnnouncement(GeminiLiveAnnouncement.FREE_BUSY)
+                    setState(GeminiLiveState.ERROR, queuedDetail)
                     return
                 }
-                if (active.get() && GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) {
-                    Log.i(TAG, "Metered Live socket failed; not automatically starting another session")
-                    stop()
-                    setState(GeminiLiveState.ERROR, "Live disconnected. Start a new session manually to continue.")
-                    return
-                }
-                if (active.get()) {
-                    val announcement = GeminiLiveReconnectAnnouncementPolicy.resolve(
-                        proxySession = config.reservationId == "free-proxy",
-                        freeTier = config.freeTier,
-                        setupCompleted = wasSetupComplete,
-                        listeningDurationMs = listeningDurationMs,
-                        reason = t.message.orEmpty(),
-                    )
-                    announcement?.let(listener::onAnnouncement)
-                    scheduleReconnect(GeminiLiveReconnectAnnouncementPolicy.detail(announcement))
-                }
+                GeminiLiveSocketFailurePolicy.Outcome.Retryable -> Unit
             }
+            if (failedBeforeSetup(config, wasSetupComplete, "Gemini Live connection failed. Please try again.")) return
+            if (session.active.get() && GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy)) {
+                Log.i(TAG, "Metered Live socket failed; not automatically starting another session")
+                stop()
+                setState(GeminiLiveState.ERROR, "Live disconnected. Start a new session manually to continue.")
+                return
+            }
+            reconnectAfterDrop(config, wasSetupComplete, listeningDurationMs, t.message.orEmpty())
+        }
+    }
+
+    /** A private reservation that never reached setupComplete is released and not retried. */
+    private fun failedBeforeSetup(config: LiveTokenConfig, wasSetupComplete: Boolean, detail: String): Boolean {
+        if (wasSetupComplete || !session.active.get() || config.reservationId == "free-proxy" || config.reservationId == "direct") {
+            return false
+        }
+        session.active.set(false)
+        scope.launch {
+            relay.releaseReservation(
+                reservationId = config.reservationId,
+                inputAudioMs = session.inputAudioMs,
+                outputAudioMs = session.outputAudioMs,
+                imageCount = session.visualInputCount,
+            )
+        }
+        session.tokenConfig = null
+        setState(GeminiLiveState.ERROR, detail)
+        return true
+    }
+
+    private fun reconnectAfterDrop(config: LiveTokenConfig, wasSetupComplete: Boolean, listeningDurationMs: Long, reason: String) {
+        if (!session.active.get()) return
+        val announcement = GeminiLiveReconnectAnnouncementPolicy.resolve(
+            proxySession = config.reservationId == "free-proxy",
+            freeTier = config.freeTier,
+            setupCompleted = wasSetupComplete,
+            listeningDurationMs = listeningDurationMs,
+            reason = reason,
+        )
+        announcement?.let(listener::onAnnouncement)
+        scheduleReconnect(GeminiLiveReconnectAnnouncementPolicy.detail(announcement))
+    }
 
     private fun localizedFreeQueueMessage(): String {
         val tag = runCatching {
             com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences.selected(appContext).languageTag
                 .ifBlank { java.util.Locale.getDefault().toLanguageTag() }
-        }.getOrDefault("en").lowercase()
-        return when {
-            tag.startsWith("pt") -> "Muitos usuários gratuitos no modo Live agora. Você está na fila — tente novamente em instantes."
-            tag.startsWith("es") -> "Demasiados usuarios gratuitos en el modo Live ahora mismo. Estás en cola — inténtalo de nuevo en un momento."
-            tag.startsWith("de") -> "Zu viele kostenlose Nutzer im Live-Modus. Du bist in der Warteschlange — bitte versuche es gleich erneut."
-            tag.startsWith("fr") -> "Trop d'utilisateurs gratuits en mode Live. Vous êtes en file d'attente — réessayez dans un instant."
-            tag.startsWith("it") -> "Troppi utenti gratuiti in modalità Live. Sei in coda — riprova tra un momento."
-            tag.startsWith("zh") -> "当前 Live 模式的免费用户过多，您已进入排队，请稍后重试。"
-            tag.startsWith("ko") -> "현재 Live 모드에 무료 사용자가 많아 대기열에 있습니다. 잠시 후 다시 시도해 주세요."
-            tag.startsWith("ru") -> "Слишком много бесплатных пользователей в режиме Live. Вы в очереди — попробуйте ещё раз через мгновение."
-            else -> "Too many free users on Live mode right now, you are in queue. Please try again in a moment."
-        }
-    }
-        })
+        }.getOrDefault("en")
+        return GeminiLiveSocketFailurePolicy.freeQueueMessage(tag)
     }
 
     private fun sendSetup(webSocket: WebSocket, config: LiveTokenConfig) {
         val setup = GeminiLiveProtocol.buildSetup(
             config = config,
-            sessionResumptionHandle = sessionResumptionHandle,
-            language = lastLanguage,
-            imagePrompt = lastImagePrompt,
-            systemPrompt = lastSystemPrompt,
+            sessionResumptionHandle = session.sessionResumptionHandle,
+            language = session.language,
+            imagePrompt = session.imagePrompt,
+            systemPrompt = session.systemPrompt,
             storedSystemPrompt = { ProSubscriptionAiPrefs.getSystemPrompt(appContext) },
         )
         // Do not log the user-provided system instruction or session-resumption handle.
-        Log.i(TAG, "Sending Live setup model=${config.model} serverProvided=${setup.serverProvided} resuming=${!sessionResumptionHandle.isNullOrBlank()}")
+        Log.i(TAG, "Sending Live setup model=${config.model} serverProvided=${setup.serverProvided} resuming=${!session.sessionResumptionHandle.isNullOrBlank()}")
         check(webSocket.send(setup.json)) {
             "Live setup could not be sent"
         }
@@ -672,8 +477,8 @@ class GeminiLiveClient(
                     else "Gemini Live session failed. Please try again."
                     setState(GeminiLiveState.ERROR, detail)
                 }
-                GeminiLiveServerEvent.SetupComplete -> if (setupComplete.compareAndSet(false, true)) onSetupComplete()
-                is GeminiLiveServerEvent.SessionResumptionUpdate -> sessionResumptionHandle = event.newHandle
+                GeminiLiveServerEvent.SetupComplete -> if (session.setupComplete.compareAndSet(false, true)) onSetupComplete()
+                is GeminiLiveServerEvent.SessionResumptionUpdate -> session.sessionResumptionHandle = event.newHandle
                 is GeminiLiveServerEvent.GoAway -> Log.i(TAG, "Gemini Live goAway received; timeLeft=${event.timeLeft}")
                 // Google-recommended metering: usageMetadata is the billed tokens for this turn
                 // (includes re-billed sliding window). Forward it for server-side quota debit.
@@ -681,7 +486,7 @@ class GeminiLiveClient(
                 is GeminiLiveServerEvent.Transcription -> listener.onTranscription(event.input, event.text)
                 GeminiLiveServerEvent.Interrupted -> onServerInterrupted()
                 is GeminiLiveServerEvent.ModelAudio -> playPcm(event.pcm)
-                GeminiLiveServerEvent.TurnComplete -> if (active.get()) {
+                GeminiLiveServerEvent.TurnComplete -> if (session.active.get()) {
                     finishModelPlayback()
                     listener.onModelTurnComplete()
                     setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
@@ -693,13 +498,13 @@ class GeminiLiveClient(
     }
 
     private fun onSetupComplete() {
-        socketListeningStartedAtMs = System.currentTimeMillis()
-        tokenConfig?.takeIf { it.freeTier || it.economy }?.let { config ->
+        session.socketListeningStartedAtMs = System.currentTimeMillis()
+        session.tokenConfig?.takeIf { it.freeTier || it.economy }?.let { config ->
             // The proxy/economy route can debit a daily allowance. Do not silently renew.
             if (meteredSessionLimitJob == null) {
                 meteredSessionLimitJob = scope.launch {
                     delay(GeminiLiveSessionPolicy.METERED_SESSION_LIMIT_MS)
-                    if (active.get()) {
+                    if (session.active.get()) {
                         Log.i(TAG, "Free/Economy Live reached five-minute limit; stopping without renewal")
                         listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
                         stop()
@@ -717,11 +522,8 @@ class GeminiLiveClient(
         // A server interruption alone is not enough to refresh vision: it can be
         // caused by noise/echo. Require simultaneous local energy evidence so barge-in
         // speech still gets a fresh image without reintroducing spontaneous captures.
-        val locallyConfirmedSpeech = speechActive.get()
-        playback?.let { track ->
-            runCatching { track.pause() }
-            runCatching { track.flush() }
-        }
+        val locallyConfirmedSpeech = session.speechActive.get()
+        audio.interruptPlayback()
         finishModelPlayback()
         if (locallyConfirmedSpeech) listener.onUserSpeechActivity(true)
         listener.onInterrupted()
@@ -731,183 +533,61 @@ class GeminiLiveClient(
     }
 
     private fun handleUsageMetadata(usage: JSONObject) {
-        val total = usage.optInt("totalTokenCount", 0)
-        if (total <= 0) {
-            // Fallback to prompt+response if total missing
-            val prompt = usage.optInt("promptTokenCount", 0)
-            val response = usage.optInt("responseTokenCount", 0)
-            if (prompt <= 0 && response <= 0) return
-        }
-        // Avoid double-billing same total within a turn
-        val totalForDedup = usage.optInt("totalTokenCount", usage.optInt("promptTokenCount", 0) + usage.optInt("responseTokenCount", 0))
-        if (totalForDedup == lastUsageTotalTokens && totalForDedup != 0) return
-        lastUsageTotalTokens = totalForDedup
+        if (!session.acceptUsageMetadata(usage)) return
         reportLiveUsage(usageMetadata = usage, deltaInputMs = 0, deltaOutputMs = 0, deltaImages = 0)
     }
 
     private fun reportTurnUsageIfNeeded() {
-        val deltaInput = inputAudioMs - lastBilledInputMs
-        val deltaOutput = outputAudioMs - lastBilledOutputMs
-        val deltaImages = visualInputCount - lastBilledImages
-        if (deltaInput <= 0 && deltaOutput <= 0 && deltaImages <= 0) return
+        val usage = session.pendingTurnUsage() ?: return
         // If we just billed via usageMetadata for this turn, lastUsageTotalTokens will have been updated
         // and delta will be small; we still report delta as fallback but server will deduplicate via max logic.
-        reportLiveUsage(usageMetadata = null, deltaInputMs = deltaInput, deltaOutputMs = deltaOutput, deltaImages = deltaImages)
-        lastBilledInputMs = inputAudioMs
-        lastBilledOutputMs = outputAudioMs
-        lastBilledImages = visualInputCount
+        reportLiveUsage(usageMetadata = null, deltaInputMs = usage.deltaInputMs, deltaOutputMs = usage.deltaOutputMs, deltaImages = usage.deltaImages)
+        session.markTurnBilled()
     }
 
     private fun reportLiveUsage(usageMetadata: JSONObject?, deltaInputMs: Long, deltaOutputMs: Long, deltaImages: Int) {
-        val cfg = tokenConfig ?: return
+        val cfg = session.tokenConfig ?: return
         if (cfg.reservationId == "free-proxy" || cfg.reservationId == "direct") return
-        val authToken = ProSubscriptionServerPrefs.getApiToken(appContext).trim()
-        val base = AiProviderPrefs.getRelayBaseUrl(appContext).trim().trimEnd('/')
-        if (authToken.isBlank() || !base.startsWith("https://")) return
-        scope.launch {
-            try {
-                val body = JSONObject().apply {
-                    put("reservation_id", cfg.reservationId)
-                    if (usageMetadata != null) put("usage_metadata", usageMetadata) else {
-                        put("delta_input_audio_ms", deltaInputMs)
-                        put("delta_output_audio_ms", deltaOutputMs)
-                        put("delta_image_count", deltaImages)
-                        put("input_audio_ms", deltaInputMs)
-                        put("output_audio_ms", deltaOutputMs)
-                        put("image_count", deltaImages)
-                    }
-                }.toString().toRequestBody("application/json".toMediaType())
-                val req = Request.Builder()
-                    .url("$base/api/pro/live/usage")
-                    .header("Authorization", "Bearer $authToken")
-                    .post(body)
-                    .build()
-                http.newCall(req).execute().use { resp ->
-                    val raw = resp.body?.string().orEmpty()
-                    if (!resp.isSuccessful) {
-                        val json = runCatching { JSONObject(raw) }.getOrNull()
-                        val err = json?.optString("error") ?: raw
-                        if (resp.code == 402 && err.contains("live_quota_exhausted")) {
-                            Log.w(TAG, "Live quota exhausted mid-session, stopping")
-                            active.set(false)
-                            setState(GeminiLiveState.ERROR, "Live quota exhausted. Please wait for quota reset or upgrade.")
-                            stop()
-                        } else {
-                            Log.w(TAG, "Live usage report failed code=${resp.code} err=$err")
-                        }
-                    } else {
-                        Log.d(TAG, "Live usage reported ok deltaInput=$deltaInputMs deltaOutput=$deltaOutputMs images=$deltaImages usage=$usageMetadata")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Live usage report exception", e)
-            }
+        relay.reportUsage(cfg, usageMetadata, deltaInputMs, deltaOutputMs, deltaImages) {
+            session.active.set(false)
+            setState(GeminiLiveState.ERROR, "Live quota exhausted. Please wait for quota reset or upgrade.")
+            stop()
         }
     }
 
     private fun startCapture() {
-        if (!setupComplete.get()) return
-        if (
-            ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!session.setupComplete.get()) return
+        if (!audio.hasRecordPermission()) {
             setState(GeminiLiveState.ERROR, "Microphone permission is required")
             return
         }
-        if (!captureEnabled.compareAndSet(false, true)) return
-        requestAudioFocus()
-        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
-            // SDK PCM is the ONLY input. SCO and a second AudioRecord can duplicate audio
-            // and force output away from Mentra's Bluetooth media profile.
-            val manager = MentraLiveManager.getInstance(appContext)
-            if (!manager.connected || !manager.ready) {
-                captureEnabled.set(false)
-                setState(GeminiLiveState.ERROR, "Mentra Live is not ready")
-                return
-            }
-            startPlayback()
-            mentraMicActive = true
-            manager.setPcmListener(::offerMentraPcm)
-            runCatching { manager.setMicrophoneEnabled(true) }.onFailure { error ->
-                manager.setPcmListener(null)
-                mentraMicActive = false
-                captureEnabled.set(false)
-                setState(GeminiLiveState.ERROR, error.message ?: "Mentra microphone failed")
-            }
+        if (!audio.captureEnabled.compareAndSet(false, true)) return
+        audio.requestAudioFocus()
+        if (audio.isMentraSelected()) {
+            audio.startMentraInput(::offerMentraPcm)
             return
         }
-        configureAudioRoute()
-        startPlayback()
-        val minBuffer = AudioRecord.getMinBufferSize(
-            INPUT_SAMPLE_RATE_HZ,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-        )
-        if (minBuffer <= 0) {
-            captureEnabled.set(false)
-            setState(GeminiLiveState.ERROR, "Microphone is unavailable")
-            return
-        }
-        val newRecorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-            INPUT_SAMPLE_RATE_HZ,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            maxOf(minBuffer, INPUT_CHUNK_BYTES * 4),
-        )
-        if (newRecorder.state != AudioRecord.STATE_INITIALIZED) {
-            captureEnabled.set(false)
-            newRecorder.release()
-            setState(GeminiLiveState.ERROR, "Microphone could not be initialized")
-            return
-        }
-        recorder = newRecorder
-        recorderJob = scope.launch {
-            val buffer = ByteArray(INPUT_CHUNK_BYTES)
-            newRecorder.startRecording()
-            while (active.get() && setupComplete.get() && captureEnabled.get()) {
-                val count = newRecorder.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
-                if (count > 0) {
-                    val packet = if (count == buffer.size) buffer else buffer.copyOf(count)
-                    sendPcm(packet)
-                }
-            }
-        }
+        audio.startPhoneInput(keepRunning = { session.active.get() && session.setupComplete.get() }, onPcm = ::sendPcm)
     }
 
     private fun pauseCapture() {
-        val wasCapturing = captureEnabled.getAndSet(false)
-        if (mentraMicActive) {
-            mentraMicActive = false
-            runCatching {
-                MentraLiveManager.getInstance(appContext).apply {
-                    setPcmListener(null)
-                    setMicrophoneEnabled(false)
-                    setOwnAudioPlaying(false)
-                }
-            }
-        }
+        val wasCapturing = audio.captureEnabled.getAndSet(false)
+        audio.stopMentraInput()
         speechDetector.reset()
-        speechActive.set(false)
-        recorderJob?.cancel()
-        recorderJob = null
-        recorder?.let {
-            runCatching { it.stop() }
-            it.release()
-        }
-        recorder = null
+        session.speechActive.set(false)
+        audio.stopPhoneInput()
 
         flushDelayedAudio()
 
         // With automatic VAD enabled, Gemini asks clients to explicitly flush cached audio when
         // a stream is actually paused (background/audio-focus). This is not used as per-turn VAD.
-        if (wasCapturing && active.get() && setupComplete.get() && socket != null) {
+        if (wasCapturing && session.active.get() && session.setupComplete.get() && socket != null) {
             sendAudioStreamEnd()
         }
     }
 
     private fun resumeCapture() {
-        if (active.get() && setupComplete.get() && socket != null && state == GeminiLiveState.LISTENING) {
+        if (session.active.get() && session.setupComplete.get() && socket != null && session.state == GeminiLiveState.LISTENING) {
             startCapture()
         }
     }
@@ -919,221 +599,52 @@ class GeminiLiveClient(
     }
 
     private fun sendPcm(bytes: ByteArray) {
-        if (!setupComplete.get() || bytes.isEmpty()) return
+        if (!session.setupComplete.get() || bytes.isEmpty()) return
         // The local detector schedules visual refreshes only. Gemini's server-side VAD must
         // receive the continuous stream so quiet speech and natural pauses are not discarded.
         speechDetector.offerPcm16Le(bytes)
-        synchronized(audioDelayLock) {
-            val speaking = speechActive.get()
-            if (audioDeferredForVisualContext && visualAudioHoldStarted && speaking) {
-                repeat(heldVisualSilenceChunks.coerceAtMost(delayedAudio.size)) {
-                    delayedAudio.removeLast()
-                }
-                heldVisualSilenceChunks = 0
-                visualAudioHoldStarted = false
-            }
-
-            if (!audioDeferredForVisualContext || !visualAudioHoldStarted || speaking) {
-                delayedAudio.addLast(bytes.copyOf())
-            }
-            if (audioDeferredForVisualContext && !speaking && !visualAudioHoldStarted) {
-                visualAudioHoldStarted = true
-                // The detector changes state on the fifteenth silent chunk. Those chunks are
-                // already inside the delayed tail, so retain exactly that tail and no more.
-                heldVisualSilenceChunks = VISUAL_TRAILING_SILENCE_CHUNKS.coerceAtMost(delayedAudio.size)
-            }
-            val canStream = !audioDeferredForVisualContext ||
-                (!visualAudioHoldStarted && speaking)
-            if (canStream && delayedAudio.size > AUDIO_DELAY_CHUNKS) {
-                sendAudioPacket(delayedAudio.removeFirst())
-            }
-        }
+        visualAudioHold.offer(bytes, isSpeaking = { session.speechActive.get() }, send = ::sendAudioPacket)
     }
 
     private fun flushDelayedAudio() {
-        synchronized(audioDelayLock) {
-            audioDeferredForVisualContext = false
-            visualAudioHoldStarted = false
-            heldVisualSilenceChunks = 0
-            if (active.get() && setupComplete.get()) {
-                while (delayedAudio.isNotEmpty()) sendAudioPacket(delayedAudio.removeFirst())
-            } else {
-                delayedAudio.clear()
-            }
-        }
+        visualAudioHold.flush(isLive = { session.isLive }, send = ::sendAudioPacket)
     }
 
-    private fun clearDelayedAudio() {
-        synchronized(audioDelayLock) {
-            audioDeferredForVisualContext = false
-            visualAudioHoldStarted = false
-            heldVisualSilenceChunks = 0
-            delayedAudio.clear()
-        }
-    }
+    private fun clearDelayedAudio() = visualAudioHold.clear()
 
     private fun sendAudioPacket(bytes: ByteArray) {
         if (sendRealtimeBlob(GeminiLiveProtocol.REALTIME_AUDIO_FIELD, GeminiLiveProtocol.INPUT_AUDIO_MIME_TYPE, bytes)) {
-            inputAudioMs += bytes.size.toLong() * 1_000L / (INPUT_SAMPLE_RATE_HZ * 2L)
+            session.addInputAudioBytes(bytes.size)
         }
     }
 
     private fun sendRealtimeBlob(field: String, mimeType: String, bytes: ByteArray): Boolean =
         socket?.send(GeminiLiveProtocol.buildRealtimeBlob(field, mimeType, bytes)) == true
 
-    private fun startPlayback() {
-        if (playback != null) return
-        val minBuffer = AudioTrack.getMinBufferSize(
-            OUTPUT_SAMPLE_RATE_HZ,
-            AudioFormat.CHANNEL_OUT_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-        ).coerceAtLeast(OUTPUT_SAMPLE_RATE_HZ / 5)
-        playback = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build(),
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setSampleRate(OUTPUT_SAMPLE_RATE_HZ)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .build(),
-            )
-            .setBufferSizeInBytes(minBuffer * 2)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
-            .also { it.play() }
-    }
-
     private fun playPcm(bytes: ByteArray) {
         if (bytes.isEmpty()) return
-        if (modelSpeaking.compareAndSet(false, true)) {
+        if (session.modelSpeaking.compareAndSet(false, true)) {
             listener.onModelOutputStarted()
-            val wasUserSpeaking = speechActive.getAndSet(false)
+            val wasUserSpeaking = session.speechActive.getAndSet(false)
             speechDetector.reset()
             if (wasUserSpeaking) listener.onUserSpeechActivity(false)
         }
-        if (playback == null) startPlayback()
-        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
-            runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(true) }
-        }
-        val track = playback ?: return
-        if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
-            runCatching { track.play() }
-        }
-        var offset = 0
-        while (offset < bytes.size) {
-            val written = track.write(bytes, offset, bytes.size - offset, AudioTrack.WRITE_BLOCKING)
-            if (written <= 0) {
-                Log.w(TAG, "Live audio playback write failed result=$written remaining=${bytes.size - offset}")
-                break
-            }
-            offset += written
-            outputAudioMs += written.toLong() * 1_000L / (OUTPUT_SAMPLE_RATE_HZ * 2L)
-        }
+        audio.play(bytes, onWritten = session::addOutputAudioBytes)
     }
 
     private fun finishModelPlayback() {
-        if (!modelSpeaking.getAndSet(false)) return
-        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
-            runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(false) }
-        }
+        if (!session.modelSpeaking.getAndSet(false)) return
+        audio.setMentraOwnAudioPlaying(false)
         speechDetector.reset()
-        speechActive.set(false)
-    }
-
-    private fun stopPlayback() {
-        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
-            runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(false) }
-        }
-        playback?.let {
-            runCatching { it.pause() }
-            runCatching { it.flush() }
-            it.release()
-        }
-        playback = null
-    }
-
-    private fun configureAudioRoute() {
-        if (liveAudioRouteConfigured) return
-        previousAudioMode = audioManager.mode
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            previousCommunicationDevice = audioManager.communicationDevice
-        }
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        val bluetooth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            audioManager.availableCommunicationDevices.firstOrNull {
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-            }
-        } else {
-            null
-        }
-        val selected = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && bluetooth != null) {
-            audioManager.setCommunicationDevice(bluetooth)
-        } else {
-            false
-        }
-        @Suppress("DEPRECATION")
-        runCatching { audioManager.startBluetoothSco() }
-        liveAudioRouteConfigured = true
-        Log.i(TAG, "Live audio route selectedBluetooth=$selected device=${bluetooth?.productName}")
-    }
-
-    private fun restoreAudioRoute() {
-        if (!liveAudioRouteConfigured) return
-        @Suppress("DEPRECATION")
-        runCatching { audioManager.stopBluetoothSco() }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val previous = previousCommunicationDevice
-            if (previous != null) runCatching { audioManager.setCommunicationDevice(previous) }
-            else runCatching { audioManager.clearCommunicationDevice() }
-        }
-        previousAudioMode?.let { audioManager.mode = it }
-        previousAudioMode = null
-        previousCommunicationDevice = null
-        liveAudioRouteConfigured = false
-    }
-
-    private fun requestAudioFocus() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                        .build(),
-                )
-                .setOnAudioFocusChangeListener(audioFocusListener)
-                .build()
-            audioManager.requestAudioFocus(audioFocusRequest!!)
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.requestAudioFocus(
-                audioFocusListener,
-                AudioManager.STREAM_VOICE_CALL,
-                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE,
-            )
-        }
-    }
-
-    private fun abandonAudioFocus() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest?.let(audioManager::abandonAudioFocusRequest)
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.abandonAudioFocus(audioFocusListener)
-        }
-        audioFocusRequest = null
+        session.speechActive.set(false)
     }
 
     private fun scheduleReconnect(detail: String? = null) {
         if (reconnectJob?.isActive == true) return
         pauseCapture()
         reconnectJob = scope.launch {
-            reconnectAttempt++
-            val delayMs = (1_000L shl (reconnectAttempt - 1).coerceAtMost(4)).coerceAtMost(15_000L)
+            session.reconnectAttempt++
+            val delayMs = (1_000L shl (session.reconnectAttempt - 1).coerceAtMost(4)).coerceAtMost(15_000L)
             setState(GeminiLiveState.RECONNECTING, detail ?: "Reconnecting in ${delayMs / 1000}s")
             delay(delayMs)
             connectOrReconnect()
@@ -1148,8 +659,8 @@ class GeminiLiveClient(
         sessionResumptionJob?.cancel()
         sessionResumptionJob = scope.launch {
             delay(SESSION_RESUMPTION_RECONNECT_MS)
-            if (!active.get() || socket !== webSocket) return@launch
-            if (sessionResumptionHandle.isNullOrBlank()) {
+            if (!session.active.get() || socket !== webSocket) return@launch
+            if (session.sessionResumptionHandle.isNullOrBlank()) {
                 stop()
                 setState(GeminiLiveState.ERROR, "Live session renewal was unavailable. Start a new session.")
                 return@launch
@@ -1164,26 +675,19 @@ class GeminiLiveClient(
     } == true
 
     private fun notifyRouteChange() {
-        if (active.get() && state == GeminiLiveState.LISTENING) {
+        if (session.active.get() && session.state == GeminiLiveState.LISTENING) {
             setState(GeminiLiveState.LISTENING, "Audio route changed")
         }
     }
 
     private fun setState(next: GeminiLiveState, detail: String) {
-        state = next
+        session.state = next
         Log.i(TAG, "state=$next detail=$detail")
         listener.onStateChanged(next, detail)
     }
 
     private companion object {
         const val TAG = "GeminiLiveClient"
-        const val INPUT_SAMPLE_RATE_HZ = GeminiLiveProtocol.INPUT_SAMPLE_RATE_HZ
-        const val OUTPUT_SAMPLE_RATE_HZ = GeminiLiveProtocol.OUTPUT_SAMPLE_RATE_HZ
-        const val INPUT_CHUNK_BYTES = 1_280 // 40 ms PCM16 mono at 16 kHz; halves WS message rate vs 20 ms.
-        // Keep more than the detector's 600 ms trailing-silence window. During a still transfer,
-        // speech streams normally while this tail is held back from Gemini's 500 ms server VAD.
-        const val AUDIO_DELAY_CHUNKS = 16
-        const val VISUAL_TRAILING_SILENCE_CHUNKS = 15
         const val SESSION_RESUMPTION_RECONNECT_MS = 9 * 60 * 1000L
         const val MAX_VISUAL_INPUTS_PER_SESSION = 540 // At most 1 FPS over the 9-minute resumption window.
     }
