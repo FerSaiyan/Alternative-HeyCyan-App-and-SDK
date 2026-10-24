@@ -10,10 +10,11 @@ import android.os.Looper
 import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
+import com.fersaiyan.cyanbridge.audio.TtsProgressObserver
+import com.fersaiyan.cyanbridge.audio.TtsSpeaker
 import com.fersaiyan.cyanbridge.bridge.core.DisplayCommand
 import com.fersaiyan.cyanbridge.bridge.core.GlassesBridge
 import com.fersaiyan.cyanbridge.plugins.PluginVoiceRecognizer
@@ -26,7 +27,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 
 /** Translates recognized speech from the phone or a connected Bluetooth glasses microphone. */
 class HandsFreeTranslatorService : Service() {
@@ -35,39 +35,34 @@ class HandsFreeTranslatorService : Service() {
     private val translatorStore = HandsFreeTranslatorStore()
     private val translating = AtomicBoolean(false)
     private var voiceRecognizer: PluginVoiceRecognizer? = null
-    private var tts: TextToSpeech? = null
-    @Volatile private var ttsReady = false
+    private var tts: TtsSpeaker? = null
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val pendingSpeech = AtomicReference<Pair<String, String>?>(null)
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
     override fun onCreate() {
         super.onCreate()
         HandsFreeTranslatorNotificationHelper.ensureChannel(this)
         translatorStore.load(this)
-        tts = TextToSpeech(this) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-            Log.i(TAG, "Translation TTS initialization successful=$ttsReady")
-            if (ttsReady) pendingSpeech.getAndSet(null)?.let { (text, language) ->
-                mainHandler.post { speakTranslation(text, language) }
-            } else {
-                pendingSpeech.set(null)
+        tts = TtsSpeaker(this, TAG, onInit = { _, ok ->
+            Log.i(TAG, "Translation TTS initialization successful=$ok")
+            if (!ok) {
                 HandsFreeTranslatorNotificationHelper.updateNotification(
                     this, "Translator active; spoken output unavailable (TTS initialization failed)",
                 )
             }
+        }).also { speaker ->
+            speaker.progressObserver = object : TtsProgressObserver {
+                override fun onStart(utteranceId: String?) { Log.d(TAG, "Translation speech started") }
+                override fun onDone(utteranceId: String?) { Log.d(TAG, "Translation speech finished") }
+                override fun onError(utteranceId: String?, errorCode: Int?) {
+                    if (errorCode == null) {
+                        Log.w(TAG, "Translation speech synthesis failed")
+                    } else {
+                        Log.w(TAG, "Translation speech synthesis failed errorCode=$errorCode")
+                    }
+                }
+            }
         }
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) { Log.d(TAG, "Translation speech started") }
-            override fun onDone(utteranceId: String?) { Log.d(TAG, "Translation speech finished") }
-            @Deprecated("Use onError with code")
-            override fun onError(utteranceId: String?) {
-                Log.w(TAG, "Translation speech synthesis failed")
-            }
-            override fun onError(utteranceId: String?, errorCode: Int) {
-                Log.w(TAG, "Translation speech synthesis failed errorCode=$errorCode")
-            }
-        })
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -85,9 +80,7 @@ class HandsFreeTranslatorService : Service() {
 
     override fun onDestroy() {
         voiceRecognizer?.stop()
-        pendingSpeech.set(null)
         mainHandler.removeCallbacksAndMessages(null)
-        tts?.stop()
         tts?.shutdown()
         tts = null
         scope.cancel()
@@ -159,15 +152,12 @@ class HandsFreeTranslatorService : Service() {
                         HandsFreeTranslatorPreferences.getMaxHistory(this@HandsFreeTranslatorService),
                     )
                     if (HandsFreeTranslatorPreferences.isSpeakTranslation(this@HandsFreeTranslatorService)) {
-                        val utterance = translation.translatedText to translation.targetLanguage
-                        if (ttsReady) {
-                            mainHandler.post { speakTranslation(utterance.first, utterance.second) }
-                        } else {
-                            // A translation can finish before Android binds the TTS engine.
-                            // Keep the newest phrase instead of silently showing text only.
-                            pendingSpeech.set(utterance)
-                            Log.i(TAG, "Translation speech queued until TTS initialization")
-                        }
+                        val text = translation.translatedText
+                        val language = translation.targetLanguage
+                        // A translation can finish before Android binds the TTS engine.
+                        // Keep the newest phrase instead of silently showing text only.
+                        if (tts?.isInitialized == false) Log.i(TAG, "Translation speech queued until TTS initialization")
+                        tts?.whenReady { mainHandler.post { speakTranslation(text, language) } }
                     }
                     HandsFreeTranslatorNotificationHelper.updateNotification(
                         this@HandsFreeTranslatorService,
@@ -239,10 +229,6 @@ class HandsFreeTranslatorService : Service() {
     }
 
     private fun speakTranslation(text: String, language: String) {
-        if (!ttsReady) {
-            pendingSpeech.set(text to language)
-            return
-        }
         val engine = tts ?: return
         val locale = when (language) {
             "en" -> Locale.US
@@ -295,9 +281,8 @@ class HandsFreeTranslatorService : Service() {
             "Translation output usage=$usage communicationDevice=${communicationDevice?.type} " +
                 "bluetoothMediaConnected=$bluetoothMediaConnected language=$language",
         )
-        val result = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "translation_utterance")
-        if (result != TextToSpeech.SUCCESS) {
-            Log.w(TAG, "Translation TTS speak() failed result=$result")
+        if (!engine.speak(text, "translation_utterance")) {
+            Log.w(TAG, "Translation TTS speak() failed")
             HandsFreeTranslatorNotificationHelper.updateNotification(
                 this, "Translation shown; speech playback failed on the selected audio route",
             )
