@@ -1,3 +1,4 @@
+import java.time.Duration
 import org.gradle.api.artifacts.transform.CacheableTransform
 import org.gradle.api.artifacts.transform.InputArtifact
 import org.gradle.api.artifacts.transform.TransformAction
@@ -378,4 +379,9 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+}
+
+// A deadlocked JVM test must fail its task instead of hanging the build indefinitely.
+tasks.withType(Test).configureEach {
+    timeout = Duration.ofMinutes(30)
 }

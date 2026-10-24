@@ -1,3 +1,4 @@
+import java.time.Duration
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)
@@ -92,4 +93,9 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+}
+
+// A deadlocked test must fail its task instead of hanging the build indefinitely.
+tasks.withType<Test>().configureEach {
+    timeout.set(Duration.ofMinutes(30))
 }
