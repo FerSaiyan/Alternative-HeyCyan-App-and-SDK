@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.persistence
 
+import com.fersaiyan.cyanbridge.shared.platform.PlatformFilePaths
 import com.fersaiyan.cyanbridge.shared.platform.PlatformLogger
 import com.fersaiyan.cyanbridge.shared.platform.createPlatformPreferences
 import kotlinx.serialization.encodeToString
@@ -369,8 +370,19 @@ class IosMediaRecordRepository : MediaRecordRepository {
     }
 
     private fun MediaRecordJson.toEntity() = MediaRecordEntity(
-        id, filename, mimeType, filePath, downloadedAt, fileSize, source,
+        id, filename, mimeType, currentDocumentsPath(filePath), downloadedAt, fileSize, source,
     )
+
+    /**
+     * iOS moves the app container (new UUID) on reinstall and update, so an
+     * absolute path saved earlier goes stale. Re-root it under today's Documents.
+     */
+    private fun currentDocumentsPath(storedPath: String): String {
+        val marker = "/Documents/"
+        val index = storedPath.indexOf(marker)
+        if (index < 0) return storedPath
+        return PlatformFilePaths.dataDirectory() + "/" + storedPath.substring(index + marker.length)
+    }
     private fun MediaRecordEntity.toJson() = MediaRecordJson(
         id, filename, mimeType, filePath, downloadedAt, fileSize, source,
     )

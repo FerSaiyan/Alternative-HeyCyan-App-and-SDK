@@ -108,6 +108,8 @@ fun RecordingsScreen(
     onDeleteItems: suspend (List<RecordingItem>) -> Set<Long> = { emptySet() },
     onDismissTranscript: () -> Unit,
     onDestinationSelected: (AppDestination) -> Unit = {},
+    // Hosts that already draw the app-level navigation shell (iOS) pass false.
+    showNavigationBar: Boolean = true,
 ) {
     var selectionMode by remember { mutableStateOf(false) }
     var selectedSessionIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
@@ -196,7 +198,7 @@ fun RecordingsScreen(
             )
         },
         bottomBar = {
-            NavigationBar(
+            if (showNavigationBar) NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 0.dp,
             ) {

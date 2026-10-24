@@ -35,7 +35,9 @@ kotlin {
         iosArm64 {
             binaries.framework {
                 baseName = "CyanBridgeShared"
-                isStatic = true
+                // embedAndSignAppleFrameworkForXcode copies the framework into the app's
+                // Frameworks/ folder; a static archive there makes device installs fail.
+                isStatic = false
             }
         }
         iosSimulatorArm64 {

@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.icons.AppIcon
 import com.fersaiyan.cyanbridge.shared.icons.imageVector
@@ -26,6 +27,8 @@ import com.fersaiyan.cyanbridge.shared.navigation.icon
 fun CyanBridgeNavShell(
     currentDestination: AppDestination,
     onNavigate: (AppDestination) -> Unit,
+    // Tabs the host does not offer (iOS hides Plugins).
+    hiddenDestinations: Set<AppDestination> = emptySet(),
     content: @Composable (AppDestination) -> Unit,
 ) {
     val navigationColors = NavigationBarItemDefaults.colors(
@@ -44,7 +47,7 @@ fun CyanBridgeNavShell(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 0.dp,
             ) {
-                AppDestination.entries.forEach { destination ->
+                AppDestination.entries.filterNot { it in hiddenDestinations }.forEach { destination ->
                     val selected = destination == currentDestination
                     NavigationBarItem(
                         selected = selected,
@@ -66,6 +69,7 @@ fun CyanBridgeNavShell(
                                     MaterialTheme.typography.labelMedium
                                 },
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         },
                         colors = navigationColors,

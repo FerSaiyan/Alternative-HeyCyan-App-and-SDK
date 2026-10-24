@@ -1,5 +1,8 @@
 package com.fersaiyan.cyanbridge.devices.tunebuds
 
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrame
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrameType
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope

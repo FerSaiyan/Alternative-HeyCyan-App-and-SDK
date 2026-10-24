@@ -1,5 +1,8 @@
 package com.fersaiyan.cyanbridge.devices.tunebuds
 
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrame
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrameType
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.runTest

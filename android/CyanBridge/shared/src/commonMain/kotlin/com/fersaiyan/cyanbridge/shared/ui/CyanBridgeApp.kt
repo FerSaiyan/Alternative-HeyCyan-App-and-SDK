@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -56,12 +57,19 @@ fun CyanBridgeApp(
     proSubscriptionState: ProSubscriptionUiState = ProSubscriptionUiState(),
     onProSubscriptionAction: (ProSubscriptionAction) -> String = ::unavailableProSubscriptionStatus,
     liveVideoSlot: @Composable () -> Unit = {},
+    hiddenDestinations: Set<AppDestination> = emptySet(),
 ) {
-    var currentDestination by remember(initialDestination) { mutableStateOf(initialDestination) }
+    var currentDestination by remember(initialDestination) {
+        mutableStateOf(initialDestination.takeUnless { it in hiddenDestinations } ?: AppDestination.GLASSES)
+    }
     var showAppearance by remember { mutableStateOf(false) }
     var localAppearance by remember(appearanceSettings) { mutableStateOf(appearanceSettings) }
 
+    // Re-selecting the current tab pops it back to its root (chat list, settings...), as on iOS.
+    var tabResetCount by remember { mutableStateOf(0) }
+
     if (showAppearance) {
+        SystemBackHandler { showAppearance = false }
         AppearanceScreen(
             settings = localAppearance,
             dynamicColorAvailable = false,
@@ -76,11 +84,16 @@ fun CyanBridgeApp(
             onBack = { showAppearance = false },
         )
     } else {
+        val show: (AppDestination) -> Unit = { destination ->
+            if (destination == currentDestination) tabResetCount++
+            if (destination !in hiddenDestinations) currentDestination = destination
+        }
         CyanBridgeNavShell(
             currentDestination = currentDestination,
+            hiddenDestinations = hiddenDestinations,
             onNavigate = { destination ->
                 if (useSharedDestinations) {
-                    currentDestination = destination
+                    show(destination)
                 } else if (destination == AppDestination.GLASSES) {
                     currentDestination = destination
                 } else {
@@ -94,7 +107,7 @@ fun CyanBridgeApp(
                         state = dashboardState,
                         onAction = { action ->
                             if (useSharedDestinations && action is GlassesDashboardAction.Navigate) {
-                                currentDestination = action.destination
+                                show(action.destination)
                             } else {
                                 onDashboardAction(action)
                             }
@@ -113,10 +126,10 @@ fun CyanBridgeApp(
                 AppDestination.MEDIA,
                 AppDestination.PLUGINS,
                 AppDestination.SETTINGS,
-                -> if (useSharedDestinations) {
+                -> if (useSharedDestinations) key(destination, tabResetCount) {
                     SharedDestinationScreen(
                         destination = destination,
-                        onDestinationSelected = { currentDestination = it },
+                        onDestinationSelected = show,
                         onOpenAppearance = { showAppearance = true },
                         proSubscriptionState = proSubscriptionState,
                         onProSubscriptionAction = onProSubscriptionAction,

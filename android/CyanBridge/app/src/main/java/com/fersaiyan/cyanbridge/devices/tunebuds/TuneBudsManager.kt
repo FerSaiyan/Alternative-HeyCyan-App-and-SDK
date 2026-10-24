@@ -1,5 +1,12 @@
 package com.fersaiyan.cyanbridge.devices.tunebuds
 
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrame
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrameType
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsBattery
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsMediaCounts
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsStorageInfo
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsScreenConfig
 import android.content.Context
 import android.util.Log
 import com.fersaiyan.cyanbridge.glasses.GlassesPhotoCapture

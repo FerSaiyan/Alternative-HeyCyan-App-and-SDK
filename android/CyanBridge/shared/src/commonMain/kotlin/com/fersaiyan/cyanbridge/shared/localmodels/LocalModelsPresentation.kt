@@ -19,6 +19,24 @@ data class LocalModelsConfigureUiState(
     val generation: LocalModelGenerationUiState = LocalModelGenerationUiState(),
     val remoteServer: RemoteInferenceUiState = RemoteInferenceUiState(),
     val studioBridge: StudioBridgeUiState = StudioBridgeUiState(),
+    /** Name search over the catalog plus online results; null hides the search field. */
+    val catalogSearch: LocalModelCatalogSearchUiState? = null,
+)
+
+data class LocalModelCatalogSearchUiState(
+    val query: String = "",
+    val isSearching: Boolean = false,
+    val status: String = "",
+    val results: List<LocalModelCatalogUiItem> = emptyList(),
+)
+
+/** Optional parts of the local-models screen; iOS has no Studio bridge, MTP or runtime knobs. */
+data class LocalModelsPlatformFeatures(
+    val studioBridge: Boolean = true,
+    val advancedOptions: Boolean = true,
+    val mtp: Boolean = true,
+    /** Runtime choice, CPU threads, GPU layers, prompt template and structured JSON. */
+    val runtimeTuning: Boolean = true,
 )
 
 data class InstalledModelUiItem(

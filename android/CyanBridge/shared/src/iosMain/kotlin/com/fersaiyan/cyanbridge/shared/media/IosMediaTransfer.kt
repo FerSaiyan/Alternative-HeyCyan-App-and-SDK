@@ -2,12 +2,14 @@ package com.fersaiyan.cyanbridge.shared.media
 
 import com.fersaiyan.cyanbridge.shared.persistence.MediaRecordEntity
 import com.fersaiyan.cyanbridge.shared.persistence.MediaRecordRepository
+import com.fersaiyan.cyanbridge.shared.platform.IosMediaPlatform
 import com.fersaiyan.cyanbridge.shared.platform.PlatformFilePaths
 import com.fersaiyan.cyanbridge.shared.platform.PlatformHttpClient
 import com.fersaiyan.cyanbridge.shared.platform.PlatformLogger
 import com.fersaiyan.cyanbridge.shared.platform.platformCurrentTimeMillis
 import platform.Foundation.NSFileManager
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * iOS implementation of the glasses HTTP media protocol.
@@ -17,6 +19,12 @@ import kotlinx.cinterop.ExperimentalForeignApi
  * stores files in the app Documents directory, and records them for the
  * shared gallery presentation.
  */
+/** [newRecords] were downloaded in this run; the rest were already on the phone. */
+data class IosMediaSyncResult(
+    val records: List<MediaRecordEntity>,
+    val newRecords: List<MediaRecordEntity>,
+)
+
 @OptIn(ExperimentalForeignApi::class)
 class IosMediaTransfer(
     private val repository: MediaRecordRepository,
@@ -25,7 +33,7 @@ class IosMediaTransfer(
     suspend fun sync(
         glassesIpAddress: String,
         onProgress: ((completed: Int, total: Int) -> Unit)? = null,
-    ): List<MediaRecordEntity> {
+    ): IosMediaSyncResult {
         val baseUrl = normalizeBaseUrl(glassesIpAddress)
         val configResponse = httpClient.get("$baseUrl/files/media.config")
         check(configResponse.isSuccessful) {
@@ -48,6 +56,7 @@ class IosMediaTransfer(
         )
 
         val downloaded = mutableListOf<MediaRecordEntity>()
+        val newRecords = mutableListOf<MediaRecordEntity>()
         filenames.forEachIndexed { index, filename ->
             val destination = "$destinationDirectory/$filename"
             val existing = repository.getByFilename(filename)
@@ -65,6 +74,13 @@ class IosMediaTransfer(
             check(response.isSuccessful) {
                 "Media download failed for $filename with HTTP ${response.statusCode}"
             }
+            if (filename.endsWith(".opus", ignoreCase = true)) {
+                // Glasses store bare Opus packets; wrap them so players can open the file.
+                IosMediaPlatform.readFile(destination)?.let { raw ->
+                    val wrapped = OggOpusWrapper.wrapIfNeeded(raw)
+                    if (wrapped !== raw) IosMediaPlatform.writeFile(destination, wrapped)
+                }
+            }
             val record = MediaRecordEntity(
                 id = filename,
                 filename = filename,
@@ -76,11 +92,18 @@ class IosMediaTransfer(
             )
             repository.insert(record)
             downloaded += record
+            newRecords += record
             onProgress?.invoke(index + 1, filenames.size)
         }
         PlatformLogger.i(TAG, "Downloaded ${downloaded.size} media files from $baseUrl")
-        return downloaded
+        return IosMediaSyncResult(records = downloaded, newRecords = newRecords)
     }
+
+    /** True when the glasses HTTP server answers, i.e. the phone is on their hotspot. */
+    suspend fun isReachable(glassesIpAddress: String): Boolean = withTimeoutOrNull(4_000L) {
+        runCatching { httpClient.get("${normalizeBaseUrl(glassesIpAddress)}/files/media.config").isSuccessful }
+            .getOrDefault(false)
+    } ?: false
 
     private fun normalizeBaseUrl(value: String): String {
         val trimmed = value.trim().removeSuffix("/")

@@ -12,6 +12,8 @@ on:
       - android/CyanBridge/gradle.properties
       - ios/CyanBridgeKMPHost/**
       - ios/CyanBridgeKMPHostTests/**
+      - ios/LocalModels/**
+      - ios/scripts/build_llama_xcframework.sh
       - ios/QCSDKDemo/**
       - ios/QCSDK.framework/**
       - ios/QCSDKDemo.xcodeproj/**
@@ -69,6 +71,17 @@ jobs:
           CODE_SIGN_IDENTITY=""
           ENABLE_USER_SCRIPT_SANDBOXING=NO
           build
+
+      - name: Restore llama.xcframework
+        id: llama-cache
+        uses: actions/cache@v4
+        with:
+          path: ios/LocalModels/Frameworks
+          key: llama-xcframework-${{ hashFiles('ios/scripts/build_llama_xcframework.sh') }}
+
+      - name: Build llama.xcframework for on-device models
+        if: steps.llama-cache.outputs.cache-hit != 'true'
+        run: ios/scripts/build_llama_xcframework.sh
 
       - name: Build the unsigned SwiftUI simulator host
         run: >-

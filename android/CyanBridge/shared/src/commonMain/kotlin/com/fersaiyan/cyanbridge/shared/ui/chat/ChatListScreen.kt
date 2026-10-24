@@ -74,6 +74,8 @@ fun ChatListScreen(
     onNewChat: () -> Unit,
     onChatAppearance: () -> Unit,
     onDestinationSelected: (AppDestination) -> Unit,
+    // Hosts that already draw the app-level navigation shell (iOS) pass false.
+    showNavigationBar: Boolean = true,
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -92,7 +94,7 @@ fun ChatListScreen(
             )
         },
         bottomBar = {
-            NavigationBar(
+            if (showNavigationBar) NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 tonalElevation = 0.dp,
             ) {

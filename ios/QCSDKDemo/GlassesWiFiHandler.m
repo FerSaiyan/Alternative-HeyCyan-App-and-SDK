@@ -11,6 +11,7 @@
 @property (nonatomic, copy) GlassesWiFiHandlerStatusCallback statusCallback;
 @property (nonatomic, copy) GlassesWiFiHandlerCredentialsCallback credentialsCallback;
 @property (nonatomic, copy) GlassesWiFiHandlerConnectionCallback connectionCallback;
+@property (nonatomic, assign) NSInteger manualJoinRounds;
 
 @end
 
@@ -103,6 +104,13 @@
     self.statusCallback = statusCallback;
     self.connectionCallback = completion;
 
+#if CYAN_FREE_PROVISIONING
+    // Free provisioning cannot sign the Hotspot entitlement, so the user joins the hotspot in Settings.
+    self.state = GlassesWiFiHandlerStateConnecting;
+    self.manualJoinRounds = 0;
+    [self updateStatus:[NSString stringWithFormat:@"📶 Open Settings ▸ Wi-Fi and join:\n%@\nPassword: %@", ssid, password.length > 0 ? password : @"(none)"] preview:nil];
+    [self testConnection];
+#else
     [self updateStatus:@"Configuring WiFi connection..." preview:nil];
 
     NEHotspotConfiguration *configuration;
@@ -139,6 +147,7 @@
             }
         });
     }];
+#endif
 }
 
 - (void)cancelCurrentOperation {
@@ -180,6 +189,20 @@
 
 - (void)testIPs:(NSArray *)ips index:(NSInteger)index {
     if (index >= ips.count) {
+#if CYAN_FREE_PROVISIONING
+        // Keep scanning while the user joins the hotspot manually.
+        const NSInteger maxManualJoinRounds = 6;
+        if (self.manualJoinRounds < maxManualJoinRounds) {
+            self.manualJoinRounds += 1;
+            [self updateStatus:[NSString stringWithFormat:@"📶 Join %@ in Settings ▸ Wi-Fi. Waiting (%ld/%ld)...", self.glassesSSID, (long)self.manualJoinRounds, (long)maxManualJoinRounds] preview:nil];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                if (self.state == GlassesWiFiHandlerStateConnecting) {
+                    [self testIPs:ips index:0];
+                }
+            });
+            return;
+        }
+#endif
         [self updateStatus:@"Could not find glasses on any known IP address" preview:nil];
 
         NSError *error = [NSError errorWithDomain:@"GlassesWiFiHandler"

@@ -1,0 +1,7 @@
+
+# Built by ios/scripts/build_llama_xcframework.sh
+LocalModels/Frameworks/
+LocalModels/.build/
+LocalModels/.swiftpm/
+# Fetched by ios/scripts/fetch_moyoung_sdk.sh
+Vendor/

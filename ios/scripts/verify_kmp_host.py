@@ -8,6 +8,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = ROOT / "ios" / "QCSDKDemo.xcodeproj" / "project.pbxproj"
 HOST = ROOT / "ios" / "CyanBridgeKMPHost" / "CyanBridgeKMPHostApp.swift"
+VENDOR_BRIDGE = ROOT / "ios" / "CyanBridgeKMPHost" / "QCSDKGlassesBridge.swift"
 HOST_ENTITLEMENTS = ROOT / "ios" / "CyanBridgeKMPHost" / "CyanBridgeKMPHost.entitlements"
 DEMO_APP_DELEGATE = ROOT / "ios" / "QCSDKDemo" / "AppDelegate.m"
 SCHEME = ROOT / "ios" / "QCSDKDemo.xcodeproj" / "xcshareddata" / "xcschemes" / "CyanBridgeKMPHost.xcscheme"
@@ -50,8 +51,14 @@ def main() -> int:
         'BlueprintIdentifier = "CB2000092F00000100CB0001"' in scheme,
         "The shared Xcode scheme must build CyanBridgeKMPHost.",
     )
-    for forbidden in ("QCSDK", "CoreBluetooth", "NetworkExtension"):
-        require(forbidden not in host, f"The KMP host must not import vendor transport: {forbidden}")
+    for forbidden in ("import QCSDK", "CoreBluetooth", "NetworkExtension"):
+        require(forbidden not in host, f"The KMP host entry point must not import vendor transport: {forbidden}")
+
+    # QCSDK is confined to the Swift bridge and only exists on device builds.
+    vendor_bridge = VENDOR_BRIDGE.read_text(encoding="utf-8")
+    require("#if canImport(QCSDK)" in vendor_bridge, "The QCSDK bridge must compile behind canImport(QCSDK).")
+    require("VendorGlassesBridge" in vendor_bridge, "The QCSDK bridge must implement the shared VendorGlassesBridge.")
+    require("VendorGlassesSetup.register()" in host, "The KMP host must register the vendor bridge at launch.")
 
     # Verify the iosMain entry point exists
     require(
@@ -89,6 +96,12 @@ def main() -> int:
         )
         require("CoreBluetooth" in configuration, "The KMP host must link CoreBluetooth for the iOS BLE adapter.")
         require("NetworkExtension" in configuration, "The KMP host must link NetworkExtension for hotspot joining.")
+        require(
+            '"OTHER_LDFLAGS[sdk=iphoneos*]"' in configuration and "QCSDK," in configuration,
+            "The KMP host must link QCSDK for device builds only.",
+        )
+        unconditional_ldflags = configuration.split('"OTHER_LDFLAGS[sdk=iphoneos*]"')[0]
+        require("QCSDK," not in unconditional_ldflags, "QCSDK has no simulator slice and must stay device-only.")
     require(
         "com.apple.developer.networking.HotspotConfiguration" in host_entitlements,
         "The KMP host must enable the Hotspot Configuration entitlement.",

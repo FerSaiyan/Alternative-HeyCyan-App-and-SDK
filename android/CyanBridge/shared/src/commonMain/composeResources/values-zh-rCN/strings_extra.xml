@@ -24,7 +24,7 @@
     <string name="settings_intro">以隐私为先的默认设置、本地控制和自动化设置。</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_appearance_description">主题、强调色方案、动态颜色和对比度</string>
-    <string name="settings_custom_ai_provider">自定义 AI 提供商</string>
+    <string name="settings_custom_ai_provider">AI 提供商</string>
     <string name="settings_memory_privacy">记忆隐私</string>
     <string name="settings_transcripts">转录</string>
     <string name="settings_data">数据</string>
@@ -487,7 +487,7 @@
     <string name="dashboard_quality_detailed_warning_body">Detailed uses Wi-Fi instead of Bluetooth and takes longer (up to 30 seconds) to transfer the full-resolution image.</string>
     <string name="dashboard_quality_detailed_warning_continue">Continue</string>
     <string name="dashboard_quality_detailed_warning_cancel">Cancel</string>
-    <string name="dashboard_test_image">测试 AI 图像描述</string>
+    <string name="dashboard_test_image">测试描述</string>
     <string name="dashboard_ai_wake_word_route">唤醒词操作</string>
     <string name="dashboard_ai_wake_word_route_description">在 HeyCyan 和 Eyevue 眼镜上，AI 唤醒词启动：</string>
     <string name="dashboard_ai_wake_word_voice">语音提问</string>
@@ -571,4 +571,12 @@
     <string name="plugin_category_operations">操作</string>
     <string name="plugin_category_language">语言</string>
     <string name="plugin_category_other">其他</string>
+    <string name="dashboard_conn_connected">已连接</string>
+    <string name="dashboard_conn_disconnected">未连接</string>
+    <string name="dashboard_conn_disconnecting">正在断开</string>
+    <string name="dashboard_conn_bluetooth_unavailable">蓝牙不可用</string>
+    <string name="dashboard_storage_title">存储空间</string>
+    <string name="dashboard_media_photos">%1$d 张照片</string>
+    <string name="dashboard_media_videos">%1$d 个视频</string>
+    <string name="dashboard_media_audio">%1$d 段音频</string>
 </resources>
