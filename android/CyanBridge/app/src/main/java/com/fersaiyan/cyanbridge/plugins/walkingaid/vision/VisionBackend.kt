@@ -15,10 +15,7 @@ data class AcceleratorInfo(
     val delegatedOperators: Int,
     val totalOperators: Int,
     val details: String,
-) {
-    val delegationPercentage: Float
-        get() = if (totalOperators > 0) (delegatedOperators.toFloat() / totalOperators) * 100f else 0f
-}
+)
 
 data class VisionFrame(
     val bitmap: Bitmap,

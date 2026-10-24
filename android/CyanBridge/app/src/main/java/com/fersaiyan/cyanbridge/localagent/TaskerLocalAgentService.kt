@@ -217,6 +217,7 @@ class TaskerLocalAgentService : Service() {
                 finishService("Screen read failed", result.detail)
             }
         }
+        activeJob = loopJob
     }
 
     private fun startLoop(goalRaw: String?) {
@@ -409,6 +410,7 @@ class TaskerLocalAgentService : Service() {
                 finishService("Stopped after maximum steps", "max_steps_reached")
             }
         }
+        activeJob = loopJob
     }
 
     private enum class ApprovalOutcome { APPROVED, REJECTED, EXECUTION_FAILED, TIMED_OUT }
@@ -551,6 +553,12 @@ class TaskerLocalAgentService : Service() {
         .build()
 
     companion object {
+        @Volatile
+        private var activeJob: Job? = null
+
+        /** True while a task loop or a screen read is in progress; a new task is ignored meanwhile. */
+        fun isRunning(): Boolean = activeJob?.isActive == true
+
         private const val TAG = "TaskerLocalAgent"
         private const val QUERY_MAX_CHARS = 1000
         private const val CHANNEL_ID = "local_agent_tasker"

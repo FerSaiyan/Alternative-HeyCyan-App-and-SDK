@@ -31,7 +31,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -51,7 +50,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
 import com.fersaiyan.cyanbridge.bridge.notifications.NotificationForwarderService
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
@@ -844,30 +842,6 @@ fun LocalAgentSettingsScreen(
 @Composable
 private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium)
-}
-
-@Composable
-private fun ProviderOption(
-    type: AgentProviderType,
-    selected: Boolean,
-    onSelected: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = onSelected)
-        Text(
-            stringResource(
-                when (type) {
-                    AgentProviderType.TASKER -> R.string.compose_provider_tasker
-                    AgentProviderType.LOCAL_AGENT -> R.string.compose_provider_local
-                    AgentProviderType.PRO_SUBSCRIPTION -> R.string.compose_provider_pro
-                },
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
 }
 
 @Composable

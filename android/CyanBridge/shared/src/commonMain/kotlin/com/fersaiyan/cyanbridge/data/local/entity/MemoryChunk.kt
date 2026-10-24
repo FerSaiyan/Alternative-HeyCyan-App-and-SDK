@@ -10,7 +10,8 @@ import androidx.room.PrimaryKey
  * MVP usage:
  * - Periodic accessibility screen snapshots (see LocalAgentMemoryStore).
  *
- * Stored as an append-only log. Full-text search is provided via [MemoryChunkFts].
+ * Stored as an append-only log. Full-text search is provided by the FTS5 table `memory_chunks_fts`,
+ * which AppDatabase creates through SQL because Room has no FTS5 entity.
  */
 @Entity(
     tableName = "memory_chunks",

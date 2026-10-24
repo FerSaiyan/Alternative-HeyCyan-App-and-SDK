@@ -53,21 +53,6 @@ object MemoryModeManager {
         MemorySourceType.SYSTEM_NOTE -> null
     }
 
-    fun isEncryptedSyncBackendConfigured(): Boolean = false
-
-    fun isFastCloudBackendConfigured(): Boolean = false
-
-    fun isConfidentialCloudBackendConfigured(): Boolean = false
-
-    fun isModeBackendAvailable(mode: MemoryPrivacyMode): Boolean {
-        return when (mode) {
-            MemoryPrivacyMode.PRIVATE_LOCAL -> true
-            MemoryPrivacyMode.ENCRYPTED_SYNC -> isEncryptedSyncBackendConfigured()
-            MemoryPrivacyMode.FAST_CLOUD_MEMORY -> isFastCloudBackendConfigured()
-            MemoryPrivacyMode.CONFIDENTIAL_CLOUD_BETA -> isConfidentialCloudBackendConfigured()
-        }
-    }
-
     fun modeAvailabilityText(mode: MemoryPrivacyMode): String {
         return when (mode) {
             MemoryPrivacyMode.PRIVATE_LOCAL -> "Fully available on this device."

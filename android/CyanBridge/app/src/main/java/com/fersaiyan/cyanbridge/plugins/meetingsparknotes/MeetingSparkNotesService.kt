@@ -117,10 +117,6 @@ class MeetingSparkNotesService : Service() {
         summarizeTranscript(currentTranscript())
     }
 
-    private fun summarizeCurrentMeeting() {
-        summarizeTranscript(currentTranscript())
-    }
-
     private fun currentTranscript(): String = synchronized(transcriptLock) {
         transcriptLines.joinToString(separator = "\n")
     }

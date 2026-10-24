@@ -26,18 +26,6 @@ object DailyBulletsSettings {
         - Do not invent details outside OCR
     """.trimIndent()
 
-    fun getCustomReviewPrompt(context: Context): String = DailyBullets.customReviewPrompt[context]
-
-    fun setCustomReviewPrompt(context: Context, prompt: String) {
-        DailyBullets.customReviewPrompt[context] = prompt
-    }
-
-    fun getCustomSummaryPrompt(context: Context): String = DailyBullets.customSummaryPrompt[context]
-
-    fun setCustomSummaryPrompt(context: Context, prompt: String) {
-        DailyBullets.customSummaryPrompt[context] = prompt
-    }
-
     fun getCustomBulletPrompt(context: Context): String = DailyBullets.customBulletPrompt[context]
 
     fun getBulletPrompt(context: Context): String =

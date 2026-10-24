@@ -5,11 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
-import android.view.View
-import android.widget.ImageView
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import com.fersaiyan.cyanbridge.R
 import java.lang.ref.WeakReference
 open class BaseActivity : AppCompatActivity() {
 
@@ -82,23 +78,6 @@ open class BaseActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         activity = null
-    }
-
-    override fun setContentView(layoutResID: Int) {
-        super.setContentView(layoutResID)
-        setupViews()
-    }
-
-    override fun setContentView(layoutView: View?) {
-        super.setContentView(layoutView)
-        setupViews()
-    }
-
-    protected open fun setupViews() {
-        val navigateBefore = findViewById<ImageView>(R.id.ivNavigateBefore)
-        val tvTitle = findViewById<TextView>(R.id.tvTitle)
-        navigateBefore?.setOnClickListener { finish() }
-        tvTitle?.isSelected = true
     }
 
 

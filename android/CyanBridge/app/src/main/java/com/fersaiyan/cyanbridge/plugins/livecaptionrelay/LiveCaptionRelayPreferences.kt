@@ -30,18 +30,6 @@ object LiveCaptionRelayPreferences {
         LiveCaptionRelay.translationEnabled[context] = enabled
     }
 
-    fun getFontSize(context: Context): Int = LiveCaptionRelay.fontSize[context]
-
-    fun setFontSize(context: Context, size: Int) {
-        LiveCaptionRelay.fontSize[context] = size
-    }
-
-    fun getCaptionPosition(context: Context): String = LiveCaptionRelay.captionPosition[context]
-
-    fun setCaptionPosition(context: Context, position: String) {
-        LiveCaptionRelay.captionPosition[context] = position
-    }
-
     fun isShowConfidence(context: Context): Boolean = LiveCaptionRelay.showConfidence[context]
 
     fun setShowConfidence(context: Context, show: Boolean) {

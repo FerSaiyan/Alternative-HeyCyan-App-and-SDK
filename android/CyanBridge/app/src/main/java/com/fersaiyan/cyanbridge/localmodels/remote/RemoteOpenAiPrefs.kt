@@ -58,11 +58,6 @@ object RemoteOpenAiPrefs {
         RemoteOpenAi.enabled[context] = enabled
     }
 
-    /** Returns true if we have at least a base URL and model configured. */
-    fun isConfigured(context: Context): Boolean {
-        return getBaseUrl(context).isNotBlank() && getModel(context).isNotBlank()
-    }
-
     /** Whether requests through Local Models should currently use the remote server. */
     fun isActive(context: Context): Boolean {
         return isRemoteOpenAiActive(

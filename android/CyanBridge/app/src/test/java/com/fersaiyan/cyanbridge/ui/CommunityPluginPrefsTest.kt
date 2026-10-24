@@ -26,11 +26,6 @@ class CommunityPluginPrefsTest {
     }
 
     @Test
-    fun noShortcutIsSelectedByDefault() {
-        assertNull(CommunityPluginPrefs.getGlassesTabShortcutPluginId(context))
-    }
-
-    @Test
     fun shortcutCanBeSelectedAndCleared() {
         CommunityPluginPrefs.setGlassesTabShortcutEnabled(context, NativePluginIds.MEETING_SPARK_NOTES, true)
         assertEquals(

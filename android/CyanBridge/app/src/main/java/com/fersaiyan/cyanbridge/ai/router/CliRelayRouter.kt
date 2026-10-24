@@ -8,6 +8,7 @@ import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.shared.ai.AiProviderReplies
 import com.fersaiyan.cyanbridge.shared.ai.AiProviderRouting
+import com.fersaiyan.cyanbridge.shared.ai.CliRelayBackend
 import com.fersaiyan.cyanbridge.shared.ai.RelayClient
 import com.fersaiyan.cyanbridge.shared.ai.RelayMedia
 import com.fersaiyan.cyanbridge.shared.ai.RelaySettings
@@ -130,18 +131,6 @@ object AiAssistantRouter {
     }
 
     private val localModelsProvider = LocalModelsProvider()
-
-    suspend fun chatReply(context: Context, chatId: String, userPrompt: String, messages: List<Map<String, String>>): String {
-        return chatReplyStreaming(
-            context = context,
-            chatId = chatId,
-            userPrompt = userPrompt,
-            messages = messages,
-            imagePaths = emptyList(),
-            audioPath = null,
-            callbacks = null,
-        )
-    }
 
     suspend fun chatReplyStreaming(
         context: Context,

@@ -25,11 +25,6 @@ object ProSubscriptionServerPrefs {
 
     fun getVerifyUrl(context: Context): String = Server.verifyUrl[context].trim()
 
-    fun setVerifyUrl(context: Context, url: String?) {
-        val value = url?.trim().orEmpty()
-        if (value.isBlank()) Server.verifyUrl.remove(context) else Server.verifyUrl[context] = value
-    }
-
     fun getApiToken(context: Context): String {
         clearLegacyPlaintextCredentials(context)
         val encrypted = ServerSecrets.apiToken[context].trim()

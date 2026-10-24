@@ -26,32 +26,6 @@ class HandsFreeTranslatorStore {
         }
     }
 
-    fun getTranslations(maxCount: Int): List<TranslationEntry> {
-        synchronized(lock) {
-            if (translations.isEmpty()) return emptyList()
-            val takeCount = maxCount.coerceIn(1, translations.size)
-            return translations.takeLast(takeCount).toList()
-        }
-    }
-
-    fun addPreset(preset: TranslationPreset) {
-        synchronized(lock) {
-            presets.add(preset)
-        }
-    }
-
-    fun getPresets(): List<TranslationPreset> {
-        synchronized(lock) {
-            return presets.toList()
-        }
-    }
-
-    fun removePreset(presetId: String) {
-        synchronized(lock) {
-            presets.removeAll { it.id == presetId }
-        }
-    }
-
     fun clear(context: Context) {
         synchronized(lock) {
             translations.clear()

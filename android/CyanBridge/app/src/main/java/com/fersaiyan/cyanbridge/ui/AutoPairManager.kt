@@ -56,8 +56,6 @@ object AutoPairManager {
         Log.i(TAG, "autoReconnectSuppressed=$suppressed ($reason)")
     }
 
-    fun isAutoReconnectSuppressed(): Boolean = suppressAutoReconnect
-
     fun start(context: Context) {
         if (started) return
         started = true

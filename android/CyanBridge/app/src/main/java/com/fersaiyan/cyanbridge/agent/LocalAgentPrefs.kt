@@ -125,10 +125,6 @@ object LocalAgentPrefs {
 
     fun getCaptureIntervalMin(context: Context): Int = LocalAgent.captureIntervalMin[context]
 
-    fun setCaptureIntervalMin(context: Context, minutes: Int) {
-        LocalAgent.captureIntervalMin[context] = minutes
-    }
-
     fun getCaptureBlacklistPackages(context: Context): Set<String> =
         cleanPackages(LocalAgent.captureBlacklist[context].orEmpty())
 
@@ -141,22 +137,10 @@ object LocalAgentPrefs {
     private fun cleanPackages(packages: Set<String>): Set<String> =
         packages.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
 
-    fun isHideSystemAppsEnabled(context: Context): Boolean = LocalAgent.hideSystemApps[context]
-
-    fun setHideSystemAppsEnabled(context: Context, enabled: Boolean) {
-        LocalAgent.hideSystemApps[context] = enabled
-    }
-
     fun isDailyFactsReminderEnabled(context: Context): Boolean = LocalAgent.dailyFactsReminderEnabled[context]
 
     fun setDailyFactsReminderEnabled(context: Context, enabled: Boolean) {
         LocalAgent.dailyFactsReminderEnabled[context] = enabled
-    }
-
-    fun getDailySummaryAutoRefreshHours(context: Context): Int = LocalAgent.dailySummaryAutoRefreshHours[context]
-
-    fun setDailySummaryAutoRefreshHours(context: Context, hours: Int) {
-        LocalAgent.dailySummaryAutoRefreshHours[context] = hours
     }
 
     fun isRequireActionConfirmationEnabled(context: Context): Boolean = LocalAgent.requireActionConfirmation[context]
@@ -325,12 +309,5 @@ object LocalAgentPrefs {
 
     fun setEnabled(context: Context, enabled: Boolean) {
         LocalAgent.enabled[context] = enabled
-    }
-
-    /** Optional identifier for the on-device model (e.g., a GGUF filename or a friendly alias). */
-    fun getModelId(context: Context): String? = LocalAgent.modelId[context]
-
-    fun setModelId(context: Context, modelId: String?) {
-        LocalAgent.modelId[context] = modelId?.takeIf { it.isNotBlank() }?.trim()
     }
 }

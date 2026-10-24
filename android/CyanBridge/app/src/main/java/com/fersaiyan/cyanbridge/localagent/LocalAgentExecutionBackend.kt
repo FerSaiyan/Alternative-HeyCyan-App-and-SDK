@@ -23,26 +23,6 @@ data class LocalAgentBackendExecutionResult(
     val detail: String,
 )
 
-/** Existing in-process Accessibility backend kept temporarily for migration/debug comparison. */
-object AccessibilityExecutionBackend : LocalAgentExecutionBackend {
-    override val id: String = "accessibility_legacy"
-
-    override suspend fun isReady(context: Context): Boolean = LocalAgentAccessibilityBridge.isConnected()
-
-    override suspend fun observe(context: Context): LocalAgentObservation? = LocalAgentObserver.observe()
-
-    override suspend fun execute(
-        context: Context,
-        action: LocalAgentAction,
-    ): LocalAgentBackendExecutionResult {
-        val ok = LocalAgentAccessibilityBridge.perform(action)
-        return LocalAgentBackendExecutionResult(
-            success = ok,
-            detail = if (ok) "ok(accessibility)" else "failed(accessibility)",
-        )
-    }
-}
-
 /**
  * Tasker-backed observation/execution.
  *

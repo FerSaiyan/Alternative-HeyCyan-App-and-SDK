@@ -4,8 +4,8 @@ import android.content.Context
 import android.util.Base64
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.ai.router.CliRelayBackend
 import com.fersaiyan.cyanbridge.ai.router.RelayErrorLocalizer
+import com.fersaiyan.cyanbridge.shared.ai.CliRelayBackend
 import com.fersaiyan.cyanbridge.shared.ai.RelayClient
 import com.fersaiyan.cyanbridge.shared.ai.RelayMedia
 import com.fersaiyan.cyanbridge.shared.ai.RelayServerCapabilities as SharedCapabilities

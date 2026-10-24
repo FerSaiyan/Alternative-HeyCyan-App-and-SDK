@@ -65,10 +65,6 @@ object LocalAgentMemoryStore {
         return File(userFactsCandidatesDir(context), "${date.trim()}.md")
     }
 
-    fun userFactsCandidatesFileForToday(context: Context): File {
-        return userFactsCandidatesFileForDate(context, dayString(System.currentTimeMillis()))
-    }
-
     fun dailyFactsIndexFile(context: Context): File = File(baseDir(context), "DAILY_FACTS.md")
 
     private fun dailyFactsDir(context: Context): File {
@@ -91,10 +87,6 @@ object LocalAgentMemoryStore {
         return File(confirmedDailyFactsDir(context), "${date.trim()}.md")
     }
 
-    fun confirmedDailyFactsFileForToday(context: Context): File {
-        return confirmedDailyFactsFileForDate(context, dayString(System.currentTimeMillis()))
-    }
-
     fun dailySummaryFileForDate(context: Context, date: String): File {
         return File(dailySummariesDir(context), "${date.trim()}.md")
     }
@@ -102,13 +94,6 @@ object LocalAgentMemoryStore {
     fun dailyBulletsFileForDate(context: Context, date: String): File {
         return File(dailyBulletsDir(context), "${date.trim()}.jsonl")
     }
-
-    fun dailySummaryFileForDay(context: Context, tsMs: Long): File {
-        return File(dailySummariesDir(context), "${dayString(tsMs)}.md")
-    }
-
-    fun dailySummaryFileForToday(context: Context): File =
-        dailySummaryFileForDay(context, System.currentTimeMillis())
 
     fun listDailySummaryDatesDesc(context: Context, limit: Int = 30): List<String> {
         val files = dailySummariesDir(context).listFiles().orEmpty()
@@ -122,13 +107,6 @@ object LocalAgentMemoryStore {
             .take(limit.coerceIn(1, 365))
             .toList()
     }
-
-    fun dailyFactsFileForDay(context: Context, tsMs: Long): File {
-        return File(dailyFactsDir(context), "${dayString(tsMs)}.md")
-    }
-
-    fun dailyFactsFileForToday(context: Context): File =
-        dailyFactsFileForDay(context, System.currentTimeMillis())
 
     fun ensureSeedFiles(context: Context) {
         runCatching {
@@ -226,17 +204,6 @@ object LocalAgentMemoryStore {
         return File(screenDir(context), "${date.trim()}.jsonl")
     }
 
-    fun screenCaptureFileForDay(context: Context, tsMs: Long): File {
-        return File(screenDir(context), "${dayString(tsMs)}.jsonl")
-    }
-
-    fun screenCaptureFileForToday(context: Context): File =
-        screenCaptureFileForDay(context, System.currentTimeMillis())
-
-    fun screenCapturesFileForDate(context: Context, date: String): File = screenCaptureFileForDate(context, date)
-
-    fun screenCapturesFileForToday(context: Context): File = screenCaptureFileForToday(context)
-
     fun appendScreenCapture(
         context: Context,
         packageName: String,
@@ -287,10 +254,6 @@ object LocalAgentMemoryStore {
             .filter { it.isNotBlank() }
             .toList()
             .takeLast(maxLines)
-    }
-
-    fun hasScreenCapturesForDate(context: Context, date: String): Boolean {
-        return readScreenCaptureLines(context, date, maxLines = 1).isNotEmpty()
     }
 
     fun screenCaptureLastUpdatedAtMs(context: Context, date: String): Long {

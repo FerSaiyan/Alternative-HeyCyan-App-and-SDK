@@ -63,13 +63,6 @@ class WalkingAidImageCapture(context: Context) {
     }
 
     companion object {
-        const val THUMBNAIL_QUALITY_LEVEL = 3
         fun isAwaitingPhotoReady(): Boolean = HeyCyanPhotoCapture.isActive()
-
-        fun buildChatAiCaptureCommand(qualityLevel: Int): ByteArray {
-            require(qualityLevel in 0..5) { "Thumbnail quality must be between 0 and 5" }
-            val quality = qualityLevel.toByte()
-            return byteArrayOf(0x02, 0x01, 0x06, quality, quality)
-        }
     }
 }

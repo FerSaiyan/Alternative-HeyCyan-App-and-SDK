@@ -26,32 +26,6 @@ class MeetingSparkNotesStore {
         }
     }
 
-    fun getSummaries(maxCount: Int): List<MeetingSummary> {
-        synchronized(lock) {
-            if (summaries.isEmpty()) return emptyList()
-            val takeCount = maxCount.coerceIn(1, summaries.size)
-            return summaries.takeLast(takeCount).toList()
-        }
-    }
-
-    fun getCurrentAudioBuffer(): ByteArray {
-        synchronized(lock) {
-            return currentAudioBuffer.copyOf()
-        }
-    }
-
-    fun appendAudioBuffer(chunk: ByteArray) {
-        synchronized(lock) {
-            currentAudioBuffer += chunk
-        }
-    }
-
-    fun clearAudioBuffer() {
-        synchronized(lock) {
-            currentAudioBuffer = ByteArray(0)
-        }
-    }
-
     fun clear(context: Context) {
         synchronized(lock) {
             summaries.clear()

@@ -8,17 +8,3 @@ data class CaptionEntry(
     val targetLanguage: String?,
     val confidence: Float,
 )
-
-data class CaptionDisplaySettings(
-    val fontSize: Int,
-    val showOriginal: Boolean,
-    val showTranslation: Boolean,
-    val backgroundColor: String,
-    val textColor: String,
-)
-
-enum class CaptionPosition {
-    TOP,
-    BOTTOM,
-    CENTER,
-}

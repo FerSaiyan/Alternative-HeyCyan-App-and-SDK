@@ -22,23 +22,6 @@ data class BillingPlan(
     val paddleOffer: ProviderOffer,
 )
 
-enum class CheckoutState {
-    IDLE,
-    PREPARING,
-    OPEN,
-    VERIFYING,
-    COMPLETE,
-    ERROR,
-}
-
-enum class SubscriptionStatus {
-    INACTIVE,
-    PENDING,
-    ACTIVE,
-    PAST_DUE,
-    CANCELED,
-}
-
 object BillingCatalog {
     val plans = listOf(
         paidPlan("cheap", "Cheap", 1.0, 1.55),

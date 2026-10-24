@@ -55,11 +55,6 @@ class NotificationForwarderService : NotificationListenerService() {
 
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-        fun setForwardingEnabled(value: Boolean) {
-            enabled = value
-            Log.i(TAG, "Notification forwarding ${if (value) "enabled" else "disabled"}")
-        }
-
         /** Check if the listener is currently bound by the system. */
         fun isListenerBound(context: Context): Boolean {
             val flat = ComponentName(context, NotificationForwarderService::class.java).flattenToString()

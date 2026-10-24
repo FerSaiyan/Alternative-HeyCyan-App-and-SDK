@@ -25,7 +25,6 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_connec
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_media_audio
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_media_videos
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_media_photos
-import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_storage_title
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.SmartDisplay
@@ -1298,29 +1297,6 @@ private fun MeizuMyvuControls(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-}
-
-@Composable
-private fun MetaControlRow(
-    status: String,
-    startLabel: String,
-    onStart: () -> Unit,
-    startEnabled: Boolean,
-    stopLabel: String,
-    onStop: () -> Unit,
-    stopEnabled: Boolean,
-) {
-    Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    ActionRow(
-        primaryLabel = startLabel,
-        onPrimary = onStart,
-        primaryEnabled = startEnabled,
-        primaryStyle = ActionButtonStyle.Primary,
-        secondaryLabel = stopLabel,
-        onSecondary = onStop,
-        secondaryEnabled = stopEnabled,
-        secondaryStyle = ActionButtonStyle.Destructive,
-    )
 }
 
 @Composable

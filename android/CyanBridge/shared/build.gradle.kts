@@ -79,12 +79,10 @@ kotlin {
                 implementation(libs.androidx.sqlite.bundled)
             }
         }
-@OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
-commonTest.dependencies {
-    implementation(kotlin("test"))
-    implementation(libs.kotlinx.coroutines.test)
-    implementation(compose.uiTest)
-}
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }
 

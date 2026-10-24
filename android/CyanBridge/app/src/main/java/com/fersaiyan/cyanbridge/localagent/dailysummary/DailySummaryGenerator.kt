@@ -876,14 +876,4 @@ Remember: You MUST output a valid summary. Do not refuse.
         if (lower.contains("mix of different apps")) return false
         return true
     }
-
-    private fun shouldRetryWithCompactPrompt(error: Throwable): Boolean {
-        val msg = error.message?.lowercase().orEmpty()
-        return msg.contains("timed out") ||
-            msg.contains("timeout") ||
-            msg.contains("relay unavailable") ||
-            msg.contains("http 5") ||
-            msg.contains("unusable response") ||
-            msg.contains("couldn't generate")
-    }
 }

@@ -63,7 +63,6 @@ object GeminiLiveImageButtonRouter {
     }
 
     fun isRegistered(): Boolean = registration?.device == DeviceClass.HEY_CYAN
-    fun isRegisteredFor(device: DeviceClass): Boolean = registration?.device == device
 
     /** Bind a fresh native stream to the current Live registration, including acquisition failure. */
     fun nativePhotoReceiver(device: DeviceClass): ((Deferred<ByteArray>) -> Unit)? {

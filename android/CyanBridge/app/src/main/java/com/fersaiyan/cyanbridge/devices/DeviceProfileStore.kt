@@ -60,9 +60,6 @@ object DeviceProfileStore {
     fun isTuneBudsSelected(context: Context): Boolean =
         selectedClass(context) == DeviceClass.TUNEBUDS
 
-    fun isMoyoungW620Selected(context: Context): Boolean =
-        selectedClass(context) == DeviceClass.MOYOUNG_W620
-
     fun getUserOverrideForMac(context: Context, mac: String): DeviceClass? {
         val raw = overrideFor(mac)[context] ?: return null
         return safeClass(raw)

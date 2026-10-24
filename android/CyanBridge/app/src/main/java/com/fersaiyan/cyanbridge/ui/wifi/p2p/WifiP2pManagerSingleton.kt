@@ -309,10 +309,6 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         handler.postDelayed(delayedPeerDiscoveryRestart, 1500L)
     }
 
-    fun setConnect(connected: Boolean) {
-        connectionState.setConnected(connected)
-    }
-
     @SuppressLint("MissingPermission")
     fun requestPeers() {
         if (!hasWifiP2pPermission()) {

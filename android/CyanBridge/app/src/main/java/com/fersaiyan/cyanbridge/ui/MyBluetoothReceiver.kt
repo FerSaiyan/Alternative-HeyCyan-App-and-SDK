@@ -1,7 +1,5 @@
 package com.fersaiyan.cyanbridge.ui
 import android.bluetooth.BluetoothDevice
-import android.nfc.Tag
-import android.os.UserManager
 import android.util.Log
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.bluetooth.DeviceManager

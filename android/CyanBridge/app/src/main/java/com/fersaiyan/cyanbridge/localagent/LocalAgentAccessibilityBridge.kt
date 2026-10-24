@@ -5,8 +5,7 @@ import com.fersaiyan.cyanbridge.localagent.accessibility.LocalAgentAccessibility
 import kotlinx.coroutines.CancellationException
 
 /**
- * Simple in-process bridge between our foreground [LocalAgentService] and the
- * [LocalAgentAccessibilityService] singleton.
+ * Simple in-process bridge to the [LocalAgentAccessibilityService] singleton.
  */
 object LocalAgentAccessibilityBridge {
     private const val TAG = "LocalAgentBridge"
@@ -107,14 +106,5 @@ object LocalAgentAccessibilityBridge {
             Log.w(TAG, "perform failed: ${e.message}")
             false
         }
-    }
-
-    /** Legacy call site kept during the Tasker migration. No privileged fallback remains. */
-    suspend fun performWithOptionalShizukuFallback(
-        context: android.content.Context,
-        action: LocalAgentAction,
-    ): Boolean {
-        if (!LocalAgentDeviceState.isReady(context)) return false
-        return perform(action)
     }
 }

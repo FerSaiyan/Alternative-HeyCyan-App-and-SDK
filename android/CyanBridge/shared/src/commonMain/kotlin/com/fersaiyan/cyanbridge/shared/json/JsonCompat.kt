@@ -23,9 +23,6 @@ fun parseJsonArray(text: String): JsonArray =
     OrgJsonReader(text).nextValue() as? JsonArray
         ?: throw JsonSyntaxException("Value is not a JSON array: ${text.take(200)}")
 
-/** Parses any value like `JSONTokener(text).nextValue()`. */
-fun parseJsonValue(text: String): JsonElement = OrgJsonReader(text).nextValue()
-
 /** org.json's string form of a value: strings as-is, `null` as "null", objects and arrays as JSON. */
 fun JsonElement.asOptString(): String = when (this) {
     is JsonPrimitive -> content
@@ -86,67 +83,3 @@ fun JsonElement?.toBooleanOrNull(): Boolean? {
 /** The value's string form, or null when it is missing or JSON null. */
 fun JsonObject.optStringOrNull(key: String): String? =
     this[key]?.takeUnless { it is JsonNull }?.asOptString()
-
-/**
- * Text as org.json's `toString(indentSpaces)` wrote it (`"/"` escaped, whole doubles
- * without ".0", `": "` after keys when indented), for prompts that embed JSON.
- */
-fun JsonElement.toOrgJsonString(indentSpaces: Int = 0): String =
-    StringBuilder().also { writeOrgJson(this, it, indentSpaces, 0) }.toString()
-
-private fun writeOrgJson(element: JsonElement, out: StringBuilder, indent: Int, depth: Int) {
-    fun newline(level: Int) {
-        if (indent <= 0) return
-        out.append('\n')
-        repeat(indent * level) { out.append(' ') }
-    }
-    when (element) {
-        is JsonObject -> {
-            out.append('{')
-            element.entries.forEachIndexed { index, (key, value) ->
-                if (index > 0) out.append(',')
-                newline(depth + 1)
-                writeOrgJsonString(key, out)
-                out.append(if (indent > 0) ": " else ":")
-                writeOrgJson(value, out, indent, depth + 1)
-            }
-            if (element.isNotEmpty()) newline(depth)
-            out.append('}')
-        }
-        is JsonArray -> {
-            out.append('[')
-            element.forEachIndexed { index, value ->
-                if (index > 0) out.append(',')
-                newline(depth + 1)
-                writeOrgJson(value, out, indent, depth + 1)
-            }
-            if (element.isNotEmpty()) newline(depth)
-            out.append(']')
-        }
-        is JsonNull -> out.append("null")
-        is JsonPrimitive -> when {
-            element.isString -> writeOrgJsonString(element.content, out)
-            element.content.toLongOrNull() != null -> out.append(element.content)
-            else -> {
-                val number = element.content.toDoubleOrNull()
-                if (number != null && number == number.toLong().toDouble()) out.append(number.toLong()) else out.append(element.content)
-            }
-        }
-    }
-}
-
-private fun writeOrgJsonString(value: String, out: StringBuilder) {
-    out.append('"')
-    for (c in value) {
-        when (c) {
-            '"', '\\', '/' -> out.append('\\').append(c)
-            '\t' -> out.append("\\t")
-            '\b' -> out.append("\\b")
-            '\n' -> out.append("\\n")
-            '\r' -> out.append("\\r")
-            '\u000C' -> out.append("\\f")
-            else -> if (c.code <= 0x1F) out.append("\\u").append(c.code.toString(16).padStart(4, '0')) else out.append(c)
-        }
-    }
-    out.append('"')
-}

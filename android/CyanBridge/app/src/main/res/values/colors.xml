@@ -1,32 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
-
-
-    <!-- 主界面 -->
-    <color name="main_nv_select">#000000</color>
-    <color name="main_nv_not_select">#717171</color>
-    <color name="main_nv_bg">#f9f9f9</color>
-    <color name="main_nv_text_bg">#2F2E41</color>
-    <color name="main_line_1">#adadad</color>
-
-    <!-- title bar -->
-    <color name="title_bar_left">#2F2E41</color>
-    <color name="title_bar_center">#2F2E41</color>
-    <color name="title_bar_right">#FF6A00</color>
-    <color name="title_bar_line">#ededed</color>
 
     <!-- New UI Colors (Cyber Theme) -->
     <color name="bg_dark">#0B0F14</color>
     <color name="card_bg">#161B22</color>
     <color name="cyan_accent">#00E5FF</color>
-    <color name="cyan_dim">#3300E5FF</color>
     <color name="text_primary">#E6EDF3</color>
     <color name="text_secondary">#8B949E</color>
     <color name="danger">#FF5252</color>
