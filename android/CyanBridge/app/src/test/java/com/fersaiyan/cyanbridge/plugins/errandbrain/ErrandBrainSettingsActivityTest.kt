@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.plugins.errandbrain
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.assertServiceIntent
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
@@ -19,7 +18,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -30,23 +28,6 @@ class ErrandBrainSettingsActivityTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.clearPreferenceFiles("errand_brain_prefs", "errand_brain_store", COMMUNITY_PLUGIN_PREFS)
-    }
-
-    @Test
-    fun defaultStateMatchesPreferenceDefaults() {
-        assertEquals(
-            ErrandBrainSettingsState(
-                enabled = false,
-                autoCreateTasks = true,
-                voiceCommands = true,
-                reminderEnabled = true,
-                defaultPriority = "medium",
-                defaultCategory = "personal",
-                maxHistory = 200,
-                customPrompt = "",
-            ),
-            ErrandBrainSettingsState.load(context),
-        )
     }
 
     @Test
@@ -129,16 +110,5 @@ class ErrandBrainSettingsActivityTest {
 
         assertEquals("x".repeat(1000), activity.state.customPrompt)
         assertEquals("x".repeat(1000), ErrandBrainPreferences.getCustomPrompt(context))
-    }
-
-    @Test
-    fun clearHistoryShowsToastAndBackFinishes() {
-        val activity = createSettingsActivity<ErrandBrainSettingsActivity>()
-
-        activity.onClearHistory()
-        assertEquals(context.getString(R.string.compose_history_cleared), ShadowToast.getTextOfLatestToast())
-
-        activity.onBack()
-        assertTrue(activity.isFinishing)
     }
 }

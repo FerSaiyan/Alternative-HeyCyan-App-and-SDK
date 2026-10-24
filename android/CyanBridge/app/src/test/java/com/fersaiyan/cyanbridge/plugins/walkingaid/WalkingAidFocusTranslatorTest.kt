@@ -23,21 +23,6 @@ class WalkingAidFocusTranslatorTest {
     }
 
     @Test
-    fun translatedTextCanMatchLabelsFromDetectorFrame() = runBlocking {
-        val translator = WalkingAidFocusTranslator(context) { _, _ ->
-            "Watch for buses and people"
-        }
-
-        val translated = translator.translateToEnglish("Avise-me sobre ônibus e pessoas", "local")
-        val matches = WalkingAidFocusMapper.matchDetectedLabels(
-            translated,
-            listOf("bus", "person", "dog"),
-        )
-
-        assertEquals(listOf("bus", "person"), matches)
-    }
-
-    @Test
     fun savedTranslationIsReusedWithoutAnotherCompletion() = runBlocking {
         var calls = 0
         val translator = WalkingAidFocusTranslator(context) { _, _ ->

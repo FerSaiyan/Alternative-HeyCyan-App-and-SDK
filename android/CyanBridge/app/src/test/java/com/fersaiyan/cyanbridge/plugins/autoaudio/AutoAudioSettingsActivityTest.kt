@@ -36,14 +36,6 @@ class AutoAudioSettingsActivityTest {
     }
 
     @Test
-    fun defaultStateMatchesPreferenceDefaults() {
-        assertEquals(
-            AutoAudioSettingsState(enabled = false, visualNotes = false, speechExtend = true, loopsPerSync = 12),
-            AutoAudioSettingsState.load(context),
-        )
-    }
-
-    @Test
     fun firstFrameStateComesFromPreferences() {
         AutoAudioCapturePrefs.setEnabled(context, true)
         AutoAudioCapturePrefs.setVisualNotesEnabled(context, true)

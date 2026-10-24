@@ -25,8 +25,6 @@ fun AppCompatActivity.nextStartedServiceIntent(): Intent? = shadowOf(this).nextS
 
 fun AppCompatActivity.nextStoppedServiceIntent(): Intent? = shadowOf(this).nextStoppedService
 
-fun AppCompatActivity.nextStartedActivityIntent(): Intent? = shadowOf(this).nextStartedActivity
-
 fun assertServiceIntent(intent: Intent?, serviceClass: Class<*>, action: String?) {
     assertNotNull("expected a service intent for ${serviceClass.simpleName}", intent)
     assertEquals(serviceClass.name, intent!!.component?.className)
