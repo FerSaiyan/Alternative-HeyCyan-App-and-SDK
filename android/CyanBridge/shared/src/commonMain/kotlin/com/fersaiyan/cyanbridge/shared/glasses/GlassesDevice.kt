@@ -19,8 +19,8 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
  * The selected glasses, as one family implements them on a platform. [profile] declares what
  * the family supports (and drives the dashboard gating); each capability property is the
  * family's implementation, or null when the family has none. Android and iOS implement one
- * [GlassesDevice] per family over their vendor managers/SDKs, and their dashboard controllers
- * call [handle] instead of branching on the device class.
+ * [GlassesDevice] per family over their vendor managers/SDKs, and [GlassesDashboardController]
+ * calls [handle] instead of branching on the device class.
  */
 interface GlassesDevice {
     val profile: GlassesFamilyProfile
@@ -55,6 +55,13 @@ interface GlassesDevice {
      * has no capability for, so the caller can handle or ignore them.
      */
     fun handle(action: GlassesDashboardAction): Boolean = GlassesDeviceActions.handle(this, action)
+
+    /**
+     * Runs an action of this family's vendor panel (Meta registration and camera, Meizu display;
+     * see [com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating.requiredPanel]). Returns
+     * false when the family has no such panel action.
+     */
+    fun handlePanelAction(action: GlassesDashboardAction): Boolean = false
 }
 
 /** Maps device-side dashboard actions to capabilities; shared by every [GlassesDevice]. */
