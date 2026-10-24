@@ -112,7 +112,6 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaProfile
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaSync
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaType
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueWifiTransport
-import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungWifiCredentials
@@ -756,14 +755,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val glassesDeviceHost: GlassesDeviceHost = object : GlassesDeviceHost {
         override val heyCyanLivePreviewManager: com.fersaiyan.cyanbridge.ota.LivePreviewManager
             get() = this@MainActivity.livePreviewManager
-
-        override fun startBatteryPolling() {
-            this@MainActivity.startBatteryPolling()
-        }
-
-        override fun stopBatteryPolling() {
-            this@MainActivity.stopBatteryPolling()
-        }
 
         override fun stopHeyCyanMediaSyncForDestroy() {
             mediaSync.stopForActivityDestroy()
@@ -1566,8 +1557,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun getOrCreateMetaRaybanManager(): com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager =
         deviceManagers.getOrCreateMetaRaybanManager()
-
-    private fun getOrCreateMeizuMyvuManager(): MeizuMyvuManager = deviceManagers.getOrCreateMeizuMyvuManager()
 
     private fun showPendingMeizuMyvuFailureIfNeeded() {
         meizuMyvuUi.showPendingMeizuMyvuFailureIfNeeded()
@@ -4098,13 +4087,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun isMetaRaybanSelected(): Boolean = deviceManagers.isMetaRaybanSelected()
 
-    private fun isMeizuMyvuSelected(): Boolean = deviceManagers.isMeizuMyvuSelected()
-
     private fun isEyevueSelected(): Boolean = deviceManagers.isEyevueSelected()
 
     private fun isTuneBudsSelected(): Boolean = deviceManagers.isTuneBudsSelected()
-
-    private fun isMoyoungW620Selected(): Boolean = deviceManagers.isMoyoungW620Selected()
 
     private fun isHeyCyanSelected(): Boolean = deviceManagers.isHeyCyanSelected()
 

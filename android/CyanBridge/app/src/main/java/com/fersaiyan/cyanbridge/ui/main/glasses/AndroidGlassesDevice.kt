@@ -64,8 +64,6 @@ internal fun interface CameraPluginGate {
 /** Activity work and state the glasses families reach. */
 internal interface GlassesDeviceHost {
     val heyCyanLivePreviewManager: LivePreviewManager
-    fun startBatteryPolling()
-    fun stopBatteryPolling()
 
     /** Stops the HeyCyan SDK Wi-Fi media sync for activity destruction. */
     fun stopHeyCyanMediaSyncForDestroy()

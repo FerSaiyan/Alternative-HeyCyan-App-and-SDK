@@ -89,13 +89,9 @@ internal class DeviceManagerRegistry(
     // Selection predicates kept for the activity's AI and voice flows.
     fun isMetaRaybanSelected(): Boolean = isSelected(DeviceClass.META_RAYBAN)
 
-    fun isMeizuMyvuSelected(): Boolean = isSelected(DeviceClass.MEIZU_MYVU)
-
     fun isEyevueSelected(): Boolean = isSelected(DeviceClass.EYEVUE)
 
     fun isTuneBudsSelected(): Boolean = isSelected(DeviceClass.TUNEBUDS)
-
-    fun isMoyoungW620Selected(): Boolean = isSelected(DeviceClass.MOYOUNG_W620)
 
     fun isHeyCyanSelected(): Boolean = isSelected(DeviceClass.HEY_CYAN)
 
