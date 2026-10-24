@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.media.rtsp
 
+import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspDescription
+import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspMessage
 import java.io.ByteArrayInputStream
 import java.io.EOFException
 import java.io.IOException
