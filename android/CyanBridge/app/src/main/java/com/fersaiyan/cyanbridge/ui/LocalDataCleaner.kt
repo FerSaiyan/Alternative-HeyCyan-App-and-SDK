@@ -1,6 +1,8 @@
 package com.fersaiyan.cyanbridge.ui
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.clear
 import java.io.File
 
 object LocalDataCleaner {
@@ -53,10 +55,7 @@ object LocalDataCleaner {
 
         // Best-effort: clear any legacy transcript pref file if present.
         try {
-            context.getSharedPreferences("cyanbridge_transcripts", Context.MODE_PRIVATE)
-                .edit()
-                .clear()
-                .apply()
+            MemoryPrefs.LegacyTranscripts.clear(context)
         } catch (_: Throwable) {
             // ignore
         }

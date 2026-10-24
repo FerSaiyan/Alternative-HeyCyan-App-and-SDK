@@ -6,6 +6,10 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs.MetaPermissionRequests
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 internal object MetaDatPermissions {
     fun required(sdk: Int = Build.VERSION.SDK_INT): Array<String> = if (sdk >= 31) arrayOf(
@@ -17,13 +21,14 @@ internal object MetaDatPermissions {
     }.toTypedArray()
 
     fun recordRequestResult(context: Context, result: Map<String, Boolean>) {
-        val editor = context.getSharedPreferences("meta_permission_requests", Context.MODE_PRIVATE).edit()
-        result.keys.forEach { editor.putBoolean(it, true) }
-        editor.apply()
+        MetaPermissionRequests.edit(context) {
+            result.keys.forEach { this[MetaPermissionRequests.requested[it]] = true }
+        }
     }
 
     fun permanentlyDenied(activity: Activity): Boolean {
-        val prefs = activity.getSharedPreferences("meta_permission_requests", Context.MODE_PRIVATE)
-        return missing(activity).any { prefs.getBoolean(it, false) && !activity.shouldShowRequestPermissionRationale(it) }
+        return missing(activity).any {
+            MetaPermissionRequests.requested[it][activity] && !activity.shouldShowRequestPermissionRationale(it)
+        }
     }
 }

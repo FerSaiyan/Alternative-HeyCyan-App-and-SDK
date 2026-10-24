@@ -27,6 +27,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.R
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
@@ -37,15 +40,12 @@ import kotlinx.coroutines.withContext
 
 object VersionUpdateChecker {
 
-    private const val KEY_LAST_CHECK_TIME = "last_version_check_time"
-    private const val KEY_REMINDED_VERSION = "reminded_version"
     private const val CHECK_INTERVAL_HOURS = 6
     private const val PLAY_STORE_FALLBACK_URL = "https://play.google.com/store/apps/details?id=com.fersaiyan.cyanbridge"
     private const val GITHUB_FALLBACK_URL = "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases"
 
     fun checkForUpdates(context: Context) {
-        val prefs = context.getSharedPreferences("version_check", Context.MODE_PRIVATE)
-        val lastCheck = prefs.getLong(KEY_LAST_CHECK_TIME, 0)
+        val lastCheck = AppPrefs.VersionCheck.lastCheckTime[context]
         val currentTime = System.currentTimeMillis()
         val hoursSinceLastCheck = (currentTime - lastCheck) / (1000 * 60 * 60)
 
@@ -53,7 +53,7 @@ object VersionUpdateChecker {
             return
         }
 
-        prefs.edit().putLong(KEY_LAST_CHECK_TIME, currentTime).apply()
+        AppPrefs.VersionCheck.lastCheckTime[context] = currentTime
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -95,14 +95,13 @@ object VersionUpdateChecker {
         playStoreUrl: String,
         githubUrl: String,
     ) {
-        val prefs = context.getSharedPreferences("version_check", Context.MODE_PRIVATE)
         val currentVersion = try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
         } catch (e: Exception) {
             ""
         }
 
-        val remindedVersion = prefs.getString(KEY_REMINDED_VERSION, "") ?: ""
+        val remindedVersion = AppPrefs.VersionCheck.remindedVersion[context]
 
         if (latestVersion != currentVersion && latestVersion != remindedVersion) {
             showUpdateDialog(context, latestVersion, playStoreUrl, githubUrl)
@@ -123,7 +122,6 @@ object VersionUpdateChecker {
             "Unknown"
         }
 
-        val prefs = context.getSharedPreferences("version_check", Context.MODE_PRIVATE)
         // Compose requires lifecycle, saved-state, and back-press owners on the
         // dialog's decor view. A platform Dialog does not install those owners.
         val dialog = ComponentDialog(activity)
@@ -158,7 +156,7 @@ object VersionUpdateChecker {
                                 dialog.dismiss()
                             },
                             onLater = {
-                                prefs.edit().putString(KEY_REMINDED_VERSION, latestVersion).apply()
+                                AppPrefs.VersionCheck.remindedVersion[context] = latestVersion
                                 dialog.dismiss()
                             },
                         )

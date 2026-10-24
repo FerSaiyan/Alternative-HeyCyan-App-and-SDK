@@ -9,12 +9,14 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
 import com.fersaiyan.cyanbridge.localagent.LocalAgentObservation
-import com.fersaiyan.cyanbridge.localagent.LocalAgentShadowTrace
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 import com.fersaiyan.cyanbridge.localagent.TaskerExecutionBackend
 import com.fersaiyan.cyanbridge.localagent.TaskerLocalAgentService
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
+import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
@@ -76,8 +78,8 @@ class LocalAiTaskerEmbeddingYouTubeHilTest {
         val previousEmbeddingEnabled = AutomationPrefs.isEmbeddingDecisionEnabled(context)
         val previousEmbeddingPath = AutomationPrefs.getEmbeddingModelPath(context)
         val previousEmbeddingMargin = AutomationPrefs.getEmbeddingMarginThreshold(context)
-        val shadowPrefs = context.getSharedPreferences(LocalAgentShadowTrace.PREFS_NAME, Context.MODE_PRIVATE)
-        val previousShadow = shadowPrefs.getBoolean(LocalAgentShadowTrace.PREF_ENABLED, false)
+        val shadowEnabled = AgentPrefs.ShadowTrace.youtubeShadowEnabled
+        val previousShadow = shadowEnabled[context]
         val reached = linkedSetOf<String>()
         fun stage(name: String) {
             if (reached.add(name)) {
@@ -91,8 +93,7 @@ class LocalAiTaskerEmbeddingYouTubeHilTest {
             try {
                 AutomationPrefs.setProviderType(context,
                     if (proPlanner) AgentProviderType.PRO_SUBSCRIPTION else AgentProviderType.LOCAL_AGENT)
-                shadowPrefs.edit().putBoolean(LocalAgentShadowTrace.PREF_ENABLED,
-                    InstrumentationRegistry.getArguments().getString("hil_shadow") == "true").apply()
+                shadowEnabled[context] = InstrumentationRegistry.getArguments().getString("hil_shadow") == "true"
                 AutomationPrefs.setLocalAgentAutomationEnabled(context, true)
                 AutomationPrefs.setMaxSteps(context, 20)
                 AutomationPrefs.setEmbeddingDecisionEnabled(context, true)
@@ -158,7 +159,7 @@ class LocalAiTaskerEmbeddingYouTubeHilTest {
                     },
                 )
                 AutomationPrefs.setProviderType(context, previousProvider)
-                shadowPrefs.edit().putBoolean(LocalAgentShadowTrace.PREF_ENABLED, previousShadow).apply()
+                shadowEnabled[context] = previousShadow
                 AutomationPrefs.setLocalAgentAutomationEnabled(context, previousAutomationEnabled)
                 AutomationPrefs.setMaxSteps(context, previousMaxSteps)
                 AutomationPrefs.setEmbeddingDecisionEnabled(context, previousEmbeddingEnabled)
