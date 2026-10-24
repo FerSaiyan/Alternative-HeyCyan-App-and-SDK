@@ -10,12 +10,12 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
+import com.fersaiyan.cyanbridge.audio.TtsSpeaker
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiClient
-import kotlinx.coroutines.CompletableDeferred
+import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,23 +40,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 class StudioApprovalHandler(private val appContext: Context) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var tts: TextToSpeech? = null
-    private var ttsReady = CompletableDeferred<Boolean>()
+    private var tts: TtsSpeaker? = null
     private val processing = AtomicBoolean(false)
 
     fun initialize() {
-        tts = TextToSpeech(appContext) { status ->
-            val ok = status == TextToSpeech.SUCCESS
-            if (ok) {
-                runCatching { tts?.language = Locale.US }
-            }
-            ttsReady.complete(ok)
-        }
+        tts = TtsSpeaker(appContext, TAG, onInit = { speaker, ok -> if (ok) speaker.setLanguage(Locale.US) })
     }
 
     fun shutdown() {
-        runCatching { tts?.stop() }
-        runCatching { tts?.shutdown() }
+        tts?.shutdown()
         tts = null
         scope.cancel()
     }
@@ -173,44 +165,23 @@ class StudioApprovalHandler(private val appContext: Context) {
     // -----------------------------------------------------------------------
 
     private suspend fun speakAndWait(text: String) {
-        val ok = withTimeoutOrNull(3_000) { ttsReady.await() } ?: false
-        if (!ok) {
+        val speaker = tts
+        if (speaker == null || !speaker.awaitReady(3_000)) {
             Log.w(TAG, "TTS not ready")
             return
         }
-
-        val utteranceId = "studio_approval_${System.currentTimeMillis()}"
-        val completed = CompletableDeferred<Unit>()
-
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
-            override fun onDone(id: String?) {
-                if (id == utteranceId && !completed.isCompleted) completed.complete(Unit)
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onError(id: String?) {
-                if (id == utteranceId && !completed.isCompleted) completed.complete(Unit)
-            }
-            override fun onError(id: String?, errorCode: Int) {
-                if (id == utteranceId && !completed.isCompleted) completed.complete(Unit)
-            }
-        })
-
-        val queued = runCatching {
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) == TextToSpeech.SUCCESS
-        }.getOrDefault(false)
-
-        if (queued) {
-            withTimeoutOrNull(15_000) { completed.await() }
-        }
+        speaker.speakAndAwait(
+            text = text,
+            utteranceId = "studio_approval_${System.currentTimeMillis()}",
+            readyTimeoutMs = 0L,
+            timeoutMs = 15_000,
+        )
     }
 
     private suspend fun speakBestEffort(text: String) {
-        val ok = withTimeoutOrNull(3_000) { ttsReady.await() } ?: false
-        if (!ok) return
-        runCatching {
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "studio_event")
-        }
+        val speaker = tts ?: return
+        if (!speaker.awaitReady(3_000)) return
+        speaker.speak(text, "studio_event")
     }
 
     // -----------------------------------------------------------------------
@@ -220,86 +191,83 @@ class StudioApprovalHandler(private val appContext: Context) {
     private suspend fun captureVoiceResponse(context: Context): String? {
         if (!canCaptureVoice(context)) return null
         return withContext(Dispatchers.Main) {
-            suspendCancellableCoroutine { cont ->
-                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                var recognizer: SpeechRecognizer? = null
-                var finished = false
-
-                fun finish(result: String?) {
-                    if (finished) return
-                    finished = true
-                    runCatching { recognizer?.destroy() }
-                    recognizer = null
-                    runCatching {
-                        audioManager.isBluetoothScoOn = false
-                        audioManager.stopBluetoothSco()
-                        audioManager.mode = AudioManager.MODE_NORMAL
-                    }
-                    if (cont.isActive) {
-                        cont.resume(result?.trim()?.takeIf { it.isNotBlank() }) {}
-                    }
-                }
-                cont.invokeOnCancellation { finish(null) }
-
-                // Route audio to Bluetooth SCO if available
-                runCatching {
-                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                    audioManager.startBluetoothSco()
-                    audioManager.isBluetoothScoOn = true
-                }
-
-                // Beep to indicate listening
-                runCatching {
-                    val tone = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 90)
-                    tone.startTone(ToneGenerator.TONE_PROP_BEEP, 180)
-                    scope.launch {
-                        delay(250)
-                        runCatching { tone.release() }
-                    }
-                }
-
-                try {
-                    recognizer = SpeechRecognizer.createSpeechRecognizer(context)
-                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-                        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-                    }
-
-                    recognizer?.setRecognitionListener(object : RecognitionListener {
-                        override fun onReadyForSpeech(params: Bundle?) {}
-                        override fun onBeginningOfSpeech() {}
-                        override fun onRmsChanged(rmsdB: Float) {}
-                        override fun onBufferReceived(buffer: ByteArray?) {}
-                        override fun onEndOfSpeech() {}
-                        override fun onError(error: Int) {
-                            Log.w(TAG, "STT error: $error")
-                            finish(null)
-                        }
-                        override fun onResults(results: Bundle?) {
-                            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                            finish(matches?.firstOrNull())
-                        }
-                        override fun onPartialResults(partialResults: Bundle?) {}
-                        override fun onEvent(eventType: Int, params: Bundle?) {}
-                    })
-
-                    recognizer?.startListening(intent)
-
-                    // Timeout: if STT doesn't finish within the window, auto-deny
-                    scope.launch {
-                        delay(STT_TIMEOUT_MS)
-                        finish(null)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "STT init failed: ${e.message}")
-                    finish(null)
-                }
+            val session = AudioSessionCoordinator.tryOpen(context, AudioSessionRequest.VoiceCapture(TAG))
+                ?: return@withContext null
+            try {
+                session.connectRoute()
+                recognizeOnce(context)
+            } finally {
+                session.close()
             }
         }
     }
+
+    private suspend fun recognizeOnce(context: Context): String? =
+        suspendCancellableCoroutine { cont ->
+            var recognizer: SpeechRecognizer? = null
+            var finished = false
+
+            fun finish(result: String?) {
+                if (finished) return
+                finished = true
+                runCatching { recognizer?.destroy() }
+                recognizer = null
+                if (cont.isActive) {
+                    cont.resume(result?.trim()?.takeIf { it.isNotBlank() }) {}
+                }
+            }
+            cont.invokeOnCancellation { finish(null) }
+
+            // Beep to indicate listening
+            runCatching {
+                val tone = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 90)
+                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 180)
+                scope.launch {
+                    delay(250)
+                    runCatching { tone.release() }
+                }
+            }
+
+            try {
+                recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+                }
+
+                recognizer?.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {}
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {}
+                    override fun onError(error: Int) {
+                        Log.w(TAG, "STT error: $error")
+                        finish(null)
+                    }
+                    override fun onResults(results: Bundle?) {
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        finish(matches?.firstOrNull())
+                    }
+                    override fun onPartialResults(partialResults: Bundle?) {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+
+                recognizer?.startListening(intent)
+
+                // Timeout: if STT doesn't finish within the window, auto-deny
+                scope.launch {
+                    delay(STT_TIMEOUT_MS)
+                    finish(null)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "STT init failed: ${e.message}")
+                finish(null)
+            }
+        }
 
     // -----------------------------------------------------------------------
     // LLM Classification
