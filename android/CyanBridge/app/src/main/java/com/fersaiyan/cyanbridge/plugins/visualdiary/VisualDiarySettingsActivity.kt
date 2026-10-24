@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.visualdiary
 
+import android.content.Context
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
@@ -26,13 +27,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,25 +38,49 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.devices.DeviceCapabilityHelper
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
-import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
+import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 
-class VisualDiarySettingsActivity : AppCompatActivity() {
-    private var visualDiaryEnabled by mutableStateOf(false)
-    private var lastError by mutableStateOf("")
+data class VisualDiarySettingsState(
+    /** Refreshed from preferences on create, resume and every enable/disable. */
+    val enabled: Boolean,
+    /** Refreshed together with [enabled]. */
+    val lastError: String,
+    val customPrompt: String,
+    val hasCamera: Boolean,
+    val cameraUnavailableReason: String?,
+) {
+    companion object {
+        fun load(context: Context) = VisualDiarySettingsState(
+            enabled = VisualDiaryPreferences.isEnabled(context),
+            lastError = VisualDiaryPreferences.getLastError(context),
+            customPrompt = VisualDiaryPreferences.getCustomPrompt(context),
+            hasCamera = DeviceCapabilityHelper.hasCamera(context),
+            cameraUnavailableReason = DeviceCapabilityHelper.unavailableCameraReason(context),
+        )
+    }
+}
+
+interface VisualDiarySettingsActions {
+    fun onBack()
+
+    /** Master switch (only wired while a camera is available) and the stop button (always `false`). */
+    fun onEnabledChange(enabled: Boolean)
+    fun onOpenTasker()
+    fun onCaptureSceneNow()
+    fun onCustomPromptChange(prompt: String)
+}
+
+class VisualDiarySettingsActivity : AppCompatActivity(), VisualDiarySettingsActions {
+    private lateinit var uiState: MutableState<VisualDiarySettingsState>
+
+    internal val state: VisualDiarySettingsState get() = uiState.value
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        uiState = mutableStateOf(VisualDiarySettingsState.load(this))
         refreshUi()
-        val composeView = installComposeHostWithLegacyAdapter(R.layout.activity_visual_diary_settings)
-        setThemedComposeContent(composeView) {
-            VisualDiarySettingsScreen(
-                enabled = visualDiaryEnabled,
-                lastError = lastError,
-                onBack = ::finish,
-                onEnabledChanged = ::setEnabled,
-                onOpenTasker = ::openTasker,
-            )
+        setThemedComposeScreen {
+            VisualDiarySettingsScreen(state = uiState.value, actions = this)
         }
     }
 
@@ -67,44 +89,54 @@ class VisualDiarySettingsActivity : AppCompatActivity() {
         refreshUi()
     }
 
-    private fun setEnabled(enabled: Boolean) {
+    private inline fun update(transform: VisualDiarySettingsState.() -> VisualDiarySettingsState) {
+        uiState.value = uiState.value.transform()
+    }
+
+    override fun onBack() = finish()
+
+    override fun onEnabledChange(enabled: Boolean) {
         if (enabled) VisualDiaryService.enable(this) else VisualDiaryService.disable(this)
         refreshUi()
     }
 
     private fun refreshUi() {
-        visualDiaryEnabled = VisualDiaryPreferences.isEnabled(this)
-        lastError = VisualDiaryPreferences.getLastError(this)
+        val enabled = VisualDiaryPreferences.isEnabled(this)
+        val lastError = VisualDiaryPreferences.getLastError(this)
+        update { copy(enabled = enabled, lastError = lastError) }
         VisualDiaryService.startIfEnabled(this)
     }
 
-    private fun openTasker() {
+    override fun onOpenTasker() {
         packageManager.getLaunchIntentForPackage("net.dinglisch.android.taskerm")?.let(::startActivity)
+    }
+
+    override fun onCaptureSceneNow() {
+        VisualDiaryService.captureNow(this)
+    }
+
+    override fun onCustomPromptChange(prompt: String) {
+        update { copy(customPrompt = prompt) }
+        VisualDiaryPreferences.setCustomPrompt(this, prompt)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VisualDiarySettingsScreen(
-    enabled: Boolean,
-    lastError: String,
-    onBack: () -> Unit,
-    onEnabledChanged: (Boolean) -> Unit,
-    onOpenTasker: () -> Unit,
+    state: VisualDiarySettingsState,
+    actions: VisualDiarySettingsActions,
 ) {
-    val context = LocalContext.current
     val scrollState = rememberScrollState()
-    var prompt by remember { mutableStateOf(VisualDiaryPreferences.getCustomPrompt(context)) }
-
-    val hasCamera = remember { DeviceCapabilityHelper.hasCamera(context) }
-    val cameraUnavailableReason = remember { DeviceCapabilityHelper.unavailableCameraReason(context) }
+    val hasCamera = state.hasCamera
+    val cameraUnavailableReason = state.cameraUnavailableReason
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.compose_plugin_settings_title, stringResource(R.string.compose_plugin_name_visual_diary))) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = actions::onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.compose_back))
                     }
                 },
@@ -160,16 +192,16 @@ fun VisualDiarySettingsScreen(
             )
             SwitchSetting(
                 stringResource(R.string.compose_visual_enabled),
-                enabled && hasCamera,
-                if (hasCamera) onEnabledChanged else { _ -> },
+                state.enabled && hasCamera,
+                if (hasCamera) actions::onEnabledChange else { _ -> },
             )
             NativePluginShortcutPreference(
                 pluginId = NativePluginIds.VISUAL_DIARY,
                 pluginTitle = stringResource(R.string.compose_plugin_name_visual_diary),
             )
-            if (lastError.isNotBlank()) {
+            if (state.lastError.isNotBlank()) {
                 Text(
-                    stringResource(R.string.compose_last_stop_reason, lastError),
+                    stringResource(R.string.compose_last_stop_reason, state.lastError),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -180,27 +212,24 @@ fun VisualDiarySettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = onOpenTasker, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = actions::onOpenTasker, modifier = Modifier.fillMaxWidth()) {
                 Text("Open Tasker schedule")
             }
             OutlinedButton(
-                onClick = { VisualDiaryService.captureNow(context) },
+                onClick = actions::onCaptureSceneNow,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.compose_capture_scene_now)) }
             SectionTitle(stringResource(R.string.compose_scene_descriptions))
             OutlinedTextField(
-                value = prompt,
-                onValueChange = {
-                    prompt = it
-                    VisualDiaryPreferences.setCustomPrompt(context, it)
-                },
+                value = state.customPrompt,
+                onValueChange = actions::onCustomPromptChange,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.compose_scene_description_prompt)) },
                 minLines = 3,
                 maxLines = 7,
             )
             OutlinedButton(
-                onClick = { onEnabledChanged(false) },
+                onClick = { actions.onEnabledChange(false) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.compose_stop_visual_diary)) }
             SectionTitle(stringResource(R.string.compose_shared_memory))
