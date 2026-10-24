@@ -169,3 +169,36 @@ Every session logs `"<owner> <KIND> granted state=…"`, `"<owner> route plan=�
 
 **TTS (all features)**
 - Walking Aid warnings/explore, Walking Aid chat, translator, notification announcements, Live announcements, Studio and Local Agent speech sound and route exactly as before. Streaming local-model replies still request transient focus once per reply and release it at the end.
+
+## Wave 3: shared database (Room in `:shared`)
+
+The schema is byte-identical: same file `cyanbridge-db`, version 8, identity hash `1f2b5479c1d0fe0282817bfd8e009967`. Still, run the upgrade test once on a phone that has real data:
+
+1. Install the previous build, signed with the release key, using `scripts/install_debug_keep_data.sh`.
+2. Create some data: chats with messages, a note, a meeting recording with a transcription, and memory/screen captures. Search memory once.
+3. Install this branch over it with `install -r` (no uninstall).
+4. Check that chats, messages, notes, recordings and transcriptions are intact and memory search returns the same results. Logcat should show no Room integrity or migration errors.
+5. Optional: `adb shell run-as com.fersaiyan.cyanbridge sqlite3 databases/cyanbridge-db "PRAGMA user_version; SELECT identity_hash FROM room_master_table"` should print `8` and the hash above.
+
+Known issue, not caused by this change: the memory search index needs SQLite FTS5. On phones whose system SQLite lacks it, fresh installs get no search index, and an upgrade from database version 4 or older fails at migration 4→5.
+
+**iOS (needs a Mac build):** existing chats appear after updating (a one-time import from NSUserDefaults), new messages persist across restarts, and a deleted chat stays deleted.
+
+## Wave 3: AI relay and providers in shared code
+
+- **Android relay chat, voice and image questions:** same fields, headers, timeouts, retries and error texts. The JSON bytes differ slightly (`/` is no longer escaped, and a whole-number temperature is written as `0.0`), but the values are the same.
+- **Relay errors:** test a real 402, 403 and 401 and check you get the same localized quota/subscription/auth messages. A 2xx response that isn't JSON now shows a different "Relay error: …" text.
+- **OpenAI-compatible endpoints:** URLs, payload with image/audio parts, streaming, and the health text should be unchanged.
+- **Local agent:** one UI-control run and one Telegram command, to confirm model-output parsing is as tolerant as before.
+- **iOS (intentional changes to match Android):**
+  - Relay chat retries up to 3 times and checks `/capabilities` first.
+  - Errors read "Error: <relay error>".
+  - Remote OpenAI requests send `max_tokens` 2048 and `temperature` 0.7.
+  - Meeting notes use Android's prompt.
+
+## Wave 3: shared Eyevue protocol (iOS only)
+
+iOS now uses the protocol code Android already ran, so check with an iPhone and Eyevue glasses:
+- Start video sends `0x00`, as the vendor app does.
+- Replies in `AC 55` frames are accepted. The old shared parser probably dropped every reply from real glasses.
+- AI photos are capped at 4 MiB.
