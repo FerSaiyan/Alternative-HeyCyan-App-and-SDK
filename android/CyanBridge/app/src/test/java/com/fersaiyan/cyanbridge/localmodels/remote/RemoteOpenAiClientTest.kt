@@ -1,5 +1,11 @@
 package com.fersaiyan.cyanbridge.localmodels.remote
 
+import java.io.File
+import java.util.Base64
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -36,5 +42,44 @@ class RemoteOpenAiClientTest {
                 assertTrue(expected.message?.contains("query string or fragment") == true)
             }
         }
+    }
+
+    @Test
+    fun image_attachment_is_read_from_disk_into_an_image_url_data_part() {
+        val image = File.createTempFile("remote-openai-attachment", ".png").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        try {
+            val payload = RemoteOpenAiClient.buildChatCompletionPayload(
+                model = "vision-model",
+                messages = listOf(mapOf("role" to "user", "content" to "Describe this")),
+                maxTokens = 32,
+                temperature = 0.2,
+                imagePaths = listOf(image.absolutePath),
+            )
+
+            val part = payload["messages"]!!.jsonArray[0].jsonObject["content"]!!.jsonArray[1].jsonObject
+            assertEquals("image_url", part["type"]!!.jsonPrimitive.content)
+            assertEquals(
+                "data:image/png;base64,${Base64.getEncoder().encodeToString(byteArrayOf(1, 2, 3))}",
+                part["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content,
+            )
+        } finally {
+            image.delete()
+        }
+    }
+
+    @Test
+    fun unreadable_attachments_are_rejected_instead_of_dropped() {
+        val error = runCatching {
+            RemoteOpenAiClient.buildChatCompletionPayload(
+                model = "vision-model",
+                messages = listOf(mapOf("role" to "user", "content" to "Look")),
+                maxTokens = 32,
+                temperature = 0.2,
+                imagePaths = listOf("/does/not/exist.png"),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(error?.message.orEmpty().contains("Cannot read image attachment"))
     }
 }

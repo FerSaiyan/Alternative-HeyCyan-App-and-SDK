@@ -4,7 +4,6 @@ import android.content.Context
 import com.fersaiyan.cyanbridge.data.local.entity.CaptureSession
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import java.io.File
-import kotlinx.coroutines.flow.first
 
 /**
  * Seeds a [CaptureSession] from a deterministic audio asset without touching the microphone.
@@ -46,23 +45,4 @@ object TestMeetingCaptureSeeder {
         val id = MyApplication.repository.insertCaptureSession(session)
         return SeededSession(session.copy(id = id), id, audioFile)
     }
-
-    suspend fun seedFromWavAsset(
-        assetWav: String = TestAudioAssets.MEETING_WAV,
-        deviceClass: String = "GENERIC_AUDIO",
-    ): SeededSession = seedFromAsset(assetName = assetWav, deviceClass = deviceClass)
-
-    suspend fun clearLatestTestSessions() {
-        // Best-effort: remove seeded sessions whose stopReason == test_seed
-        val all = MyApplication.repository.getAllCaptureSessionsOnce()
-        for (session in all) {
-            if (session.stopReason == "test_seed") {
-                MyApplication.repository.deleteCaptureSession(session.id)
-                runCatching { File(session.audioPath).delete() }
-            }
-        }
-    }
 }
-
-suspend fun com.fersaiyan.cyanbridge.data.repository.CyanBridgeRepository.getAllCaptureSessionsOnce(): List<CaptureSession> =
-    this.getAllCaptureSessions().first()
