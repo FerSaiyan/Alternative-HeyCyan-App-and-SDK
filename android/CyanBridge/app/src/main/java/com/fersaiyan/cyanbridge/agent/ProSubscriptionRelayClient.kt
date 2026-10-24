@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
+import com.fersaiyan.cyanbridge.analytics.InstallationIdentity
 import com.fersaiyan.cyanbridge.shared.billing.BillingProvider
 import org.json.JSONArray
 import org.json.JSONObject
@@ -17,7 +18,6 @@ import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.URLEncoder
 import java.net.UnknownHostException
-import java.util.UUID
 
 object ProSubscriptionRelayClient {
     data class ModelOption(
@@ -92,9 +92,6 @@ object ProSubscriptionRelayClient {
     private const val READ_TIMEOUT_MS = 15000
     private const val RELAY_DOWN_HINT =
         "Server may be down or this app may need an update to use the new server address."
-
-    private const val FEEDBACK_PREFS = "pro_feature_feedback"
-    private const val KEY_INSTALLATION_ID = "installation_id"
 
     fun fetchModelCatalog(context: Context): Result<ModelCatalog> = runCatching {
         val candidates = listOf("/models", "/v1/models")
@@ -191,7 +188,7 @@ object ProSubscriptionRelayClient {
     }
 
     fun registerBetaCloudInterest(context: Context): Result<BetaInterestResult> = runCatching {
-        val installationId = installationId(context)
+        val installationId = InstallationIdentity.getOrCreate(context)
         val payload = JSONObject()
             .put("installation_id", installationId)
             .put("package_name", context.packageName)
@@ -544,16 +541,6 @@ object ProSubscriptionRelayClient {
         return (0 until array.length()).any { index ->
             array.optString(index).equals(expected, ignoreCase = true)
         }
-    }
-
-    private fun installationId(context: Context): String {
-        val prefs = context.getSharedPreferences(FEEDBACK_PREFS, Context.MODE_PRIVATE)
-        val existing = prefs.getString(KEY_INSTALLATION_ID, "").orEmpty().trim()
-        if (existing.isNotBlank()) return existing
-
-        val generated = UUID.randomUUID().toString()
-        prefs.edit().putString(KEY_INSTALLATION_ID, generated).apply()
-        return generated
     }
 
     private fun endpoint(context: Context, path: String): String {

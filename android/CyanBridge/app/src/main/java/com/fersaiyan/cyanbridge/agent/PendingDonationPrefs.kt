@@ -1,86 +1,51 @@
 package com.fersaiyan.cyanbridge.agent
 
 import android.content.Context
-import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import com.fersaiyan.cyanbridge.shared.platform.PlatformPreferences
+import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs.Donation
+import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs.DonationSecrets
+import com.fersaiyan.cyanbridge.shared.prefs.clear
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.prefs.store
 
 object PendingDonationPrefs {
-    private const val PREFS_NAME = "pending_donation_prefs"
-    private const val SECRET_PREFS_NAME = "pending_donation_secrets"
-    private const val KEY_INVOICE_URL = "invoice_url"
-    private const val KEY_STATUS_URL = "status_url"
-    private const val KEY_AMOUNT = "amount"
-    private const val KEY_AWAITING_RETURN = "awaiting_return"
-
     data class PendingDonation(
         val invoiceUrl: String,
         val statusUrl: String,
         val amount: String,
     )
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-    private fun secretPrefs(context: Context): SharedPreferences {
-        val masterKey = MasterKey.Builder(context.applicationContext)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        return EncryptedSharedPreferences.create(
-            context.applicationContext,
-            SECRET_PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
-    }
-
     fun save(context: Context, pending: PendingDonation) {
-        val saved = secretPrefs(context).edit()
-            .putString(KEY_INVOICE_URL, pending.invoiceUrl)
-            .putString(KEY_STATUS_URL, pending.statusUrl)
-            .putString(KEY_AMOUNT, pending.amount)
-            .commit()
+        val saved = DonationSecrets.edit(context, commit = true) {
+            this[DonationSecrets.invoiceUrl] = pending.invoiceUrl
+            this[DonationSecrets.statusUrl] = pending.statusUrl
+            this[DonationSecrets.amount] = pending.amount
+        }
         check(saved) { "Unable to securely save donation checkout state" }
-        prefs(context).edit()
-            // Remove the plaintext state and credentials written by the legacy flow.
-            .remove(KEY_INVOICE_URL)
-            .remove(KEY_STATUS_URL)
-            .remove(KEY_AMOUNT)
-            .remove("api_token")
-            .remove("email")
-            .remove("subscription_id")
-            .apply()
+        // Remove the plaintext state and credentials written by the legacy flow.
+        removePlaintextState(context)
     }
 
     fun get(context: Context): PendingDonation? {
-        val p = prefs(context)
-        val encrypted = secretPrefs(context)
+        val encrypted = DonationSecrets.store(context)
         val securePending = PendingDonation(
-            invoiceUrl = encrypted.getString(KEY_INVOICE_URL, "").orEmpty().trim(),
-            statusUrl = encrypted.getString(KEY_STATUS_URL, "").orEmpty().trim(),
-            amount = encrypted.getString(KEY_AMOUNT, "").orEmpty().trim(),
+            invoiceUrl = encrypted[DonationSecrets.invoiceUrl].trim(),
+            statusUrl = encrypted[DonationSecrets.statusUrl].trim(),
+            amount = encrypted[DonationSecrets.amount].trim(),
         )
         if (securePending.invoiceUrl.isNotBlank() && securePending.statusUrl.isNotBlank()) {
-            p.edit()
-                .remove(KEY_INVOICE_URL)
-                .remove(KEY_STATUS_URL)
-                .remove(KEY_AMOUNT)
-                .remove("api_token")
-                .remove("email")
-                .remove("subscription_id")
-                .apply()
+            removePlaintextState(context)
             return securePending
         }
 
         // Migrate a pending legacy donation once, removing its old credential copies.
-        p.edit()
-            .remove("api_token")
-            .remove("email")
-            .remove("subscription_id")
-            .apply()
-        val invoiceUrl = p.getString(KEY_INVOICE_URL, "").orEmpty().trim()
-        val statusUrl = p.getString(KEY_STATUS_URL, "").orEmpty().trim()
-        val amount = p.getString(KEY_AMOUNT, "").orEmpty().trim()
+        removeLegacyCredentials(context)
+        val plain = Donation.store(context)
+        val invoiceUrl = plain[Donation.invoiceUrl].trim()
+        val statusUrl = plain[Donation.statusUrl].trim()
+        val amount = plain[Donation.amount].trim()
         if (invoiceUrl.isBlank() || statusUrl.isBlank()) return null
         return PendingDonation(
             invoiceUrl = invoiceUrl,
@@ -90,15 +55,33 @@ object PendingDonationPrefs {
     }
 
     fun clear(context: Context) {
-        prefs(context).edit().clear().apply()
-        secretPrefs(context).edit().clear().apply()
+        Donation.clear(context)
+        DonationSecrets.clear(context)
     }
 
     fun setAwaitingReturn(context: Context, awaiting: Boolean) {
-        prefs(context).edit().putBoolean(KEY_AWAITING_RETURN, awaiting).apply()
+        Donation.awaitingReturn[context] = awaiting
     }
 
-    fun isAwaitingReturn(context: Context): Boolean {
-        return prefs(context).getBoolean(KEY_AWAITING_RETURN, false)
+    fun isAwaitingReturn(context: Context): Boolean = Donation.awaitingReturn[context]
+
+    /** Removes the plaintext credentials an old checkout flow kept in this file. */
+    fun removeLegacyCredentials(context: Context) {
+        Donation.edit(context) { removeLegacyCredentials() }
+    }
+
+    private fun removePlaintextState(context: Context) {
+        Donation.edit(context) {
+            Donation.invoiceUrl.remove(this)
+            Donation.statusUrl.remove(this)
+            Donation.amount.remove(this)
+            removeLegacyCredentials()
+        }
+    }
+
+    private fun PlatformPreferences.removeLegacyCredentials() {
+        Donation.legacyApiToken.remove(this)
+        Donation.legacyEmail.remove(this)
+        Donation.legacySubscriptionId.remove(this)
     }
 }

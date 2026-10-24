@@ -14,6 +14,12 @@ import androidx.lifecycle.Lifecycle
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
 import com.fersaiyan.cyanbridge.shared.billing.ProSubscriptionSettingsUiState
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.prefs.store
 import com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences
 import java.util.Locale
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
@@ -35,10 +41,6 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
     private var publishEnabled = false
 
     internal val state: ProSubscriptionSettingsUiState get() = composeState
-
-    private val prefs by lazy {
-        getSharedPreferences("pro_subscription_settings", MODE_PRIVATE)
-    }
 
     private val isInForeground get() = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
 
@@ -70,12 +72,13 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
             return
         }
 
-        draft.cloudSync = prefs.getBoolean("cloud_sync", true)
-        draft.prioritySupport = prefs.getBoolean("priority_support", true)
-        draft.pluginRewards = prefs.getBoolean("plugin_rewards", true)
-        draft.earlyAccessDevices = prefs.getBoolean("early_access_devices", true)
-        draft.backupFrequencyIndex = prefs.getInt("backup_frequency_idx", 1).coerceIn(0, FREQUENCY_ITEMS.lastIndex)
-        draft.supportChannelIndex = prefs.getInt("support_channel_idx", 0).coerceIn(0, SUPPORT_ITEMS.lastIndex)
+        val settings = ProPrefs.Settings.store(this)
+        draft.cloudSync = settings[ProPrefs.Settings.cloudSync]
+        draft.prioritySupport = settings[ProPrefs.Settings.prioritySupport]
+        draft.pluginRewards = settings[ProPrefs.Settings.pluginRewards]
+        draft.earlyAccessDevices = settings[ProPrefs.Settings.earlyAccessDevices]
+        draft.backupFrequencyIndex = settings[ProPrefs.Settings.backupFrequencyIndex].coerceIn(0, FREQUENCY_ITEMS.lastIndex)
+        draft.supportChannelIndex = settings[ProPrefs.Settings.supportChannelIndex].coerceIn(0, SUPPORT_ITEMS.lastIndex)
 
         val savedRequestsModel = ProSubscriptionAiPrefs.getRequestsModel(this)
         val savedQuestionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this)
@@ -102,7 +105,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
         val appearancePreferences = AppearancePreferences(this)
         composeView.setContent {
             var liveEconomy by androidx.compose.runtime.remember {
-                mutableStateOf(com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.isEconomy(this))
+                mutableStateOf(AssistantPrefs.GeminiLive.proEconomy[this])
             }
             val appearance by rememberAppearanceSettings(appearancePreferences)
             CyanBridgeTheme(appearance) {
@@ -115,7 +118,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                     liveEconomyDescription = economyMode.description,
                     livePrivateDescription = privateMode.description,
                     onLiveEconomyChange = { enabled ->
-                        com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.setEconomy(this, enabled)
+                        AssistantPrefs.GeminiLive.proEconomy[this] = enabled
                         liveEconomy = enabled
                     },
                     state = composeState,
@@ -242,14 +245,14 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
     }
 
     private fun saveSettings() {
-        prefs.edit()
-            .putBoolean("cloud_sync", draft.cloudSync)
-            .putBoolean("priority_support", draft.prioritySupport)
-            .putBoolean("plugin_rewards", draft.pluginRewards)
-            .putBoolean("early_access_devices", draft.earlyAccessDevices)
-            .putInt("backup_frequency_idx", draft.backupFrequencyIndex)
-            .putInt("support_channel_idx", draft.supportChannelIndex)
-            .apply()
+        ProPrefs.Settings.edit(this) {
+            this[ProPrefs.Settings.cloudSync] = draft.cloudSync
+            this[ProPrefs.Settings.prioritySupport] = draft.prioritySupport
+            this[ProPrefs.Settings.pluginRewards] = draft.pluginRewards
+            this[ProPrefs.Settings.earlyAccessDevices] = draft.earlyAccessDevices
+            this[ProPrefs.Settings.backupFrequencyIndex] = draft.backupFrequencyIndex
+            this[ProPrefs.Settings.supportChannelIndex] = draft.supportChannelIndex
+        }
 
         ProSubscriptionAiPrefs.setRequestsModel(this, models.modelAt(draft.requestsModelIndex))
         ProSubscriptionAiPrefs.setQuestionsModel(this, models.modelAt(draft.questionsModelIndex))

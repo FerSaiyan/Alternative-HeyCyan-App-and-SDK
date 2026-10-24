@@ -5,8 +5,9 @@ import android.view.View
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
-import com.fersaiyan.cyanbridge.media.GlassesMediaPrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
+import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
 import com.fersaiyan.cyanbridge.ui.hasBluetooth
@@ -244,7 +245,7 @@ internal class LegacyGlassesControlsBinder(
 
                 binding.btnVideo -> {
                     // Toggle video recording. While video is active, pause the auto audio loop.
-                    val isRecording = GlassesMediaPrefs.isVideoRecording(activity)
+                    val isRecording = MediaPrefs.GlassesMedia.videoRecording[activity]
                     if (isRecording) {
                         Toast.makeText(activity, "Stopping video recording…", Toast.LENGTH_SHORT).show()
                         controls.controlVideoRecording(false)

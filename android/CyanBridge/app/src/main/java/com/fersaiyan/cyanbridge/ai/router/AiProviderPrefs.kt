@@ -2,47 +2,38 @@ package com.fersaiyan.cyanbridge.ai.router
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.shared.ai.DEFAULT_RELAY_URL
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs.Provider
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 typealias AiProviderType = com.fersaiyan.cyanbridge.shared.ai.AiProviderType
 typealias CliRelayBackend = com.fersaiyan.cyanbridge.shared.ai.CliRelayBackend
 
 object AiProviderPrefs {
-    private const val PREFS_NAME = "ai_provider_prefs"
-    private const val KEY_PROVIDER = "provider"
-    private const val KEY_RELAY_BASE_URL = "relay_base_url"
-    private const val KEY_RELAY_BACKEND = "relay_backend"
     private const val LEGACY_PUBLIC_RELAY_URL = "https://carelens-wine.vercel.app"
-    private const val DEFAULT_PUBLIC_RELAY_URL = DEFAULT_RELAY_URL
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-    fun getProvider(context: Context): AiProviderType =
-        AiProviderType.fromWire(prefs(context).getString(KEY_PROVIDER, AiProviderType.CLI_RELAY.wire))
+    fun getProvider(context: Context): AiProviderType = AiProviderType.fromWire(Provider.provider[context])
 
     fun setProvider(context: Context, provider: AiProviderType) {
-        prefs(context).edit().putString(KEY_PROVIDER, provider.wire).apply()
+        Provider.provider[context] = provider.wire
     }
 
     fun getRelayBaseUrl(context: Context): String =
-        prefs(context).getString(KEY_RELAY_BASE_URL, DEFAULT_PUBLIC_RELAY_URL)
-            ?.trim()
-            .orEmpty()
-            .let { current ->
-                when {
-                    current.isBlank() -> DEFAULT_PUBLIC_RELAY_URL
-                    current == LEGACY_PUBLIC_RELAY_URL -> DEFAULT_PUBLIC_RELAY_URL
-                    else -> current
-                }
+        Provider.relayBaseUrl[context].trim().let { current ->
+            when {
+                current.isBlank() -> DEFAULT_RELAY_URL
+                current == LEGACY_PUBLIC_RELAY_URL -> DEFAULT_RELAY_URL
+                else -> current
             }
+        }
 
     fun setRelayBaseUrl(context: Context, value: String) {
-        prefs(context).edit().putString(KEY_RELAY_BASE_URL, value.trim()).apply()
+        Provider.relayBaseUrl[context] = value.trim()
     }
 
-    fun getRelayBackend(context: Context): CliRelayBackend =
-        CliRelayBackend.fromWire(prefs(context).getString(KEY_RELAY_BACKEND, CliRelayBackend.GEMINI.wire))
+    fun getRelayBackend(context: Context): CliRelayBackend = CliRelayBackend.fromWire(Provider.relayBackend[context])
 
     fun setRelayBackend(context: Context, backend: CliRelayBackend) {
-        prefs(context).edit().putString(KEY_RELAY_BACKEND, backend.wire).apply()
+        Provider.relayBackend[context] = backend.wire
     }
 }
