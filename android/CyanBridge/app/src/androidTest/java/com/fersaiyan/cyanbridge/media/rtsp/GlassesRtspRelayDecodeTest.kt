@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.media.rtsp
 
+import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspMessage
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri

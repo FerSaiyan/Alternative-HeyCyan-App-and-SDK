@@ -23,6 +23,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
 import com.fersaiyan.cyanbridge.network.WifiP2pChannelGroupDriver
+import com.fersaiyan.cyanbridge.shared.devices.eyevue.matchesEyevuePeerName
 import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
 import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClaim
 import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClient

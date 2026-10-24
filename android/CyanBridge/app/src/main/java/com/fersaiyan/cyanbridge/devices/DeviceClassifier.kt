@@ -1,7 +1,7 @@
 package com.fersaiyan.cyanbridge.devices
 
 import android.os.ParcelUuid
-import com.fersaiyan.cyanbridge.devices.eyevue.EyevueProtocol
+import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueProtocol
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import java.util.UUID
 
@@ -12,6 +12,7 @@ import java.util.UUID
  */
 object DeviceClassifier {
 
+    private val EYEVUE_SERVICE_UUID: UUID = UUID.fromString(EyevueProtocol.SERVICE_UUID)
     private val TUNEBUDS_BLE_SERVICE_UUID: UUID =
         UUID.fromString("0000fdb3-0000-1000-8000-00805f9b34fb")
     private val MYVU_ADVERTISED_SERVICE_UUID: UUID =
@@ -33,7 +34,7 @@ object DeviceClassifier {
 
         // Eyevue devices may omit their local name while still advertising the
         // vendor service. Check the UUID before name-based fallbacks.
-        if (serviceUuids.any { it.uuid == EyevueProtocol.SERVICE_UUID }) {
+        if (serviceUuids.any { it.uuid == EYEVUE_SERVICE_UUID }) {
             return DeviceClass.EYEVUE
         }
 

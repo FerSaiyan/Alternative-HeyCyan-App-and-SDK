@@ -12,7 +12,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.localagent.LocalAgentAction
 import com.fersaiyan.cyanbridge.localagent.LocalAgentApprovalVoiceSession
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalClarifier
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalCoordinator
 import kotlinx.coroutines.async

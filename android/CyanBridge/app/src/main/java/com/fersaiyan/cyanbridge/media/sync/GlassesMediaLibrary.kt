@@ -6,7 +6,7 @@ import android.media.MediaScannerConnection
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
-import com.fersaiyan.cyanbridge.media.OggOpusPackager
+import com.fersaiyan.cyanbridge.shared.media.OggOpusWrapper
 import com.fersaiyan.cyanbridge.media.SyncedMediaFolder
 import com.fersaiyan.cyanbridge.media.autocapture.GlassesSyncedAudioIngestor
 import java.io.ByteArrayOutputStream
@@ -79,7 +79,7 @@ internal class GlassesMediaLibrary(private val context: Context) {
                     }
                     return saved.success
                 }
-                val wrapped = OggOpusPackager.wrapOpusIfNeeded(rawBytes)
+                val wrapped = OggOpusWrapper.wrapOpusIfNeeded(rawBytes)
                 val saved = saveOpusToLibrary(
                     payloadBytes = wrapped.first,
                     rawBytesSize = rawBytes.size,

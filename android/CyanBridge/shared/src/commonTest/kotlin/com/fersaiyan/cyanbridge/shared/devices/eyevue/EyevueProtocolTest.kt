@@ -1,22 +1,23 @@
-package com.fersaiyan.cyanbridge.devices.eyevue
+package com.fersaiyan.cyanbridge.shared.devices.eyevue
 
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class EyevueProtocolTest {
     @Test
     fun livePacketsMatchVendorFrames() {
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x03, 0x67, 0x30, 0x97.toByte()),
             EyevueProtocol.buildStartLiveApPacket(),
         )
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x03, 0x67, 0x31, 0x98.toByte()),
             EyevueProtocol.buildStartLiveP2pPacket(),
         )
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x04, 0x44, 0x30, 0x01, 0x75),
             EyevueProtocol.buildFinishTransferPacket(),
         )
@@ -25,17 +26,17 @@ class EyevueProtocolTest {
     @Test
     fun photoPacketsMatchVendorShutters() {
         // Homescreen/manual: command 34 + 48, CRC = (34 + 48) & 0xFF = 82.
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x03, 0x22, 0x30, 0x52),
             EyevueProtocol.buildManualPhotoPacket(),
         )
         // AI: command 34 + 49, CRC = (34 + 49) & 0xFF = 83.
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x03, 0x22, 0x31, 0x53.toByte()),
             EyevueProtocol.buildAiPhotoPacket(),
         )
         // Homescreen default must be the manual shutter, not the AI shutter.
-        assertArrayEquals(
+        assertContentEquals(
             EyevueProtocol.buildManualPhotoPacket(),
             EyevueProtocol.buildTakePhotoPacket(),
         )
@@ -45,11 +46,11 @@ class EyevueProtocolTest {
     fun videoPacketsMatchVendorStartStop() {
         // Vendor startRecord/stopRecord both send value 0; command id differs.
         // Start: command 35 + 0, CRC = 35. Stop: command 36 + 0, CRC = 36.
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x03, 0x23, 0x00, 0x23),
             EyevueProtocol.buildStartVideoPacket(),
         )
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x03, 0x24, 0x00, 0x24),
             EyevueProtocol.buildStopVideoPacket(),
         )
@@ -59,15 +60,15 @@ class EyevueProtocolTest {
     fun finishPacketsMatchVendorCleanup() {
         // Vendor stopP2pWifiConnect: (48, 1) keep, (48, 0) clear, (49, n) partial.
         // CRCs: (68+48+1)=117=0x75, (68+48+0)=116=0x74, (68+49+45)=162=0xA2.
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x04, 0x44, 0x30, 0x01, 0x75),
             EyevueProtocol.buildFinishTransferPacket(),
         )
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x04, 0x44, 0x30, 0x00, 0x74),
             EyevueProtocol.buildFinishTransferAndClearPacket(),
         )
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xAB.toByte(), 0x55, 0x00, 0x04, 0x44, 0x31, 0x2D, 0xA2.toByte()),
             EyevueProtocol.buildFinishTransferPartialPacket(45),
         )
@@ -83,15 +84,14 @@ class EyevueProtocolTest {
 
         assertEquals(1, frames.size)
         assertEquals(EyevueProtocol.CMD_APP_LIVE, frames.single().commandId)
-        assertArrayEquals(byteArrayOf(0x31), frames.single().payload)
+        assertContentEquals(byteArrayOf(0x31), frames.single().payload)
     }
 
     @Test
     fun parserRejectsCorruptCrc() {
         val packet = EyevueProtocol.buildStartLiveApPacket().also { it[it.lastIndex] = 0 }
 
-        runCatching { EyevueProtocol.parseDatagram(packet) }
-            .onSuccess { error("Corrupt packet was accepted") }
+        assertFailsWith<IllegalArgumentException> { EyevueProtocol.parseDatagram(packet) }
     }
 
     @Test
@@ -103,7 +103,7 @@ class EyevueProtocolTest {
         assertTrue(battery?.isCharging == true)
 
         val wifi = EyevueProtocol.parseWifiSsid(
-            EyevueFrame(EyevueProtocol.CMD_RECEIVE_WIFI_INFO, "Eyevue-AP\u0000".toByteArray()),
+            EyevueFrame(EyevueProtocol.CMD_RECEIVE_WIFI_INFO, "Eyevue-AP\u0000".encodeToByteArray()),
         )
         assertEquals("Eyevue-AP", wifi)
     }
@@ -130,7 +130,7 @@ class EyevueProtocolTest {
         )
         val countFrame = EyevueProtocol.parseDatagram(countBytes)
         assertEquals(EyevueProtocol.CMD_RECEIVE_THUMBNAIL_COUNT, countFrame.commandId)
-        assertArrayEquals(byteArrayOf(0x00, 0x2D), countFrame.payload)
+        assertContentEquals(byteArrayOf(0x00, 0x2D), countFrame.payload)
 
         // The streaming decoder must also accept the inbound header.
         val decoder = EyevueFrameDecoder()
@@ -141,7 +141,7 @@ class EyevueProtocolTest {
 
     @Test
     fun voiceAssistantPacketsMatchVendorBitFlags() {
-        assertArrayEquals(
+        assertContentEquals(
             EyevueProtocol.valuePacket(EyevueProtocol.CMD_SET_VOICE_ASSISTANT_STATUS, 1),
             EyevueProtocol.buildSetVoiceAssistantStatusPacket(
                 localOfflineSpeechEnabled = false,
@@ -164,40 +164,41 @@ class EyevueProtocolTest {
 
         val image = assembler.append(photoPacket(EyevueProtocol.CMD_RECEIVE_PHOTO_DATA_END))
 
-        assertArrayEquals(
+        assertContentEquals(
             byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte()),
             image,
         )
     }
 
     @Test
-    fun liveProfilesMatchVendorModelFamilies() {
-        val sk = EyevueMediaProfile.fromProject("SK01")
-        assertEquals(EyevueWifiMode.AP, sk.mode)
-        assertEquals("http://192.168.1.254/?custom=1&cmd=3001&par=1", sk.liveControlUrl)
-        assertEquals("rtsp://192.168.1.254/xxx.mov", sk.liveStreamUrl)
-
-        val tSeries = EyevueMediaProfile.fromProject("T01")
-        assertEquals(EyevueWifiMode.AP, tSeries.mode)
-        assertEquals(null, tSeries.liveControlUrl)
-        assertEquals("rtsp://192.168.169.1/h264", tSeries.liveStreamUrl)
-
-        val other = EyevueMediaProfile.fromProject("EV01")
-        assertEquals(EyevueWifiMode.P2P, other.mode)
-        assertEquals("rtsp://192.168.49.207/xxx.mov", other.liveStreamUrl)
+    fun setTimeUsesLocalWallClockFields() {
+        // 2026-03-01T01:02:03Z at UTC-03:00 is 2026-02-28 22:02:03 local.
+        val epochMillis = 1_772_326_923_000L
+        assertContentEquals(
+            EyevueProtocol.buildSetTimePacket(2026, 2, 28, 22, 2, 3),
+            EyevueProtocol.buildSetTimePacket(epochMillis, utcOffsetMinutes = -180),
+        )
+        // Leap day, positive offset: 2024-02-29T23:30:00Z at +01:00 is 2024-03-01 00:30:00.
+        assertContentEquals(
+            EyevueProtocol.buildSetTimePacket(2024, 3, 1, 0, 30, 0),
+            EyevueProtocol.buildSetTimePacket(1_709_249_400_000L, utcOffsetMinutes = 60),
+        )
     }
 
     @Test
-    fun releaseLivePreviewSupportsAndroidTenAndNewer() {
-        assertEquals(false, EyevueLivePreviewPolicy.isSupported(28))
-        assertEquals(true, EyevueLivePreviewPolicy.isSupported(29))
-        assertEquals(true, EyevueLivePreviewPolicy.isSupported(36))
+    fun parsesCustomerAndMediaIndex() {
+        val customer = EyevueProtocol.parseCustomer(
+            EyevueFrame(EyevueProtocol.CMD_RECEIVE_CUSTOMER, "SK01\u0000\u0000AB".encodeToByteArray() + byteArrayOf(0, 0)),
+        )
+        assertEquals(EyevueCustomer(project = "SK01", customer = "AB"), customer)
+        assertEquals("http://192.168.1.254/?custom=1&cmd=3001&par=1", EyevueProtocol.mediaIndexUrl("192.168.1.254"))
     }
 
     private fun photoPacket(commandId: Int, payload: ByteArray = byteArrayOf()): ByteArray =
         byteArrayOf(0xAB.toByte(), 0x55, 0, 0, commandId.toByte()) + payload + byteArrayOf(0, 0, 0)
 
-    @Test fun photoOverflowAndCancelledStreamsRequireFreshStart() {
+    @Test
+    fun photoOverflowAndCancelledStreamsRequireFreshStart() {
         val assembler = EyevuePhotoAssembler(maxImageBytes = 4)
         val start = photoPacket(EyevueProtocol.CMD_RECEIVE_PHOTO_DATA_START)
         val data = photoPacket(EyevueProtocol.CMD_RECEIVE_PHOTO_DATA, byteArrayOf(0, 0, 0, 0, 1, 2, 3))
@@ -214,6 +215,6 @@ class EyevueProtocolTest {
         assertEquals(null, assembler.append(end))
         assembler.append(start)
         assembler.append(data)
-        assertArrayEquals(byteArrayOf(1, 2, 3), assembler.append(end))
+        assertContentEquals(byteArrayOf(1, 2, 3), assembler.append(end))
     }
 }

@@ -39,7 +39,7 @@ import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import com.fersaiyan.cyanbridge.shared.chat.ChatRole
 import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.chat.ChatStoreRepository
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.context.LocalAgentContextBuilder
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsReviewProtocol
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsReviewProtocol.ReviewBatchItem

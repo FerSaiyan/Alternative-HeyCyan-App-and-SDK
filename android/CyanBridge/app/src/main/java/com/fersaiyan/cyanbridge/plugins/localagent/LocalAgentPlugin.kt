@@ -6,7 +6,7 @@ import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.LocalAgentNotificationSpeaker
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 import com.fersaiyan.cyanbridge.localagent.LocalAgentTelegramService
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType

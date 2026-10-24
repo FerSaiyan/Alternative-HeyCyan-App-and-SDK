@@ -1,25 +1,21 @@
 package com.fersaiyan.cyanbridge.media.rtsp
 
+import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspDescription
+import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspFormatException
+import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspMessage
 import java.io.EOFException
 import java.io.IOException
 import java.io.InputStream
 import java.net.URI
 
-/** A complete RTSP message. Its body is consumed exactly once, with its headers. */
-internal data class RtspMessage(val lines: List<String>, val body: ByteArray = byteArrayOf()) {
-    val firstLine: String get() = lines.first()
+// Message format and SDP rewriting live in shared code; this file adds the blocking socket I/O.
 
-    fun header(name: String): String? = lines.drop(1).firstOrNull {
-        it.substringBefore(':').equals(name, ignoreCase = true)
-    }?.substringAfter(':')?.trim()
+internal fun RtspMessage.requireOk(): RtspMessage = if (isOk) this else throw IOException(firstLine)
 
-    fun requireOk(): RtspMessage {
-        if (firstLine.split(' ').getOrNull(1) != "200") throw IOException(firstLine)
-        return this
-    }
-
-    fun bytes(): ByteArray =
-        (lines.joinToString("\r\n") + "\r\n\r\n").toByteArray(Charsets.US_ASCII) + body
+internal fun RtspDescription.Companion.from(response: RtspMessage, requestedUrl: String): RtspDescription = try {
+    parse(response, requestedUrl) { base, control -> URI(base).resolve(control).toString() }
+} catch (error: RtspFormatException) {
+    throw IOException(error.message)
 }
 
 internal fun readRtspMessage(input: InputStream, first: Int = input.read()): RtspMessage? {
@@ -57,51 +53,4 @@ internal fun readRtspBytes(input: InputStream, count: Int): ByteArray {
         offset += size
     }
     return result
-}
-
-internal data class RtspTrack(val controlUrl: String, val rtpChannel: Int, val rtcpChannel: Int, val mediaType: String)
-
-internal data class RtspDescription(
-    val aggregateUrl: String,
-    val localSdp: ByteArray,
-    val tracks: List<RtspTrack>,
-) {
-    companion object {
-        fun from(response: RtspMessage, requestedUrl: String): RtspDescription {
-            val base = response.header("Content-Base") ?: response.header("Content-Location") ?: requestedUrl
-            val tracks = mutableListOf<RtspTrack>()
-            var mediaIndex = -1
-            var mediaType = ""
-            var aggregate = base
-            val rewritten = String(response.body, Charsets.US_ASCII).lineSequence()
-                .filter { it.isNotBlank() }.map { line ->
-                    when {
-                        line.startsWith("c=") -> "c=IN IP4 127.0.0.1"
-                        line.startsWith("m=") -> {
-                            mediaIndex++
-                            mediaType = line.substringAfter("m=").substringBefore(' ')
-                            line
-                        }
-                        line.startsWith("a=control:") -> {
-                            val control = line.substringAfter("a=control:")
-                            if (mediaIndex < 0) {
-                                if (control != "*") aggregate = resolveControl(base, control)
-                                "a=control:*"
-                            } else {
-                                if (tracks.size != mediaIndex) throw IOException("Missing SDP track control")
-                                tracks.add(RtspTrack(resolveControl(base, control), mediaIndex * 2, mediaIndex * 2 + 1, mediaType))
-                                "a=control:track${mediaIndex + 1}"
-                            }
-                        }
-                        else -> line // Preserve audio fmtp, H264 parameter sets and clock rates.
-                    }
-                }.toList()
-            if (tracks.isEmpty() || tracks.size != mediaIndex + 1) throw IOException("Missing SDP tracks")
-            return RtspDescription(aggregate, (rewritten.joinToString("\r\n") + "\r\n")
-                .toByteArray(Charsets.US_ASCII), tracks)
-        }
-
-        private fun resolveControl(base: String, control: String): String =
-            if (control.startsWith("rtsp://")) control else URI(base).resolve(control).toString()
-    }
 }

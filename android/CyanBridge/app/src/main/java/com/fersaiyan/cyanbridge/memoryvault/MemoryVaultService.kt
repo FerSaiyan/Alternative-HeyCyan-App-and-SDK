@@ -14,8 +14,8 @@ import com.fersaiyan.cyanbridge.data.local.entity.SyncPreparationQueueEntity
 import com.fersaiyan.cyanbridge.data.local.entity.VaultItemEntity
 import com.fersaiyan.cyanbridge.data.local.entity.VaultItemKeyEntity
 import com.fersaiyan.cyanbridge.data.local.entity.VaultLockStateEntity
-import com.fersaiyan.cyanbridge.memoryvault.crypto.CipherEnvelope
-import com.fersaiyan.cyanbridge.memoryvault.crypto.VaultCrypto
+import com.fersaiyan.cyanbridge.shared.memoryvault.crypto.CipherEnvelope
+import com.fersaiyan.cyanbridge.shared.memoryvault.crypto.VaultCrypto
 import com.fersaiyan.cyanbridge.memoryvault.crypto.VaultKeyManager
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import kotlinx.coroutines.Dispatchers

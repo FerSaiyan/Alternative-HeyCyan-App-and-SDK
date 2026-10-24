@@ -11,6 +11,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.ai.AiQuestionForegroundService
 import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
 import com.fersaiyan.cyanbridge.audio.TtsSpeaker
