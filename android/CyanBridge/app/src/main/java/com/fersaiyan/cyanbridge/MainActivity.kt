@@ -47,6 +47,7 @@ import com.fersaiyan.cyanbridge.ota.firmwareSubscriptionGateCopy
 import com.fersaiyan.cyanbridge.ota.isExpectedFirmwareFilename
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionLease
+import com.fersaiyan.cyanbridge.glasses.GlassesDeviceInfoReader
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.glasses.GlassesPhotoCapture
 import com.fersaiyan.cyanbridge.glasses.BackgroundGlassesCommandPermit
@@ -3431,7 +3432,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     )
                 }
 
-                val deviceInfo = readGlassesDeviceInfo()
+                val deviceInfo = GlassesDeviceInfoReader.readGlassesDeviceInfo()
                 if (deviceInfo == null) {
                     throw IllegalStateException("Could not read glasses info. Is Bluetooth connected?")
                 }
@@ -3682,69 +3683,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         OtaTarget.JIELI_BLE -> com.fersaiyan.cyanbridge.shared.glasses.OtaTargetSelection.JIELI_BLE
     }
 
-    /**
-     * Get the glasses' Wi-Fi hardware version via BLE syncDeviceInfo.
-     * Returns empty string if BLE is not connected.
-     */
-    private suspend fun getGlassesWifiHardwareVersion(): String {
-        if (!BleOperateManager.getInstance().isConnected) return ""
-        return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-            LargeDataHandler.getInstance().syncDeviceInfo { _, response ->
-                if (cont.isActive) {
-                    cont.resume(response?.wifiHardwareVersion ?: "") {}
-                }
-            }
-            // Timeout after 5 seconds
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                kotlinx.coroutines.delay(5000)
-                if (cont.isActive) cont.resume("") {}
-            }
-        }
-    }
-
-    /**
-     * Get the glasses' Wi-Fi firmware version via BLE syncDeviceInfo.
-     */
-    private suspend fun getGlassesWifiFirmwareVersion(): String {
-        if (!BleOperateManager.getInstance().isConnected) return ""
-        return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-            LargeDataHandler.getInstance().syncDeviceInfo { _, response ->
-                if (cont.isActive) {
-                    cont.resume(response?.wifiFirmwareVersion ?: "") {}
-                }
-            }
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                kotlinx.coroutines.delay(5000)
-                if (cont.isActive) cont.resume("") {}
-            }
-        }
-    }
-
-    /**
-     * Read the full [DeviceInfoResponse] from the glasses via BLE syncDeviceInfo.
-     * Returns null if BLE is not connected or the request times out.
-     *
-     * The response contains both BLE identifiers (hardwareVersion, firmwareVersion)
-     * and Wi-Fi identifiers (wifiHardwareVersion, wifiFirmwareVersion).
-     */
-    private suspend fun readGlassesDeviceInfo(): com.oudmon.ble.base.communication.bigData.resp.DeviceInfoResponse? {
-        if (!BleOperateManager.getInstance().isConnected) return null
-        return withTimeoutOrNull(5_000) {
-            suspendCancellableCoroutine { cont ->
-                try {
-                    LargeDataHandler.getInstance().syncDeviceInfo { _, response ->
-                        if (cont.isActive) {
-                            cont.resume(response) {}
-                        }
-                    }
-                } catch (error: Exception) {
-                    Log.w("DebugOta", "syncDeviceInfo failed while preparing OTA", error)
-                    if (cont.isActive) cont.resume(null) {}
-                }
-            }
-        }
-    }
-
     /** Require a live BLE link and a new four-field device-info response between OTA stages. */
     private suspend fun awaitFreshBleReadiness(stage: OtaReadinessStage): Boolean {
         val bleManager = BleOperateManager.getInstance()
@@ -3832,7 +3770,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return false
         }
 
-        val deviceInfo = readGlassesDeviceInfo() ?: run {
+        val deviceInfo = GlassesDeviceInfoReader.readGlassesDeviceInfo() ?: run {
             Log.e("Ota", "Fresh syncDeviceInfo failed for $stage")
             return false
         }
