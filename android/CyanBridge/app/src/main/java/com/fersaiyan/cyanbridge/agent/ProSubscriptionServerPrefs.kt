@@ -1,26 +1,21 @@
 package com.fersaiyan.cyanbridge.agent
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.util.Patterns
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import com.fersaiyan.cyanbridge.shared.platform.PlatformPreferences
+import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs.LegacyCheckout
+import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs.Server
+import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs.ServerSecrets
+import com.fersaiyan.cyanbridge.shared.prefs.clear
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.remove
+import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.prefs.store
 import java.util.Locale
 import java.util.UUID
 
 object ProSubscriptionServerPrefs {
-    private const val PREFS_NAME = "pro_subscription_server_prefs"
-    private const val SECRET_PREFS_NAME = "pro_subscription_server_secrets"
-    private const val LEGACY_CHECKOUT_PREFS_NAME = "pending_legacy_checkout_prefs"
-    private const val LEGACY_DONATION_PREFS_NAME = "pending_donation_prefs"
-    private const val KEY_VERIFY_URL = "verify_url"
-    private const val KEY_API_TOKEN = "api_token"
-    private const val KEY_ACCOUNT_EMAIL = "account_email"
-    private const val KEY_VERIFIED_ACCOUNT_EMAIL = "verified_account_email"
-    private const val KEY_WEB_CALLBACK_RESULT = "web_callback_result"
-    private const val KEY_WEB_CALLBACK_PURPOSE = "web_callback_purpose"
-    private const val KEY_WEB_CALLBACK_EXPIRES_AT_MS = "web_callback_expires_at_ms"
-    private const val KEY_LEGACY_CREDENTIALS_CLEARED = "legacy_credentials_cleared"
     private const val WEB_CALLBACK_RESULT_TTL_MS = 15L * 60L * 1000L
 
     enum class WebCallbackPurpose {
@@ -28,54 +23,35 @@ object ProSubscriptionServerPrefs {
         DONATION,
     }
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-    private fun secretPrefs(context: Context): SharedPreferences {
-        val masterKey = MasterKey.Builder(context.applicationContext)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        return EncryptedSharedPreferences.create(
-            context.applicationContext,
-            SECRET_PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
-    }
-
-    fun getVerifyUrl(context: Context): String =
-        prefs(context).getString(KEY_VERIFY_URL, "").orEmpty().trim()
+    fun getVerifyUrl(context: Context): String = Server.verifyUrl[context].trim()
 
     fun setVerifyUrl(context: Context, url: String?) {
         val value = url?.trim().orEmpty()
-        prefs(context).edit().apply {
-            if (value.isBlank()) remove(KEY_VERIFY_URL) else putString(KEY_VERIFY_URL, value)
-        }.apply()
+        if (value.isBlank()) Server.verifyUrl.remove(context) else Server.verifyUrl[context] = value
     }
 
     fun getApiToken(context: Context): String {
         clearLegacyPlaintextCredentials(context)
-        val encryptedPrefs = secretPrefs(context)
-        val encrypted = encryptedPrefs.getString(KEY_API_TOKEN, "").orEmpty().trim()
+        val encrypted = ServerSecrets.apiToken[context].trim()
         if (encrypted.isNotBlank()) return encrypted
 
         // Migrate the legacy plaintext token once, then remove the old copy.
-        val legacy = prefs(context).getString(KEY_API_TOKEN, "").orEmpty().trim()
+        val legacy = Server.legacyApiToken[context].trim()
         if (legacy.isBlank()) return ""
 
-        val saved = encryptedPrefs.edit().putString(KEY_API_TOKEN, legacy).commit()
-        prefs(context).edit().remove(KEY_API_TOKEN).commit()
+        val saved = ServerSecrets.edit(context, commit = true) { this[ServerSecrets.apiToken] = legacy }
+        Server.edit(context, commit = true) { Server.legacyApiToken.remove(this) }
         return if (saved) legacy else ""
     }
 
     fun setApiToken(context: Context, token: String?) {
         clearLegacyPlaintextCredentials(context)
         val value = token?.trim().orEmpty()
-        val saved = secretPrefs(context).edit().apply {
-            if (value.isBlank()) remove(KEY_API_TOKEN) else putString(KEY_API_TOKEN, value)
-        }.commit()
+        val saved = ServerSecrets.edit(context, commit = true) {
+            if (value.isBlank()) ServerSecrets.apiToken.remove(this) else this[ServerSecrets.apiToken] = value
+        }
         check(saved) { "Unable to securely store the server account token" }
-        prefs(context).edit().remove(KEY_API_TOKEN).commit()
+        Server.edit(context, commit = true) { Server.legacyApiToken.remove(this) }
     }
 
     fun createWebCallbackResult(
@@ -85,11 +61,11 @@ object ProSubscriptionServerPrefs {
     ): String {
         clearLegacyPlaintextCredentials(context)
         val result = UUID.randomUUID().toString()
-        val saved = secretPrefs(context).edit()
-            .putString(KEY_WEB_CALLBACK_RESULT, result)
-            .putString(KEY_WEB_CALLBACK_PURPOSE, purpose.name)
-            .putLong(KEY_WEB_CALLBACK_EXPIRES_AT_MS, nowMs + WEB_CALLBACK_RESULT_TTL_MS)
-            .commit()
+        val saved = ServerSecrets.edit(context, commit = true) {
+            this[ServerSecrets.webCallbackResult] = result
+            this[ServerSecrets.webCallbackPurpose] = purpose.name
+            this[ServerSecrets.webCallbackExpiresAtMs] = nowMs + WEB_CALLBACK_RESULT_TTL_MS
+        }
         check(saved) { "Unable to securely prepare the checkout callback" }
         return result
     }
@@ -100,52 +76,53 @@ object ProSubscriptionServerPrefs {
         nowMs: Long = System.currentTimeMillis(),
     ): WebCallbackPurpose? {
         clearLegacyPlaintextCredentials(context)
-        val encryptedPrefs = secretPrefs(context)
-        val expectedResult = encryptedPrefs.getString(KEY_WEB_CALLBACK_RESULT, "").orEmpty()
-        val expiresAtMs = encryptedPrefs.getLong(KEY_WEB_CALLBACK_EXPIRES_AT_MS, 0L)
+        val secrets = ServerSecrets.store(context)
+        val expectedResult = secrets[ServerSecrets.webCallbackResult]
+        val expiresAtMs = secrets[ServerSecrets.webCallbackExpiresAtMs]
         if (expectedResult.isBlank() || expiresAtMs <= nowMs) {
-            encryptedPrefs.edit()
-                .remove(KEY_WEB_CALLBACK_RESULT)
-                .remove(KEY_WEB_CALLBACK_PURPOSE)
-                .remove(KEY_WEB_CALLBACK_EXPIRES_AT_MS)
-                .apply()
+            clearWebCallback(secrets)
             return null
         }
         if (result.isNullOrBlank() || result != expectedResult) return null
 
-        val purpose = encryptedPrefs.getString(KEY_WEB_CALLBACK_PURPOSE, "")
-            ?.let { value -> WebCallbackPurpose.entries.firstOrNull { it.name == value } }
-        encryptedPrefs.edit()
-            .remove(KEY_WEB_CALLBACK_RESULT)
-            .remove(KEY_WEB_CALLBACK_PURPOSE)
-            .remove(KEY_WEB_CALLBACK_EXPIRES_AT_MS)
-            .apply()
+        val purpose = secrets[ServerSecrets.webCallbackPurpose]
+            .let { value -> WebCallbackPurpose.entries.firstOrNull { it.name == value } }
+        clearWebCallback(secrets)
         return purpose
     }
 
-    fun getAccountEmail(context: Context): String =
-        sanitizeAccountEmail(prefs(context).getString(KEY_ACCOUNT_EMAIL, ""))
+    private fun clearWebCallback(secrets: PlatformPreferences) {
+        secrets.edit {
+            ServerSecrets.webCallbackResult.remove(this)
+            ServerSecrets.webCallbackPurpose.remove(this)
+            ServerSecrets.webCallbackExpiresAtMs.remove(this)
+        }
+    }
+
+    fun getAccountEmail(context: Context): String = sanitizeAccountEmail(Server.accountEmail[context])
 
     fun setAccountEmail(context: Context, email: String?) {
         val value = sanitizeAccountEmail(email)
-        prefs(context).edit().apply {
-            if (value.isBlank()) remove(KEY_ACCOUNT_EMAIL) else putString(KEY_ACCOUNT_EMAIL, value)
-            if (value != getVerifiedAccountEmail(context)) remove(KEY_VERIFIED_ACCOUNT_EMAIL)
-        }.apply()
+        val verified = getVerifiedAccountEmail(context)
+        Server.edit(context) {
+            if (value.isBlank()) Server.accountEmail.remove(this) else this[Server.accountEmail] = value
+            if (value != verified) Server.verifiedAccountEmail.remove(this)
+        }
     }
 
     fun getVerifiedAccountEmail(context: Context): String =
-        sanitizeAccountEmail(prefs(context).getString(KEY_VERIFIED_ACCOUNT_EMAIL, ""))
+        sanitizeAccountEmail(Server.verifiedAccountEmail[context])
 
     fun isAccountEmailVerified(context: Context, email: String?): Boolean =
         normalizeAccountEmail(email) == getVerifiedAccountEmail(context)
 
     fun setVerifiedAccountEmail(context: Context, email: String?) {
         val value = sanitizeAccountEmail(email)
-        prefs(context).edit().apply {
-            if (value.isBlank()) remove(KEY_VERIFIED_ACCOUNT_EMAIL) else putString(KEY_VERIFIED_ACCOUNT_EMAIL, value)
-            if (value.isBlank()) remove(KEY_ACCOUNT_EMAIL) else putString(KEY_ACCOUNT_EMAIL, value)
-        }.apply()
+        Server.edit(context) {
+            listOf(Server.verifiedAccountEmail, Server.accountEmail).forEach { pref ->
+                if (value.isBlank()) pref.remove(this) else this[pref] = value
+            }
+        }
     }
 
     fun normalizeAccountEmail(email: String?): String =
@@ -165,19 +142,10 @@ object ProSubscriptionServerPrefs {
     }
 
     private fun clearLegacyPlaintextCredentials(context: Context) {
-        val serverPrefs = prefs(context)
-        if (serverPrefs.getBoolean(KEY_LEGACY_CREDENTIALS_CLEARED, false)) return
+        if (Server.legacyCredentialsCleared[context]) return
 
-        context.getSharedPreferences(LEGACY_CHECKOUT_PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .clear()
-            .apply()
-        context.getSharedPreferences(LEGACY_DONATION_PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove("api_token")
-            .remove("email")
-            .remove("subscription_id")
-            .apply()
-        serverPrefs.edit().putBoolean(KEY_LEGACY_CREDENTIALS_CLEARED, true).apply()
+        LegacyCheckout.clear(context)
+        PendingDonationPrefs.removeLegacyCredentials(context)
+        Server.legacyCredentialsCleared[context] = true
     }
 }

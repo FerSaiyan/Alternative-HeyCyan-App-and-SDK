@@ -43,6 +43,8 @@ import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.InstalledLocalModel
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
+import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
@@ -70,7 +72,7 @@ class LocalModelTestActivity : ComponentActivity() {
     }
 
     private fun startTest() {
-        val requestedId = intent.getStringExtra(EXTRA_MODEL_ID) ?: LocalModelsPrefs.getSelectedModelId(this)
+        val requestedId = intent.getStringExtra(EXTRA_MODEL_ID) ?: LocalModelStorageRepository.getSelectedModelId(this)
         val model = LocalModelStorageRepository.listInstalled(this).firstOrNull { it.id == requestedId }
         if (model == null) {
             uiState = uiState.copy(
@@ -157,7 +159,7 @@ class LocalModelTestActivity : ComponentActivity() {
                                 append(" (${signedPercent(it)} decode speed)")
                             }
                         }
-                        LocalModelsPrefs.setLastBenchmark(this, summary)
+                        AgentPrefs.LocalModels.lastBenchmark[this] = summary.trim()
                         uiState.copy(
                             running = false,
                             phase = "Test complete",

@@ -2,24 +2,17 @@ package com.fersaiyan.cyanbridge.localmodels.settings
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
+import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs.LocalModelSettings
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONObject
 
 object LocalModelSettingsRepository {
-    private const val PREFS_NAME = "local_model_settings"
-    private const val KEY_SETTINGS_BY_MODEL = "settings_by_model"
-    private const val KEY_HF_TOKEN = "hf_token"
-    private const val LEGACY_PREFS = "local_models_prefs"
-    private const val LEGACY_KEY_USE_GPU = "use_gpu"
-
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-    fun getHuggingFaceToken(context: Context): String {
-        return prefs(context).getString(KEY_HF_TOKEN, "")?.trim().orEmpty()
-    }
+    fun getHuggingFaceToken(context: Context): String = LocalModelSettings.huggingFaceToken[context].trim()
 
     fun setHuggingFaceToken(context: Context, token: String) {
-        prefs(context).edit().putString(KEY_HF_TOKEN, token.trim()).apply()
+        LocalModelSettings.huggingFaceToken[context] = token.trim()
     }
 
     fun getForModel(context: Context, modelId: String): LocalGenerationSettings {
@@ -66,7 +59,7 @@ object LocalModelSettingsRepository {
                     else -> LocalComputeBackend.valueOf(raw)
                 }
             }.getOrElse {
-                if (legacyUseGpu(context)) LocalComputeBackend.GPU else defaults.computeBackend
+                if (AgentPrefs.LocalModels.useGpu[context]) LocalComputeBackend.GPU else defaults.computeBackend
             },
             cpuThreads = existing.optInt("cpu_threads", defaults.cpuThreads)
                 .coerceIn(1, 16),
@@ -99,22 +92,17 @@ object LocalModelSettingsRepository {
                 .put("gpu_layers", settings.gpuLayers)
                 .put("model_runtime", settings.modelRuntime.name),
         )
-        prefs(context).edit().putString(KEY_SETTINGS_BY_MODEL, all.toString()).apply()
+        LocalModelSettings.settingsByModel[context] = all.toString()
     }
 
     fun clearForModel(context: Context, modelId: String) {
         val all = readAllSettings(context)
         all.remove(modelId)
-        prefs(context).edit().putString(KEY_SETTINGS_BY_MODEL, all.toString()).apply()
+        LocalModelSettings.settingsByModel[context] = all.toString()
     }
 
     private fun readAllSettings(context: Context): JSONObject {
-        val raw = prefs(context).getString(KEY_SETTINGS_BY_MODEL, "{}") ?: "{}"
+        val raw = LocalModelSettings.settingsByModel[context]
         return runCatching { JSONObject(raw) }.getOrDefault(JSONObject())
-    }
-
-    private fun legacyUseGpu(context: Context): Boolean {
-        return context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
-            .getBoolean(LEGACY_KEY_USE_GPU, false)
     }
 }

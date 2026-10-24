@@ -1,52 +1,46 @@
 package com.fersaiyan.cyanbridge.agent
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs.Subscription
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 object ProSubscriptionPrefs {
-    private const val PREFS_NAME = "pro_subscription_prefs"
-    private const val KEY_IS_SUBSCRIBED = "is_subscribed"
-    private const val KEY_PLAN = "plan"
-    private const val KEY_EXPIRES_AT = "expires_at"
-    private const val KEY_PURCHASE_TOKEN = "purchase_token"
-    private const val KEY_PROVIDER = "provider"
-    private const val KEY_LAST_VERIFIED_AT = "last_verified_at"
-
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-    fun isSubscribed(context: Context): Boolean = prefs(context).getBoolean(KEY_IS_SUBSCRIBED, false)
+    fun isSubscribed(context: Context): Boolean = Subscription.isSubscribed[context]
 
     fun setSubscribed(context: Context, subscribed: Boolean) {
-        prefs(context).edit().putBoolean(KEY_IS_SUBSCRIBED, subscribed).apply()
+        Subscription.isSubscribed[context] = subscribed
     }
 
-    fun getPlan(context: Context): String = prefs(context).getString(KEY_PLAN, null) ?: "none"
+    fun getPlan(context: Context): String = Subscription.plan[context]
 
     fun setPlan(context: Context, plan: String) {
-        prefs(context).edit().putString(KEY_PLAN, plan).apply()
+        Subscription.plan[context] = plan
     }
 
-    fun getExpiresAt(context: Context): Long = prefs(context).getLong(KEY_EXPIRES_AT, 0L)
+    fun getExpiresAt(context: Context): Long = Subscription.expiresAt[context]
 
     fun setExpiresAt(context: Context, timestamp: Long) {
-        prefs(context).edit().putLong(KEY_EXPIRES_AT, timestamp).apply()
+        Subscription.expiresAt[context] = timestamp
     }
 
-    fun getPurchaseToken(context: Context): String = prefs(context).getString(KEY_PURCHASE_TOKEN, null) ?: ""
+    fun getPurchaseToken(context: Context): String = Subscription.purchaseToken[context].orEmpty()
 
     fun setPurchaseToken(context: Context, token: String) {
-        prefs(context).edit().putString(KEY_PURCHASE_TOKEN, token).apply()
+        Subscription.purchaseToken[context] = token
     }
 
-    fun getProvider(context: Context): String = prefs(context).getString(KEY_PROVIDER, "mock") ?: "mock"
+    fun getProvider(context: Context): String = Subscription.provider[context]
 
     fun setProvider(context: Context, provider: String) {
-        prefs(context).edit().putString(KEY_PROVIDER, provider).apply()
+        Subscription.provider[context] = provider
     }
 
-    fun getLastVerifiedAt(context: Context): Long = prefs(context).getLong(KEY_LAST_VERIFIED_AT, 0L)
+    fun getLastVerifiedAt(context: Context): Long = Subscription.lastVerifiedAt[context]
 
     fun setLastVerifiedAt(context: Context, timestamp: Long) {
-        prefs(context).edit().putLong(KEY_LAST_VERIFIED_AT, timestamp).apply()
+        Subscription.lastVerifiedAt[context] = timestamp
     }
 
     fun isActiveLocally(context: Context, nowMs: Long = System.currentTimeMillis()): Boolean {
@@ -60,17 +54,13 @@ object ProSubscriptionPrefs {
         provider: String = "none",
         clearPurchaseToken: Boolean = true,
     ) {
-        val e = prefs(context).edit()
-            .putBoolean(KEY_IS_SUBSCRIBED, false)
-            .putString(KEY_PLAN, "none")
-            .putLong(KEY_EXPIRES_AT, 0L)
-            .putString(KEY_PROVIDER, provider)
-            .putLong(KEY_LAST_VERIFIED_AT, System.currentTimeMillis())
-
-        if (clearPurchaseToken) {
-            e.remove(KEY_PURCHASE_TOKEN)
+        Subscription.edit(context) {
+            this[Subscription.isSubscribed] = false
+            this[Subscription.plan] = "none"
+            this[Subscription.expiresAt] = 0L
+            this[Subscription.provider] = provider
+            this[Subscription.lastVerifiedAt] = System.currentTimeMillis()
+            if (clearPurchaseToken) this[Subscription.purchaseToken] = null
         }
-
-        e.apply()
     }
 }

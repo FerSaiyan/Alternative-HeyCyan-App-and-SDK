@@ -3,28 +3,27 @@ package com.fersaiyan.cyanbridge.memoryvault
 import android.content.Context
 import com.fersaiyan.cyanbridge.data.local.entity.VaultLockStateEntity
 import com.fersaiyan.cyanbridge.memoryvault.crypto.VaultKeyManager
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs.VaultLock
+import com.fersaiyan.cyanbridge.shared.prefs.clear
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.prefs.store
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
 object VaultLockStateManager {
-    private const val PREFS = "memory_vault_lock_state"
-    private const val KEY_LOCKED = "locked"
-    private const val KEY_LOCKED_AT = "locked_at"
-    private const val KEY_LAST_UNLOCKED_AT = "last_unlocked_at"
-
-    fun isLocked(context: Context): Boolean {
-        return prefs(context).getBoolean(KEY_LOCKED, false)
-    }
+    fun isLocked(context: Context): Boolean = VaultLock.locked[context]
 
     fun requiresPassphrase(context: Context): Boolean = VaultKeyManager.requiresPassphrase(context)
 
     fun lock(context: Context) {
         val now = System.currentTimeMillis()
-        prefs(context).edit()
-            .putBoolean(KEY_LOCKED, true)
-            .putLong(KEY_LOCKED_AT, now)
-            .apply()
+        VaultLock.edit(context) {
+            this[VaultLock.locked] = true
+            this[VaultLock.lockedAt] = now
+        }
         VaultKeyManager.lock()
         persist(context)
     }
@@ -32,34 +31,29 @@ object VaultLockStateManager {
     fun unlockWithDevice(context: Context): Boolean {
         if (VaultKeyManager.requiresPassphrase(context)) return false
         val ok = VaultKeyManager.unlockWithDevice(context)
-        if (ok) {
-            val now = System.currentTimeMillis()
-            prefs(context).edit()
-                .putBoolean(KEY_LOCKED, false)
-                .putLong(KEY_LAST_UNLOCKED_AT, now)
-                .apply()
-            persist(context)
-        }
+        if (ok) markUnlocked(context)
         return ok
     }
 
     fun unlockWithPassphrase(context: Context, passphrase: CharArray): Boolean {
         val ok = VaultKeyManager.unlockWithPassphrase(context, passphrase)
-        if (ok) {
-            val now = System.currentTimeMillis()
-            prefs(context).edit()
-                .putBoolean(KEY_LOCKED, false)
-                .putLong(KEY_LAST_UNLOCKED_AT, now)
-                .apply()
-            persist(context)
-        }
+        if (ok) markUnlocked(context)
         return ok
+    }
+
+    private fun markUnlocked(context: Context) {
+        val now = System.currentTimeMillis()
+        VaultLock.edit(context) {
+            this[VaultLock.locked] = false
+            this[VaultLock.lastUnlockedAt] = now
+        }
+        persist(context)
     }
 
     fun setPassphrase(context: Context, passphrase: CharArray): Boolean {
         val ok = VaultKeyManager.setPassphrase(context, passphrase)
         if (ok) {
-            prefs(context).edit().putBoolean(KEY_LOCKED, true).apply()
+            VaultLock.locked[context] = true
             VaultKeyManager.lock()
             persist(context)
         }
@@ -77,7 +71,7 @@ object VaultLockStateManager {
     }
 
     fun clearAll(context: Context) {
-        prefs(context).edit().clear().apply()
+        VaultLock.clear(context)
         VaultKeyManager.clearAll(context)
         runCatching {
             runBlocking(Dispatchers.IO) {
@@ -89,19 +83,16 @@ object VaultLockStateManager {
     private fun persist(context: Context) {
         runCatching {
             runBlocking(Dispatchers.IO) {
-                val p = prefs(context)
+                val p = VaultLock.store(context)
                 MyApplication.database.memoryVaultDao().upsertLockState(
                     VaultLockStateEntity(
-                        isLocked = p.getBoolean(KEY_LOCKED, false),
+                        isLocked = p[VaultLock.locked],
                         requiresPassphrase = VaultKeyManager.requiresPassphrase(context),
-                        lockedAt = p.getLong(KEY_LOCKED_AT, 0L),
-                        lastUnlockedAt = p.getLong(KEY_LAST_UNLOCKED_AT, 0L),
+                        lockedAt = p[VaultLock.lockedAt],
+                        lastUnlockedAt = p[VaultLock.lastUnlockedAt],
                     )
                 )
             }
         }
     }
-
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

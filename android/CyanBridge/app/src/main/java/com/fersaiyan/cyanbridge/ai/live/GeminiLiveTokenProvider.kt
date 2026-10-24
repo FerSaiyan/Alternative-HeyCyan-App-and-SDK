@@ -4,6 +4,8 @@ import android.content.Context
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
 import java.time.Instant
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -59,7 +61,7 @@ class DefaultGeminiLiveTokenProvider(
         // Never silently downgrade a paid account to the proxy because local prefs are stale.
         // The server validates expiry/active status for the selected paid route.
         val paidPlan = account.plan.lowercase() in setOf("cheap", "standard", "max")
-        val economy = paidPlan && GeminiLiveModePreferences.isEconomy(appContext)
+        val economy = paidPlan && AssistantPrefs.GeminiLive.proEconomy[appContext]
         if (!paidPlan || economy) {
             val httpUrl = base.toHttpUrl().newBuilder()
                 .addPathSegments("api/pro/live/free")

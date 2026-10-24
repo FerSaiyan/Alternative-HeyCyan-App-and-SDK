@@ -1,6 +1,9 @@
 package com.fersaiyan.cyanbridge.localagent.dailysummary
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.roundToLong
@@ -12,12 +15,7 @@ object DailySummaryBulletRunHistory {
         val createdAtMs: Long,
     )
 
-    private const val PREFS_NAME = "daily_summary_bullet_run_history"
-    private const val KEY_RUNS = "runs_json"
     private const val MAX_RUNS = 20
-
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     fun record(
         context: Context,
@@ -32,7 +30,7 @@ object DailySummaryBulletRunHistory {
             createdAtMs = System.currentTimeMillis(),
         )
         val trimmed = current.takeLast(MAX_RUNS)
-        prefs(context).edit().putString(KEY_RUNS, encode(trimmed)).apply()
+        MemoryPrefs.DailySummaryBulletRuns.runsJson[context] = encode(trimmed)
     }
 
     fun estimateEtaMs(
@@ -55,7 +53,7 @@ object DailySummaryBulletRunHistory {
     }
 
     private fun loadRuns(context: Context): List<Run> {
-        val raw = prefs(context).getString(KEY_RUNS, "[]") ?: "[]"
+        val raw = MemoryPrefs.DailySummaryBulletRuns.runsJson[context]
         val arr = runCatching { JSONArray(raw) }.getOrElse { JSONArray() }
         val out = ArrayList<Run>(arr.length())
         for (i in 0 until arr.length()) {

@@ -4,6 +4,10 @@ import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import com.fersaiyan.cyanbridge.R
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs.Language
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.isSet
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 enum class AppLanguage(
     val languageTag: String,
@@ -34,25 +38,16 @@ enum class AppLanguage(
 }
 
 object AppLanguagePreferences {
-    private const val PREFS = "app_language"
-    private const val KEY_LANGUAGE = "selected_language"
+    fun selected(context: Context): AppLanguage = AppLanguage.fromStored(Language.selected[context])
 
-    private fun preferences(context: Context) =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    fun selected(context: Context): AppLanguage {
-        return AppLanguage.fromStored(preferences(context).getString(KEY_LANGUAGE, null))
-    }
-
-    fun hasUserSelectedLanguage(context: Context): Boolean =
-        preferences(context).contains(KEY_LANGUAGE)
+    fun hasUserSelectedLanguage(context: Context): Boolean = Language.selected.isSet(context)
 
     fun applyStoredLocale(context: Context) {
         applyLocale(selected(context))
     }
 
     fun select(context: Context, language: AppLanguage) {
-        preferences(context).edit().putString(KEY_LANGUAGE, language.name).apply()
+        Language.selected[context] = language.name
         applyLocale(language)
     }
 

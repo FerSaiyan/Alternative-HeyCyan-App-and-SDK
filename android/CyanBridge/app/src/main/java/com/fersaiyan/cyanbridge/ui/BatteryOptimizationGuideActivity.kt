@@ -16,6 +16,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.BatteryOptimizationGuideScreen
@@ -110,10 +113,6 @@ class BatteryOptimizationGuideActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val PREFS = "cyanbridge_prefs"
-        private const val KEY_COMPLETED = "battery_opt_guide_completed"
-        private const val KEY_SUPPRESS = "battery_opt_guide_suppress"
-        private const val KEY_REMIND_AFTER = "battery_opt_guide_remind_after"
         private const val REMINDER_DELAY_MS = 7L * 24 * 60 * 60 * 1000
 
         fun launchIfNeeded(activity: AppCompatActivity) {
@@ -122,36 +121,25 @@ class BatteryOptimizationGuideActivity : AppCompatActivity() {
         }
 
         private fun shouldShow(context: Context): Boolean {
-            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            if (prefs.getBoolean(KEY_SUPPRESS, false)) return false
-            if (prefs.getBoolean(KEY_COMPLETED, false)) return false
-            if (System.currentTimeMillis() < prefs.getLong(KEY_REMIND_AFTER, 0L)) return false
+            if (AppPrefs.Main.batteryGuideSuppressed[context]) return false
+            if (AppPrefs.Main.batteryGuideCompleted[context]) return false
+            if (System.currentTimeMillis() < AppPrefs.Main.batteryGuideRemindAfter[context]) return false
             return !isBatteryOptimizationIgnored(context)
         }
 
         private fun deferReminder(context: Context) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putLong(KEY_REMIND_AFTER, System.currentTimeMillis() + REMINDER_DELAY_MS)
-                .apply()
+            AppPrefs.Main.batteryGuideRemindAfter[context] = System.currentTimeMillis() + REMINDER_DELAY_MS
         }
 
         private fun isOnboardingCompleted(context: Context): Boolean =
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getBoolean("onboarding_completed", false)
+            AppPrefs.Main.onboardingCompleted[context]
 
         private fun markCompleted(context: Context) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY_COMPLETED, true)
-                .apply()
+            AppPrefs.Main.batteryGuideCompleted[context] = true
         }
 
         private fun suppressPermanently(context: Context) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY_SUPPRESS, true)
-                .apply()
+            AppPrefs.Main.batteryGuideSuppressed[context] = true
         }
 
         private fun isBatteryOptimizationIgnored(context: Context): Boolean {

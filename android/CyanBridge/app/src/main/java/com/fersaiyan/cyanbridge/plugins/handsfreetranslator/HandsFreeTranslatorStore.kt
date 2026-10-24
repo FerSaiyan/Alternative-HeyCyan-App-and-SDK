@@ -2,14 +2,14 @@ package com.fersaiyan.cyanbridge.plugins.handsfreetranslator
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONArray
 import org.json.JSONObject
 
 class HandsFreeTranslatorStore {
     private val TAG = "HandsFreeTranslatorStore"
-    private val PREFS = "hands_free_translator_store"
-    private val KEY_TRANSLATIONS = "translations_json"
-    private val KEY_PRESETS = "presets_json"
 
     private val lock = Any()
     private val translations = mutableListOf<TranslationEntry>()
@@ -74,7 +74,7 @@ class HandsFreeTranslatorStore {
                         .put("confidence", translation.confidence.toDouble())
                 )
             }
-            prefs(context).edit().putString(KEY_TRANSLATIONS, arr.toString()).apply()
+            PluginPrefs.HandsFreeTranslatorStore.translationsJson[context] = arr.toString()
 
             // Persist presets
             val presetsArr = JSONArray()
@@ -88,7 +88,7 @@ class HandsFreeTranslatorStore {
                         .put("phrases", JSONArray(preset.phrases))
                 )
             }
-            prefs(context).edit().putString(KEY_PRESETS, presetsArr.toString()).apply()
+            PluginPrefs.HandsFreeTranslatorStore.presetsJson[context] = presetsArr.toString()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to persist translations", e)
         }
@@ -104,7 +104,7 @@ class HandsFreeTranslatorStore {
             loaded = true
             try {
                 // Load translations
-                val raw = prefs(context).getString(KEY_TRANSLATIONS, "[]") ?: "[]"
+                val raw = PluginPrefs.HandsFreeTranslatorStore.translationsJson[context]
                 val arr = JSONArray(raw)
                 for (i in 0 until arr.length()) {
                     val obj = arr.optJSONObject(i) ?: continue
@@ -122,7 +122,7 @@ class HandsFreeTranslatorStore {
                 }
 
                 // Load presets
-                val presetsRaw = prefs(context).getString(KEY_PRESETS, "[]") ?: "[]"
+                val presetsRaw = PluginPrefs.HandsFreeTranslatorStore.presetsJson[context]
                 val presetsArr = JSONArray(presetsRaw)
                 for (i in 0 until presetsArr.length()) {
                     val obj = presetsArr.optJSONObject(i) ?: continue
@@ -148,7 +148,4 @@ class HandsFreeTranslatorStore {
             }
         }
     }
-
-    private fun prefs(context: Context) =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

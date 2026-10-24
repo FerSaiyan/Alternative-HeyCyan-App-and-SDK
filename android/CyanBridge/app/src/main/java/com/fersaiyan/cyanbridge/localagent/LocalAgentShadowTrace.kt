@@ -3,19 +3,18 @@ package com.fersaiyan.cyanbridge.localagent
 import android.content.Context
 import android.util.Log
 import com.fersaiyan.cyanbridge.BuildConfig
+import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
 import org.json.JSONArray
 import org.json.JSONObject
 
 /** Opt-in, debug-only trace for comparing external models against *observed* YouTube states. */
 object LocalAgentShadowTrace {
-    const val PREFS_NAME = "local_agent_hil_shadow"
-    const val PREF_ENABLED = "youtube_shadow_enabled"
     private const val TAG = "JevShadow"
 
     fun record(context: Context, state: LocalAgentTaskState, observation: LocalAgentObservation,
                built: UiActionCandidateBuilder.Built) {
-        if (!BuildConfig.DEBUG || !context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getBoolean(PREF_ENABLED, false) ||
+        if (!BuildConfig.DEBUG || !AgentPrefs.ShadowTrace.youtubeShadowEnabled[context] ||
             !state.goal.contains("Linus Tech Tips", ignoreCase = true)) return
 
         val screen = observation.screenSnapshot?.toCompressedPromptText(state.goal)

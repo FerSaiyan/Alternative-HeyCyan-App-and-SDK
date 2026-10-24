@@ -14,6 +14,9 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.ai.transcription.AutomaticTranscriptionEngine
 import com.fersaiyan.cyanbridge.data.local.entity.CaptureSession
 import com.fersaiyan.cyanbridge.plugins.handsfreetranslator.HandsFreeTranslatorService
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -218,8 +221,8 @@ class AudioEmulatorHarnessTest {
         val listening = CountDownLatch(1)
         val mode = InstrumentationRegistry.getArguments().getString("proLiveMode") ?: "economy"
         require(mode in setOf("private", "economy")) { "proLiveMode must be private or economy" }
-        val previousEconomy = com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.isEconomy(ctx)
-        com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.setEconomy(ctx, mode == "economy")
+        val previousEconomy = AssistantPrefs.GeminiLive.proEconomy[ctx]
+        AssistantPrefs.GeminiLive.proEconomy[ctx] = mode == "economy"
 
         val client = GeminiLiveClient(
             context = ctx,
@@ -268,7 +271,7 @@ class AudioEmulatorHarnessTest {
             assertTrue(outputText.get().contains("I like red flowers", ignoreCase = true))
         } finally {
             client.close()
-            com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.setEconomy(ctx, previousEconomy)
+            AssistantPrefs.GeminiLive.proEconomy[ctx] = previousEconomy
         }
     }
 }

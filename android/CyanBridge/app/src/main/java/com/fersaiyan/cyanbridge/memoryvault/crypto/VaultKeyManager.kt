@@ -4,28 +4,26 @@ import android.content.Context
 import android.util.Base64
 import com.fersaiyan.cyanbridge.shared.memoryvault.crypto.CipherEnvelope
 import com.fersaiyan.cyanbridge.shared.memoryvault.crypto.VaultCrypto
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs.VaultKeys
+import com.fersaiyan.cyanbridge.shared.prefs.clear
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import java.util.concurrent.atomic.AtomicReference
 
 object VaultKeyManager {
-    private const val PREFS = "memory_vault_keys"
-    private const val KEY_MASTER_DEVICE_WRAPPED = "master_device_wrapped"
-    private const val KEY_PASS_SALT = "passphrase_salt"
-    private const val KEY_MASTER_PASS_WRAPPED = "master_pass_wrapped"
-    private const val KEY_REQUIRES_PASSPHRASE = "requires_passphrase"
-
     private val cachedMasterKey = AtomicReference<ByteArray?>(null)
 
     fun requiresPassphrase(context: Context): Boolean {
-        return prefs(context).getBoolean(KEY_REQUIRES_PASSPHRASE, false)
+        return VaultKeys.requiresPassphrase[context]
     }
 
     fun ensureMasterKeyExists(context: Context) {
-        val p = prefs(context)
-        if (!p.getString(KEY_MASTER_DEVICE_WRAPPED, null).isNullOrBlank()) return
+        if (!VaultKeys.masterDeviceWrapped[context].isNullOrBlank()) return
 
         val master = VaultCrypto.newAesKeyBytes()
         val wrapped = DeviceKeyManager.wrap(master)
-        p.edit().putString(KEY_MASTER_DEVICE_WRAPPED, wrapped.encode()).apply()
+        VaultKeys.masterDeviceWrapped[context] = wrapped.encode()
         cachedMasterKey.set(master.copyOf())
         VaultCrypto.destroy(master)
     }
@@ -34,7 +32,7 @@ object VaultKeyManager {
         ensureMasterKeyExists(context)
         if (requiresPassphrase(context)) return false
 
-        val wrapped = DeviceWrappedBlob.decode(prefs(context).getString(KEY_MASTER_DEVICE_WRAPPED, null)) ?: return false
+        val wrapped = DeviceWrappedBlob.decode(VaultKeys.masterDeviceWrapped[context]) ?: return false
         val master = runCatching { DeviceKeyManager.unwrap(wrapped) }.getOrNull() ?: return false
         replaceCached(master)
         return true
@@ -42,9 +40,8 @@ object VaultKeyManager {
 
     fun unlockWithPassphrase(context: Context, passphrase: CharArray): Boolean {
         ensureMasterKeyExists(context)
-        val p = prefs(context)
-        val saltB64 = p.getString(KEY_PASS_SALT, null)
-        val wrappedB64 = p.getString(KEY_MASTER_PASS_WRAPPED, null)
+        val saltB64 = VaultKeys.passphraseSalt[context]
+        val wrappedB64 = VaultKeys.masterPassWrapped[context]
         if (saltB64.isNullOrBlank() || wrappedB64.isNullOrBlank()) return false
 
         val salt = runCatching { Base64.decode(saltB64, Base64.NO_WRAP) }.getOrNull() ?: return false
@@ -78,24 +75,22 @@ object VaultKeyManager {
         }
         VaultCrypto.destroy(derived)
 
-        prefs(context).edit()
-            .putBoolean(KEY_REQUIRES_PASSPHRASE, true)
-            .putString(KEY_PASS_SALT, Base64.encodeToString(salt, Base64.NO_WRAP))
-            .putString(
-                KEY_MASTER_PASS_WRAPPED,
-                DeviceWrappedBlob(nonce = envelope.nonce, ciphertext = envelope.ciphertext).encode(),
-            )
-            .apply()
+        VaultKeys.edit(context) {
+            this[VaultKeys.requiresPassphrase] = true
+            this[VaultKeys.passphraseSalt] = Base64.encodeToString(salt, Base64.NO_WRAP)
+            this[VaultKeys.masterPassWrapped] =
+                DeviceWrappedBlob(nonce = envelope.nonce, ciphertext = envelope.ciphertext).encode()
+        }
         VaultCrypto.destroy(salt)
         return true
     }
 
     fun clearPassphrase(context: Context) {
-        prefs(context).edit()
-            .putBoolean(KEY_REQUIRES_PASSPHRASE, false)
-            .remove(KEY_PASS_SALT)
-            .remove(KEY_MASTER_PASS_WRAPPED)
-            .apply()
+        VaultKeys.edit(context) {
+            this[VaultKeys.requiresPassphrase] = false
+            this[VaultKeys.passphraseSalt] = null
+            this[VaultKeys.masterPassWrapped] = null
+        }
     }
 
     fun getUnlockedMasterKey(context: Context): ByteArray? {
@@ -114,7 +109,7 @@ object VaultKeyManager {
 
     fun clearAll(context: Context) {
         lock()
-        prefs(context).edit().clear().apply()
+        VaultKeys.clear(context)
     }
 
     private fun replaceCached(bytes: ByteArray) {
@@ -122,7 +117,4 @@ object VaultKeyManager {
         VaultCrypto.destroy(prev)
         VaultCrypto.destroy(bytes)
     }
-
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

@@ -45,9 +45,11 @@ import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.daily.DailyFactsReminderScheduler
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyBulletsSettings
 import com.fersaiyan.cyanbridge.localagent.tasker.TaskerAgentBridge
-import com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs
 import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultService
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
 import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
@@ -73,8 +75,8 @@ data class AutoDiarySettingsState(
             enabled = AutoDiaryService.isEnabled(context),
             taskerObserverAvailable = TaskerAgentBridge.isTaskerUiObserverAvailable(context),
             dailyFactsReminder = LocalAgentPrefs.isDailyFactsReminderEnabled(context),
-            autoSaveDailyFacts = ChatMemoryPrefs.isAutoSaveDailyFactsEnabled(context),
-            extractUserFactCandidates = ChatMemoryPrefs.isExtractUserFactCandidatesEnabled(context),
+            autoSaveDailyFacts = MemoryPrefs.ChatMemory.autoSaveDailyFacts[context],
+            extractUserFactCandidates = MemoryPrefs.ChatMemory.extractUserFactCandidates[context],
             maxTokensPerBullet = DailyBulletsSettings.getMaxTokensPerBullet(context),
             screenOcrRetentionDays = MemoryModeManager.getScreenOcrRetentionDays(context),
             bulletPrompt = DailyBulletsSettings.getBulletPrompt(context),
@@ -158,12 +160,12 @@ class AutoDiarySettingsActivity : AppCompatActivity(), AutoDiarySettingsActions 
 
     override fun onAutoSaveDailyFactsChange(enabled: Boolean) {
         update { copy(autoSaveDailyFacts = enabled) }
-        ChatMemoryPrefs.setAutoSaveDailyFactsEnabled(this, enabled)
+        MemoryPrefs.ChatMemory.autoSaveDailyFacts[this] = enabled
     }
 
     override fun onExtractUserFactCandidatesChange(enabled: Boolean) {
         update { copy(extractUserFactCandidates = enabled) }
-        ChatMemoryPrefs.setExtractUserFactCandidatesEnabled(this, enabled)
+        MemoryPrefs.ChatMemory.extractUserFactCandidates[this] = enabled
     }
 
     override fun onOpenSummary() {

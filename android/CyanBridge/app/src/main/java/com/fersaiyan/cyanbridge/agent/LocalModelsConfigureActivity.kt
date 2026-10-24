@@ -51,6 +51,10 @@ import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsConfigureUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsSection
 import com.fersaiyan.cyanbridge.shared.localmodels.RemoteInferenceUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.StudioBridgeUiState
+import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.shared.ui.localmodels.LocalModelsConfigureScreen
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
@@ -73,10 +77,6 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
     private var generationDraft = GenerationDraft()
     private var remoteDraft = RemoteDraft()
     private var studioDraft = StudioDraft()
-
-    private val sectionPrefs by lazy {
-        getSharedPreferences("local_models_sections", MODE_PRIVATE)
-    }
 
     private val importModelLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -230,7 +230,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
             generationSettingsExpanded = sectionExpanded(LocalModelsSection.GENERATION_SETTINGS),
             download = downloadState,
             hasUnsavedChanges = hasUnsavedChanges,
-            warmupResult = LocalModelsPrefs.getLastBenchmark(this),
+            warmupResult = AgentPrefs.LocalModels.lastBenchmark[this],
             generation = LocalModelGenerationUiState(
                 computeBackendOptions = LocalComputeBackend.entries.map { it.label },
                 computeBackendIndex = generationDraft.computeBackend.ordinal.coerceAtLeast(0),
@@ -276,7 +276,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
     private fun loadGenerationDraft(model: InstalledLocalModel?) {
         if (model == null) {
             val defaults = LocalGenerationSettings.defaultsFor(null)
-            generationDraft = GenerationDraft.from(defaults, LocalMtpMode.AUTO, LocalModelsPrefs.getHuggingFaceToken(this))
+            generationDraft = GenerationDraft.from(defaults, LocalMtpMode.AUTO, LocalModelSettingsRepository.getHuggingFaceToken(this))
             return
         }
         val settings = LocalModelSettingsRepository.getForModel(this, model.id)
@@ -286,7 +286,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
         generationDraft = GenerationDraft.from(
             settings = settings,
             mtpMode = LocalMtpSettingsRepository.getMode(this, model.id),
-            huggingFaceToken = LocalModelsPrefs.getHuggingFaceToken(this),
+            huggingFaceToken = LocalModelSettingsRepository.getHuggingFaceToken(this),
         ).copy(templateIndex = templateIndex)
     }
 
@@ -315,7 +315,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
     }
 
     private fun selectModel(id: String) {
-        LocalModelsPrefs.setSelectedModelId(this, id)
+        LocalModelStorageRepository.setSelectedModelId(this, id)
         loadGenerationDraft(selectedModel())
         hasUnsavedChanges = false
         refreshComposeState()
@@ -390,7 +390,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
 
     private fun saveGenerationSettings(showToast: Boolean): Boolean {
         val model = selectedModel()
-        LocalModelsPrefs.setHuggingFaceToken(this, generationDraft.huggingFaceToken)
+        LocalModelSettingsRepository.setHuggingFaceToken(this, generationDraft.huggingFaceToken)
         if (model == null) {
             if (showToast) Toast.makeText(this, "Saved download token. Install a model to save model settings.", Toast.LENGTH_SHORT).show()
             hasUnsavedChanges = false
@@ -766,15 +766,15 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
     }
 
     private fun toggleSection(section: LocalModelsSection) {
-        val key = sectionKey(section)
-        sectionPrefs.edit().putBoolean(key, !sectionExpanded(section)).apply()
+        sectionPref(section)[this] = !sectionExpanded(section)
         refreshComposeState()
     }
 
     private fun sectionExpanded(section: LocalModelsSection): Boolean =
-        sectionPrefs.getBoolean(sectionKey(section), false)
+        sectionPref(section)[this]
 
-    private fun sectionKey(section: LocalModelsSection) = "section_${section.name.lowercase(Locale.US)}"
+    private fun sectionPref(section: LocalModelsSection) =
+        AppPrefs.LocalModelsSections.expanded[section.name.lowercase(Locale.US)]
 
     private fun requestClose() {
         if (!hasUnsavedChanges) {

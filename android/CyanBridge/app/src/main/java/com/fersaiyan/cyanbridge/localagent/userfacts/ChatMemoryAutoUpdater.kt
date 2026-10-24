@@ -3,6 +3,9 @@ package com.fersaiyan.cyanbridge.localagent.userfacts
 import android.content.Context
 import android.util.Log
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsStorage
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -30,16 +33,16 @@ object ChatMemoryAutoUpdater {
     ): Applied {
         try {
             val now = System.currentTimeMillis()
-            val last = ChatMemoryPrefs.getLastExtractAtMs(context)
+            val last = MemoryPrefs.ChatMemory.lastExtractAtMs[context]
             if (now - last < throttleMs) return Applied()
 
-            if (!ChatMemoryPrefs.isAutoSaveDailyFactsEnabled(context) &&
-                !ChatMemoryPrefs.isExtractUserFactCandidatesEnabled(context)
+            if (!MemoryPrefs.ChatMemory.autoSaveDailyFacts[context] &&
+                !MemoryPrefs.ChatMemory.extractUserFactCandidates[context]
             ) {
                 return Applied()
             }
 
-            ChatMemoryPrefs.setLastExtractAtMs(context, now)
+            MemoryPrefs.ChatMemory.lastExtractAtMs[context] = now
 
             val extracted = ChatMemoryExtractor.extract(
                 context = context,
@@ -54,14 +57,14 @@ object ChatMemoryAutoUpdater {
             var addedCand = 0
             var addedDaily = 0
 
-            if (ChatMemoryPrefs.isExtractUserFactCandidatesEnabled(context) && extracted.candidateUserFacts.isNotEmpty()) {
+            if (MemoryPrefs.ChatMemory.extractUserFactCandidates[context] && extracted.candidateUserFacts.isNotEmpty()) {
                 val before = CandidateUserFactsStorage.load(context, date).size
                 CandidateUserFactsStorage.append(context, date, extracted.candidateUserFacts)
                 val after = CandidateUserFactsStorage.load(context, date).size
                 addedCand = (after - before).coerceAtLeast(0)
             }
 
-            if (ChatMemoryPrefs.isAutoSaveDailyFactsEnabled(context) && extracted.candidateDailyFacts.isNotEmpty()) {
+            if (MemoryPrefs.ChatMemory.autoSaveDailyFacts[context] && extracted.candidateDailyFacts.isNotEmpty()) {
                 val before = DailyFactsStorage.load(context, date).draft.size
                 DailyFactsStorage.appendDraft(context, date, extracted.candidateDailyFacts)
                 val after = DailyFactsStorage.load(context, date).draft.size

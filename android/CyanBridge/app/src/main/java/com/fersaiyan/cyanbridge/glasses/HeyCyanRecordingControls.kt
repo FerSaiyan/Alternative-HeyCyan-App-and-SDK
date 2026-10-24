@@ -2,8 +2,9 @@ package com.fersaiyan.cyanbridge.glasses
 
 import android.content.Context
 import android.util.Log
-import com.fersaiyan.cyanbridge.media.GlassesMediaPrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
+import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.oudmon.ble.base.communication.LargeDataHandler
 
 /** Start/stop on-glasses video and audio recording on HeyCyan glasses. */
@@ -25,10 +26,7 @@ internal class HeyCyanRecordingControls(
         val value = if (start) 0x02 else 0x03
 
         // While video is recording, pause the auto audio loop.
-        if (start) {
-            AutoAudioCapturePrefs.setPausedForVideo(context, true)
-            GlassesMediaPrefs.setVideoRecording(context, true) // optimistic
-        }
+        if (start) setVideoRecording(true) // optimistic
 
         try {
             LargeDataHandler.getInstance().glassesControl(
@@ -37,24 +35,11 @@ internal class HeyCyanRecordingControls(
                 try {
                     if (rsp.dataType == 1) {
                         if (rsp.errorCode == 0) {
-                            when (rsp.workTypeIng) {
-                                2 -> {
-                                    // Glasses are recording video
-                                    GlassesMediaPrefs.setVideoRecording(context, true)
-                                    AutoAudioCapturePrefs.setPausedForVideo(context, true)
-                                }
-                                else -> {
-                                    // Anything other than 2 means not actively recording video.
-                                    GlassesMediaPrefs.setVideoRecording(context, false)
-                                    AutoAudioCapturePrefs.setPausedForVideo(context, false)
-                                }
-                            }
-                        } else {
+                            // Anything other than 2 means not actively recording video.
+                            setVideoRecording(rsp.workTypeIng == 2)
+                        } else if (start) {
                             // Command failed; revert optimistic state.
-                            if (start) {
-                                GlassesMediaPrefs.setVideoRecording(context, false)
-                                AutoAudioCapturePrefs.setPausedForVideo(context, false)
-                            }
+                            setVideoRecording(false)
                         }
                     }
                 } finally {
@@ -66,6 +51,11 @@ internal class HeyCyanRecordingControls(
             GlassesSessionCoordinator.releaseBackgroundCommand(permit)
             Log.e("VideoRecording", "Failed to send video recording command", e)
         }
+    }
+
+    private fun setVideoRecording(recording: Boolean) {
+        MediaPrefs.GlassesMedia.videoRecording[context] = recording
+        AutoAudioCapturePrefs.setPausedForVideo(context, recording)
     }
 
     fun controlAudioRecording(start: Boolean) {

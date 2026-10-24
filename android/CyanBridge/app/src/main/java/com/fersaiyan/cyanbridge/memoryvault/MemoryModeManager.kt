@@ -1,6 +1,9 @@
 package com.fersaiyan.cyanbridge.memoryvault
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs.MemoryMode
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
 import com.fersaiyan.cyanbridge.shared.settings.MemorySourceType
 import com.fersaiyan.cyanbridge.data.local.entity.MemoryModePreferenceEntity
@@ -10,83 +13,44 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 object MemoryModeManager {
-    private const val PREFS = "memory_mode_prefs"
-    private const val KEY_MODE = "mode"
-    private const val KEY_OCR_RETENTION_DAYS = "ocr_retention_days"
-    private const val KEY_OCR_CAPTURE_ENABLED = "ocr_capture_enabled"
-    private const val KEY_SYNC_EXPLICIT = "sync_explicit"
-    private const val KEY_SYNC_DAILY = "sync_daily"
-    private const val KEY_SYNC_OCR = "sync_ocr"
-    private const val KEY_SYNC_DERIVED = "sync_derived"
-
-    fun getSelectedMode(context: Context): MemoryPrivacyMode {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_MODE, MemoryPrivacyMode.PRIVATE_LOCAL.name)
-        return MemoryPrivacyMode.fromRaw(raw)
-    }
+    fun getSelectedMode(context: Context): MemoryPrivacyMode = MemoryMode.mode[context]
 
     fun setSelectedMode(context: Context, mode: MemoryPrivacyMode) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_MODE, mode.name)
-            .apply()
+        MemoryMode.mode[context] = mode
         persistSnapshotBestEffort(context)
     }
 
-    fun getScreenOcrRetentionDays(context: Context): Int {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_OCR_RETENTION_DAYS, 7)
-            .coerceIn(1, 365)
-    }
+    fun getScreenOcrRetentionDays(context: Context): Int = MemoryMode.ocrRetentionDays[context]
 
     fun setScreenOcrRetentionDays(context: Context, days: Int) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putInt(KEY_OCR_RETENTION_DAYS, days.coerceIn(1, 365))
-            .apply()
+        MemoryMode.ocrRetentionDays[context] = days
         persistSnapshotBestEffort(context)
     }
 
-    fun isScreenOcrCaptureEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_OCR_CAPTURE_ENABLED, true)
-    }
+    fun isScreenOcrCaptureEnabled(context: Context): Boolean = MemoryMode.ocrCaptureEnabled[context]
 
     fun setScreenOcrCaptureEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_OCR_CAPTURE_ENABLED, enabled)
-            .apply()
+        MemoryMode.ocrCaptureEnabled[context] = enabled
         persistSnapshotBestEffort(context)
     }
 
-    fun isSourceSyncEnabled(context: Context, sourceType: MemorySourceType): Boolean {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return when (sourceType) {
-            MemorySourceType.EXPLICIT_USER_FACT -> prefs.getBoolean(KEY_SYNC_EXPLICIT, true)
-            MemorySourceType.AUTO_DAILY_FACT -> prefs.getBoolean(KEY_SYNC_DAILY, true)
-            MemorySourceType.SCREEN_OCR -> prefs.getBoolean(KEY_SYNC_OCR, false)
-            MemorySourceType.DERIVED_SUMMARY -> prefs.getBoolean(KEY_SYNC_DERIVED, false)
-            MemorySourceType.IMPORTED_TEXT -> true
-            MemorySourceType.SYSTEM_NOTE -> false
-        }
-    }
+    fun isSourceSyncEnabled(context: Context, sourceType: MemorySourceType): Boolean =
+        syncPref(sourceType)?.get(context) ?: (sourceType == MemorySourceType.IMPORTED_TEXT)
 
     fun setSourceSyncEnabled(context: Context, sourceType: MemorySourceType, enabled: Boolean) {
-        val key = when (sourceType) {
-            MemorySourceType.EXPLICIT_USER_FACT -> KEY_SYNC_EXPLICIT
-            MemorySourceType.AUTO_DAILY_FACT -> KEY_SYNC_DAILY
-            MemorySourceType.SCREEN_OCR -> KEY_SYNC_OCR
-            MemorySourceType.DERIVED_SUMMARY -> KEY_SYNC_DERIVED
-            MemorySourceType.IMPORTED_TEXT -> null
-            MemorySourceType.SYSTEM_NOTE -> null
-        } ?: return
-
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(key, enabled)
-            .apply()
+        val pref = syncPref(sourceType) ?: return
+        pref[context] = enabled
         persistSnapshotBestEffort(context)
+    }
+
+    /** Imported text always syncs and system notes never do, so they have no switch. */
+    private fun syncPref(sourceType: MemorySourceType) = when (sourceType) {
+        MemorySourceType.EXPLICIT_USER_FACT -> MemoryMode.syncExplicit
+        MemorySourceType.AUTO_DAILY_FACT -> MemoryMode.syncDaily
+        MemorySourceType.SCREEN_OCR -> MemoryMode.syncOcr
+        MemorySourceType.DERIVED_SUMMARY -> MemoryMode.syncDerived
+        MemorySourceType.IMPORTED_TEXT -> null
+        MemorySourceType.SYSTEM_NOTE -> null
     }
 
     fun isEncryptedSyncBackendConfigured(): Boolean = false
