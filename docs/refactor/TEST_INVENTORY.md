@@ -1,6 +1,6 @@
 # Test inventory (cyan-refactor)
 
-Line counts are per file. CI legend:
+Line counts are per file; "before" is cyan-refactor at f908faf. CI legend:
 - **U** = `:app:testDebugUnitTest`, which runs every JVM test in app/src/test (android-self-hosted.yml).
 - **P** = `:shared:portabilityTest`, which runs commonTest + portabilityTest (android-self-hosted.yml and the hil scripts).
 - **E** = named in an emulator/HIL CI step.
@@ -11,10 +11,10 @@ Line counts are per file. CI legend:
 
 | Source set | Before (files / lines / @Test) | After |
 |---|---|---|
-| app/src/test | 179 / 15,921 / 857 | 159 / 14,102 / 729 (incl. 2,406 parked in `refactorparity/`) |
+| app/src/test | 179 / 15,921 / 857 | 159 / 14,102 / 729 (incl. 2,406 parked in `refactorparity/`); 160 / 14,522 / 735 after merging the TuneBuds session work |
 | app/src/androidTest | 65 / 8,337 / 139 | 56 / 7,406 / 124 |
 | app/src/androidTestLitertNpu | 4 / 793 / 7 | unchanged (compiled only with `-PlocalLiteRtNpuAarPath`) |
-| shared/src/commonTest | 58 / 4,995 / 291 | 47 / 4,155 / 224 |
+| shared/src/commonTest | 58 / 4,995 / 291 | 47 / 4,155 / 224; 47 / 4,283 / 228 after the TuneBuds merge |
 | shared/src/portabilityTest | 5 / 629 / 12 | unchanged |
 
 ## By core feature
@@ -26,7 +26,7 @@ Line counts are per file. CI legend:
 | Eyevue | shared EyevueProtocolTest (220), EyevuePeerMatchingTest (21), EyevueSetTimeCalendarTest (40, P); EyevueLiveVideoViewTest (31), EyevueMediaProfileTest (30), EyevueReleaseSafetyTest (58) | P, U | Byte-exact packets |
 | MYVU / Mentra / Moyoung | MeizuMyvuConnectionPolicyTest (44), MentraPhotoCaptureTest (24), MoyoungW620ManagerTest (18) | U | Thin (see gaps) |
 | MemoMind | shared MemoMindPacketEncoderTest (140) | P | Byte-exact, but the encoder has no production caller |
-| TuneBuds | app devices/tunebuds/* (519), shared tunebuds/* (327) | U, P | Owned by the TuneBuds agent; untouched |
+| TuneBuds | app devices/tunebuds/* (939), shared tunebuds/* (455) | U, P | Owned by the TuneBuds agent; untouched |
 | Device gating / dashboard | GlassesManagerGatingMatrixTest (93), GlassesDashboardGatingTest (97), DashboardSessionPolicyTest (243), GlassesDeviceTest (83), GlassesFamilyProfileTest (138), GlassesDashboardPresentationTest (45); GlassesDashboardScreenTest (479, androidTest) | P, — | |
 | Media sync / glasses network | GlassesNetworkSessionCoreTest (307), GlassesLinkArbiterTest (196), GlassesWifiErrorPolicyTest (41), GlassesNetworkAddressingTest (95), GlassesWifiNotifyTest (46), HeyCyanP2pPeerMatchingTest (76), AdaptiveP2pSyncTest (98), GlassesMediaSyncHelpersTest (57), OggOpusWrapperTest (127), OggOpusWrapperDigestTest (36), GlassesNetworkOwnershipSourceTest (75) | P, U | |
 | OTA | BleDfuManagerTest (183), OtaFirmwareTargetTest (149), OtaHttpServerTest (74), WifiOtaModeResponseTest (27), OtaSectionUiStateTest (87) | U | |
