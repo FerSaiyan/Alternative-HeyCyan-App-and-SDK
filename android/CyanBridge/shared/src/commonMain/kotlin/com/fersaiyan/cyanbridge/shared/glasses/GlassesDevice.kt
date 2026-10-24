@@ -12,6 +12,7 @@ import com.fersaiyan.cyanbridge.bridge.core.OnboardRecording
 import com.fersaiyan.cyanbridge.bridge.core.RecordingSettingsControl
 import com.fersaiyan.cyanbridge.bridge.core.VolumeReporting
 import com.fersaiyan.cyanbridge.bridge.core.WearingDetectionControl
+import com.fersaiyan.cyanbridge.shared.assistant.AssistantGlassesHooks
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 
 /**
@@ -36,6 +37,9 @@ interface GlassesDevice {
     val recordingSettings: RecordingSettingsControl? get() = null
     val wearingDetection: WearingDetectionControl? get() = null
     val aiPhoto: AiPhotoCapture? get() = null
+
+    /** What the glasses need around an assistant answer (for example HeyCyan AI-speak modes). */
+    val assistantHooks: AssistantGlassesHooks get() = AssistantGlassesHooks.None
 
     val canTakeAiPhoto: Boolean get() = aiPhoto != null
 

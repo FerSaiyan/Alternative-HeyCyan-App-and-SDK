@@ -6,6 +6,7 @@ import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.bridge.core.MediaSyncTransport
 import com.fersaiyan.cyanbridge.bridge.core.RecordingSettingsControl
 import com.fersaiyan.cyanbridge.bridge.core.WearingDetectionControl
+import com.fersaiyan.cyanbridge.shared.assistant.AssistantGlassesHooks
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -77,5 +78,6 @@ class GlassesDeviceTest {
         ).forEach { assertFalse(device.handle(it), "$it") }
         assertTrue(calls.isEmpty())
         assertFalse(device.canTakeAiPhoto)
+        assertEquals(AssistantGlassesHooks.None, device.assistantHooks)
     }
 }
