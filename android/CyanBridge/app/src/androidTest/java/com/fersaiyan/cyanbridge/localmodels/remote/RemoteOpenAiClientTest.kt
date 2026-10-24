@@ -2,7 +2,9 @@ package com.fersaiyan.cyanbridge.localmodels.remote
 
 import java.io.File
 import java.util.Base64
+import kotlinx.serialization.json.JsonObject
 import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -114,7 +116,11 @@ class RemoteOpenAiClientTest {
         }
     }
 
-    private fun org.json.JSONObject.userContentParts(): JSONArray {
+    private fun JsonObject.getJSONArray(name: String): JSONArray = JSONObject(toString()).getJSONArray(name)
+
+    private fun JsonObject.getBoolean(name: String): Boolean = JSONObject(toString()).getBoolean(name)
+
+    private fun JsonObject.userContentParts(): JSONArray {
         return getJSONArray("messages")
             .getJSONObject(0)
             .getJSONArray("content")

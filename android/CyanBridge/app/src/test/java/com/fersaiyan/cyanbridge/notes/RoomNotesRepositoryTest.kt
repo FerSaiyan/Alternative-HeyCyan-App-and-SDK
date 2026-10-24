@@ -3,7 +3,7 @@ package com.fersaiyan.cyanbridge.notes
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.fersaiyan.cyanbridge.ai.summarization.FakeSummarizationService
+import com.fersaiyan.cyanbridge.shared.notes.FakeSummarizationService
 import com.fersaiyan.cyanbridge.data.local.AppDatabase
 import kotlinx.coroutines.runBlocking
 import org.junit.After

@@ -65,6 +65,13 @@ class WqRecordParser {
         }
     }
 
+    /**
+     * Parses one frame from a BLE notification on characteristic 0x2020.
+     *
+     * Returns null when the frame is shorter than magic + frameCnt or has no payload.
+     * Because [MAGIC_BYTE] is still a placeholder, a magic mismatch is only logged
+     * unless [strict] is true, so captured data can still be analysed.
+     */
     fun parse(data: ByteArray, strict: Boolean = false): WqFrame? {
         if (data.size < MIN_FRAME_SIZE) {
             PlatformLogger.w(TAG, "Frame too short: ${data.size} bytes (minimum $MIN_FRAME_SIZE)")

@@ -154,7 +154,7 @@ class AndroidMediaRecordRepositoryWrapper : MediaRecordRepository {
 
 class AndroidChatAiService : ChatAiService {
     override suspend fun chat(messages: List<ChatMessage>, model: String?): ChatResponse {
-        // TODO: Delegate to CliRelayClient or DirectApiClient
+        // TODO: Delegate to CliRelayClient or RemoteOpenAiClient
         return ChatResponse(
             message = ChatMessage("assistant", "Android AI service - connect to relay or local model."),
         )

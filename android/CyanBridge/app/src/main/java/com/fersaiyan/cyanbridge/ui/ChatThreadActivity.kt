@@ -3,8 +3,6 @@ package com.fersaiyan.cyanbridge.ui
 import android.Manifest
 import android.content.Intent
 import android.graphics.BitmapFactory
-import android.media.AudioFormat
-import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Bundle
@@ -33,10 +31,15 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.ai.router.AiAssistantRouter as RelayAiAssistantRouter
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
+import com.fersaiyan.cyanbridge.audio.AudioSessionHandle
+import com.fersaiyan.cyanbridge.audio.PcmRecorder
+import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePreference
+import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import com.fersaiyan.cyanbridge.shared.chat.ChatRole
 import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.chat.ChatStoreRepository
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.context.LocalAgentContextBuilder
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsReviewProtocol
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsReviewProtocol.ReviewBatchItem
@@ -121,7 +124,8 @@ class ChatThreadActivity : AppCompatActivity() {
     private val queuedLocalPrompts = java.util.ArrayDeque<QueuedLocalPrompt>()
     private val pendingImagePaths = mutableListOf<String>()
     private var pendingAudioPath: String? = null
-    private var audioRecorder: AudioRecord? = null
+    private var audioRecorder: PcmRecorder? = null
+    private var audioSession: AudioSessionHandle? = null
     private var audioRecordingThread: Thread? = null
     private var mediaRecordingFilePath: String? = null
     @Volatile
@@ -792,26 +796,18 @@ class ChatThreadActivity : AppCompatActivity() {
         mediaRecordingFilePath = outFile.absolutePath
 
         try {
-            val minBuffer = AudioRecord.getMinBufferSize(
-                AUDIO_SAMPLE_RATE_HZ,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
+            // A voice note is a one-shot capture: Live and voice plugins pause while it records.
+            val session = AudioSessionCoordinator.tryOpen(
+                this,
+                AudioSessionRequest.VoiceCapture("ChatThreadActivity", route = AudioRoutePreference.SYSTEM_DEFAULT),
+            ) ?: throw IllegalStateException("Microphone is in use")
+            audioSession = session
+            val recorder = session.openRecorder(
+                source = MediaRecorder.AudioSource.MIC,
+                sampleRateHz = AUDIO_SAMPLE_RATE_HZ,
+                bufferBytes = { it.coerceAtLeast(AUDIO_SAMPLE_RATE_HZ) },
             )
-            if (minBuffer <= 0) {
-                throw IllegalStateException("AudioRecord buffer init failed: $minBuffer")
-            }
-
-            val recorder = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                AUDIO_SAMPLE_RATE_HZ,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                minBuffer.coerceAtLeast(AUDIO_SAMPLE_RATE_HZ),
-            )
-            if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-                runCatching { recorder.release() }
-                throw IllegalStateException("AudioRecord not initialized")
-            }
+            val minBuffer = recorder.minBufferBytes
 
             audioRecorder = recorder
             isMediaRecording = true
@@ -824,13 +820,13 @@ class ChatThreadActivity : AppCompatActivity() {
                 runCatching {
                     FileOutputStream(outFile).use { output ->
                         output.write(ByteArray(WAV_HEADER_BYTES))
-                        recorder.startRecording()
+                        recorder.start()
                         while (isMediaRecording) {
                             val read = recorder.read(ioBuffer, 0, ioBuffer.size)
                             if (read > 0) {
                                 output.write(ioBuffer, 0, read)
                                 pcmBytesWritten += read.toLong()
-                            } else if (read == AudioRecord.ERROR_BAD_VALUE || read == AudioRecord.ERROR_INVALID_OPERATION) {
+                            } else if (read == android.media.AudioRecord.ERROR_BAD_VALUE || read == android.media.AudioRecord.ERROR_INVALID_OPERATION) {
                                 throw IllegalStateException("Audio read failed: $read")
                             }
                         }
@@ -839,8 +835,7 @@ class ChatThreadActivity : AppCompatActivity() {
                     runCatching { outFile.delete() }
                 }
 
-                runCatching { recorder.stop() }
-                runCatching { recorder.release() }
+                recorder.close()
 
                 if (outFile.exists() && pcmBytesWritten > 0L) {
                     runCatching {
@@ -867,8 +862,9 @@ class ChatThreadActivity : AppCompatActivity() {
                 stopAudioRecording(saveAsAttachment = true)
             }.also { mainHandler.postDelayed(it, 30_000L) }
         } catch (t: Throwable) {
-            runCatching { audioRecorder?.release() }
             audioRecorder = null
+            audioSession?.close()
+            audioSession = null
             audioRecordingThread = null
             isMediaRecording = false
             mediaRecordingFilePath = null
@@ -893,9 +889,9 @@ class ChatThreadActivity : AppCompatActivity() {
         if (worker != null && worker.isAlive) {
             runCatching { worker.join(1200L) }
         }
-        if (recorder != null && recorder.state == AudioRecord.STATE_INITIALIZED) {
-            runCatching { recorder.release() }
-        }
+        recorder?.close()
+        audioSession?.close()
+        audioSession = null
 
         val audioFile = path?.let { File(it) }
         if (saveAsAttachment && !path.isNullOrBlank()) {

@@ -4,7 +4,7 @@ import android.content.Context
 import com.fersaiyan.cyanbridge.data.local.entity.PendingAction
 import com.fersaiyan.cyanbridge.localagent.LocalAgentAction
 import com.fersaiyan.cyanbridge.localagent.LocalAgentDeviceState
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.TaskerExecutionBackend
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import org.json.JSONObject

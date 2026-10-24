@@ -4,20 +4,18 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.AudioDeviceInfo
-import android.media.AudioManager
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.ai.AiQuestionForegroundService
-import kotlinx.coroutines.CompletableDeferred
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
+import com.fersaiyan.cyanbridge.audio.TtsSpeaker
+import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
@@ -48,10 +46,7 @@ class LocalAgentApprovalVoiceSession(
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private val externalReplies = Channel<String>(Channel.UNLIMITED)
-    private val ttsReady = CompletableDeferred<Boolean>()
-    private val tts = TextToSpeech(appContext) { status ->
-        if (!ttsReady.isCompleted) ttsReady.complete(status == TextToSpeech.SUCCESS)
-    }
+    private val tts = TtsSpeaker(appContext, TAG)
 
     fun submitExternalReply(reply: String) {
         val trimmed = reply.trim()
@@ -97,39 +92,33 @@ class LocalAgentApprovalVoiceSession(
     }
 
     private suspend fun speakAndAwait(text: String) {
-        val ready = withTimeoutOrNull(TTS_INIT_TIMEOUT_MS) { ttsReady.await() } == true
-        if (!ready) return
+        if (!tts.awaitReady(TTS_INIT_TIMEOUT_MS)) return
         withContext(Dispatchers.Main.immediate) {
-            suspendCancellableCoroutine<Unit> { continuation ->
-                val id = "local_agent_approval_${UUID.randomUUID()}"
-                tts.language = Locale.getDefault()
-                tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) = Unit
-                    override fun onDone(utteranceId: String?) {
-                        if (utteranceId == id && continuation.isActive) continuation.resume(Unit)
-                    }
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        if (utteranceId == id && continuation.isActive) continuation.resume(Unit)
-                    }
-                    override fun onError(utteranceId: String?, errorCode: Int) {
-                        if (utteranceId == id && continuation.isActive) continuation.resume(Unit)
-                    }
-                })
-                val result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, Bundle(), id)
-                if (result != TextToSpeech.SUCCESS && continuation.isActive) continuation.resume(Unit)
-                continuation.invokeOnCancellation { tts.stop() }
-            }
+            tts.setLanguage(Locale.getDefault())
+            tts.speakAndAwait(
+                text = text,
+                utteranceId = "local_agent_approval_${UUID.randomUUID()}",
+                readyTimeoutMs = 0L,
+                params = Bundle(),
+            )
         }
     }
 
     private suspend fun recognizeOnce(timeoutMs: Long): String? = withContext(Dispatchers.Main.immediate) {
+        val session = AudioSessionCoordinator.tryOpen(appContext, AudioSessionRequest.VoiceCapture(TAG))
+            ?: return@withContext null
+        try {
+            session.connectRoute()
+            recognizeWithRoute(timeoutMs)
+        } finally {
+            session.close()
+        }
+    }
+
+    private suspend fun recognizeWithRoute(timeoutMs: Long): String? =
         suspendCancellableCoroutine { continuation ->
-            val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val route = prepareVoiceRoute(audioManager)
             val recognizer = runCatching { SpeechRecognizer.createSpeechRecognizer(appContext) }.getOrNull()
             if (recognizer == null) {
-                restoreVoiceRoute(audioManager, route)
                 continuation.resume(null)
                 return@suspendCancellableCoroutine
             }
@@ -140,7 +129,6 @@ class LocalAgentApprovalVoiceSession(
                     finished = true
                     runCatching { recognizer.cancel() }
                     runCatching { recognizer.destroy() }
-                    restoreVoiceRoute(audioManager, route)
                     if (continuation.isActive) continuation.resume(null)
                 }
             }
@@ -151,7 +139,6 @@ class LocalAgentApprovalVoiceSession(
                 finished = true
                 mainHandler.removeCallbacks(timeout)
                 runCatching { recognizer.destroy() }
-                restoreVoiceRoute(audioManager, route)
                 if (continuation.isActive) continuation.resume(value?.trim()?.takeIf { it.isNotBlank() })
             }
 
@@ -185,67 +172,18 @@ class LocalAgentApprovalVoiceSession(
                 mainHandler.removeCallbacks(timeout)
                 runCatching { recognizer.cancel() }
                 runCatching { recognizer.destroy() }
-                restoreVoiceRoute(audioManager, route)
             }
         }
-    }
-
-    private data class VoiceRoute(
-        val previousMode: Int,
-        val previousCommunicationDevice: AudioDeviceInfo?,
-        val legacyScoStarted: Boolean,
-    )
-
-    private fun prepareVoiceRoute(audioManager: AudioManager): VoiceRoute {
-        val previousMode = audioManager.mode
-        val previousCommunicationDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            audioManager.communicationDevice
-        } else null
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-
-        var legacyScoStarted = false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val bluetooth = audioManager.availableCommunicationDevices.firstOrNull {
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-            }
-            if (bluetooth != null) runCatching { audioManager.setCommunicationDevice(bluetooth) }
-        } else {
-            @Suppress("DEPRECATION")
-            runCatching {
-                audioManager.startBluetoothSco()
-                audioManager.isBluetoothScoOn = true
-                legacyScoStarted = true
-            }
-        }
-        return VoiceRoute(previousMode, previousCommunicationDevice, legacyScoStarted)
-    }
-
-    private fun restoreVoiceRoute(audioManager: AudioManager, route: VoiceRoute) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            runCatching {
-                val previous = route.previousCommunicationDevice
-                if (previous != null) audioManager.setCommunicationDevice(previous)
-                else audioManager.clearCommunicationDevice()
-            }
-        } else if (route.legacyScoStarted) {
-            @Suppress("DEPRECATION")
-            runCatching {
-                audioManager.isBluetoothScoOn = false
-                audioManager.stopBluetoothSco()
-            }
-        }
-        audioManager.mode = route.previousMode
-    }
 
     override fun close() {
         externalReplies.close()
         AiQuestionForegroundService.stop(appContext)
-        runCatching { tts.stop() }
-        runCatching { tts.shutdown() }
+        tts.shutdown()
     }
 
     companion object {
         const val DEFAULT_LISTEN_TIMEOUT_MS = 30_000L
         private const val TTS_INIT_TIMEOUT_MS = 5_000L
+        private const val TAG = "LocalAgentApprovalVoice"
     }
 }

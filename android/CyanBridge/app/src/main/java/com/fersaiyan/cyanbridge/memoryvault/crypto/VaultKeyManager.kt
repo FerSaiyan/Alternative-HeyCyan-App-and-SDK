@@ -2,6 +2,8 @@ package com.fersaiyan.cyanbridge.memoryvault.crypto
 
 import android.content.Context
 import android.util.Base64
+import com.fersaiyan.cyanbridge.shared.memoryvault.crypto.CipherEnvelope
+import com.fersaiyan.cyanbridge.shared.memoryvault.crypto.VaultCrypto
 import java.util.concurrent.atomic.AtomicReference
 
 object VaultKeyManager {

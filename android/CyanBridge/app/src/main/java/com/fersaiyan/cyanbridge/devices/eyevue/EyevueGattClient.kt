@@ -13,6 +13,10 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueFrame
+import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueFrameDecoder
+import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevuePhotoAssembler
+import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueProtocol
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +32,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import java.io.IOException
+import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -44,6 +49,11 @@ class EyevueGattClient(
 ) {
     companion object {
         private const val TAG = "EyevueGatt"
+        private val SERVICE_UUID: UUID = UUID.fromString(EyevueProtocol.SERVICE_UUID)
+        private val COMMAND_WRITE_UUID: UUID = UUID.fromString(EyevueProtocol.COMMAND_WRITE_UUID)
+        private val COMMAND_NOTIFY_UUID: UUID = UUID.fromString(EyevueProtocol.COMMAND_NOTIFY_UUID)
+        private val PHOTO_NOTIFY_UUID: UUID = UUID.fromString(EyevueProtocol.PHOTO_NOTIFY_UUID)
+        private val CCCD_UUID: UUID = UUID.fromString(EyevueProtocol.CCCD_UUID)
         private const val OPERATION_TIMEOUT_MS = 10_000L
         private val ENABLE_NOTIFICATION_VALUE = byteArrayOf(0x01, 0x00)
     }
@@ -200,12 +210,12 @@ class EyevueGattClient(
             val hex = value.joinToString("") { "%02X".format(it) }
             Log.d(TAG, "Eyevue notify uuid=${characteristic.uuid} len=${value.size} hex=$hex")
             when (characteristic.uuid) {
-                EyevueProtocol.COMMAND_NOTIFY_UUID -> {
+                COMMAND_NOTIFY_UUID -> {
                     val frames = decoder.append(value)
                     Log.d(TAG, "Eyevue decoded ${frames.size} frame(s) from ${value.size} bytes")
                     frames.forEach(_frames::tryEmit)
                 }
-                EyevueProtocol.PHOTO_NOTIFY_UUID -> {
+                PHOTO_NOTIFY_UUID -> {
                     photoPacketListener?.invoke(value)
                     photoAssembler.append(value)?.let { image ->
                         photoListener?.invoke(image)
@@ -367,16 +377,16 @@ class EyevueGattClient(
     }
 
     private fun resolveCharacteristics(currentGatt: BluetoothGatt) {
-        val service = currentGatt.getService(EyevueProtocol.SERVICE_UUID)
+        val service = currentGatt.getService(SERVICE_UUID)
             ?: run {
                 writeCharacteristic = null
                 notifyCharacteristic = null
                 photoNotifyCharacteristic = null
                 return
             }
-        writeCharacteristic = service.getCharacteristic(EyevueProtocol.COMMAND_WRITE_UUID)
-        notifyCharacteristic = service.getCharacteristic(EyevueProtocol.COMMAND_NOTIFY_UUID)
-        photoNotifyCharacteristic = service.getCharacteristic(EyevueProtocol.PHOTO_NOTIFY_UUID)
+        writeCharacteristic = service.getCharacteristic(COMMAND_WRITE_UUID)
+        notifyCharacteristic = service.getCharacteristic(COMMAND_NOTIFY_UUID)
+        photoNotifyCharacteristic = service.getCharacteristic(PHOTO_NOTIFY_UUID)
     }
 
     @SuppressLint("MissingPermission")
@@ -385,7 +395,7 @@ class EyevueGattClient(
         characteristic: BluetoothGattCharacteristic,
         label: String,
     ) {
-        val cccd = characteristic.getDescriptor(EyevueProtocol.CCCD_UUID)
+        val cccd = characteristic.getDescriptor(CCCD_UUID)
             ?: throw IOException("Eyevue $label CCCD was not found")
         withTimeout(OPERATION_TIMEOUT_MS) {
             suspendCancellableCoroutine<Unit> { continuation ->

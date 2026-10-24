@@ -21,7 +21,7 @@ import com.fersaiyan.cyanbridge.ui.OfficialHeyCyanWarningDialog
 import com.fersaiyan.cyanbridge.localagent.AudioSessionCoordinator
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
 import com.fersaiyan.cyanbridge.audio.MeetingCapturePrefs
 import com.fersaiyan.cyanbridge.audio.MeetingCaptureService
@@ -218,9 +218,9 @@ import com.fersaiyan.cyanbridge.ai.router.AssistantIntent
 import com.fersaiyan.cyanbridge.ai.router.AssistantRequest
 import com.fersaiyan.cyanbridge.ai.router.AssistantRequestRouter
 import com.fersaiyan.cyanbridge.ai.router.AssistantRequestSource
-import com.fersaiyan.cyanbridge.ai.router.AssistantSpeechPolicy
-import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoute
-import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoutingPolicy
+import com.fersaiyan.cyanbridge.shared.ai.AssistantSpeechPolicy
+import com.fersaiyan.cyanbridge.shared.ai.GlassesAssistantRoute
+import com.fersaiyan.cyanbridge.shared.ai.GlassesAssistantRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
 import com.fersaiyan.cyanbridge.ai.router.RelayErrorLocalizer
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveActivity

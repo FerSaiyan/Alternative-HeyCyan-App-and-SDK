@@ -1,16 +1,15 @@
 package com.fersaiyan.cyanbridge.shared.ai
 
 import com.fersaiyan.cyanbridge.shared.platform.PlatformHttpClient
+import com.fersaiyan.cyanbridge.shared.platform.PlatformHttpTransport
 import com.fersaiyan.cyanbridge.shared.platform.PlatformLogger
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -20,35 +19,22 @@ const val DEFAULT_RELAY_URL = "https://cyanbridge.vercel.app"
 private val relayJson = Json { ignoreUnknownKeys = true }
 private val relayHeaders = mapOf("Content-Type" to "application/json; charset=UTF-8")
 
-/** Chat through the relay: POST /chat. Errors come back as an "Error: …" reply. */
+/** Chat through the relay: POST /chat (see [RelayClient]). Errors come back as an "Error: …" reply. */
 class RelayChatAiService(
-    private val baseUrl: String = DEFAULT_RELAY_URL,
-    private val httpClient: PlatformHttpClient = PlatformHttpClient(),
+    baseUrl: String = DEFAULT_RELAY_URL,
+    httpClient: PlatformHttpClient = PlatformHttpClient(),
 ) : ChatAiService {
+    private val client = relayClient(baseUrl, httpClient)
+
     override suspend fun chat(messages: List<ChatMessage>, model: String?): ChatResponse {
-        val reply = try {
-            val body = buildJsonObject {
-                putJsonArray("messages") {
-                    messages.forEach { message ->
-                        addJsonObject {
-                            put("role", message.role)
-                            put("content", message.content)
-                        }
-                    }
-                }
-                put("prompt", messages.lastOrNull { it.role.equals("user", ignoreCase = true) }?.content.orEmpty())
-                model?.trim()?.takeIf { it.isNotBlank() }?.let { put("model", it) }
-            }
-            val response = httpClient.post("$baseUrl/chat", body.toString(), relayHeaders)
-            if (response.isSuccessful) {
-                relayText(response.body, "reply", "response", "message")
-            } else {
-                PlatformLogger.e(TAG, "Chat request failed: ${response.statusCode}")
-                "Error: Server returned ${response.statusCode}"
-            }
-        } catch (e: Exception) {
-            PlatformLogger.e(TAG, "Chat request error", e)
-            "Error: ${e.message ?: "Unknown error"}"
+        val reply = client.chat(
+            chatId = null,
+            prompt = messages.lastOrNull { it.role.equals("user", ignoreCase = true) }?.content.orEmpty(),
+            messages = messages.map { mapOf("role" to it.role, "content" to it.content) },
+            modelOverride = model,
+        ).getOrElse {
+            PlatformLogger.e(TAG, "Chat request error", it)
+            "Error: ${it.message ?: "Unknown error"}"
         }
         return ChatResponse(message = ChatMessage("assistant", reply))
     }
@@ -86,33 +72,29 @@ class RelayVoiceAiService(
     }
 }
 
-/** Image questions through the relay: POST /image-query. Errors come back as "Error: …". */
+/** Image questions through the relay: POST /image-query (see [RelayClient]). Errors come back as "Error: …". */
 class RelayImageAiService(
-    private val baseUrl: String = DEFAULT_RELAY_URL,
-    private val httpClient: PlatformHttpClient = PlatformHttpClient(),
+    baseUrl: String = DEFAULT_RELAY_URL,
+    httpClient: PlatformHttpClient = PlatformHttpClient(),
 ) : ImageAiService {
-    @OptIn(ExperimentalEncodingApi::class)
-    override suspend fun analyzeImage(imageData: ByteArray, prompt: String, mimeType: String): String = try {
-        val body = buildJsonObject {
-            put("imageBase64", Base64.encode(imageData))
-            put("filename", if (mimeType.equals("image/png", ignoreCase = true)) "image.png" else "image.jpg")
-            put("prompt", prompt)
+    private val client = relayClient(baseUrl, httpClient)
+
+    override suspend fun analyzeImage(imageData: ByteArray, prompt: String, mimeType: String): String {
+        val filename = if (mimeType.equals("image/png", ignoreCase = true)) "image.png" else "image.jpg"
+        return client.imageQuery(RelayMedia(filename) { imageData }, prompt).getOrElse {
+            PlatformLogger.e(TAG, "Image analysis error", it)
+            "Error: ${it.message ?: "Unknown error"}"
         }
-        val response = httpClient.post("$baseUrl/image-query", body.toString(), relayHeaders)
-        if (response.isSuccessful) {
-            relayText(response.body, "reply", "response", "text")
-        } else {
-            PlatformLogger.e(TAG, "Image analysis failed: ${response.statusCode}")
-            "Error: Server returned ${response.statusCode}"
-        }
-    } catch (e: Exception) {
-        PlatformLogger.e(TAG, "Image analysis error", e)
-        "Error: ${e.message ?: "Unknown error"}"
     }
 
     private companion object {
         const val TAG = "RelayImageAi"
     }
+}
+
+private fun relayClient(baseUrl: String, httpClient: PlatformHttpClient): RelayClient {
+    val transport = PlatformHttpTransport(httpClient)
+    return RelayClient(RelaySettingsSnapshot(baseUrl), transport, RelayCapabilitiesCache(transport))
 }
 
 /** Models offered by the relay: GET /models, cached; the two relay defaults when it fails. */

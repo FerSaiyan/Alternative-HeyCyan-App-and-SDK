@@ -3,7 +3,7 @@ package com.fersaiyan.cyanbridge.ui.debug
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Before

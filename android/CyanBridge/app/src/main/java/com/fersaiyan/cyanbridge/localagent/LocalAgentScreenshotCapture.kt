@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.localagent
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull

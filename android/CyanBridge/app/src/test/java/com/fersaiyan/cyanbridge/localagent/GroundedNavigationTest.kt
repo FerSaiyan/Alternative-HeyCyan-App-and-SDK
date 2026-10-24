@@ -46,8 +46,9 @@ class GroundedNavigationTest {
 
     @Test fun `populated Chrome fixture form submits its Search button without retapping label`() {
         val original = observation("com.android.chrome", "Search news", "latest smartglasses news", "Search")
-        val form = original.copy(screenSnapshot = original.screenSnapshot!!.copy(nodes =
-            original.screenSnapshot.nodes.map { node ->
+        val snapshot = original.screenSnapshot!!
+        val form = original.copy(screenSnapshot = snapshot.copy(nodes =
+            snapshot.nodes.map { node ->
                 if (node.index == 1) node.copy(viewId = "query", isEditable = true) else node
             }))
         assertEquals(listOf(LocalAgentAction.ClickCoord(240, 125)),

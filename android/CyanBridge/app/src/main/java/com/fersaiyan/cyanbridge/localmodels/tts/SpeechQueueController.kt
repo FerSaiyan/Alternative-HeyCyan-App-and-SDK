@@ -1,13 +1,13 @@
 package com.fersaiyan.cyanbridge.localmodels.tts
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
-import android.media.AudioManager
-import android.os.Build
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
+import com.fersaiyan.cyanbridge.audio.AudioSessionHandle
+import com.fersaiyan.cyanbridge.shared.audio.AudioFocusMode
+import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -57,8 +57,7 @@ class SpeechQueueController(
 
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private var audioFocusRequest: AudioFocusRequest? = null
+    private var playbackSession: AudioSessionHandle? = null
     private var hasAudioFocus = false
     private var completionNotifiedSessionId = 0L
 
@@ -262,34 +261,18 @@ class SpeechQueueController(
 
     private fun requestAudioFocus() {
         if (hasAudioFocus) return
-        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build(),
-                )
-                .build()
-            audioFocusRequest = request
-            audioManager.requestAudioFocus(request)
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.requestAudioFocus(null, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-        }
-        hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        val session = playbackSession ?: AudioSessionCoordinator.tryOpen(
+            context,
+            AudioSessionRequest.Playback(TAG, focus = AudioFocusMode.TRANSIENT),
+        ).also { playbackSession = it }
+        hasAudioFocus = session?.requestFocus() == true
         if (!hasAudioFocus) Log.w(TAG, "Audio focus was not granted; continuing with system TTS routing")
     }
 
     private fun abandonAudioFocus() {
-        if (!hasAudioFocus) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest?.let(audioManager::abandonAudioFocusRequest)
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.abandonAudioFocus(null)
-        }
-        audioFocusRequest = null
+        val session = playbackSession ?: return
+        playbackSession = null
         hasAudioFocus = false
+        session.close()
     }
 }

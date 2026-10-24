@@ -1,9 +1,10 @@
 package com.fersaiyan.cyanbridge.localagent
 
 import android.content.Context
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
+import com.fersaiyan.cyanbridge.audio.TtsProgressObserver
+import com.fersaiyan.cyanbridge.audio.TtsSpeaker
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
@@ -23,49 +24,33 @@ interface LocalAgentTtsEngine {
     fun shutdown()
 }
 
-/** [LocalAgentTtsEngine] backed by the platform [TextToSpeech]. */
+/** [LocalAgentTtsEngine] backed by the shared [TtsSpeaker]. */
 class AndroidLocalAgentTtsEngine(
     context: Context,
     onInit: (ok: Boolean) -> Unit,
 ) : LocalAgentTtsEngine {
 
-    private val tts = TextToSpeech(context) { status ->
-        onInit(status == TextToSpeech.SUCCESS)
-    }
+    private val speaker = TtsSpeaker(context, LOCAL_AGENT_SERVICE_LOG_TAG, onInit = { _, ok -> onInit(ok) })
 
     override fun setLanguage(locale: Locale) {
-        tts.language = locale
+        speaker.setLanguage(locale)
     }
 
-    override fun speak(text: String, utteranceId: String): Boolean {
-        return tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) == TextToSpeech.SUCCESS
-    }
+    override fun speak(text: String, utteranceId: String): Boolean = speaker.speak(text, utteranceId)
 
     override fun setOnUtteranceFinished(onFinished: (utteranceId: String?) -> Unit) {
-        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
-
-            override fun onDone(doneId: String?) {
-                onFinished(doneId)
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(errorId: String?) {
-                onFinished(errorId)
-            }
-
-            override fun onError(errorId: String?, errorCode: Int) {
-                onFinished(errorId)
-            }
-        })
+        speaker.progressObserver = object : TtsProgressObserver {
+            override fun onDone(utteranceId: String?) = onFinished(utteranceId)
+            override fun onError(utteranceId: String?, errorCode: Int?) = onFinished(utteranceId)
+        }
     }
 
     override fun stop() {
-        tts.stop()
+        speaker.stop()
     }
 
     override fun shutdown() {
-        tts.shutdown()
+        speaker.shutdown()
     }
 }
 
@@ -127,7 +112,7 @@ class LocalAgentSpeechOutput(
             false
         }
         if (!ok) return
-        AudioSessionCoordinator.markBusy()
+        AudioSessionCoordinator.markSpeechBusy()
 
         val utteranceId = "local_agent_result_${clock()}"
         val completed = CompletableDeferred<Unit>()
@@ -139,7 +124,7 @@ class LocalAgentSpeechOutput(
             engine?.speak(clean, utteranceId) == true
         }.getOrDefault(false)
         if (!queued) {
-            AudioSessionCoordinator.markIdle()
+            AudioSessionCoordinator.markSpeechIdle()
             return
         }
 
@@ -152,7 +137,7 @@ class LocalAgentSpeechOutput(
                 if (withTimeoutOrNull(250L) { completed.await() } != null) return
             }
         } finally {
-            AudioSessionCoordinator.markIdle()
+            AudioSessionCoordinator.markSpeechIdle()
         }
     }
 

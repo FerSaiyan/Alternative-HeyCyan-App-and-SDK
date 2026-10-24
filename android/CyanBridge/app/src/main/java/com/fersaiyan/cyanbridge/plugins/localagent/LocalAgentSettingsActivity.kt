@@ -55,7 +55,7 @@ import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
 import com.fersaiyan.cyanbridge.bridge.notifications.NotificationForwarderService
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 import com.fersaiyan.cyanbridge.localagent.LocalAgentShizukuFallback
 import com.fersaiyan.cyanbridge.localagent.LocalAgentTaskHistory
 import com.fersaiyan.cyanbridge.localagent.LocalAgentTelegramService

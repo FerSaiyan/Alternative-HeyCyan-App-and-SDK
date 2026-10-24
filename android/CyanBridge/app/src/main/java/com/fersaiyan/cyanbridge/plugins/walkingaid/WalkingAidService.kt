@@ -8,13 +8,13 @@ import android.graphics.BitmapFactory
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.IBinder
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ServiceCompat
 import androidx.fragment.app.FragmentActivity
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
+import com.fersaiyan.cyanbridge.audio.TtsSpeaker
+import com.fersaiyan.cyanbridge.audio.TtsUtteranceOutcome
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
@@ -51,7 +51,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -67,7 +66,6 @@ class WalkingAidService : Service() {
     private var exploreNarrationJob: Job? = null
     private val exploreEngine = WalkingAidExploreEngine()
     private var activeMode = WalkingAidMode.WALKING
-    private val speechCompletions = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     private val utteranceSequence = AtomicLong(0L)
 
     private var visionBackend: VisionBackend? = null
@@ -84,8 +82,7 @@ class WalkingAidService : Service() {
     private val frameQueue = WalkingAidFrameQueue()
     private val frameChannel get() = frameQueue.frames
 
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    private var tts: TtsSpeaker? = null
     private var runtimeInitialized = false
     private var safetyDisclaimerSpoken = false
     private var wasAutoAudioEnabled = false
@@ -138,27 +135,13 @@ class WalkingAidService : Service() {
 
     override fun onDestroy() {
         stopLoop(reason = "destroy")
-        tts?.stop()
         tts?.shutdown()
         tts = null
         super.onDestroy()
     }
 
     private fun initTts() {
-        tts = TextToSpeech(this) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-        }
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {}
-            override fun onDone(utteranceId: String?) { finishSpeech(utteranceId, true) }
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) { finishSpeech(utteranceId, false) }
-            override fun onStop(utteranceId: String?, interrupted: Boolean) { finishSpeech(utteranceId, false) }
-        })
-    }
-
-    private fun finishSpeech(utteranceId: String?, completed: Boolean) {
-        if (utteranceId != null) speechCompletions.remove(utteranceId)?.complete(completed)
+        tts = TtsSpeaker(this, TAG)
     }
 
     private fun initializeRuntimeIfNeeded() {
@@ -655,7 +638,7 @@ class WalkingAidService : Service() {
                 completion.await()
             } ?: false
         } finally {
-            speechCompletions.remove(utteranceId)
+            tts?.forget(utteranceId)
             if (!completion.isCompleted) withContext(NonCancellable + Dispatchers.Main) { tts?.stop() }
         }
     }
@@ -692,20 +675,20 @@ class WalkingAidService : Service() {
     }
 
     private fun speakTts(text: String, completion: CompletableDeferred<Boolean>? = null): String? {
-        if (!ttsReady || tts == null) {
+        val speaker = tts
+        if (speaker == null || !speaker.isReady) {
             Log.w(TAG, "TTS not ready")
             return null
         }
         val locale = Locale.forLanguageTag(ImageQuestionPreferences.get(this).appLanguageTag)
-        tts?.language = locale
-        tts?.setSpeechRate(WalkingAidPreferences.getSpeechRate(this))
+        speaker.setLanguage(locale)
+        speaker.setSpeechRate(WalkingAidPreferences.getSpeechRate(this))
 
         val utteranceId = "walking_aid_${utteranceSequence.incrementAndGet()}"
-        if (completion != null) speechCompletions[utteranceId] = completion
-        if (tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) != TextToSpeech.SUCCESS) {
-            finishSpeech(utteranceId, false)
-            return null
+        val queued = speaker.speak(text, utteranceId) { outcome ->
+            completion?.complete(outcome == TtsUtteranceOutcome.DONE)
         }
+        if (!queued) return null
         return utteranceId
     }
 

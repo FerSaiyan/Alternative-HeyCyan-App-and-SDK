@@ -21,7 +21,7 @@ import com.fersaiyan.cyanbridge.media.AdaptiveP2pSyncSession
 import com.fersaiyan.cyanbridge.media.AdaptiveSyncCheckpoint
 import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
 import com.fersaiyan.cyanbridge.media.OfficialHeyCyanApp
-import com.fersaiyan.cyanbridge.media.OggOpusPackager
+import com.fersaiyan.cyanbridge.shared.media.OggOpusWrapper
 import com.fersaiyan.cyanbridge.media.VendorAlbumDownloader
 import com.fersaiyan.cyanbridge.media.autocapture.GlassesSyncedAudioIngestor
 import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
@@ -1981,7 +1981,7 @@ internal class GlassesMediaSyncCoordinator(
                     )
                 }
                 rawBytesSize = rawBytes.size
-                val wrapped = OggOpusPackager.wrapOpusIfNeeded(rawBytes)
+                val wrapped = OggOpusWrapper.wrapOpusIfNeeded(rawBytes)
                 payloadBytes = wrapped.first
                 payloadNote = wrapped.second
                 saved = mediaLibrary.saveOpusToLibrary(

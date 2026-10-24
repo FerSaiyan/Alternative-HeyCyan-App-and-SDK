@@ -5,6 +5,8 @@ import android.util.Log
 import com.fersaiyan.cyanbridge.glasses.GlassesPhotoCapture
 import com.fersaiyan.cyanbridge.glasses.NativeGlassesPhotoCapture
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueFrame
+import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueProtocol
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveImageButtonRouter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart

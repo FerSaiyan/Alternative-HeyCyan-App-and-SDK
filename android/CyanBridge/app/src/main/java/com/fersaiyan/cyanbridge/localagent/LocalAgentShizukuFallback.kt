@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.localagent
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 
 /**
  * Compatibility shim retained temporarily so existing settings code keeps compiling while

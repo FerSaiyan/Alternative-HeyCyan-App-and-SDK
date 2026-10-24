@@ -7,8 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.media.AudioDeviceInfo
-import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -20,10 +18,14 @@ import android.widget.Toast
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
+import com.fersaiyan.cyanbridge.audio.AudioSessionGrant
+import com.fersaiyan.cyanbridge.audio.AudioSessionHandle
+import com.fersaiyan.cyanbridge.audio.AudioSessionListener
+import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
-import java.util.concurrent.atomic.AtomicReference
 
 /** Shared microphone permission and foreground-service handling for voice plugins. */
 object PluginVoicePermissions {
@@ -122,7 +124,9 @@ internal fun startPluginVoiceService(context: Context, intent: Intent) {
  * Continuous Android speech recognition with best-effort routing to a Bluetooth glasses mic.
  *
  * The vendor's raw audio protocol is not confirmed for real-time use. Android's supported SCO/
- * communication-device route is therefore the safe path for live plugins.
+ * communication-device route is therefore the safe path for live plugins. The microphone is a
+ * [AudioSessionRequest.ContinuousRecognition] session: only one plugin listens at a time, and
+ * listening pauses while a spoken prompt or Gemini Live owns the microphone.
  */
 internal class PluginVoiceRecognizer(
     context: Context,
@@ -132,51 +136,80 @@ internal class PluginVoiceRecognizer(
     private val onError: (String) -> Unit,
 ) {
     private val appContext = context.applicationContext
+    private val owner = context.javaClass.simpleName
     private val handler = Handler(Looper.getMainLooper())
-    private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var speechRecognizer: SpeechRecognizer? = null
-    private var running = false
-    private var usingCommunicationDevice = false
+    @Volatile private var running = false
+    @Volatile private var session: AudioSessionHandle? = null
 
     private val restartRunnable = Runnable { startListening() }
 
-    fun start(): Boolean {
-        val active = activeRecognizer.get()
-        if (active != null && active !== this) {
-            onError("Another voice plugin is already listening")
-            return false
+    private val sessionListener = object : AudioSessionListener {
+        override fun onSuspended() {
+            handler.post {
+                Log.i(TAG, "$owner pausing recognition while another session uses the microphone")
+                handler.removeCallbacks(restartRunnable)
+                runCatching { speechRecognizer?.cancel() }
+            }
         }
+
+        override fun onResumed() {
+            handler.post { scheduleRestart(ROUTE_SETTLE_MS) }
+        }
+    }
+
+    fun start(): Boolean {
         if (running) return true
-        activeRecognizer.set(this)
+        val handle = when (
+            val grant = AudioSessionCoordinator.open(
+                appContext,
+                AudioSessionRequest.ContinuousRecognition(owner),
+                sessionListener,
+            )
+        ) {
+            is AudioSessionGrant.Granted -> grant.handle
+            is AudioSessionGrant.Denied -> {
+                onError("Another voice plugin is already listening")
+                return false
+            }
+        }
+        session = handle
         running = true
         handler.post {
             if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
                 failAndStop("Speech recognition is unavailable on this phone")
                 return@post
             }
-            routeBluetoothMic()
+            val route = handle.connectRouteNow()
+            if (route.bluetoothActive) {
+                Log.i(TAG, "Using Bluetooth microphone route for $owner")
+            } else {
+                Log.i(TAG, "Bluetooth mic route unavailable; Android will use its current input")
+            }
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).also {
                 it.setRecognitionListener(listener)
             }
-            handler.postDelayed(restartRunnable, ROUTE_SETTLE_MS)
+            if (handle.isActive) handler.postDelayed(restartRunnable, ROUTE_SETTLE_MS)
         }
         return true
     }
 
     fun stop() {
         running = false
-        activeRecognizer.compareAndSet(this, null)
+        val handle = session
+        session = null
         handler.post {
             handler.removeCallbacks(restartRunnable)
             runCatching { speechRecognizer?.cancel() }
             runCatching { speechRecognizer?.destroy() }
             speechRecognizer = null
-            clearBluetoothMicRoute()
         }
+        // Released at once so the next plugin can take the microphone immediately.
+        handle?.close()
     }
 
     private fun startListening() {
-        if (!running) return
+        if (!running || session?.isActive != true) return
         val recognizer = speechRecognizer ?: run {
             failAndStop("Speech recognizer was not initialized")
             return
@@ -230,7 +263,7 @@ internal class PluginVoiceRecognizer(
     }
 
     private fun scheduleRestart(delayMs: Long) {
-        if (!running) return
+        if (!running || session?.isActive != true) return
         handler.removeCallbacks(restartRunnable)
         handler.postDelayed(restartRunnable, delayMs)
     }
@@ -238,45 +271,6 @@ internal class PluginVoiceRecognizer(
     private fun failAndStop(message: String) {
         onError(message)
         stop()
-    }
-
-    private fun routeBluetoothMic() {
-        runCatching {
-            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val device = audioManager.availableCommunicationDevices.firstOrNull {
-                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                        it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-                }
-                if (device != null && audioManager.setCommunicationDevice(device)) {
-                    usingCommunicationDevice = true
-                    Log.i(TAG, "Using Bluetooth communication device type=${device.type}")
-                    return
-                }
-            }
-            @Suppress("DEPRECATION")
-            run {
-                audioManager.startBluetoothSco()
-                audioManager.isBluetoothScoOn = true
-            }
-        }.onFailure { error ->
-            Log.w(TAG, "Bluetooth mic route unavailable; Android will use its current input", error)
-        }
-    }
-
-    private fun clearBluetoothMicRoute() {
-        runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && usingCommunicationDevice) {
-                audioManager.clearCommunicationDevice()
-            }
-            @Suppress("DEPRECATION")
-            run {
-                audioManager.isBluetoothScoOn = false
-                audioManager.stopBluetoothSco()
-            }
-            audioManager.mode = AudioManager.MODE_NORMAL
-        }
-        usingCommunicationDevice = false
     }
 
     private fun android.os.Bundle?.bestRecognition(): String? {
@@ -298,6 +292,5 @@ internal class PluginVoiceRecognizer(
             SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
             SpeechRecognizer.ERROR_CLIENT,
         )
-        private val activeRecognizer = AtomicReference<PluginVoiceRecognizer?>(null)
     }
 }

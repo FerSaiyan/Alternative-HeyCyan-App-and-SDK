@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.localagent
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

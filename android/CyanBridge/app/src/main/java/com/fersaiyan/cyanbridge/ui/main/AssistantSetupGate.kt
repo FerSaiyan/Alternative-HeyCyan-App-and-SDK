@@ -11,7 +11,7 @@ import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivit
 import com.fersaiyan.cyanbridge.ai.router.AssistantSetupDestination
 import com.fersaiyan.cyanbridge.ai.router.AssistantTestKind
 import com.fersaiyan.cyanbridge.ai.router.AssistantTestReadiness
-import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoute
+import com.fersaiyan.cyanbridge.shared.ai.GlassesAssistantRoute
 
 /** Before a voice or image test question, sends the user to any setup the current route needs. */
 internal class AssistantSetupGate(

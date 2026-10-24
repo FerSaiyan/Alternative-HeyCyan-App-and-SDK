@@ -20,7 +20,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowToast
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])

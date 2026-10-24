@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.ai.transcription
 import android.content.Context
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.ai.router.MediaInferenceRoutingPolicy
+import com.fersaiyan.cyanbridge.ai.transcription.retry.RetryPolicy
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 
 data class AutomaticTranscriptionSelection(
