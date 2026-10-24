@@ -283,3 +283,29 @@ Smoke test per family:
 No glasses needed. Deleted code had no caller, so behavior is unchanged apart from one deliberate fix:
 - **Telegram `/task` while a task runs:** the guard now asks `TaskerLocalAgentService` (the service that actually runs tasks) instead of the never-started `LocalAgentService`. With a Local Agent task or a screen read in progress, a second `/task` should reply "A Local Agent task is already running…" instead of "Task accepted". The automation diagnostics in the debug log show the same running state.
 - **Pairing:** `DeviceBindActivity` lost its unused protocol auto-detection probes; pair one glasses family through manual selection to confirm the dialog still finishes on connect.
+
+## Wave 7: shared screen ViewModels — chats, notes, recordings
+
+**Android**
+
+Screens and strings are meant to be identical, and the emulator pixel comparison will check this. Known changes:
+- A generation or a voice-note recording now continues through a rotation. Before, rotating stopped and attached the recording.
+- Closing the chat screen while recording now discards the voice note silently. There is no late "Voice note attached" toast.
+- `KnowledgeSyncWorker.schedule` runs once per screen ViewModel instead of on every `onCreate`.
+
+Smoke test:
+- Send text, an image and a voice note in a chat.
+- Title generation.
+- Delete a chat.
+- The daily-facts review chat.
+- Note edit and save.
+- Recordings list, gallery open and share.
+- Transcription debug.
+- Knowledge integrations sync.
+
+**iOS (Mac build; chats now run on Android's logic)**
+- Empty chats are hidden. A new chat is created on the first send.
+- Titles are generated the Android way: the first 32 characters, then a 2–6 word AI title, with one extra AI call.
+- Voice records a voice note (30 s auto-stop) that is transcribed when sent. Before, the transcript went straight into the composer.
+- Errors read `message ?: "Failed to get response"`.
+- A note save with an empty body is ignored.
