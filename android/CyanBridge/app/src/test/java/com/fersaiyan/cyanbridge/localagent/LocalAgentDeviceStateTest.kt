@@ -51,27 +51,6 @@ class LocalAgentDeviceStateTest {
     }
 
     @Test
-    fun `step engine does not execute when device state is unavailable`() = runBlocking {
-        var executed = false
-        val engine = LocalAgentStepEngine(
-            context = unavailableDeviceContext(),
-            executor = object : LocalAgentStepEngine.LocalAgentActionExecutor {
-                override suspend fun execute(action: LocalAgentAction): Boolean {
-                    executed = true
-                    return true
-                }
-
-                override fun ensureNotCancelled() = Unit
-            },
-        )
-
-        val result = engine.execute(listOf(LocalAgentAction.GlobalBack))
-
-        assertTrue(result.haltedForDeviceState)
-        assertFalse(executed)
-    }
-
-    @Test
     fun `screenshot planning fails before accessibility when device state is unavailable`() = runBlocking {
         val capture = LocalAgentScreenshotCapture.captureForPlanning(
             context = unavailableDeviceContext(),

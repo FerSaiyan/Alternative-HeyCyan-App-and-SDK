@@ -19,15 +19,6 @@ object LocalAgentShizukuFallback {
         LocalAgentPrefs.setShizukuStatus(context, it)
     }
 
-    suspend fun performAfterAccessibilityFailure(
-        context: Context,
-        action: LocalAgentAction,
-    ): Boolean {
-        LocalAgentPrefs.setShizukuFallbackEnabled(context, false)
-        LocalAgentPrefs.setShizukuStatus(context, "Shizuku support removed")
-        return false
-    }
-
     fun disconnect(context: Context) {
         LocalAgentPrefs.setShizukuFallbackEnabled(context, false)
         LocalAgentPrefs.setShizukuStatus(context, "Shizuku support removed")

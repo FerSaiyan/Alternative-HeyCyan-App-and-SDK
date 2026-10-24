@@ -63,12 +63,11 @@ These were left untouched, or tidied without dropping any assertion.
 
 ## Parked refactor scaffolding (delete after hardware validation)
 
-`app/src/test/.../refactorparity/` holds 2,406 lines of Kotlin; its README carries the delete note.
+`app/src/test/.../refactorparity/` holds 1,036 lines of Kotlin; its README carries the delete note. Its `localagentservice/` tests (1,370 lines) were deleted with `LocalAgentService`, which nothing started.
 - RelayLegacyParityTest (314)
 - RemoteOpenAiLegacyParityTest (150)
 - JsonCompatParityTest (54)
 - GeminiLiveClientCharacterizationTest (518)
-- `localagentservice/`: LocalAgentRuntimeTest (295), LocalAgentTaskLoopTest (424), LocalAgentScreenReaderTest (204), LocalAgentSpeechOutputTest (171), LocalAgentServiceActionExecutorTest (29), LocalAgentServiceFakes (247). Nothing starts `LocalAgentService` any more, so the production code these cover is unreachable too.
 
 ## Core behavior with weak or no test coverage
 
