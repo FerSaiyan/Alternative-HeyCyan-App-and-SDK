@@ -56,6 +56,15 @@ class GlassesMediaSyncHelpersTest {
     }
 
     @Test
+    fun `derives the ipv4 slash 24 prefix`() {
+        assertEquals("192.168.49.", GlassesP2pNetwork.ipv4Prefix24("192.168.49.79"))
+        assertNull(GlassesP2pNetwork.ipv4Prefix24(null))
+        assertNull(GlassesP2pNetwork.ipv4Prefix24(" "))
+        assertNull(GlassesP2pNetwork.ipv4Prefix24("fe80::1"))
+        assertNull(GlassesP2pNetwork.ipv4Prefix24("10.0.0"))
+    }
+
+    @Test
     fun `scores likely glasses peer names`() {
         val score = GlassesP2pPeerSelector::likelyGlassesPeerNameStrength
         assertEquals(-1, score(null, "C4E3BFC3A402"))
