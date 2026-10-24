@@ -40,7 +40,7 @@ data class AudioRouteResult(
  * restoration. Only [AudioSessionCoordinator] calls it, so the process applies routing once and
  * restores it when the last session leaves.
  */
-internal class BluetoothCommunicationRoute(context: Context) {
+internal class BluetoothCommunicationRoute(val context: Context) {
     private val appContext = context.applicationContext
     private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var previousMode: Int? = null

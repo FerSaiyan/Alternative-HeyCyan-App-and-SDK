@@ -127,8 +127,10 @@ class TtsSpeaker(
 
     val isSpeaking: Boolean get() = !shutDown && runCatching { engine.isSpeaking }.getOrDefault(false)
 
-    suspend fun awaitReady(timeoutMs: Long): Boolean =
-        withTimeoutOrNull(timeoutMs) { ready.await() } ?: false
+    suspend fun awaitReady(timeoutMs: Long): Boolean {
+        if (isInitialized || timeoutMs <= 0) return isReady
+        return withTimeoutOrNull(timeoutMs) { ready.await() } ?: false
+    }
 
     /**
      * Runs [action] now when ready; otherwise keeps it (replacing an earlier pending action) until

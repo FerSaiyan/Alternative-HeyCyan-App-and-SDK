@@ -63,7 +63,7 @@ object AudioSessionCoordinator {
     ): AudioSessionGrant {
         val appContext = context.applicationContext
         val (grant, transitions) = synchronized(lock) {
-            if (route == null) route = BluetoothCommunicationRoute(appContext)
+            if (route?.context !== appContext) route = BluetoothCommunicationRoute(appContext)
             when (val result = arbiter.request(request)) {
                 is AudioArbitration.Denied -> {
                     Log.i(TAG, "${request.owner} ${request.kind} denied: ${result.reason}")
