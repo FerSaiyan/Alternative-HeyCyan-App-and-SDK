@@ -86,4 +86,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // Shared code logs through android.util.Log on Android; let host unit tests use the stubs.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
