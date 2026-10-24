@@ -74,9 +74,8 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
-import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
+import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 
 
 import com.fersaiyan.cyanbridge.devices.DeviceCapabilityHelper
@@ -101,9 +100,7 @@ class WalkingAidSettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        composeView = installComposeHostWithLegacyAdapter(R.layout.activity_walking_aid_settings)
-
-        setThemedComposeContent(composeView) {
+        composeView = setThemedComposeScreen {
             WalkingAidSettingsScreen(
                 onBack = ::finish,
                 onStartService = ::startWithPermissions,

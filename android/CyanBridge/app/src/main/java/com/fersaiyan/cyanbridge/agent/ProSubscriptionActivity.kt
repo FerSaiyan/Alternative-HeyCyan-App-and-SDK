@@ -5,11 +5,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.util.Patterns
-import android.view.View
+import android.view.SoundEffectConstants
 import android.widget.EditText
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -21,7 +18,6 @@ import androidx.compose.ui.platform.ComposeView
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
-import com.google.android.material.button.MaterialButton
 import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
@@ -31,7 +27,6 @@ import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.pro.ProSubscriptionScreen
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
-import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import kotlin.concurrent.thread
 import kotlinx.coroutines.Dispatchers
@@ -55,17 +50,11 @@ class ProSubscriptionActivity : AppCompatActivity() {
         val onVerified: () -> Unit,
     )
 
-    private lateinit var tvStatus: TextView
-    private lateinit var rgPlan: RadioGroup
-    private lateinit var rbTrial: RadioButton
-    private lateinit var rbCheap: RadioButton
-    private lateinit var rbStandard: RadioButton
-    private lateinit var rbMax: RadioButton
-    private lateinit var cardWebCheckout: View
-    private lateinit var btnSubscribeWeb: MaterialButton
-    private lateinit var cardUnsubscribe: View
-    private lateinit var btnUnsubscribe: MaterialButton
-    private lateinit var btnSubscribe: MaterialButton
+    /** Status line shown on the screen; starts as the text the screen showed before any refresh. */
+    private var statusText = "Not subscribed"
+
+    /** Plan picked on the screen (`free_trial`, `cheap`, `standard` or `max`); null until onCreate picks one. */
+    private var checkedPlan: String? = null
     private var billing: PlayBillingManager? = null
     private var playProducts: Map<String, ProductDetails> = emptyMap()
     private var lastBillingError: String = ""
@@ -79,34 +68,21 @@ class ProSubscriptionActivity : AppCompatActivity() {
     private var emailCodeVerificationInProgress by mutableStateOf(false)
     private var emailCodeVerificationError by mutableStateOf<String?>(null)
     private var composeState by mutableStateOf(ProSubscriptionUiState())
+
+    internal val state: ProSubscriptionUiState get() = composeState
     private lateinit var composeView: ComposeView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        composeView = installComposeHostWithLegacyAdapter(R.layout.activity_pro_subscription)
-
-        tvStatus = findViewById(R.id.tv_status)
-        rgPlan = findViewById(R.id.rg_plan)
-        rbTrial = findViewById(R.id.rb_trial)
-        rbCheap = findViewById(R.id.rb_cheap)
-        rbStandard = findViewById(R.id.rb_standard)
-        rbMax = findViewById(R.id.rb_max)
-        cardWebCheckout = findViewById(R.id.card_web_checkout)
-        btnSubscribeWeb = findViewById(R.id.btn_subscribe_web)
-        cardUnsubscribe = findViewById(R.id.card_unsubscribe)
-        btnUnsubscribe = findViewById(R.id.btn_unsubscribe)
-
-        btnSubscribe = findViewById(R.id.btn_subscribe)
-        val btnCancel: MaterialButton = findViewById(R.id.btn_cancel)
-        val btnDonate: MaterialButton = findViewById(R.id.btn_donate)
+        composeView = ComposeView(this).also(::setContentView)
 
         updateStatusDisplay()
         applyWebCheckoutVisibility()
         maybeShowCallbackToast(intent)
 
         // Set default selection if none selected
-        if (rgPlan.checkedRadioButtonId == View.NO_ID) {
-            rbTrial.isChecked = true
+        if (checkedPlan == null) {
+            checkedPlan = "free_trial"
         }
         applyRequestedPlanFromIntent()
         changePlanRequested = intent?.getBooleanExtra(EXTRA_CHANGE_PLAN, false) == true
@@ -125,39 +101,6 @@ class ProSubscriptionActivity : AppCompatActivity() {
         // If user already has an active plan, guide them to settings instead of repurchasing
         if (maybeRedirectToSettingsIfActive(showToast = false)) return
 
-        btnDonate.setOnClickListener {
-            showAsaasDonationDialog()
-        }
-
-        btnUnsubscribe.setOnClickListener {
-            showUnsubscribeConfirmation()
-        }
-
-        btnSubscribe.setOnClickListener {
-            if (maybeRedirectToSettingsIfActive(showToast = true)) return@setOnClickListener
-            val plan = selectedPlan()
-            promptForSubscriptionEmail(plan) { email ->
-                if (plan == "free_trial") {
-                    activateFreeTrial(email)
-                } else {
-                    startGooglePlaySubscriptionFlow(plan)
-                }
-            }
-        }
-
-        btnSubscribeWeb.setOnClickListener {
-            if (maybeRedirectToSettingsIfActive(showToast = true)) return@setOnClickListener
-            if (selectedPlan() == "free_trial") {
-                btnSubscribe.performClick()
-            } else {
-                launchWebCheckout(selectedPlan(), BillingProvider.ASAAS)
-            }
-        }
-
-        btnCancel.setOnClickListener {
-            finish()
-        }
-
         setupBilling()
 
         val appearancePreferences = AppearancePreferences(this)
@@ -169,7 +112,10 @@ class ProSubscriptionActivity : AppCompatActivity() {
                     restoreNotFoundEmail = restoreNotFoundEmail,
                     restoreLogsSending = restoreLogsSending,
                     onPlanSelected = ::selectPlanFromCompose,
-                    onStartFreeTrial = { btnSubscribe.performClick() },
+                    onStartFreeTrial = {
+                        playClickSound()
+                        subscribeToSelectedPlan()
+                    },
                     onSubscribeWithGooglePlay = {
                         val plan = selectedPlan()
                         promptForSubscriptionEmail(plan) { startGooglePlaySubscriptionFlow(plan) }
@@ -185,8 +131,14 @@ class ProSubscriptionActivity : AppCompatActivity() {
                     onRestoreExistingSubscription = ::restoreExistingProSubscription,
                     onDismissRestoreNotFound = { restoreNotFoundEmail = null },
                     onSendRestoreFailureLogs = ::sendRestoreFailureLogs,
-                    onDonate = { btnDonate.performClick() },
-                    onCancelSubscription = { btnUnsubscribe.performClick() },
+                    onDonate = {
+                        playClickSound()
+                        showAsaasDonationDialog()
+                    },
+                    onCancelSubscription = {
+                        playClickSound()
+                        showUnsubscribeConfirmation()
+                    },
                     onBack = ::finish,
                 )
                 emailCodeDialogRequest?.let { request ->
@@ -292,27 +244,49 @@ class ProSubscriptionActivity : AppCompatActivity() {
         }
     }
 
-    private fun selectedPlan(): String {
-        return when (rgPlan.checkedRadioButtonId) {
-            R.id.rb_trial -> "free_trial"
-            R.id.rb_cheap -> "cheap"
-            R.id.rb_max -> "max"
-            else -> "standard"
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_CHECKED_PLAN, checkedPlan)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        // The plan picker kept its selection across recreation; onResume publishes it.
+        savedInstanceState.getString(STATE_CHECKED_PLAN)?.let { checkedPlan = it }
+    }
+
+    /** Former hidden "Subscribe" button: start the email prompt and checkout for the selected plan. */
+    private fun subscribeToSelectedPlan() {
+        if (maybeRedirectToSettingsIfActive(showToast = true)) return
+        val plan = selectedPlan()
+        promptForSubscriptionEmail(plan) { email ->
+            if (plan == "free_trial") {
+                activateFreeTrial(email)
+            } else {
+                startGooglePlaySubscriptionFlow(plan)
+            }
         }
     }
 
+    /**
+     * These actions used to be relayed through hidden buttons, whose performClick() played the
+     * standard click sound before running the handler. Keep that audible feedback.
+     */
+    private fun playClickSound() {
+        composeView.playSoundEffect(SoundEffectConstants.CLICK)
+    }
+
+    private fun selectedPlan(): String = checkedPlan ?: "standard"
+
     private fun applyWebCheckoutVisibility() {
         val enabled = SubscriptionCheckoutPolicy.isWebCheckoutEnabled(this)
-        cardWebCheckout.visibility = if (enabled) View.VISIBLE else View.GONE
         composeState = composeState.copy(webCheckoutAvailable = enabled)
     }
 
     private fun selectPlanFromCompose(plan: String) {
-        when (plan) {
-            "cheap" -> rbCheap.isChecked = true
-            "standard" -> rbStandard.isChecked = true
-            "max" -> rbMax.isChecked = true
-            else -> rbTrial.isChecked = true
+        checkedPlan = when (plan) {
+            "cheap", "standard", "max" -> plan
+            else -> "free_trial"
         }
         refreshComposeState()
     }
@@ -320,7 +294,7 @@ class ProSubscriptionActivity : AppCompatActivity() {
     private fun refreshComposeState() {
         val status = ProSubscriptionVerifier.localStatus(this)
         composeState = composeState.copy(
-            status = tvStatus.text?.toString().orEmpty().ifBlank { status.message },
+            status = statusText.ifBlank { status.message },
             selectedPlan = selectedPlan(),
             webCheckoutAvailable = SubscriptionCheckoutPolicy.isWebCheckoutEnabled(this),
             isSubscribed = status.active,
@@ -449,10 +423,10 @@ class ProSubscriptionActivity : AppCompatActivity() {
 
     private fun applyRequestedPlanFromIntent() {
         when (intent?.getStringExtra(EXTRA_INITIAL_PLAN)?.trim()?.lowercase()) {
-            "free_trial" -> rbTrial.isChecked = true
-            "cheap" -> rbCheap.isChecked = true
-            "max" -> rbMax.isChecked = true
-            "standard" -> rbStandard.isChecked = true
+            "free_trial" -> checkedPlan = "free_trial"
+            "cheap" -> checkedPlan = "cheap"
+            "max" -> checkedPlan = "max"
+            "standard" -> checkedPlan = "standard"
         }
     }
 
@@ -462,7 +436,8 @@ class ProSubscriptionActivity : AppCompatActivity() {
         changePlan: Boolean = false,
     ) {
         if (plan == "free_trial") {
-            btnSubscribe.performClick()
+            playClickSound()
+            subscribeToSelectedPlan()
             return
         }
         promptForSubscriptionEmail(plan) {
@@ -523,7 +498,7 @@ class ProSubscriptionActivity : AppCompatActivity() {
                         openProSettingsAfterSubscribe()
                     } else {
                         val message = "Email verified, but no active Pro subscription was found for this account."
-                        tvStatus.text = message
+                        statusText = message
                         refreshComposeState()
                         restoreNotFoundEmail = email
                     }
@@ -531,7 +506,7 @@ class ProSubscriptionActivity : AppCompatActivity() {
                     val message = ProSubscriptionRelayClient.relayUnavailableHint(error)
                         ?: error.message
                         ?: "Unable to restore Pro access."
-                    tvStatus.text = message
+                    statusText = message
                     refreshComposeState()
                     Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                 }
@@ -985,14 +960,6 @@ class ProSubscriptionActivity : AppCompatActivity() {
             offer != null && product != null && PlaySubscriptionCatalog.configuredOffer(product, offer) != null
         }.toSet()
 
-        fun updateLabel(button: RadioButton, plan: String, name: String) {
-            val price = prices[plan] ?: "Google Play price unavailable"
-            button.text = "$name - $price"
-        }
-
-        updateLabel(rbCheap, "cheap", "Cheap")
-        updateLabel(rbStandard, "standard", "Standard")
-        updateLabel(rbMax, "max", "Max")
         composeState = composeState.copy(
             playPriceLabels = prices,
             playCheckoutAvailablePlans = availablePlans,
@@ -1147,15 +1114,14 @@ class ProSubscriptionActivity : AppCompatActivity() {
         val plan = status.plan.ifBlank { "none" }
         val provider = ProSubscriptionPrefs.getProvider(this)
 
-        tvStatus.text = if (status.active) {
+        statusText = if (status.active) {
             "✓ Active on $plan plan · source=$provider"
         } else {
             "Not subscribed · ${status.message}"
         }
 
-        cardUnsubscribe.visibility = if (status.active) View.VISIBLE else View.GONE
         composeState = composeState.copy(
-            status = tvStatus.text?.toString().orEmpty(),
+            status = statusText,
             selectedPlan = selectedPlan(),
             webCheckoutAvailable = SubscriptionCheckoutPolicy.isWebCheckoutEnabled(this),
             isSubscribed = status.active,
@@ -1393,5 +1359,6 @@ class ProSubscriptionActivity : AppCompatActivity() {
         const val EXTRA_FROM_WEB_CALLBACK = "extra_from_web_callback"
         const val EXTRA_INITIAL_PLAN = "extra_initial_plan"
         const val EXTRA_CHANGE_PLAN = "extra_change_plan"
+        private const val STATE_CHECKED_PLAN = "checked_plan"
     }
 }

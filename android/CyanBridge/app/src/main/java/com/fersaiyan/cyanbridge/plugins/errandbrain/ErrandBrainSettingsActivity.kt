@@ -1,354 +1,265 @@
 package com.fersaiyan.cyanbridge.plugins.errandbrain
 
+import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.R
+import com.fersaiyan.cyanbridge.plugins.settings.PluginCustomInstructionsCard
+import com.fersaiyan.cyanbridge.plugins.settings.PluginFieldLabel
+import com.fersaiyan.cyanbridge.plugins.settings.PluginFilterChip
+import com.fersaiyan.cyanbridge.plugins.settings.PluginHistoryCard
+import com.fersaiyan.cyanbridge.plugins.settings.PluginSettingsCard
+import com.fersaiyan.cyanbridge.plugins.settings.PluginSettingsScaffold
+import com.fersaiyan.cyanbridge.plugins.settings.PluginSettingsSectionTitle
+import com.fersaiyan.cyanbridge.plugins.settings.PluginSwitchRow
+import com.fersaiyan.cyanbridge.plugins.settings.applyNativePluginSwitch
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
-import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
-import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
+import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 
-class ErrandBrainSettingsActivity : AppCompatActivity() {
+data class ErrandBrainSettingsState(
+    val enabled: Boolean,
+    val autoCreateTasks: Boolean,
+    val voiceCommands: Boolean,
+    val reminderEnabled: Boolean,
+    val defaultPriority: String,
+    val defaultCategory: String,
+    val maxHistory: Int,
+    val customPrompt: String,
+) {
+    companion object {
+        fun load(context: Context) = ErrandBrainSettingsState(
+            enabled = ErrandBrainPreferences.isEnabled(context),
+            autoCreateTasks = ErrandBrainPreferences.isAutoCreateTasks(context),
+            voiceCommands = ErrandBrainPreferences.isVoiceCommands(context),
+            reminderEnabled = ErrandBrainPreferences.isReminderEnabled(context),
+            defaultPriority = ErrandBrainPreferences.getDefaultPriority(context),
+            defaultCategory = ErrandBrainPreferences.getDefaultCategory(context),
+            maxHistory = ErrandBrainPreferences.getMaxHistory(context),
+            customPrompt = ErrandBrainPreferences.getCustomPrompt(context),
+        )
+    }
+}
 
-    private lateinit var composeView: ComposeView
+interface ErrandBrainSettingsActions {
+    fun onBack()
+    fun onEnabledChange(enabled: Boolean)
+    fun onAutoCreateTasksChange(enabled: Boolean)
+    fun onVoiceCommandsChange(enabled: Boolean)
+    fun onReminderEnabledChange(enabled: Boolean)
+    fun onDefaultPrioritySelected(priority: String)
+    fun onDefaultCategorySelected(category: String)
+    fun onCustomPromptChange(prompt: String)
+    fun onMaxHistoryChange(maxHistory: Int)
+    fun onClearHistory()
+}
+
+class ErrandBrainSettingsActivity : AppCompatActivity(), ErrandBrainSettingsActions {
+
+    private lateinit var uiState: MutableState<ErrandBrainSettingsState>
+
+    internal val state: ErrandBrainSettingsState get() = uiState.value
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        composeView = installComposeHostWithLegacyAdapter(R.layout.activity_errand_brain_settings)
-
-        setThemedComposeContent(composeView) {
-            ErrandBrainSettingsScreen(
-                onBack = ::finish,
-                onDeactivate = { ErrandBrainService.stop(this) },
-            )
+        uiState = mutableStateOf(ErrandBrainSettingsState.load(this))
+        setThemedComposeScreen {
+            ErrandBrainSettingsScreen(state = uiState.value, actions = this)
         }
+    }
+
+    private inline fun update(transform: ErrandBrainSettingsState.() -> ErrandBrainSettingsState) {
+        uiState.value = uiState.value.transform()
+    }
+
+    override fun onBack() = finish()
+
+    override fun onEnabledChange(enabled: Boolean) {
+        update { copy(enabled = enabled) }
+        applyNativePluginSwitch(
+            pluginId = NativePluginIds.ERRAND_BRAIN,
+            enabled = enabled,
+            persistPluginFlag = { ErrandBrainPreferences.setEnabled(this, it) },
+            onDisabled = { ErrandBrainService.stop(this) },
+        )
+    }
+
+    override fun onAutoCreateTasksChange(enabled: Boolean) {
+        update { copy(autoCreateTasks = enabled) }
+        ErrandBrainPreferences.setAutoCreateTasks(this, enabled)
+    }
+
+    override fun onVoiceCommandsChange(enabled: Boolean) {
+        update { copy(voiceCommands = enabled) }
+        ErrandBrainPreferences.setVoiceCommands(this, enabled)
+    }
+
+    override fun onReminderEnabledChange(enabled: Boolean) {
+        update { copy(reminderEnabled = enabled) }
+        ErrandBrainPreferences.setReminderEnabled(this, enabled)
+    }
+
+    override fun onDefaultPrioritySelected(priority: String) {
+        update { copy(defaultPriority = priority) }
+        ErrandBrainPreferences.setDefaultPriority(this, priority)
+    }
+
+    override fun onDefaultCategorySelected(category: String) {
+        update { copy(defaultCategory = category) }
+        ErrandBrainPreferences.setDefaultCategory(this, category)
+    }
+
+    override fun onCustomPromptChange(prompt: String) {
+        if (prompt.length > MAX_CUSTOM_PROMPT_LENGTH) return
+        update { copy(customPrompt = prompt) }
+        ErrandBrainPreferences.setCustomPrompt(this, prompt)
+    }
+
+    override fun onMaxHistoryChange(maxHistory: Int) {
+        update { copy(maxHistory = maxHistory) }
+        ErrandBrainPreferences.setMaxHistory(this, maxHistory)
+    }
+
+    override fun onClearHistory() {
+        ErrandBrainStore().clear(this)
+        Toast.makeText(this, getString(R.string.compose_history_cleared), Toast.LENGTH_SHORT).show()
+    }
+
+    internal companion object {
+        const val MAX_CUSTOM_PROMPT_LENGTH = 1000
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val priorityOptions = listOf("low", "medium", "high", "urgent")
+private val categoryOptions = listOf("personal", "work", "shopping", "health", "finance")
+
 @Composable
 fun ErrandBrainSettingsScreen(
-    onBack: () -> Unit,
-    onDeactivate: () -> Unit,
+    state: ErrandBrainSettingsState,
+    actions: ErrandBrainSettingsActions,
 ) {
-    val context = LocalContext.current
-    val scrollState = rememberScrollState()
-
-    var enabled by remember { mutableStateOf(ErrandBrainPreferences.isEnabled(context)) }
-    var autoCreateTasks by remember { mutableStateOf(ErrandBrainPreferences.isAutoCreateTasks(context)) }
-    var voiceCommands by remember { mutableStateOf(ErrandBrainPreferences.isVoiceCommands(context)) }
-    var reminderEnabled by remember { mutableStateOf(ErrandBrainPreferences.isReminderEnabled(context)) }
-    var defaultPriority by remember { mutableStateOf(ErrandBrainPreferences.getDefaultPriority(context)) }
-    var defaultCategory by remember { mutableStateOf(ErrandBrainPreferences.getDefaultCategory(context)) }
-    var maxHistory by remember { mutableIntStateOf(ErrandBrainPreferences.getMaxHistory(context)) }
-    var customPrompt by remember { mutableStateOf(ErrandBrainPreferences.getCustomPrompt(context)) }
-
-    val priorityOptions = listOf("low", "medium", "high", "urgent")
-    val categoryOptions = listOf("personal", "work", "shopping", "health", "finance")
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.compose_plugin_settings_title, stringResource(R.string.compose_plugin_name_errand_brain))) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.compose_back))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp)
-                .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            // Section: General
-            SectionTitle(stringResource(R.string.compose_general))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(stringResource(R.string.compose_errand_enabled), modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = enabled,
-                            onCheckedChange = { newValue ->
-                                enabled = newValue
-                                ErrandBrainPreferences.setEnabled(context, newValue)
-                                CommunityPluginPrefs.setNativePluginEnabled(
-                                    context,
-                                    NativePluginIds.ERRAND_BRAIN,
-                                    newValue,
-                                )
-                                if (!newValue) onDeactivate()
-                            },
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(stringResource(R.string.compose_auto_create_tasks_voice), modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = autoCreateTasks,
-                            onCheckedChange = { newValue ->
-                                autoCreateTasks = newValue
-                                ErrandBrainPreferences.setAutoCreateTasks(context, newValue)
-                            },
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(stringResource(R.string.compose_voice_commands), modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = voiceCommands,
-                            onCheckedChange = { newValue ->
-                                voiceCommands = newValue
-                                ErrandBrainPreferences.setVoiceCommands(context, newValue)
-                            },
-                        )
-                    }
-                }
-            }
-
-            SectionTitle(stringResource(R.string.compose_glasses_tab))
-            NativePluginShortcutPreference(
-                pluginId = NativePluginIds.ERRAND_BRAIN,
-                pluginTitle = stringResource(R.string.compose_plugin_name_errand_brain),
+    PluginSettingsScaffold(
+        title = stringResource(R.string.compose_plugin_settings_title, stringResource(R.string.compose_plugin_name_errand_brain)),
+        onBack = actions::onBack,
+    ) {
+        // Section: General
+        PluginSettingsSectionTitle(stringResource(R.string.compose_general))
+        PluginSettingsCard {
+            PluginSwitchRow(
+                label = stringResource(R.string.compose_errand_enabled),
+                checked = state.enabled,
+                onCheckedChange = actions::onEnabledChange,
             )
 
-            // Section: Reminders
-            SectionTitle(stringResource(R.string.compose_reminders))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(stringResource(R.string.compose_reminders_enabled), modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = reminderEnabled,
-                            onCheckedChange = { newValue ->
-                                reminderEnabled = newValue
-                                ErrandBrainPreferences.setReminderEnabled(context, newValue)
-                            },
-                        )
-                    }
+            Spacer(modifier = Modifier.height(12.dp))
 
-                    if (reminderEnabled) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            stringResource(R.string.compose_reminder_example),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
+            PluginSwitchRow(
+                label = stringResource(R.string.compose_auto_create_tasks_voice),
+                checked = state.autoCreateTasks,
+                onCheckedChange = actions::onAutoCreateTasksChange,
+            )
 
-            // Section: Defaults
-            SectionTitle(stringResource(R.string.compose_defaults))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(R.string.compose_default_priority),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        priorityOptions.forEach { priority ->
-                            FilterChip(
-                                selected = defaultPriority == priority,
-                                onClick = {
-                                    defaultPriority = priority
-                                    ErrandBrainPreferences.setDefaultPriority(context, priority)
-                                },
-                                label = { Text(priority.replaceFirstChar { it.titlecase() }) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                ),
-                            )
-                        }
-                    }
+            Spacer(modifier = Modifier.height(8.dp))
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        stringResource(R.string.compose_default_category),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        categoryOptions.take(5).forEach { category ->
-                            FilterChip(
-                                selected = defaultCategory == category,
-                                onClick = {
-                                    defaultCategory = category
-                                    ErrandBrainPreferences.setDefaultCategory(context, category)
-                                },
-                                label = { Text(category.replaceFirstChar { it.titlecase() }) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                ),
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Section: Custom Instructions
-            SectionTitle(stringResource(R.string.compose_custom_instructions))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(R.string.compose_additional_task_instructions),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextField(
-                        value = customPrompt,
-                        onValueChange = { newValue ->
-                            if (newValue.length <= 1000) {
-                                customPrompt = newValue
-                                ErrandBrainPreferences.setCustomPrompt(context, newValue)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                         label = { Text(stringResource(R.string.compose_task_parsing_instructions)) },
-                         placeholder = { Text(stringResource(R.string.compose_task_parsing_hint)) },
-                        minLines = 2,
-                        maxLines = 4,
-                        supportingText = { Text("${customPrompt.length}/1000") },
-                    )
-                }
-            }
-
-            // Section: History
-            SectionTitle(stringResource(R.string.compose_task_history))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        stringResource(R.string.compose_max_stored_tasks, maxHistory),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Slider(
-                        value = maxHistory.toFloat(),
-                        onValueChange = { newValue ->
-                            maxHistory = newValue.toInt()
-                            ErrandBrainPreferences.setMaxHistory(context, newValue.toInt())
-                        },
-                        valueRange = 50f..1000f,
-                        steps = 94,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Button(
-                        onClick = {
-                            ErrandBrainStore().clear(context)
-                            Toast.makeText(context, context.getString(R.string.compose_history_cleared), Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(R.string.compose_clear_history))
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
+            PluginSwitchRow(
+                label = stringResource(R.string.compose_voice_commands),
+                checked = state.voiceCommands,
+                onCheckedChange = actions::onVoiceCommandsChange,
+            )
         }
+
+        PluginSettingsSectionTitle(stringResource(R.string.compose_glasses_tab))
+        NativePluginShortcutPreference(
+            pluginId = NativePluginIds.ERRAND_BRAIN,
+            pluginTitle = stringResource(R.string.compose_plugin_name_errand_brain),
+        )
+
+        // Section: Reminders
+        PluginSettingsSectionTitle(stringResource(R.string.compose_reminders))
+        PluginSettingsCard {
+            PluginSwitchRow(
+                label = stringResource(R.string.compose_reminders_enabled),
+                checked = state.reminderEnabled,
+                onCheckedChange = actions::onReminderEnabledChange,
+            )
+
+            if (state.reminderEnabled) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    stringResource(R.string.compose_reminder_example),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        // Section: Defaults
+        PluginSettingsSectionTitle(stringResource(R.string.compose_defaults))
+        PluginSettingsCard {
+            PluginFieldLabel(stringResource(R.string.compose_default_priority))
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                priorityOptions.forEach { priority ->
+                    PluginFilterChip(
+                        selected = state.defaultPriority == priority,
+                        onClick = { actions.onDefaultPrioritySelected(priority) },
+                        label = priority.replaceFirstChar { it.titlecase() },
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            PluginFieldLabel(stringResource(R.string.compose_default_category))
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                categoryOptions.take(5).forEach { category ->
+                    PluginFilterChip(
+                        selected = state.defaultCategory == category,
+                        onClick = { actions.onDefaultCategorySelected(category) },
+                        label = category.replaceFirstChar { it.titlecase() },
+                    )
+                }
+            }
+        }
+
+        // Section: Custom Instructions
+        PluginSettingsSectionTitle(stringResource(R.string.compose_custom_instructions))
+        PluginCustomInstructionsCard(
+            description = stringResource(R.string.compose_additional_task_instructions),
+            label = stringResource(R.string.compose_task_parsing_instructions),
+            placeholder = stringResource(R.string.compose_task_parsing_hint),
+            value = state.customPrompt,
+            maxLength = ErrandBrainSettingsActivity.MAX_CUSTOM_PROMPT_LENGTH,
+            minLines = 2,
+            maxLines = 4,
+            onValueChange = actions::onCustomPromptChange,
+        )
+
+        // Section: History
+        PluginSettingsSectionTitle(stringResource(R.string.compose_task_history))
+        PluginHistoryCard(
+            maxHistoryLabel = stringResource(R.string.compose_max_stored_tasks, state.maxHistory),
+            maxHistory = state.maxHistory,
+            valueRange = 50f..1000f,
+            steps = 94,
+            onMaxHistoryChange = actions::onMaxHistoryChange,
+            onClearHistory = actions::onClearHistory,
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
     }
-}
-
-@Composable
-private fun SectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 4.dp),
-    )
 }
