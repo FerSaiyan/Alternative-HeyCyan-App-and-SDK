@@ -23,4 +23,15 @@ interface MessageDao {
 
     @Query("DELETE FROM messages")
     suspend fun deleteAllMessages()
+
+    @Query("DELETE FROM messages WHERE id = :id")
+    suspend fun deleteMessageById(id: String)
+
+    @Query("SELECT COUNT(*) FROM messages WHERE chatId = :chatId")
+    suspend fun countForChat(chatId: String): Int
+
+    data class ChatMessageCount(val chatId: String, val count: Int)
+
+    @Query("SELECT chatId, COUNT(*) AS count FROM messages GROUP BY chatId")
+    suspend fun getMessageCounts(): List<ChatMessageCount>
 }

@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.kotlin.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
 }
 
 val enableAppleTargets = providers.gradleProperty("enableAppleTargets").orNull == "true"
@@ -61,6 +62,17 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.materialIconsExtended)
             implementation(compose.components.resources)
+            // The app database (Room KMP). Android keeps the framework SQLite through Room's
+            // open helper; other targets use the bundled SQLite driver.
+            api(libs.androidx.room.runtime)
+        }
+        getByName("portabilityTest").dependencies {
+            implementation(libs.androidx.sqlite.bundled)
+        }
+        if (enableAppleTargets) {
+            iosMain.dependencies {
+                implementation(libs.androidx.sqlite.bundled)
+            }
         }
 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
 commonTest.dependencies {
@@ -68,6 +80,17 @@ commonTest.dependencies {
     implementation(libs.kotlinx.coroutines.test)
     implementation(compose.uiTest)
 }
+    }
+}
+
+// Room's code generator runs per target; never on commonMain metadata.
+dependencies {
+    add("kspAndroid", libs.androidx.room.compiler)
+    add("kspPortability", libs.androidx.room.compiler)
+    if (enableAppleTargets) {
+        add("kspIosX64", libs.androidx.room.compiler)
+        add("kspIosArm64", libs.androidx.room.compiler)
+        add("kspIosSimulatorArm64", libs.androidx.room.compiler)
     }
 }
 

@@ -277,35 +277,7 @@ class MyApplication : Application(){
         private lateinit var instance: MyApplication
 
         val database: com.fersaiyan.cyanbridge.data.local.AppDatabase by lazy {
-            androidx.room.Room.databaseBuilder(
-                CONTEXT,
-                com.fersaiyan.cyanbridge.data.local.AppDatabase::class.java,
-                "cyanbridge-db"
-            )
-                .addMigrations(
-                    com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_1_2,
-                    com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_2_3,
-                    com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_3_4,
-                    com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_4_5,
-                    com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_5_6,
-                    com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_6_7,
-                    com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_7_8,
-                )
-                .addCallback(
-                    object : androidx.room.RoomDatabase.Callback() {
-                        override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                            super.onCreate(db)
-                            // Room doesn't (yet) support declaring FTS5 virtual tables via annotations.
-                            // Ensure the FTS5 index exists for fresh installs.
-                            runCatching {
-                                com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_4_5.migrate(db)
-                                com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_5_6.migrate(db)
-                                com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_6_7.migrate(db)
-                            }
-                        }
-                    }
-                )
-                .build()
+            com.fersaiyan.cyanbridge.data.local.buildAppDatabase(CONTEXT)
         }
 
         val repository: com.fersaiyan.cyanbridge.data.repository.CyanBridgeRepository by lazy {
