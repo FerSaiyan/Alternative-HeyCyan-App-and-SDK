@@ -5,8 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RawQuery
-import androidx.sqlite.db.SimpleSQLiteQuery
-import androidx.sqlite.db.SupportSQLiteQuery
+import androidx.room.RoomRawQuery
 import com.fersaiyan.cyanbridge.data.local.entity.MemoryChunk
 
 @Dao
@@ -74,10 +73,10 @@ interface MemoryChunkDao {
     )
 
     @RawQuery(observedEntities = [MemoryChunk::class])
-    suspend fun searchHitsRaw(query: SupportSQLiteQuery): List<SearchHit>
+    suspend fun searchHitsRaw(query: RoomRawQuery): List<SearchHit>
 
     @RawQuery(observedEntities = [MemoryChunk::class])
-    suspend fun searchChunksRaw(query: SupportSQLiteQuery): List<MemoryChunk>
+    suspend fun searchChunksRaw(query: RoomRawQuery): List<MemoryChunk>
 
     suspend fun search(query: String, limit: Int = 20): List<MemoryChunk> {
         val sql = """
@@ -89,7 +88,7 @@ interface MemoryChunkDao {
             LIMIT ?
         """.trimIndent()
 
-        return searchChunksRaw(SimpleSQLiteQuery(sql, arrayOf<Any>(query, limit)))
+        return searchChunksRaw(searchQuery(sql, query, limit))
     }
 
     suspend fun searchWithSnippet(query: String, limit: Int = 20): List<SearchHit> {
@@ -105,6 +104,13 @@ interface MemoryChunkDao {
             LIMIT ?
         """.trimIndent()
 
-        return searchHitsRaw(SimpleSQLiteQuery(sql, arrayOf<Any>(query, limit)))
+        return searchHitsRaw(searchQuery(sql, query, limit))
     }
 }
+
+/** Binds the FTS match expression and row limit (positional `?` 1 and 2). */
+private fun searchQuery(sql: String, query: String, limit: Int) =
+    RoomRawQuery(sql) { statement ->
+        statement.bindText(1, query)
+        statement.bindLong(2, limit.toLong())
+    }
