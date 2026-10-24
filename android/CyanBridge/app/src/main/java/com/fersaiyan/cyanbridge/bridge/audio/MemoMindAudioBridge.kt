@@ -7,12 +7,16 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
-import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.util.Log
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
+import com.fersaiyan.cyanbridge.audio.AudioSessionGrant
+import com.fersaiyan.cyanbridge.audio.AudioSessionHandle
 import com.fersaiyan.cyanbridge.bridge.devices.memomind.MemoMindConstants
 import com.fersaiyan.cyanbridge.bridge.devices.memomind.MemoMindGattClient
+import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePreference
+import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -89,8 +93,8 @@ class MemoMindAudioBridge(
     /** AudioTrack for PCM playback to glasses speakers (A2DP). */
     private var audioTrack: AudioTrack? = null
 
-    /** AudioRecord for phone mic capture. */
-    private var audioRecord: AudioRecord? = null
+    /** Session owning the phone mic capture (and its recorder). */
+    private var micSession: AudioSessionHandle? = null
 
     // ------------------------------------------------------------------
     // BLE recording characteristics
@@ -311,30 +315,43 @@ class MemoMindAudioBridge(
             return@callbackFlow
         }
 
-        val bufferSize = AudioRecord.getMinBufferSize(
-            SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-        )
-
-        audioRecord = AudioRecord.Builder()
-            .setAudioSource(MediaRecorder.AudioSource.MIC)
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setSampleRate(SAMPLE_RATE)
-                    .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .build()
+        // A continuous phone-mic stream: pauses (drops audio) while a spoken prompt or Gemini
+        // Live owns the microphone, and only one such stream runs at a time.
+        val session = when (
+            val grant = AudioSessionCoordinator.open(
+                context,
+                AudioSessionRequest.ContinuousRecognition(TAG, route = AudioRoutePreference.SYSTEM_DEFAULT),
             )
-            .setBufferSizeInBytes(bufferSize * 2)
-            .build()
+        ) {
+            is AudioSessionGrant.Granted -> grant.handle
+            is AudioSessionGrant.Denied -> {
+                val error = IllegalStateException("Microphone is in use: ${grant.reason}")
+                Log.w(TAG, error.message.orEmpty())
+                close(error)
+                return@callbackFlow
+            }
+        }
+        micSession = session
+
+        val recorder = try {
+            session.openRecorder(MediaRecorder.AudioSource.MIC, SAMPLE_RATE, { minBuffer -> minBuffer * 2 })
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start AudioRecord", e)
+            session.close()
+            micSession = null
+            close(e)
+            return@callbackFlow
+        }
+        val bufferSize = recorder.minBufferBytes
 
         try {
-            audioRecord?.startRecording()
+            recorder.startOrThrow()
             _isRecording.value = true
             Log.i(TAG, "Phone mic recording started (bufferSize=$bufferSize)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start AudioRecord", e)
+            session.close()
+            micSession = null
             close(e)
             return@callbackFlow
         }
@@ -345,9 +362,9 @@ class MemoMindAudioBridge(
         launch(Dispatchers.IO) {
             while (isActive && _isRecording.value) {
                 try {
-                    val read = audioRecord?.read(buffer, 0, buffer.size) ?: -1
+                    val read = recorder.read(buffer, 0, buffer.size)
                     if (read > 0) {
-                        trySend(buffer.copyOf(read))
+                        if (session.isActive) trySend(buffer.copyOf(read))
                     } else if (read < 0) {
                         Log.w(TAG, "AudioRecord read error: $read")
                     }
@@ -361,12 +378,8 @@ class MemoMindAudioBridge(
         awaitClose {
             Log.i(TAG, "Phone mic recording stopped")
             _isRecording.value = false
-            try {
-                audioRecord?.stop()
-                audioRecord?.release()
-            } catch (_: Exception) {
-            }
-            audioRecord = null
+            session.close()
+            if (micSession === session) micSession = null
         }
     }
 
@@ -442,5 +455,7 @@ class MemoMindAudioBridge(
         Log.i(TAG, "release() — releasing audio resources")
         releasePlayback()
         stopPhoneMicRecording()
+        micSession?.close()
+        micSession = null
     }
 }
