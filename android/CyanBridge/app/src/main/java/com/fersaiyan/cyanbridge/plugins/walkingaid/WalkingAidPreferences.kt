@@ -125,12 +125,6 @@ object WalkingAidPreferences {
         return getDepthCloudModelId(context).ifBlank { null }
     }
 
-    /** Returns true if either image description or depth use cloud source. */
-    fun usesCloudSource(context: Context): Boolean =
-        getImageDescriptionSource(context) == "cloud" || getDepthSource(context) == "cloud"
-
-    fun shouldUseCloud(context: Context): Boolean = usesCloudSource(context)
-
     fun getYoloModelType(context: Context): String = WalkingAid.yoloModelType[context]
 
     fun setYoloModelType(context: Context, type: String) {
@@ -189,16 +183,5 @@ object WalkingAidPreferences {
 
     fun setPhotoSettleDelayMs(context: Context, delayMs: Int) {
         WalkingAid.photoSettleDelayMs[context] = delayMs
-    }
-
-    fun getWatchlistTerms(context: Context): List<String> =
-        WalkingAidFocusMapper.resolve(getFocusDescription(context))
-
-    fun setWatchlistTerms(context: Context, terms: List<String>) {
-        val csv = terms.map { it.trim() }.filter { it.isNotBlank() }.joinToString(",")
-        WalkingAid.edit(context) {
-            this[WalkingAid.watchlistTerms] = csv
-            this[WalkingAid.focusDescription] = csv
-        }
     }
 }

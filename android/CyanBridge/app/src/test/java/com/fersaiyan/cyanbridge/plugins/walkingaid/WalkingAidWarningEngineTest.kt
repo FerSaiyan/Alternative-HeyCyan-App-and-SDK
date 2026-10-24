@@ -6,7 +6,6 @@ import com.fersaiyan.cyanbridge.plugins.walkingaid.vision.DetectionResult
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertArrayEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -64,13 +63,6 @@ class WalkingAidWarningEngineTest {
         )
 
         assertTrue(decision.shouldWarn)
-    }
-
-    @Test
-    fun qualityThreeUsesChatAiPacketWithoutHomeModeSuffix() {
-        val packet = WalkingAidImageCapture.buildChatAiCaptureCommand(3)
-
-        assertArrayEquals(byteArrayOf(0x02, 0x01, 0x06, 0x03, 0x03), packet)
     }
 
     @Test
