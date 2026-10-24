@@ -2,16 +2,6 @@ package com.fersaiyan.cyanbridge.shared.platform
 
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice
-import com.fersaiyan.cyanbridge.shared.ui.DeviceBindScreen
-import kotlinx.coroutines.flow.first
-
-/** State for the shared DeviceBindScreen, shown over the dashboard while pairing. */
-internal data class IosDeviceBindUiState(
-    val devices: List<ScannedDevice> = emptyList(),
-    val isScanning: Boolean = false,
-    val connectingDevice: ScannedDevice? = null,
-    val selectedClass: DeviceClass = DeviceClass.HEY_CYAN,
-)
 
 /** Named devices first, strongest signal first, like the Android bind list. */
 internal fun List<ScannedDevice>.upsert(
