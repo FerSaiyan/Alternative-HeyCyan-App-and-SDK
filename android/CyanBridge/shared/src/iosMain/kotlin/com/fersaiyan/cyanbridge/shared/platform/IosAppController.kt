@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.platform
 
+import com.fersaiyan.cyanbridge.data.local.iosAppDatabase
 import com.fersaiyan.cyanbridge.shared.ai.DEFAULT_RELAY_URL
 import com.fersaiyan.cyanbridge.shared.ai.RelayAiModelRegistry
 import com.fersaiyan.cyanbridge.shared.ai.RelayChatAiService
@@ -27,11 +28,14 @@ import com.fersaiyan.cyanbridge.shared.media.IosMediaTransfer
 import com.fersaiyan.cyanbridge.shared.persistence.ChatEntity
 import com.fersaiyan.cyanbridge.shared.persistence.ChatMessageEntity
 import com.fersaiyan.cyanbridge.shared.persistence.DeviceProfileEntity
+import com.fersaiyan.cyanbridge.shared.persistence.ChatRepository
 import com.fersaiyan.cyanbridge.shared.persistence.IosChatRepository
 import com.fersaiyan.cyanbridge.shared.persistence.IosDeviceProfileRepository
 import com.fersaiyan.cyanbridge.shared.persistence.IosMediaRecordRepository
 import com.fersaiyan.cyanbridge.shared.persistence.IosMemoryVaultRepository
 import com.fersaiyan.cyanbridge.shared.persistence.IosNotesRepository
+import com.fersaiyan.cyanbridge.shared.persistence.LegacyImportingChatRepository
+import com.fersaiyan.cyanbridge.shared.persistence.RoomChatRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -83,7 +87,13 @@ internal val VIDEO_DURATION_OPTIONS_SECONDS = listOf(15, 30, 60, 180, 540, 720)
 internal class IosAppController {
     val bleManager = IosBleManager()
     val wifiP2pManager = IosWifiP2pManager()
-    val chatRepository = IosChatRepository()
+    // Chats live in the shared app database (the Android tables). Chats an earlier build kept
+    // in NSUserDefaults are imported on first use; that copy stays as a backup.
+    val chatRepository: ChatRepository = LegacyImportingChatRepository(
+        target = RoomChatRepository(iosAppDatabase),
+        legacy = IosChatRepository(),
+        legacyPrefs = createPlatformPreferences("cyanbridge_chats"),
+    )
     val notesRepository = IosNotesRepository()
     val deviceProfileRepository = IosDeviceProfileRepository()
     val memoryVaultRepository = IosMemoryVaultRepository()
