@@ -21,17 +21,11 @@ interface MemoryChunkDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(chunk: MemoryChunk): Long
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(chunks: List<MemoryChunk>): List<Long>
-
     @Query("DELETE FROM memory_chunks")
     suspend fun deleteAll()
 
     @Query("DELETE FROM memory_chunks WHERE source = :source")
     suspend fun deleteBySource(source: String): Int
-
-    @Query("DELETE FROM memory_chunks WHERE source = :source AND packageName = :packageName")
-    suspend fun deleteBySourceAndPackageName(source: String, packageName: String): Int
 
     @Query("SELECT * FROM memory_chunks WHERE source = :source AND sourceId = :sourceId")
     suspend fun listBySourceAndSourceId(source: String, sourceId: String): List<MemoryChunk>

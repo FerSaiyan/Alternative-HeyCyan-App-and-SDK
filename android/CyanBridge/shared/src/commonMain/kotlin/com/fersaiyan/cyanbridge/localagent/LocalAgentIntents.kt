@@ -25,7 +25,6 @@ object LocalAgentIntents {
     const val EXTRA_STATUS = "status"
     const val EXTRA_LAST_ERROR = "last_error"
     const val EXTRA_GOAL = "goal"
-    const val EXTRA_TASK_ID = "task_id"
     const val EXTRA_IS_TERMINAL = "is_terminal"
     const val EXTRA_USER_MESSAGE = "user_message"
     const val EXTRA_APPROVAL_REPLY = "approval_reply"

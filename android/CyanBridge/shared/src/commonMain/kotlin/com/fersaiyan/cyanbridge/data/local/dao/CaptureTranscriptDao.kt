@@ -9,9 +9,6 @@ import com.fersaiyan.cyanbridge.data.local.entity.CaptureTranscript
 @Dao
 interface CaptureTranscriptDao {
 
-    @Query("SELECT * FROM capture_transcripts WHERE captureSessionId = :sessionId")
-    suspend fun getForSession(sessionId: Long): CaptureTranscript?
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(transcript: CaptureTranscript)
 

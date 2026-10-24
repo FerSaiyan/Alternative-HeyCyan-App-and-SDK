@@ -24,14 +24,6 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.destination_glasses_s
 import com.fersaiyan.cyanbridge.shared.generated.resources.destination_media_subtitle
 import com.fersaiyan.cyanbridge.shared.generated.resources.destination_plugins_subtitle
 import com.fersaiyan.cyanbridge.shared.generated.resources.destination_settings_subtitle
-import com.fersaiyan.cyanbridge.shared.generated.resources.memory_confidential_cloud
-import com.fersaiyan.cyanbridge.shared.generated.resources.memory_confidential_cloud_description
-import com.fersaiyan.cyanbridge.shared.generated.resources.memory_encrypted_sync
-import com.fersaiyan.cyanbridge.shared.generated.resources.memory_encrypted_sync_description
-import com.fersaiyan.cyanbridge.shared.generated.resources.memory_fast_cloud
-import com.fersaiyan.cyanbridge.shared.generated.resources.memory_fast_cloud_description
-import com.fersaiyan.cyanbridge.shared.generated.resources.memory_private_local
-import com.fersaiyan.cyanbridge.shared.generated.resources.memory_private_local_description
 import com.fersaiyan.cyanbridge.shared.generated.resources.nav_chats
 import com.fersaiyan.cyanbridge.shared.generated.resources.nav_glasses
 import com.fersaiyan.cyanbridge.shared.generated.resources.nav_media
@@ -44,9 +36,7 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.ota_source_personal_d
 import com.fersaiyan.cyanbridge.shared.generated.resources.ota_source_stealth
 import com.fersaiyan.cyanbridge.shared.generated.resources.ota_source_stealth_description
 import com.fersaiyan.cyanbridge.shared.generated.resources.ota_target_ble
-import com.fersaiyan.cyanbridge.shared.generated.resources.ota_target_ble_description
 import com.fersaiyan.cyanbridge.shared.generated.resources.ota_target_wifi
-import com.fersaiyan.cyanbridge.shared.generated.resources.ota_target_wifi_description
 import com.fersaiyan.cyanbridge.shared.generated.resources.plugin_category_accessibility
 import com.fersaiyan.cyanbridge.shared.generated.resources.plugin_category_language
 import com.fersaiyan.cyanbridge.shared.generated.resources.plugin_category_mobility
@@ -69,7 +59,6 @@ import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.glasses.OtaTargetSelection
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
-import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 
@@ -151,28 +140,6 @@ fun localizedAccentProfile(profile: AccentProfile): String = stringResource(
 
 @OptIn(ExperimentalResourceApi::class)
 @Composable
-fun localizedMemoryModeTitle(mode: MemoryPrivacyMode): String = stringResource(
-    when (mode) {
-        MemoryPrivacyMode.PRIVATE_LOCAL -> Res.string.memory_private_local
-        MemoryPrivacyMode.ENCRYPTED_SYNC -> Res.string.memory_encrypted_sync
-        MemoryPrivacyMode.FAST_CLOUD_MEMORY -> Res.string.memory_fast_cloud
-        MemoryPrivacyMode.CONFIDENTIAL_CLOUD_BETA -> Res.string.memory_confidential_cloud
-    },
-)
-
-@OptIn(ExperimentalResourceApi::class)
-@Composable
-fun localizedMemoryModeDescription(mode: MemoryPrivacyMode): String = stringResource(
-    when (mode) {
-        MemoryPrivacyMode.PRIVATE_LOCAL -> Res.string.memory_private_local_description
-        MemoryPrivacyMode.ENCRYPTED_SYNC -> Res.string.memory_encrypted_sync_description
-        MemoryPrivacyMode.FAST_CLOUD_MEMORY -> Res.string.memory_fast_cloud_description
-        MemoryPrivacyMode.CONFIDENTIAL_CLOUD_BETA -> Res.string.memory_confidential_cloud_description
-    },
-)
-
-@OptIn(ExperimentalResourceApi::class)
-@Composable
 fun localizedSyncFlowLabel(flow: GlassesSyncFlow): String = stringResource(
     when (flow) {
         GlassesSyncFlow.OFFICIAL_HEYCYAN -> Res.string.sync_flow_official_title
@@ -195,15 +162,6 @@ fun localizedOtaTargetLabel(target: OtaTargetSelection): String = stringResource
     when (target) {
         OtaTargetSelection.V821_WIFI -> Res.string.ota_target_wifi
         OtaTargetSelection.JIELI_BLE -> Res.string.ota_target_ble
-    },
-)
-
-@OptIn(ExperimentalResourceApi::class)
-@Composable
-fun localizedOtaTargetDescription(target: OtaTargetSelection): String = stringResource(
-    when (target) {
-        OtaTargetSelection.V821_WIFI -> Res.string.ota_target_wifi_description
-        OtaTargetSelection.JIELI_BLE -> Res.string.ota_target_ble_description
     },
 )
 
