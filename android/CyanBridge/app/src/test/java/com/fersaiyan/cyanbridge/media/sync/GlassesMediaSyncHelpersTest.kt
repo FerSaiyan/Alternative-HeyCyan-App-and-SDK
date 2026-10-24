@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.media.sync
 
+import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
+import com.fersaiyan.cyanbridge.shared.network.HeyCyanP2pPeerMatching
 import java.io.ByteArrayInputStream
 import java.util.TimeZone
 import org.junit.After
@@ -57,16 +59,16 @@ class GlassesMediaSyncHelpersTest {
 
     @Test
     fun `derives the ipv4 slash 24 prefix`() {
-        assertEquals("192.168.49.", GlassesP2pNetwork.ipv4Prefix24("192.168.49.79"))
-        assertNull(GlassesP2pNetwork.ipv4Prefix24(null))
-        assertNull(GlassesP2pNetwork.ipv4Prefix24(" "))
-        assertNull(GlassesP2pNetwork.ipv4Prefix24("fe80::1"))
-        assertNull(GlassesP2pNetwork.ipv4Prefix24("10.0.0"))
+        assertEquals("192.168.49.", GlassesNetworkAddressing.prefix24("192.168.49.79"))
+        assertNull(GlassesNetworkAddressing.prefix24(null))
+        assertNull(GlassesNetworkAddressing.prefix24(" "))
+        assertNull(GlassesNetworkAddressing.prefix24("fe80::1"))
+        assertNull(GlassesNetworkAddressing.prefix24("10.0.0"))
     }
 
     @Test
     fun `scores likely glasses peer names`() {
-        val score = GlassesP2pPeerSelector::likelyGlassesPeerNameStrength
+        val score = HeyCyanP2pPeerMatching::likelyGlassesPeerNameStrength
         assertEquals(-1, score(null, "C4E3BFC3A402"))
         assertEquals(-1, score("", null))
         assertEquals(100, score("m01_c4e3bfc3a402", "C4E3BFC3A402"))

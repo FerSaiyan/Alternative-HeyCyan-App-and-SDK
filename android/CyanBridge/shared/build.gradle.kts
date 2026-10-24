@@ -63,7 +63,7 @@ kotlin {
 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
 commonTest.dependencies {
     implementation(kotlin("test"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
+    implementation(libs.kotlinx.coroutines.test)
     implementation(compose.uiTest)
 }
     }

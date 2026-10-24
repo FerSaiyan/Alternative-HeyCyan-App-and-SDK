@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
 import com.fersaiyan.cyanbridge.shared.ai.AiModel
 import com.fersaiyan.cyanbridge.shared.ai.AiModelRegistry
 import com.fersaiyan.cyanbridge.shared.ai.ChatAiService
@@ -10,6 +11,7 @@ import com.fersaiyan.cyanbridge.shared.ai.VoiceAiService
 import com.fersaiyan.cyanbridge.shared.network.P2pConnectionState
 import com.fersaiyan.cyanbridge.shared.network.P2pPeer
 import com.fersaiyan.cyanbridge.shared.network.WifiP2pManager
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkPhase
 import com.fersaiyan.cyanbridge.shared.persistence.ChatEntity
 import com.fersaiyan.cyanbridge.shared.persistence.ChatMessageEntity
 import com.fersaiyan.cyanbridge.shared.persistence.ChatRepository
@@ -27,57 +29,65 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 
 // ── Wi-Fi P2P Manager wrapper ──
 
+/**
+ * Read-only view of the Android glasses link for shared code. The link itself is owned by
+ * [GlassesNetworkSessionCoordinator]; Android workflows open and close it there.
+ */
 class AndroidWifiP2pManagerWrapper : WifiP2pManager {
     private val _isAvailable = MutableStateFlow(true)
     override val isAvailable: StateFlow<Boolean> = _isAvailable.asStateFlow()
 
-    private val _connectionState = MutableStateFlow(P2pConnectionState.IDLE)
-    override val connectionState: Flow<P2pConnectionState> = _connectionState.asStateFlow()
+    override val supportsTrueWifiDirect: Boolean = true
+
+    override val connectionState: Flow<P2pConnectionState> =
+        GlassesNetworkSessionCoordinator.snapshot.map { it.phase.toP2pConnectionState() }
 
     private val _glassesIpAddress = MutableStateFlow<String?>(null)
     override val glassesIpAddress: StateFlow<String?> = _glassesIpAddress.asStateFlow()
 
     override fun discoverPeers(): Flow<P2pPeer> = flow {
-        // Delegate to WifiP2pManagerSingleton
-        PlatformLogger.i(TAG, "Wi-Fi P2P discovery - delegating to Android WifiP2pManagerSingleton")
+        PlatformLogger.i(TAG, "Wi-Fi P2P discovery is driven by GlassesNetworkSessionCoordinator on Android")
     }
 
-    override fun stopDiscovery() {
-        // TODO: Delegate to WifiP2pManagerSingleton
-    }
+    override fun stopDiscovery() = Unit
 
     override suspend fun connect(peerAddress: String) {
-        _connectionState.value = P2pConnectionState.CONNECTING
-        // TODO: Delegate to WifiP2pManagerSingleton
-        _connectionState.value = P2pConnectionState.CONNECTED
+        PlatformLogger.i(TAG, "Android glasses links are opened by their workflow, not by shared code")
     }
 
     override suspend fun disconnect() {
-        _connectionState.value = P2pConnectionState.DISCONNECTING
-        // TODO: Delegate to WifiP2pManagerSingleton
-        _connectionState.value = P2pConnectionState.IDLE
+        PlatformLogger.i(TAG, "Android glasses links are closed by their workflow, not by shared code")
     }
 
-    override fun isConnected(): Boolean = _connectionState.value == P2pConnectionState.CONNECTED
+    override fun isConnected(): Boolean =
+        GlassesNetworkSessionCoordinator.snapshot.value.phase == GlassesLinkPhase.CONNECTED
 
     override fun setGlassesIpAddress(ip: String) {
         _glassesIpAddress.value = ip
     }
 
-    override suspend fun bindToP2pNetwork(): Boolean {
-        // TODO: Delegate to Android ConnectivityManager.bindProcessToNetwork()
-        return true
-    }
+    override suspend fun bindToP2pNetwork(): Boolean =
+        GlassesNetworkSessionCoordinator.snapshot.value.routeBound
 
-    override fun cancelConnection() {
-        _connectionState.value = P2pConnectionState.IDLE
-    }
+    override fun cancelConnection() = Unit
 
     companion object {
         private const val TAG = "AndroidWifiP2p"
+
+        internal fun GlassesLinkPhase.toP2pConnectionState(): P2pConnectionState = when (this) {
+            GlassesLinkPhase.IDLE -> P2pConnectionState.IDLE
+            GlassesLinkPhase.PREFLIGHT_TEARDOWN,
+            GlassesLinkPhase.DISCOVERING,
+            -> P2pConnectionState.DISCOVERING
+            GlassesLinkPhase.CONNECTING -> P2pConnectionState.CONNECTING
+            GlassesLinkPhase.CONNECTED -> P2pConnectionState.CONNECTED
+            GlassesLinkPhase.TEARING_DOWN -> P2pConnectionState.DISCONNECTING
+            GlassesLinkPhase.QUARANTINED -> P2pConnectionState.ERROR
+        }
     }
 }
 
