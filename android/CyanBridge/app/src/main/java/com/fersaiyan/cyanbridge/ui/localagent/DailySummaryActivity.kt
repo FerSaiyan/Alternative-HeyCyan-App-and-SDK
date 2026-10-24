@@ -1,13 +1,15 @@
 package com.fersaiyan.cyanbridge.ui.localagent
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -16,7 +18,11 @@ import com.fersaiyan.cyanbridge.localagent.dailysummary.DailySummaryPrefs
 import com.fersaiyan.cyanbridge.localagent.dailysummary.DailySummaryRegenerateWorker
 import com.fersaiyan.cyanbridge.localagent.dailysummary.DailySummaryRunHistory
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
+import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryEstimate
+import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryPlatform
 import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryScreen
+import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryViewModel
+import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryWork
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
@@ -26,14 +32,6 @@ import java.util.Locale
 
 class DailySummaryActivity : AppCompatActivity() {
 
-    private val workManager by lazy { WorkManager.getInstance(this) }
-    private var summaryText by mutableStateOf("")
-    private var statusText by mutableStateOf("")
-    private var isRegenerating by mutableStateOf(false)
-    private var progressValue by mutableStateOf(0)
-    private var progressTitle by mutableStateOf("Regenerating daily summary")
-    private var progressDetail by mutableStateOf("Estimating remaining time...")
-
     private val date: String by lazy {
         intent.getStringExtra(EXTRA_DATE)?.trim().orEmpty().ifBlank {
             SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(System.currentTimeMillis()))
@@ -41,6 +39,10 @@ class DailySummaryActivity : AppCompatActivity() {
     }
 
     private val file by lazy { LocalAgentMemoryStore.dailySummaryFileForDate(this, date) }
+
+    private val viewModel by viewModels<DailySummaryViewModel> {
+        viewModelFactory { initializer { DailySummaryViewModel(AndroidDailySummaryPlatform(applicationContext, date)) } }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,178 +54,50 @@ class DailySummaryActivity : AppCompatActivity() {
                 DailySummaryScreen(
                     title = "Daily summary ($date)",
                     path = file.absolutePath,
-                    status = statusText,
-                    summary = summaryText,
-                    isBusy = isRegenerating,
-                    progress = progressValue,
-                    progressTitle = progressTitle,
-                    progressDetail = progressDetail,
-                    onRefresh = ::refreshFromDisk,
-                    onRegenerate = ::regenerate,
+                    status = viewModel.status,
+                    summary = viewModel.summary,
+                    isBusy = viewModel.isRegenerating,
+                    progress = viewModel.progress,
+                    progressTitle = viewModel.progressTitle,
+                    progressDetail = viewModel.progressDetail,
+                    onRefresh = viewModel::refresh,
+                    onRegenerate = viewModel::regenerate,
                     onShare = ::shareCurrent,
                     onBack = ::finish,
                 )
             }
         }
 
-        refreshFromDisk()
-        observeRegenerationWork()
-    }
-
-    private fun refreshFromDisk() {
-        val loaded = LocalAgentMemoryStore.readText(file).trimEnd()
-        val text = if (loaded.isNotBlank()) loaded else "(No daily summary generated yet. Tap Regenerate.)"
-        summaryText = text
-
-        val last = DailySummaryPrefs.getLastGeneratedAtMs(this, date)
-        statusText = if (last > 0L) {
-            val t = SimpleDateFormat("HH:mm", Locale.US).format(Date(last))
-            "Last generated: $t"
-        } else {
-            "Not generated yet"
-        }
-    }
-
-    private fun setBusy(busy: Boolean) {
-        isRegenerating = busy
-    }
-
-    private fun regenerate() {
-        val cooldown = DailySummaryPrefs.remainingCooldownMs(this, date)
-        if (cooldown > 0L) {
-            val seconds = (cooldown / 1000L).coerceAtLeast(1L)
-            Toast.makeText(this, "Please wait ${seconds}s before regenerating.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        setBusy(true)
-        val inputTokens = DailySummaryGenerator.estimateInputTokensForDate(this, date)
-        val estimate = DailySummaryRunHistory.estimate(
-            context = this,
-            providerHint = DailySummaryGenerator.providerHint(this),
-            inputTokens = inputTokens,
-        )
-
-        progressValue = 1
-        progressTitle = "Regenerating daily summary (${estimate.provider})"
-        progressDetail = formatEtaText(
-            etaMs = estimate.expectedTotalMs,
-            sampleCount = estimate.sampleCount,
-            stage = "Queued",
-        )
-        statusText = "Generating…"
-
-        val request = DailySummaryRegenerateWorker.buildRequest(date)
-        workManager.enqueueUniqueWork(
+        viewModel.refresh()
+        // Observed with this Activity's lifecycle, so a finished run is reported when the screen shows.
+        WorkManager.getInstance(this).getWorkInfosForUniqueWorkLiveData(
             DailySummaryRegenerateWorker.uniqueWorkName(date),
-            ExistingWorkPolicy.REPLACE,
-            request,
+        ).observe(this) { infos -> viewModel.onWork(infos.firstOrNull()?.toDailySummaryWork()) }
+    }
+
+    private fun WorkInfo.toDailySummaryWork(): DailySummaryWork = when (state) {
+        WorkInfo.State.ENQUEUED,
+        WorkInfo.State.BLOCKED,
+        WorkInfo.State.RUNNING -> DailySummaryWork(
+            state = DailySummaryWork.State.RUNNING,
+            percent = progress.getInt(DailySummaryRegenerateWorker.KEY_PROGRESS_PERCENT, 0),
+            etaMs = progress.getLong(DailySummaryRegenerateWorker.KEY_ETA_MS, 0L),
+            stage = progress.getString(DailySummaryRegenerateWorker.KEY_STAGE).orEmpty(),
+            provider = progress.getString(DailySummaryRegenerateWorker.KEY_PROVIDER).orEmpty(),
+            sampleCount = progress.getInt(DailySummaryRegenerateWorker.KEY_SAMPLE_COUNT, 0),
+            bulletDone = progress.getInt(DailySummaryRegenerateWorker.KEY_BULLET_DONE, 0),
+            bulletTotal = progress.getInt(DailySummaryRegenerateWorker.KEY_BULLET_TOTAL, 0),
         )
-
-        Toast.makeText(this, "Generating daily summary in background…", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun observeRegenerationWork() {
-        workManager.getWorkInfosForUniqueWorkLiveData(
-            DailySummaryRegenerateWorker.uniqueWorkName(date),
-        ).observe(this) { infos ->
-            val info = infos.firstOrNull() ?: run {
-                setBusy(false)
-                return@observe
-            }
-            renderWorkInfo(info)
-        }
-    }
-
-    private fun renderWorkInfo(info: WorkInfo) {
-        when (info.state) {
-            WorkInfo.State.ENQUEUED,
-            WorkInfo.State.BLOCKED,
-            WorkInfo.State.RUNNING -> {
-                setBusy(true)
-                val percent = info.progress.getInt(DailySummaryRegenerateWorker.KEY_PROGRESS_PERCENT, 0)
-                    .coerceIn(0, 100)
-                val etaMs = info.progress.getLong(DailySummaryRegenerateWorker.KEY_ETA_MS, 0L)
-                val stage = info.progress.getString(DailySummaryRegenerateWorker.KEY_STAGE)
-                    ?.trim()
-                    .orEmpty()
-                    .ifBlank { "Generating summary" }
-                val provider = info.progress.getString(DailySummaryRegenerateWorker.KEY_PROVIDER)
-                    ?.trim()
-                    .orEmpty()
-                    .ifBlank { DailySummaryGenerator.providerHint(this) }
-                val sampleCount = info.progress.getInt(DailySummaryRegenerateWorker.KEY_SAMPLE_COUNT, 0)
-                val bulletDone = info.progress.getInt(DailySummaryRegenerateWorker.KEY_BULLET_DONE, 0)
-                val bulletTotal = info.progress.getInt(DailySummaryRegenerateWorker.KEY_BULLET_TOTAL, 0)
-
-                progressValue = percent
-                progressTitle = "Regenerating daily summary (${provider})"
-                progressDetail = formatEtaText(
-                    etaMs = etaMs,
-                    sampleCount = sampleCount,
-                    stage = stage,
-                    bulletDone = bulletDone,
-                    bulletTotal = bulletTotal,
-                )
-                statusText = if (percent > 0) {
-                    "Generating… $percent%"
-                } else {
-                    "Generating…"
-                }
-            }
-
-            WorkInfo.State.SUCCEEDED -> {
-                setBusy(false)
-                progressValue = 100
-                statusText = "Generation complete"
-                refreshFromDisk()
-                Toast.makeText(this, "Daily summary saved", Toast.LENGTH_SHORT).show()
-            }
-
-            WorkInfo.State.FAILED,
-            WorkInfo.State.CANCELLED -> {
-                setBusy(false)
-                statusText = "Generation failed"
-                val error = info.outputData.getString(DailySummaryRegenerateWorker.KEY_ERROR)
-                    ?.trim()
-                    .orEmpty()
-                    .ifBlank { "Failed to regenerate summary" }
-                Toast.makeText(this, error, Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    private fun formatEtaText(
-        etaMs: Long,
-        sampleCount: Int,
-        stage: String,
-        bulletDone: Int = 0,
-        bulletTotal: Int = 0,
-    ): String {
-        val safeEta = etaMs.coerceAtLeast(0L)
-        val totalSeconds = (safeEta / 1000L).coerceAtLeast(0L)
-        val minutes = totalSeconds / 60L
-        val seconds = totalSeconds % 60L
-        val etaLabel = if (minutes > 0L) {
-            String.format(Locale.US, "%dm %02ds", minutes, seconds)
-        } else {
-            String.format(Locale.US, "%ds", seconds)
-        }
-        val sampleLabel = if (sampleCount > 0) {
-            "avg of last ${sampleCount.coerceAtMost(3)} runs"
-        } else {
-            "cold-start estimate"
-        }
-        val bulletLabel = if (bulletTotal > 0) {
-            " · bullets $bulletDone/$bulletTotal"
-        } else {
-            ""
-        }
-        return "$stage$bulletLabel · ETA ~$etaLabel ($sampleLabel)"
+        WorkInfo.State.SUCCEEDED -> DailySummaryWork(DailySummaryWork.State.SUCCEEDED)
+        WorkInfo.State.FAILED,
+        WorkInfo.State.CANCELLED -> DailySummaryWork(
+            state = DailySummaryWork.State.FAILED,
+            error = outputData.getString(DailySummaryRegenerateWorker.KEY_ERROR).orEmpty(),
+        )
     }
 
     private fun shareCurrent() {
-        val content = summaryText.trim()
+        val content = viewModel.summary.trim()
         if (content.isBlank()) {
             Toast.makeText(this, "Nothing to share", Toast.LENGTH_SHORT).show()
             return
@@ -246,5 +120,38 @@ class DailySummaryActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_DATE = "extra_date"
+    }
+}
+
+private class AndroidDailySummaryPlatform(private val context: Context, private val date: String) : DailySummaryPlatform {
+    override fun readSummary() = LocalAgentMemoryStore.readText(LocalAgentMemoryStore.dailySummaryFileForDate(context, date))
+
+    override fun lastGeneratedTime(): String? = DailySummaryPrefs.getLastGeneratedAtMs(context, date)
+        .takeIf { it > 0L }
+        ?.let { SimpleDateFormat("HH:mm", Locale.US).format(Date(it)) }
+
+    override fun remainingCooldownMs() = DailySummaryPrefs.remainingCooldownMs(context, date)
+
+    override fun estimate(): DailySummaryEstimate {
+        val estimate = DailySummaryRunHistory.estimate(
+            context = context,
+            providerHint = DailySummaryGenerator.providerHint(context),
+            inputTokens = DailySummaryGenerator.estimateInputTokensForDate(context, date),
+        )
+        return DailySummaryEstimate(estimate.provider, estimate.expectedTotalMs, estimate.sampleCount)
+    }
+
+    override fun providerHint() = DailySummaryGenerator.providerHint(context)
+
+    override fun startRegeneration() {
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            DailySummaryRegenerateWorker.uniqueWorkName(date),
+            ExistingWorkPolicy.REPLACE,
+            DailySummaryRegenerateWorker.buildRequest(date),
+        )
+    }
+
+    override fun showMessage(message: String, long: Boolean) {
+        Toast.makeText(context, message, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
     }
 }
