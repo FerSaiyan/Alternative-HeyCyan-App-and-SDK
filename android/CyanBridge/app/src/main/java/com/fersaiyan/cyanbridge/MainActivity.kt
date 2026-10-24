@@ -48,6 +48,7 @@ import com.fersaiyan.cyanbridge.ota.isExpectedFirmwareFilename
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionLease
 import com.fersaiyan.cyanbridge.glasses.GlassesDeviceInfoReader
+import com.fersaiyan.cyanbridge.glasses.HeyCyanRecordingControls
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.glasses.GlassesPhotoCapture
 import com.fersaiyan.cyanbridge.glasses.BackgroundGlassesCommandPermit
@@ -527,6 +528,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val livePreviewManager by lazy { com.fersaiyan.cyanbridge.ota.LivePreviewManager(this) }
     private var livePreviewDialog: AlertDialog? = null
     private val wifiAdbDebugController by lazy { DefaultWifiAdbDebugControllerFactory.create(this) }
+    private val glassesFeatureHost = object : HeyCyanRecordingControls.Host {
+        override fun rejectHeyCyanOnlyFeature(feature: String): Boolean =
+            this@MainActivity.rejectHeyCyanOnlyFeature(feature)
+
+        override fun isGlassesCommandBlocked(source: String): Boolean =
+            this@MainActivity.isGlassesCommandBlocked(source)
+
+        override fun acquireBackgroundGlassesCommand(source: String): BackgroundGlassesCommandPermit? =
+            this@MainActivity.acquireBackgroundGlassesCommand(source)
+
+        override fun warnIfBackgroundGlassesCommandTimesOut(permit: BackgroundGlassesCommandPermit) =
+            this@MainActivity.warnIfBackgroundGlassesCommandTimesOut(permit)
+    }
+    private val recordingControls by lazy { HeyCyanRecordingControls(this, glassesFeatureHost) }
 
     // AI Hijack settings
     private var isAiHijackEnabled = true // Default to enabled
@@ -4034,102 +4049,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun controlVideoRecording(start: Boolean) {
-        if (rejectHeyCyanOnlyFeature("Video recording")) return
-        if (isGlassesCommandBlocked("video recording command")) return
-        val permit = acquireBackgroundGlassesCommand("video recording command") ?: return
-        val value = if (start) 0x02 else 0x03
+    private fun controlVideoRecording(start: Boolean) = recordingControls.controlVideoRecording(start)
 
-        // While video is recording, pause the auto audio loop.
-        if (start) {
-            AutoAudioCapturePrefs.setPausedForVideo(this, true)
-            GlassesMediaPrefs.setVideoRecording(this, true) // optimistic
-        }
-
-        try {
-            LargeDataHandler.getInstance().glassesControl(
-                byteArrayOf(0x02, 0x01, value.toByte())
-            ) { _, rsp ->
-                try {
-                    if (rsp.dataType == 1) {
-                        if (rsp.errorCode == 0) {
-                            when (rsp.workTypeIng) {
-                                2 -> {
-                                    // Glasses are recording video
-                                    GlassesMediaPrefs.setVideoRecording(this, true)
-                                    AutoAudioCapturePrefs.setPausedForVideo(this, true)
-                                }
-                                else -> {
-                                    // Anything other than 2 means not actively recording video.
-                                    GlassesMediaPrefs.setVideoRecording(this, false)
-                                    AutoAudioCapturePrefs.setPausedForVideo(this, false)
-                                }
-                            }
-                        } else {
-                            // Command failed; revert optimistic state.
-                            if (start) {
-                                GlassesMediaPrefs.setVideoRecording(this, false)
-                                AutoAudioCapturePrefs.setPausedForVideo(this, false)
-                            }
-                        }
-                    }
-                } finally {
-                    GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-                }
-            }
-            warnIfBackgroundGlassesCommandTimesOut(permit)
-        } catch (e: Exception) {
-            GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-            Log.e("VideoRecording", "Failed to send video recording command", e)
-        }
-    }
-    
-    private fun controlAudioRecording(start: Boolean) {
-        if (rejectHeyCyanOnlyFeature("On-glasses audio recording")) return
-        if (isGlassesCommandBlocked("audio recording command")) return
-        val permit = acquireBackgroundGlassesCommand("audio recording command") ?: return
-        val value = if (start) 0x08 else 0x0c
-        try {
-            LargeDataHandler.getInstance().glassesControl(
-                byteArrayOf(0x02, 0x01, value.toByte())
-            ) { _, it ->
-                try {
-                    if (it.dataType == 1) {
-                        if (it.errorCode == 0) {
-                            when (it.workTypeIng) {
-                                2 -> {
-                                    //Glasses are recording video
-                                }
-                                4 -> {
-                                    //Glasses are in transfer mode
-                                }
-                                5 -> {
-                                    //Glasses are in OTA mode
-                                }
-                                1, 6 ->{
-                                    //Glasses are in camera mode
-                                }
-                                7 -> {
-                                    //Glasses are in AI conversation
-                                }
-                                8 ->{
-                                    //Glasses are in recording mode
-                                }
-                            }
-                        }
-                    } else {
-                        //Execute start and end
-                    }
-                } finally {
-                    GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-                }
-            }
-            warnIfBackgroundGlassesCommandTimesOut(permit)
-        } catch (e: Exception) {
-            GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-            Log.e("AudioRecording", "Failed to send audio recording command", e)
-        }
-    }
+    private fun controlAudioRecording(start: Boolean) = recordingControls.controlAudioRecording(start)
 
     private fun stopGlassesAiAudio(source: String) {
         if (isMetaRaybanSelected()) {
