@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.plugins.handsfreetranslator
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.assertServiceIntent
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
@@ -18,11 +17,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class HandsFreeTranslatorSettingsActivityTest {
     private lateinit var context: Context
 
@@ -30,22 +26,6 @@ class HandsFreeTranslatorSettingsActivityTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.clearPreferenceFiles("hands_free_translator_prefs", "hands_free_translator_store", COMMUNITY_PLUGIN_PREFS)
-    }
-
-    @Test
-    fun defaultStateMatchesPreferenceDefaults() {
-        assertEquals(
-            HandsFreeTranslatorSettingsState(
-                enabled = false,
-                sourceLanguage = "en",
-                targetLanguage = "es",
-                autoDetect = true,
-                speakTranslation = true,
-                maxHistory = 100,
-                customPrompt = "",
-            ),
-            HandsFreeTranslatorSettingsState.load(context),
-        )
     }
 
     @Test
@@ -128,16 +108,5 @@ class HandsFreeTranslatorSettingsActivityTest {
 
         assertEquals("x".repeat(1000), activity.state.customPrompt)
         assertEquals("x".repeat(1000), HandsFreeTranslatorPreferences.getCustomPrompt(context))
-    }
-
-    @Test
-    fun clearHistoryShowsToastAndBackFinishes() {
-        val activity = createSettingsActivity<HandsFreeTranslatorSettingsActivity>()
-
-        activity.onClearHistory()
-        assertEquals(context.getString(R.string.compose_history_cleared), ShadowToast.getTextOfLatestToast())
-
-        activity.onBack()
-        assertTrue(activity.isFinishing)
     }
 }

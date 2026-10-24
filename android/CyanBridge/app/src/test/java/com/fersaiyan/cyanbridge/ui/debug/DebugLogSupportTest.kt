@@ -10,10 +10,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class DebugLogSupportTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
@@ -40,19 +38,6 @@ class DebugLogSupportTest {
     }
 
     @Test
-    fun `collector includes exact automation log tags`() {
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("LocalAgentAccSvc"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("LocalAgentBridge"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("LocalAgentController"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("LocalAgentService"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("LocalAgentSteps"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("RemoteOpenAiClient"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("MeizuMyvu"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("MeizuMyvuService"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("myvu"))
-    }
-
-    @Test
     fun `empty filtered logcat becomes a deliverable diagnostic message`() {
         assertEquals(
             "No matching Android logcat entries were available. See Device Info and Extra Info for structured diagnostics.",
@@ -73,13 +58,6 @@ class DebugLogSupportTest {
         assertTrue(deviceInfo.contains("Local-model backend: Remote OpenAI-compatible"))
         assertTrue(deviceInfo.contains("Remote model: qwen2.5:7b"))
         assertTrue(deviceInfo.contains("Remote base URL: http://100.100.10.20:11434"))
-    }
-
-    @Test
-    fun `collector includes Meta registration and device detection tags`() {
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("MetaRaybanManager"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("DAT:CORE:RegistrationManager"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("DAT:CORE:BluetoothDeviceDetection"))
     }
 
     @Test

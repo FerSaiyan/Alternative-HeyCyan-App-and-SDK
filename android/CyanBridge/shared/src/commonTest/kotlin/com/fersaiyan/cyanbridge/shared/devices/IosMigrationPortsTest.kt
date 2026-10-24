@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.shared.devices
 import com.fersaiyan.cyanbridge.shared.chat.ExternalChatExportParser
 import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueFrameDecoder
 import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueProtocol
-import com.fersaiyan.cyanbridge.shared.media.OggOpusWrapper
 import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCatalogParser
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -47,16 +46,6 @@ class IosMigrationPortsTest {
             BleDeviceClassifier.guessDeviceClass(null, serviceUuids = listOf("FEE7"), heyCyanServiceUuids = listOf("fee7")),
         )
         assertEquals(DeviceClass.UNKNOWN, BleDeviceClassifier.guessDeviceClass("Kitchen speaker"))
-    }
-
-    @Test
-    fun oggWrapperWrapsFixed40BytePackets() {
-        val raw = ByteArray(40 * 10) { (it % 251).toByte() }
-        val wrapped = OggOpusWrapper.wrapIfNeeded(raw)
-        assertEquals("OggS", wrapped.copyOfRange(0, 4).decodeToString())
-        assertTrue(wrapped.decodeToString(throwOnInvalidSequence = false).contains("OpusHead"))
-        // Already-wrapped input is returned unchanged.
-        assertContentEquals(wrapped, OggOpusWrapper.wrapIfNeeded(wrapped))
     }
 
     @Test

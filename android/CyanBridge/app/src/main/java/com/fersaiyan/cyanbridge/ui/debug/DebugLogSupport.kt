@@ -49,49 +49,6 @@ object DebugLogSupport {
 
     private const val TAG = "DebugLogSupport"
     private const val MAX_LOGCAT_CHARS = 120_000
-    internal val LOG_TAGS = listOf(
-        "AIHijack",
-        "ImageQuestionAudio",
-        "DataDownload",
-        "DeviceNotify",
-        "WifiP2pManagerSingleton",
-        "WifiP2pBroadcastReceiver",
-        "GlassesNetSession",
-        "BleIpBridge",
-        "FirmwareClient",
-        "Ota",
-        "OtaManager",
-        "BleDfuManager",
-        "DebugLogSupport",
-        "CliRelayRouter",
-        "LocalAgent",
-        "LocalAgentAccSvc",
-        "LocalAgentBridge",
-        "LocalAgentController",
-        "LocalAgentRecovery",
-        "LocalAgentService",
-        "LocalAgentSteps",
-        "MainActivity",
-        "MetaRaybanManager",
-        "DAT:CORE:RegistrationManager",
-        "DAT:CORE:BluetoothDeviceDetection",
-        "MeizuMyvu",
-        "MeizuMyvuService",
-        "myvu",
-        "VisualDiaryService",
-        "WalkingAidService",
-        "CommunityPluginsActivity",
-        "ChatThreadActivity",
-        "SettingsActivity",
-        "LocalModelsConfigureActivity",
-        "RecordingsListActivity",
-        "LocalModelsProvider",
-        "RemoteOpenAiClient",
-        "LocalChatSession",
-        "LiteRtLocalEngine",
-        "LlamaCppLocalEngine",
-        "GemmaLiteRtTranscribe",
-    )
 
     data class DebugReport(
         val logs: String,
@@ -222,7 +179,7 @@ object DebugLogSupport {
 
     fun collectLogcat(): String {
         val collected = try {
-            // Do not build logcat filter specs from LOG_TAGS. Android's filter syntax uses
+            // Do not build logcat filter specs from tag names. Android's filter syntax uses
             // ':' as the tag/priority delimiter, while Meta DAT emits tags which themselves
             // contain colons (for example DAT:CORE:RegistrationManager). Passing those tags
             // as "tag:*" makes logcat reject the complete command and previously left every

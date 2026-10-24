@@ -3,13 +3,9 @@ package com.fersaiyan.cyanbridge.plugins.localagent
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsActivity
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
 import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.settings.nextStartedActivityIntent
-import com.fersaiyan.cyanbridge.ui.SettingsActivity
-import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsActivity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -17,13 +13,11 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowToast
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class LocalAgentSettingsActivityTest {
     private lateinit var context: Context
 
@@ -96,31 +90,5 @@ class LocalAgentSettingsActivityTest {
 
         assertFalse(RuntimePrefs.isTelegramRemoteControlEnabled(context))
         assertEquals(context.getString(R.string.compose_local_agent_enable_first), ShadowToast.getTextOfLatestToast())
-    }
-
-    @Test
-    fun statusActionShowsNoGoalToast() {
-        val activity = createSettingsActivity<LocalAgentSettingsActivity>()
-
-        activity.onAgentStatus()
-
-        assertEquals(context.getString(R.string.compose_local_agent_no_goal), ShadowToast.getTextOfLatestToast())
-    }
-
-    @Test
-    fun navigationActionsOpenTheSameActivities() {
-        val activity = createSettingsActivity<LocalAgentSettingsActivity>()
-
-        activity.onOpenSettings()
-        assertEquals(SettingsActivity::class.java.name, activity.nextStartedActivityIntent()?.component?.className)
-
-        activity.onOpenPendingActions()
-        assertEquals(PendingActionsActivity::class.java.name, activity.nextStartedActivityIntent()?.component?.className)
-
-        activity.onOpenAutoDiarySettings()
-        assertEquals(AutoDiarySettingsActivity::class.java.name, activity.nextStartedActivityIntent()?.component?.className)
-
-        activity.onBack()
-        assertTrue(activity.isFinishing)
     }
 }

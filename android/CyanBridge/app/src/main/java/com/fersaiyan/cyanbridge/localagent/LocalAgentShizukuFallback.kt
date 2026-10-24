@@ -32,10 +32,4 @@ object LocalAgentShizukuFallback {
         LocalAgentPrefs.setShizukuFallbackEnabled(context, false)
         LocalAgentPrefs.setShizukuStatus(context, "Shizuku support removed")
     }
-
-    internal fun supportsFixedInputOperation(
-        action: LocalAgentAction,
-        screenWidth: Int,
-        screenHeight: Int,
-    ): Boolean = false
 }

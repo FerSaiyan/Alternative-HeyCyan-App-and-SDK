@@ -31,11 +31,28 @@ class LocalModelCatalogTest {
     }
 
     @Test
+    fun everyEntryMatchesItsRuntimeFileFormat() {
+        LocalModelCatalogRepository.curatedModels.forEach { entry ->
+            assertEquals("local", entry.providerType)
+            if (entry.engine == "litert") {
+                assertEquals("litertlm", entry.format)
+                assertTrue(entry.expectedFilename.endsWith(".litertlm"))
+            } else {
+                assertEquals("llama", entry.engine)
+                assertEquals("gguf", entry.format)
+                assertTrue(entry.expectedFilename.endsWith(".gguf"))
+            }
+            assertTrue(entry.contextSizeDefault >= 2048, entry.id)
+        }
+    }
+
+    @Test
     fun lookupRejectsBlankIdsAndFindsCurrentQwenStarter() {
         assertNull(LocalModelCatalogRepository.findById(null))
         assertNull(LocalModelCatalogRepository.findById("  "))
         val qwen = LocalModelCatalogRepository.findById("qwen3.5-0.8b-q4")
         assertEquals("qwen3.5-0.8b-q4", qwen?.id)
+        assertEquals("qwen", qwen?.family)
         assertEquals("Qwen3.5-0.8B-Q4_0.gguf", qwen?.expectedFilename)
         assertEquals(0.35, qwen?.minStorageGb)
         assertTrue(LocalModelCatalogRepository.curatedModels.none { it.id.startsWith("qwen2.5") })

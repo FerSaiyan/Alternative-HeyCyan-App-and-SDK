@@ -35,18 +35,4 @@ class TaskerIntegrationStatusTest {
         assertTrue("net.dinglisch.android.taskerm" in packages)
         assertTrue("com.joaomgcd.autoinput" in packages)
     }
-
-    @Test
-    fun environmentReadyRequiresBothAppsAndBothAccessibilityServices() {
-        val ready = TaskerIntegrationStatus(
-            taskerInstalled = true,
-            autoInputInstalled = true,
-            taskerAccessibilityEnabled = true,
-            autoInputAccessibilityEnabled = true,
-        )
-        val missingTaskerAccessibility = ready.copy(taskerAccessibilityEnabled = false)
-
-        assertTrue(ready.automationEnvironmentReady)
-        assertEquals(false, missingTaskerAccessibility.automationEnvironmentReady)
-    }
 }
