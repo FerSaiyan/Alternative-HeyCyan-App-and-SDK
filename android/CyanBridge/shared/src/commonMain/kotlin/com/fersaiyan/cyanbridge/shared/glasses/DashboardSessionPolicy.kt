@@ -1,10 +1,7 @@
-package com.fersaiyan.cyanbridge.ui.main
-
-import com.fersaiyan.cyanbridge.glasses.GlassesSession
-import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
+package com.fersaiyan.cyanbridge.shared.glasses
 
 /** Decides which dashboard actions may run while an exclusive glasses session is active. */
-internal object DashboardSessionPolicy {
+object DashboardSessionPolicy {
     /** Actions that only touch app state and never contend for the glasses connection. */
     fun ignoresExclusiveSession(action: GlassesDashboardAction): Boolean =
         action is GlassesDashboardAction.SubmitFirmwarePatchRequest ||

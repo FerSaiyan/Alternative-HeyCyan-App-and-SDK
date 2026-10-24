@@ -10,6 +10,7 @@ import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
 import com.fersaiyan.cyanbridge.ui.hasBluetooth
+import com.fersaiyan.cyanbridge.ui.main.glasses.AndroidGlassesDevices
 import com.fersaiyan.cyanbridge.ui.requestBluetoothPermission
 import com.fersaiyan.cyanbridge.ui.setOnClickListener
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
@@ -33,7 +34,6 @@ internal interface LegacyControlsHost {
     fun selectCustomAiProvider()
     fun refreshAiModeButtons()
     fun showOfficialHeyCyanWarningOrContinue()
-    fun startMoyoungW620MediaSync()
     fun cancelDataDownloadAttempt(reason: String, showToast: Boolean)
     fun dumpOtaServerInfo()
     fun testPullModeOta()
@@ -42,17 +42,17 @@ internal interface LegacyControlsHost {
 /**
  * Binds the hidden legacy glasses controls, one section at a time. Dashboard actions and Tasker
  * commands still route through these buttons, so every click first passes the same shared guards
- * (exclusive session, Meta rejection, Bluetooth permission, glasses audio stop).
+ * (exclusive session, the selected profile's SDK-control rejection, Bluetooth permission,
+ * glasses audio stop).
  */
 internal class LegacyGlassesControlsBinder(
     host: MainScreenHost,
     private val controls: LegacyControlsHost,
-    private val devices: DeviceManagerRegistry,
+    private val glasses: AndroidGlassesDevices,
     private val connection: DeviceConnectionCoordinator,
     private val heyCyanSettings: HeyCyanSettingsController,
     private val sessionGuard: GlassesSessionGuard,
     private val transportPermissions: GlassesTransportPermissions,
-    private val metaRaybanUi: MetaRaybanUiController,
     private val meetingCaptureUi: MeetingCaptureUiController,
 ) : MainScreenController(host) {
     fun bind() {
@@ -89,7 +89,7 @@ internal class LegacyGlassesControlsBinder(
             return false
         }
 
-        if (devices.isMetaRaybanSelected() && view in setOf(
+        if (glasses.selectedProfile().heyCyanSdkControlsRejection != null && view in setOf(
                 binding.btnConnect,
                 binding.btnDisconnect,
                 binding.btnAddListener,
@@ -294,8 +294,8 @@ internal class LegacyGlassesControlsBinder(
     }
 
     private fun onCameraClicked() {
-        if (devices.isMetaRaybanSelected()) {
-            metaRaybanUi.captureMetaPhotoForGallery()
+        glasses.selected().legacyCameraButton?.let { camera ->
+            camera.capturePhoto()
             return
         }
         val permit = sessionGuard.acquireBackgroundGlassesCommand("camera command")
@@ -378,11 +378,8 @@ internal class LegacyGlassesControlsBinder(
             when (view) {
                 binding.btnDataDownload -> {
                     transportPermissions.ensureGlassesTransportPermissions("Wi-Fi media sync") {
-                        if (devices.isMoyoungW620Selected()) {
-                            controls.startMoyoungW620MediaSync()
-                        } else {
-                            controls.showOfficialHeyCyanWarningOrContinue()
-                        }
+                        glasses.selected().legacyDataDownload?.startSync()
+                            ?: controls.showOfficialHeyCyanWarningOrContinue()
                     }
                 }
                 binding.btnTransferStop -> {

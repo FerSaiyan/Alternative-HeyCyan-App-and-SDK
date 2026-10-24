@@ -1,5 +1,8 @@
 package com.fersaiyan.cyanbridge.wifiadb
 
+import com.fersaiyan.cyanbridge.bridge.core.GlassesCapability
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -72,8 +75,16 @@ class WifiAdbSourceSafetyTest {
         ).readText()
         assertTrue(
             dashboardControllerSource.contains(
-                "if (BuildConfig.DEBUG && devices.isHeyCyanSelected()) actions.startWifiAdbDebug()",
+                "if (BuildConfig.DEBUG && family.supports(GlassesCapability.WIFI_ADB_DEBUG)) actions.startWifiAdbDebug()",
             ),
+        )
+        // Only HeyCyan declares the Wi-Fi ADB capability.
+        assertEquals(
+            setOf(DeviceClass.HEY_CYAN),
+            GlassesFamilyProfiles.all
+                .filter { it.supports(GlassesCapability.WIFI_ADB_DEBUG) }
+                .map { it.deviceClass }
+                .toSet(),
         )
         assertTrue(mainSource.contains("private fun startWifiAdbDebug() = wifiAdbDebugCoordinator.startWifiAdbDebug()"))
         assertTrue(coordinatorSource.contains("if (!BuildConfig.DEBUG || wifiAdbDebugController.isActive) return"))
@@ -81,9 +92,19 @@ class WifiAdbSourceSafetyTest {
             coordinatorSource.contains("isAvailable = BuildConfig.DEBUG && isHeyCyanSelected() && runtime.isAvailable"),
         )
         assertTrue(coordinatorSource.contains("private fun isHeyCyanSelected(): Boolean = host.isHeyCyanSelected()"))
-        assertTrue(connectionCoordinatorSource.contains("isAvailable = BuildConfig.DEBUG &&"))
+        // The dashboard gating lives in :shared; the coordinator passes the build type in.
+        val dashboardGatingSource = File(
+            "../shared/src/commonMain/kotlin/com/fersaiyan/cyanbridge/shared/glasses/GlassesDashboardPresentation.kt",
+        ).readText()
+        assertTrue(connectionCoordinatorSource.contains("isDebugBuild = BuildConfig.DEBUG,"))
+        assertTrue(
+            dashboardGatingSource.contains(
+                "isAvailable = isDebugBuild &&\n                model.isVisible(Action.WIFI_ADB_DEBUG),",
+            ),
+        )
         assertFalse(mainSource.contains("isAvailable = BuildConfig.DEBUG && showBattery"))
         assertFalse(coordinatorSource.contains("isAvailable = BuildConfig.DEBUG && showBattery"))
         assertFalse(connectionCoordinatorSource.contains("isAvailable = BuildConfig.DEBUG && showBattery"))
+        assertFalse(dashboardGatingSource.contains("isAvailable = isDebugBuild && showBattery"))
     }
 }
