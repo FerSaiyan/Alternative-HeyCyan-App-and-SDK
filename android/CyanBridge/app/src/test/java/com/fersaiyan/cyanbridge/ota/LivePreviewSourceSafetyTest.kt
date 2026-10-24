@@ -21,5 +21,13 @@ class LivePreviewSourceSafetyTest {
         assertFalse(source.contains("byteArrayOf(0x02, 0x01, 0x0A)"))
         assertFalse(source.contains("byteArrayOf(0x02, 0x01, 0x0F)"))
         assertFalse(source.contains("PASSIVE MODE"))
+        // Acquisition and teardown moved to the shared session; it must not reset the V821 either.
+        assertTrue(source.contains("GlassesLinkClient.HEYCYAN_LIVE_PREVIEW"))
+        val sessionSource = File(
+            "src/main/java/com/fersaiyan/cyanbridge/network/GlassesNetworkSessionCoordinator.kt",
+        ).readText()
+        assertFalse(sessionSource.contains("byteArrayOf(0x02, 0x01, 0x0F)"))
+        assertFalse(sessionSource.contains("resetDeviceP2p"))
+        assertFalse(sessionSource.contains("startPeerDiscovery"))
     }
 }
