@@ -38,6 +38,9 @@
 
     <!-- Narrow package visibility replaces QUERY_ALL_PACKAGES. -->
     <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
         <package android:name="com.glasssutdio.wear" />
         <package android:name="net.dinglisch.android.taskerm" />
         <package android:name="com.joaomgcd.autoinput" />

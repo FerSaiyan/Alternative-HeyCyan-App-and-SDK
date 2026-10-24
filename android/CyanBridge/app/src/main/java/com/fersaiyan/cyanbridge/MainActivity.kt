@@ -342,15 +342,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         ttsReady = status == TextToSpeech.SUCCESS
         Log.i("ImageQuestionAudio", "TTS initialization status=$status ready=$ttsReady")
         if (status == TextToSpeech.SUCCESS) {
-            val languageResult = tts?.setLanguage(Locale("fa", "IR"))
-            if (
-                languageResult == TextToSpeech.LANG_MISSING_DATA ||
-                languageResult == TextToSpeech.LANG_NOT_SUPPORTED
-            ) {
-                Log.w(TAG, "Persian text-to-speech voice is unavailable (result=$languageResult)")
-            } else {
-                Log.i(TAG, "Persian text-to-speech language result=$languageResult")
-            }
+            tts?.setLanguage(Locale("fa", "IR"))
+            Log.i(
+                TAG,
+                "Initialized TTS default=${tts?.defaultEngine} " +
+                    "available=${tts?.engines?.joinToString { "${it.name}:${it.label}" }}",
+            )
         }
         localSpeechSessionManager.attachTtsEngine(tts, ttsReady)
     }
@@ -360,15 +357,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun speakVision(text: String, onDone: (() -> Unit)? = null) {
-        val languageResult = tts?.setLanguage(
-            Locale("fa", "IR"),
-        )
-        if (
-            languageResult == TextToSpeech.LANG_MISSING_DATA ||
-            languageResult == TextToSpeech.LANG_NOT_SUPPORTED
-        ) {
-            Log.w(TAG, "Persian text-to-speech voice is unavailable; attempting system speech anyway")
-        }
+        tts?.setLanguage(Locale("fa", "IR"))
         speak(
             text = text,
             languageTag = null,
@@ -387,11 +376,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     ) {
         val engine = tts
         languageTag?.takeIf { it.isNotBlank() }?.let { tag ->
-            val result = engine?.setLanguage(Locale.forLanguageTag(tag))
-            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.w(TAG, "Text-to-speech voice unavailable for $tag")
-            }
-            Log.i("ImageQuestionAudio", "TTS language tag=$tag result=$result")
+            engine?.setLanguage(Locale.forLanguageTag(tag))
+            Log.i("ImageQuestionAudio", "TTS language tag=$tag")
         }
         val id = utteranceId ?: "utt_${System.currentTimeMillis()}"
         val wrappedOnDone: () -> Unit = {
@@ -403,9 +389,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         ttsDoneCallbacks[id] = wrappedOnDone
 
-        val bundle = Bundle().apply {
-            putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, id)
-            streamType?.let { putString(TextToSpeech.Engine.KEY_PARAM_STREAM, it.toString()) }
+        val bundle = streamType?.let { type ->
+            Bundle().apply {
+                putString(TextToSpeech.Engine.KEY_PARAM_STREAM, type.toString())
+            }
         }
 
         AudioSessionCoordinator.markBusy()
@@ -421,9 +408,25 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             ttsDoneCallbacks.remove(id)?.invoke()
         }
     }
+
+    private fun findBookFusionTtsEngine(): String? {
+        val ttsServiceIntent = Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE)
+        val services = packageManager.queryIntentServices(
+            ttsServiceIntent,
+            PackageManager.MATCH_ALL,
+        )
+        return services.firstOrNull {
+            it.serviceInfo.packageName.equals(BOOKFUSION_TTS_PACKAGE, ignoreCase = true)
+        }?.serviceInfo?.packageName
+            ?: services.firstOrNull {
+                it.loadLabel(packageManager).toString().contains("BookFusion", ignoreCase = true)
+            }?.serviceInfo?.packageName
+    }
+
     companion object {
         const val EXTRA_TASKER_COMMAND = "tasker_command"
         private const val TAG = "MainActivity"
+        private const val BOOKFUSION_TTS_PACKAGE = "com.bookfusion.tts"
         private var loggedLargeDataHandlerMethods = false
         private const val AI_MODE_PHONE_ASSISTANT = "PhoneAssistant"
         private const val AI_MODE_TASKER = "Tasker"
@@ -714,7 +717,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // Check for app updates
         VersionUpdateChecker.checkForUpdates(this)
         // Initialize TTS
-        tts = TextToSpeech(this, this)
+        val preferredEngine = findBookFusionTtsEngine()
+        tts = if (preferredEngine != null) {
+            TextToSpeech(this, this, preferredEngine)
+        } else {
+            TextToSpeech(this, this)
+        }
+        Log.i(TAG, "Requested TTS engine=${preferredEngine ?: "system default"}")
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
                 localSpeechSessionManager.speechQueueController.onUtteranceStart(utteranceId)
