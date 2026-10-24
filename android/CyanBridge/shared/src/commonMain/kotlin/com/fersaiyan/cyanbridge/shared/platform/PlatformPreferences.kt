@@ -15,6 +15,8 @@ expect class PlatformPreferences {
     fun putFloat(key: String, value: Float)
     fun getBoolean(key: String, defaultValue: Boolean): Boolean
     fun putBoolean(key: String, value: Boolean)
+    fun getStringSet(key: String): Set<String>?
+    fun putStringSet(key: String, value: Set<String>)
     fun remove(key: String)
     fun clear()
     fun contains(key: String): Boolean
@@ -24,3 +26,6 @@ expect class PlatformPreferences {
  * Factory to create or retrieve a named preferences store.
  */
 expect fun createPlatformPreferences(name: String): PlatformPreferences
+
+/** True on iOS, whose app kept some settings under its own suite and key names. */
+internal expect val usesIosPreferenceNames: Boolean
