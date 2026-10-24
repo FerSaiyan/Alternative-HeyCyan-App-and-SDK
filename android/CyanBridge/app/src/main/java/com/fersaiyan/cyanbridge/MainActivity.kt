@@ -265,6 +265,9 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutButton
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
+import com.fersaiyan.cyanbridge.ui.main.BatteryResponseParser
+import com.fersaiyan.cyanbridge.ui.main.BatteryResult
+import com.fersaiyan.cyanbridge.ui.main.DashboardSessionPolicy
 import com.fersaiyan.cyanbridge.tasker.TaskerIntegrationManager
 import com.fersaiyan.cyanbridge.localagent.context.LocalAgentContextBuilder
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsStorage
@@ -1879,52 +1882,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun isDashboardActionBlockedByExclusiveSession(action: GlassesDashboardAction): Boolean {
-        if (
-            action is GlassesDashboardAction.SubmitFirmwarePatchRequest ||
-            action is GlassesDashboardAction.SelectImageThumbnailQuality ||
-            action is GlassesDashboardAction.SetGeminiLiveImageDelay ||
-            action is GlassesDashboardAction.SetAiWakeWordRoute ||
-            action == GlassesDashboardAction.DismissFirmwarePatchRequest ||
-            action == GlassesDashboardAction.MetaSendDiagnostics
-        ) {
+        if (DashboardSessionPolicy.ignoresExclusiveSession(action)) {
             return false
         }
         val activeSession = GlassesSessionCoordinator.currentSession() ?: return false
-        val isAllowed = if (activeSession == GlassesSession.WIFI_ADB_DEBUG) {
-            action == GlassesDashboardAction.StopWifiAdbDebug
-        } else if (activeSession == GlassesSession.META_CAMERA) {
-            when (action) {
-                is GlassesDashboardAction.Navigate,
-                GlassesDashboardAction.StartMeetingCapture,
-                GlassesDashboardAction.StopMeetingCapture,
-                is GlassesDashboardAction.RunNativePluginShortcut,
-                is GlassesDashboardAction.SelectAssistantMode,
-                GlassesDashboardAction.TestVoiceQuestion,
-                GlassesDashboardAction.TestImageQuestion,
-                GlassesDashboardAction.OpenExternalImageAutomationDiagnostics,
-                GlassesDashboardAction.StartAgent,
-                GlassesDashboardAction.StopAgent,
-                GlassesDashboardAction.RunAgentDemo,
-                GlassesDashboardAction.MetaStopSession,
-                GlassesDashboardAction.MetaStopStream,
-                GlassesDashboardAction.MetaStopDisplay,
-                GlassesDashboardAction.MetaCapturePhoto,
-                GlassesDashboardAction.MetaViewPhoto,
-                GlassesDashboardAction.MetaStartSession,
-                GlassesDashboardAction.MetaStartStream,
-                GlassesDashboardAction.MetaStartDisplay,
-                GlassesDashboardAction.MetaSendDiagnostics -> true
-                else -> false
-            }
-        } else {
-            when (action) {
-                is GlassesDashboardAction.Navigate -> true
-                GlassesDashboardAction.StopSync -> activeSession == GlassesSession.MEDIA_SYNC
-                GlassesDashboardAction.StopLivePreview -> activeSession == GlassesSession.LIVE_PREVIEW
-                GlassesDashboardAction.CancelOta -> activeSession == GlassesSession.OTA
-                else -> false
-            }
-        }
+        val isAllowed = DashboardSessionPolicy.isAllowedDuring(action, activeSession)
         if (isAllowed) return false
 
         Toast.makeText(
@@ -7499,35 +7461,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private data class BatteryResult(
-        val battery: Int?,
-        val charging: Boolean?,
-        val message: String
-    )
-
-    private fun parseBatteryResponse(response: Any?): BatteryResult {
-        if (response == null) {
-            return BatteryResult(null, null, "Battery callback: null response")
-        }
-        return try {
-            val clazz = response.javaClass
-            val batteryField = clazz.getDeclaredField("battery").apply {
-                isAccessible = true
-            }
-            val chargingField = clazz.getDeclaredField("charging").apply {
-                isAccessible = true
-            }
-
-            val battery = batteryField.getInt(response)
-            val charging = chargingField.getBoolean(response)
-            val message =
-                "Battery: $battery% (${if (charging) "charging" else "not charging"})"
-            BatteryResult(battery, charging, message)
-        } catch (e: Exception) {
-            Log.e("BatteryCallback", "Failed to parse BatteryResponse", e)
-            BatteryResult(null, null, "Battery: $response")
-        }
-    }
+    private fun parseBatteryResponse(response: Any?): BatteryResult =
+        BatteryResponseParser.parse(response)
 
     private fun handleBatteryReport(battery: Int, charging: Boolean) {
         val message = "Battery: $battery% (${if (charging) "charging" else "not charging"})"
