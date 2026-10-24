@@ -12,6 +12,7 @@ import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrameType
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsMediaCounts
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsScreenConfig
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsSessionState
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsStorageInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -416,4 +417,4 @@ class TuneBudsManagerTest {
 }
 
 /** Capability fields as the manager exposes them. */
-private val TuneBudsState.caps: TuneBudsState get() = this
+private val TuneBudsState.caps: TuneBudsSessionState get() = device
