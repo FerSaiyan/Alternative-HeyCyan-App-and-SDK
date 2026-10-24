@@ -921,12 +921,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         DashboardController(
             mainScreenHost,
             dashboardActionHost,
-            deviceManagers,
             glassesDevices,
             transportPermissions,
             nativePluginShortcuts,
             meetingCaptureUi,
-            metaRaybanUi,
             appDestinationNavigator,
         )
     }

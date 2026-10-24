@@ -94,4 +94,49 @@ class GlassesDashboardGatingTest {
         )
         assertEquals(LivePreviewUiState(), state.livePreview)
     }
+
+    /**
+     * The iOS host showed HeyCyan sections only while linked, the other families' sections while
+     * linked (Meta and Meizu cards always), and the Eyevue panel alone. The shared gating keeps
+     * that; Eyevue now also shows Android's device-info section.
+     */
+    @Test
+    fun iosGatingKeepsTheSectionsOfTheFormerIosHost() {
+        val otherGlasses = setOf(
+            DeviceClass.TUNEBUDS, DeviceClass.MOYOUNG_W620, DeviceClass.META_RAYBAN,
+            DeviceClass.MENTRA_LIVE, DeviceClass.MEIZU_MYVU,
+        )
+        DeviceClass.entries.forEach { deviceClass ->
+            listOf(true, false).forEach { linked ->
+                val heyCyan = linked && deviceClass == DeviceClass.HEY_CYAN
+                val eyevue = linked && deviceClass == DeviceClass.EYEVUE
+                val shown = linked || deviceClass == DeviceClass.META_RAYBAN || deviceClass == DeviceClass.MEIZU_MYVU
+                val other = if (deviceClass in otherGlasses && shown) {
+                    GlassesManagerGating.visibleActions(deviceClass)
+                } else {
+                    emptySet()
+                }
+                val state = sample.withIosFamilyGating(GlassesFamilyProfiles.forClass(deviceClass), linked)
+                val flags = listOf(
+                    state.showHeyCyanControls, state.showCaptureSettings, state.showAiWakeWordRouting,
+                    state.showAdvancedControls, state.showAdvancedLocalAgent, state.showAdvancedDeviceInfo,
+                    state.showAdvancedDeviceVolume, state.showAdvancedImageQuality, state.showAdvancedDeveloperTools,
+                    state.showAdvancedOta, state.showMetaRaybanControls, state.showMeizuMyvuControls,
+                    state.showTuneBudsControls, state.showEyevueControls,
+                )
+                val expected = listOf(
+                    heyCyan, heyCyan, heyCyan,
+                    heyCyan || eyevue || Action.ADVANCED_CONTROLS in other, heyCyan,
+                    heyCyan || eyevue || Action.ADVANCED_DEVICE_INFO in other,
+                    heyCyan, heyCyan || Action.ADVANCED_IMAGE_QUALITY in other, heyCyan,
+                    heyCyan, Action.META_RAYBAN_CONTROLS in other, Action.MEIZU_MYVU_CONTROLS in other,
+                    Action.TUNEBUDS_CONTROLS in other, eyevue,
+                )
+                assertEquals(expected, flags, "iOS sections for $deviceClass, linked=$linked")
+                assertEquals(sample.deviceInfoLabel, state.deviceInfoLabel)
+                assertEquals(false, state.wifiAdbDebug.isAvailable)
+                assertEquals(LivePreviewUiState(), state.livePreview)
+            }
+        }
+    }
 }

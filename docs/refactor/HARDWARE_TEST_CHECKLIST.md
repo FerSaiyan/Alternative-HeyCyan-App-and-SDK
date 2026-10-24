@@ -252,3 +252,28 @@ Every prefs file, key, type and default is declared once in `shared/prefs`, and 
 **iOS (needs a Mac build):**
 - Wake word route, thumbnail quality, assistant mode, language and the remote server settings keep their existing NSUserDefaults names.
 - The appearance and welcome flags still load.
+
+## Wave 5: shared Glasses dashboard controller
+
+**Android:** behavior is unchanged. Meta and Meizu panel actions now run only while that family is selected, which is already the only time the panel renders. The per-family checks above cover this.
+
+**iOS (compile on a Mac first: `-PenableAppleTargets=true :shared:compileKotlinIosSimulatorArm64`)**
+
+Deliberate changes:
+- **Eyevue**
+  - Handles actions whenever it is selected.
+  - Media count, start sync and volume now show "not implemented in the iOS host yet"; they no longer fall through to HeyCyan BLE or hotspot commands.
+  - The image question listens for a spoken question while the photo transfers.
+  - Shows the Advanced and Device info cards when linked.
+- **Battery and storage cards:** shown by family profile, with "--" until data arrives. Meta, audio-only and unknown glasses have no battery card.
+- **TuneBuds, SDK glasses, Meizu:** undeclared actions show "not implemented" instead of the HeyCyan fallback messages.
+- **Wake word and thumbnail quality:** saved only for families that support them.
+- **QCSDK assistant hooks:** apply only while HeyCyan is selected.
+
+Smoke test per family:
+- connect;
+- photo or AI photo;
+- battery;
+- image question;
+- sync (HeyCyan only);
+- the Meta and Meizu panels.

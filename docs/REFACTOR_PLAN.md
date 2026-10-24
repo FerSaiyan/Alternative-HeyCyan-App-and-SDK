@@ -43,8 +43,8 @@ Nada disso foi testado com os óculos ainda. A compilação do app Android tamb�
 3. `e1b2f583`: a sessão HeyCyan (QCSDK e o caminho BLE sem SDK) saiu do controlador para `IosHeyCyanGlasses.kt`. O controlador só despacha a ação para os óculos selecionados (Eyevue → outros → HeyCyan) e cuida do que é do app.
 
 O que ainda falta no iOS (entra junto com A4, para servir aos dois apps):
-- [ ] Levar o handler do Eyevue (`handleEyevue`) para uma classe própria, como as outras.
-- [ ] Trocar o despacho por classe por uma interface `GlassesDevice` no `commonMain` (`handle(action)`, `canTakeAiPhoto`, `requestAiPhoto()`, `assistantHooks`, conectar/desconectar). `IosHeyCyanGlasses`, `IosOtherGlasses` e o Eyevue passam a implementá-la.
+- [x] Levar o handler do Eyevue (`handleEyevue`) para uma classe própria, como as outras (`IosEyevueGlasses`).
+- [x] Trocar o despacho por classe por uma interface `GlassesDevice` no `commonMain` (`handle(action)`, `canTakeAiPhoto`, `requestAiPhoto()`, `assistantHooks`, conectar/desconectar). `IosHeyCyanGlasses`, os aparelhos de `IosOtherGlasses` (TuneBuds, SDK, Meizu) e o `IosEyevueGlasses` passam a implementá-la.
 
 ## 4. Plano do Android (pronto para executar)
 
@@ -105,6 +105,9 @@ Os 104 desvios `isXSelected()` do `MainActivity` (Eyevue 30, TuneBuds 22, Meta 1
 ### A5. Controlador da tela Óculos comum (grande)
 
 Depois de A3 e A4, as 66 `GlassesDashboardAction` são tratadas por um controlador no `commonMain`, que chama o `GlassesDevice` e o `GlassesAssistant`. `MainActivity` e `IosAppController` ficam com permissões, serviços em primeiro plano e ciclo de vida. Meta: `MainActivity` abaixo de 1.000 linhas.
+
+- [x] `GlassesDashboardController` (comum): política de sessão exclusiva, gating da família, capacidades e painel do `GlassesDevice` selecionado; o resto vai para um `GlassesDashboardHost`. No Android o host é o `DashboardController`; no iOS, o `IosDashboardHost`. O gating do iOS é `withIosFamilyGating` (o `withFamilyGating` mais as diferenças do iOS).
+- [ ] Testar nos dois apps com os óculos (o iOS ainda precisa compilar num Mac: `-PenableAppleTargets=true :shared:compileKotlinIosSimulatorArm64`).
 
 ### A6. Clientes de IA (média)
 

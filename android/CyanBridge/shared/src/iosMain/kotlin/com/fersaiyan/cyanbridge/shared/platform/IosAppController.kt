@@ -1,29 +1,30 @@
 package com.fersaiyan.cyanbridge.shared.platform
 
+import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.data.local.iosAppDatabase
 import com.fersaiyan.cyanbridge.shared.ai.DEFAULT_RELAY_URL
 import com.fersaiyan.cyanbridge.shared.ai.RelayAiModelRegistry
 import com.fersaiyan.cyanbridge.shared.ai.RelayChatAiService
 import com.fersaiyan.cyanbridge.shared.ai.RelayImageAiService
 import com.fersaiyan.cyanbridge.shared.ai.RelayVoiceAiService
-import com.fersaiyan.cyanbridge.shared.assistant.AssistantGlassesHooks
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantOutput
 import com.fersaiyan.cyanbridge.shared.assistant.GlassesAssistant
 import com.fersaiyan.cyanbridge.shared.ble.BleConnectionState
 import com.fersaiyan.cyanbridge.shared.ble.IosBleManager
-import com.fersaiyan.cyanbridge.shared.ble.IosEyevueSession
 import com.fersaiyan.cyanbridge.shared.ble.IosTuneBudsSession
 import com.fersaiyan.cyanbridge.shared.ble.VendorGlassesMode
 import com.fersaiyan.cyanbridge.shared.ble.awaitModeAccepted
 import com.fersaiyan.cyanbridge.shared.devices.BleDeviceClassifier
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
-import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice
 import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueProtocol
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardController
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
+import com.fersaiyan.cyanbridge.shared.glasses.withIosFamilyGating
 import com.fersaiyan.cyanbridge.shared.media.IosMediaTransfer
 import com.fersaiyan.cyanbridge.shared.persistence.ChatEntity
 import com.fersaiyan.cyanbridge.shared.persistence.ChatMessageEntity
@@ -57,26 +58,13 @@ import platform.CoreBluetooth.CBUUID
 
 private const val IOS_BLE_CONNECT_TIMEOUT_MS = 20_000L
 private const val GLASSES_CHAT_ID = "glasses-assistant"
-/** Glasses handled by IosOtherGlasses. */
-private val OTHER_GLASSES_CLASSES = setOf(
-    DeviceClass.TUNEBUDS,
-    DeviceClass.MOYOUNG_W620,
-    DeviceClass.META_RAYBAN,
-    DeviceClass.MENTRA_LIVE,
-    DeviceClass.MEIZU_MYVU,
-)
 /** Classes the app does not reconnect at launch (audio-only devices; Meizu's relay is RFCOMM-only). */
 private val NO_LINK_CLASSES = setOf(DeviceClass.GENERIC_AUDIO, DeviceClass.MEIZU_MYVU)
-/** Classes whose dashboard card is useful without a live link (Meta registration, Meizu notice). */
-private val CARD_WITHOUT_LINK_CLASSES = setOf(DeviceClass.META_RAYBAN, DeviceClass.MEIZU_MYVU)
-// Same option lists as Android's MainActivity for HeyCyan recording limits.
-private val MEETING_TIMER_SECONDS = listOf<Long?>(null, 15L * 60L, 60L * 60L, 3L * 60L * 60L)
 // Android ImageThumbnailQuality (sdkValue to label).
 private val THUMBNAIL_QUALITY_LABELS = mapOf(
     0 to "Instant", 1 to "Quick", 2 to "Smooth", 3 to "Fine", 4 to "Clearer", 5 to "Detailed",
 )
 internal const val ASSISTANT_TAG = "IosGlassesAssistant"
-internal val VIDEO_DURATION_OPTIONS_SECONDS = listOf(15, 30, 60, 180, 540, 720)
 
 /**
  * Small iOS host controller for the shared dashboard. It owns platform jobs so
@@ -102,17 +90,7 @@ internal class IosAppController {
     private val voiceAiService = IosRoutedVoiceAiService(RelayVoiceAiService())
     private val imageAiService = IosRoutedImageAiService(RelayImageAiService())
     private val meetingRecorder = IosMeetingRecorder(voiceAiService, chatAiService, notesRepository)
-    private val eyevue = IosEyevueSession(
-        bleManager = bleManager,
-        onBattery = { battery ->
-            scope.launch { updateState { it.copy(batteryPercent = battery.percent, showBattery = true) } }
-        },
-        onWifiSsid = { ssid ->
-            scope.launch { updateState { it.copy(transfer = it.transfer.copy(detail = "Eyevue Wi-Fi: $ssid")) } }
-        },
-        onPhoto = { image -> answerGlassesPhoto(image) },
-    )
-    private val isEyevueConnected get() = isBleConnected && selectedDeviceClass == DeviceClass.EYEVUE
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val pluginsRuntime = IosPluginsRuntime(
         chatAiService = chatAiService,
         imageAiService = imageAiService,
@@ -122,37 +100,50 @@ internal class IosAppController {
         requestGlassesPhoto = { vendor?.awaitModeAccepted(VendorGlassesMode.AI_PHOTO) ?: false },
     )
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    /** Scan and reconnect go through the app's pairing flow; [onDisconnect] drops the family's link. */
+    private fun glassesConnection(onDisconnect: () -> Unit) = object : GlassesConnectionControl {
+        override fun scan() = openDeviceBind()
+
+        override fun reconnect() = this@IosAppController.reconnect()
+
+        override fun disconnect() = onDisconnect()
+    }
+
+    private val bleConnection = glassesConnection { scope.launch { bleManager.disconnect() } }
+
+    private val glassesHost = object : IosGlassesHost {
+        override val dashboard: GlassesDashboardUiState get() = _dashboardState.value
+        override val isBleConnected: Boolean get() = this@IosAppController.isBleConnected
+
+        override fun updateDashboard(transform: (GlassesDashboardUiState) -> GlassesDashboardUiState) =
+            updateState(transform)
+
+        override fun onGlassesPhoto(bytes: ByteArray) = answerGlassesPhoto(bytes)
+
+        override fun onGlassesButton() {
+            if (assistant.isBusy) return
+            // Mentra Live's button is its camera button: ask about what the glasses see.
+            if (selectedDeviceClass == DeviceClass.MENTRA_LIVE) {
+                handle(GlassesDashboardAction.TestImageQuestion)
+            } else {
+                scope.launch { onGlassesAiVoice() }
+            }
+        }
+
+        override fun onSdkConnectionChanged(connected: Boolean) {
+            updateConnectionCapabilities()
+            if (connected) {
+                otherGlasses.sdkBridge?.requestBattery()
+                otherGlasses.sdkBridge?.requestMediaCounts()
+            }
+        }
+    }
+
+    /** Eyevue over BLE GATT. */
+    private val eyevue = IosEyevueGlasses(bleManager, scope, glassesHost, bleConnection)
 
     /** TuneBuds, MoYoung, Meta, Mentra and Meizu (see IosOtherGlasses). */
-    private val otherGlasses: IosOtherGlasses = IosOtherGlasses(
-        bleManager = bleManager,
-        scope = scope,
-        host = object : IosGlassesHost {
-            override fun updateDashboard(transform: (GlassesDashboardUiState) -> GlassesDashboardUiState) =
-                updateState(transform)
-
-            override fun onGlassesPhoto(bytes: ByteArray) = answerGlassesPhoto(bytes)
-
-            override fun onGlassesButton() {
-                if (assistant.isBusy) return
-                // Mentra Live's button is its camera button: ask about what the glasses see.
-                if (selectedDeviceClass == DeviceClass.MENTRA_LIVE) {
-                    handle(GlassesDashboardAction.TestImageQuestion)
-                } else {
-                    scope.launch { onGlassesAiVoice() }
-                }
-            }
-
-            override fun onSdkConnectionChanged(connected: Boolean) {
-                updateConnectionCapabilities()
-                if (connected) {
-                    otherGlasses.sdkBridge?.requestBattery()
-                    otherGlasses.sdkBridge?.requestMediaCounts()
-                }
-            }
-        },
-    )
+    private val otherGlasses = IosOtherGlasses(bleManager, scope, glassesHost, bleConnection)
 
     private val assistant = GlassesAssistant(
         scope = scope,
@@ -164,9 +155,8 @@ internal class IosAppController {
             override suspend fun saveAnswer(question: String, answer: String, photo: ByteArray?) =
                 saveGlassesAnswer(question, answer, photo)
         },
-        glassesHooks = { vendor?.let(::QcsdkAssistantHooks) ?: AssistantGlassesHooks.None },
+        glassesHooks = { selectedDevice.assistantHooks },
     )
-
 
     /** HeyCyan glasses: QCSDK on device builds, raw BLE commands otherwise. */
     private val heyCyan: IosHeyCyanGlasses = IosHeyCyanGlasses(
@@ -185,7 +175,28 @@ internal class IosAppController {
 
             override fun onPhoto(bytes: ByteArray) = answerGlassesPhoto(bytes)
         },
+        connection = bleConnection,
     )
+
+    // Like Android, unclassified and audio-only glasses use the HeyCyan path.
+    private val genericAudioGlasses = IosProfiledGlasses(GlassesFamilyProfiles.genericAudio, heyCyan)
+    private val unknownGlasses = IosProfiledGlasses(GlassesFamilyProfiles.unknown, heyCyan)
+
+    /** The selected family's implementation (Android: AndroidGlassesDevices). */
+    private val selectedDevice: IosGlassesDevice
+        get() = when (selectedDeviceClass) {
+            DeviceClass.HEY_CYAN -> heyCyan
+            DeviceClass.EYEVUE -> eyevue
+            DeviceClass.TUNEBUDS -> otherGlasses.tuneBudsDevice
+            DeviceClass.MOYOUNG_W620,
+            DeviceClass.META_RAYBAN,
+            DeviceClass.MENTRA_LIVE,
+            -> otherGlasses.sdkDevice(selectedDeviceClass)
+            DeviceClass.MEIZU_MYVU -> otherGlasses.meizuDevice
+            DeviceClass.GENERIC_AUDIO -> genericAudioGlasses
+            DeviceClass.UNKNOWN -> unknownGlasses
+        }
+
     fun debugPhotoCycle() {
         scope.launch {
             delay(5_000L)
@@ -219,6 +230,18 @@ internal class IosAppController {
         ),
     )
     val dashboardState: StateFlow<GlassesDashboardUiState> = _dashboardState.asStateFlow()
+
+    /** Session policy, family gating and device dispatch are shared; [IosDashboardHost] runs the effects. */
+    private val dashboardController = GlassesDashboardController(
+        IosDashboardHost(
+            state = _dashboardState,
+            scope = scope,
+            selectedGlasses = { selectedDevice },
+            assistant = assistant,
+            meetingRecorder = meetingRecorder,
+            pluginsRuntime = pluginsRuntime,
+        ),
+    )
 
     private val _deviceBindState = MutableStateFlow<IosDeviceBindUiState?>(null)
     val deviceBindState: StateFlow<IosDeviceBindUiState?> = _deviceBindState.asStateFlow()
@@ -342,108 +365,7 @@ internal class IosAppController {
         )
     }
 
-    fun handle(action: GlassesDashboardAction) {
-        if (isEyevueConnected && handleEyevue(action)) return
-        if (otherGlasses.handle(action)) return
-        if (heyCyan.handle(action)) return
-        when (action) {
-            GlassesDashboardAction.Scan -> openDeviceBind()
-            GlassesDashboardAction.Reconnect -> reconnect()
-            GlassesDashboardAction.Disconnect -> if (otherGlasses.usesSdk) {
-                otherGlasses.disconnectSdk()
-            } else {
-                scope.launch { bleManager.disconnect() }
-            }
-            is GlassesDashboardAction.RunNativePluginShortcut -> pluginsRuntime.runShortcut(action.action)
-            is GlassesDashboardAction.RequestOtaFirmware,
-            GlassesDashboardAction.CancelOta,
-            GlassesDashboardAction.DumpOtaInfo,
-            GlassesDashboardAction.TestPullOta,
-            -> updateState { it.copy(agentLastError = "Firmware updates still require the Android app") }
-            is GlassesDashboardAction.SelectMeetingTimer -> updateState {
-                it.copy(meeting = it.meeting.copy(timerIndex = action.index.coerceIn(0, MEETING_TIMER_SECONDS.lastIndex)))
-            }
-            GlassesDashboardAction.StartMeetingCapture -> scope.launch {
-                val timer = MEETING_TIMER_SECONDS[_dashboardState.value.meeting.timerIndex]
-                meetingRecorder.start(timer)?.let { error -> updateState { it.copy(agentLastError = error) } }
-            }
-            GlassesDashboardAction.StopMeetingCapture -> meetingRecorder.stopMeetingCapture()
-            GlassesDashboardAction.TestImageQuestion -> {
-                val bridge = vendor
-                if (bridge == null && !otherGlasses.canTakeAiPhoto) {
-                    otherGlasses.missingSdkMessage()?.let { message -> updateState { it.copy(agentLastError = message) } }
-                        ?: heyCyan.reportVendorRequired("Image question")
-                } else {
-                    assistant.startPhotoQuestion {
-                        if (bridge != null) heyCyan.requestAiPhoto(bridge) else otherGlasses.requestAiPhoto()
-                    }
-                }
-            }
-            GlassesDashboardAction.TestVoiceQuestion -> assistant.askByVoice()
-            is GlassesDashboardAction.SelectAssistantMode -> {
-                AgentPrefs.LocalAgent.glassesAssistantMode.set(action.mode.name)
-                updateState { it.copy(assistantMode = action.mode) }
-            }
-            is GlassesDashboardAction.SetAiWakeWordRoute -> {
-                AssistantPrefs.WakeWord.route.set(action.route)
-                updateState { it.copy(aiWakeWordRoute = action.route) }
-            }
-            is GlassesDashboardAction.SelectImageThumbnailQuality -> {
-                val value = action.sdkValue.takeIf { it in THUMBNAIL_QUALITY_LABELS } ?: 4
-                AssistantPrefs.ImageQuestions.thumbnailQuality.set(value)
-                updateState {
-                    it.copy(
-                        imageThumbnailQualitySdkValue = value,
-                        imageThumbnailQualityLabel = THUMBNAIL_QUALITY_LABELS.getValue(value),
-                    )
-                }
-            }
-            GlassesDashboardAction.ToggleAdvanced -> updateState { it.copy(advancedExpanded = !it.advancedExpanded) }
-            is GlassesDashboardAction.Navigate -> Unit
-            else -> updateState { it.copy(agentLastError = "This control is not implemented in the iOS host yet") }
-        }
-    }
-
-    /** Eyevue actions over BLE GATT (Android: EyevueManager); false when not an Eyevue action. */
-    private fun handleEyevue(action: GlassesDashboardAction): Boolean {
-        val job: (suspend () -> Unit)? = when (action) {
-            GlassesDashboardAction.CapturePhoto -> ({ eyevue.takePhoto(highQuality = true) })
-            GlassesDashboardAction.TestImageQuestion -> ({
-                updateState { it.copy(agentLastError = "Waiting for the glasses photo…") }
-                eyevue.takePhoto(highQuality = _dashboardState.value.imageThumbnailQualitySdkValue >= 5)
-            })
-            GlassesDashboardAction.ToggleVideo -> ({
-                val start = !_dashboardState.value.isVideoRecording
-                if (eyevue.setVideoRecording(start)) updateState { it.copy(isVideoRecording = start) }
-            })
-            GlassesDashboardAction.StartAudioRecording -> ({
-                val start = !_dashboardState.value.isAudioRecording
-                if (eyevue.setAudioRecording(start)) updateState { it.copy(isAudioRecording = start) }
-            })
-            GlassesDashboardAction.RequestBattery -> ({ eyevue.requestBattery() })
-            GlassesDashboardAction.SyncTime -> ({
-                val synced = eyevue.syncTime()
-                updateState { it.copy(agentLastError = if (synced) "Glasses clock synced" else "Clock sync failed") }
-            })
-            is GlassesDashboardAction.SetWearingDetection -> ({
-                if (eyevue.setWearingDetection(action.enabled)) updateState { it.copy(wearingDetectionEnabled = action.enabled) }
-            })
-            is GlassesDashboardAction.SetVideoRecordingDuration -> ({
-                if (eyevue.setRecordingDuration(action.seconds)) {
-                    updateState { it.copy(videoRecordingDurationSeconds = action.seconds) }
-                }
-            })
-            is GlassesDashboardAction.SetAudioRecordingDuration -> ({
-                if (eyevue.setRecordingDuration(action.seconds)) {
-                    updateState { it.copy(audioRecordingDurationSeconds = action.seconds) }
-                }
-            })
-            else -> null
-        }
-        job ?: return false
-        scope.launch { job() }
-        return true
-    }
+    fun handle(action: GlassesDashboardAction) = dashboardController.handle(action)
 
     private fun openDeviceBind() {
         _deviceBindState.value = IosDeviceBindUiState()
@@ -674,40 +596,9 @@ internal class IosAppController {
         _dashboardState.value = transform(_dashboardState.value)
     }
 
+    /** The shared family gating of the selected glasses, with the iOS differences. */
     private fun updateConnectionCapabilities() {
-        val showHeyCyan = isBleConnected && selectedDeviceClass == DeviceClass.HEY_CYAN
-        // The other glasses follow Android's GlassesManagerGating. Meta (registration) and Meizu
-        // (the unsupported notice) show their card without a live link.
-        val otherConnected = if (otherGlasses.usesSdk) otherGlasses.isSdkConnected else isBleConnected
-        val other = if (selectedDeviceClass in OTHER_GLASSES_CLASSES &&
-            (otherConnected || selectedDeviceClass in CARD_WITHOUT_LINK_CLASSES)
-        ) {
-            GlassesManagerGating.visibleActions(selectedDeviceClass)
-        } else {
-            emptySet()
-        }
-        updateState { state ->
-            state.copy(
-                showHeyCyanControls = showHeyCyan,
-                showCaptureSettings = showHeyCyan,
-                showAiWakeWordRouting = showHeyCyan,
-                showAdvancedControls = showHeyCyan || GlassesManagerGating.Action.ADVANCED_CONTROLS in other,
-                showAdvancedLocalAgent = showHeyCyan,
-                showAdvancedDeviceInfo = showHeyCyan || GlassesManagerGating.Action.ADVANCED_DEVICE_INFO in other,
-                showAdvancedDeviceVolume = showHeyCyan,
-                showAdvancedImageQuality = showHeyCyan || GlassesManagerGating.Action.ADVANCED_IMAGE_QUALITY in other,
-                showAdvancedDeveloperTools = showHeyCyan,
-                showAdvancedOta = showHeyCyan,
-                showMetaRaybanControls = GlassesManagerGating.Action.META_RAYBAN_CONTROLS in other,
-                showMeizuMyvuControls = GlassesManagerGating.Action.MEIZU_MYVU_CONTROLS in other,
-                showTuneBudsControls = GlassesManagerGating.Action.TUNEBUDS_CONTROLS in other,
-                showEyevueControls = isEyevueConnected,
-                videoRecordingDurationOptionsSeconds = if (isEyevueConnected) {
-                    VIDEO_DURATION_OPTIONS_SECONDS
-                } else {
-                    state.videoRecordingDurationOptionsSeconds
-                },
-            )
-        }
+        val device = selectedDevice
+        updateState { it.withIosFamilyGating(device.profile, linked = device.isLinked) }
     }
 }
