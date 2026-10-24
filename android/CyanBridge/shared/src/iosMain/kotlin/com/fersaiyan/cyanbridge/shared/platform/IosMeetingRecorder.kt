@@ -3,6 +3,9 @@ package com.fersaiyan.cyanbridge.shared.platform
 import com.fersaiyan.cyanbridge.shared.ai.ChatAiService
 import com.fersaiyan.cyanbridge.shared.ai.ChatMessage
 import com.fersaiyan.cyanbridge.shared.ai.VoiceAiService
+import com.fersaiyan.cyanbridge.shared.notes.ChatSummarizationService
+import com.fersaiyan.cyanbridge.shared.notes.SummarizationRequest
+import com.fersaiyan.cyanbridge.shared.notes.SummaryMarkdownFormatter
 import com.fersaiyan.cyanbridge.shared.persistence.NoteEntity
 import com.fersaiyan.cyanbridge.shared.persistence.NotesRepository
 import com.fersaiyan.cyanbridge.shared.recordings.MeetingRecordingUiState
@@ -193,15 +196,12 @@ class IosMeetingRecorder(
         delete(load().map { it.id })
     }
 
+    /** Same prompt, parsing and note layout as Android's meeting notes. */
     private suspend fun summarize(title: String, transcript: String): String {
-        val prompt = """
-            Summarize this meeting transcript as Markdown with these sections:
-            ## Summary (5-10 bullets), ## Action items, ## Key decisions, ## Open questions.
-            Write in the transcript's language. Title: $title
-
-            $transcript
-        """.trimIndent()
-        return chatAiService.chat(listOf(ChatMessage("user", prompt))).message.content.trim()
+        val summarizer = ChatSummarizationService { prompt ->
+            chatAiService.chat(listOf(ChatMessage("user", prompt))).message.content
+        }
+        return SummaryMarkdownFormatter.format(summarizer.summarize(SummarizationRequest(transcript, hintTitle = title)))
     }
 
     private fun pathOf(recording: StoredRecording) = "$directory/${recording.fileName}"
