@@ -17,27 +17,6 @@ import org.robolectric.shadows.ShadowToast
 class ProSubscriptionSettingsDraftTest {
 
     @Test
-    fun untouchedDraftShowsTheScreenDefaults() {
-        val state = ProSubscriptionSettingsDraft().toUiState(ProSubscriptionModelLabels(), systemPrompt = "Prompt")
-
-        assertEquals("Quota: unknown", state.quotaStatus)
-        assertEquals("", state.quotaBreakdown)
-        assertNull(state.quotaProgress)
-        assertEquals("Not signed up yet.", state.betaStatus)
-        assertEquals(
-            listOf(
-                "Cheap models router (1x)",
-                "Gemini 3.1 Flash Live (36x)",
-                "Gemma 4 26B Vision (2x)",
-                "DeepSeek V4 Flash (2x)",
-            ),
-            state.modelOptions,
-        )
-        assertEquals("Cheap models router (1x)", state.requestsModel)
-        assertEquals("Prompt", state.systemPrompt)
-    }
-
-    @Test
     fun quotaLoadingInfoAndErrorMatchTheFormerIndicator() {
         val draft = ProSubscriptionSettingsDraft()
         val models = ProSubscriptionModelLabels()

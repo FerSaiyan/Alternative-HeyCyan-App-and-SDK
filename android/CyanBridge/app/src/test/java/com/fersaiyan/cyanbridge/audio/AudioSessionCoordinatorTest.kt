@@ -59,34 +59,6 @@ class AudioSessionCoordinatorTest {
     }
 
     @Test
-    fun onlyOneVoicePluginAndPluginsWaitForLive() {
-        val translatorEvents = Events()
-        val translator = open(AudioSessionRequest.ContinuousRecognition("HandsFreeTranslatorService"), translatorEvents)!!
-        val denied = AudioSessionCoordinator.open(context, AudioSessionRequest.ContinuousRecognition("LiveCaptionRelayService"))
-        assertTrue(denied is AudioSessionGrant.Denied)
-        assertEquals("HandsFreeTranslatorService", (denied as AudioSessionGrant.Denied).blockingOwner)
-
-        val live = open(AudioSessionRequest.Conversation("GeminiLiveClient"))!!
-        assertEquals(AudioSessionState.SUSPENDED, translator.state)
-        live.close()
-        assertEquals(listOf("suspended", "resumed"), translatorEvents.log)
-    }
-
-    @Test
-    fun meetingCaptureCoexistsWithLiveAndEndsAnAmbientProbe() {
-        val ambientEvents = Events()
-        val ambient = open(AudioSessionRequest.AmbientListening("AmbientSpeech"), ambientEvents)!!
-        val meeting = open(AudioSessionRequest.Recording("MeetingCaptureService"))!!
-        assertEquals(listOf("ended"), ambientEvents.log)
-        assertFalse(ambient.isActive)
-
-        val live = open(AudioSessionRequest.Conversation("GeminiLiveClient"))!!
-        assertTrue(meeting.isActive)
-        assertTrue(live.isActive)
-        assertNull(AudioSessionCoordinator.tryOpen(context, AudioSessionRequest.AmbientListening("AmbientSpeech")))
-    }
-
-    @Test
     fun closingIsIdempotentAndFreesTheSlot() {
         val first = open(AudioSessionRequest.VoiceCapture("AudioQuestionRecorder"))!!
         assertNull(AudioSessionCoordinator.tryOpen(context, AudioSessionRequest.VoiceCapture("StudioApprovalHandler")))

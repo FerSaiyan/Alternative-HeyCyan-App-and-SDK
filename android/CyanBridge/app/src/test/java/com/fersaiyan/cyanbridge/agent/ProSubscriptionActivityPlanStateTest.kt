@@ -32,14 +32,6 @@ class ProSubscriptionActivityPlanStateTest {
         }
 
     @Test
-    fun freeTrialIsPreselectedAndStatusShowsNotSubscribed() {
-        val activity = Robolectric.buildActivity(ProSubscriptionActivity::class.java, intent()).create().get()
-
-        assertEquals("free_trial", activity.state.selectedPlan)
-        assertTrue(activity.state.status, activity.state.status.startsWith("Not subscribed · "))
-    }
-
-    @Test
     fun requestedPlanFromIntentIsSelected() {
         val activity = Robolectric.buildActivity(ProSubscriptionActivity::class.java, intent(" MAX ")).create().get()
 

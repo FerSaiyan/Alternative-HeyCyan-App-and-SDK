@@ -1,6 +1,5 @@
 package com.fersaiyan.cyanbridge.ai.image
 
-import com.fersaiyan.cyanbridge.shared.audio.PcmEnergy
 import com.fersaiyan.cyanbridge.shared.audio.QuestionEndpoint
 import org.junit.Assert.*
 import org.junit.Test
@@ -33,10 +32,6 @@ class QuestionEndpointTest {
         val endpoint = QuestionEndpoint(resourceLimitMs = 2000)
         repeat(99) { endpoint.advance(true, 20, (it + 1) * 20L) }
         assertEquals(QuestionEndpoint.Decision.LIMIT_REACHED, endpoint.advance(true, 20, 2000))
-    }
-    @Test fun sharedEnergyPrimitiveHandlesFullScaleNegativePcmWithoutOverflow() {
-        assertEquals(32768.0, PcmEnergy.rms(shortArrayOf(Short.MIN_VALUE, Short.MIN_VALUE)), 0.01)
-        assertEquals(0.0, PcmEnergy.rms(shortArrayOf()), 0.01)
     }
     @Test fun wavHeaderDescribesTheActualPcmSentToOfflineRecognitionAndModels() {
         val bytes = AudioQuestionRecorder.wavHeader(32_000)

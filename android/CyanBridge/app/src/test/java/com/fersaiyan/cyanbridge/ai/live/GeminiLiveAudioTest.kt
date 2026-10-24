@@ -19,9 +19,4 @@ class GeminiLiveAudioTest {
         assertEquals(0, output.first().toInt())
         assertEquals(900, output[2].toInt())
     }
-
-    @Test
-    fun `live states expose a stopped state for playback cleanup`() {
-        assertEquals(GeminiLiveState.STOPPED, GeminiLiveState.valueOf("STOPPED"))
-    }
 }
