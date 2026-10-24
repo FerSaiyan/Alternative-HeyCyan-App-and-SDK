@@ -7,6 +7,7 @@ import com.fersaiyan.cyanbridge.shared.ai.ImageAiService
 import com.fersaiyan.cyanbridge.shared.ai.OpenAiCompatible
 import com.fersaiyan.cyanbridge.shared.ai.VoiceAiService
 import com.fersaiyan.cyanbridge.shared.localmodels.RemoteInferenceUiState
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs.RemoteOpenAi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -29,16 +30,11 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * on-device models, matching Android's remote toggle.
  */
 object IosRemoteModelSettings {
-    private const val KEY_ENABLED = "enabled"
-    private const val KEY_BASE_URL = "base_url"
-    private const val KEY_MODEL = "model"
     private const val KEYCHAIN_API_KEY = "remote_openai_api_key"
 
-    private val preferences = createPlatformPreferences("cyanbridge_remote_openai")
-
-    val enabled: Boolean get() = preferences.getBoolean(KEY_ENABLED, false)
-    val baseUrl: String get() = preferences.getString(KEY_BASE_URL, "").trim()
-    val model: String get() = preferences.getString(KEY_MODEL, "").trim()
+    val enabled: Boolean get() = RemoteOpenAi.enabled.get()
+    val baseUrl: String get() = RemoteOpenAi.baseUrl.get().trim()
+    val model: String get() = RemoteOpenAi.model.get().trim()
     val apiKey: String
         get() = IosSecurityRegistry.bridge?.keychainGet(KEYCHAIN_API_KEY)?.toKotlinBytes()?.decodeToString().orEmpty()
 
@@ -58,9 +54,9 @@ object IosRemoteModelSettings {
         val problem = IosRemoteOpenAiClient.validate(draft.baseUrl, draft.apiKey)
             ?: if (draft.enabled && draft.modelName.isBlank()) "Enter the model name (for example llama3.2)." else null
         if (problem != null && (draft.enabled || draft.baseUrl.isNotBlank())) return problem
-        preferences.putBoolean(KEY_ENABLED, draft.enabled)
-        preferences.putString(KEY_BASE_URL, draft.baseUrl.trim())
-        preferences.putString(KEY_MODEL, draft.modelName.trim())
+        RemoteOpenAi.enabled.set(draft.enabled)
+        RemoteOpenAi.baseUrl.set(draft.baseUrl.trim())
+        RemoteOpenAi.model.set(draft.modelName.trim())
         IosSecurityRegistry.bridge?.let { bridge ->
             if (draft.apiKey.isBlank()) {
                 bridge.keychainDelete(KEYCHAIN_API_KEY)

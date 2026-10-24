@@ -94,19 +94,19 @@ object AgentPrefs {
 
     /** Projector GGUF path per installed model id. */
     object LocalModelProjectors : PrefsFile("local_model_projectors") {
-        val pathByModelId = stringFamily("*", null)
+        val pathByModelId = optionalStringFamily("*")
     }
 
     /** `*` is the sanitized model id; benchmark keys use `<model>_<backend>_benchmark`. */
     object LocalModelMtp : PrefsFile("local_model_mtp_settings") {
-        val mode = stringFamily("*_mode", null)
-        val benchmarkSignature = stringFamily("*_signature", null)
+        val mode = optionalStringFamily("*_mode")
+        val benchmarkSignature = optionalStringFamily("*_signature")
         val benchmarkOffTps = longFamily("*_off_tps", 0L)
         val benchmarkOnTps = optionalLongFamily("*_on_tps")
         val benchmarkOffTtft = longFamily("*_off_ttft", -1L)
         val benchmarkOnTtft = longFamily("*_on_ttft", -1L)
         val benchmarkRecommend = booleanFamily("*_recommend", true)
-        val benchmarkOnFailure = stringFamily("*_on_failure", null)
+        val benchmarkOnFailure = optionalStringFamily("*_on_failure")
     }
 
     val files: List<PrefsFile> = listOf(

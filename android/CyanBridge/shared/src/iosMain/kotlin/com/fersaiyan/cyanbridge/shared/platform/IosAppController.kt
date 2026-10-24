@@ -36,6 +36,8 @@ import com.fersaiyan.cyanbridge.shared.persistence.IosMemoryVaultRepository
 import com.fersaiyan.cyanbridge.shared.persistence.IosNotesRepository
 import com.fersaiyan.cyanbridge.shared.persistence.LegacyImportingChatRepository
 import com.fersaiyan.cyanbridge.shared.persistence.RoomChatRepository
+import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,10 +56,6 @@ import platform.CoreBluetooth.CBAdvertisementDataServiceUUIDsKey
 import platform.CoreBluetooth.CBUUID
 
 private const val IOS_BLE_CONNECT_TIMEOUT_MS = 20_000L
-private const val IOS_GLASSES_PREFERENCES = "cyanbridge_ios_glasses"
-private const val PREF_AI_WAKE_ROUTE = "ai_wake_word_route"
-private const val PREF_THUMBNAIL_QUALITY = "image_thumbnail_quality"
-private const val PREF_ASSISTANT_MODE = "assistant_mode"
 private const val GLASSES_CHAT_ID = "glasses-assistant"
 /** Glasses handled by IosOtherGlasses. */
 private val OTHER_GLASSES_CLASSES = setOf(
@@ -228,7 +226,6 @@ internal class IosAppController {
     private var scanJob: Job? = null
     private var lastDiscoveredIdentifier: String? = null
     private var selectedDeviceClass: DeviceClass = DeviceClass.UNKNOWN
-    private val glassesPreferences = createPlatformPreferences(IOS_GLASSES_PREFERENCES)
     private val vendor get() = heyCyan.vendor
 
     private var isBleConnected = false
@@ -268,12 +265,12 @@ internal class IosAppController {
                 }
             }
         }
-        val thumbnailQuality = glassesPreferences.getInt(PREF_THUMBNAIL_QUALITY, 4)
+        val thumbnailQuality = AssistantPrefs.ImageQuestions.thumbnailQuality.get()
         updateState {
             it.copy(
-                aiWakeWordRoute = AiWakeWordRoute.fromRaw(glassesPreferences.getString(PREF_AI_WAKE_ROUTE, "")),
+                aiWakeWordRoute = AssistantPrefs.WakeWord.route.get(),
                 assistantMode = GlassesAssistantMode.entries.firstOrNull {
-                    it.name == glassesPreferences.getString(PREF_ASSISTANT_MODE, "")
+                    it.name == AgentPrefs.LocalAgent.glassesAssistantMode.get()
                 } ?: GlassesAssistantMode.PHONE_ASSISTANT,
                 imageThumbnailQualitySdkValue = thumbnailQuality,
                 imageThumbnailQualityLabel = THUMBNAIL_QUALITY_LABELS[thumbnailQuality] ?: "Clearer",
@@ -384,16 +381,16 @@ internal class IosAppController {
             }
             GlassesDashboardAction.TestVoiceQuestion -> assistant.askByVoice()
             is GlassesDashboardAction.SelectAssistantMode -> {
-                glassesPreferences.putString(PREF_ASSISTANT_MODE, action.mode.name)
+                AgentPrefs.LocalAgent.glassesAssistantMode.set(action.mode.name)
                 updateState { it.copy(assistantMode = action.mode) }
             }
             is GlassesDashboardAction.SetAiWakeWordRoute -> {
-                glassesPreferences.putString(PREF_AI_WAKE_ROUTE, action.route.name)
+                AssistantPrefs.WakeWord.route.set(action.route)
                 updateState { it.copy(aiWakeWordRoute = action.route) }
             }
             is GlassesDashboardAction.SelectImageThumbnailQuality -> {
                 val value = action.sdkValue.takeIf { it in THUMBNAIL_QUALITY_LABELS } ?: 4
-                glassesPreferences.putInt(PREF_THUMBNAIL_QUALITY, value)
+                AssistantPrefs.ImageQuestions.thumbnailQuality.set(value)
                 updateState {
                     it.copy(
                         imageThumbnailQualitySdkValue = value,

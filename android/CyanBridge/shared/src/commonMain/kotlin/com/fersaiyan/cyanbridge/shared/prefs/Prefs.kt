@@ -167,7 +167,8 @@ abstract class PrefsFile(
     protected fun optionalLong(key: String) = pref<Long?>(key, PrefType.LONG, null)
     protected fun optionalStringSet(key: String) = pref<Set<String>?>(key, PrefType.STRING_SET, null)
 
-    protected fun stringFamily(pattern: String, default: String?) = family(pattern, PrefType.STRING, default)
+    protected fun stringFamily(pattern: String, default: String) = family(pattern, PrefType.STRING, default)
+    protected fun optionalStringFamily(pattern: String) = family<String?>(pattern, PrefType.STRING, null)
     protected fun intFamily(pattern: String, default: Int) = family(pattern, PrefType.INT, default)
     protected fun longFamily(pattern: String, default: Long) = family(pattern, PrefType.LONG, default)
     protected fun optionalLongFamily(pattern: String) = family<Long?>(pattern, PrefType.LONG, null)

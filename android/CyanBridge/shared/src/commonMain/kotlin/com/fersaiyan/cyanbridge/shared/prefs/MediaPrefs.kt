@@ -33,9 +33,9 @@ object MediaPrefs {
 
     /** `*` is a hashed phone + glasses profile key. */
     object AdaptiveP2pProfiles : PrefsFile("adaptive_p2p_sync_profiles") {
-        val preferredRoute = stringFamily("*.preferred_route", null)
+        val preferredRoute = optionalStringFamily("*.preferred_route")
         val preferredWarmupMs = optionalLongFamily("*.preferred_warmup_ms")
-        val candidateRoute = stringFamily("*.candidate_route", null)
+        val candidateRoute = optionalStringFamily("*.candidate_route")
         val candidateWarmupMs = optionalLongFamily("*.candidate_warmup_ms")
         val candidateSuccesses = intFamily("*.candidate_successes", 0)
         val completedSyncs = intFamily("*.completed_syncs", 0)
@@ -67,7 +67,7 @@ object MediaPrefs {
         val version = optionalString("version")
         val pendingToken = optionalString("pending_token")
         val verifiedAt = longFamily("verified_at_*", 0L)
-        val versionFor = stringFamily("version_*", null)
+        val versionFor = optionalStringFamily("version_*")
     }
 
     val files: List<PrefsFile> = listOf(

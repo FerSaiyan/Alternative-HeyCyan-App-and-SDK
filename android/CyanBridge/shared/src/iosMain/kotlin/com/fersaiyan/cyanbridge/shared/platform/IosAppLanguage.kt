@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.shared.platform
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.OnboardingLanguageOption
 import platform.Foundation.NSUserDefaults
 
@@ -28,12 +29,10 @@ object IosAppLanguage {
         Language("RUSSIAN", "ru", "Русский"),
     )
 
-    private const val KEY_LANGUAGE = "selected_language"
     private const val APPLE_LANGUAGES = "AppleLanguages"
-    private val preferences = createPlatformPreferences("cyanbridge_app_language")
 
     var selectedId: String by mutableStateOf(
-        preferences.getString(KEY_LANGUAGE, "SYSTEM").takeIf { id -> languages.any { it.id == id } } ?: "SYSTEM",
+        AssistantPrefs.Language.selected.get()?.takeIf { id -> languages.any { it.id == id } } ?: "SYSTEM",
     )
         private set
 
@@ -45,7 +44,7 @@ object IosAppLanguage {
 
     fun select(id: String) {
         val language = languages.firstOrNull { it.id == id } ?: return
-        preferences.putString(KEY_LANGUAGE, language.id)
+        AssistantPrefs.Language.selected.set(language.id)
         val defaults = NSUserDefaults.standardUserDefaults
         if (language.tag.isEmpty()) {
             defaults.removeObjectForKey(APPLE_LANGUAGES)

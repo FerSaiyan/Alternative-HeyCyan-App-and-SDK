@@ -35,7 +35,8 @@ import com.fersaiyan.cyanbridge.shared.platform.CyanBridgeServices
 import com.fersaiyan.cyanbridge.shared.platform.PlatformFilePaths
 import com.fersaiyan.cyanbridge.shared.platform.SharedChatHooks
 import com.fersaiyan.cyanbridge.shared.platform.SharedMediaHooks
-import com.fersaiyan.cyanbridge.shared.platform.createPlatformPreferences
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.Pref
 import com.fersaiyan.cyanbridge.shared.ui.chat.ChatAppearanceMenuDialog
 import com.fersaiyan.cyanbridge.shared.ui.chat.ChatThreadScreen
 import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsScreen
@@ -45,8 +46,6 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 
-private const val CHAT_APPEARANCE_PREFS = "cyanbridge_chat_appearance"
-private const val NOTE_TAGS_PREFS = "cyanbridge_note_tags"
 private const val WALLPAPER_FILE = "chat_wallpaper.jpg"
 
 // Preset bubble colors cycled by the appearance menu (ARGB).
@@ -377,9 +376,8 @@ private fun SharedNoteEditorDestination(
     onClose: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val tagsPreferences = remember { createPlatformPreferences(NOTE_TAGS_PREFS) }
     var title by remember(note.id) { mutableStateOf(note.title) }
-    var tags by remember(note.id) { mutableStateOf(tagsPreferences.getString(note.id, "")) }
+    var tags by remember(note.id) { mutableStateOf(AppPrefs.NoteTags.tags[note.id].get()) }
     var body by remember(note.id) { mutableStateOf(TextFieldValue(note.content)) }
     var isSaving by remember { mutableStateOf(false) }
 
@@ -414,7 +412,7 @@ private fun SharedNoteEditorDestination(
                 } else {
                     CyanBridgeServices.notesRepository.updateNote(updated)
                 }
-                tagsPreferences.putString(note.id, tags.trim())
+                AppPrefs.NoteTags.tags[note.id].set(tags.trim())
                 isSaving = false
                 onClose()
             }
@@ -442,30 +440,30 @@ private data class ChatAppearance(
     val hasWallpaper: Boolean,
 ) {
     companion object {
-        private val preferences by lazy { createPlatformPreferences(CHAT_APPEARANCE_PREFS) }
+        private val prefs = AppPrefs.SharedChatAppearance
 
         fun load() = ChatAppearance(
-            userBubbleColor = preferences.getInt("user_bubble", -1).takeIf { it != -1 }?.let(USER_BUBBLE_COLORS::getOrNull),
-            assistantBubbleColor = preferences.getInt("assistant_bubble", -1).takeIf { it != -1 }
+            userBubbleColor = prefs.userBubble.get().takeIf { it != -1 }?.let(USER_BUBBLE_COLORS::getOrNull),
+            assistantBubbleColor = prefs.assistantBubble.get().takeIf { it != -1 }
                 ?.let(ASSISTANT_BUBBLE_COLORS::getOrNull),
-            hasWallpaper = preferences.getBoolean("wallpaper", false),
+            hasWallpaper = prefs.wallpaper.get(),
         )
 
-        fun cycle(key: String, size: Int) {
-            preferences.putInt(key, (preferences.getInt(key, -1) + 1) % size)
+        fun cycle(pref: Pref<Int>, size: Int) {
+            pref.set((pref.get() + 1) % size)
         }
 
-        fun setWallpaper(enabled: Boolean) = preferences.putBoolean("wallpaper", enabled)
+        fun setWallpaper(enabled: Boolean) = prefs.wallpaper.set(enabled)
 
-        fun reset() = preferences.clear()
+        fun reset() = prefs.store().clear()
     }
 }
 
 private suspend fun applyChatAppearanceAction(action: ChatAppearanceMenuAction) {
     when (action) {
-        ChatAppearanceMenuAction.CHANGE_USER_BUBBLE_COLOR -> ChatAppearance.cycle("user_bubble", USER_BUBBLE_COLORS.size)
+        ChatAppearanceMenuAction.CHANGE_USER_BUBBLE_COLOR -> ChatAppearance.cycle(AppPrefs.SharedChatAppearance.userBubble, USER_BUBBLE_COLORS.size)
         ChatAppearanceMenuAction.CHANGE_ASSISTANT_BUBBLE_COLOR ->
-            ChatAppearance.cycle("assistant_bubble", ASSISTANT_BUBBLE_COLORS.size)
+            ChatAppearance.cycle(AppPrefs.SharedChatAppearance.assistantBubble, ASSISTANT_BUBBLE_COLORS.size)
         ChatAppearanceMenuAction.CHOOSE_WALLPAPER -> {
             val image = SharedChatHooks.pickImage?.invoke() ?: return
             if (SharedMediaHooks.saveDocument?.invoke(WALLPAPER_FILE, image) != null) ChatAppearance.setWallpaper(true)

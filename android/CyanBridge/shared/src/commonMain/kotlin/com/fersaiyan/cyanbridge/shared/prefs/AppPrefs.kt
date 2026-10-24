@@ -77,7 +77,7 @@ object AppPrefs {
         val lastDetectedClass = optionalString("last_detected_class")
         val lastSelectedClass = optionalString("last_selected_class")
         val lastUserOverridden = boolean("last_user_overridden", false)
-        val classOverride = stringFamily("override_*", null)
+        val classOverride = optionalStringFamily("override_*")
     }
 
     object VersionCheck : PrefsFile("version_check") {
