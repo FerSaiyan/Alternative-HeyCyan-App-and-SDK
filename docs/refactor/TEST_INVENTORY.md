@@ -11,10 +11,10 @@ Line counts are per file; "before" is cyan-refactor at f908faf. CI legend:
 
 | Source set | Before (files / lines / @Test) | After |
 |---|---|---|
-| app/src/test | 179 / 15,921 / 857 | 159 / 14,102 / 729 (incl. 2,406 parked in `refactorparity/`); 160 / 14,522 / 735 after merging the TuneBuds session work |
+| app/src/test | 179 / 15,921 / 857 | 159 / 14,102 / 729 (incl. 2,406 parked in `refactorparity/`); 160 / 14,522 / 735 after merging the TuneBuds session work; 152 / 12,986 / 653 after the dead-code pass (parked `localagentservice/` tests and prefs round-trip tests removed) |
 | app/src/androidTest | 65 / 8,337 / 139 | 56 / 7,406 / 124 |
 | app/src/androidTestLitertNpu | 4 / 793 / 7 | unchanged (compiled only with `-PlocalLiteRtNpuAarPath`) |
-| shared/src/commonTest | 58 / 4,995 / 291 | 47 / 4,155 / 224; 47 / 4,283 / 228 after the TuneBuds merge |
+| shared/src/commonTest | 58 / 4,995 / 291 | 47 / 4,155 / 224; 47 / 4,283 / 228 after the TuneBuds merge; 48 / 4,721 / 229 after the shared dashboard controller merge and the MemoMind encoder test's removal |
 | shared/src/portabilityTest | 5 / 629 / 12 | unchanged |
 
 ## By core feature
@@ -40,6 +40,7 @@ Line counts are per file; "before" is cyan-refactor at f908faf. CI legend:
 | DB / persistence | AppDatabaseSchemaTest (227), SharedAppDatabaseTest (416), RoomChatRepositoryTest (107), RoomNotesRepositoryTest (94), ChatStoreTest (47), PersistenceEntityTest (17), VaultCryptoTest (30) | U, P | Protected (schema and upgrade) |
 | Settings / UI | Compose UI tests in androidTest/ui/* (~2,050), shared ChatRichTextTest, CyanBridgeThemeTest, CyanBridgeThemeContrastTest, AppearanceModelsTest, NavigationModelsTest, BillingModelsTest; prefs tests (see below) | —, P, U | Compose UI tests run only in the manual `connectedDebugAndroidTest` gate |
 | Safety (source scans) | EyevueReleaseSafetyTest, WifiAdbSourceSafetyTest, LivePreviewSourceSafetyTest, GlassesNetworkOwnershipSourceTest | U | Protected |
+| Architecture guardrails | ArchitectureGuardrailSourceTest (MainActivity line budget, no vendor SDK imports in ui/ outside the ui/main/glasses adapters, no android/java imports in commonMain, getSharedPreferences only in the listed files) | U | Ratchets: lower the budget or drop exceptions as code moves |
 
 ## Protected (derived from CI and the owner's list)
 
@@ -78,14 +79,8 @@ These were left untouched, or tidied without dropping any assertion.
 - **Plugin services** (Errand Brain, Live Caption Relay, Hands-Free Translator, Auto Audio): only their settings screens are tested. The translator is also covered by one hermetic emulator test.
 - **Compose screens:** UI tests exist but no CI job runs them.
 
-## Deferred: prefs-centric tests
+## Prefs-centric tests (revisited after the typed preferences landed)
 
-A typed-preferences layer was built concurrently, so these tests were not edited. It has landed: shared `PrefsInventoryTest` (P) pins every preference file, key, type and default, and `TypedPrefsCompatibilityTest` (U) reads settings written the old way back through it. GeminiLiveModePreferencesTest was removed with its wrapper. The rest are candidates to revisit:
-- WalkingAidPreferencesTest (229; 29 getter/setter cases, some for unused APIs)
-- MemoryModeManagerTest (41)
-- AppearancePreferencesTest (43)
-- CommunityPluginPrefsTest (44)
-- LocalAgentTaskHistoryTest (45)
-- PrivacyPrefsTest (39)
-- LocalMtpSettingsRepositoryTest (86)
-- the `firstFrameStateComesFromPreferences` cases in the plugin settings tests
+`PrefsInventoryTest` (P) pins every preference file, key, type and default, and `TypedPrefsCompatibilityTest` (U) reads settings written the old way back through it, so plain default and set-then-get cases were removed:
+- Removed: MemoryModeManagerTest, AppearancePreferencesTest, PrivacyPrefsTest, 22 of WalkingAidPreferencesTest's 29 cases, CommunityPluginPrefsTest's default case, and GeminiLiveModePreferencesTest (earlier, with its wrapper).
+- Kept because they test logic: WalkingAidPreferencesTest's mode fallback, clamping and cloud model override cases; CommunityPluginPrefsTest's select-and-clear rule; LocalAgentTaskHistoryTest (newest-first order); LocalMtpSettingsRepositoryTest (benchmark record with nullable MTP fields); and the plugin settings tests' `firstFrameStateComesFromPreferences` cases, which check that each screen's first frame maps the saved settings into its state.

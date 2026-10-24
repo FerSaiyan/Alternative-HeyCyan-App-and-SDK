@@ -277,3 +277,9 @@ Smoke test per family:
 - image question;
 - sync (HeyCyan only);
 - the Meta and Meizu panels.
+
+## Wave 6: dead-code removal
+
+No glasses needed. Deleted code had no caller, so behavior is unchanged apart from one deliberate fix:
+- **Telegram `/task` while a task runs:** the guard now asks `TaskerLocalAgentService` (the service that actually runs tasks) instead of the never-started `LocalAgentService`. With a Local Agent task or a screen read in progress, a second `/task` should reply "A Local Agent task is already running…" instead of "Task accepted". The automation diagnostics in the debug log show the same running state.
+- **Pairing:** `DeviceBindActivity` lost its unused protocol auto-detection probes; pair one glasses family through manual selection to confirm the dialog still finishes on connect.
