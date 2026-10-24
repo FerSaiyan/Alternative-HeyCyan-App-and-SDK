@@ -63,6 +63,11 @@ class WifiAdbSourceSafetyTest {
         assertTrue(mainSource.contains("wifiAdbDebug = WifiAdbDebugUiState(isAvailable = false)"))
         assertTrue(mainSource.contains("if (BuildConfig.DEBUG && isHeyCyanSelected()) startWifiAdbDebug()"))
         assertTrue(mainSource.contains("isAvailable = BuildConfig.DEBUG && isHeyCyanSelected() && runtime.isAvailable"))
+        val connectionCoordinatorSource = File(
+            "src/main/java/com/fersaiyan/cyanbridge/ui/main/DeviceConnectionCoordinator.kt",
+        ).readText()
+        assertTrue(connectionCoordinatorSource.contains("isAvailable = BuildConfig.DEBUG &&"))
         assertFalse(mainSource.contains("isAvailable = BuildConfig.DEBUG && showBattery"))
+        assertFalse(connectionCoordinatorSource.contains("isAvailable = BuildConfig.DEBUG && showBattery"))
     }
 }
