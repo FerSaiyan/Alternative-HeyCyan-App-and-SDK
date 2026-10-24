@@ -1,33 +1,38 @@
 package com.fersaiyan.cyanbridge.shared.memoryvault.crypto
 
+import com.fersaiyan.cyanbridge.shared.platform.IosSecurityRegistry
+import com.fersaiyan.cyanbridge.shared.platform.toKotlinBytes
+import com.fersaiyan.cyanbridge.shared.platform.toNSData
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
+import platform.CoreCrypto.CCKeyDerivationPBKDF
+import platform.CoreCrypto.kCCPBKDF2
+import platform.CoreCrypto.kCCPRFHmacAlgSHA256
+import platform.CoreCrypto.kCCSuccess
 
 /**
- * iOS actual implementation of VaultCrypto.
- * Uses SecRandomCopyBytes for random generation.
- * AES-GCM and PBKDF2 use simplified implementations for MVP.
+ * iOS VaultCrypto: SecRandomCopyBytes, AES-256-GCM through CryptoKit (Swift host
+ * bridge) and PBKDF2-HMAC-SHA256 through CommonCrypto.
  */
 @OptIn(ExperimentalForeignApi::class)
 actual object VaultCrypto {
     const val CRYPTO_VERSION: Int = 1
     private const val AES_KEY_BYTES: Int = 32
     private const val GCM_NONCE_BYTES: Int = 12
-    private const val GCM_TAG_BYTES: Int = 16
-    private const val PBKDF2_ITERATIONS: Int = 150_000
+    private const val PBKDF2_ITERATIONS: UInt = 150_000u
 
     actual fun randomBytes(size: Int): ByteArray {
         val buffer = ByteArray(size)
+        if (size == 0) return buffer
         buffer.usePinned { pinned ->
             val status = platform.Security.SecRandomCopyBytes(
                 platform.Security.kSecRandomDefault,
                 size.toULong(),
                 pinned.addressOf(0),
             )
-            if (status != 0) {
-                throw RuntimeException("SecRandomCopyBytes failed with status $status")
-            }
+            if (status != 0) throw RuntimeException("SecRandomCopyBytes failed with status $status")
         }
         return buffer
     }
@@ -37,57 +42,44 @@ actual object VaultCrypto {
     actual fun encryptAesGcm(keyBytes: ByteArray, plaintext: ByteArray, aad: ByteArray?): CipherEnvelope {
         require(keyBytes.size == AES_KEY_BYTES) { "Key must be $AES_KEY_BYTES bytes" }
         val nonce = randomBytes(GCM_NONCE_BYTES)
-        val ciphertext = xorProcess(keyBytes, nonce, plaintext)
-        val tag = computeTag(keyBytes, nonce, ciphertext, aad)
-        return CipherEnvelope(version = CRYPTO_VERSION, nonce = nonce, ciphertext = ciphertext + tag)
+        val sealed = IosSecurityRegistry.require()
+            .sealAesGcm(keyBytes.toNSData(), nonce.toNSData(), plaintext.toNSData(), aad?.toNSData())
+            ?: throw RuntimeException("AES-GCM encryption failed")
+        return CipherEnvelope(version = CRYPTO_VERSION, nonce = nonce, ciphertext = sealed.toKotlinBytes())
     }
 
     actual fun decryptAesGcm(keyBytes: ByteArray, envelope: CipherEnvelope, aad: ByteArray?): ByteArray {
         require(keyBytes.size == AES_KEY_BYTES) { "Key must be $AES_KEY_BYTES bytes" }
-        require(envelope.ciphertext.size >= GCM_TAG_BYTES) { "Ciphertext too short" }
-        val ciphertext = envelope.ciphertext.copyOfRange(0, envelope.ciphertext.size - GCM_TAG_BYTES)
-        val tag = envelope.ciphertext.copyOfRange(envelope.ciphertext.size - GCM_TAG_BYTES, envelope.ciphertext.size)
-        val expectedTag = computeTag(keyBytes, envelope.nonce, ciphertext, aad)
-        if (!tag.contentEquals(expectedTag)) {
-            throw RuntimeException("GCM authentication tag mismatch")
-        }
-        return xorProcess(keyBytes, envelope.nonce, ciphertext)
+        return IosSecurityRegistry.require()
+            .openAesGcm(keyBytes.toNSData(), envelope.nonce.toNSData(), envelope.ciphertext.toNSData(), aad?.toNSData())
+            ?.toKotlinBytes()
+            ?: throw RuntimeException("GCM authentication tag mismatch")
     }
 
     actual fun derivePassphraseKey(passphrase: CharArray, salt: ByteArray): ByteArray {
-        val passwordBytes = passphrase.concatToString().encodeToByteArray()
-        var derived = ByteArray(32)
-        for (i in 0 until PBKDF2_ITERATIONS) {
-            val input = passwordBytes + salt + byteArrayOf(i.toByte())
-            derived = simpleHash(input)
+        val password = passphrase.concatToString()
+        val derived = ByteArray(AES_KEY_BYTES)
+        val status = salt.usePinned { saltPin ->
+            derived.usePinned { derivedPin ->
+                CCKeyDerivationPBKDF(
+                    algorithm = kCCPBKDF2,
+                    password = password,
+                    passwordLen = password.encodeToByteArray().size.toULong(),
+                    salt = if (salt.isEmpty()) null else saltPin.addressOf(0).reinterpret(),
+                    saltLen = salt.size.toULong(),
+                    prf = kCCPRFHmacAlgSHA256,
+                    rounds = PBKDF2_ITERATIONS,
+                    derivedKey = derivedPin.addressOf(0).reinterpret(),
+                    derivedKeyLen = derived.size.toULong(),
+                )
+            }
         }
-        return derived.copyOf(AES_KEY_BYTES)
+        check(status == kCCSuccess) { "PBKDF2 failed with status $status" }
+        return derived
     }
 
     actual fun destroy(bytes: ByteArray?) {
         if (bytes == null) return
         for (i in bytes.indices) bytes[i] = 0
-    }
-
-    private fun xorProcess(key: ByteArray, nonce: ByteArray, input: ByteArray): ByteArray {
-        val output = ByteArray(input.size)
-        for (i in input.indices) {
-            val keyByte = key[(i + nonce.hashCode()) % key.size]
-            output[i] = (input[i].toInt() xor keyByte.toInt()).toByte()
-        }
-        return output
-    }
-
-    private fun computeTag(key: ByteArray, nonce: ByteArray, ciphertext: ByteArray, aad: ByteArray?): ByteArray {
-        val input = key + nonce + ciphertext + (aad ?: ByteArray(0))
-        return simpleHash(input).copyOf(GCM_TAG_BYTES)
-    }
-
-    private fun simpleHash(input: ByteArray): ByteArray {
-        var hash = ByteArray(32)
-        for (i in input.indices) {
-            hash[i % 32] = (hash[i % 32].toInt() xor input[i].toInt()).toByte()
-        }
-        return hash
     }
 }

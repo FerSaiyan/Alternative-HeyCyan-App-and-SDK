@@ -1,5 +1,8 @@
 package com.fersaiyan.cyanbridge.devices.tunebuds
 
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrame
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrameDecoder
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice

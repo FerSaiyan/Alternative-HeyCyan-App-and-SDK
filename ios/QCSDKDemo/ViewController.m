@@ -538,6 +538,10 @@ typedef NS_ENUM(NSInteger, QGDeviceActionType) {
                                                                 statusCallback:^(GlassesWiFiHandlerState state, NSString *status, UIImage *previewImage) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     NSLog(@"WiFi Status: %@ - %@", @(state), status);
+#if CYAN_FREE_PROVISIONING
+                    // Manual join instructions must be visible, not just logged.
+                    self.mediaDownloadStatus = status;
+#endif
                     // Update UI or show alerts based on status
                     [self.tableView reloadData];
                 });

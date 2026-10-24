@@ -149,6 +149,10 @@ typedef NS_ENUM(NSInteger, GlassesMediaDownloaderErrorCode) {
 
 - (void)triggerIOSNativeWiFiJoin {
     NSLog(@"📱 Triggering iOS-native WiFi joining for hotspot: %@", self.ssid);
+#if CYAN_FREE_PROVISIONING
+    // Free provisioning cannot sign the Hotspot entitlement, so the user joins the hotspot in Settings.
+    [self waitForManualJoinWithAttempt:0];
+#else
     [self updateStatus:[NSString stringWithFormat:@"Joining %@ via iOS...", self.ssid] preview:nil];
 
     // Try the modern NEHotspotConfiguration approach first
@@ -158,7 +162,47 @@ typedef NS_ENUM(NSInteger, GlassesMediaDownloaderErrorCode) {
     } else {
         [self showManualConnectionInstructions];
     }
+#endif
 }
+
+#if CYAN_FREE_PROVISIONING
+- (void)waitForManualJoinWithAttempt:(NSInteger)attempt {
+    const NSInteger maxAttempts = 40; // ~2 minutes at 3s intervals
+    if (self.didFinish) { return; }
+
+    if (attempt >= maxAttempts) {
+        NSLog(@"⏱️ Manual join window expired, falling back to IP scan");
+        [self performComprehensiveIPScan];
+        return;
+    }
+
+    NSString *password = self.password.length > 0 ? self.password : @"(none)";
+    NSString *instructions = [NSString stringWithFormat:@"📶 Open Settings ▸ Wi-Fi and join:\n%@\nPassword: %@ (if rejected, try 123456789)\n\nWaiting for connection (%ld/%ld)...",
+                              self.ssid, password, (long)attempt + 1, (long)maxAttempts];
+    [self updateStatus:instructions preview:nil];
+
+    NSString *ip = self.deviceIP.length > 0 ? self.deviceIP : @"192.168.31.1";
+    NSURL *testURL = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@/files/media.config", ip]];
+    NSURLRequest *request = [NSURLRequest requestWithURL:testURL
+                                            cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+                                        timeoutInterval:2.0];
+
+    [[[NSURLSession sharedSession] dataTaskWithRequest:request
+                                     completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!error && data && ((NSHTTPURLResponse *)response).statusCode == 200) {
+                NSLog(@"✅ Manual join detected, glasses reachable at %@", ip);
+                self->_deviceIP = ip;
+                [self verifyWiFiConnectionAndProceed];
+            } else {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self waitForManualJoinWithAttempt:attempt + 1];
+                });
+            }
+        });
+    }] resume];
+}
+#endif
 
 - (void)applyHotspotConfigurationOnce {
     if (@available(iOS 11.0, *)) {

@@ -35,7 +35,9 @@ import platform.CoreBluetooth.CBService
 import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSNumber
+import platform.Foundation.NSUUID
 import platform.darwin.NSObject
+import com.fersaiyan.cyanbridge.shared.devices.BleDeviceClassifier
 import com.fersaiyan.cyanbridge.shared.platform.PlatformLogger
 import com.fersaiyan.cyanbridge.shared.platform.toIosNSData
 import kotlin.coroutines.resume
@@ -75,6 +77,15 @@ class IosBleManager : BleManager {
     override val connectionState: Flow<BleConnectionState> = _connectionState.asStateFlow()
 
     private val listeners = mutableListOf<BleNotificationListener>()
+
+    /** QCSDK bridge from the Swift host; HeyCyan sessions hand the peripheral to it. */
+    var vendorBridge: VendorGlassesBridge? = null
+    var attachVendorOnConnect: Boolean = false
+
+    /** Protocols with a known command characteristic (e.g. Eyevue AA13) write only to it. */
+    var preferredWriteCharacteristicUuid: String? = null
+    private val _isVendorAttached = MutableStateFlow(false)
+    val isVendorAttached: StateFlow<Boolean> = _isVendorAttached.asStateFlow()
     private val centralDelegate = CentralDelegate()
     private val central = CBCentralManager(
         delegate = centralDelegate,
@@ -120,7 +131,14 @@ class IosBleManager : BleManager {
     override suspend fun connect(identifier: String) {
         check(central.state == CBManagerStatePoweredOn) { "Bluetooth is not powered on" }
         check(pendingConnect == null) { "A BLE connection is already pending" }
+        // After an app restart the saved profile identifier is known but not yet discovered.
         val peripheral = peripherals[identifier]
+            ?: NSUUID(uUIDString = identifier).let { uuid ->
+                central.retrievePeripheralsWithIdentifiers(listOf(uuid))
+                    .filterIsInstance<CBPeripheral>()
+                    .firstOrNull()
+                    ?.also { peripherals[identifier] = it }
+            }
             ?: throw IllegalArgumentException("iOS BLE peripheral was not discovered: $identifier")
 
         suspendCancellableCoroutine<Unit> { continuation ->
@@ -128,6 +146,9 @@ class IosBleManager : BleManager {
             _connectionState.value = BleConnectionState.CONNECTING
             central.connectPeripheral(peripheral, options = null)
             continuation.invokeOnCancellation {
+                // A timed-out connect must not leave the manager stuck in "pending".
+                pendingConnect = null
+                _connectionState.value = BleConnectionState.DISCONNECTED
                 central.cancelPeripheralConnection(peripheral)
             }
         }
@@ -179,6 +200,11 @@ class IosBleManager : BleManager {
         peripheral.writeValue(data, forCharacteristic = characteristic, type = writeType)
     }
 
+    /** Largest single write the connected peripheral accepts (ATT MTU minus 3); 20 before connecting. */
+    fun maximumWriteLength(): Int =
+        connectedPeripheral?.maximumWriteValueLengthForType(CBCharacteristicWriteWithoutResponse)?.toInt()
+            ?.takeIf { it > 0 } ?: 20
+
     override fun addNotificationListener(listener: BleNotificationListener) {
         if (!listeners.contains(listener)) listeners += listener
     }
@@ -229,7 +255,10 @@ class IosBleManager : BleManager {
     fun onBluetoothStateChanged(enabled: Boolean) {
         _isBluetoothEnabled.value = enabled
         if (!enabled) {
-            connectedPeripheral?.let { central.cancelPeripheralConnection(it) }
+            connectedPeripheral?.let { peripheral ->
+                detachVendor(peripheral)
+                central.cancelPeripheralConnection(peripheral)
+            }
             pendingConnect?.resumeWithException(IllegalStateException("Bluetooth was disabled"))
             pendingBattery?.resume(null)
             pendingFirmware?.resume(null)
@@ -245,6 +274,13 @@ class IosBleManager : BleManager {
             pendingCommands.clear()
             _connectedDeviceMac.value = null
             _connectionState.value = BleConnectionState.DISCONNECTED
+        }
+    }
+
+    private fun detachVendor(peripheral: CBPeripheral) {
+        if (_isVendorAttached.value) {
+            vendorBridge?.detach(peripheral)
+            _isVendorAttached.value = false
         }
     }
 
@@ -289,13 +325,37 @@ class IosBleManager : BleManager {
             connectedPeripheral = didConnectPeripheral
             writeCharacteristic = null
             characteristicsReady = CompletableDeferred()
-            didConnectPeripheral.delegate = this
             _connectedDeviceMac.value = didConnectPeripheral.identifier.UUIDString
+            val bridge = vendorBridge?.takeIf { attachVendorOnConnect }
+            if (bridge == null) {
+                completeGenericConnection(didConnectPeripheral)
+                return
+            }
+            // QCSDK installs its own peripheral delegate, so the generic discovery is skipped.
+            bridge.attach(didConnectPeripheral) { success ->
+                scope.launch {
+                    if (connectedPeripheral !== didConnectPeripheral) return@launch
+                    if (success) {
+                        _isVendorAttached.value = true
+                        _connectionState.value = BleConnectionState.CONNECTED
+                        pendingConnect?.resume(Unit)
+                        pendingConnect = null
+                        PlatformLogger.i(TAG, "QCSDK attached to ${didConnectPeripheral.name ?: didConnectPeripheral.identifier.UUIDString}")
+                    } else {
+                        PlatformLogger.w(TAG, "QCSDK could not attach; using the generic BLE path")
+                        completeGenericConnection(didConnectPeripheral)
+                    }
+                }
+            }
+        }
+
+        fun completeGenericConnection(peripheral: CBPeripheral) {
+            peripheral.delegate = this
             _connectionState.value = BleConnectionState.CONNECTED
             pendingConnect?.resume(Unit)
             pendingConnect = null
-            didConnectPeripheral.discoverServices(null)
-            PlatformLogger.i(TAG, "Connected to ${didConnectPeripheral.name ?: didConnectPeripheral.identifier.UUIDString}")
+            peripheral.discoverServices(null)
+            PlatformLogger.i(TAG, "Connected to ${peripheral.name ?: peripheral.identifier.UUIDString}")
         }
 
         @ObjCSignatureOverride
@@ -319,6 +379,7 @@ class IosBleManager : BleManager {
             error: NSError?,
         ) {
             if (connectedPeripheral?.identifier?.UUIDString == didDisconnectPeripheral.identifier.UUIDString) {
+                detachVendor(didDisconnectPeripheral)
                 connectedPeripheral = null
                 writeCharacteristic = null
                 characteristicsReady.cancel()
@@ -367,9 +428,15 @@ class IosBleManager : BleManager {
                     notifyCharacteristics[characteristic.UUID.UUIDString] = characteristic
                     peripheral.setNotifyValue(true, forCharacteristic = characteristic)
                 }
-                if (writeCharacteristic == null &&
-                    (characteristic.hasProperty(CBCharacteristicPropertyWrite) ||
-                        characteristic.hasProperty(CBCharacteristicPropertyWriteWithoutResponse))
+                val writable = characteristic.hasProperty(CBCharacteristicPropertyWrite) ||
+                    characteristic.hasProperty(CBCharacteristicPropertyWriteWithoutResponse)
+                val preferred = preferredWriteCharacteristicUuid
+                if (writable && if (preferred == null) {
+                        writeCharacteristic == null
+                    } else {
+                        BleDeviceClassifier.normalizeUuid(characteristic.UUID.UUIDString) ==
+                            BleDeviceClassifier.normalizeUuid(preferred)
+                    }
                 ) {
                     writeCharacteristic = characteristic
                 }

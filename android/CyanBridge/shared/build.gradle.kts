@@ -35,7 +35,9 @@ kotlin {
         iosArm64 {
             binaries.framework {
                 baseName = "CyanBridgeShared"
-                isStatic = true
+                // embedAndSignAppleFrameworkForXcode copies the framework into the app's
+                // Frameworks/ folder; a static archive there makes device installs fail.
+                isStatic = false
             }
         }
         iosSimulatorArm64 {
@@ -61,6 +63,7 @@ kotlin {
 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
 commonTest.dependencies {
     implementation(kotlin("test"))
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
     implementation(compose.uiTest)
 }
     }

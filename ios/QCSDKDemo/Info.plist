@@ -2,13 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>bluetooth-central</string>
-	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- Device transfer uses local cleartext HTTP. Narrow this after hardware validation. -->
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 		<key>NSAllowsLocalNetworking</key>
@@ -17,12 +12,12 @@
 		<dict>
 			<key>3.192.168.31</key>
 			<dict>
-				<key>NSIncludesSubdomains</key>
-				<true/>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
 				<true/>
 				<key>NSExceptionMinimumTLSVersion</key>
 				<string>TLSv1.0</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
 			</dict>
 		</dict>
 	</dict>
@@ -43,17 +38,9 @@
 			</array>
 		</dict>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Location access lets the app verify Wi-Fi connection status for your glasses.</string>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>CyanBridge uses Bluetooth to find and communicate with your glasses.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>CyanBridge connects to your glasses over their local Wi-Fi transfer network.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>CyanBridge can record audio attachments and meeting notes when you request it.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>CyanBridge lets you attach photos to chats and view media imported from your glasses.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>CyanBridge saves media imported from your glasses to your photo library.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
 </dict>
 </plist>

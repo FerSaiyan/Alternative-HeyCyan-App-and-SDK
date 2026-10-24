@@ -1,5 +1,15 @@
 package com.fersaiyan.cyanbridge.shared.ui.chat
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.runtime.produceState
+import com.fersaiyan.cyanbridge.shared.platform.SharedMediaHooks
+import com.fersaiyan.cyanbridge.shared.platform.PlatformFilePaths
+import com.fersaiyan.cyanbridge.shared.chat.ChatImageMarkup
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
@@ -121,6 +131,8 @@ fun ChatThreadScreen(
     onRecordAudio: () -> Unit,
     onClearAttachments: () -> Unit,
     onDestinationSelected: (AppDestination) -> Unit,
+    // Hosts that already draw the app-level navigation shell (iOS) pass false.
+    showNavigationBar: Boolean = true,
 ) {
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
@@ -173,7 +185,7 @@ fun ChatThreadScreen(
                     onClearAttachments = onClearAttachments,
                     modifier = Modifier.imePadding(),
                 )
-                if (!imeVisible) {
+                if (!imeVisible && showNavigationBar) {
                     ChatNavigationBar(onDestinationSelected = onDestinationSelected)
                 }
             }
@@ -273,6 +285,17 @@ private fun ChatTimeline(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    // Dragging the conversation dismisses the keyboard, like Messages / WhatsApp.
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) {
+                keyboard?.hide()
+                focusManager.clearFocus()
+            }
+        }
+    }
     var isNearBottom by remember { mutableStateOf(true) }
     var completedInitialScroll by remember { mutableStateOf(false) }
     val finalItemIndex = messages.lastIndex + if (isThinking) 1 else 0
@@ -407,11 +430,16 @@ private fun ChatMessageBubble(
                 contentColor = contentColor,
                 shape = shape,
             ) {
-                ChatRichText(
-                    markdown = message.content,
-                    color = contentColor,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                )
+                val imagePath = ChatImageMarkup.imagePath(message.content)
+                Column {
+                    if (imagePath != null) ChatBubbleImage(imagePath)
+                    ChatRichText(
+                        markdown = ChatImageMarkup.stripImage(message.content),
+                        color = contentColor,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        background = background,
+                    )
+                }
             }
         }
     }
@@ -594,4 +622,24 @@ private fun ChatNavigationBar(onDestinationSelected: (AppDestination) -> Unit) {
             )
         }
     }
+}
+
+/** Photo attached to a message (image questions); tap opens it full screen. */
+@Composable
+private fun ChatBubbleImage(relativePath: String) {
+    val path = PlatformFilePaths.dataDirectory() + "/" + relativePath
+    val bitmap by produceState<ImageBitmap?>(null, path) {
+        value = SharedMediaHooks.loadImage?.invoke(path)
+    }
+    val image = bitmap ?: return
+    Image(
+        bitmap = image,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio((image.width.toFloat() / image.height).coerceIn(0.6f, 1.8f))
+            .heightIn(max = 280.dp)
+            .clickable { SharedMediaHooks.openMedia?.invoke(path) },
+    )
 }

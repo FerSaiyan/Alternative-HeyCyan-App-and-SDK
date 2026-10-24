@@ -88,6 +88,8 @@ fun CommunityPluginsScreen(
     onDownloadTaskerIntegration: (CommunityPluginCardData) -> Unit = {},
     onOpenTaskerIntegrationSettings: (String) -> Unit = {},
     onWatchTaskerTutorial: (() -> Unit)? = null,
+    // Hosts that already draw the app-level navigation shell (iOS) pass false.
+    showNavigationBar: Boolean = true,
 ) {
     var selectedPluginTitle by rememberSaveable { mutableStateOf<String?>(null) }
     var detailsPluginTitle by rememberSaveable { mutableStateOf<String?>(null) }
@@ -112,7 +114,7 @@ fun CommunityPluginsScreen(
             )
         },
         bottomBar = {
-            NavigationBar(
+            if (showNavigationBar) NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 0.dp,
             ) {

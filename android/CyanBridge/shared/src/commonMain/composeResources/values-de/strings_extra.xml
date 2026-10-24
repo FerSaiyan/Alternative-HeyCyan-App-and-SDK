@@ -24,7 +24,7 @@
     <string name="settings_intro">Datenschutzfreundliche Voreinstellungen, lokale Kontrollen und Automatisierung.</string>
     <string name="settings_appearance">Darstellung</string>
     <string name="settings_appearance_description">Design, Akzentprofil, dynamische Farben und Kontrast</string>
-    <string name="settings_custom_ai_provider">Benutzerdefinierter KI-Anbieter</string>
+    <string name="settings_custom_ai_provider">KI-Anbieter</string>
     <string name="settings_memory_privacy">Speicherdatenschutz</string>
     <string name="settings_transcripts">Transkripte</string>
     <string name="settings_data">Daten</string>
@@ -501,7 +501,7 @@
     <string name="dashboard_quality_detailed_warning_body">Detailed uses Wi-Fi instead of Bluetooth and takes longer (up to 30 seconds) to transfer the full-resolution image.</string>
     <string name="dashboard_quality_detailed_warning_continue">Continue</string>
     <string name="dashboard_quality_detailed_warning_cancel">Cancel</string>
-    <string name="dashboard_test_image">KI-Bildbeschreibung testen</string>
+    <string name="dashboard_test_image">Beschreibung testen</string>
     <string name="dashboard_ai_wake_word_route">Aktion des Aktivierungsworts</string>
     <string name="dashboard_ai_wake_word_route_description">Bei HeyCyan- und Eyevue-Brillen startet die KI-Aktivierung durch das Aktivierungswort:</string>
     <string name="dashboard_ai_wake_word_voice">Sprachfrage</string>
@@ -571,4 +571,12 @@
     <string name="plugin_category_operations">Betrieb</string>
     <string name="plugin_category_language">Sprache</string>
     <string name="plugin_category_other">Sonstiges</string>
+    <string name="dashboard_conn_connected">Verbunden</string>
+    <string name="dashboard_conn_disconnected">Getrennt</string>
+    <string name="dashboard_conn_disconnecting">Wird getrennt</string>
+    <string name="dashboard_conn_bluetooth_unavailable">Bluetooth nicht verfügbar</string>
+    <string name="dashboard_storage_title">Speicher</string>
+    <string name="dashboard_media_photos">%1$d Fotos</string>
+    <string name="dashboard_media_videos">%1$d Videos</string>
+    <string name="dashboard_media_audio">%1$d Audios</string>
 </resources>
