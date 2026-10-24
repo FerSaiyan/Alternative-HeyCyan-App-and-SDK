@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.localagent
 
 import android.util.Log
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.currentCoroutineContext
@@ -330,7 +331,7 @@ class LocalAgentTaskLoop(
     }
 
     private suspend fun awaitApprovalWithVoice(action: LocalAgentAction?): Boolean {
-        AudioSessionCoordinator.waitUntilIdle()
+        AudioSessionCoordinator.awaitSpeechIdle()
         device.availability()
             .takeIf { it != LocalAgentDeviceState.Availability.READY }
             ?.let { return false }

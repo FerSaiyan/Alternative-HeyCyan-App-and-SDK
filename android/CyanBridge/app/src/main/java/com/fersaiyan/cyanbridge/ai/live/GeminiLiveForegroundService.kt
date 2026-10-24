@@ -10,7 +10,6 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
-import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -19,6 +18,7 @@ import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
+import com.fersaiyan.cyanbridge.audio.TtsSpeaker
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionRoute
 import com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences
 import java.io.File
@@ -61,9 +61,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     private var initialTurnSent = false
     private val hardwareInProgress = AtomicBoolean(false)
     private var hardwareRegistered = false
-    private var announcementTts: TextToSpeech? = null
-    private var announcementTtsReady = false
-    private var pendingAnnouncement: GeminiLiveAnnouncement? = null
+    private var announcementTts: TtsSpeaker? = null
     private var terminalAnnouncementIssued = false
     private val hardwareHandler: (ManualGlassesPhoto) -> Unit = { photo ->
         serviceScope.launch(Dispatchers.Main) { captureHardwareImageQuestion(photo) }
@@ -112,13 +110,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
             )
         }
         client = GeminiLiveClient(this, this)
-        announcementTts = TextToSpeech(applicationContext) { status ->
-            announcementTtsReady = status == TextToSpeech.SUCCESS
-            if (announcementTtsReady) pendingAnnouncement?.let {
-                pendingAnnouncement = null
-                speakAnnouncement(it)
-            }
-        }
+        announcementTts = TtsSpeaker(applicationContext, TAG)
         visionController = GeminiLiveVisionController(this, client!!) { message ->
             visionStatus = message
             updateNotification()
@@ -497,26 +489,17 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     }
 
     private fun speakAnnouncement(kind: GeminiLiveAnnouncement) {
-        if (!announcementTtsReady) {
-            pendingAnnouncement = kind
-            return
+        // Before the engine is ready only the latest announcement is kept.
+        announcementTts?.whenReady { engine ->
+            val languageTag = AppLanguagePreferences.selected(this).languageTag
+                .ifBlank { Locale.getDefault().toLanguageTag() }
+            engine.setLanguage(Locale.forLanguageTag(languageTag))
+            engine.useVoiceCommunicationAudio()
+            engine.speak(
+                GeminiLiveAnnouncementMessages.text(kind, languageTag),
+                "gemini_live_announcement_${System.nanoTime()}",
+            )
         }
-        val languageTag = AppLanguagePreferences.selected(this).languageTag
-            .ifBlank { Locale.getDefault().toLanguageTag() }
-        val engine = announcementTts ?: return
-        engine.language = Locale.forLanguageTag(languageTag)
-        engine.setAudioAttributes(
-            android.media.AudioAttributes.Builder()
-                .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build(),
-        )
-        engine.speak(
-            GeminiLiveAnnouncementMessages.text(kind, languageTag),
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            "gemini_live_announcement_${System.nanoTime()}",
-        )
     }
 
     companion object {

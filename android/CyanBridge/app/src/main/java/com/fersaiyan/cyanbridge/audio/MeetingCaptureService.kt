@@ -6,12 +6,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.media.AudioDeviceInfo
-import android.media.AudioManager
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
@@ -24,15 +20,14 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.data.local.entity.CaptureSession
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
+import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import com.fersaiyan.cyanbridge.ui.MyApplication
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -63,7 +58,7 @@ class MeetingCaptureService : Service() {
     private var timerDurationSec: Long? = null
     private var autoStopJobActive: Boolean = false
 
-    private var btRoute: BtInputRoute? = null
+    private var audioSession: AudioSessionHandle? = null
 
     private val notificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -118,14 +113,16 @@ class MeetingCaptureService : Service() {
         // Pause the automatic glasses audio loop while meeting capture is running.
         AutoAudioCapturePrefs.setPausedForMeeting(applicationContext, true)
 
+        // A recording coexists with interactive sessions and ends an ambient speech probe.
+        val session = AudioSessionCoordinator.tryOpen(this, AudioSessionRequest.Recording(TAG))
+        audioSession = session
+
         serviceScope.launch {
-            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
             // Prefer glasses (Bluetooth) mic when available.
-            val route = startBluetoothInputRoutingBestEffort(audioManager)
-            btRoute = route
+            val route = session?.connectRoute() ?: AudioRouteResult.PHONE
+            if (!route.bluetoothActive) Log.d(TAG, "Bluetooth mic not detected; using phone mic")
 
-            val source = if (route.isActive) CaptureSource.BLUETOOTH_MIC else CaptureSource.PHONE_MIC
+            val source = if (route.bluetoothActive) CaptureSource.BLUETOOTH_MIC else CaptureSource.PHONE_MIC
             captureSource = source
 
             val outputFile = createOutputFile()
@@ -145,7 +142,7 @@ class MeetingCaptureService : Service() {
 
                 // If we can identify the BT input device, explicitly prefer it.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    route.preferredInput?.let { r.setPreferredDevice(it) }
+                    route.inputDevice?.let { r.setPreferredDevice(it) }
                 }
 
                 // Keep a widely supported output profile for MVP export/transcription pipeline.
@@ -165,13 +162,10 @@ class MeetingCaptureService : Service() {
                 false
             }
 
-            // If we failed to start recording, release any BT routing changes.
             if (!startOk) {
-                stopBluetoothInputRoutingBestEffort(audioManager, btRoute)
-            }
-
-            if (!startOk) {
-                btRoute = null
+                // If we failed to start recording, release any BT routing changes.
+                audioSession?.close()
+                audioSession = null
                 // If meeting capture never started, undo the pause.
                 AutoAudioCapturePrefs.setPausedForMeeting(applicationContext, false)
                 broadcastState(isRecording = false, error = "Failed to start recording")
@@ -202,15 +196,19 @@ class MeetingCaptureService : Service() {
     }
 
     private fun stopCapture(stopReason: String?) {
+        val session = audioSession
         val r = recorder ?: run {
+            if (session != null && audioSession === session) {
+                audioSession = null
+                session.close()
+            }
             stopSelf()
             return
         }
         recorder = null
+        audioSession = null
 
         serviceScope.launch {
-            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
             val error: String? = runCatching {
                 r.stop()
                 null
@@ -222,8 +220,7 @@ class MeetingCaptureService : Service() {
             runCatching { r.reset() }
             runCatching { r.release() }
 
-            stopBluetoothInputRoutingBestEffort(audioManager, btRoute)
-            btRoute = null
+            session?.close()
 
             val endedAtMs = System.currentTimeMillis()
             val started = startedAtMs ?: endedAtMs
@@ -349,145 +346,6 @@ class MeetingCaptureService : Service() {
             putExtra(EXTRA_ERROR, error)
         }
         LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(i)
-    }
-
-    private data class BtInputRoute(
-        val isActive: Boolean,
-        val usedSco: Boolean,
-        val usedCommunicationDevice: Boolean,
-        val preferredInput: AudioDeviceInfo?,
-    )
-
-    private fun isBluetoothHeadsetLikelyConnected(audioManager: AudioManager): Boolean {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val inputs = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
-                if (inputs.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }) return true
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    if (inputs.any { it.type == AudioDeviceInfo.TYPE_BLE_HEADSET }) return true
-                }
-
-                val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                if (outputs.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }) return true
-                if (outputs.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }) return true
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    if (outputs.any { it.type == AudioDeviceInfo.TYPE_BLE_HEADSET }) return true
-                }
-            }
-
-            // Fallback hint: if SCO is available off-call we can attempt routing.
-            audioManager.isBluetoothScoAvailableOffCall
-        } catch (_: Throwable) {
-            false
-        }
-    }
-
-    private fun findBluetoothInputDevice(audioManager: AudioManager): AudioDeviceInfo? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
-        val inputs = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
-        return inputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
-            ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                inputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLE_HEADSET }
-            } else {
-                null
-            }
-    }
-
-    private fun findBluetoothCommunicationDevice(audioManager: AudioManager): AudioDeviceInfo? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
-        return runCatching {
-            audioManager.availableCommunicationDevices.firstOrNull {
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-            }
-        }.getOrNull()
-    }
-
-    private suspend fun startBluetoothInputRoutingBestEffort(audioManager: AudioManager): BtInputRoute {
-        if (!isBluetoothHeadsetLikelyConnected(audioManager)) {
-            Log.d(TAG, "Bluetooth mic not detected; using phone mic")
-            return BtInputRoute(false, usedSco = false, usedCommunicationDevice = false, preferredInput = null)
-        }
-
-        // Android 12+ has explicit communication-device routing; try that first.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val comm = findBluetoothCommunicationDevice(audioManager)
-            if (comm != null) {
-                val ok = runCatching {
-                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                    audioManager.setCommunicationDevice(comm)
-                    true
-                }.getOrDefault(false)
-
-                delay(250)
-                val preferred = findBluetoothInputDevice(audioManager)
-                if (ok) {
-                    Log.i(TAG, "Using communication device routing for Bluetooth mic (type=${comm.type})")
-                    return BtInputRoute(
-                        isActive = true,
-                        usedSco = false,
-                        usedCommunicationDevice = true,
-                        preferredInput = preferred,
-                    )
-                }
-            }
-        }
-
-        // Legacy fallback: SCO routing.
-        val scoConnected = startBluetoothScoBestEffort(audioManager)
-        val preferred = findBluetoothInputDevice(audioManager)
-        return BtInputRoute(
-            isActive = scoConnected,
-            usedSco = scoConnected,
-            usedCommunicationDevice = false,
-            preferredInput = preferred,
-        )
-    }
-
-    private fun stopBluetoothInputRoutingBestEffort(audioManager: AudioManager, route: BtInputRoute? = null) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (route?.usedCommunicationDevice == true || route == null)) {
-            runCatching { audioManager.clearCommunicationDevice() }
-        }
-
-        // Always best-effort stop SCO + reset mode.
-        stopBluetoothScoBestEffort(audioManager)
-    }
-
-    private suspend fun startBluetoothScoBestEffort(audioManager: AudioManager): Boolean {
-        return runCatching {
-            val deferred = CompletableDeferred<Boolean>()
-            val receiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context?, intent: Intent?) {
-                    if (intent?.action != AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED) return
-                    val state = intent.getIntExtra(AudioManager.EXTRA_SCO_AUDIO_STATE, -1)
-                    when (state) {
-                        AudioManager.SCO_AUDIO_STATE_CONNECTED -> deferred.complete(true)
-                        AudioManager.SCO_AUDIO_STATE_DISCONNECTED,
-                        AudioManager.SCO_AUDIO_STATE_ERROR -> deferred.complete(false)
-                    }
-                }
-            }
-
-            registerReceiver(receiver, IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED))
-            try {
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                runCatching { audioManager.startBluetoothSco() }
-                runCatching { audioManager.isBluetoothScoOn = true }
-
-                // Some devices are slow to bring up SCO.
-                withTimeoutOrNull(6_000) { deferred.await() } ?: false
-            } finally {
-                runCatching { unregisterReceiver(receiver) }
-            }
-        }.getOrElse { e ->
-            Log.w(TAG, "Failed to start Bluetooth SCO", e)
-            false
-        }
-    }
-
-    private fun stopBluetoothScoBestEffort(audioManager: AudioManager) {
-        runCatching { audioManager.isBluetoothScoOn = false }
-        runCatching { audioManager.stopBluetoothSco() }
-        runCatching { audioManager.mode = AudioManager.MODE_NORMAL }
     }
 
     companion object {

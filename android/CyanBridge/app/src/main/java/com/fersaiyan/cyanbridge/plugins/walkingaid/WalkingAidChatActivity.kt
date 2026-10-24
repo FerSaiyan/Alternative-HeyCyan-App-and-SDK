@@ -1,8 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
@@ -50,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
+import com.fersaiyan.cyanbridge.audio.TtsSpeaker
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelRequestPriority
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
@@ -63,16 +62,13 @@ import java.util.Locale
 class WalkingAidChatActivity : AppCompatActivity() {
 
     private lateinit var composeView: ComposeView
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    private var tts: TtsSpeaker? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         composeView = ComposeView(this).also(::setContentView)
 
-        tts = TextToSpeech(this) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-        }
+        tts = TtsSpeaker(this, "WalkingAidChat")
 
         WalkingAidImageStore.load(this)
 
@@ -85,24 +81,15 @@ class WalkingAidChatActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        tts?.stop()
         tts?.shutdown()
         tts = null
         super.onDestroy()
     }
 
     private fun speakTts(text: String) {
-        if (!ttsReady || tts == null) return
-        val locale = Locale.forLanguageTag(ImageQuestionPreferences.get(this).appLanguageTag)
-        tts?.language = locale
-        val utteranceId = "walking_chat_${System.currentTimeMillis()}"
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(uttId: String?) {}
-            override fun onDone(uttId: String?) {}
-            @Deprecated("Deprecated in Java")
-            override fun onError(uttId: String?) {}
-        })
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        val speaker = tts?.takeIf { it.isReady } ?: return
+        speaker.setLanguage(Locale.forLanguageTag(ImageQuestionPreferences.get(this).appLanguageTag))
+        speaker.speak(text, "walking_chat_${System.currentTimeMillis()}")
     }
 }
 
