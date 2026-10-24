@@ -43,7 +43,7 @@ class MemoMindPacketEncoderCharacterizationTest {
         assertEquals("fa000009%02x010601%02x".format(seq(battery), (seq(battery) + 10) and 0xFF), battery.hex())
 
         fun setting(frame: ByteArray, opcode: Int, value: Int) = assertEquals(
-            "fa000e%02x01%02x08000001%02x01%02x".format(
+            "fa00000e%02x01%02x08000001%02x01%02x".format(
                 seq(frame), opcode, value, (0xFA + 0x0E + seq(frame) + 1 + opcode + 8 + 1 + value + 1) and 0xFF,
             ),
             frame.hex(),
