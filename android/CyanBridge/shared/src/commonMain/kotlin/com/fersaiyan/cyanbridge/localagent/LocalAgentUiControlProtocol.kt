@@ -1,8 +1,15 @@
 package com.fersaiyan.cyanbridge.localagent
 
-import org.json.JSONException
-import org.json.JSONObject
-import org.json.JSONTokener
+import com.fersaiyan.cyanbridge.shared.json.JsonSyntaxException
+import com.fersaiyan.cyanbridge.shared.json.optBoolean
+import com.fersaiyan.cyanbridge.shared.json.optDouble
+import com.fersaiyan.cyanbridge.shared.json.optInt
+import com.fersaiyan.cyanbridge.shared.json.optJsonObject
+import com.fersaiyan.cyanbridge.shared.json.optLong
+import com.fersaiyan.cyanbridge.shared.json.optString
+import com.fersaiyan.cyanbridge.shared.json.optStringOrNull
+import com.fersaiyan.cyanbridge.shared.json.parseJsonObject
+import kotlinx.serialization.json.JsonObject
 
 object LocalAgentUiControlProtocol {
     const val CURRENT_VERSION: Int = 1
@@ -280,29 +287,29 @@ object LocalAgentUiControlProtocol {
     fun parseDecision(raw: String): Decision {
         val jsonText = extractJsonObjectText(raw)
         val obj = try {
-            JSONObject(JSONTokener(jsonText))
-        } catch (e: JSONException) {
+            parseJsonObject(jsonText)
+        } catch (e: JsonSyntaxException) {
             throw JsonParseException(
                 message = "UI-control response is not valid JSON: ${e.message}. Extracted=${jsonText.preview()}",
                 cause = e,
             )
         }
 
-        val actionStr = obj.optNullableString("action")?.trim()?.lowercase()
+        val actionStr = obj.optStringOrNull("action")?.trim()?.lowercase()
             ?: throw SchemaViolationException("Missing required field: action")
         val resolvedAction = ACTION_ALIASES[actionStr] ?: actionStr
-        val params = obj.optJSONObject("params") ?: JSONObject()
+        val params = obj.optJsonObject("params") ?: JsonObject(emptyMap())
         val action = parseAction(resolvedAction, params)
 
         return Decision(
             version = CURRENT_VERSION,
-            reasoning = obj.optNullableString("reasoning")?.trim()?.takeIf { it.isNotBlank() },
+            reasoning = obj.optStringOrNull("reasoning")?.trim()?.takeIf { it.isNotBlank() },
             action = action,
             isComplete = obj.optBoolean("is_complete", false),
         )
     }
 
-    private fun parseAction(type: String, params: JSONObject): Action {
+    private fun parseAction(type: String, params: JsonObject): Action {
         return when (type) {
             "noop" -> NoOp
             "wait" -> Wait(ms = params.optLong("ms", 500L).coerceAtLeast(0L))
@@ -329,20 +336,20 @@ object LocalAgentUiControlProtocol {
                     .ifBlank { params.optString("input", "").trim() }
                     .ifBlank { params.optString("query", "").trim() }
                 if (text.isBlank()) {
-                    val fallback = params.keys().asSequence()
-                        .mapNotNull { key -> params.optNullableString(key)?.trim()?.takeIf { v -> v.isNotBlank() } }
+                    val fallback = params.keys.asSequence()
+                        .mapNotNull { key -> params.optStringOrNull(key)?.trim()?.takeIf { v -> v.isNotBlank() } }
                         .firstOrNull()
                     if (fallback != null) {
-                        TypeText(text = fallback, hint = params.optNullableString("hint")
+                        TypeText(text = fallback, hint = params.optStringOrNull("hint")
                             ?.trim()?.takeIf { it.isNotBlank() }
-                            ?: params.optNullableString("field_hint")?.trim()?.takeIf { it.isNotBlank() })
+                            ?: params.optStringOrNull("field_hint")?.trim()?.takeIf { it.isNotBlank() })
                     } else {
                         throw SchemaViolationException("params.text is required for type_text")
                     }
                 } else {
-                    TypeText(text = text, hint = params.optNullableString("hint")
+                    TypeText(text = text, hint = params.optStringOrNull("hint")
                         ?.trim()?.takeIf { it.isNotBlank() }
-                        ?: params.optNullableString("field_hint")?.trim()?.takeIf { it.isNotBlank() })
+                        ?: params.optStringOrNull("field_hint")?.trim()?.takeIf { it.isNotBlank() })
                 }
             }
             "press_enter" -> PressEnter
@@ -408,7 +415,7 @@ object LocalAgentUiControlProtocol {
             "send_email" -> {
                 val to = params.optString("to", "").trim()
                 if (to.isBlank()) throw SchemaViolationException("params.to is required for send_email")
-                SendEmail(to = to, subject = params.optNullableString("subject").orEmpty(), body = params.optNullableString("body").orEmpty())
+                SendEmail(to = to, subject = params.optStringOrNull("subject").orEmpty(), body = params.optStringOrNull("body").orEmpty())
             }
             "set_alarm" -> {
                 val hour = params.optInt("hour", -1)
@@ -416,14 +423,14 @@ object LocalAgentUiControlProtocol {
                 if (hour !in 0..23 || minute !in 0..59) {
                     throw SchemaViolationException("params.hour (0-23) and params.minute (0-59) are required for set_alarm")
                 }
-                SetAlarm(hour = hour, minute = minute, label = params.optNullableString("label")?.trim()?.takeIf { it.isNotBlank() })
+                SetAlarm(hour = hour, minute = minute, label = params.optStringOrNull("label")?.trim()?.takeIf { it.isNotBlank() })
             }
             "open_contacts" -> OpenContacts
             "toggle_wifi" -> ToggleWifi
             "toggle_bluetooth" -> ToggleBluetooth
             "toggle_flashlight" -> ToggleFlashlight
             "read_screen_aloud" -> ReadScreenAloud
-            "finish", "done" -> Finish(message = params.optNullableString("message")?.trim()?.takeIf { it.isNotBlank() })
+            "finish", "done" -> Finish(message = params.optStringOrNull("message")?.trim()?.takeIf { it.isNotBlank() })
             else -> throw SchemaViolationException("Unsupported action type: $type")
         }
     }
@@ -447,10 +454,10 @@ object LocalAgentUiControlProtocol {
             val attempt = closeTruncatedJson(candidate)
             try {
                 if (attempt != null) {
-                    JSONObject(JSONTokener(attempt))
+                    parseJsonObject(attempt)
                     return attempt
                 }
-            } catch (_: JSONException) {
+            } catch (_: JsonSyntaxException) {
                 // fall through
             }
         }
@@ -521,15 +528,6 @@ object LocalAgentUiControlProtocol {
             append(textStartingWithBrace)
             if (inString) append('"')
             repeat(depth) { append('}') }
-        }
-    }
-
-    private fun JSONObject.optNullableString(key: String): String? {
-        val v = opt(key)
-        if (v == null || v == JSONObject.NULL) return null
-        return when (v) {
-            is String -> v
-            else -> v.toString()
         }
     }
 

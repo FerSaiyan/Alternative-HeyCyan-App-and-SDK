@@ -1,7 +1,14 @@
 package com.fersaiyan.cyanbridge.localagent
 
-import org.json.JSONArray
-import org.json.JSONObject
+import com.fersaiyan.cyanbridge.shared.json.optDouble
+import com.fersaiyan.cyanbridge.shared.json.optInt
+import com.fersaiyan.cyanbridge.shared.json.optLong
+import com.fersaiyan.cyanbridge.shared.json.optString
+import com.fersaiyan.cyanbridge.shared.json.parseJsonArray
+import com.fersaiyan.cyanbridge.shared.json.parseJsonObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 object LocalAgentActionParser {
 
@@ -11,8 +18,8 @@ object LocalAgentActionParser {
         val trimmed = json.trim()
         return try {
             when {
-                trimmed.startsWith("[") -> parseArray(JSONArray(trimmed))
-                trimmed.startsWith("{") -> listOfNotNull(parseOne(JSONObject(trimmed)))
+                trimmed.startsWith("[") -> parseArray(parseJsonArray(trimmed))
+                trimmed.startsWith("{") -> listOfNotNull(parseOne(parseJsonObject(trimmed)))
                 else -> emptyList()
             }
         } catch (_: Exception) {
@@ -20,13 +27,12 @@ object LocalAgentActionParser {
         }
     }
 
-    private fun parseArray(arr: JSONArray): List<LocalAgentAction> {
-        val out = ArrayList<LocalAgentAction>(arr.length())
-        for (i in 0 until arr.length()) {
-            val v = arr.opt(i) ?: continue
-            val obj = when (v) {
-                is JSONObject -> v
-                is String -> runCatching { JSONObject(v) }.getOrNull()
+    private fun parseArray(arr: JsonArray): List<LocalAgentAction> {
+        val out = ArrayList<LocalAgentAction>(arr.size)
+        for (v in arr) {
+            val obj = when {
+                v is JsonObject -> v
+                v is JsonPrimitive && v.isString -> runCatching { parseJsonObject(v.content) }.getOrNull()
                 else -> null
             } ?: continue
 
@@ -35,7 +41,7 @@ object LocalAgentActionParser {
         return out
     }
 
-    private fun parseOne(obj: JSONObject): LocalAgentAction? {
+    private fun parseOne(obj: JsonObject): LocalAgentAction? {
         val type = obj.optString("type", "").trim().lowercase()
         return when (type) {
             "sleep", "wait" -> LocalAgentAction.Wait(ms = obj.optLong("ms", 0L).coerceAtLeast(0L))
@@ -46,7 +52,7 @@ object LocalAgentActionParser {
                 if (text.isBlank()) null else LocalAgentAction.ClickText(text)
             }
             "click_coord", "click_at" -> {
-                if (!obj.has("x") || !obj.has("y")) return null
+                if (!obj.containsKey("x") || !obj.containsKey("y")) return null
                 val x = obj.optDouble("x", Double.NaN)
                 val y = obj.optDouble("y", Double.NaN)
                 if (!x.isFinite() || !y.isFinite()) {
@@ -80,7 +86,7 @@ object LocalAgentActionParser {
                 LocalAgentAction.Finish(message)
             }
             "swipe" -> {
-                if (!obj.has("start_x") || !obj.has("start_y") || !obj.has("end_x") || !obj.has("end_y")) return null
+                if (!obj.containsKey("start_x") || !obj.containsKey("start_y") || !obj.containsKey("end_x") || !obj.containsKey("end_y")) return null
                 val sx = obj.optDouble("start_x", Double.NaN)
                 val sy = obj.optDouble("start_y", Double.NaN)
                 val ex = obj.optDouble("end_x", Double.NaN)
@@ -95,7 +101,7 @@ object LocalAgentActionParser {
                 )
             }
             "long_press" -> {
-                if (!obj.has("x") || !obj.has("y")) return null
+                if (!obj.containsKey("x") || !obj.containsKey("y")) return null
                 val x = obj.optDouble("x", Double.NaN)
                 val y = obj.optDouble("y", Double.NaN)
                 if (!x.isFinite() || !y.isFinite()) null

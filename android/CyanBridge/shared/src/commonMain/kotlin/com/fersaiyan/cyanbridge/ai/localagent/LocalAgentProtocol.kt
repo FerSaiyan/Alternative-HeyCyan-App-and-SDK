@@ -1,15 +1,23 @@
 package com.fersaiyan.cyanbridge.ai.localagent
 
-import org.json.JSONArray
-import org.json.JSONException
-import org.json.JSONObject
-import org.json.JSONTokener
+import com.fersaiyan.cyanbridge.shared.json.JsonSyntaxException
+import com.fersaiyan.cyanbridge.shared.json.optInt
+import com.fersaiyan.cyanbridge.shared.json.optJsonArray
+import com.fersaiyan.cyanbridge.shared.json.optJsonObject
+import com.fersaiyan.cyanbridge.shared.json.optString
+import com.fersaiyan.cyanbridge.shared.json.optStringOrNull
+import com.fersaiyan.cyanbridge.shared.json.parseJsonObject
+import com.fersaiyan.cyanbridge.shared.json.toOrgJsonString
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 
 /**
  * LocalAgent brain contract.
  *
- * This file intentionally keeps **zero** external JSON dependencies to avoid adding new libraries;
- * we use Android's built-in org.json.
+ * JSON is read with the shared org.json-compatible reader, so it is as lenient as before.
  *
  * The contract is designed for LLM calls where we must:
  *  - provide a strict JSON schema in the prompt
@@ -86,15 +94,12 @@ object LocalAgentProtocol {
         val user_message: String,
         val app_context: Map<String, String> = emptyMap(),
     ) {
-        fun toJson(): JSONObject {
-            val o = JSONObject()
-            o.put("version", CURRENT_VERSION)
-            o.put("user_message", user_message)
-
-            val ctx = JSONObject()
-            for ((k, v) in app_context) ctx.put(k, v)
-            o.put("app_context", ctx)
-            return o
+        fun toJson(): JsonObject = buildJsonObject {
+            put("version", CURRENT_VERSION)
+            put("user_message", user_message)
+            putJsonObject("app_context") {
+                for ((k, v) in app_context) put(k, v)
+            }
         }
     }
 
@@ -156,14 +161,14 @@ object LocalAgentProtocol {
      */
     data class UnknownAction(
         override val type: String,
-        val raw: JSONObject,
+        val raw: JsonObject,
     ) : LocalAgentAction
 
     data class LocalAgentBrainResponse(
         val version: Int,
         val assistantMessage: String?,
         val actions: List<LocalAgentAction>,
-        val debug: JSONObject?,
+        val debug: JsonObject?,
     )
 
     open class LocalAgentProtocolException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -193,7 +198,7 @@ object LocalAgentProtocol {
 
         val user = buildString {
             appendLine("Observation (JSON):")
-            appendLine(observation.toJson().toString(2))
+            appendLine(observation.toJson().toOrgJsonString(2))
         }
 
         return LocalAgentPrompt(system = system.trim(), user = user.trim())
@@ -210,8 +215,8 @@ object LocalAgentProtocol {
         val jsonText = extractJsonObjectText(raw)
 
         val obj = try {
-            JSONObject(JSONTokener(jsonText))
-        } catch (e: JSONException) {
+            parseJsonObject(jsonText)
+        } catch (e: JsonSyntaxException) {
             throw LocalAgentJsonParseException(
                 message = "Brain response is not valid JSON: ${e.message}. Extracted=${jsonText.preview()}",
                 cause = e,
@@ -225,9 +230,9 @@ object LocalAgentProtocol {
             )
         }
 
-        val assistantMessage = obj.optNullableString("assistant_message")?.trim()?.takeIf { it.isNotBlank() }
+        val assistantMessage = obj.optStringOrNull("assistant_message")?.trim()?.takeIf { it.isNotBlank() }
 
-        val actionsJson = obj.optJSONArray("actions")
+        val actionsJson = obj.optJsonArray("actions")
         val actions = if (actionsJson != null) {
             parseActions(actionsJson)
         } else {
@@ -240,7 +245,7 @@ object LocalAgentProtocol {
             )
         }
 
-        val debug = obj.optJSONObject("debug")
+        val debug = obj.optJsonObject("debug")
 
         return LocalAgentBrainResponse(
             version = version,
@@ -250,19 +255,19 @@ object LocalAgentProtocol {
         )
     }
 
-    private fun parseActions(arr: JSONArray): List<LocalAgentAction> {
-        val out = ArrayList<LocalAgentAction>(arr.length())
-        for (i in 0 until arr.length()) {
-            val item = arr.opt(i)
-            if (item !is JSONObject) {
+    private fun parseActions(arr: JsonArray): List<LocalAgentAction> {
+        val out = ArrayList<LocalAgentAction>(arr.size)
+        for (i in arr.indices) {
+            val item = arr[i]
+            if (item !is JsonObject) {
                 throw LocalAgentSchemaViolationException("actions[$i] must be an object")
             }
-            val type = item.optNullableString("type")?.trim()
+            val type = item.optStringOrNull("type")?.trim()
                 ?.takeIf { it.isNotBlank() }
                 ?: throw LocalAgentSchemaViolationException("actions[$i] missing required field: type")
 
             val action = when (type) {
-                "noop" -> NoOpAction(reason = item.optNullableString("reason")?.trim()?.takeIf { it.isNotBlank() })
+                "noop" -> NoOpAction(reason = item.optStringOrNull("reason")?.trim()?.takeIf { it.isNotBlank() })
 
                 "speak" -> {
                     val text = item.optString("text", "").trim()
@@ -277,7 +282,7 @@ object LocalAgentProtocol {
                 }
 
                 "start_meeting_capture" -> {
-                    val timer = if (item.has("timer_seconds")) item.optInt("timer_seconds", -1) else -1
+                    val timer = if (item.containsKey("timer_seconds")) item.optInt("timer_seconds", -1) else -1
                     val timerSeconds = when {
                         timer <= 0 -> null
                         else -> timer
@@ -299,10 +304,10 @@ object LocalAgentProtocol {
                     val action = item.optString("action", "").trim()
                     if (action.isBlank()) throw LocalAgentSchemaViolationException("actions[$i].action required for type=broadcast_intent")
 
-                    val extras = item.optJSONObject("extras")?.let { extrasObj ->
+                    val extras = item.optJsonObject("extras")?.let { extrasObj ->
                         val map = LinkedHashMap<String, String>()
-                        for (k in extrasObj.keys()) {
-                            val v = extrasObj.optNullableString(k)
+                        for (k in extrasObj.keys) {
+                            val v = extrasObj.optStringOrNull(k)
                             if (v != null) map[k] = v
                         }
                         map
@@ -381,15 +386,6 @@ object LocalAgentProtocol {
         }
 
         return null
-    }
-
-    private fun JSONObject.optNullableString(key: String): String? {
-        val v = opt(key)
-        if (v == null || v == JSONObject.NULL) return null
-        return when (v) {
-            is String -> v
-            else -> v.toString()
-        }
     }
 
     private fun String.preview(maxChars: Int = 400): String {
