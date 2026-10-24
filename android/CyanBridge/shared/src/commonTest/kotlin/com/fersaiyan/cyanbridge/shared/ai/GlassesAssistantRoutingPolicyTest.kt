@@ -1,9 +1,9 @@
-package com.fersaiyan.cyanbridge.ai.router
+package com.fersaiyan.cyanbridge.shared.ai
 
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.Test
 
 class GlassesAssistantRoutingPolicyTest {
     @Test

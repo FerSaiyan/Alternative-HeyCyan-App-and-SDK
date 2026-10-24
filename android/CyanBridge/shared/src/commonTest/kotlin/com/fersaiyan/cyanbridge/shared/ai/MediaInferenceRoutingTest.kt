@@ -1,23 +1,23 @@
-package com.fersaiyan.cyanbridge.ai.router
+package com.fersaiyan.cyanbridge.shared.ai
 
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.Test
 
-class MediaInferenceRoutingPolicyTest {
+class MediaInferenceRoutingTest {
     @Test
     fun localNeverImplicitlyRoutesToNetworkWhenMediaIsUnavailable() {
         assertEquals(
             AgentProviderType.LOCAL_AGENT,
-            MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, true, false),
+            MediaInferenceRouting.resolve(AgentProviderType.LOCAL_AGENT, true, false),
         )
         assertEquals(
             AgentProviderType.LOCAL_AGENT,
-            MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, false, true),
+            MediaInferenceRouting.resolve(AgentProviderType.LOCAL_AGENT, false, true),
         )
         assertEquals(
             AgentProviderType.LOCAL_AGENT,
-            MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, false, false),
+            MediaInferenceRouting.resolve(AgentProviderType.LOCAL_AGENT, false, false),
         )
     }
 
@@ -25,7 +25,7 @@ class MediaInferenceRoutingPolicyTest {
     fun taskerLocalModelsUsesCapableLocalRuntime() {
         assertEquals(
             AgentProviderType.LOCAL_AGENT,
-            MediaInferenceRoutingPolicy.resolve(
+            MediaInferenceRouting.resolve(
                 preferred = AgentProviderType.TASKER,
                 localMediaAvailable = true,
                 proAvailable = false,
@@ -38,7 +38,7 @@ class MediaInferenceRoutingPolicyTest {
     fun explicitProSelectionKeepsFreeGeminiLiveRoute() {
         assertEquals(
             AgentProviderType.PRO_SUBSCRIPTION,
-            MediaInferenceRoutingPolicy.resolve(
+            MediaInferenceRouting.resolve(
                 preferred = AgentProviderType.PRO_SUBSCRIPTION,
                 localMediaAvailable = false,
                 proAvailable = false,
@@ -46,7 +46,7 @@ class MediaInferenceRoutingPolicyTest {
         )
         assertEquals(
             AgentProviderType.PRO_SUBSCRIPTION,
-            MediaInferenceRoutingPolicy.resolve(
+            MediaInferenceRouting.resolve(
                 preferred = AgentProviderType.PRO_SUBSCRIPTION,
                 localMediaAvailable = true,
                 proAvailable = false,

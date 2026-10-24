@@ -1,11 +1,11 @@
-package com.fersaiyan.cyanbridge.ai.router
+package com.fersaiyan.cyanbridge.shared.ai
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.Test
 
 class AssistantSpeechPolicyTest {
     @Test
-    fun `keeps concise clarification`() {
+    fun keepsConciseClarification() {
         assertEquals(
             "Which app should I open?",
             AssistantSpeechPolicy.clarification("Which app should I open?"),
@@ -13,7 +13,7 @@ class AssistantSpeechPolicyTest {
     }
 
     @Test
-    fun `replaces tool details with safe clarification`() {
+    fun replacesToolDetailsWithSafeClarification() {
         assertEquals(
             "Please say exactly what you want me to do.",
             AssistantSpeechPolicy.clarification("Use click_coord at center:(50,90)"),
@@ -21,10 +21,18 @@ class AssistantSpeechPolicyTest {
     }
 
     @Test
-    fun `caps excessive classifier speech`() {
+    fun capsExcessiveClassifierSpeech() {
         assertEquals(
             "Please say exactly what you want me to do.",
             AssistantSpeechPolicy.clarification("x".repeat(200)),
+        )
+    }
+
+    @Test
+    fun jsonLikeTextIsReplaced() {
+        assertEquals(
+            "Please say exactly what you want me to do.",
+            AssistantSpeechPolicy.clarification("{\n\"x\": 1\n}"),
         )
     }
 }

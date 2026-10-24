@@ -1,7 +1,14 @@
 package com.fersaiyan.cyanbridge.localagent
 
-import org.json.JSONArray
-import org.json.JSONObject
+import com.fersaiyan.cyanbridge.shared.json.asOptString
+import com.fersaiyan.cyanbridge.shared.json.optBoolean
+import com.fersaiyan.cyanbridge.shared.json.optJsonArray
+import com.fersaiyan.cyanbridge.shared.json.optJsonObject
+import com.fersaiyan.cyanbridge.shared.json.optLong
+import com.fersaiyan.cyanbridge.shared.json.optString
+import com.fersaiyan.cyanbridge.shared.json.parseJsonObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Small, deliberately closed Telegram command surface. Plain chat messages are never treated as
@@ -64,18 +71,18 @@ object LocalAgentTelegramProtocol {
     }
 
     fun parseUpdates(responseBody: String): List<Update> {
-        val response = JSONObject(responseBody)
+        val response = parseJsonObject(responseBody)
         if (!response.optBoolean("ok", false)) {
             throw IllegalStateException("Telegram API rejected the polling request")
         }
-        val result = response.optJSONArray("result") ?: JSONArray()
+        val result = response.optJsonArray("result") ?: JsonArray(emptyList())
         return buildList {
-            for (index in 0 until result.length()) {
-                val item = result.optJSONObject(index) ?: continue
+            for (element in result) {
+                val item = element as? JsonObject ?: continue
                 val updateId = item.optLong("update_id", -1L)
                 if (updateId >= 0L) {
-                    val message = item.optJSONObject("message")
-                    val chatId = normalizeChatId(message?.optJSONObject("chat")?.opt("id")?.toString())
+                    val message = item.optJsonObject("message")
+                    val chatId = normalizeChatId(message?.optJsonObject("chat")?.get("id")?.asOptString())
                     val text = message?.optString("text", "")?.trim()?.takeIf { it.isNotBlank() }
                     add(Update(updateId = updateId, chatId = chatId, text = text))
                 }

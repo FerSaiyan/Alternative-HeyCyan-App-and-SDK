@@ -1,6 +1,6 @@
 package com.fersaiyan.cyanbridge.localagent
 
-import android.util.Log
+import com.fersaiyan.cyanbridge.shared.platform.PlatformLogger
 
 /**
  * Diagnoses action failures using the current screen state and suggests
@@ -35,7 +35,7 @@ object LocalAgentRecoveryEngine {
         if (lower.contains("loading") || lower.contains("progress") ||
             lower.contains("spinner") || lower.contains("please wait")
         ) {
-            Log.i(TAG, "Recovery: detected loading state, waiting")
+            PlatformLogger.i(TAG, "Recovery: detected loading state, waiting")
             return RecoveryAction(
                 action = LocalAgentAction.Wait(2_000L),
                 description = "App seems to be loading, waiting...",
@@ -46,7 +46,7 @@ object LocalAgentRecoveryEngine {
         if (lower.contains("gboard") || lower.contains("keyboard") ||
             lower.contains("swiftkey") || lower.contains("samsung keyboard")
         ) {
-            Log.i(TAG, "Recovery: keyboard detected, pressing back")
+            PlatformLogger.i(TAG, "Recovery: keyboard detected, pressing back")
             return RecoveryAction(
                 action = LocalAgentAction.GlobalBack,
                 description = "Keyboard might be blocking the screen, dismissing it.",
@@ -60,13 +60,13 @@ object LocalAgentRecoveryEngine {
             if (lower.contains("scrollable") || lower.contains("recyclerview") ||
                 lower.contains("scroll")
             ) {
-                Log.i(TAG, "Recovery: click failed + scrollable, scrolling down")
+                PlatformLogger.i(TAG, "Recovery: click failed + scrollable, scrolling down")
                 return RecoveryAction(
                     action = LocalAgentAction.Scroll(LocalAgentAction.Direction.DOWN),
                     description = "Click failed, trying to scroll down to find the target.",
                 )
             } else {
-                Log.i(TAG, "Recovery: click failed + not scrollable, pressing back")
+                PlatformLogger.i(TAG, "Recovery: click failed + not scrollable, pressing back")
                 return RecoveryAction(
                     action = LocalAgentAction.GlobalBack,
                     description = "Click failed and not scrollable, pressing back to retry.",
@@ -76,7 +76,7 @@ object LocalAgentRecoveryEngine {
 
         // 4. Last action was type_text → maybe need to tap the field first
         if (lastFailedAction is LocalAgentAction.TypeText) {
-            Log.i(TAG, "Recovery: type failed, pressing back to reset focus")
+            PlatformLogger.i(TAG, "Recovery: type failed, pressing back to reset focus")
             return RecoveryAction(
                 action = LocalAgentAction.GlobalBack,
                 description = "Typing failed, pressing back to reset focus.",
@@ -85,7 +85,7 @@ object LocalAgentRecoveryEngine {
 
         // 5. Last action was open_app → go home to try a different approach
         if (lastFailedAction is LocalAgentAction.OpenApp) {
-            Log.i(TAG, "Recovery: open_app failed, going home")
+            PlatformLogger.i(TAG, "Recovery: open_app failed, going home")
             return RecoveryAction(
                 action = LocalAgentAction.GlobalHome,
                 description = "Failed to open app, going home to try a different approach.",
@@ -94,7 +94,7 @@ object LocalAgentRecoveryEngine {
 
         // 6. After many failures, try going home as a reset
         if (consecutiveFailures >= 4) {
-            Log.i(TAG, "Recovery: too many failures, going home to reset")
+            PlatformLogger.i(TAG, "Recovery: too many failures, going home to reset")
             return RecoveryAction(
                 action = LocalAgentAction.GlobalHome,
                 description = "Too many failures, going home to reset.",
