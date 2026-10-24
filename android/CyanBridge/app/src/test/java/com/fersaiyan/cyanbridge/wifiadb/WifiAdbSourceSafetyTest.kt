@@ -60,9 +60,18 @@ class WifiAdbSourceSafetyTest {
         assertFalse(releaseSource.contains("Socket("))
 
         val mainSource = File("src/main/java/com/fersaiyan/cyanbridge/MainActivity.kt").readText()
+        val coordinatorSource = File(
+            "src/main/java/com/fersaiyan/cyanbridge/wifiadb/WifiAdbDebugCoordinator.kt",
+        ).readText()
         assertTrue(mainSource.contains("wifiAdbDebug = WifiAdbDebugUiState(isAvailable = false)"))
         assertTrue(mainSource.contains("if (BuildConfig.DEBUG && isHeyCyanSelected()) startWifiAdbDebug()"))
-        assertTrue(mainSource.contains("isAvailable = BuildConfig.DEBUG && isHeyCyanSelected() && runtime.isAvailable"))
+        assertTrue(mainSource.contains("private fun startWifiAdbDebug() = wifiAdbDebugCoordinator.startWifiAdbDebug()"))
+        assertTrue(coordinatorSource.contains("if (!BuildConfig.DEBUG || wifiAdbDebugController.isActive) return"))
+        assertTrue(
+            coordinatorSource.contains("isAvailable = BuildConfig.DEBUG && isHeyCyanSelected() && runtime.isAvailable"),
+        )
+        assertTrue(coordinatorSource.contains("private fun isHeyCyanSelected(): Boolean = host.isHeyCyanSelected()"))
         assertFalse(mainSource.contains("isAvailable = BuildConfig.DEBUG && showBattery"))
+        assertFalse(coordinatorSource.contains("isAvailable = BuildConfig.DEBUG && showBattery"))
     }
 }

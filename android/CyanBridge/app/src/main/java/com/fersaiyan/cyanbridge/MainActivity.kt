@@ -37,6 +37,7 @@ import com.fersaiyan.cyanbridge.media.AdaptiveSyncCheckpoint
 import com.fersaiyan.cyanbridge.ota.FirmwareClient
 import com.fersaiyan.cyanbridge.ota.InstalledFirmwareVersions
 import com.fersaiyan.cyanbridge.ota.FirmwareResult
+import com.fersaiyan.cyanbridge.ota.LivePreviewCoordinator
 import com.fersaiyan.cyanbridge.ota.OtaManager
 import com.fersaiyan.cyanbridge.ota.OtaReadinessStage
 import com.fersaiyan.cyanbridge.ota.OtaState
@@ -53,6 +54,7 @@ import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.glasses.GlassesPhotoCapture
 import com.fersaiyan.cyanbridge.glasses.BackgroundGlassesCommandPermit
 import com.fersaiyan.cyanbridge.wifiadb.DefaultWifiAdbDebugControllerFactory
+import com.fersaiyan.cyanbridge.wifiadb.WifiAdbDebugCoordinator
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
 import com.fersaiyan.cyanbridge.media.autocapture.GlassesSyncedAudioIngestor
@@ -498,7 +500,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var eyevueLiveStopReceiver: android.content.BroadcastReceiver? = null
     private var eyevueLiveAudioMuted by mutableStateOf(false)
     private var heyCyanLivePlayer by mutableStateOf<org.videolan.libvlc.MediaPlayer?>(null)
-    private var heyCyanLiveStopReceiver: android.content.BroadcastReceiver? = null
     private var mediaSessionLease: GlassesSessionLease? = null
     private var eyevueMediaJob: Job? = null
     private var eyevueMediaTransport: EyevueWifiTransport? = null
@@ -528,7 +529,86 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val livePreviewManager by lazy { com.fersaiyan.cyanbridge.ota.LivePreviewManager(this) }
     private var livePreviewDialog: AlertDialog? = null
     private val wifiAdbDebugController by lazy { DefaultWifiAdbDebugControllerFactory.create(this) }
-    private val glassesFeatureHost = object : HeyCyanRecordingControls.Host {
+    private val glassesFeatureHost = object :
+        HeyCyanRecordingControls.Host,
+        LivePreviewCoordinator.Host,
+        WifiAdbDebugCoordinator.Host {
+        override var dashboardState: GlassesDashboardUiState
+            get() = this@MainActivity.dashboardState
+            set(value) {
+                this@MainActivity.dashboardState = value
+            }
+
+        override var livePreviewSessionLease: GlassesSessionLease?
+            get() = this@MainActivity.livePreviewSessionLease
+            set(value) {
+                this@MainActivity.livePreviewSessionLease = value
+            }
+
+        override var wifiAdbDebugSessionLease: GlassesSessionLease?
+            get() = this@MainActivity.wifiAdbDebugSessionLease
+            set(value) {
+                this@MainActivity.wifiAdbDebugSessionLease = value
+            }
+
+        override var heyCyanLivePlayer: org.videolan.libvlc.MediaPlayer?
+            get() = this@MainActivity.heyCyanLivePlayer
+            set(value) {
+                this@MainActivity.heyCyanLivePlayer = value
+            }
+
+        override var livePreviewDialog: AlertDialog?
+            get() = this@MainActivity.livePreviewDialog
+            set(value) {
+                this@MainActivity.livePreviewDialog = value
+            }
+
+        override var eyevueLiveAudioMuted: Boolean
+            get() = this@MainActivity.eyevueLiveAudioMuted
+            set(value) {
+                this@MainActivity.eyevueLiveAudioMuted = value
+            }
+
+        override var tuneBudsLiveAudioMuted: Boolean
+            get() = this@MainActivity.tuneBudsLiveAudioMuted
+            set(value) {
+                this@MainActivity.tuneBudsLiveAudioMuted = value
+            }
+
+        override fun isHeyCyanSelected(): Boolean = this@MainActivity.isHeyCyanSelected()
+
+        override fun isTuneBudsSelected(): Boolean = this@MainActivity.isTuneBudsSelected()
+
+        override fun ensureGlassesTransportPermissions(feature: String, onGranted: () -> Unit) =
+            this@MainActivity.ensureGlassesTransportPermissions(feature, onGranted)
+
+        override fun acquireExclusiveGlassesSession(session: GlassesSession): GlassesSessionLease? =
+            this@MainActivity.acquireExclusiveGlassesSession(session)
+
+        override fun releaseExclusiveGlassesSession(lease: GlassesSessionLease?) =
+            this@MainActivity.releaseExclusiveGlassesSession(lease)
+
+        override fun isHeyCyanWifiSyncActive(): Boolean =
+            downloadInProgress || downloadAttemptJob?.isActive == true || downloadP2pConnected
+
+        override fun getOrCreateEyevueManager(): EyevueManager = this@MainActivity.getOrCreateEyevueManager()
+
+        override fun getOrCreateEyevueLivePreviewManager(): EyevueLivePreviewManager =
+            this@MainActivity.getOrCreateEyevueLivePreviewManager()
+
+        override fun isEyevueMediaSyncActive(): Boolean = eyevueMediaJob?.isActive == true
+
+        override fun getOrCreateTuneBudsManager(): TuneBudsManager = this@MainActivity.getOrCreateTuneBudsManager()
+
+        override fun getOrCreateTuneBudsLivePreviewManager(): TuneBudsLivePreviewManager =
+            this@MainActivity.getOrCreateTuneBudsLivePreviewManager()
+
+        override fun isTuneBudsMediaSyncActive(): Boolean = tuneBudsMediaJob?.isActive == true
+
+        override fun isTuneBudsAiPhotoInProgress(): Boolean = tuneBudsAiPhotoInProgress.get()
+
+        override fun isImageQuestionWorkActive(): Boolean = this@MainActivity.isImageQuestionWorkActive()
+
         override fun rejectHeyCyanOnlyFeature(feature: String): Boolean =
             this@MainActivity.rejectHeyCyanOnlyFeature(feature)
 
@@ -542,6 +622,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             this@MainActivity.warnIfBackgroundGlassesCommandTimesOut(permit)
     }
     private val recordingControls by lazy { HeyCyanRecordingControls(this, glassesFeatureHost) }
+    private val livePreviewCoordinator by lazy {
+        LivePreviewCoordinator(this, { livePreviewManager }, glassesFeatureHost)
+    }
+    private val wifiAdbDebugCoordinator by lazy {
+        WifiAdbDebugCoordinator(this, { wifiAdbDebugController }, glassesFeatureHost)
+    }
 
     // AI Hijack settings
     private var isAiHijackEnabled = true // Default to enabled
@@ -1078,8 +1164,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         tuneBudsLiveStopReceiver = null
         eyevueLiveStopReceiver?.let { runCatching { unregisterReceiver(it) } }
         eyevueLiveStopReceiver = null
-        heyCyanLiveStopReceiver?.let { runCatching { unregisterReceiver(it) } }
-        heyCyanLiveStopReceiver = null
+        livePreviewCoordinator.unregisterHeyCyanLiveStopReceiver()
         com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.stop(this)
         if (eyevueMediaJob?.isActive == true) {
             eyevueMediaCancelled = true
@@ -3809,245 +3894,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return true
     }
 
-    private fun startLivePreview() {
-        if (rejectHeyCyanOnlyFeature("Live preview")) return
-        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
-            ensureGlassesTransportPermissions("HeyCyan live preview") { startLivePreview() }
-            return
-        }
-        if (!hasNotificationPermission(this)) {
-            ensureNotificationPermission(this, "HeyCyan live preview") { startLivePreview() }
-            return
-        }
-        if (!BleOperateManager.getInstance().isConnected) {
-            Toast.makeText(this, "Connect to HeyCyan over Bluetooth first.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (livePreviewManager.isActive) return
-        if (downloadInProgress || downloadAttemptJob?.isActive == true || downloadP2pConnected) {
-            Toast.makeText(this, "Stop the current Wi-Fi sync before starting live preview.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (AutoAudioCaptureService.isRunning()) {
-            Toast.makeText(this, "Stop auto audio capture before starting live preview.", Toast.LENGTH_LONG).show()
-            return
-        }
+    private fun startLivePreview() = livePreviewCoordinator.startLivePreview()
 
-        val lease = acquireExclusiveGlassesSession(GlassesSession.LIVE_PREVIEW) ?: return
-        livePreviewSessionLease = lease
-        livePreviewManager.setAudioMuted(true)
+    private fun startEyevueLivePreview() = livePreviewCoordinator.startEyevueLivePreview()
 
-        if (heyCyanLiveStopReceiver == null) {
-            val receiver = object : android.content.BroadcastReceiver() {
-                override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-                    livePreviewManager.stop()
-                }
-            }
-            heyCyanLiveStopReceiver = receiver
-            androidx.core.content.ContextCompat.registerReceiver(
-                this,
-                receiver,
-                android.content.IntentFilter(
-                    com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.ACTION_HEYCYAN_LIVE_STOP,
-                ),
-                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
-            )
-        }
+    private fun startTuneBudsLivePreview() = livePreviewCoordinator.startTuneBudsLivePreview()
 
-        com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.start(this)
-        livePreviewManager.start {
-            com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.stop(this)
-            releaseExclusiveGlassesSession(lease)
-            if (livePreviewSessionLease === lease) livePreviewSessionLease = null
-        }
-    }
+    private fun observeLivePreviewState() = livePreviewCoordinator.observeLivePreviewState()
 
-    private fun startEyevueLivePreview() {
-        if (!EyevueLivePreviewPolicy.isSupported(Build.VERSION.SDK_INT)) {
-            Toast.makeText(this, "Eyevue live preview requires Android 10 or newer.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
-            ensureGlassesTransportPermissions("Eyevue live preview") {
-                startEyevueLivePreview()
-            }
-            return
-        }
-        if (!hasNotificationPermission(this)) {
-            ensureNotificationPermission(this, "Eyevue live preview") {
-                startEyevueLivePreview()
-            }
-            return
-        }
-        val manager = getOrCreateEyevueManager()
-        if (!manager.isConnected()) {
-            Toast.makeText(this, "Connect to Eyevue over Bluetooth first.", Toast.LENGTH_LONG).show()
-            return
-        }
-        val liveManager = getOrCreateEyevueLivePreviewManager()
-        if (liveManager.isActive) return
-        if (eyevueMediaJob?.isActive == true) {
-            Toast.makeText(this, "Stop Eyevue media sync before starting live preview.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (AutoAudioCaptureService.isRunning()) {
-            Toast.makeText(this, "Stop auto audio capture before starting live preview.", Toast.LENGTH_LONG).show()
-            return
-        }
+    private fun stopLivePreview() = livePreviewCoordinator.stopLivePreview()
 
-        val lease = acquireExclusiveGlassesSession(GlassesSession.LIVE_PREVIEW) ?: return
-        livePreviewSessionLease = lease
-        // Foreground service keeps the session + relay alive when this app is
-        // backgrounded (e.g. opening VLC). Same shape as the Gemini live one.
-        com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.start(this)
-        liveManager.onRelayUrlChanged = { url ->
-            com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.updateUrl(this, url)
-        }
-        eyevueLiveAudioMuted = false
-        liveManager.setAudioMuted(false)
-        liveManager.start(
-            onSessionFinished = {
-                liveManager.onRelayUrlChanged = null
-                com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.stop(this)
-                releaseExclusiveGlassesSession(lease)
-                if (livePreviewSessionLease === lease) livePreviewSessionLease = null
-            },
-        )
-    }
+    private fun startWifiAdbDebug() = wifiAdbDebugCoordinator.startWifiAdbDebug()
 
-    private fun startTuneBudsLivePreview() {
-        if (!isTuneBudsSelected()) return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            Toast.makeText(this, "TuneBuds live preview requires Android 8 or newer.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
-            ensureGlassesTransportPermissions("TuneBuds live preview") { startTuneBudsLivePreview() }
-            return
-        }
-        if (!hasNotificationPermission(this)) {
-            ensureNotificationPermission(this, "TuneBuds live preview") { startTuneBudsLivePreview() }
-            return
-        }
-        val manager = getOrCreateTuneBudsManager()
-        if (!manager.isConnected()) {
-            Toast.makeText(this, "Connect to TuneBuds over Bluetooth first.", Toast.LENGTH_LONG).show()
-            return
-        }
-        val liveManager = getOrCreateTuneBudsLivePreviewManager()
-        if (liveManager.isActive) return
-        if (tuneBudsMediaJob?.isActive == true || tuneBudsAiPhotoInProgress.get() || isImageQuestionWorkActive() || AutoAudioCaptureService.isRunning() ||
-            manager.state.value.isVideoRecording || manager.state.value.isAudioRecording
-        ) {
-            Toast.makeText(this, "Stop capture, recording, or media sync before starting live preview.", Toast.LENGTH_LONG).show()
-            return
-        }
-        val lease = acquireExclusiveGlassesSession(GlassesSession.LIVE_PREVIEW) ?: return
-        livePreviewSessionLease = lease
-        if (!TuneBudsLiveForegroundService.start(this)) {
-            releaseExclusiveGlassesSession(lease)
-            Toast.makeText(this, "Could not start TuneBuds live service.", Toast.LENGTH_LONG).show()
-            return
-        }
-        tuneBudsLiveAudioMuted = false
-        liveManager.setAudioMuted(false)
-        liveManager.onRelayUrlChanged = { url -> TuneBudsLiveForegroundService.updateUrl(this, url) }
-        liveManager.start {
-            liveManager.onRelayUrlChanged = null
-            TuneBudsLiveForegroundService.stop(this)
-            releaseExclusiveGlassesSession(lease)
-        }
-    }
-
-    private fun observeLivePreviewState() {
-        lifecycleScope.launch {
-            var lastLabel = ""
-            livePreviewManager.uiState.collect { lp ->
-                if (!isHeyCyanSelected()) return@collect
-                if (lp.stateLabel != lastLabel) {
-                    Log.i(
-                        "LivePreview",
-                        "HeyCyan state='${lp.stateLabel}' scanning=${lp.isScanning} playing=${lp.isPlaying} url=${lp.streamUrl}",
-                    )
-                    lastLabel = lp.stateLabel
-                }
-                dashboardState = dashboardState.copy(
-                    livePreview = com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState(
-                        isAvailable = true,
-                        stateLabel = lp.stateLabel,
-                        detail = lp.detail,
-                        isScanning = lp.isScanning,
-                        isPlaying = lp.isPlaying,
-                        streamUrl = lp.streamUrl,
-                        canStart = lp.canStart,
-                        canStop = lp.canStop,
-                    ),
-                )
-                heyCyanLivePlayer = if (lp.isPlaying) livePreviewManager.getPlayer() else null
-                livePreviewDialog?.let { dialog ->
-                    livePreviewDialog = null
-                    runCatching { dialog.dismiss() }
-                }
-            }
-        }
-    }
-
-    private fun stopLivePreview() {
-        livePreviewManager.stop()
-        heyCyanLivePlayer = null
-        com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.stop(this)
-        livePreviewDialog?.let { dialog ->
-            livePreviewDialog = null
-            dialog.dismiss()
-        }
-    }
-
-    private fun startWifiAdbDebug() {
-        if (!isHeyCyanSelected()) return
-        if (!BuildConfig.DEBUG || wifiAdbDebugController.isActive) return
-        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
-            ensureGlassesTransportPermissions("Wi-Fi ADB debug") {
-                startWifiAdbDebug()
-            }
-            return
-        }
-        if (!BleOperateManager.getInstance().isConnected) {
-            Toast.makeText(this, "Connect the glasses over Bluetooth first.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (AutoAudioCaptureService.isRunning()) {
-            Toast.makeText(this, "Stop automatic capture before starting Wi-Fi ADB.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (MeetingCapturePrefs.getState(this).isRecording) {
-            Toast.makeText(this, "Stop recording before starting Wi-Fi ADB.", Toast.LENGTH_LONG).show()
-            return
-        }
-        val lease = acquireExclusiveGlassesSession(GlassesSession.WIFI_ADB_DEBUG) ?: return
-        wifiAdbDebugSessionLease = lease
-        wifiAdbDebugController.start {
-            releaseExclusiveGlassesSession(lease)
-        }
-    }
-
-    private fun observeWifiAdbDebugState() {
-        lifecycleScope.launch {
-            wifiAdbDebugController.state.collect { runtime ->
-                dashboardState = dashboardState.copy(
-                    wifiAdbDebug = WifiAdbDebugUiState(
-                        isAvailable = BuildConfig.DEBUG && isHeyCyanSelected() && runtime.isAvailable,
-                        stateLabel = runtime.stateLabel,
-                        detail = runtime.detail,
-                        glassesIp = runtime.glassesIp,
-                        relayEndpoints = runtime.relayEndpoints,
-                        preferredCommand = runtime.preferredCommand,
-                        canStart = runtime.canStart,
-                        canStop = runtime.canStop,
-                    ),
-                )
-            }
-        }
-    }
+    private fun observeWifiAdbDebugState() = wifiAdbDebugCoordinator.observeWifiAdbDebugState()
 
     private fun controlVideoRecording(start: Boolean) = recordingControls.controlVideoRecording(start)
 
