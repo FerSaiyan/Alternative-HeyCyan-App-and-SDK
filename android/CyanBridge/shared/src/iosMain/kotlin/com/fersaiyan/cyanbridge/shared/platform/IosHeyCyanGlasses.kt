@@ -1,5 +1,16 @@
 package com.fersaiyan.cyanbridge.shared.platform
 
+import com.fersaiyan.cyanbridge.bridge.core.AiPhotoCapture
+import com.fersaiyan.cyanbridge.bridge.core.BatteryReporting
+import com.fersaiyan.cyanbridge.bridge.core.CameraCapture
+import com.fersaiyan.cyanbridge.bridge.core.DeviceInfoReporting
+import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
+import com.fersaiyan.cyanbridge.bridge.core.MediaSyncTransport
+import com.fersaiyan.cyanbridge.bridge.core.OnboardRecording
+import com.fersaiyan.cyanbridge.bridge.core.RecordingSettingsControl
+import com.fersaiyan.cyanbridge.bridge.core.VolumeReporting
+import com.fersaiyan.cyanbridge.bridge.core.WearingDetectionControl
+import com.fersaiyan.cyanbridge.shared.assistant.AssistantGlassesHooks
 import com.fersaiyan.cyanbridge.shared.ble.BleNotificationListener
 import com.fersaiyan.cyanbridge.shared.ble.IosBleManager
 import com.fersaiyan.cyanbridge.shared.ble.VendorGlassesBridge
@@ -23,7 +34,8 @@ import com.fersaiyan.cyanbridge.shared.ble.awaitVoiceWakeup
 import com.fersaiyan.cyanbridge.shared.ble.awaitVolume
 import com.fersaiyan.cyanbridge.shared.ble.awaitWearingDetection
 import com.fersaiyan.cyanbridge.shared.ble.awaitWifiIp
-import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesTransferUiState
 import com.fersaiyan.cyanbridge.shared.media.IosMediaTransfer
@@ -63,9 +75,9 @@ internal interface IosHeyCyanHost {
 }
 
 /**
- * HeyCyan glasses on iOS (Android: the glasses_sdk paths of MainActivity). Device builds drive them
- * through QCSDK once it attached to the peripheral; otherwise the documented raw BLE commands and
- * the hotspot flow of IosTransferModeConfiguration are used.
+ * HeyCyan glasses on iOS (Android: HeyCyanGlasses over the glasses_sdk controls). Device builds
+ * drive them through QCSDK once it attached to the peripheral; otherwise the documented raw BLE
+ * commands and the hotspot flow of IosTransferModeConfiguration are used.
  */
 internal class IosHeyCyanGlasses(
     private val bleManager: IosBleManager,
@@ -73,7 +85,12 @@ internal class IosHeyCyanGlasses(
     private val mediaTransfer: IosMediaTransfer,
     private val scope: CoroutineScope,
     private val host: IosHeyCyanHost,
-) {
+    override val connection: GlassesConnectionControl,
+) : IosGlassesDevice {
+    override val profile: GlassesFamilyProfile = GlassesFamilyProfiles.heyCyan
+
+    override val isLinked: Boolean get() = host.isBleConnected
+
     private val vendorBridge = VendorGlassesRegistry.bridge
 
     /** QCSDK's advertised services, so the pairing scan recognizes HeyCyan glasses. */
@@ -102,7 +119,7 @@ internal class IosHeyCyanGlasses(
         bleManager.vendorBridge = vendorBridge
         vendorBridge?.setEventListener(object : VendorGlassesEventListener {
             override fun onBatteryChanged(level: Int, charging: Boolean) {
-                scope.launch { host.updateDashboard { it.copy(batteryPercent = level, showBattery = true) } }
+                scope.launch { host.updateDashboard { it.copy(batteryPercent = level) } }
             }
 
             override fun onMediaCountsChanged(photos: Int, videos: Int, audio: Int) {
@@ -142,49 +159,86 @@ internal class IosHeyCyanGlasses(
         }
     }
 
-    /** HeyCyan dashboard actions; false when the action is not about the glasses themselves. */
-    fun handle(action: GlassesDashboardAction): Boolean {
-        when (action) {
-            GlassesDashboardAction.RequestBattery -> requestBattery()
-            GlassesDashboardAction.RequestVersion -> requestVersion()
-            GlassesDashboardAction.StartSync -> if (vendor != null) startVendorSync() else startSync()
-            GlassesDashboardAction.StopSync -> stopSync()
-            GlassesDashboardAction.CapturePhoto -> if (vendor != null) {
-                vendorMode(VendorGlassesMode.PHOTO, "Photo")
-            } else {
-                sendGlassesCommand("camera", byteArrayOf(0x02, 0x01, 0x01))
-            }
-            GlassesDashboardAction.ToggleVideo -> toggleVideo()
-            GlassesDashboardAction.StartAudioRecording -> if (vendor != null) {
+    override val camera = CameraCapture {
+        if (vendor != null) {
+            vendorMode(VendorGlassesMode.PHOTO, "Photo")
+        } else {
+            sendGlassesCommand("camera", byteArrayOf(0x02, 0x01, 0x01))
+        }
+    }
+
+    override val recording = object : OnboardRecording {
+        override fun toggleVideoRecording() = toggleVideo()
+
+        override fun toggleAudioRecording() {
+            if (vendor != null) {
                 toggleAudio()
             } else {
                 sendGlassesCommand("audio recording", byteArrayOf(0x02, 0x01, 0x08))
             }
-            GlassesDashboardAction.RequestMediaCount -> if (vendor != null) {
+        }
+    }
+
+    override val mediaSync = object : MediaSyncTransport {
+        override fun requestMediaCount() {
+            if (vendor != null) {
                 requestMediaCounts()
             } else {
                 sendGlassesCommand("media count", byteArrayOf(0x02, 0x04))
             }
-            GlassesDashboardAction.SyncTime -> syncTime()
-            GlassesDashboardAction.RequestVolume -> requestVolume()
-            is GlassesDashboardAction.SetWearingDetection -> setWearingDetection(action.enabled)
-            GlassesDashboardAction.RefreshRecordingSettings -> refreshRecordingSettings(showErrors = true)
-            is GlassesDashboardAction.SetVideoRecordingDuration -> setRecordingDuration(isAudio = false, seconds = action.seconds)
-            is GlassesDashboardAction.SetAudioRecordingDuration -> setRecordingDuration(isAudio = true, seconds = action.seconds)
-            else -> return false
         }
-        return true
+
+        override fun startSync() {
+            if (vendor != null) startVendorSync() else startHotspotSync()
+        }
+
+        override fun stopSync() = stopMediaSync()
     }
 
-    private fun requestBattery() {
+    override val battery = object : BatteryReporting {
+        override val pollsPeriodically: Boolean = false
+
+        override fun requestBattery() = requestBatteryLevel()
+
+        override fun refreshAfterSelection() = Unit
+    }
+
+    override val deviceInfo = object : DeviceInfoReporting {
+        override fun requestVersion() = requestFirmwareVersion()
+
+        override fun syncTime() = syncGlassesTime()
+    }
+
+    override val volume = VolumeReporting { requestVolume() }
+
+    override val recordingSettings = object : RecordingSettingsControl {
+        override fun refreshRecordingSettings() = this@IosHeyCyanGlasses.refreshRecordingSettings(showErrors = true)
+
+        override fun setRecordingDuration(isAudio: Boolean, seconds: Int) = setRecordingLimit(isAudio, seconds)
+    }
+
+    override val wearingDetection = WearingDetectionControl { enabled -> setWearingDetection(enabled) }
+
+    /** QCSDK's AI-photo mode; the photo arrives through [IosHeyCyanHost.onPhoto]. */
+    override val aiPhoto = object : AiPhotoCapture {
+        override suspend fun requestAiPhoto(): Boolean = vendor?.let { requestVendorAiPhoto(it) } ?: false
+    }
+
+    override val canTakeAiPhoto: Boolean get() = vendor != null
+
+    /** The AI-speak modes and the release of the glasses' AI mode around an answer. */
+    override val assistantHooks: AssistantGlassesHooks
+        get() = vendor?.let(::QcsdkAssistantHooks) ?: AssistantGlassesHooks.None
+
+    private fun requestBatteryLevel() {
         scope.launch {
             val battery = vendor?.let { bridge -> bridge.awaitBattery()?.first }
                 ?: runCatching { bleManager.requestBatteryLevel() }.getOrNull()
-            host.updateDashboard { it.copy(batteryPercent = battery, showBattery = battery != null) }
+            host.updateDashboard { it.copy(batteryPercent = battery) }
         }
     }
 
-    private fun requestVersion() {
+    private fun requestFirmwareVersion() {
         scope.launch {
             val bridge = vendor
             val label = if (bridge != null) {
@@ -207,7 +261,7 @@ internal class IosHeyCyanGlasses(
         host.updateDashboard { it.copy(agentLastError = "") }
         vendor?.awaitSyncTime()
         val bridge = vendor ?: return
-        bridge.awaitBattery()?.let { (level, _) -> host.updateDashboard { it.copy(batteryPercent = level, showBattery = true) } }
+        bridge.awaitBattery()?.let { (level, _) -> host.updateDashboard { it.copy(batteryPercent = level) } }
         bridge.awaitVersion()?.let { info -> host.updateDashboard { it.copy(deviceInfoLabel = formatVendorVersion(info)) } }
         bridge.awaitMediaCounts()?.let { counts -> showMediaCounts(counts.photos, counts.videos, counts.audio) }
         bridge.awaitWearingDetection()?.let { enabled -> host.updateDashboard { it.copy(wearingDetectionEnabled = enabled) } }
@@ -271,7 +325,7 @@ internal class IosHeyCyanGlasses(
         scope.launch { loadRecordingSettings(showErrors) }
     }
 
-    private fun setRecordingDuration(isAudio: Boolean, seconds: Int) {
+    private fun setRecordingLimit(isAudio: Boolean, seconds: Int) {
         val allowed = if (isAudio) AUDIO_DURATION_OPTIONS_SECONDS else VIDEO_DURATION_OPTIONS_SECONDS
         if (seconds !in allowed) return
         val bridge = vendor ?: return reportVendorRequired("Recording limits")
@@ -297,7 +351,7 @@ internal class IosHeyCyanGlasses(
      * photo it did not request, so it only added a shutter sound and a 12 s wait. AI photos on
      * iOS therefore stay at the glasses' default size (512x384) for now.
      */
-    suspend fun requestAiPhoto(bridge: VendorGlassesBridge): Boolean =
+    private suspend fun requestVendorAiPhoto(bridge: VendorGlassesBridge): Boolean =
         bridge.awaitModeAccepted(VendorGlassesMode.AI_PHOTO).also { accepted ->
             PlatformLogger.i(TAG, "AI photo requested via QCSDK mode: accepted=$accepted")
         }
@@ -309,14 +363,14 @@ internal class IosHeyCyanGlasses(
         host.updateDashboard { it.copy(agentLastError = "Camera button: getting the photo for your question…") }
         // The glasses may still be saving the photo; retry while they report busy.
         repeat(3) { attempt ->
-            if (requestAiPhoto(bridge)) return
+            if (requestVendorAiPhoto(bridge)) return
             PlatformLogger.w(TAG, "AI photo after camera button rejected (attempt ${attempt + 1})")
             delay(1_500L)
         }
         host.updateDashboard { it.copy(agentLastError = "The glasses were busy; press Test description to ask about the view") }
     }
 
-    fun reportVendorRequired(label: String) {
+    private fun reportVendorRequired(label: String) {
         host.updateDashboard { it.copy(agentLastError = "$label needs HeyCyan glasses connected through the vendor SDK") }
     }
 
@@ -447,7 +501,6 @@ internal class IosHeyCyanGlasses(
             it.copy(
                 isVideoRecording = false,
                 isAudioRecording = false,
-                showStorage = false,
                 storageLabel = "--",
                 mediaCounts = null,
             )
@@ -496,7 +549,7 @@ internal class IosHeyCyanGlasses(
         }
     }
 
-    private fun syncTime() {
+    private fun syncGlassesTime() {
         val bridge = vendor ?: run {
             host.updateDashboard { it.copy(agentLastError = "Clock sync needs HeyCyan glasses connected through the vendor SDK") }
             return
@@ -513,7 +566,6 @@ internal class IosHeyCyanGlasses(
             it.copy(
                 storageLabel = "$photos photos / $videos videos / $audio audio",
                 mediaCounts = com.fersaiyan.cyanbridge.shared.glasses.GlassesMediaCounts(photos, videos, audio),
-                showStorage = true,
                 transfer = it.transfer.copy(countsLabel = "Photos: $photos  Videos: $videos  Audio: $audio"),
             )
         }
@@ -527,7 +579,7 @@ internal class IosHeyCyanGlasses(
             "Wi-Fi HW: ${info.wifiHardware}",
         ).joinToString("\n")
 
-    private fun startSync() {
+    private fun startHotspotSync() {
         syncJob?.cancel()
         host.updateDashboard {
             it.copy(
@@ -682,7 +734,7 @@ internal class IosHeyCyanGlasses(
         }
     }
 
-    private fun stopSync() {
+    private fun stopMediaSync() {
         syncJob?.cancel()
         syncJob = null
         vendor?.let { bridge -> scope.launch { exitTransferMode(bridge) } }

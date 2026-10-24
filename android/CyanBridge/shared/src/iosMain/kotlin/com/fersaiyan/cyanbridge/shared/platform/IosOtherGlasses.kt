@@ -1,5 +1,12 @@
 package com.fersaiyan.cyanbridge.shared.platform
 
+import com.fersaiyan.cyanbridge.bridge.core.AiPhotoCapture
+import com.fersaiyan.cyanbridge.bridge.core.BatteryReporting
+import com.fersaiyan.cyanbridge.bridge.core.CameraCapture
+import com.fersaiyan.cyanbridge.bridge.core.DeviceInfoReporting
+import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
+import com.fersaiyan.cyanbridge.bridge.core.MediaSyncTransport
+import com.fersaiyan.cyanbridge.bridge.core.OnboardRecording
 import com.fersaiyan.cyanbridge.shared.ble.IosBleManager
 import com.fersaiyan.cyanbridge.shared.ble.IosTuneBudsSession
 import com.fersaiyan.cyanbridge.shared.ble.SdkConnectionState
@@ -12,10 +19,15 @@ import com.fersaiyan.cyanbridge.shared.ble.awaitAiPhoto
 import com.fersaiyan.cyanbridge.shared.ble.awaitConnect
 import com.fersaiyan.cyanbridge.shared.ble.awaitPerform
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.GlassesControlPanel
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
+import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsSession
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesMediaCounts
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesTransferUiState
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -23,6 +35,11 @@ import platform.Foundation.NSData
 
 /** What the glasses sessions need from the app controller. */
 internal interface IosGlassesHost {
+    val dashboard: GlassesDashboardUiState
+
+    /** The shared BLE link is up. */
+    val isBleConnected: Boolean
+
     fun updateDashboard(transform: (GlassesDashboardUiState) -> GlassesDashboardUiState)
 
     /** A photo from the glasses: answer it as an image question. */
@@ -36,16 +53,19 @@ internal interface IosGlassesHost {
 }
 
 /**
- * The glasses beyond HeyCyan (QCSDK) and Eyevue on iOS:
- * - TuneBuds: AB Mate over BLE ([IosTuneBudsSession]);
- * - MoYoung, Meta Ray-Ban, Mentra Live: their Swift SDKs ([SdkGlassesBridge]);
+ * The glasses beyond HeyCyan (QCSDK) and Eyevue on iOS, one [IosGlassesDevice] per family:
+ * - TuneBuds: AB Mate over BLE ([IosTuneBudsSession]), [tuneBudsDevice];
+ * - MoYoung, Meta Ray-Ban, Mentra Live: their Swift SDKs ([SdkGlassesBridge]), [sdkDevice];
  * - Meizu MYVU: not drivable on iOS (its app relay is RFCOMM-only), so the card explains that and
- *   the assistant runs over the glasses' Bluetooth audio.
+ *   the assistant runs over the glasses' Bluetooth audio, [meizuDevice].
+ * This class keeps the link of the selected class (the SDK listener, the TuneBuds session).
  */
 internal class IosOtherGlasses(
     private val bleManager: IosBleManager,
     private val scope: CoroutineScope,
     private val host: IosGlassesHost,
+    /** Pairing scan, reconnect and BLE disconnect of the app controller. */
+    private val bleConnection: GlassesConnectionControl,
 ) {
     val tuneBuds = IosTuneBudsSession(bleManager, scope, onPhoto = host::onGlassesPhoto)
 
@@ -78,7 +98,7 @@ internal class IosOtherGlasses(
         }
 
         override fun onBattery(level: Int, charging: Boolean) {
-            host.updateDashboard { it.copy(batteryPercent = level, showBattery = true) }
+            host.updateDashboard { it.copy(batteryPercent = level) }
         }
 
         override fun onMediaCounts(photos: Int, videos: Int, audio: Int) {
@@ -86,7 +106,6 @@ internal class IosOtherGlasses(
                 it.copy(
                     storageLabel = "$photos photos / $videos videos / $audio audio",
                     mediaCounts = GlassesMediaCounts(photos, videos, audio),
-                    showStorage = true,
                 )
             }
         }
@@ -134,12 +153,10 @@ internal class IosOtherGlasses(
                 host.updateDashboard { state ->
                     state.copy(
                         batteryPercent = tb.batteryPercent ?: state.batteryPercent,
-                        showBattery = tb.batteryPercent != null || state.showBattery,
                         storageLabel = tb.storage?.let { "${it.usedMiB} MiB used / ${it.freeMiB} MiB free" } ?: state.storageLabel,
                         mediaCounts = tb.mediaCounts?.let {
                             GlassesMediaCounts(it.images.toInt(), it.videos.toInt(), it.audio.toInt())
                         } ?: state.mediaCounts,
-                        showStorage = tb.storage != null || tb.mediaCounts != null || state.showStorage,
                         isVideoRecording = tb.isVideoRecording,
                         isAudioRecording = tb.isAudioRecording,
                         deviceInfoLabel = listOfNotNull(
@@ -216,81 +233,95 @@ internal class IosOtherGlasses(
         }
     }
 
-    /** True when [requestAiPhoto] can ask the selected glasses for a photo. */
-    val canTakeAiPhoto: Boolean
-        get() = (deviceClass == DeviceClass.TUNEBUDS && bleManager.isConnected()) || (usesSdk && sdkBridge != null)
+    /** TuneBuds over BLE (Android: TuneBudsGlasses over the RFCOMM TuneBudsManager). */
+    val tuneBudsDevice: IosGlassesDevice = TuneBudsGlasses()
 
-    /**
-     * Asks the glasses for a photo for the assistant; it arrives through [IosGlassesHost.onGlassesPhoto].
-     * False when the selected glasses cannot take one.
-     */
-    fun requestAiPhoto(): Boolean = when {
-        deviceClass == DeviceClass.TUNEBUDS && bleManager.isConnected() -> {
-            scope.launch {
-                tuneBuds.run("AI photo") {
-                    if (capturePhotoForAi() == null) error("the photo did not arrive")
-                }?.let(::showError)
-            }
-            true
+    private val sdkDevices: Map<DeviceClass, IosGlassesDevice> =
+        SDK_CLASSES.associateWith { SdkGlasses(GlassesFamilyProfiles.forClass(it)) }
+
+    /** MoYoung, Meta Ray-Ban or Mentra Live over the SDK bridge of the selected class. */
+    fun sdkDevice(deviceClass: DeviceClass): IosGlassesDevice = sdkDevices.getValue(deviceClass)
+
+    /** Meizu MYVU: only the panel, which explains why iOS cannot drive the display. */
+    val meizuDevice: IosGlassesDevice = MeizuGlasses()
+
+    private inner class TuneBudsGlasses : IosGlassesDevice {
+        override val profile: GlassesFamilyProfile = GlassesFamilyProfiles.tuneBuds
+        override val connection: GlassesConnectionControl = bleConnection
+        override val isLinked: Boolean get() = host.isBleConnected
+
+        private fun command(label: String, job: suspend (TuneBudsSession) -> Unit) {
+            scope.launch { tuneBuds.run(label) { job(this) }?.let(::showError) }
         }
-        usesSdk && sdkBridge != null -> {
-            val bridge = sdkBridge!!
-            scope.launch {
-                bridge.awaitAiPhoto()
-                    .onSuccess { host.onGlassesPhoto(it.toKotlinBytes()) }
-                    .onFailure { showError("Glasses photo failed: ${it.message}") }
-            }
-            true
+
+        override val camera = CameraCapture { command("CapturePhoto") { it.takePhoto() } }
+
+        override val recording = object : OnboardRecording {
+            override fun toggleVideoRecording() = command("ToggleVideo") { it.toggleVideo() }
+
+            override fun toggleAudioRecording() = command("StartAudioRecording") { it.toggleAudio() }
         }
-        else -> false
-    }
 
-    /** Dashboard actions for the selected class; false when the generic handler should run. */
-    fun handle(action: GlassesDashboardAction): Boolean = when (deviceClass) {
-        DeviceClass.TUNEBUDS -> handleTuneBuds(action)
-        DeviceClass.MOYOUNG_W620, DeviceClass.META_RAYBAN, DeviceClass.MENTRA_LIVE -> handleSdk(action)
-        DeviceClass.MEIZU_MYVU -> handleMeizu(action)
-        else -> false
-    }
+        override val mediaSync = object : MediaSyncTransport {
+            override fun requestMediaCount() = command("RequestMediaCount") { it.requestStorageAndMediaCounts() }
 
-    private fun handleTuneBuds(action: GlassesDashboardAction): Boolean {
-        val job: (suspend TuneBudsSession.() -> Unit) = when (action) {
-            GlassesDashboardAction.CapturePhoto -> ({ takePhoto() })
-            GlassesDashboardAction.ToggleVideo -> ({ toggleVideo() })
-            GlassesDashboardAction.StartAudioRecording -> ({ toggleAudio() })
-            GlassesDashboardAction.RequestBattery -> ({ requestBattery() })
-            GlassesDashboardAction.RequestVersion -> ({ requestVersion() })
-            GlassesDashboardAction.RequestMediaCount -> ({ requestStorageAndMediaCounts() })
-            GlassesDashboardAction.SyncTime -> ({ syncTime() })
-            GlassesDashboardAction.StartSync -> {
-                // The glasses join the phone's hotspot for media sync, which iOS apps cannot set up.
+            // The glasses join the phone's hotspot for media sync, which iOS apps cannot set up.
+            override fun startSync() =
                 showError("TuneBuds media sync needs the Android app: the glasses join the phone's hotspot")
+
+            override fun stopSync() = host.updateDashboard { it.copy(transfer = GlassesTransferUiState(detail = "Sync stopped")) }
+        }
+
+        override val battery = object : BatteryReporting {
+            override val pollsPeriodically: Boolean = false
+
+            override fun requestBattery() = command("RequestBattery") { it.requestBattery() }
+
+            override fun refreshAfterSelection() = Unit
+        }
+
+        override val deviceInfo = object : DeviceInfoReporting {
+            override fun requestVersion() = command("RequestVersion") { it.requestVersion() }
+
+            override fun syncTime() = command("SyncTime") { it.syncTime() }
+        }
+
+        /** The photo arrives through [IosGlassesHost.onGlassesPhoto]. */
+        override val aiPhoto = object : AiPhotoCapture {
+            override suspend fun requestAiPhoto(): Boolean {
+                scope.launch {
+                    tuneBuds.run("AI photo") {
+                        if (capturePhotoForAi() == null) error("the photo did not arrive")
+                    }?.let(::showError)
+                }
                 return true
             }
-            else -> return false
         }
-        scope.launch { tuneBuds.run(action::class.simpleName ?: "TuneBuds command", job)?.let(::showError) }
-        return true
+
+        override val canTakeAiPhoto: Boolean get() = bleManager.isConnected()
     }
 
-    private fun handleSdk(action: GlassesDashboardAction): Boolean {
-        val bridge = sdkBridge
-        val perform: Pair<String, String>? = when (action) {
-            GlassesDashboardAction.CapturePhoto -> SdkGlassesActions.CAPTURE_PHOTO to ""
-            GlassesDashboardAction.SyncTime -> SdkGlassesActions.SYNC_TIME to ""
-            GlassesDashboardAction.RequestVersion -> SdkGlassesActions.VERSION to ""
-            GlassesDashboardAction.MetaRegister, GlassesDashboardAction.MetaOpenPairing -> SdkGlassesActions.META_REGISTER to ""
-            GlassesDashboardAction.MetaUnregister -> SdkGlassesActions.META_UNREGISTER to ""
-            GlassesDashboardAction.MetaOpenMetaAi -> SdkGlassesActions.META_OPEN_META_AI to ""
-            GlassesDashboardAction.MetaSendDiagnostics -> SdkGlassesActions.META_DIAGNOSTICS to ""
-            else -> null
+    private inner class SdkGlasses(override val profile: GlassesFamilyProfile) : IosGlassesDevice {
+        override val connection = object : GlassesConnectionControl {
+            override fun scan() = bleConnection.scan()
+
+            override fun reconnect() = bleConnection.reconnect()
+
+            override fun disconnect() = disconnectSdk()
         }
-        when {
-            action == GlassesDashboardAction.RequestBattery -> bridge?.requestBattery()
-            action == GlassesDashboardAction.RequestMediaCount -> bridge?.requestMediaCounts()
-            perform != null -> scope.launch {
-                val target = bridge ?: return@launch showError(missingSdkMessage() ?: "SDK unavailable")
-                target.awaitPerform(perform.first, perform.second)
+        override val isLinked: Boolean get() = isSdkConnected
+        override val aiPhotoUnavailableMessage: String
+            get() = missingSdkMessage() ?: IMAGE_QUESTION_NEEDS_GLASSES
+
+        private fun withBridge(block: (SdkGlassesBridge) -> Unit) {
+            val bridge = sdkBridge ?: return showError(missingSdkMessage() ?: "SDK unavailable")
+            block(bridge)
+        }
+
+        /** Runs an SDK action and shows its answer. */
+        private fun perform(action: GlassesDashboardAction, name: String) = withBridge { bridge ->
+            scope.launch {
+                bridge.awaitPerform(name, "")
                     .onSuccess { value ->
                         if (value.isBlank()) return@onSuccess
                         if (action == GlassesDashboardAction.RequestVersion) {
@@ -303,24 +334,74 @@ internal class IosOtherGlasses(
                     }
                     .onFailure { showError(it.message ?: "Glasses command failed") }
             }
-            else -> return false
         }
-        if (bridge == null) missingSdkMessage()?.let(::showError)
-        return true
+
+        override val camera = CameraCapture {
+            perform(GlassesDashboardAction.CapturePhoto, SdkGlassesActions.CAPTURE_PHOTO)
+        }
+
+        override val battery = object : BatteryReporting {
+            override val pollsPeriodically: Boolean = false
+
+            override fun requestBattery() = withBridge { it.requestBattery() }
+
+            override fun refreshAfterSelection() = Unit
+        }
+
+        override val deviceInfo = object : DeviceInfoReporting {
+            override fun requestVersion() = perform(GlassesDashboardAction.RequestVersion, SdkGlassesActions.VERSION)
+
+            override fun syncTime() = perform(GlassesDashboardAction.SyncTime, SdkGlassesActions.SYNC_TIME)
+        }
+
+        override val mediaSync = object : MediaSyncTransport {
+            override fun requestMediaCount() = withBridge { it.requestMediaCounts() }
+
+            override fun startSync() = showError(IOS_CONTROL_NOT_IMPLEMENTED)
+
+            override fun stopSync() = host.updateDashboard { it.copy(transfer = GlassesTransferUiState(detail = "Sync stopped")) }
+        }
+
+        /** The photo arrives through [IosGlassesHost.onGlassesPhoto]. */
+        override val aiPhoto = object : AiPhotoCapture {
+            override suspend fun requestAiPhoto(): Boolean {
+                val bridge = sdkBridge ?: return false
+                scope.launch {
+                    bridge.awaitAiPhoto()
+                        .onSuccess { host.onGlassesPhoto(it.toKotlinBytes()) }
+                        .onFailure { showError("Glasses photo failed: ${it.message}") }
+                }
+                return true
+            }
+        }
+
+        override val canTakeAiPhoto: Boolean get() = sdkBridge != null
+
+        /** The Meta panel: registration through the Meta AI app, and the diagnostics sheet. */
+        override fun handlePanelAction(action: GlassesDashboardAction): Boolean {
+            if (profile.controlPanel != GlassesControlPanel.META_RAYBAN) return false
+            val name = when (action) {
+                GlassesDashboardAction.MetaRegister, GlassesDashboardAction.MetaOpenPairing -> SdkGlassesActions.META_REGISTER
+                GlassesDashboardAction.MetaUnregister -> SdkGlassesActions.META_UNREGISTER
+                GlassesDashboardAction.MetaOpenMetaAi -> SdkGlassesActions.META_OPEN_META_AI
+                GlassesDashboardAction.MetaSendDiagnostics -> SdkGlassesActions.META_DIAGNOSTICS
+                else -> return false
+            }
+            perform(action, name)
+            return true
+        }
     }
 
-    private fun handleMeizu(action: GlassesDashboardAction): Boolean = when (action) {
-        GlassesDashboardAction.MeizuConnect,
-        GlassesDashboardAction.MeizuDisconnect,
-        GlassesDashboardAction.MeizuSendTestNotification,
-        GlassesDashboardAction.MeizuShowTestTeleprompter,
-        GlassesDashboardAction.MeizuSyncClock,
-        GlassesDashboardAction.MeizuSetComfortBrightness,
-        -> {
+    private inner class MeizuGlasses : IosGlassesDevice {
+        override val profile: GlassesFamilyProfile = GlassesFamilyProfiles.meizuMyvu
+        override val connection: GlassesConnectionControl = bleConnection
+        override val isLinked: Boolean get() = host.isBleConnected
+
+        override fun handlePanelAction(action: GlassesDashboardAction): Boolean {
+            if (GlassesManagerGating.requiredPanel(action) != GlassesControlPanel.MEIZU_MYVU) return false
             showError(MEIZU_UNSUPPORTED)
-            true
+            return true
         }
-        else -> false
     }
 
     private fun showError(message: String) {
