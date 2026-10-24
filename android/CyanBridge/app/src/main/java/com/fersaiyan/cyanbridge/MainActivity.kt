@@ -112,7 +112,6 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaProfile
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaSync
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaType
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueWifiTransport
-import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungWifiCredentials
@@ -122,7 +121,6 @@ import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLiveForegroundService
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLocalHotspot
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaSync
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaType
-import com.fersaiyan.cyanbridge.devices.tunebuds.isSupportedForTuneBudsDashboard
 import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
 import com.fersaiyan.cyanbridge.privacy.PrivacyPrefs
 import com.fersaiyan.cyanbridge.ui.MyApplication
@@ -271,6 +269,9 @@ import com.fersaiyan.cyanbridge.ui.main.DashboardController
 import com.fersaiyan.cyanbridge.ui.main.DeviceConnectionCoordinator
 import com.fersaiyan.cyanbridge.ui.main.DeviceConnectionHost
 import com.fersaiyan.cyanbridge.ui.main.DeviceManagerRegistry
+import com.fersaiyan.cyanbridge.ui.main.glasses.AndroidGlassesDevices
+import com.fersaiyan.cyanbridge.ui.main.glasses.GlassesDeviceContext
+import com.fersaiyan.cyanbridge.ui.main.glasses.GlassesDeviceHost
 import com.fersaiyan.cyanbridge.ui.main.GlassesSessionGuard
 import com.fersaiyan.cyanbridge.ui.main.GlassesTransportPermissions
 import com.fersaiyan.cyanbridge.ui.main.HeyCyanSettingsController
@@ -720,8 +721,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val deviceConnectionHost: DeviceConnectionHost = object : DeviceConnectionHost {
         override val isAiHijackEnabled: Boolean
             get() = this@MainActivity.isAiHijackEnabled
-        override val livePreviewManager: com.fersaiyan.cyanbridge.ota.LivePreviewManager
-            get() = this@MainActivity.livePreviewManager
 
         override fun handleAiWakeWordActivation(source: String) {
             this@MainActivity.handleAiWakeWordActivation(source)
@@ -753,6 +752,38 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val deviceManagers: DeviceManagerRegistry by lazy {
         DeviceManagerRegistry(this) { deviceConnection }
     }
+    private val glassesDeviceHost: GlassesDeviceHost = object : GlassesDeviceHost {
+        override val heyCyanLivePreviewManager: com.fersaiyan.cyanbridge.ota.LivePreviewManager
+            get() = this@MainActivity.livePreviewManager
+
+        override fun stopHeyCyanMediaSyncForDestroy() {
+            mediaSync.stopForActivityDestroy()
+        }
+
+        override fun stopVendorMediaSyncForDestroy(stop: () -> Unit) {
+            stop()
+            releaseExclusiveGlassesSession(mediaSessionLease)
+            mediaSessionLease = null
+        }
+
+        override fun disconnectEyevueMediaTransport() {
+            vendorMediaSync.disconnectEyevueTransport()
+        }
+    }
+    private val glassesDevices: AndroidGlassesDevices by lazy {
+        AndroidGlassesDevices(
+            GlassesDeviceContext(
+                screen = mainScreenHost,
+                managers = deviceManagers,
+                actionsProvider = { dashboardActionHost },
+                connectionProvider = { deviceConnection },
+                heyCyanSettingsProvider = { heyCyanSettings },
+                metaRaybanUiProvider = { metaRaybanUi },
+                meizuMyvuUiProvider = { meizuMyvuUi },
+                hostProvider = { glassesDeviceHost },
+            ),
+        )
+    }
     private val glassesSessionGuard: GlassesSessionGuard by lazy {
         GlassesSessionGuard(this, deviceManagers, glassesTeardownScope)
     }
@@ -777,9 +808,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         DeviceConnectionCoordinator(
             mainScreenHost,
             deviceConnectionHost,
-            deviceManagers,
+            glassesDevices,
             glassesSessionGuard,
-            heyCyanSettings,
             metaRaybanUi,
             meizuMyvuUi,
         )
@@ -799,8 +829,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val nativePluginShortcuts: NativePluginShortcutController by lazy {
         NativePluginShortcutController(
             mainScreenHost,
-            deviceManagers,
-            metaRaybanUi,
+            glassesDevices,
             meetingCaptureUi,
             transportPermissions,
         )
@@ -894,8 +923,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             mainScreenHost,
             dashboardActionHost,
             deviceManagers,
-            deviceConnection,
-            heyCyanSettings,
+            glassesDevices,
             transportPermissions,
             nativePluginShortcuts,
             meetingCaptureUi,
@@ -949,10 +977,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             this@MainActivity.showOfficialHeyCyanWarningOrContinue()
         }
 
-        override fun startMoyoungW620MediaSync() {
-            this@MainActivity.startMoyoungW620MediaSync()
-        }
-
         override fun cancelDataDownloadAttempt(reason: String, showToast: Boolean) {
             this@MainActivity.cancelDataDownloadAttempt(reason, showToast)
         }
@@ -969,12 +993,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         LegacyGlassesControlsBinder(
             mainScreenHost,
             legacyControlsHost,
-            deviceManagers,
+            glassesDevices,
             deviceConnection,
             heyCyanSettings,
             glassesSessionGuard,
             transportPermissions,
-            metaRaybanUi,
             meetingCaptureUi,
         )
     }
@@ -1349,17 +1372,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.stop(this)
         vendorMediaSync.cancelSyncJobsForDestroy(moyoungW620Manager)
         otaCoordinator.onActivityDestroyed()
-        if (isMoyoungW620Selected() && GlassesSessionCoordinator.currentSession() == GlassesSession.MEDIA_SYNC) {
-            moyoungW620Manager?.stopMediaSync()
-            releaseExclusiveGlassesSession(mediaSessionLease)
-            mediaSessionLease = null
-        } else if (isEyevueSelected() && GlassesSessionCoordinator.currentSession() == GlassesSession.MEDIA_SYNC) {
-            getOrCreateEyevueManager().finishTransfer()
-            vendorMediaSync.disconnectEyevueTransport()
-            releaseExclusiveGlassesSession(mediaSessionLease)
-            mediaSessionLease = null
-        } else if (GlassesSessionCoordinator.currentSession() == GlassesSession.MEDIA_SYNC) {
-            mediaSync.stopForActivityDestroy()
+        if (GlassesSessionCoordinator.currentSession() == GlassesSession.MEDIA_SYNC) {
+            glassesDevices.selected().stopMediaSyncForActivityDestroy()
         }
         try {
             LargeDataHandler.getInstance().removeOutDeviceListener(100)
@@ -1375,7 +1389,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onResume() {
         super.onResume()
-        if (isMeizuMyvuSelected()) getOrCreateMeizuMyvuManager()
+        glassesDevices.selected().onActivityResumed()
         showPendingMeizuMyvuFailureIfNeeded()
         handleExternalImageAutomationStatus()
         if (
@@ -1452,7 +1466,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 AutoDiaryService.isEnabled(this) ||
                 VisualDiaryPreferences.isEnabled(this) ||
                 LocalAgentPlugin.isEnabled(this) ||
-                isMeizuMyvuSelected()
+                glassesDevices.selected().runsForegroundConnectionService
         if (notificationFeatureEnabled && !hasNotificationPermission(this)) {
             enabledFeaturePermissionRequestActive = true
             ensureNotificationPermission(this, "enabled background features") {
@@ -1471,11 +1485,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (LocalAgentPlugin.isEnabled(this)) {
             LocalAgentController.requestStatus(this)
         }
-        if (isMeizuMyvuSelected()) {
-            DeviceProfileStore.loadLastSelected(this)?.macAddress?.let { address ->
-                getOrCreateMeizuMyvuManager().connect(address, this)
-            }
-        }
+        glassesDevices.selected().onBackgroundFeaturesRestarted()
 
         // Mic plugins (Live Caption Relay, Hands-Free Translator, Errand Brain) are user-controlled via
         // the glasses-tab shortcut START/STOP and must not auto-start when merely enabled in Plugins.
@@ -1486,7 +1496,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun ensureEnabledMetaCameraFeature() {
-        if (!isMetaRaybanSelected() || !hasNotificationPermission(this)) return
+        if (glassesDevices.selected().cameraPluginGate == null || !hasNotificationPermission(this)) return
         if (!WalkingAidPreferences.isEnabled(this) && !VisualDiaryPreferences.isEnabled(this)) return
         if (enabledMetaCameraCheckActive) return
 
@@ -1499,7 +1509,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun startEnabledCameraFeatures() {
-        if (isMetaRaybanSelected()) {
+        if (glassesDevices.selected().cameraPluginGate != null) {
             if (WalkingAidPreferences.isEnabled(this) || VisualDiaryPreferences.isEnabled(this)) {
                 ensureEnabledMetaCameraFeature()
             }
@@ -1547,8 +1557,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun getOrCreateMetaRaybanManager(): com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager =
         deviceManagers.getOrCreateMetaRaybanManager()
-
-    private fun getOrCreateMeizuMyvuManager(): MeizuMyvuManager = deviceManagers.getOrCreateMeizuMyvuManager()
 
     private fun showPendingMeizuMyvuFailureIfNeeded() {
         meizuMyvuUi.showPendingMeizuMyvuFailureIfNeeded()
@@ -4079,13 +4087,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun isMetaRaybanSelected(): Boolean = deviceManagers.isMetaRaybanSelected()
 
-    private fun isMeizuMyvuSelected(): Boolean = deviceManagers.isMeizuMyvuSelected()
-
     private fun isEyevueSelected(): Boolean = deviceManagers.isEyevueSelected()
 
     private fun isTuneBudsSelected(): Boolean = deviceManagers.isTuneBudsSelected()
-
-    private fun isMoyoungW620Selected(): Boolean = deviceManagers.isMoyoungW620Selected()
 
     private fun isHeyCyanSelected(): Boolean = deviceManagers.isHeyCyanSelected()
 

@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.ota
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
@@ -11,13 +10,22 @@ import android.os.Build
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
+import com.fersaiyan.cyanbridge.network.HeyCyanP2pLink
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
+import com.fersaiyan.cyanbridge.shared.network.GlassesWifiNotify
+import com.fersaiyan.cyanbridge.shared.network.HeyCyanP2pPeerMatching
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClient
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesWifiErrorAction
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesWifiErrorContext
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesWifiErrorPolicy
 import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.bluetooth.DeviceManager
 import com.oudmon.ble.base.communication.LargeDataHandler
 import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyListener
 import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyRsp
-import com.oudmon.ble.base.communication.utils.ByteUtil
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,23 +76,6 @@ internal fun isCombinedOtaFilenamePair(wifiFilename: String, bleFilename: String
     OtaTarget.V821_WIFI.isExpectedFirmwareFilename(wifiFilename) &&
         OtaTarget.JIELI_BLE.isExpectedFirmwareFilename(bleFilename)
 
-internal fun selectLocalP2pIpv4(
-    glassesIp: String,
-    candidates: List<Pair<String, String>>,
-): String? {
-    val octets = glassesIp.split('.')
-    if (octets.size != 4 || octets.any { it.toIntOrNull() !in 0..255 }) return null
-    val subnetPrefix = octets.take(3).joinToString(".") + "."
-    val onGlassesSubnet = candidates.filter { (_, ip) ->
-        ip != glassesIp && ip.startsWith(subnetPrefix)
-    }
-    return onGlassesSubnet.firstOrNull { (name, _) -> isP2pInterface(name) }?.second
-        ?: onGlassesSubnet.firstOrNull()?.second
-}
-
-private fun isP2pInterface(name: String): Boolean =
-    name.contains("p2p", ignoreCase = true) || name.contains("wfd", ignoreCase = true)
-
 data class OtaUiState(
     val state: OtaState = OtaState.IDLE,
     val detail: String = "",
@@ -113,9 +104,7 @@ class OtaManager(
     private var otaJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private var p2pManager: WifiP2pManagerSingleton? = null
-    private var p2pCallback: WifiP2pManagerSingleton.WifiP2pCallback? = null
-    private var p2pReceiverRegistered = false
+    private var p2pLink: HeyCyanP2pLink? = null
     private var otaNotifyListener: GlassesDeviceNotifyListener? = null
     private var otaNotifyRegistered = false
     private var otaWakeLock: PowerManager.WakeLock? = null
@@ -123,8 +112,6 @@ class OtaManager(
     private var cleanupCompletion: CompletableDeferred<Unit>? = null
     private var retainSessionAfterCleanup = false
     private var resetUiAfterCleanup = false
-    private var cleanupRetryPending = false
-    private var cleanupRetryJob: Job? = null
     @Volatile private var sessionFinishNotified = true
     private var onSessionFinished: () -> Unit = {}
 
@@ -167,9 +154,6 @@ class OtaManager(
         cleanupCompletion = null
         retainSessionAfterCleanup = false
         resetUiAfterCleanup = false
-        cleanupRetryPending = false
-        cleanupRetryJob?.cancel()
-        cleanupRetryJob = null
         this.onSessionFinished = onSessionFinished
         val invalidPairMessage = validateFirmwarePair(wifiFirmwareFile, bleFirmwareFile)
         if (invalidPairMessage != null) {
@@ -281,7 +265,7 @@ class OtaManager(
 
     /** Retry a quarantined P2P teardown after the BLE link becomes usable again. */
     fun onBluetoothConnected() {
-        retryP2pCleanupIfNeeded()
+        GlassesNetworkSessionCoordinator.onBluetoothConnected(DeviceClass.HEY_CYAN)
     }
 
     private fun cleanup(retainSession: Boolean = false) {
@@ -290,7 +274,7 @@ class OtaManager(
             // intermediate Wi-Fi teardown so the lease cannot be stranded.
             if (!retainSession) {
                 retainSessionAfterCleanup = false
-                retryP2pCleanupIfNeeded()
+                GlassesNetworkSessionCoordinator.retryQuarantinedTeardown(DeviceClass.HEY_CYAN)
             }
             return
         }
@@ -300,22 +284,25 @@ class OtaManager(
         httpServer = null
         bleDfuManager?.cancel()
         bleDfuManager = null
-        val manager = p2pManager
+        val link = p2pLink
 
-        if (manager == null) {
+        if (link == null) {
             finishCleanup()
             return
         }
 
-        manager.stopP2pOperations()
-        manager.cancelP2pConnection()
-        if (!cleanupInProgress) return
-        removeP2pGroup(manager, attempt = 1)
+        // The shared session keeps the OTA link reserved (and retries a quarantined removal)
+        // until the group is confirmed gone; only then may the BLE DFU stage or the next
+        // workflow use the glasses.
+        GlassesNetworkSessionCoordinator.closeHeyCyanLink(context, link) {
+            Log.i(TAG, "Confirmed OTA P2P group is gone")
+            finishCleanup()
+        }
     }
 
     /** Tear down only the Wi-Fi transport while retaining the exclusive OTA lease. */
     private suspend fun cleanupWifiTransportForNextStage() {
-        if (p2pManager == null && httpServer == null && !otaNotifyRegistered) {
+        if (p2pLink == null && httpServer == null && !otaNotifyRegistered) {
             restoreDefaultNetwork()
             return
         }
@@ -338,111 +325,10 @@ class OtaManager(
         }
     }
 
-    private fun removeP2pGroup(manager: WifiP2pManagerSingleton, attempt: Int) {
-        val resultHandled = java.util.concurrent.atomic.AtomicBoolean(false)
-        val handleResult: (Boolean) -> Unit = { success ->
-            if (success) {
-                Log.i(TAG, "OTA P2P removal accepted on cleanup attempt $attempt; waiting for disconnect")
-            } else {
-                Log.w(TAG, "OTA P2P removal failed on attempt $attempt; checking group state")
-            }
-            awaitP2pDisconnect(manager, attempt)
-        }
-        scope.launch {
-            delay(P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS)
-            if (cleanupInProgress && resultHandled.compareAndSet(false, true)) {
-                Log.w(TAG, "OTA P2P removal gave no callback on attempt $attempt; checking group state")
-                awaitP2pDisconnect(manager, attempt)
-            }
-        }
-        try {
-            manager.removeGroup { success ->
-                if (resultHandled.compareAndSet(false, true)) {
-                    handleResult(success)
-                } else {
-                    Log.d(TAG, "Ignoring late OTA P2P removal callback for attempt $attempt")
-                }
-            }
-        } catch (e: Exception) {
-            if (resultHandled.compareAndSet(false, true)) {
-                Log.w(TAG, "OTA P2P removal threw on attempt $attempt; checking group state", e)
-                awaitP2pDisconnect(manager, attempt)
-            }
-        }
-    }
-
-    private fun awaitP2pDisconnect(manager: WifiP2pManagerSingleton, attempt: Int) {
-        scope.launch {
-            val deadline = System.currentTimeMillis() + P2P_GROUP_DISCONNECT_TIMEOUT_MS
-            while (cleanupInProgress && System.currentTimeMillis() < deadline) {
-                manager.requestConnectionInfo()
-                delay(250)
-                if (!manager.isConnecting() && !manager.isConnected()) {
-                    Log.i(TAG, "Confirmed OTA P2P group is gone after cleanup attempt $attempt")
-                    finishCleanup()
-                    return@launch
-                }
-            }
-
-            if (cleanupInProgress) {
-                if (!manager.canUseP2p() || attempt >= P2P_GROUP_REMOVAL_MAX_ATTEMPTS) {
-                    cleanupRetryPending = true
-                    Log.e(TAG, "OTA P2P teardown could not be confirmed; keeping the OTA lease quarantined until a cleanup retry")
-                    // Keep retrying from the manager scope so an Activity recreation cannot
-                    // strand the exclusive lease or leave the P2P group owned indefinitely.
-                    scheduleP2pRemovalRetry(
-                        manager = manager,
-                        attempt = 1,
-                        delayMs = P2P_QUARANTINE_RETRY_MS,
-                    )
-                } else {
-                    Log.w(TAG, "OTA P2P group still present after cleanup attempt $attempt; retaining the OTA lease and retrying")
-                    scheduleP2pRemovalRetry(manager, attempt + 1)
-                }
-            }
-        }
-    }
-
-    private fun retryP2pCleanupIfNeeded() {
-        if (!cleanupInProgress || !cleanupRetryPending) return
-        val manager = p2pManager ?: return
-        cleanupRetryJob?.cancel()
-        cleanupRetryJob = null
-        cleanupRetryPending = false
-        Log.i(TAG, "Retrying quarantined OTA P2P teardown")
-        removeP2pGroup(manager, attempt = 1)
-    }
-
-    private fun scheduleP2pRemovalRetry(
-        manager: WifiP2pManagerSingleton,
-        attempt: Int,
-        delayMs: Long = P2P_GROUP_REMOVAL_RETRY_MS,
-    ) {
-        cleanupRetryJob?.cancel()
-        cleanupRetryJob = scope.launch {
-            delay(delayMs)
-            cleanupRetryJob = null
-            if (cleanupInProgress && !sessionFinishNotified) {
-                cleanupRetryPending = false
-                removeP2pGroup(manager, attempt)
-            }
-        }
-    }
-
     private fun finishCleanup() {
         if (!cleanupInProgress) return
-        val manager = p2pManager
         val retainSession = retainSessionAfterCleanup
         retainSessionAfterCleanup = false
-        p2pCallback?.let { callback -> manager?.removeCallback(callback) }
-        if (p2pReceiverRegistered) {
-            try {
-                manager?.unregisterReceiver()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to unregister OTA P2P receiver: ${e.message}")
-            }
-            p2pReceiverRegistered = false
-        }
         if (otaNotifyRegistered) {
             try {
                 LargeDataHandler.getInstance().removeOutDeviceListener(OTA_NOTIFY_CMD_TYPE)
@@ -450,16 +336,12 @@ class OtaManager(
             }
             otaNotifyRegistered = false
         }
-        p2pManager = null
-        p2pCallback = null
+        p2pLink = null
         otaNotifyListener = null
         p2pConnected = false
         p2pInfo = null
         WifiP2pManagerSingleton.lastGroupOwnerIp = null
         cleanupInProgress = false
-        cleanupRetryPending = false
-        cleanupRetryJob?.cancel()
-        cleanupRetryJob = null
         restoreDefaultNetwork()
 
         val completion = cleanupCompletion
@@ -479,11 +361,8 @@ class OtaManager(
     }
 
     private fun restoreDefaultNetwork() {
-        val connectivityManager =
-            context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return
         try {
-            connectivityManager.bindProcessToNetwork(null)
+            GlassesNetworkSessionCoordinator.restoreDefaultProcessNetwork(context)
             Log.i(TAG, "Restored the default process network after OTA P2P teardown")
         } catch (error: RuntimeException) {
             Log.w(TAG, "Could not restore the default process network after OTA P2P teardown", error)
@@ -790,10 +669,8 @@ class OtaManager(
     /**
      * Start P2P peer discovery and connection, mirroring the official app flow.
      */
-    private fun startP2p(): Boolean {
-        p2pManager = WifiP2pManagerSingleton.getInstance(context)
-
-        p2pCallback = object : WifiP2pManagerSingleton.WifiP2pCallback {
+    private suspend fun startP2p(): Boolean {
+        val callback = object : WifiP2pManagerSingleton.WifiP2pCallback {
             override fun onWifiP2pEnabled() {
                 Log.i(TAG, "P2P enabled")
             }
@@ -803,12 +680,13 @@ class OtaManager(
             }
 
             override fun onPeersChanged(peers: Collection<WifiP2pDevice>) {
+                val link = p2pLink ?: return
                 if (cleanupInProgress) {
                     Log.d(TAG, "Ignoring P2P peers during OTA teardown")
                     return
                 }
                 Log.i(TAG, "P2P peers changed: ${peers.size} peers")
-                if (p2pManager?.isConnecting() == true || p2pManager?.isConnected() == true) {
+                if (link.manager.isConnecting() || link.manager.isConnected()) {
                     return
                 }
                 // Find the glasses peer by matching the paired device name/address
@@ -822,14 +700,21 @@ class OtaManager(
                 } catch (_: Exception) {
                     null
                 }
-                val target = peers.firstOrNull { peer ->
-                    peer.deviceName == pairedName ||
-                        peer.deviceAddress == pairedMac ||
-                        peer.deviceName?.endsWith("_${pairedMac?.takeLast(5)?.replace(":", "")}") == true
+                val target = HeyCyanP2pPeerMatching.selectPreferringAvailable(
+                    peers,
+                    isAvailable = { it.status == WifiP2pDevice.AVAILABLE },
+                ) { peer ->
+                    HeyCyanP2pPeerMatching.matchesPairedGlassesPeer(
+                        peer.deviceName,
+                        peer.deviceAddress,
+                        pairedName,
+                        pairedMac,
+                    )
                 }
                 if (target != null) {
                     Log.i(TAG, "Found glasses P2P peer: ${target.deviceName} / ${target.deviceAddress}")
-                    p2pManager?.connectToDevice(target)
+                    link.markConnectRequested()
+                    link.manager.connectToDevice(target)
                 } else {
                     Log.w(TAG, "No matching glasses peer found among ${peers.size} peers")
                 }
@@ -839,18 +724,13 @@ class OtaManager(
                 Log.i(TAG, "P2P connected: groupFormed=${info.groupFormed}, isGroupOwner=${info.isGroupOwner}")
                 p2pConnected = info.groupFormed
                 p2pInfo = info
-                if (cleanupInProgress && !info.groupFormed) {
-                    Log.i(TAG, "Confirmed OTA P2P group removal from connection info")
-                    finishCleanup()
-                }
+                p2pLink?.markGroupFormed(info.groupFormed)
             }
 
             override fun onDisconnected() {
                 Log.w(TAG, "P2P disconnected")
                 p2pConnected = false
-                if (cleanupInProgress) {
-                    finishCleanup()
-                }
+                p2pLink?.markGroupFormed(false)
             }
 
             override fun onPeerDiscoveryStarted() {
@@ -890,19 +770,16 @@ class OtaManager(
             }
         }
 
-        val manager = p2pManager ?: return false
-        val callback = p2pCallback ?: return false
-        manager.addCallback(callback)
-        try {
-            manager.registerReceiver()
-            p2pReceiverRegistered = true
-        } catch (e: Exception) {
-            manager.removeCallback(callback)
-            Log.e(TAG, "Failed to register OTA P2P receiver: ${e.message}", e)
+        val link = GlassesNetworkSessionCoordinator.openHeyCyanLink(
+            context,
+            GlassesLinkClient.HEYCYAN_OTA,
+            callback,
+        ) ?: run {
+            Log.e(TAG, "Failed to claim the glasses Wi-Fi Direct link for OTA")
             return false
         }
-        manager.resetFailCount()
-        manager.startPeerDiscovery()
+        p2pLink = link
+        link.manager.startPeerDiscovery()
         return true
     }
 
@@ -921,49 +798,44 @@ class OtaManager(
         otaNotifyListener = object : GlassesDeviceNotifyListener() {
             override fun parseData(cmdType: Int, response: GlassesDeviceNotifyRsp) {
                 val load = response.loadData
-                if (load.size < 7) return
-                when (load[6].toInt()) {
-                    0x08 -> {
+                when (val notify = GlassesWifiNotify.parse(load) ?: return) {
+                    is GlassesWifiNotify.GlassesIp -> {
                         // Glasses IP address
-                        if (load.size >= 11) {
-                            val ip = "${ByteUtil.byteToInt(load[7])}." +
-                                "${ByteUtil.byteToInt(load[8])}." +
-                                "${ByteUtil.byteToInt(load[9])}." +
-                                "${ByteUtil.byteToInt(load[10])}"
-                            Log.i(TAG, "[BLE] Glasses IP received: $ip (raw bytes: ${load[7]},${load[8]},${load[9]},${load[10]})")
-                            bleIpReceived = ip
-                        } else {
-                            Log.w(TAG, "[BLE] IP notify too short: ${load.size} bytes")
-                        }
+                        Log.i(TAG, "[BLE] Glasses IP received: ${notify.ip} (raw bytes: ${load[7]},${load[8]},${load[9]},${load[10]})")
+                        bleIpReceived = notify.ip
                     }
-                    0x09 -> {
+                    is GlassesWifiNotify.GlassesIpTooShort -> {
+                        Log.w(TAG, "[BLE] IP notify too short: ${notify.size} bytes")
+                    }
+                    is GlassesWifiNotify.WifiError -> {
                         // P2P/WiFi error
-                        val errorCode = ByteUtil.byteToInt(load.getOrNull(7) ?: 0)
-                        Log.e(TAG, "[BLE] P2P/WiFi error from glasses: errorCode=$errorCode (raw=${load.getOrNull(7)})")
+                        Log.e(TAG, "[BLE] P2P/WiFi error from glasses: errorCode=${notify.code} (raw=${notify.raw})")
                         // 255 is a noisy vendor notification; other error codes are fatal.
-                        if (errorCode != 255) otaFailed = true
+                        val action = GlassesWifiErrorPolicy.decide(
+                            GlassesWifiErrorContext.OTA,
+                            notify.code,
+                            sessionActive = true,
+                        )
+                        if (action == GlassesWifiErrorAction.FAIL_OTA) otaFailed = true
                     }
-                    0x04 -> {
+                    is GlassesWifiNotify.OtaProgress -> {
                         // OTA progress
-                        if (load.size >= 10) {
-                            val progress = ByteUtil.byteToInt(load[7])
-                            val phase = ByteUtil.byteToInt(load.getOrNull(8) ?: 0)
-                            Log.i(TAG, "[BLE] OTA progress: $progress% (phase=$phase)")
+                        if (notify.size >= 10) {
+                            Log.i(TAG, "[BLE] OTA progress: ${notify.percent}% (phase=${notify.phase})")
                         }
                     }
-                    0x07 -> {
-                        val result = load.getOrNull(7)?.let(ByteUtil::byteToInt)
-                        if (isWifiOtaCompleteNotification(notifyType = 0x07, result = result)) {
+                    is GlassesWifiNotify.OtaResult -> {
+                        if (isWifiOtaCompleteNotification(notifyType = notify.type, result = notify.result)) {
                             Log.i(TAG, "[BLE] OTA COMPLETE notification received!")
                             otaComplete = true
                         } else {
                             // The official app accepts type 0x07 only when loadData[7] == 1.
-                            Log.w(TAG, "[BLE] OTA completion notification was not successful: result=$result")
+                            Log.w(TAG, "[BLE] OTA completion notification was not successful: result=${notify.result}")
                             otaFailed = true
                         }
                     }
-                    else -> {
-                        Log.d(TAG, "[BLE] Unknown notify type: 0x${load[6].toString(16)} (${load.size} bytes)")
+                    is GlassesWifiNotify.Other -> {
+                        Log.d(TAG, "[BLE] Unknown notify type: 0x${notify.type.toString(16)} (${notify.size} bytes)")
                     }
                 }
             }
@@ -1053,7 +925,7 @@ class OtaManager(
                     }
                 }
             }
-            val selected = selectLocalP2pIpv4(glassesIp, candidates)
+            val selected = GlassesNetworkAddressing.selectLocalP2pIpv4(glassesIp, candidates)
             Log.i(TAG, "P2P local IP candidates=$candidates, glassesIp=$glassesIp, selected=$selected")
             return selected
         } catch (e: Exception) {

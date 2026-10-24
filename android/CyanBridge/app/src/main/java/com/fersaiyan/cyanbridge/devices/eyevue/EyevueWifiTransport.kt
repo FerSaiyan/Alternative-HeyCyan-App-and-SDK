@@ -21,6 +21,11 @@ import android.os.Build
 import android.os.Looper
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
+import com.fersaiyan.cyanbridge.network.WifiP2pChannelGroupDriver
+import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClaim
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClient
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -44,7 +49,11 @@ data class EyevueWifiConnection(
     val network: Network?,
 )
 
-/** Connects Eyevue's AP or Wi-Fi Direct network and binds process traffic to it. */
+/**
+ * Connects Eyevue's AP or Wi-Fi Direct network and binds process traffic to it. The link is
+ * claimed from [GlassesNetworkSessionCoordinator], which owns the process binding and the
+ * confirmed group removal after [disconnect].
+ */
 class EyevueWifiTransport(
     context: Context,
 ) {
@@ -67,6 +76,8 @@ class EyevueWifiTransport(
     private var p2pTargetSsid: String? = null
     private var p2pConnecting = false
     private var boundNetwork: Network? = null
+    private var linkClaim: GlassesLinkClaim? = null
+    private val routes = GlassesNetworkSessionCoordinator.routes(context)
 
     @SuppressLint("MissingPermission")
     suspend fun connect(
@@ -83,6 +94,9 @@ class EyevueWifiTransport(
         }
 
         disconnect()
+        val claim = GlassesNetworkSessionCoordinator.claimVendorLink(context, GlassesLinkClient.EYEVUE_WIFI)
+            ?: return Result.failure(IOException("The glasses Wi-Fi link is still owned by another session"))
+        linkClaim = claim
         return try {
             val network = when (mode) {
                 EyevueWifiMode.AP -> connectAp(ssid, password)
@@ -116,16 +130,26 @@ class EyevueWifiTransport(
             runCatching { context.unregisterReceiver(receiver) }
         }
         p2pReceiver = null
-        p2pChannel?.let { channel ->
-            runCatching { p2pManager.stopPeerDiscovery(channel, null) }
-            runCatching { p2pManager.cancelConnect(channel, null) }
-            runCatching { p2pManager.removeGroup(channel, null) }
-        }
+        val channel = p2pChannel
         p2pChannel = null
+        channel?.let {
+            runCatching { p2pManager.stopPeerDiscovery(it, null) }
+            runCatching { p2pManager.cancelConnect(it, null) }
+        }
 
-        if (boundNetwork != null) {
-            runCatching { connectivityManager.bindProcessToNetwork(null) }
-            boundNetwork = null
+        // The shared session restores the default network and removes the group (confirmed,
+        // retried and quarantined if needed) while the link stays reserved.
+        val claim = linkClaim
+        linkClaim = null
+        boundNetwork = null
+        if (claim != null) {
+            GlassesNetworkSessionCoordinator.releaseVendorLink(
+                context,
+                claim,
+                channel?.let { WifiP2pChannelGroupDriver(context, p2pManager, it) },
+            )
+        } else {
+            channel?.let { runCatching { it.close() } }
         }
     }
 
@@ -154,7 +178,9 @@ class EyevueWifiTransport(
                         resumed = true
                         apNetworkCallback = this
                         boundNetwork = network
-                        connectivityManager.bindProcessToNetwork(network)
+                        linkClaim?.let { claim ->
+                            GlassesNetworkSessionCoordinator.bindProcessToNetwork(context, claim, network)
+                        }
                         Log.i(TAG, "Eyevue AP network available: $ssid")
                         continuation.resume(network)
                     }
@@ -169,7 +195,7 @@ class EyevueWifiTransport(
 
                     override fun onLost(network: Network) {
                         if (boundNetwork == network) {
-                            runCatching { connectivityManager.bindProcessToNetwork(null) }
+                            GlassesNetworkSessionCoordinator.unbindProcess(context, linkClaim)
                             boundNetwork = null
                             if (continuation.isActive) {
                                 continuation.resumeWithException(IOException("Eyevue AP network was lost"))
@@ -181,7 +207,7 @@ class EyevueWifiTransport(
                 continuation.invokeOnCancellation {
                     runCatching { connectivityManager.unregisterNetworkCallback(callback) }
                     if (boundNetwork != null) {
-                        runCatching { connectivityManager.bindProcessToNetwork(null) }
+                        GlassesNetworkSessionCoordinator.unbindProcess(context, linkClaim)
                         boundNetwork = null
                     }
                 }
@@ -257,10 +283,13 @@ class EyevueWifiTransport(
             }
         }
 
+        linkClaim?.let(GlassesNetworkSessionCoordinator.core::markGroupFormed)
         val network = awaitP2pRoute(info, ssid, baseIp)
         if (network != null) {
             boundNetwork = network
-            connectivityManager.bindProcessToNetwork(network)
+            linkClaim?.let { claim ->
+                GlassesNetworkSessionCoordinator.bindProcessToNetwork(context, claim, network)
+            }
         } else {
             Log.i(TAG, "Eyevue P2P proceeding on the default route (no bindable Network surfaced)")
         }
@@ -323,30 +352,18 @@ class EyevueWifiTransport(
      */
     private suspend fun awaitP2pRoute(info: WifiP2pInfo, ssid: String, baseIp: String): Network? =
         withContext(Dispatchers.IO) {
-            val prefix = "192.168.49."
+            val subnetHints = GlassesNetworkAddressing.subnetHints(baseIp)
             val deadline = System.currentTimeMillis() + P2P_ROUTE_TIMEOUT_MS
             var reachable = false
             var boundCandidate: Network? = null
             while (System.currentTimeMillis() < deadline) {
-                if (!reachable && isHostReachable(baseIp, 80, 1_500)) {
+                if (!reachable && baseIp.isNotBlank() && routes.isPortOpen(baseIp, 80, 1_500)) {
                     Log.i(TAG, "Eyevue P2P host reachable: $baseIp:80")
                     reachable = true
                 }
                 if (boundCandidate == null) {
-                    boundCandidate = connectivityManager.allNetworks.firstOrNull { network ->
-                        val capabilities = connectivityManager.getNetworkCapabilities(network)
-                            ?: return@firstOrNull false
-                        if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                            return@firstOrNull false
-                        }
-                        val properties = connectivityManager.getLinkProperties(network)
-                        val interfaceName = properties?.interfaceName.orEmpty()
-                        val addresses = properties?.linkAddresses.orEmpty()
-                            .mapNotNull { it.address.hostAddress }
-                        interfaceName.contains("p2p", ignoreCase = true) ||
-                            interfaceName.contains("wfd", ignoreCase = true) ||
-                            addresses.any { it.startsWith(prefix) }
-                    }
+                    boundCandidate = runCatching { routes.findVerifiedP2pNetwork(subnetHints) }
+                        .getOrNull()?.network
                 }
                 if (reachable) return@withContext boundCandidate
                 delay(500)
@@ -357,18 +374,6 @@ class EyevueWifiTransport(
                     "(groupOwner=${info.groupOwnerAddress?.hostAddress})",
             )
         }
-
-    private fun isHostReachable(host: String, port: Int, timeoutMs: Int): Boolean {
-        if (host.isBlank()) return false
-        try {
-            java.net.Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress(host, port), timeoutMs)
-                return true
-            }
-        } catch (_: Exception) {
-            return false
-        }
-    }
 
     private fun hasWifiPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

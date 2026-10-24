@@ -2,9 +2,6 @@ package com.fersaiyan.cyanbridge.ota
 
 import android.content.Context
 import android.Manifest
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
 import android.net.Uri
 import android.graphics.Bitmap
 import android.net.wifi.WifiManager
@@ -16,21 +13,23 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveVideoView
 import com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanVideoFrameOutput
-import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
 import com.fersaiyan.cyanbridge.media.rtsp.GlassesRtspRelay
+import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
+import com.fersaiyan.cyanbridge.network.HeyCyanP2pLink
+import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
+import com.fersaiyan.cyanbridge.shared.network.GlassesWifiNotify
+import com.fersaiyan.cyanbridge.shared.network.HeyCyanP2pPeerMatching
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClient
 import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.bluetooth.DeviceManager
 import com.oudmon.ble.base.communication.LargeDataHandler
 import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyListener
 import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyRsp
-import com.oudmon.ble.base.communication.utils.ByteUtil
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.IOException
-import java.net.InetSocketAddress
-import java.net.Socket
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -80,12 +79,9 @@ class LivePreviewManager(
     private var mainJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private var p2pManager: WifiP2pManagerSingleton? = null
-    private var p2pCallback: WifiP2pManagerSingleton.WifiP2pCallback? = null
-    private var p2pReceiverRegistered = false
+    private var p2pLink: HeyCyanP2pLink? = null
     private var notifyListener: GlassesDeviceNotifyListener? = null
     private var notifyRegistered = false
-    private var boundP2pNetwork: Network? = null
     @Volatile private var cleanupComplete = true
     @Volatile private var cleanupInProgress = false
     @Volatile private var sessionFinishNotified = true
@@ -122,10 +118,6 @@ class LivePreviewManager(
         private const val PROBE_TIMEOUT_MS = 8_000L
         private const val BLE_IP_TIMEOUT_MS = 45_000L
         private const val P2P_CONNECT_TIMEOUT_MS = 20_000L
-        private const val P2P_GROUP_REMOVAL_RETRY_MS = 1_000L
-        private const val P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS = 5_000L
-        private const val P2P_GROUP_DISCONNECT_TIMEOUT_MS = 5_000L
-        private const val P2P_GROUP_REMOVAL_MAX_ATTEMPTS = 3
     }
 
     private fun elapsed(): Long = System.currentTimeMillis() - flowStartTimeMs
@@ -212,8 +204,8 @@ class LivePreviewManager(
         unbindP2pNetwork()
         if (!cleanupComplete) {
             cleanupInProgress = true
-            p2pManager?.stopP2pOperations()
-            p2pManager?.cancelP2pConnection()
+            // Bluetooth is gone: drop the link now; the next claim clears any stale group.
+            p2pLink?.let { link -> GlassesNetworkSessionCoordinator.abandonHeyCyanLink(context, link) }
             finishCleanup()
         }
     }
@@ -231,95 +223,20 @@ class LivePreviewManager(
 
         unbindP2pNetwork()
 
-        val manager = p2pManager
-        if (manager == null) {
+        val link = p2pLink
+        if (link == null) {
             finishCleanup()
             return
         }
-        manager.stopP2pOperations()
-        manager.cancelP2pConnection()
-        if (!cleanupInProgress) return
-        removeP2pGroup(manager, attempt = 1)
-    }
-
-    private fun removeP2pGroup(manager: WifiP2pManagerSingleton, attempt: Int) {
-        val resultHandled = java.util.concurrent.atomic.AtomicBoolean(false)
-        val handleResult: (Boolean) -> Unit = { success ->
-            if (success) {
-                Log.i(TAG, "[${elapsed()}ms] cleanup: P2P removal accepted on attempt $attempt; waiting for disconnect")
-            } else {
-                Log.w(TAG, "[${elapsed()}ms] cleanup: P2P removal failed on attempt $attempt; checking group state")
-            }
-            awaitP2pDisconnect(manager, attempt)
-        }
-        scope.launch {
-            delay(P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS)
-            if (cleanupInProgress && resultHandled.compareAndSet(false, true)) {
-                Log.w(TAG, "[${elapsed()}ms] cleanup: P2P removal gave no callback on attempt $attempt; checking group state")
-                awaitP2pDisconnect(manager, attempt)
-            }
-        }
-        try {
-            manager.removeGroup { success ->
-                if (resultHandled.compareAndSet(false, true)) {
-                    handleResult(success)
-                } else {
-                    Log.d(TAG, "[${elapsed()}ms] cleanup: ignoring late P2P removal callback for attempt $attempt")
-                }
-            }
-        } catch (e: Exception) {
-            if (resultHandled.compareAndSet(false, true)) {
-                Log.w(TAG, "[${elapsed()}ms] cleanup: P2P removal threw on attempt $attempt; checking group state", e)
-                awaitP2pDisconnect(manager, attempt)
-            }
-        }
-    }
-
-    private fun awaitP2pDisconnect(manager: WifiP2pManagerSingleton, attempt: Int) {
-        scope.launch {
-            val deadline = System.currentTimeMillis() + P2P_GROUP_DISCONNECT_TIMEOUT_MS
-            while (cleanupInProgress && System.currentTimeMillis() < deadline) {
-                manager.requestConnectionInfo()
-                delay(250)
-                if (!manager.isConnecting() && !manager.isConnected()) {
-                    Log.i(TAG, "[${elapsed()}ms] cleanup: confirmed P2P group is gone after attempt $attempt")
-                    finishCleanup()
-                    return@launch
-                }
-            }
-
-            if (cleanupInProgress) {
-                if (!manager.canUseP2p() || attempt >= P2P_GROUP_REMOVAL_MAX_ATTEMPTS) {
-                    Log.e(TAG, "[${elapsed()}ms] cleanup: P2P teardown could not be confirmed; keeping the preview lease quarantined until Bluetooth reconnect")
-                } else {
-                    Log.w(TAG, "[${elapsed()}ms] cleanup: P2P group still present after attempt $attempt; retaining the preview lease and retrying")
-                    scheduleP2pRemovalRetry(manager, attempt + 1)
-                }
-            }
-        }
-    }
-
-    private fun scheduleP2pRemovalRetry(manager: WifiP2pManagerSingleton, attempt: Int) {
-        scope.launch {
-            delay(P2P_GROUP_REMOVAL_RETRY_MS)
-            if (cleanupInProgress && !sessionFinishNotified) {
-                removeP2pGroup(manager, attempt)
-            }
+        // The preview lease stays held until the shared session confirms the group is gone.
+        GlassesNetworkSessionCoordinator.closeHeyCyanLink(context, link) {
+            Log.i(TAG, "[${elapsed()}ms] cleanup: confirmed P2P group is gone")
+            finishCleanup()
         }
     }
 
     private fun finishCleanup() {
         if (!cleanupInProgress) return
-        p2pCallback?.let { callback -> p2pManager?.removeCallback(callback) }
-        if (p2pReceiverRegistered) {
-            try {
-                p2pManager?.unregisterReceiver()
-                Log.d(TAG, "[${elapsed()}ms] cleanup: P2P receiver unregistered")
-            } catch (e: Exception) {
-                Log.w(TAG, "[${elapsed()}ms] cleanup: P2P unregisterReceiver failed: ${e.message}")
-            }
-            p2pReceiverRegistered = false
-        }
         if (notifyRegistered) {
             try {
                 LargeDataHandler.getInstance().removeOutDeviceListener(2)
@@ -329,8 +246,7 @@ class LivePreviewManager(
             }
             notifyRegistered = false
         }
-        p2pCallback = null
-        p2pManager = null
+        p2pLink = null
         notifyListener = null
         p2pConnected = false
         p2pInfo = null
@@ -482,11 +398,10 @@ class LivePreviewManager(
      * Start P2P peer discovery and connection.
      * Logs every P2P event with details.
      */
-    private fun startP2p(): Boolean {
-        p2pManager = WifiP2pManagerSingleton.getInstance(context)
-        Log.i(TAG, "[${elapsed()}ms] [P2P] Manager obtained, registering callback")
+    private suspend fun startP2p(): Boolean {
+        Log.i(TAG, "[${elapsed()}ms] [P2P] Claiming the glasses link, registering callback")
 
-        p2pCallback = object : WifiP2pManagerSingleton.WifiP2pCallback {
+        val callback = object : WifiP2pManagerSingleton.WifiP2pCallback {
             override fun onWifiP2pEnabled() {
                 Log.i(TAG, "[${elapsed()}ms] [P2P] Wi-Fi P2P enabled")
             }
@@ -505,11 +420,12 @@ class LivePreviewManager(
                     Log.d(TAG, "[${elapsed()}ms] [P2P]   peer[$i]: name='${peer.deviceName}' addr=${peer.deviceAddress} status=${peer.status}")
                 }
 
-                if (p2pManager?.isConnecting() == true) {
+                val link = p2pLink ?: return
+                if (link.manager.isConnecting()) {
                     Log.d(TAG, "[${elapsed()}ms] [P2P] Already connecting, skipping peer selection")
                     return
                 }
-                if (p2pManager?.isConnected() == true) {
+                if (link.manager.isConnected()) {
                     Log.d(TAG, "[${elapsed()}ms] [P2P] Already connected, skipping peer selection")
                     return
                 }
@@ -521,13 +437,17 @@ class LivePreviewManager(
                 // Wi-Fi Direct has its own MAC. The official peer name embeds
                 // the full BLE MAC (e.g. AIMB-G3_C4E3BFC3A402), whereas the BLE
                 // name may contain only its last four digits (AIMB-G3_A402).
-                fun matches(peer: WifiP2pDevice): Boolean =
-                    HeyCyanP2pPolicy.matchesOfficialPeer(peer.deviceName, pairedName, pairedMac) ||
-                        (!pairedName.isNullOrBlank() && peer.deviceName.equals(pairedName, ignoreCase = true)) ||
-                        (!pairedMac.isNullOrBlank() && peer.deviceAddress.equals(pairedMac, ignoreCase = true))
-
-                val target = peers.firstOrNull { matches(it) && it.status == WifiP2pDevice.AVAILABLE }
-                    ?: peers.firstOrNull(::matches)
+                val target = HeyCyanP2pPeerMatching.selectPreferringAvailable(
+                    peers,
+                    isAvailable = { it.status == WifiP2pDevice.AVAILABLE },
+                ) { peer ->
+                    HeyCyanP2pPeerMatching.matchesPairedGlassesPeer(
+                        peer.deviceName,
+                        peer.deviceAddress,
+                        pairedName,
+                        pairedMac,
+                    )
+                }
 
                 if (target != null) {
                     if (!peerConnectionState.beginConnect()) {
@@ -536,7 +456,8 @@ class LivePreviewManager(
                     }
                     Log.i(TAG, "[${elapsed()}ms] [P2P] Matched glasses peer: '${target.deviceName}' (${target.deviceAddress})")
                     Log.i(TAG, "[${elapsed()}ms] [P2P] Sending connect request (WPS PBC)...")
-                    p2pManager?.connectToDevice(target)
+                    link.markConnectRequested()
+                    link.manager.connectToDevice(target)
                 } else {
                     Log.w(TAG, "[${elapsed()}ms] [P2P] No matching glasses peer among ${peers.size} peers")
                     Log.w(TAG, "[${elapsed()}ms] [P2P]   Paired: '$pairedName' / $pairedMac")
@@ -555,19 +476,15 @@ class LivePreviewManager(
                 p2pConnected = info.groupFormed
                 peerConnectionState.onConnectionInfo(info.groupFormed)
                 p2pInfo = info
-                if (cleanupInProgress && !info.groupFormed) {
-                    Log.i(TAG, "[${elapsed()}ms] [P2P] Confirmed group removal from connection info")
-                    finishCleanup()
-                }
+                p2pLink?.markGroupFormed(info.groupFormed)
             }
 
             override fun onDisconnected() {
                 Log.w(TAG, "[${elapsed()}ms] [P2P] Disconnected!")
                 val wasConnected = peerConnectionState.onDisconnected()
                 p2pConnected = false
-                if (cleanupInProgress) {
-                    finishCleanup()
-                } else if (wasConnected) {
+                p2pLink?.markGroupFormed(false)
+                if (wasConnected && !cleanupInProgress) {
                     failP2p("The Wi-Fi Direct group disconnected.")
                 }
             }
@@ -607,18 +524,16 @@ class LivePreviewManager(
             }
         }
 
-        val manager = p2pManager ?: return false
-        val callback = p2pCallback ?: return false
-        manager.addCallback(callback)
-        try {
-            manager.registerReceiver()
-            p2pReceiverRegistered = true
-        } catch (e: Exception) {
-            manager.removeCallback(callback)
-            Log.e(TAG, "[${elapsed()}ms] [P2P] Failed to register receiver: ${e.message}", e)
+        val link = GlassesNetworkSessionCoordinator.openHeyCyanLink(
+            context,
+            GlassesLinkClient.HEYCYAN_LIVE_PREVIEW,
+            callback,
+        ) ?: run {
+            Log.e(TAG, "[${elapsed()}ms] [P2P] Could not claim the glasses Wi-Fi Direct link")
             return false
         }
-        manager.resetFailCount()
+        p2pLink = link
+        val manager = link.manager
         Log.i(TAG, "[${elapsed()}ms] [P2P] Registered receiver, reset fail count, starting discovery...")
         // Never let generic discovery timeout send 0x0F while realtime preview owns V821.
         manager.startPeerDiscovery(allowDeviceResetOnTimeout = false)
@@ -652,36 +567,27 @@ class LivePreviewManager(
                     return
                 }
 
-                val notifyType = load[6].toInt() and 0xFF
-                when (notifyType) {
-                    0x08 -> {
-                        if (load.size >= 11) {
-                            val b7 = ByteUtil.byteToInt(load[7])
-                            val b8 = ByteUtil.byteToInt(load[8])
-                            val b9 = ByteUtil.byteToInt(load[9])
-                            val b10 = ByteUtil.byteToInt(load[10])
-                            val ip = "$b7.$b8.$b9.$b10"
-                            Log.i(TAG, "[${elapsed()}ms] [BLE] *** GLASSES IP RECEIVED: $ip ***")
-                            Log.i(TAG, "[${elapsed()}ms] [BLE]   Raw bytes: load[7]=$b7, load[8]=$b8, load[9]=$b9, load[10]=$b10")
-                            bleIpReceived = ip
-                        } else {
-                            Log.w(TAG, "[${elapsed()}ms] [BLE] IP notify (0x08) too short: ${load.size} bytes (need >= 11)")
-                        }
+                when (val notify = GlassesWifiNotify.parse(load) ?: return) {
+                    is GlassesWifiNotify.GlassesIp -> {
+                        val (b7, b8, b9, b10) = notify.octets
+                        Log.i(TAG, "[${elapsed()}ms] [BLE] *** GLASSES IP RECEIVED: ${notify.ip} ***")
+                        Log.i(TAG, "[${elapsed()}ms] [BLE]   Raw bytes: load[7]=$b7, load[8]=$b8, load[9]=$b9, load[10]=$b10")
+                        bleIpReceived = notify.ip
                     }
-                    0x09 -> {
-                        val errorCode = ByteUtil.byteToInt(load.getOrNull(7) ?: 0)
-                        Log.e(TAG, "[${elapsed()}ms] [BLE] P2P/WiFi ERROR (0x09): errorCode=$errorCode, raw=${load.getOrNull(7)}")
+                    is GlassesWifiNotify.GlassesIpTooShort -> {
+                        Log.w(TAG, "[${elapsed()}ms] [BLE] IP notify (0x08) too short: ${notify.size} bytes (need >= 11)")
                     }
-                    0x04 -> {
-                        val progress = ByteUtil.byteToInt(load.getOrNull(7) ?: 0)
-                        val phase = ByteUtil.byteToInt(load.getOrNull(8) ?: 0)
-                        Log.d(TAG, "[${elapsed()}ms] [BLE] OTA progress (0x04): progress=$progress%, phase=$phase")
+                    is GlassesWifiNotify.WifiError -> {
+                        Log.e(TAG, "[${elapsed()}ms] [BLE] P2P/WiFi ERROR (0x09): errorCode=${notify.code}, raw=${notify.raw}")
                     }
-                    0x07 -> {
+                    is GlassesWifiNotify.OtaProgress -> {
+                        Log.d(TAG, "[${elapsed()}ms] [BLE] OTA progress (0x04): progress=${notify.percent}%, phase=${notify.phase}")
+                    }
+                    is GlassesWifiNotify.OtaResult -> {
                         Log.i(TAG, "[${elapsed()}ms] [BLE] OTA complete (0x07)")
                     }
-                    else -> {
-                        Log.d(TAG, "[${elapsed()}ms] [BLE] Unknown notify type: 0x${notifyType.toString(16).padStart(2, '0')} (${load.size} bytes)")
+                    is GlassesWifiNotify.Other -> {
+                        Log.d(TAG, "[${elapsed()}ms] [BLE] Unknown notify type: 0x${notify.type.toString(16).padStart(2, '0')} (${notify.size} bytes)")
                     }
                 }
             }
@@ -806,46 +712,44 @@ class LivePreviewManager(
     }
 
     private suspend fun bindToP2pNetwork(glassesIp: String): Boolean {
-        val glassesPrefix = glassesIp.substringBeforeLast('.', missingDelimiterValue = "").takeIf { it.isNotBlank() }
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: run {
-                Log.w(TAG, "[${elapsed()}ms] [P2P] ConnectivityManager unavailable")
-                return false
-            }
+        val link = p2pLink ?: return false
+        val routes = GlassesNetworkSessionCoordinator.routes(context)
+        val subnetHints = GlassesNetworkAddressing.subnetHints(glassesIp)
 
         val deadline = System.currentTimeMillis() + P2P_CONNECT_TIMEOUT_MS
         var attempts = 0
         while (System.currentTimeMillis() < deadline) {
             attempts++
-            val network = findP2pNetwork(connectivityManager, glassesPrefix)
-            if (network != null) {
-                try {
-                    if (connectivityManager.bindProcessToNetwork(network)) {
-                        boundP2pNetwork = network
-                        Log.i(TAG, "[${elapsed()}ms] [P2P] Bound process to the P2P route for RTSP")
-                        return true
-                    }
-                    Log.w(TAG, "[${elapsed()}ms] [P2P] bindProcessToNetwork returned false (attempt=$attempts)")
-                } catch (e: Exception) {
-                    Log.w(TAG, "[${elapsed()}ms] [P2P] Failed to bind RTSP to the P2P route: ${e.message}")
+            val match = try {
+                routes.findVerifiedP2pNetwork(subnetHints)
+            } catch (e: Exception) {
+                Log.w(TAG, "[${elapsed()}ms] [P2P] Could not enumerate Wi-Fi routes: ${e.message}")
+                null
+            }
+            if (match != null) {
+                Log.i(
+                    TAG,
+                    "[${elapsed()}ms] [P2P] Selected route: if=${match.interfaceName} addresses=${match.addresses} " +
+                        "(matchesGlassesSubnet=${subnetHints.any { prefix -> match.addresses.any { it.startsWith(prefix) } }})"
+                )
+                if (GlassesNetworkSessionCoordinator.bindProcessToNetwork(context, link.claim, match.network)) {
+                    Log.i(TAG, "[${elapsed()}ms] [P2P] Bound process to the P2P route for RTSP")
+                    return true
                 }
+                Log.w(TAG, "[${elapsed()}ms] [P2P] bindProcessToNetwork was refused (attempt=$attempts)")
                 // Samsung may expose the local-only P2P Network but reject
                 // process binding. Its kernel route still works for ordinary
                 // sockets (the vendor media-sync path uses this too). Verify
                 // the actual socket source before allowing LibVLC to use it.
-                val properties = connectivityManager.getLinkProperties(network)
-                val localAddresses = properties?.linkAddresses
-                    ?.mapNotNull { it.address.hostAddress }
-                    ?.toSet().orEmpty()
                 val directRoute = withContext(Dispatchers.IO) {
-                    HeyCyanLiveP2pRouteProbe.findRoute(glassesIp, RTSP_PORTS, localAddresses)
+                    HeyCyanLiveP2pRouteProbe.findRoute(glassesIp, RTSP_PORTS, match.addresses.toSet())
                 }
                 if (directRoute != null && p2pConnected) {
                     Log.i(
                         TAG,
                         "[${elapsed()}ms] [P2P] Verified direct P2P socket route: " +
                             "${directRoute.localAddress} -> $glassesIp:${directRoute.port} " +
-                            "if=${properties?.interfaceName}; process binding is unavailable",
+                            "if=${match.interfaceName}; process binding is unavailable",
                     )
                     return true
                 }
@@ -859,67 +763,15 @@ class LivePreviewManager(
         return false
     }
 
-    private fun findP2pNetwork(
-        connectivityManager: ConnectivityManager,
-        glassesPrefix: String?,
-    ): Network? {
-        return try {
-            connectivityManager.allNetworks.firstOrNull { candidate ->
-                val capabilities = connectivityManager.getNetworkCapabilities(candidate) ?: return@firstOrNull false
-                if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                ) {
-                    return@firstOrNull false
-                }
-
-                val linkProperties = connectivityManager.getLinkProperties(candidate)
-                val interfaceName = linkProperties?.interfaceName.orEmpty()
-                val addresses = linkProperties?.linkAddresses
-                    ?.mapNotNull { it.address.hostAddress }
-                    .orEmpty()
-                val matchesGlassesSubnet = glassesPrefix != null && addresses.any { it.startsWith("$glassesPrefix.") }
-                val looksLikeP2p = interfaceName.contains("p2p", ignoreCase = true) ||
-                    interfaceName.contains("wfd", ignoreCase = true)
-                if (matchesGlassesSubnet || looksLikeP2p) {
-                    Log.i(
-                        TAG,
-                        "[${elapsed()}ms] [P2P] Selected route: if=$interfaceName addresses=$addresses " +
-                            "(matchesGlassesSubnet=$matchesGlassesSubnet)"
-                    )
-                    true
-                } else {
-                    false
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "[${elapsed()}ms] [P2P] Could not enumerate Wi-Fi routes: ${e.message}")
-            null
-        }
-    }
-
     private fun unbindP2pNetwork() {
-        if (boundP2pNetwork == null) return
-        try {
-            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            connectivityManager?.bindProcessToNetwork(null)
+        val link = p2pLink ?: return
+        if (GlassesNetworkSessionCoordinator.unbindProcess(context, link.claim)) {
             Log.d(TAG, "[${elapsed()}ms] [P2P] Restored the default process network")
-        } catch (e: Exception) {
-            Log.w(TAG, "[${elapsed()}ms] [P2P] Failed to restore the default network: ${e.message}")
-        } finally {
-            boundP2pNetwork = null
         }
     }
 
-    private fun isPortOpen(host: String, port: Int, timeoutMs: Int): Boolean {
-        return try {
-            Socket().use { socket ->
-                socket.connect(InetSocketAddress(host, port), timeoutMs)
-                true
-            }
-        } catch (e: IOException) {
-            false
-        }
-    }
+    private fun isPortOpen(host: String, port: Int, timeoutMs: Int): Boolean =
+        GlassesNetworkSessionCoordinator.routes(context).isPortOpen(host, port, timeoutMs)
 
     /**
      * Try one RTSP URL with the same LibVLC stack proven on Eyevue. Visible

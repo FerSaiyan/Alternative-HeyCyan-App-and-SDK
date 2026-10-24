@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.ConnectivityManager
 import android.net.Network
 import android.net.wifi.WpsInfo
 import android.net.wifi.p2p.WifiP2pConfig
@@ -15,6 +14,10 @@ import android.os.Build
 import android.os.Looper
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
+import com.fersaiyan.cyanbridge.network.WifiP2pChannelGroupDriver
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClaim
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClient
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
@@ -24,15 +27,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 
-/** AB Mate P2P only: no HeyCyan SDK resets, static HTTP target, or process binding. */
+/**
+ * AB Mate P2P only: no HeyCyan SDK resets, static HTTP target, or process binding. The link is
+ * claimed from [GlassesNetworkSessionCoordinator], which confirms the group removal on [close].
+ */
 internal class TuneBudsP2pTransport(context: Context) {
     private val context = context.applicationContext
     private val manager = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
-    private val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private val routes = GlassesNetworkSessionCoordinator.routes(context)
     private var channel: WifiP2pManager.Channel? = null
+    private var linkClaim: GlassesLinkClaim? = null
     private var receiver: BroadcastReceiver? = null
     private val _isActive = MutableStateFlow(false)
     val isActive = _isActive.asStateFlow()
@@ -40,6 +46,9 @@ internal class TuneBudsP2pTransport(context: Context) {
     @SuppressLint("MissingPermission")
     suspend fun connect(address: String, ssid: String): Network = withContext(Dispatchers.Main) {
         val manager = manager ?: throw IOException("Wi-Fi Direct is not available on this phone")
+        val claim = GlassesNetworkSessionCoordinator.claimVendorLink(context, GlassesLinkClient.TUNEBUDS_WIFI_DIRECT)
+            ?: throw IOException("The glasses Wi-Fi link is still owned by another session")
+        linkClaim = claim
         val current = manager.initialize(context, Looper.getMainLooper()) { _isActive.value = false }
             ?: throw IOException("TuneBuds P2P channel initialization failed")
         channel = current
@@ -59,6 +68,7 @@ internal class TuneBudsP2pTransport(context: Context) {
                     if (devices.none { matchesTuneBudsP2pPeer(address, ssid, it.deviceAddress, it.deviceName) }) return@requestGroupInfo
                     val interfaceName = group.`interface`?.takeIf(String::isNotBlank) ?: return@requestGroupInfo
                     _isActive.value = true
+                    GlassesNetworkSessionCoordinator.core.markGroupFormed(claim)
                     formed.complete(interfaceName)
                     Log.i("TuneBudsP2p", "Group ${group.`interface`} owner=${info.groupOwnerAddress}; HTTP target comes from E7")
                 }
@@ -124,9 +134,7 @@ internal class TuneBudsP2pTransport(context: Context) {
             withTimeout(15_000L) route@ {
                 while (true) {
                     if (!_isActive.value) throw IOException("TuneBuds P2P disconnected before routing was ready")
-                    val network = connectivity.allNetworks.firstOrNull {
-                        connectivity.getLinkProperties(it)?.interfaceName == interfaceName
-                    }
+                    val network = routes.findNetworkByInterface(interfaceName)
                     if (network != null) return@route network
                     delay(250L)
                 }
@@ -141,20 +149,30 @@ internal class TuneBudsP2pTransport(context: Context) {
         _isActive.value = false
         receiver?.let { runCatching { context.unregisterReceiver(it) } }
         receiver = null
-        val current = channel ?: return@withContext
+        val claim = linkClaim
+        linkClaim = null
+        val current = channel
         channel = null // Ignore any late Android callbacks from this attempt.
-        try {
-            manager?.stopPeerDiscovery(current, null)
-            manager?.cancelConnect(current, null)
-            val removed = CompletableDeferred<Unit>()
-            manager?.removeGroup(current, object : WifiP2pManager.ActionListener {
-                override fun onSuccess() { removed.complete(Unit) }
-                override fun onFailure(reason: Int) { removed.complete(Unit) }
-            })
-            if (withTimeoutOrNull(5_000L) { removed.await(); true } != true) {
-                throw IOException("TuneBuds P2P group teardown timed out")
-            }
-        } finally { current.close() }
+        if (current == null) {
+            claim?.let { GlassesNetworkSessionCoordinator.releaseVendorLink(context, it, driver = null) }
+            return@withContext
+        }
+        manager?.stopPeerDiscovery(current, null)
+        manager?.cancelConnect(current, null)
+        if (claim == null || manager == null) {
+            current.close()
+            return@withContext
+        }
+        // Await a confirmed group removal before the caller switches the E6 topology; the
+        // shared session keeps retrying in the background if it cannot be confirmed.
+        val confirmed = GlassesNetworkSessionCoordinator.releaseVendorLinkAndAwait(
+            context,
+            claim,
+            WifiP2pChannelGroupDriver(context, manager, current),
+        )
+        if (!confirmed) {
+            throw IOException("TuneBuds P2P group teardown timed out")
+        }
     }
 }
 

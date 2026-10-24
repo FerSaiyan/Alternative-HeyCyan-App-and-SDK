@@ -63,7 +63,7 @@ kotlin {
 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
 commonTest.dependencies {
     implementation(kotlin("test"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
+    implementation(libs.kotlinx.coroutines.test)
     implementation(compose.uiTest)
 }
     }
@@ -85,5 +85,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // Shared code logs through android.util.Log on Android; let host unit tests use the stubs.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }

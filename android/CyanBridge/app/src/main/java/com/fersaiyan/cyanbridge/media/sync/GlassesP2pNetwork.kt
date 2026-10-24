@@ -1,28 +1,28 @@
 package com.fersaiyan.cyanbridge.media.sync
 
 import android.content.Context
-import android.net.ConnectivityManager
 import android.net.Network
 import android.util.Log
 import com.fersaiyan.cyanbridge.media.AdaptiveHttpRoute
 import com.fersaiyan.cyanbridge.media.AdaptiveP2pSyncSession
 import com.fersaiyan.cyanbridge.media.AdaptiveSyncCheckpoint
-import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
+import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
+import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClaim
 import com.fersaiyan.cyanbridge.ui.bleIpBridge
 import java.io.InputStream
 import java.net.HttpURLConnection
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.Socket
 import java.net.URL
 
 /**
- * Routes media-sync HTTP traffic to the glasses over the Wi-Fi Direct group: P2P network
- * lookup, process binding and VPN-safe (P2P-local-address bound) HTTP.
+ * Media-sync HTTP over the glasses link: the official (system-routed) and adaptive route
+ * variants. Network lookup, process binding and VPN-safe sockets come from
+ * [GlassesNetworkSessionCoordinator], which owns them for every glasses workflow.
  */
 internal class GlassesP2pNetwork(
     private val context: Context,
+    private val linkClaim: () -> GlassesLinkClaim?,
     private val downloadFlowMode: () -> GlassesSyncFlow,
     private val adaptiveActiveRoute: () -> AdaptiveHttpRoute?,
     private val adaptiveSyncSession: () -> AdaptiveP2pSyncSession?,
@@ -30,29 +30,8 @@ internal class GlassesP2pNetwork(
     private val downloadWifiIp: () -> String?,
 ) {
     var downloadP2pNetwork: Network? = null
-    private var boundNetwork: Network? = null
     var selectedDownloadNetworkSummary = "none"
-
-    fun isPortOpen(ip: String, port: Int, timeoutMs: Int): Boolean {
-        // Standard path: use P2P network's socket factory.
-        try {
-            val factory = downloadP2pNetwork?.socketFactory ?: javax.net.SocketFactory.getDefault()
-            factory.createSocket().use { s ->
-                s.connect(InetSocketAddress(ip, port), timeoutMs)
-                return true
-            }
-        } catch (_: Exception) {}
-
-        // VPN fallback: bind socket to P2P local address to bypass VPN routing.
-        val p2pAddr = p2pLocalAddress() ?: return false
-        return try {
-            Socket().use { s ->
-                s.bind(InetSocketAddress(p2pAddr, 0))
-                s.connect(InetSocketAddress(ip, port), timeoutMs)
-                true
-            }
-        } catch (_: Exception) { false }
-    }
+    private val routes = GlassesNetworkSessionCoordinator.routes(context)
 
     data class AdaptiveMediaConfigFetch(
         val content: String? = null,
@@ -208,30 +187,9 @@ internal class GlassesP2pNetwork(
         } catch (_: Exception) { null }
     }
 
-    /** Build an OkHttp client whose sockets bind to the P2P local address (VPN-proof). */
-    private fun vpnSafeHttpClient(connectTimeoutMs: Int, readTimeoutMs: Int): okhttp3.OkHttpClient? {
-        val p2pAddr = p2pLocalAddress() ?: return null
-        val factory = object : javax.net.SocketFactory() {
-            override fun createSocket(): Socket {
-                val s = Socket()
-                s.bind(InetSocketAddress(p2pAddr, 0))
-                return s
-            }
-            override fun createSocket(host: String, port: Int) = throw UnsupportedOperationException()
-            override fun createSocket(host: String, port: Int, localHost: InetAddress, localPort: Int) = throw UnsupportedOperationException()
-            override fun createSocket(host: InetAddress, port: Int) = throw UnsupportedOperationException()
-            override fun createSocket(address: InetAddress, port: Int, localAddress: InetAddress, localPort: Int) = throw UnsupportedOperationException()
-        }
-        return try {
-            okhttp3.OkHttpClient.Builder()
-                .socketFactory(factory)
-                .connectTimeout(connectTimeoutMs.toLong(), java.util.concurrent.TimeUnit.MILLISECONDS)
-                .readTimeout(readTimeoutMs.toLong(), java.util.concurrent.TimeUnit.MILLISECONDS)
-                .followRedirects(true)
-                .followSslRedirects(true)
-                .build()
-        } catch (_: Exception) { null }
-    }
+    /** An OkHttp client whose sockets bind to the P2P local address (VPN-proof). */
+    private fun vpnSafeHttpClient(connectTimeoutMs: Int, readTimeoutMs: Int): okhttp3.OkHttpClient? =
+        routes.localAddressBoundHttpClient(downloadP2pNetwork, connectTimeoutMs, readTimeoutMs)
 
     /**
      * HTTP GET using P2P-bound sockets (VPN-safe).
@@ -358,31 +316,18 @@ internal class GlassesP2pNetwork(
     }
 
     fun findLikelyP2pNetwork(): Network? {
-        // We want a network whose sockets route to the Wi‑Fi Direct group even when a VPN is active.
-        // Wi‑Fi Direct networks still show up as TRANSPORT_WIFI; the VPN itself shows up as TRANSPORT_VPN.
+        // We want a network whose sockets route to the Wi-Fi Direct group even when a VPN is active.
         return try {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-            val prefixHints = listOfNotNull(
-                ipv4Prefix24(downloadBleIp()),
-                ipv4Prefix24(bleIpBridge.ip.value),
-                ipv4Prefix24(downloadWifiIp())
-            ).distinct()
-
-            for (n in cm.allNetworks) {
-                val caps = cm.getNetworkCapabilities(n) ?: continue
-                if (!caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)) continue
-                if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)) continue
-
-                val lp = cm.getLinkProperties(n)
-                val ifName = lp?.interfaceName ?: ""
-                val addrs = lp?.linkAddresses?.mapNotNull { it.address.hostAddress } ?: emptyList()
-
-                if (HeyCyanP2pPolicy.isVerifiedP2pNetwork(ifName, addrs, prefixHints)) {
-                    selectedDownloadNetworkSummary = "if=$ifName addrs=$addrs"
-                    Log.i("DataDownload", "Selected verified P2P/WFD network: $selectedDownloadNetworkSummary")
-                    return n
-                }
+            val prefixHints = GlassesNetworkAddressing.subnetHints(
+                downloadBleIp(),
+                bleIpBridge.ip.value,
+                downloadWifiIp(),
+            )
+            val match = routes.findVerifiedP2pNetwork(prefixHints)
+            if (match != null) {
+                selectedDownloadNetworkSummary = match.summary
+                Log.i("DataDownload", "Selected verified P2P/WFD network: $selectedDownloadNetworkSummary")
+                return match.network
             }
 
             selectedDownloadNetworkSummary = "none (ordinary Wi-Fi fallback rejected)"
@@ -397,69 +342,25 @@ internal class GlassesP2pNetwork(
 
     fun bindProcessToNetwork(network: Network?) {
         if (network == null) return
-        if (boundNetwork == network) return
+        val claim = linkClaim() ?: return
+        if (GlassesNetworkSessionCoordinator.isProcessBound(claim)) return
 
-        // When a VPN is active, Android blocks bindProcessToNetwork (EPERM).
-        // We skip it and rely on per-socket binding via socket.bind(p2pLocalAddress) instead.
+        // A VPN usually refuses process binding (EPERM); a bypassable one accepts it. Either way
+        // the adaptive routes keep binding individual sockets to the P2P local address.
         if (isVpnActive()) {
-            Log.i("DataDownload", "VPN active — skipping bindProcessToNetwork, will bind sockets to P2P local address")
-            return
+            Log.i("DataDownload", "VPN active — attempting bindProcessToNetwork; P2P-local socket binding remains the fallback")
         }
-
-        try {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val ok = cm.bindProcessToNetwork(network)
-            if (ok) {
-                boundNetwork = network
-                Log.i("DataDownload", "Bound process to P2P network")
-            } else {
-                Log.w("DataDownload", "bindProcessToNetwork returned false")
-            }
-        } catch (e: Exception) {
-            Log.w("DataDownload", "bindProcessToNetwork failed: ${e.message}")
+        if (GlassesNetworkSessionCoordinator.bindProcessToNetwork(context, claim, network)) {
+            Log.i("DataDownload", "Bound process to P2P network")
+        } else {
+            Log.w("DataDownload", "bindProcessToNetwork returned false")
         }
     }
 
     fun unbindProcessFromNetwork() {
-        if (boundNetwork == null) return
-        try {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            cm.bindProcessToNetwork(null)
-        } catch (_: Exception) {
-            // ignore
-        } finally {
-            boundNetwork = null
-        }
+        val claim = linkClaim() ?: return
+        GlassesNetworkSessionCoordinator.unbindProcess(context, claim)
     }
 
-    fun isVpnActive(): Boolean {
-        return try {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            cm.allNetworks.any { n ->
-                cm.getNetworkCapabilities(n)
-                    ?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) == true
-            }
-        } catch (_: Exception) { false }
-    }
-
-    /** Return the P2P network's first IPv4 local address (e.g. "192.168.49.1"). */
-    private fun p2pLocalAddress(): InetAddress? {
-        val network = downloadP2pNetwork ?: return null
-        return try {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val lp = cm.getLinkProperties(network)
-            lp?.linkAddresses
-                ?.mapNotNull { it.address }
-                ?.firstOrNull { it is java.net.Inet4Address }
-        } catch (_: Exception) { null }
-    }
-
-    companion object {
-        fun ipv4Prefix24(ip: String?): String? {
-            if (ip.isNullOrBlank()) return null
-            val parts = ip.split(".")
-            if (parts.size != 4) return null
-            return "${parts[0]}.${parts[1]}.${parts[2]}."
-        }
-    }
+    fun isVpnActive(): Boolean = routes.isVpnActive()
 }

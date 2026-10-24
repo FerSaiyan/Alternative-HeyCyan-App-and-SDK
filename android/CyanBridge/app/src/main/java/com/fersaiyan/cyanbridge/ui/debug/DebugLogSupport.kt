@@ -56,6 +56,7 @@ object DebugLogSupport {
         "DeviceNotify",
         "WifiP2pManagerSingleton",
         "WifiP2pBroadcastReceiver",
+        "GlassesNetSession",
         "BleIpBridge",
         "FirmwareClient",
         "Ota",
