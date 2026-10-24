@@ -1,9 +1,11 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
+import android.widget.Toast
 import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
 
@@ -30,6 +32,27 @@ internal class MeizuMyvuGlasses(context: GlassesDeviceContext) :
     }
 
     override val runsForegroundConnectionService: Boolean = true
+
+    /** The MYVU panel: connection, test notification and teleprompter, clock and brightness. */
+    override fun handlePanelAction(action: GlassesDashboardAction): Boolean {
+        when (action) {
+            GlassesDashboardAction.MeizuConnect -> {
+                DeviceProfileStore.loadLastSelected(activity)?.macAddress?.let {
+                    manager.connect(it, activity, userInitiated = true)
+                } ?: Toast.makeText(activity, "Select MYVU glasses from Scan first", Toast.LENGTH_LONG).show()
+            }
+            GlassesDashboardAction.MeizuDisconnect -> manager.disconnect()
+            GlassesDashboardAction.MeizuSendTestNotification -> manager.sendTestNotification()
+            GlassesDashboardAction.MeizuShowTestTeleprompter -> manager.showTeleprompter(
+                "CyanBridge",
+                "MYVU display connected\n\nNative voice plugins can now use the MYVU headset microphone and display bridge.",
+            )
+            GlassesDashboardAction.MeizuSyncClock -> manager.syncClock()
+            GlassesDashboardAction.MeizuSetComfortBrightness -> manager.setBrightness(70)
+            else -> return false
+        }
+        return true
+    }
 
     override fun renderConnectionStatus(connected: Boolean) {
         val myvu = manager.state.value

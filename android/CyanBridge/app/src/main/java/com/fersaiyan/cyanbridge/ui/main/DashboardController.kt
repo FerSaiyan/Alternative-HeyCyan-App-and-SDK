@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main
 
 import android.content.Intent
-import android.util.Log
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.ai.AiWakeWordPreferences
@@ -10,16 +9,20 @@ import com.fersaiyan.cyanbridge.ai.image.ImageThumbnailQuality
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveVisionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.bridge.core.GlassesCapability
-import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
-import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
-import com.fersaiyan.cyanbridge.shared.glasses.DashboardSessionPolicy
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
+import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
 import com.fersaiyan.cyanbridge.shared.glasses.FirmwarePatchRequestUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardController
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardHost
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesDevice
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
-import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
+import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
+import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.ui.main.glasses.AndroidGlassesDevices
 
 /**
@@ -51,182 +54,134 @@ internal interface DashboardActionHost {
 }
 
 /**
- * Turns shared dashboard actions into calls on the selected glasses family's capabilities
- * ([AndroidGlassesDevices]), the main-screen controllers, or app-level work.
+ * Android host of the shared [GlassesDashboardController]: the selected glasses family
+ * ([AndroidGlassesDevices]) and the activity work behind the dashboard actions (legacy views,
+ * preferences, activities, toasts and the [DashboardActionHost] coordinators).
  */
 internal class DashboardController(
     host: MainScreenHost,
     private val actions: DashboardActionHost,
-    private val devices: DeviceManagerRegistry,
     private val glasses: AndroidGlassesDevices,
     private val transportPermissions: GlassesTransportPermissions,
     private val nativePlugins: NativePluginShortcutController,
     private val meetingCaptureUi: MeetingCaptureUiController,
-    private val metaRaybanUi: MetaRaybanUiController,
     private val navigator: AppDestinationNavigator,
-) : MainScreenController(host) {
-    fun handleDashboardAction(action: GlassesDashboardAction) {
-        if (isDashboardActionBlockedByExclusiveSession(action)) return
-        val device = glasses.selected()
-        val family = device.profile
-        if (!GlassesManagerGating.isActionSupported(family, action)) {
-            Log.i("Dashboard", "Ignoring unsupported ${family.deviceClass} dashboard action: $action")
-            return
-        }
-        if (action == GlassesDashboardAction.StopLivePreview) {
-            Log.i("LivePreview", "BUTTON TAP: Stop Live Preview")
-        }
-        // Device-side actions run on the selected family's capabilities.
-        if (device.handle(action)) return
-        when (action) {
-            is GlassesDashboardAction.Navigate -> navigator.navigateToDestination(action.destination)
-            is GlassesDashboardAction.SelectMeetingTimer -> {
-                val index = action.index.coerceIn(0, meetingCaptureUi.meetingTimerOptions.lastIndex)
-                binding.spinnerMeetingTimer.setSelection(index)
-                updateDashboardState { state ->
-                    state.copy(meeting = state.meeting.copy(timerIndex = index))
-                }
-            }
-            GlassesDashboardAction.StartMeetingCapture -> binding.btnMeetingStart.performClick()
-            GlassesDashboardAction.StopMeetingCapture -> binding.btnMeetingStop.performClick()
-            is GlassesDashboardAction.RunNativePluginShortcut -> {
-                nativePlugins.runNativePluginShortcut(action.action)
-            }
-            is GlassesDashboardAction.SelectAssistantMode -> when (action.mode) {
-                GlassesAssistantMode.PHONE_ASSISTANT -> actions.selectPhoneAssistant()
-                GlassesAssistantMode.CUSTOM_AI_PROVIDER -> actions.selectCustomAiProvider()
-            }
-            is GlassesDashboardAction.SetAiWakeWordRoute -> {
-                if (family.supports(GlassesCapability.WAKE_WORD)) {
-                    AiWakeWordPreferences.setRoute(activity, action.route)
-                    updateDashboardState { state -> state.copy(aiWakeWordRoute = action.route) }
-                }
-            }
-            is GlassesDashboardAction.SelectImageThumbnailQuality -> {
-                if (!family.supports(GlassesCapability.IMAGE_QUALITY_SELECTION)) return
-                val quality = ImageQuestionPreferences.setThumbnailQuality(activity, action.sdkValue)
-                actions.onImageThumbnailQualitySelected(quality)
-                updateDashboardState { state ->
-                    state.copy(
-                        imageThumbnailQualitySdkValue = quality.sdkValue,
-                        imageThumbnailQualityLabel = quality.label,
-                    )
-                }
-            }
-            is GlassesDashboardAction.SetGeminiLiveImageDelay -> {
-                val seconds = GeminiLiveVisionPreferences.setImageDelaySeconds(activity, action.seconds)
-                updateDashboardState { state -> state.copy(geminiLiveImageDelaySeconds = seconds) }
-            }
-            GlassesDashboardAction.TestVoiceQuestion -> binding.btnTestHijackVoice.performClick()
-            GlassesDashboardAction.TestImageQuestion -> binding.btnTestHijackImage.performClick()
-            GlassesDashboardAction.OpenExternalImageAutomationDiagnostics -> {
-                activity.startActivity(Intent(activity, ExternalAssistantAutomationSetupActivity::class.java))
-            }
-            GlassesDashboardAction.ToggleAdvanced -> {
-                if (!dashboardState.showAdvancedControls) return
-                binding.btnToggleAdvanced.performClick()
-                updateDashboardState { state ->
-                    state.copy(advancedExpanded = !state.advancedExpanded)
-                }
-            }
-            GlassesDashboardAction.StartAgent -> LocalAgentController.requestStatus(activity)
-            GlassesDashboardAction.StopAgent -> binding.btnAgentStop.performClick()
-            GlassesDashboardAction.RunAgentDemo -> binding.btnAgentDemo.performClick()
-            GlassesDashboardAction.StartClassicBluetoothScan -> binding.btnBt.performClick()
-            GlassesDashboardAction.DumpOtaInfo -> binding.btnOtaInfo.performClick()
-            GlassesDashboardAction.TestPullOta -> binding.btnPullOtaTest.performClick()
-            is GlassesDashboardAction.RequestOtaFirmware -> actions.requestOtaFirmware(action.source)
-            is GlassesDashboardAction.SubmitFirmwarePatchRequest -> {
-                val request = dashboardState.firmwarePatchRequest ?: return
-                if (request.isSubmitting) return
-                dashboardState = dashboardState.copy(
-                    firmwarePatchRequest = request.copy(
-                        isSubmitting = true,
-                        submissionError = null,
-                    ),
-                )
-                actions.submitFirmwarePatchRequest(request, action.contactEmail)
-            }
-            GlassesDashboardAction.DismissFirmwarePatchRequest -> {
-                if (dashboardState.firmwarePatchRequest?.isSubmitting != true) {
-                    dashboardState = dashboardState.copy(firmwarePatchRequest = null)
-                }
-            }
-            GlassesDashboardAction.CancelOta -> actions.cancelOta()
-            GlassesDashboardAction.RequestStartWifiAdbDebug -> {
-                if (BuildConfig.DEBUG && family.supports(GlassesCapability.WIFI_ADB_DEBUG)) actions.startWifiAdbDebug()
-            }
-            GlassesDashboardAction.StopWifiAdbDebug -> {
-                if (BuildConfig.DEBUG && family.supports(GlassesCapability.WIFI_ADB_DEBUG)) actions.stopWifiAdbDebug()
-            }
-            GlassesDashboardAction.MetaRegister -> binding.btnMetaRegister.performClick()
-            GlassesDashboardAction.MetaOpenPairing ->
-                activity.startActivity(Intent(activity, MetaPairingActivity::class.java))
-            GlassesDashboardAction.MetaOpenMetaAi -> metaRaybanUi.openMetaAiAppOrStore()
-            GlassesDashboardAction.MetaUnregister -> binding.btnMetaUnregister.performClick()
-            GlassesDashboardAction.MetaStartSession -> binding.btnMetaSessionStart.performClick()
-            GlassesDashboardAction.MetaStopSession -> binding.btnMetaSessionStop.performClick()
-            GlassesDashboardAction.MetaStartStream -> binding.btnMetaStreamStart.performClick()
-            GlassesDashboardAction.MetaStopStream -> binding.btnMetaStreamStop.performClick()
-            GlassesDashboardAction.MetaCapturePhoto -> binding.btnMetaCapturePhoto.performClick()
-            GlassesDashboardAction.MetaViewPhoto -> binding.btnMetaViewPhoto.performClick()
-            GlassesDashboardAction.MetaStartDisplay -> binding.btnMetaDisplayStart.performClick()
-            GlassesDashboardAction.MetaStopDisplay -> binding.btnMetaDisplayStop.performClick()
-            GlassesDashboardAction.MetaSendDiagnostics -> metaRaybanUi.showMetaDiagnostics()
-            GlassesDashboardAction.MeizuConnect -> {
-                DeviceProfileStore.loadLastSelected(activity)?.macAddress?.let {
-                    devices.getOrCreateMeizuMyvuManager().connect(it, activity, userInitiated = true)
-                } ?: Toast.makeText(activity, "Select MYVU glasses from Scan first", Toast.LENGTH_LONG).show()
-            }
-            GlassesDashboardAction.MeizuDisconnect -> devices.getOrCreateMeizuMyvuManager().disconnect()
-            GlassesDashboardAction.MeizuSendTestNotification -> devices.getOrCreateMeizuMyvuManager().sendTestNotification()
-            GlassesDashboardAction.MeizuShowTestTeleprompter -> devices.getOrCreateMeizuMyvuManager().showTeleprompter(
-                "CyanBridge",
-                "MYVU display connected\n\nNative voice plugins can now use the MYVU headset microphone and display bridge.",
-            )
-            GlassesDashboardAction.MeizuSyncClock -> devices.getOrCreateMeizuMyvuManager().syncClock()
-            GlassesDashboardAction.MeizuSetComfortBrightness -> devices.getOrCreateMeizuMyvuManager().setBrightness(70)
-            GlassesDashboardAction.DismissTransportPermissionDialog ->
-                transportPermissions.dismissTransportPermissionDialog()
-            GlassesDashboardAction.RequestTransportPermission -> transportPermissions.requestPendingTransportPermission()
-            // Device-side actions the selected family has no capability for.
-            GlassesDashboardAction.Scan,
-            GlassesDashboardAction.Reconnect,
-            GlassesDashboardAction.Disconnect,
-            GlassesDashboardAction.CapturePhoto,
-            GlassesDashboardAction.ToggleVideo,
-            GlassesDashboardAction.StartAudioRecording,
-            GlassesDashboardAction.RequestMediaCount,
-            GlassesDashboardAction.StartSync,
-            GlassesDashboardAction.StopSync,
-            GlassesDashboardAction.StartLivePreview,
-            GlassesDashboardAction.StopLivePreview,
-            GlassesDashboardAction.RequestBattery,
-            GlassesDashboardAction.RequestVersion,
-            GlassesDashboardAction.SyncTime,
-            GlassesDashboardAction.RequestVolume,
-            GlassesDashboardAction.AddDeviceListener,
-            GlassesDashboardAction.RefreshRecordingSettings,
-            is GlassesDashboardAction.SetVideoRecordingDuration,
-            is GlassesDashboardAction.SetAudioRecordingDuration,
-            is GlassesDashboardAction.SetWearingDetection ->
-                Log.i("Dashboard", "${family.deviceClass} has no capability for $action")
-        }
-    }
+) : MainScreenController(host), GlassesDashboardHost {
+    private val controller = GlassesDashboardController(this)
 
-    private fun isDashboardActionBlockedByExclusiveSession(action: GlassesDashboardAction): Boolean {
-        if (DashboardSessionPolicy.ignoresExclusiveSession(action)) {
-            return false
-        }
-        val activeSession = GlassesSessionCoordinator.currentSession() ?: return false
-        val isAllowed = DashboardSessionPolicy.isAllowedDuring(action, activeSession)
-        if (isAllowed) return false
+    fun handleDashboardAction(action: GlassesDashboardAction) = controller.handle(action)
 
+    override val selectedDevice: GlassesDevice get() = glasses.selected()
+
+    override var dashboard: GlassesDashboardUiState
+        get() = dashboardState
+        set(value) {
+            dashboardState = value
+        }
+
+    override fun updateDashboard(transform: (GlassesDashboardUiState) -> GlassesDashboardUiState) =
+        updateDashboardState(transform)
+
+    override fun onBlockedByExclusiveSession(session: GlassesSession) {
         Toast.makeText(
             activity,
-            "${activeSession.label.replaceFirstChar { it.uppercase() }} is using the glasses connection.",
+            "${session.label.replaceFirstChar { it.uppercase() }} is using the glasses connection.",
             Toast.LENGTH_SHORT,
         ).show()
-        return true
     }
+
+    /** The shared controller logged it; Android shows nothing more. */
+    override fun onActionUnavailable(action: GlassesDashboardAction) = Unit
+
+    override fun navigate(destination: AppDestination) = navigator.navigateToDestination(destination)
+
+    override val meetingTimerLastIndex: Int get() = meetingCaptureUi.meetingTimerOptions.lastIndex
+
+    override fun onMeetingTimerSelected(index: Int) = binding.spinnerMeetingTimer.setSelection(index)
+
+    override fun startMeetingCapture() {
+        binding.btnMeetingStart.performClick()
+    }
+
+    override fun stopMeetingCapture() {
+        binding.btnMeetingStop.performClick()
+    }
+
+    override fun runNativePluginShortcut(action: NativePluginShortcutAction) =
+        nativePlugins.runNativePluginShortcut(action)
+
+    override fun selectAssistantMode(mode: GlassesAssistantMode) = when (mode) {
+        GlassesAssistantMode.PHONE_ASSISTANT -> actions.selectPhoneAssistant()
+        GlassesAssistantMode.CUSTOM_AI_PROVIDER -> actions.selectCustomAiProvider()
+    }
+
+    override fun saveAiWakeWordRoute(route: AiWakeWordRoute) = AiWakeWordPreferences.setRoute(activity, route)
+
+    override fun saveImageThumbnailQuality(sdkValue: Int): ImageThumbnailQuality {
+        val quality = ImageQuestionPreferences.setThumbnailQuality(activity, sdkValue)
+        actions.onImageThumbnailQualitySelected(quality)
+        return quality
+    }
+
+    override fun saveGeminiLiveImageDelay(seconds: Int): Int =
+        GeminiLiveVisionPreferences.setImageDelaySeconds(activity, seconds)
+
+    override fun askVoiceQuestion() {
+        binding.btnTestHijackVoice.performClick()
+    }
+
+    override fun askImageQuestion() {
+        binding.btnTestHijackImage.performClick()
+    }
+
+    override fun openExternalImageAutomationDiagnostics() {
+        activity.startActivity(Intent(activity, ExternalAssistantAutomationSetupActivity::class.java))
+    }
+
+    override fun onAdvancedToggled() {
+        binding.btnToggleAdvanced.performClick()
+    }
+
+    override fun startLocalAgent() {
+        LocalAgentController.requestStatus(activity)
+    }
+
+    override fun stopLocalAgent() {
+        binding.btnAgentStop.performClick()
+    }
+
+    override fun runLocalAgentDemo() {
+        binding.btnAgentDemo.performClick()
+    }
+
+    override fun startClassicBluetoothScan() {
+        binding.btnBt.performClick()
+    }
+
+    override fun dumpOtaInfo() {
+        binding.btnOtaInfo.performClick()
+    }
+
+    override fun testPullOta() {
+        binding.btnPullOtaTest.performClick()
+    }
+
+    override fun requestOtaFirmware(source: OtaFirmwareSource) = actions.requestOtaFirmware(source)
+
+    override fun submitFirmwarePatchRequest(request: FirmwarePatchRequestUiState, contactEmail: String) =
+        actions.submitFirmwarePatchRequest(request, contactEmail)
+
+    override fun cancelOta() = actions.cancelOta()
+
+    override fun startWifiAdbDebug(family: GlassesFamilyProfile) {
+        if (BuildConfig.DEBUG && family.supports(GlassesCapability.WIFI_ADB_DEBUG)) actions.startWifiAdbDebug()
+    }
+
+    override fun stopWifiAdbDebug(family: GlassesFamilyProfile) {
+        if (BuildConfig.DEBUG && family.supports(GlassesCapability.WIFI_ADB_DEBUG)) actions.stopWifiAdbDebug()
+    }
+
+    override fun dismissTransportPermissionDialog() = transportPermissions.dismissTransportPermissionDialog()
+
+    override fun requestTransportPermission() = transportPermissions.requestPendingTransportPermission()
 }
