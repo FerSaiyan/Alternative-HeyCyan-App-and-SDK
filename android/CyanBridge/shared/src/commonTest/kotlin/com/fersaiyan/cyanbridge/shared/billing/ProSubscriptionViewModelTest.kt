@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.billing
 
+import com.fersaiyan.cyanbridge.shared.viewmodel.CloseScreen
 import com.fersaiyan.cyanbridge.shared.viewmodel.ScreenEffect
 import com.fersaiyan.cyanbridge.shared.viewmodel.ScreenToast
 import kotlin.test.AfterTest
@@ -95,6 +96,53 @@ class ProSubscriptionViewModelTest {
     }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
+class ProSubscriptionSettingsViewModelTest {
+    private val dispatcher = UnconfinedTestDispatcher()
+    private val platform = FakeProAccountPlatform().apply {
+        entitlement.isSubscribed = true
+        entitlement.plan = "standard"
+        entitlement.provider = "server_verified"
+    }
+    private val settings = FakeSettingsStore()
+
+    @BeforeTest
+    fun setUp() = Dispatchers.setMain(dispatcher)
+
+    @AfterTest
+    fun tearDown() = Dispatchers.resetMain()
+
+    @Test
+    fun modelChoiceIsSavedAndCancellingClosesTheScreen() = runTest(dispatcher) {
+        val effects = mutableListOf<ScreenEffect>()
+        val vm = ProSubscriptionSettingsViewModel(platform, settings, dispatcher)
+        backgroundScope.launch(dispatcher) { vm.effectFlow.toList(effects) }
+        vm.visible = true
+        assertTrue(vm.start())
+        assertEquals("Status: Active", vm.state.value.ui.planStatus)
+
+        vm.selectRequestsModel("DeepSeek V4 Flash (2x)")
+        assertEquals("deepseek/deepseek-v4-flash", settings.requestsModel)
+        assertEquals("Quota (deepseek/deepseek-v4-flash): 0 left", vm.state.value.ui.quotaStatus)
+
+        vm.cancelSubscription()
+        assertFalse(platform.entitlement.isSubscribed)
+        assertEquals(listOf(ScreenToast("Cancelled", long = true), CloseScreen), effects.takeLast(2))
+    }
+}
+
+private class FakeSettingsStore : ProSettingsStore {
+    override fun loadToggles() = ProSettingsToggles(true, true, true, true, 1, 0)
+    override fun saveToggles(toggles: ProSettingsToggles) = Unit
+    override var requestsModel = "openrouter/free"
+    override var questionsModel = "auto"
+    override var tasksModel = "auto"
+    override var systemPrompt = ""
+    override fun resetSystemPrompt() = Unit
+    override var liveEconomy = false
+    override fun defaultLiveModes() = listOf(ProLiveMode("economy", "Economy", ""), ProLiveMode("private", "Private", ""))
+}
+
 private class FakeEntitlement : ProEntitlementStore {
     override var isSubscribed = false
     override var plan = "none"
@@ -146,7 +194,7 @@ private class FakeProAccountPlatform : ProAccountPlatform {
         message = if (entitlement.isSubscribed) "Subscription active (local status)" else "No active subscription",
     )
 
-    override fun verifyNow(strict: Boolean, applyActivationRouting: Boolean) = localStatus()
+    override fun verifyNow(strict: Boolean?, applyActivationRouting: Boolean) = localStatus()
     override fun forceStrictVerification() = false
     override fun applyActivationRouting() = "Switched provider to Pro Subscription"
     override fun hasVerifyUrl() = false

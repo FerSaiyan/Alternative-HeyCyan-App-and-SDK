@@ -1,14 +1,14 @@
-package com.fersaiyan.cyanbridge.agent
+package com.fersaiyan.cyanbridge.shared.billing
 
-import com.fersaiyan.cyanbridge.shared.billing.ProSubscriptionSettingsUiState
+import com.fersaiyan.cyanbridge.shared.format.formatFixed
+import com.fersaiyan.cyanbridge.shared.format.formatLocalMonthDayTime
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Working values behind the Pro settings screen.
- *
- * Handlers mutate the draft freely; [ProSubscriptionSettingsActivity] publishes it to Compose only at
- * the points where it always refreshed the screen, so on-screen update timing is unchanged.
- * Initial values match what the screen showed before any handler ran.
+ * Working values behind the Pro settings screen. Handlers mutate the draft freely; the ViewModel
+ * publishes it only at the points where the screen always refreshed. Initial values match what
+ * the screen showed before any handler ran.
  */
 internal class ProSubscriptionSettingsDraft {
     var planStatus = ""
@@ -46,28 +46,17 @@ internal class ProSubscriptionSettingsDraft {
         quotaProgressIndeterminate = false
     }
 
-    fun showQuotaInfo(quota: ProSubscriptionRelayClient.QuotaInfo) {
+    fun showQuotaInfo(quota: ProQuota) {
         val displayModel = quota.model.removeSuffix("/free").ifBlank { quota.model }
-        val resetText = if (quota.resetAtMs > 0L) {
-            "Resets ${ProSubscriptionSettingsFormat.resetTime(quota.resetAtMs)}"
-        } else {
-            ""
-        }
+        val resetText = if (quota.resetAtMs > 0L) "Resets ${ProSubscriptionSettingsFormat.resetTime(quota.resetAtMs)}" else ""
 
         if (quota.limit > 0) {
-            val usedPercent = ((quota.used.toDouble() / quota.limit.toDouble()) * 100.0)
-                .coerceIn(0.0, 100.0)
-                .roundToInt()
+            val usedPercent = ((quota.used.toDouble() / quota.limit.toDouble()) * 100.0).coerceIn(0.0, 100.0).roundToInt()
             quotaStatus = "Quota ($displayModel): $usedPercent% used"
             quotaBreakdown = buildString {
                 append("${ProSubscriptionSettingsFormat.compactCount(quota.remaining)} left")
-                append(
-                    " · ${ProSubscriptionSettingsFormat.compactCount(quota.used)}/" +
-                        "${ProSubscriptionSettingsFormat.compactCount(quota.limit)} used",
-                )
-                if (resetText.isNotBlank()) {
-                    append(" · $resetText")
-                }
+                append(" · ${ProSubscriptionSettingsFormat.compactCount(quota.used)}/${ProSubscriptionSettingsFormat.compactCount(quota.limit)} used")
+                if (resetText.isNotBlank()) append(" · $resetText")
             }
             quotaProgressVisible = true
             quotaProgressIndeterminate = false
@@ -76,9 +65,7 @@ internal class ProSubscriptionSettingsDraft {
             quotaStatus = "Quota ($displayModel): ${ProSubscriptionSettingsFormat.compactCount(quota.remaining)} left"
             quotaBreakdown = buildString {
                 append("${ProSubscriptionSettingsFormat.compactCount(quota.used)} used")
-                if (resetText.isNotBlank()) {
-                    append(" · $resetText")
-                }
+                if (resetText.isNotBlank()) append(" · $resetText")
             }
             quotaProgressVisible = false
             quotaProgressIndeterminate = false
@@ -123,9 +110,7 @@ internal class ProSubscriptionModelLabels(initial: Map<String, String> = DEFAULT
     /** Adds saved model ids the catalog does not know yet, keeping them selectable. */
     fun includeSaved(saved: List<String>) {
         saved.forEach { id ->
-            if (id.isNotBlank() && idToLabel.keys.none { it.equals(id, ignoreCase = true) }) {
-                idToLabel[id] = id
-            }
+            if (id.isNotBlank() && idToLabel.keys.none { it.equals(id, ignoreCase = true) }) idToLabel[id] = id
         }
         rebuild()
     }
@@ -159,9 +144,7 @@ internal class ProSubscriptionModelLabels(initial: Map<String, String> = DEFAULT
         val normalized = mutableListOf<Pair<String, String>>()
         idToLabel.forEach { (id, baseLabel) ->
             var label = baseLabel.trim().ifBlank { id }
-            if (seen.contains(label)) {
-                label = "$label · $id"
-            }
+            if (seen.contains(label)) label = "$label · $id"
             seen += label
             normalized += id to label
             labels += label
@@ -181,18 +164,16 @@ internal class ProSubscriptionModelLabels(initial: Map<String, String> = DEFAULT
 }
 
 internal object ProSubscriptionSettingsFormat {
-    fun resetTime(resetAtMs: Long): String {
-        if (resetAtMs <= 0L) return "-"
-        return java.text.SimpleDateFormat("MMM d, HH:mm 'UTC'", java.util.Locale.US)
-            .format(java.util.Date(resetAtMs))
-    }
+    /** The reset time in the device's time zone; the label has always said UTC. */
+    fun resetTime(resetAtMs: Long): String =
+        if (resetAtMs <= 0L) "-" else "${formatLocalMonthDayTime(resetAtMs)} UTC"
 
     fun compactCount(value: Int): String {
-        val absValue = kotlin.math.abs(value.toLong())
+        val absValue = abs(value.toLong())
         return when {
-            absValue >= 1_000_000_000L -> String.format(java.util.Locale.US, "%.1fB", value / 1_000_000_000.0)
-            absValue >= 1_000_000L -> String.format(java.util.Locale.US, "%.1fM", value / 1_000_000.0)
-            absValue >= 1_000L -> String.format(java.util.Locale.US, "%.1fk", value / 1_000.0)
+            absValue >= 1_000_000_000L -> formatFixed(value / 1_000_000_000.0, 1) + "B"
+            absValue >= 1_000_000L -> formatFixed(value / 1_000_000.0, 1) + "M"
+            absValue >= 1_000L -> formatFixed(value / 1_000.0, 1) + "k"
             else -> value.toString()
         }.replace(".0", "")
     }

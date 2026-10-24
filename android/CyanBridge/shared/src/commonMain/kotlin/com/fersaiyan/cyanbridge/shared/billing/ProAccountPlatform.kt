@@ -99,7 +99,8 @@ interface ProAccountPlatform {
     val entitlement: ProEntitlementStore
 
     fun localStatus(): ProEntitlementStatus
-    fun verifyNow(strict: Boolean, applyActivationRouting: Boolean = false): ProEntitlementStatus
+    /** Asks the server for the entitlement; a null [strict] uses the verifier's own debug rule. */
+    fun verifyNow(strict: Boolean?, applyActivationRouting: Boolean = false): ProEntitlementStatus
 
     /** Debug builds verify Play and verification-pending entitlements strictly. */
     fun forceStrictVerification(): Boolean

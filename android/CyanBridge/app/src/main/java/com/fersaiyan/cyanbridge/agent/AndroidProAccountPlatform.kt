@@ -17,7 +17,15 @@ import com.fersaiyan.cyanbridge.shared.billing.ProLiveMode
 import com.fersaiyan.cyanbridge.shared.billing.ProModelCatalog
 import com.fersaiyan.cyanbridge.shared.billing.ProModelOption
 import com.fersaiyan.cyanbridge.shared.billing.ProQuota
+import com.fersaiyan.cyanbridge.shared.billing.ProSettingsStore
+import com.fersaiyan.cyanbridge.shared.billing.ProSettingsToggles
 import com.fersaiyan.cyanbridge.shared.billing.ProTrialActivation
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.prefs.store
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import java.net.HttpURLConnection
 import java.net.URL
@@ -55,8 +63,11 @@ class AndroidProAccountPlatform(context: Context) : ProAccountPlatform {
 
     override fun localStatus() = ProSubscriptionVerifier.localStatus(context).toStatus()
 
-    override fun verifyNow(strict: Boolean, applyActivationRouting: Boolean) =
-        ProSubscriptionVerifier.verifyNow(context, strict, applyActivationRouting).toStatus()
+    override fun verifyNow(strict: Boolean?, applyActivationRouting: Boolean) = if (strict == null) {
+        ProSubscriptionVerifier.verifyNow(context, applyActivationRouting = applyActivationRouting)
+    } else {
+        ProSubscriptionVerifier.verifyNow(context, strict, applyActivationRouting)
+    }.toStatus()
 
     override fun forceStrictVerification(): Boolean {
         if (!BuildConfig.DEBUG) return false
@@ -260,3 +271,54 @@ class AndroidProAccountPlatform(context: Context) : ProAccountPlatform {
 }
 
 internal fun ProSubscriptionRelayClient.LiveModeOption.toShared() = ProLiveMode(id, displayLabel, description)
+
+/** The Pro settings screen's preferences on Android. */
+class AndroidProSettingsStore(context: Context) : ProSettingsStore {
+    private val context = context.applicationContext
+
+    override fun loadToggles(): ProSettingsToggles {
+        val settings = ProPrefs.Settings.store(context)
+        return ProSettingsToggles(
+            cloudSync = settings[ProPrefs.Settings.cloudSync],
+            prioritySupport = settings[ProPrefs.Settings.prioritySupport],
+            pluginRewards = settings[ProPrefs.Settings.pluginRewards],
+            earlyAccessDevices = settings[ProPrefs.Settings.earlyAccessDevices],
+            backupFrequencyIndex = settings[ProPrefs.Settings.backupFrequencyIndex],
+            supportChannelIndex = settings[ProPrefs.Settings.supportChannelIndex],
+        )
+    }
+
+    override fun saveToggles(toggles: ProSettingsToggles) {
+        ProPrefs.Settings.edit(context) {
+            this[ProPrefs.Settings.cloudSync] = toggles.cloudSync
+            this[ProPrefs.Settings.prioritySupport] = toggles.prioritySupport
+            this[ProPrefs.Settings.pluginRewards] = toggles.pluginRewards
+            this[ProPrefs.Settings.earlyAccessDevices] = toggles.earlyAccessDevices
+            this[ProPrefs.Settings.backupFrequencyIndex] = toggles.backupFrequencyIndex
+            this[ProPrefs.Settings.supportChannelIndex] = toggles.supportChannelIndex
+        }
+    }
+
+    override var requestsModel: String
+        get() = ProSubscriptionAiPrefs.getRequestsModel(context)
+        set(value) = ProSubscriptionAiPrefs.setRequestsModel(context, value)
+    override var questionsModel: String
+        get() = ProSubscriptionAiPrefs.getQuestionsModel(context)
+        set(value) = ProSubscriptionAiPrefs.setQuestionsModel(context, value)
+    override var tasksModel: String
+        get() = ProSubscriptionAiPrefs.getTasksModel(context)
+        set(value) = ProSubscriptionAiPrefs.setTasksModel(context, value)
+    override var systemPrompt: String
+        get() = ProSubscriptionAiPrefs.getSystemPrompt(context)
+        set(value) = ProSubscriptionAiPrefs.setSystemPrompt(context, value)
+
+    override fun resetSystemPrompt() = ProSubscriptionAiPrefs.resetSystemPrompt(context)
+
+    override var liveEconomy: Boolean
+        get() = AssistantPrefs.GeminiLive.proEconomy[context]
+        set(value) {
+            AssistantPrefs.GeminiLive.proEconomy[context] = value
+        }
+
+    override fun defaultLiveModes() = ProSubscriptionRelayClient.defaultLiveModes().map { it.toShared() }
+}
