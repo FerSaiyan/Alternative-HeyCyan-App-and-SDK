@@ -68,7 +68,8 @@ kotlin {
         }
         androidMain.dependencies {
             // Keystore-backed storage for secure preference files (API keys, account tokens).
-            implementation("androidx.security:security-crypto:1.1.0-alpha06")
+            // The app ships the library with the Tink version it resolves.
+            compileOnly("androidx.security:security-crypto:1.1.0-alpha06")
         }
         getByName("portabilityTest").dependencies {
             implementation(libs.androidx.sqlite.bundled)
