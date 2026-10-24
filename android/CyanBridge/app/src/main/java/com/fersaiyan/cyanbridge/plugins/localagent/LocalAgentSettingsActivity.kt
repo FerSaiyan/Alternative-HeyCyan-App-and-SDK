@@ -68,18 +68,19 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
-import com.fersaiyan.cyanbridge.ui.installComposeHostWithLegacyAdapter
 import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsActivity
-import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
+import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class LocalAgentSettingsActivity : AppCompatActivity() {
+class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsActions {
 
     private var uiState by mutableStateOf(LocalAgentSettingsUiState())
+
+    internal val state: LocalAgentSettingsUiState get() = uiState
     private var receiverRegistered = false
 
     private val statusReceiver = object : BroadcastReceiver() {
@@ -104,8 +105,7 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         refreshUi()
-        val composeView = installComposeHostWithLegacyAdapter(R.layout.activity_local_agent_settings)
-        setThemedComposeContent(composeView) { LocalAgentSettingsContent() }
+        setThemedComposeScreen { LocalAgentSettingsScreen(state = uiState, actions = this) }
     }
 
     override fun onStart() {
@@ -164,7 +164,9 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
         )
     }
 
-    private fun setEnabled(enabled: Boolean) {
+    override fun onBack() = finish()
+
+    override fun onEnabledChange(enabled: Boolean) {
         LocalAgentPlugin.setEnabled(this, enabled)
         refreshUi()
     }
@@ -179,14 +181,42 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
         refreshUi()
     }
 
-    private fun setRequireActionConfirmation(enabled: Boolean) {
+    override fun onOpenSettings() {
+        startActivity(Intent(this, com.fersaiyan.cyanbridge.ui.SettingsActivity::class.java))
+    }
+
+    override fun onScreenshotPlanningChange(enabled: Boolean) {
+        RuntimePrefs.setScreenshotPlanningEnabled(this, enabled)
+        refreshUi()
+    }
+
+    override fun onRemoteScreenshotUploadChange(enabled: Boolean) {
+        RuntimePrefs.setRemoteScreenshotUploadEnabled(this, enabled)
+        refreshUi()
+    }
+
+    override fun onMaxStepsChange(maxSteps: Int) {
+        AutomationPrefs.setMaxSteps(this, maxSteps)
+        refreshUi()
+    }
+
+    override fun onRequireActionConfirmationChange(enabled: Boolean) {
         // Keep the old automation preference aligned with the runtime policy.
         AutomationPrefs.setRequireConfirmationEnabled(this, enabled)
         RuntimePrefs.setRequireActionConfirmationEnabled(this, enabled)
         refreshUi()
     }
 
-    private fun saveTelegramConfiguration(botToken: String, allowedChatId: String): Boolean {
+    override fun onAutoExecuteLowRiskChange(enabled: Boolean) {
+        RuntimePrefs.setAutoExecuteLowRiskEnabled(this, enabled)
+        refreshUi()
+    }
+
+    override fun onOpenPendingActions() {
+        startActivity(Intent(this, PendingActionsActivity::class.java))
+    }
+
+    override fun onSaveTelegramConfiguration(botToken: String, allowedChatId: String): Boolean {
         if (LocalAgentTelegramProtocol.normalizeChatId(allowedChatId) == null) {
             Toast.makeText(this, R.string.compose_local_agent_valid_chat_id, Toast.LENGTH_SHORT).show()
             return false
@@ -221,7 +251,7 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
         return true
     }
 
-    private fun clearTelegramToken() {
+    override fun onClearTelegramToken() {
         RuntimePrefs.setTelegramRemoteControlEnabled(this, false)
         LocalAgentTelegramService.stop(this)
         if (RuntimePrefs.clearTelegramBotToken(this)) {
@@ -234,7 +264,7 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
         refreshUi()
     }
 
-    private fun setTelegramRemoteControl(enabled: Boolean) {
+    override fun onTelegramRemoteControlChange(enabled: Boolean) {
         if (enabled) {
             when {
                 !LocalAgentPlugin.isEnabled(this) -> {
@@ -263,7 +293,7 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
         refreshUi()
     }
 
-    private fun setShizukuFallback(enabled: Boolean) {
+    override fun onShizukuFallbackChange(enabled: Boolean) {
         RuntimePrefs.setShizukuFallbackEnabled(this, enabled)
         if (enabled) {
             RuntimePrefs.setShizukuStatus(this, LocalAgentShizukuFallback.availability().statusText)
@@ -274,7 +304,7 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
         refreshUi()
     }
 
-    private fun requestShizukuPermission() {
+    override fun onRequestShizukuPermission() {
         Toast.makeText(
             this,
             LocalAgentShizukuFallback.requestPermission(this),
@@ -283,7 +313,54 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
         refreshUi()
     }
 
-    private fun openNotificationListenerSettings() {
+    override fun onWhatsAppReadAloudChange(enabled: Boolean) {
+        RuntimePrefs.setWhatsAppNotificationReadAloudEnabled(this, enabled)
+        refreshUi()
+    }
+
+    override fun onAgentStatus() {
+        Toast.makeText(this, R.string.compose_local_agent_no_goal, Toast.LENGTH_SHORT).show()
+        LocalAgentController.requestStatus(this)
+    }
+
+    override fun onAgentStop() {
+        runAgentCommand(getString(R.string.compose_local_agent_stopping)) {
+            LocalAgentController.stop(this)
+        }
+    }
+
+    override fun onAgentDemo() {
+        Toast.makeText(
+            this,
+            R.string.compose_demo_message,
+            Toast.LENGTH_LONG,
+        ).show()
+        runAgentCommand(getString(R.string.compose_local_agent_starting)) {
+            LocalAgentController.demo(this)
+        }
+    }
+
+    override fun onOpenAutoDiarySettings() {
+        startActivity(Intent(this, AutoDiarySettingsActivity::class.java))
+    }
+
+    override fun onEditAgentPersonality() {
+        LocalAgentMemoryStore.ensureSeedFiles(this)
+        editMemoryFile(
+            title = getString(R.string.compose_agent_personality),
+            file = LocalAgentMemoryStore.agentPersonaFile(this),
+        )
+    }
+
+    override fun onEditUserFacts() {
+        LocalAgentMemoryStore.ensureSeedFiles(this)
+        editMemoryFile(
+            title = getString(R.string.compose_user_facts),
+            file = LocalAgentMemoryStore.userFactsFile(this),
+        )
+    }
+
+    override fun onOpenNotificationListenerSettings() {
         runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
             .onFailure {
                 Toast.makeText(this, R.string.compose_local_agent_unable_open_notifications, Toast.LENGTH_SHORT).show()
@@ -307,7 +384,7 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
         refreshUi()
     }
 
-    private fun openAccessibilitySettings() {
+    override fun onOpenAccessibilitySettings() {
         AlertDialog.Builder(this)
             .setTitle(R.string.onboarding_accessibility_disclosure_title)
             .setMessage(R.string.onboarding_accessibility_disclosure_body)
@@ -339,7 +416,7 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showContextDebug() {
+    override fun onViewInjectedContext() {
         val debug = RuntimePrefs.getLastContextInjectionDebug(this)
         val atMs = RuntimePrefs.getLastContextInjectionAtMs(this)
         val message = if (debug.isBlank()) {
@@ -357,7 +434,7 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showTaskHistory() {
+    override fun onShowTaskHistory() {
         val entries = LocalAgentTaskHistory.recent(this, limit = 8)
         val message = if (entries.isEmpty()) {
             getString(R.string.compose_local_agent_no_history)
@@ -392,371 +469,9 @@ class LocalAgentSettingsActivity : AppCompatActivity() {
             ?: return false
         return services.split(':').any { it.equals(expected, ignoreCase = true) }
     }
-
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    private fun LocalAgentSettingsContent() {
-        val state = uiState
-        var telegramBotToken by remember { mutableStateOf("") }
-        var telegramAllowedChatId by remember(state.telegramAllowedChatId) {
-            mutableStateOf(state.telegramAllowedChatId)
-        }
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.compose_local_agent_settings_title)) },
-                    navigationIcon = {
-                        IconButton(onClick = ::finish) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.compose_back))
-                        }
-                    },
-                )
-            },
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    stringResource(R.string.compose_local_agent_intro),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                SwitchSetting(
-                    label = stringResource(R.string.compose_local_agent_enable),
-                    checked = state.enabled,
-                    onCheckedChange = ::setEnabled,
-                )
-                NativePluginShortcutPreference(
-                    pluginId = NativePluginIds.LOCAL_AGENT,
-                    pluginTitle = stringResource(R.string.compose_local_agent_title),
-                )
-
-                SectionTitle(stringResource(R.string.compose_local_agent_planning))
-                Text(
-                    stringResource(R.string.compose_local_agent_provider_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedButton(
-                    onClick = {
-                        startActivity(Intent(this@LocalAgentSettingsActivity, com.fersaiyan.cyanbridge.ui.SettingsActivity::class.java))
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.compose_open_settings))
-                }
-
-                SectionTitle(stringResource(R.string.compose_local_agent_screenshot_planning))
-                Text(
-                    stringResource(R.string.compose_local_agent_screenshot_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SwitchSetting(
-                    label = stringResource(R.string.compose_local_agent_use_screenshots),
-                    checked = state.screenshotPlanningEnabled,
-                    onCheckedChange = {
-                        RuntimePrefs.setScreenshotPlanningEnabled(this@LocalAgentSettingsActivity, it)
-                        refreshUi()
-                    },
-                )
-                Text(
-                    stringResource(R.string.compose_local_agent_screenshot_requirements),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SwitchSetting(
-                    label = stringResource(R.string.compose_local_agent_remote_screenshots),
-                    checked = state.remoteScreenshotUploadEnabled,
-                    enabled = state.screenshotPlanningEnabled,
-                    onCheckedChange = {
-                        RuntimePrefs.setRemoteScreenshotUploadEnabled(this@LocalAgentSettingsActivity, it)
-                        refreshUi()
-                    },
-                )
-                Text(
-                    stringResource(R.string.compose_local_agent_remote_screenshot_consent),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    stringResource(R.string.compose_local_agent_screenshot_status, state.screenshotStatus),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                SectionTitle(stringResource(R.string.compose_local_agent_runtime_safety))
-                StatusCard(state)
-                Text(
-                    stringResource(R.string.compose_local_agent_runtime_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SettingAction(
-                    label = stringResource(R.string.compose_local_agent_accessibility_service),
-                    detail = stringResource(
-                        if (state.accessibilityEnabled) R.string.compose_enabled else R.string.compose_disabled,
-                    ),
-                    actionLabel = stringResource(R.string.compose_open_settings_lower),
-                    onClick = ::openAccessibilitySettings,
-                )
-                NumberSetting(
-                    label = stringResource(R.string.compose_max_steps_per_request),
-                    value = state.maxSteps,
-                    range = 1..200,
-                    onValueChanged = {
-                        AutomationPrefs.setMaxSteps(this@LocalAgentSettingsActivity, it)
-                        refreshUi()
-                    },
-                )
-                SwitchSetting(
-                    label = stringResource(R.string.compose_require_approval),
-                    checked = state.requireActionConfirmation,
-                    onCheckedChange = ::setRequireActionConfirmation,
-                )
-                SwitchSetting(
-                    label = stringResource(R.string.compose_auto_execute_low_risk),
-                    checked = state.autoExecuteLowRisk,
-                    enabled = state.requireActionConfirmation,
-                    onCheckedChange = {
-                        RuntimePrefs.setAutoExecuteLowRiskEnabled(this@LocalAgentSettingsActivity, it)
-                        refreshUi()
-                    },
-                )
-                OutlinedButton(
-                    onClick = {
-                        startActivity(Intent(this@LocalAgentSettingsActivity, PendingActionsActivity::class.java))
-                    },
-                    enabled = state.requireActionConfirmation,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.compose_view_pending_actions))
-                }
-                Text(
-                    stringResource(R.string.compose_local_agent_reuse_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SettingAction(
-                    label = stringResource(R.string.compose_recent_automation_activity),
-                    detail = stringResource(R.string.compose_local_metadata_only),
-                    actionLabel = stringResource(R.string.compose_view),
-                    onClick = ::showTaskHistory,
-                )
-
-                SectionTitle(stringResource(R.string.compose_local_agent_telegram))
-                Text(
-                    stringResource(R.string.compose_local_agent_telegram_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = telegramBotToken,
-                    onValueChange = { telegramBotToken = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.compose_telegram_bot_token)) },
-                    placeholder = {
-                        Text(
-                            if (state.telegramConfigured) stringResource(R.string.compose_telegram_token_saved)
-                            else stringResource(R.string.compose_telegram_token_placeholder),
-                        )
-                    },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                )
-                OutlinedTextField(
-                    value = telegramAllowedChatId,
-                    onValueChange = { telegramAllowedChatId = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.compose_telegram_chat_id)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            if (saveTelegramConfiguration(telegramBotToken, telegramAllowedChatId)) {
-                                telegramBotToken = ""
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.compose_save_configuration))
-                    }
-                    OutlinedButton(
-                        onClick = ::clearTelegramToken,
-                        enabled = state.telegramConfigured,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.compose_clear_token))
-                    }
-                }
-                SwitchSetting(
-                    label = stringResource(R.string.compose_enable_telegram),
-                    checked = state.telegramRemoteControlEnabled,
-                    enabled = state.telegramConfigured,
-                    onCheckedChange = ::setTelegramRemoteControl,
-                )
-                Text(
-                    stringResource(R.string.compose_telegram_commands),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    stringResource(R.string.compose_telegram_status, state.telegramStatus),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (state.telegramLastError.isNotBlank() && state.telegramLastError != "(none)") {
-                    Text(
-                        stringResource(R.string.compose_telegram_error, state.telegramLastError),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-
-                SectionTitle(stringResource(R.string.compose_local_agent_shizuku))
-                Text(
-                    stringResource(R.string.compose_local_agent_shizuku_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SwitchSetting(
-                    label = stringResource(R.string.compose_use_shizuku),
-                    checked = state.shizukuFallbackEnabled,
-                    onCheckedChange = ::setShizukuFallback,
-                )
-                SettingAction(
-                    label = stringResource(R.string.compose_shizuku_access),
-                    detail = state.shizukuAvailability,
-                    actionLabel = stringResource(R.string.compose_grant_access),
-                    onClick = ::requestShizukuPermission,
-                )
-                Text(
-                    stringResource(R.string.compose_shizuku_status, state.shizukuStatus),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                SectionTitle(stringResource(R.string.compose_local_agent_notification))
-                Text(
-                    stringResource(R.string.compose_local_agent_notification_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SettingAction(
-                    label = stringResource(R.string.compose_notification_access),
-                    detail = stringResource(
-                        if (state.notificationListenerEnabled) R.string.compose_enabled else R.string.compose_disabled,
-                    ),
-                    actionLabel = stringResource(R.string.compose_open_settings_lower),
-                    onClick = ::openNotificationListenerSettings,
-                )
-                SwitchSetting(
-                    label = stringResource(R.string.compose_read_whatsapp_aloud),
-                    checked = state.whatsappNotificationReadAloud,
-                    enabled = state.notificationListenerEnabled,
-                    onCheckedChange = {
-                        RuntimePrefs.setWhatsAppNotificationReadAloudEnabled(this@LocalAgentSettingsActivity, it)
-                        refreshUi()
-                    },
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            Toast.makeText(this@LocalAgentSettingsActivity, R.string.compose_local_agent_no_goal, Toast.LENGTH_SHORT).show()
-                            LocalAgentController.requestStatus(this@LocalAgentSettingsActivity)
-                        },
-                        enabled = state.enabled,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.compose_action_status))
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            runAgentCommand(getString(R.string.compose_local_agent_stopping)) {
-                                LocalAgentController.stop(this@LocalAgentSettingsActivity)
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.compose_action_stop))
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            Toast.makeText(
-                                this@LocalAgentSettingsActivity,
-                                R.string.compose_demo_message,
-                                Toast.LENGTH_LONG,
-                            ).show()
-                            runAgentCommand(getString(R.string.compose_local_agent_starting)) {
-                                LocalAgentController.demo(this@LocalAgentSettingsActivity)
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.compose_action_demo))
-                    }
-                }
-
-                SectionTitle(stringResource(R.string.compose_local_agent_shared_memory))
-                Text(
-                    stringResource(R.string.compose_local_agent_shared_memory_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedButton(
-                    onClick = {
-                        startActivity(Intent(this@LocalAgentSettingsActivity, AutoDiarySettingsActivity::class.java))
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.compose_open_autodiary_settings))
-                }
-
-                SectionTitle(stringResource(R.string.compose_local_agent_personalization))
-                OutlinedButton(
-                    onClick = {
-                        LocalAgentMemoryStore.ensureSeedFiles(this@LocalAgentSettingsActivity)
-                        editMemoryFile(
-                            title = getString(R.string.compose_agent_personality),
-                            file = LocalAgentMemoryStore.agentPersonaFile(this@LocalAgentSettingsActivity),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.compose_edit_agent_personality))
-                }
-                OutlinedButton(
-                    onClick = {
-                        LocalAgentMemoryStore.ensureSeedFiles(this@LocalAgentSettingsActivity)
-                        editMemoryFile(
-                            title = getString(R.string.compose_user_facts),
-                            file = LocalAgentMemoryStore.userFactsFile(this@LocalAgentSettingsActivity),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.compose_edit_user_facts))
-                }
-                OutlinedButton(
-                    onClick = ::showContextDebug,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.compose_view_injected_context))
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-    }
 }
 
-private data class LocalAgentSettingsUiState(
+data class LocalAgentSettingsUiState(
     val enabled: Boolean = false,
     val providerType: AgentProviderType = AgentProviderType.TASKER,
     val accessibilityEnabled: Boolean = false,
@@ -779,6 +494,352 @@ private data class LocalAgentSettingsUiState(
     val status: String = "Unknown",
     val lastError: String = "",
 )
+
+/** Every effect the Local Agent settings screen can trigger; implemented by [LocalAgentSettingsActivity]. */
+interface LocalAgentSettingsActions {
+    fun onBack()
+    fun onEnabledChange(enabled: Boolean)
+    fun onOpenSettings()
+    fun onScreenshotPlanningChange(enabled: Boolean)
+    fun onRemoteScreenshotUploadChange(enabled: Boolean)
+    fun onOpenAccessibilitySettings()
+    fun onMaxStepsChange(maxSteps: Int)
+    fun onRequireActionConfirmationChange(enabled: Boolean)
+    fun onAutoExecuteLowRiskChange(enabled: Boolean)
+    fun onOpenPendingActions()
+    fun onShowTaskHistory()
+
+    /** Returns true when the configuration was saved, so the screen can clear the typed token. */
+    fun onSaveTelegramConfiguration(botToken: String, allowedChatId: String): Boolean
+    fun onClearTelegramToken()
+    fun onTelegramRemoteControlChange(enabled: Boolean)
+    fun onShizukuFallbackChange(enabled: Boolean)
+    fun onRequestShizukuPermission()
+    fun onOpenNotificationListenerSettings()
+    fun onWhatsAppReadAloudChange(enabled: Boolean)
+    fun onAgentStatus()
+    fun onAgentStop()
+    fun onAgentDemo()
+    fun onOpenAutoDiarySettings()
+    fun onEditAgentPersonality()
+    fun onEditUserFacts()
+    fun onViewInjectedContext()
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LocalAgentSettingsScreen(
+    state: LocalAgentSettingsUiState,
+    actions: LocalAgentSettingsActions,
+) {
+    var telegramBotToken by remember { mutableStateOf("") }
+    var telegramAllowedChatId by remember(state.telegramAllowedChatId) {
+        mutableStateOf(state.telegramAllowedChatId)
+    }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.compose_local_agent_settings_title)) },
+                navigationIcon = {
+                    IconButton(onClick = actions::onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.compose_back))
+                    }
+                },
+            )
+        },
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                stringResource(R.string.compose_local_agent_intro),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            SwitchSetting(
+                label = stringResource(R.string.compose_local_agent_enable),
+                checked = state.enabled,
+                onCheckedChange = actions::onEnabledChange,
+            )
+            NativePluginShortcutPreference(
+                pluginId = NativePluginIds.LOCAL_AGENT,
+                pluginTitle = stringResource(R.string.compose_local_agent_title),
+            )
+
+            SectionTitle(stringResource(R.string.compose_local_agent_planning))
+            Text(
+                stringResource(R.string.compose_local_agent_provider_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = actions::onOpenSettings,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.compose_open_settings))
+            }
+
+            SectionTitle(stringResource(R.string.compose_local_agent_screenshot_planning))
+            Text(
+                stringResource(R.string.compose_local_agent_screenshot_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SwitchSetting(
+                label = stringResource(R.string.compose_local_agent_use_screenshots),
+                checked = state.screenshotPlanningEnabled,
+                onCheckedChange = actions::onScreenshotPlanningChange,
+            )
+            Text(
+                stringResource(R.string.compose_local_agent_screenshot_requirements),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SwitchSetting(
+                label = stringResource(R.string.compose_local_agent_remote_screenshots),
+                checked = state.remoteScreenshotUploadEnabled,
+                enabled = state.screenshotPlanningEnabled,
+                onCheckedChange = actions::onRemoteScreenshotUploadChange,
+            )
+            Text(
+                stringResource(R.string.compose_local_agent_remote_screenshot_consent),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                stringResource(R.string.compose_local_agent_screenshot_status, state.screenshotStatus),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            SectionTitle(stringResource(R.string.compose_local_agent_runtime_safety))
+            StatusCard(state)
+            Text(
+                stringResource(R.string.compose_local_agent_runtime_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SettingAction(
+                label = stringResource(R.string.compose_local_agent_accessibility_service),
+                detail = stringResource(
+                    if (state.accessibilityEnabled) R.string.compose_enabled else R.string.compose_disabled,
+                ),
+                actionLabel = stringResource(R.string.compose_open_settings_lower),
+                onClick = actions::onOpenAccessibilitySettings,
+            )
+            NumberSetting(
+                label = stringResource(R.string.compose_max_steps_per_request),
+                value = state.maxSteps,
+                range = 1..200,
+                onValueChanged = actions::onMaxStepsChange,
+            )
+            SwitchSetting(
+                label = stringResource(R.string.compose_require_approval),
+                checked = state.requireActionConfirmation,
+                onCheckedChange = actions::onRequireActionConfirmationChange,
+            )
+            SwitchSetting(
+                label = stringResource(R.string.compose_auto_execute_low_risk),
+                checked = state.autoExecuteLowRisk,
+                enabled = state.requireActionConfirmation,
+                onCheckedChange = actions::onAutoExecuteLowRiskChange,
+            )
+            OutlinedButton(
+                onClick = actions::onOpenPendingActions,
+                enabled = state.requireActionConfirmation,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.compose_view_pending_actions))
+            }
+            Text(
+                stringResource(R.string.compose_local_agent_reuse_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SettingAction(
+                label = stringResource(R.string.compose_recent_automation_activity),
+                detail = stringResource(R.string.compose_local_metadata_only),
+                actionLabel = stringResource(R.string.compose_view),
+                onClick = actions::onShowTaskHistory,
+            )
+
+            SectionTitle(stringResource(R.string.compose_local_agent_telegram))
+            Text(
+                stringResource(R.string.compose_local_agent_telegram_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = telegramBotToken,
+                onValueChange = { telegramBotToken = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.compose_telegram_bot_token)) },
+                placeholder = {
+                    Text(
+                        if (state.telegramConfigured) stringResource(R.string.compose_telegram_token_saved)
+                        else stringResource(R.string.compose_telegram_token_placeholder),
+                    )
+                },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
+            OutlinedTextField(
+                value = telegramAllowedChatId,
+                onValueChange = { telegramAllowedChatId = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.compose_telegram_chat_id)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        if (actions.onSaveTelegramConfiguration(telegramBotToken, telegramAllowedChatId)) {
+                            telegramBotToken = ""
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.compose_save_configuration))
+                }
+                OutlinedButton(
+                    onClick = actions::onClearTelegramToken,
+                    enabled = state.telegramConfigured,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.compose_clear_token))
+                }
+            }
+            SwitchSetting(
+                label = stringResource(R.string.compose_enable_telegram),
+                checked = state.telegramRemoteControlEnabled,
+                enabled = state.telegramConfigured,
+                onCheckedChange = actions::onTelegramRemoteControlChange,
+            )
+            Text(
+                stringResource(R.string.compose_telegram_commands),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                stringResource(R.string.compose_telegram_status, state.telegramStatus),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (state.telegramLastError.isNotBlank() && state.telegramLastError != "(none)") {
+                Text(
+                    stringResource(R.string.compose_telegram_error, state.telegramLastError),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
+            SectionTitle(stringResource(R.string.compose_local_agent_shizuku))
+            Text(
+                stringResource(R.string.compose_local_agent_shizuku_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SwitchSetting(
+                label = stringResource(R.string.compose_use_shizuku),
+                checked = state.shizukuFallbackEnabled,
+                onCheckedChange = actions::onShizukuFallbackChange,
+            )
+            SettingAction(
+                label = stringResource(R.string.compose_shizuku_access),
+                detail = state.shizukuAvailability,
+                actionLabel = stringResource(R.string.compose_grant_access),
+                onClick = actions::onRequestShizukuPermission,
+            )
+            Text(
+                stringResource(R.string.compose_shizuku_status, state.shizukuStatus),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            SectionTitle(stringResource(R.string.compose_local_agent_notification))
+            Text(
+                stringResource(R.string.compose_local_agent_notification_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SettingAction(
+                label = stringResource(R.string.compose_notification_access),
+                detail = stringResource(
+                    if (state.notificationListenerEnabled) R.string.compose_enabled else R.string.compose_disabled,
+                ),
+                actionLabel = stringResource(R.string.compose_open_settings_lower),
+                onClick = actions::onOpenNotificationListenerSettings,
+            )
+            SwitchSetting(
+                label = stringResource(R.string.compose_read_whatsapp_aloud),
+                checked = state.whatsappNotificationReadAloud,
+                enabled = state.notificationListenerEnabled,
+                onCheckedChange = actions::onWhatsAppReadAloudChange,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = actions::onAgentStatus,
+                    enabled = state.enabled,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.compose_action_status))
+                }
+                OutlinedButton(
+                    onClick = actions::onAgentStop,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.compose_action_stop))
+                }
+                OutlinedButton(
+                    onClick = actions::onAgentDemo,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.compose_action_demo))
+                }
+            }
+
+            SectionTitle(stringResource(R.string.compose_local_agent_shared_memory))
+            Text(
+                stringResource(R.string.compose_local_agent_shared_memory_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = actions::onOpenAutoDiarySettings,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.compose_open_autodiary_settings))
+            }
+
+            SectionTitle(stringResource(R.string.compose_local_agent_personalization))
+            OutlinedButton(
+                onClick = actions::onEditAgentPersonality,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.compose_edit_agent_personality))
+            }
+            OutlinedButton(
+                onClick = actions::onEditUserFacts,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.compose_edit_user_facts))
+            }
+            OutlinedButton(
+                onClick = actions::onViewInjectedContext,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.compose_view_injected_context))
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
 
 @Composable
 private fun SectionTitle(text: String) {
