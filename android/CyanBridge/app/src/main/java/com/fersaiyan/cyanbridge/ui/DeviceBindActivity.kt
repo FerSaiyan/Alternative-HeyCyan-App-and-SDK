@@ -559,11 +559,6 @@ class DeviceBindActivity : BaseActivity() {
         const val REQUEST_ENABLE_BLUETOOTH = 300
         const val META_DAT_PROFILE_ID = "META_DAT"
         const val DEVICE_LIST_PUBLISH_INTERVAL_MS = 1_000L
-        const val HEY_CYAN_PROBE_CALLBACK = "device_bind_protocol_probe"
-        const val EYEVUE_PROBE_TIMEOUT_MS = 30_000L
-        const val TUNEBUDS_PROBE_TIMEOUT_MS = 12_000L
-        const val HEY_CYAN_CONNECT_TIMEOUT_MS = 6_000L
-        const val HEY_CYAN_RESPONSE_TIMEOUT_MS = 4_000L
         const val HEY_CYAN_MAX_VIDEO_SECONDS = 720
         const val HEY_CYAN_MAX_AUDIO_SECONDS = 7_200
         const val EYEVUE_MAX_RECORDING_SECONDS = 600
