@@ -2,8 +2,12 @@ package com.fersaiyan.cyanbridge.localmodels.remote
 
 import android.content.Context
 import android.util.Log
-import org.json.JSONArray
-import org.json.JSONObject
+import com.fersaiyan.cyanbridge.ai.router.UrlConnectionHttpTransport
+import com.fersaiyan.cyanbridge.shared.ai.OpenAiCompatible
+import com.fersaiyan.cyanbridge.shared.ai.OpenAiCompatible.EncodedAttachment
+import com.fersaiyan.cyanbridge.shared.ai.OpenAiCompatible.StreamLine
+import com.fersaiyan.cyanbridge.shared.platform.HttpRequest
+import kotlinx.serialization.json.JsonObject
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -15,12 +19,8 @@ import java.util.Base64
 import java.util.Locale
 
 /**
- * Lightweight client for OpenAI-compatible chat/completions endpoints.
- *
- * Supports both non-streaming and streaming (SSE) responses.
- * Works with Ollama (/v1/chat/completions), llama.cpp server, vLLM, TGI
- * with the OpenAI compatibility layer, and any other server that speaks
- * the same protocol.
+ * Android side of the OpenAI-compatible client ([OpenAiCompatible]): settings,
+ * attachments from files, and HTTP including the streamed (SSE) reply.
  */
 object RemoteOpenAiClient {
     private const val TAG = "RemoteOpenAiClient"
@@ -38,37 +38,23 @@ object RemoteOpenAiClient {
         imagePaths: List<String> = emptyList(),
         audioPath: String? = null,
     ): String {
-        val baseUrl = RemoteOpenAiPrefs.getBaseUrl(context)
-        val apiKey = RemoteOpenAiPrefs.getApiKey(context)
-        val model = RemoteOpenAiPrefs.getModel(context)
+        val (url, apiKey, payload) = prepare(context, messages, maxTokens, temperature, false, imagePaths, audioPath)
+        Log.i(TAG, "chatCompletion -> $url model=${RemoteOpenAiPrefs.getModel(context)}")
 
-        require(baseUrl.isNotBlank()) { "Remote server base URL is not configured" }
-        require(model.isNotBlank()) { "Remote server model name is not configured" }
-        require(apiKey.isBlank() || RemoteOpenAiPrefs.isCredentialTransportAllowed(baseUrl)) {
-            "Refusing to send an API key over a public cleartext URL"
-        }
-
-        val payload = buildChatCompletionPayload(
-            model = model,
-            messages = messages,
-            maxTokens = maxTokens,
-            temperature = temperature,
-            imagePaths = imagePaths,
-            audioPath = audioPath,
+        val response = UrlConnectionHttpTransport.execute(
+            HttpRequest(
+                method = "POST",
+                url = url,
+                headers = jsonHeaders(apiKey),
+                body = payload.toString(),
+                connectTimeoutMs = CONNECT_TIMEOUT_MS,
+                readTimeoutMs = READ_TIMEOUT_MS,
+            ),
         )
-
-        val url = buildChatCompletionsUrl(baseUrl)
-        Log.i(TAG, "chatCompletion -> $url model=$model")
-
-        return postJson(url, apiKey, payload)
-            .let { response ->
-                val choices = response.optJSONArray("choices")
-                    ?: throw IllegalStateException("No choices in remote response")
-                if (choices.length() == 0) throw IllegalStateException("Empty choices array")
-                val message = choices.getJSONObject(0).optJSONObject("message")
-                message?.optString("content")?.trim()?.takeIf { it.isNotBlank() }
-                    ?: throw IllegalStateException("Empty content in remote response")
-            }
+        if (!response.isSuccessful) {
+            throw IllegalStateException("Remote server HTTP ${response.statusCode}: ${response.body.take(500)}")
+        }
+        return OpenAiCompatible.parseChatCompletion(response.body)
     }
 
     /**
@@ -84,28 +70,8 @@ object RemoteOpenAiClient {
         imagePaths: List<String> = emptyList(),
         audioPath: String? = null,
     ): String {
-        val baseUrl = RemoteOpenAiPrefs.getBaseUrl(context)
-        val apiKey = RemoteOpenAiPrefs.getApiKey(context)
-        val model = RemoteOpenAiPrefs.getModel(context)
-
-        require(baseUrl.isNotBlank()) { "Remote server base URL is not configured" }
-        require(model.isNotBlank()) { "Remote server model name is not configured" }
-        require(apiKey.isBlank() || RemoteOpenAiPrefs.isCredentialTransportAllowed(baseUrl)) {
-            "Refusing to send an API key over a public cleartext URL"
-        }
-
-        val payload = buildChatCompletionPayload(
-            model = model,
-            messages = messages,
-            maxTokens = maxTokens,
-            temperature = temperature,
-            stream = true,
-            imagePaths = imagePaths,
-            audioPath = audioPath,
-        )
-
-        val url = buildChatCompletionsUrl(baseUrl)
-        Log.i(TAG, "chatCompletionStreaming -> $url model=$model")
+        val (url, apiKey, payload) = prepare(context, messages, maxTokens, temperature, true, imagePaths, audioPath)
+        Log.i(TAG, "chatCompletionStreaming -> $url model=${RemoteOpenAiPrefs.getModel(context)}")
 
         return postJsonStreaming(url, apiKey, payload, onToken)
     }
@@ -120,66 +86,30 @@ object RemoteOpenAiClient {
 
         return try {
             val modelsUrl = buildModelsUrl(baseUrl)
-            val conn = (URL(modelsUrl).openConnection() as HttpURLConnection)
-            conn.requestMethod = "GET"
-            conn.connectTimeout = CONNECT_TIMEOUT_MS
-            conn.readTimeout = 10_000
-            conn.setRequestProperty("Accept", "application/json")
             val apiKey = RemoteOpenAiPrefs.getApiKey(context)
             if (apiKey.isNotBlank() && !RemoteOpenAiPrefs.isCredentialTransportAllowed(baseUrl)) {
                 return "Refusing public cleartext transport for API key"
             }
-            if (apiKey.isNotBlank()) {
-                conn.setRequestProperty("Authorization", "Bearer $apiKey")
+            val headers = buildMap {
+                put("Accept", "application/json")
+                if (apiKey.isNotBlank()) put("Authorization", "Bearer $apiKey")
             }
-            val code = conn.responseCode
-            val body = BufferedReader(InputStreamReader(
-                if (code in 200..299) conn.inputStream else conn.errorStream
-            )).use { it.readText() }
-            conn.disconnect()
-
-            if (code !in 200..299) {
-                "HTTP $code: ${body.take(200)}"
-            } else {
-                val obj = runCatching { JSONObject(body) }.getOrNull()
-                val models = obj?.optJSONArray("data")
-                val count = models?.length() ?: 0
-                if (count > 0) {
-                    val names = (0 until count).mapNotNull { i ->
-                        models?.optJSONObject(i)?.optString("id")
-                    }.take(5).joinToString(", ")
-                    "OK ($count models: $names)"
-                } else {
-                    "OK (server reachable)"
-                }
-            }
+            val response = UrlConnectionHttpTransport.execute(
+                HttpRequest("GET", modelsUrl, headers, connectTimeoutMs = CONNECT_TIMEOUT_MS, readTimeoutMs = 10_000),
+            )
+            OpenAiCompatible.healthSummary(response.statusCode, response.body)
         } catch (e: Exception) {
             "Unreachable: ${e.message}"
         }
     }
 
-    internal fun buildChatCompletionsUrl(baseUrl: String): String {
-        val (clean, path) = normalizeBaseUrl(baseUrl)
-        return when {
-            clean.endsWith("/chat/completions") -> clean
-            clean.endsWith("/v1") -> "$clean/chat/completions"
-            path.isBlank() || path == "/" -> "$clean/v1/chat/completions"
-            else -> "$clean/chat/completions"
-        }
-    }
+    internal fun buildChatCompletionsUrl(baseUrl: String): String =
+        OpenAiCompatible.chatCompletionsUrl(normalizeBaseUrl(baseUrl))
 
-    internal fun buildModelsUrl(baseUrl: String): String {
-        val (normalized, _) = normalizeBaseUrl(baseUrl)
-        val clean = normalized.removeSuffix("/chat/completions")
-        val path = URI(clean).path.orEmpty()
-        return when {
-            clean.endsWith("/v1") -> "$clean/models"
-            path.isBlank() || path == "/" -> "$clean/v1/models"
-            else -> "$clean/models"
-        }
-    }
+    internal fun buildModelsUrl(baseUrl: String): String =
+        OpenAiCompatible.modelsUrl(normalizeBaseUrl(baseUrl))
 
-    private fun normalizeBaseUrl(baseUrl: String): Pair<String, String> {
+    private fun normalizeBaseUrl(baseUrl: String): String {
         val clean = baseUrl.trim().trimEnd('/')
         val uri = runCatching { URI(clean) }.getOrElse {
             throw IllegalArgumentException("Remote server base URL is invalid", it)
@@ -191,7 +121,32 @@ object RemoteOpenAiClient {
         require(uri.rawQuery == null && uri.rawFragment == null) {
             "Remote server base URL must not include a query string or fragment"
         }
-        return clean to uri.path.orEmpty()
+        return clean
+    }
+
+    private data class Prepared(val url: String, val apiKey: String, val payload: JsonObject)
+
+    private fun prepare(
+        context: Context,
+        messages: List<Map<String, String>>,
+        maxTokens: Int,
+        temperature: Double,
+        stream: Boolean,
+        imagePaths: List<String>,
+        audioPath: String?,
+    ): Prepared {
+        val baseUrl = RemoteOpenAiPrefs.getBaseUrl(context)
+        val apiKey = RemoteOpenAiPrefs.getApiKey(context)
+        val model = RemoteOpenAiPrefs.getModel(context)
+
+        require(baseUrl.isNotBlank()) { "Remote server base URL is not configured" }
+        require(model.isNotBlank()) { "Remote server model name is not configured" }
+        require(apiKey.isBlank() || RemoteOpenAiPrefs.isCredentialTransportAllowed(baseUrl)) {
+            "Refusing to send an API key over a public cleartext URL"
+        }
+
+        val payload = buildChatCompletionPayload(model, messages, maxTokens, temperature, stream, imagePaths, audioPath)
+        return Prepared(buildChatCompletionsUrl(baseUrl), apiKey, payload)
     }
 
     /**
@@ -207,136 +162,35 @@ object RemoteOpenAiClient {
         stream: Boolean = false,
         imagePaths: List<String> = emptyList(),
         audioPath: String? = null,
-    ): JSONObject {
-        require(model.isNotBlank()) { "Remote server model name is not configured" }
-        require(maxTokens > 0) { "maxTokens must be greater than zero" }
-
-        val hasAudio = !audioPath.isNullOrBlank()
-        val hasMedia = imagePaths.isNotEmpty() || hasAudio
-        val userMessageIndex = messages.indexOfLast {
-            it["role"]?.trim()?.lowercase(Locale.US).let { role ->
-                role.isNullOrBlank() || role == "user"
-            }
-        }
-        if (hasMedia && userMessageIndex < 0) {
-            throw IllegalArgumentException("Media attachments require at least one user message")
-        }
-
-        val messagesArray = JSONArray()
-        messages.forEachIndexed { index, message ->
-            val role = message["role"]?.trim()?.lowercase(Locale.US).orEmpty().ifBlank { "user" }
-            val text = message["content"].orEmpty()
-            val jsonMessage = JSONObject().put("role", role)
-            if (index != userMessageIndex || !hasMedia) {
-                jsonMessage.put("content", text)
-            } else {
-                val contentParts = JSONArray()
-                if (text.isNotBlank()) {
-                    contentParts.put(JSONObject().put("type", "text").put("text", text))
-                }
-                imagePaths.forEach { path ->
-                    val image = readAttachment(File(requireAttachmentPath(path, "image")), "image")
-                    contentParts.put(
-                        JSONObject()
-                            .put("type", "image_url")
-                            .put("image_url", JSONObject().put("url", "data:${image.mimeType};base64,${image.base64}")),
-                    )
-                }
-                if (hasAudio) {
-                    val audioFile = File(requireAttachmentPath(audioPath.orEmpty(), "audio"))
-                    val audio = readAttachment(audioFile, "audio")
-                    contentParts.put(
-                        JSONObject()
-                            .put("type", "input_audio")
-                            .put(
-                                "input_audio",
-                                JSONObject()
-                                    .put("data", audio.base64)
-                                    .put("format", audio.mimeType),
-                            ),
-                    )
-                }
-                jsonMessage.put("content", contentParts)
-            }
-            messagesArray.put(jsonMessage)
-        }
-
-        return JSONObject()
-            .put("model", model.trim())
-            .put("messages", messagesArray)
-            .put("max_tokens", maxTokens)
-            .put("temperature", temperature)
-            .apply {
-                if (stream) put("stream", true)
-            }
-    }
-
-    private data class EncodedAttachment(
-        val base64: String,
-        val mimeType: String,
+    ): JsonObject = OpenAiCompatible.buildChatCompletionPayload(
+        model = model,
+        messages = messages,
+        maxTokens = maxTokens,
+        temperature = temperature,
+        stream = stream,
+        images = imagePaths.map { path -> { readAttachment(path, "image") } },
+        audio = audioPath?.takeIf { it.isNotBlank() }?.let { path -> { readAttachment(path, "audio") } },
     )
 
-    private fun requireAttachmentPath(path: String, kind: String): String {
-        return path.trim().takeIf { it.isNotBlank() }
-            ?: throw IllegalArgumentException("$kind attachment path is blank")
-    }
-
-    private fun readAttachment(file: File, kind: String): EncodedAttachment {
+    private fun readAttachment(path: String, kind: String): EncodedAttachment {
+        val file = File(path.trim().takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("$kind attachment path is blank"))
         require(file.isFile && file.canRead()) {
             "Cannot read $kind attachment: ${file.path}"
         }
         require(file.length() > 0L) {
             "$kind attachment is empty: ${file.path}"
         }
-
         val extension = file.extension.lowercase(Locale.US)
         val mimeType = when (kind) {
-            "image" -> when (extension) {
-                "jpg", "jpeg" -> "image/jpeg"
-                "png" -> "image/png"
-                "webp" -> "image/webp"
-                "gif" -> "image/gif"
-                "bmp" -> "image/bmp"
-                "heic" -> "image/heic"
-                else -> throw IllegalArgumentException(
-                    "Unsupported image format '.$extension'. Use JPEG, PNG, WebP, GIF, BMP, or HEIC.",
-                )
-            }
-            "audio" -> when (extension) {
-                "wav", "wave" -> "wav"
-                "mp3", "mpeg" -> "mp3"
-                else -> throw IllegalArgumentException(
-                    "Unsupported remote audio format '.$extension'. OpenAI-compatible chat audio requires WAV or MP3.",
-                )
-            }
-            else -> error("Unknown attachment kind: $kind")
+            "image" -> OpenAiCompatible.imageMimeType(extension)
+            else -> OpenAiCompatible.audioFormat(extension)
         }
-
-        return EncodedAttachment(
-            base64 = Base64.getEncoder().encodeToString(file.readBytes()),
-            mimeType = mimeType,
-        )
+        return EncodedAttachment(Base64.getEncoder().encodeToString(file.readBytes()), mimeType)
     }
 
-    private fun postJson(url: String, apiKey: String, payload: JSONObject): JSONObject {
-        val conn = (URL(url).openConnection() as HttpURLConnection)
-        conn.requestMethod = "POST"
-        conn.connectTimeout = CONNECT_TIMEOUT_MS
-        conn.readTimeout = READ_TIMEOUT_MS
-        conn.doOutput = true
-        conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-        if (apiKey.isNotBlank()) {
-            conn.setRequestProperty("Authorization", "Bearer $apiKey")
-        }
-        OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload.toString()) }
-        val code = conn.responseCode
-        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        val body = BufferedReader(InputStreamReader(stream ?: conn.inputStream)).use { it.readText() }
-        conn.disconnect()
-        if (code !in 200..299) {
-            throw IllegalStateException("Remote server HTTP $code: ${body.take(500)}")
-        }
-        return JSONObject(body)
+    private fun jsonHeaders(apiKey: String): Map<String, String> = buildMap {
+        put("Content-Type", "application/json; charset=utf-8")
+        if (apiKey.isNotBlank()) put("Authorization", "Bearer $apiKey")
     }
 
     /**
@@ -345,7 +199,7 @@ object RemoteOpenAiClient {
     private fun postJsonStreaming(
         url: String,
         apiKey: String,
-        payload: JSONObject,
+        payload: JsonObject,
         onToken: ((String) -> Unit)?,
     ): String {
         val conn = (URL(url).openConnection() as HttpURLConnection)
@@ -353,11 +207,8 @@ object RemoteOpenAiClient {
         conn.connectTimeout = CONNECT_TIMEOUT_MS
         conn.readTimeout = READ_TIMEOUT_MS
         conn.doOutput = true
-        conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        jsonHeaders(apiKey).forEach { (name, value) -> conn.setRequestProperty(name, value) }
         conn.setRequestProperty("Accept", "text/event-stream")
-        if (apiKey.isNotBlank()) {
-            conn.setRequestProperty("Authorization", "Bearer $apiKey")
-        }
         OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload.toString()) }
 
         val code = conn.responseCode
@@ -370,24 +221,15 @@ object RemoteOpenAiClient {
 
         val result = StringBuilder()
         BufferedReader(InputStreamReader(conn.inputStream)).use { reader ->
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                val l = line ?: continue
-                if (!l.startsWith("data:")) continue
-                val data = l.removePrefix("data:").trim()
-                if (data == "[DONE]") break
-                if (data.isBlank()) continue
-
-                val chunk = runCatching {
-                    val obj = JSONObject(data)
-                    val choices = obj.optJSONArray("choices") ?: return@runCatching ""
-                    val delta = choices.optJSONObject(0)?.optJSONObject("delta") ?: return@runCatching ""
-                    delta.optString("content", "")
-                }.getOrDefault("")
-
-                if (chunk.isNotBlank()) {
-                    result.append(chunk)
-                    onToken?.invoke(chunk)
+            while (true) {
+                val line = reader.readLine() ?: break
+                when (val parsed = OpenAiCompatible.parseStreamLine(line)) {
+                    StreamLine.Done -> break
+                    StreamLine.Skip -> Unit
+                    is StreamLine.Token -> {
+                        result.append(parsed.text)
+                        onToken?.invoke(parsed.text)
+                    }
                 }
             }
         }

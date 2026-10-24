@@ -4,24 +4,12 @@ import com.fersaiyan.cyanbridge.shared.ai.ChatAiService
 import com.fersaiyan.cyanbridge.shared.ai.ChatMessage
 import com.fersaiyan.cyanbridge.shared.ai.ChatResponse
 import com.fersaiyan.cyanbridge.shared.ai.ImageAiService
+import com.fersaiyan.cyanbridge.shared.ai.OpenAiCompatible
 import com.fersaiyan.cyanbridge.shared.ai.VoiceAiService
 import com.fersaiyan.cyanbridge.shared.localmodels.RemoteInferenceUiState
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.addJsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSLocale
 import platform.Foundation.NSTemporaryDirectory
@@ -89,7 +77,6 @@ object IosRemoteModelSettings {
 
 /** Minimal OpenAI chat-completions client (Android: RemoteOpenAiClient). */
 internal object IosRemoteOpenAiClient {
-    private val json = Json { ignoreUnknownKeys = true }
     private val httpClient = PlatformHttpClient()
 
     /** Returns a user-facing problem with the URL/key pair, or null when it is usable. */
@@ -107,86 +94,36 @@ internal object IosRemoteOpenAiClient {
         return null
     }
 
-    fun chatCompletionsUrl(baseUrl: String): String {
-        val clean = baseUrl.trim().trimEnd('/')
-        val path = clean.substringAfter("://").substringAfter('/', "")
-        return when {
-            clean.endsWith("/chat/completions") -> clean
-            clean.endsWith("/v1") -> "$clean/chat/completions"
-            path.isBlank() -> "$clean/v1/chat/completions"
-            else -> "$clean/chat/completions"
-        }
-    }
-
-    fun modelsUrl(baseUrl: String): String {
-        val clean = baseUrl.trim().trimEnd('/').removeSuffix("/chat/completions")
-        val path = clean.substringAfter("://").substringAfter('/', "")
-        return when {
-            clean.endsWith("/v1") -> "$clean/models"
-            path.isBlank() -> "$clean/v1/models"
-            else -> "$clean/models"
-        }
-    }
-
     suspend fun healthCheck(baseUrl: String, apiKey: String): String {
         validate(baseUrl, apiKey)?.let { return it }
         return runCatching {
-            val response = httpClient.get(modelsUrl(baseUrl), authHeaders(apiKey))
-            if (!response.isSuccessful) return "HTTP ${response.statusCode}: ${response.body.take(200)}"
-            val models = runCatching {
-                (json.parseToJsonElement(response.body).jsonObject["data"] as? JsonArray)
-                    ?.mapNotNull { (it as? JsonObject)?.get("id")?.jsonPrimitive?.contentOrNull }
-            }.getOrNull().orEmpty()
-            if (models.isEmpty()) "OK (server reachable)" else "OK (${models.size} models: ${models.take(5).joinToString()})"
+            val response = httpClient.get(OpenAiCompatible.modelsUrl(baseUrl), authHeaders(apiKey))
+            OpenAiCompatible.healthSummary(response.statusCode, response.body)
         }.getOrElse { "Unreachable: ${it.message}" }
     }
 
+    /** Same request and reply handling as Android's RemoteOpenAiClient (see [OpenAiCompatible]). */
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun chat(messages: List<ChatMessage>, image: ByteArray? = null, imageMimeType: String = "image/jpeg"): String {
         val baseUrl = IosRemoteModelSettings.baseUrl
         val apiKey = IosRemoteModelSettings.apiKey
         validate(baseUrl, apiKey)?.let { error(it) }
-        val lastUser = messages.indexOfLast { it.role.equals("user", ignoreCase = true) }
-        val payload = buildJsonObject {
-            put("model", IosRemoteModelSettings.model)
-            put("stream", false)
-            putJsonArray("messages") {
-                messages.forEachIndexed { index, message ->
-                    addJsonObject {
-                        put("role", message.role.lowercase().ifBlank { "user" })
-                        if (image != null && index == lastUser) {
-                            putJsonArray("content") {
-                                addJsonObject {
-                                    put("type", "text")
-                                    put("text", message.content)
-                                }
-                                addJsonObject {
-                                    put("type", "image_url")
-                                    putJsonObject("image_url") {
-                                        put("url", "data:$imageMimeType;base64,${Base64.encode(image)}")
-                                    }
-                                }
-                            }
-                        } else {
-                            put("content", message.content)
-                        }
-                    }
-                }
-            }
-        }
-        val url = chatCompletionsUrl(baseUrl)
+        val payload = OpenAiCompatible.buildChatCompletionPayload(
+            model = IosRemoteModelSettings.model,
+            messages = messages.map { mapOf("role" to it.role, "content" to it.content) },
+            maxTokens = 2048,
+            temperature = 0.7,
+            images = listOfNotNull(image?.let { bytes -> { OpenAiCompatible.EncodedAttachment(Base64.encode(bytes), imageMimeType) } }),
+        )
+        val url = OpenAiCompatible.chatCompletionsUrl(baseUrl)
         PlatformLogger.i(TAG, "chat -> $url model=${IosRemoteModelSettings.model} image=${image != null}")
         val response = httpClient.post(
             url,
             payload.toString(),
-            authHeaders(apiKey) + ("Content-Type" to "application/json; charset=UTF-8"),
+            authHeaders(apiKey) + ("Content-Type" to "application/json; charset=utf-8"),
         )
-        check(response.isSuccessful) { "Server returned ${response.statusCode}: ${response.body.take(200)}" }
-        val content = runCatching {
-            val choice = (json.parseToJsonElement(response.body).jsonObject["choices"] as JsonArray).first().jsonObject
-            choice["message"]?.jsonObject?.get("content")?.jsonPrimitive?.contentOrNull
-        }.getOrNull()
-        return content?.trim()?.takeIf { it.isNotEmpty() } ?: error("The server returned an empty reply")
+        check(response.isSuccessful) { "Remote server HTTP ${response.statusCode}: ${response.body.take(500)}" }
+        return OpenAiCompatible.parseChatCompletion(response.body)
     }
 
     private fun authHeaders(apiKey: String): Map<String, String> =
