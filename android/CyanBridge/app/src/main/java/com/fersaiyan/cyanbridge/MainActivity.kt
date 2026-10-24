@@ -265,16 +265,25 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutButton
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
-import com.fersaiyan.cyanbridge.ui.main.DashboardSessionPolicy
+import com.fersaiyan.cyanbridge.ui.main.AgentControlsUiController
+import com.fersaiyan.cyanbridge.ui.main.AppDestinationNavigator
+import com.fersaiyan.cyanbridge.ui.main.AssistantSetupGate
+import com.fersaiyan.cyanbridge.ui.main.DashboardActionHost
+import com.fersaiyan.cyanbridge.ui.main.DashboardController
 import com.fersaiyan.cyanbridge.ui.main.DeviceConnectionCoordinator
 import com.fersaiyan.cyanbridge.ui.main.DeviceConnectionHost
 import com.fersaiyan.cyanbridge.ui.main.DeviceManagerRegistry
 import com.fersaiyan.cyanbridge.ui.main.GlassesSessionGuard
 import com.fersaiyan.cyanbridge.ui.main.GlassesTransportPermissions
 import com.fersaiyan.cyanbridge.ui.main.HeyCyanSettingsController
+import com.fersaiyan.cyanbridge.ui.main.LegacyControlsHost
+import com.fersaiyan.cyanbridge.ui.main.LegacyGlassesControlsBinder
 import com.fersaiyan.cyanbridge.ui.main.MainScreenHost
+import com.fersaiyan.cyanbridge.ui.main.MeetingCaptureUiController
 import com.fersaiyan.cyanbridge.ui.main.MeizuMyvuUiController
 import com.fersaiyan.cyanbridge.ui.main.MetaRaybanUiController
+import com.fersaiyan.cyanbridge.ui.main.NativePluginShortcutController
+import com.fersaiyan.cyanbridge.ui.main.TaskerCommandHandler
 import com.fersaiyan.cyanbridge.tasker.TaskerIntegrationManager
 import com.fersaiyan.cyanbridge.localagent.context.LocalAgentContextBuilder
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsStorage
@@ -658,15 +667,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             metaRaybanUi.enabledMetaCameraCheckActive = value
         }
 
-    // Chapter 5: meeting capture UI + state
-    private val meetingTimerOptions: List<Pair<Long?, String>> = listOf(
-        null to "No timer",
-        15L * 60L to "15 min",
-        60L * 60L to "1 hour",
-        3L * 60L * 60L to "3 hours",
-    )
-    private var meetingCaptureStateReceiver: BroadcastReceiver? = null
-
     private val eyevueAiPhotoInProgress = AtomicBoolean(false)
     private val tuneBudsAiPhotoInProgress = AtomicBoolean(false)
 
@@ -755,14 +755,216 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             meizuMyvuUi,
         )
     }
-    private val metaRaybanManager: com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager?
-        get() = deviceManagers.metaRaybanManager
     private val eyevueManager: EyevueManager?
         get() = deviceManagers.eyevueManager
     private val tuneBudsManager: TuneBudsManager?
         get() = deviceManagers.tuneBudsManager
     private val moyoungW620Manager: MoyoungW620Manager?
         get() = deviceManagers.moyoungW620Manager
+    private val meetingCaptureUi: MeetingCaptureUiController by lazy {
+        MeetingCaptureUiController(mainScreenHost) { refreshNativePluginShortcutState() }
+    }
+    private val agentControlsUi: AgentControlsUiController by lazy {
+        AgentControlsUiController(mainScreenHost)
+    }
+    private val nativePluginShortcuts: NativePluginShortcutController by lazy {
+        NativePluginShortcutController(
+            mainScreenHost,
+            deviceManagers,
+            metaRaybanUi,
+            meetingCaptureUi,
+            transportPermissions,
+        )
+    }
+    private val dashboardActionHost: DashboardActionHost = object : DashboardActionHost {
+        override fun selectPhoneAssistant() {
+            this@MainActivity.selectPhoneAssistant()
+        }
+
+        override fun selectCustomAiProvider() {
+            this@MainActivity.selectCustomAiProvider()
+        }
+
+        override fun onImageThumbnailQualitySelected(quality: ImageThumbnailQuality) {
+            pendingImageThumbnailQuality = quality
+        }
+
+        override fun startEyevueMediaSync() {
+            this@MainActivity.startEyevueMediaSync()
+        }
+
+        override fun startTuneBudsMediaSync() {
+            this@MainActivity.startTuneBudsMediaSync()
+        }
+
+        override fun startMoyoungW620MediaSync() {
+            this@MainActivity.startMoyoungW620MediaSync()
+        }
+
+        override fun stopEyevueMediaSync() {
+            this@MainActivity.stopEyevueMediaSync()
+        }
+
+        override fun stopTuneBudsMediaSync() {
+            this@MainActivity.stopTuneBudsMediaSync()
+        }
+
+        override fun stopMoyoungW620MediaSync() {
+            this@MainActivity.stopMoyoungW620MediaSync()
+        }
+
+        override fun requestOtaFirmware(source: OtaFirmwareSource) {
+            this@MainActivity.requestOtaFirmware(source)
+        }
+
+        override fun submitFirmwarePatchRequest(
+            request: FirmwarePatchRequestUiState,
+            contactEmail: String,
+        ) {
+            this@MainActivity.submitFirmwarePatchRequest(request, contactEmail)
+        }
+
+        override fun cancelOta() {
+            val managerWasActive = otaManager.isActive
+            otaPreparationJob?.cancel()
+            otaPreparationJob = null
+            pendingPersonalFirmwareTarget = null
+            stagedPersonalWifiFirmware?.takeIf { it.exists() }?.delete()
+            stagedPersonalWifiFirmware = null
+            otaManager.cancel()
+            if (!managerWasActive) {
+                releaseExclusiveGlassesSession(otaSessionLease)
+                resetOtaDashboardToIdle()
+            }
+        }
+
+        override fun startEyevueLivePreview() {
+            this@MainActivity.startEyevueLivePreview()
+        }
+
+        override fun startTuneBudsLivePreview() {
+            this@MainActivity.startTuneBudsLivePreview()
+        }
+
+        override fun startLivePreview() {
+            this@MainActivity.startLivePreview()
+        }
+
+        override fun stopLivePreview() {
+            this@MainActivity.stopLivePreview()
+        }
+
+        override fun releaseLivePreviewSession() {
+            releaseExclusiveGlassesSession(livePreviewSessionLease)
+            livePreviewSessionLease = null
+        }
+
+        override fun startWifiAdbDebug() {
+            this@MainActivity.startWifiAdbDebug()
+        }
+
+        override fun stopWifiAdbDebug() {
+            wifiAdbDebugController.stop()
+        }
+    }
+    private val appDestinationNavigator: AppDestinationNavigator by lazy {
+        AppDestinationNavigator(this)
+    }
+    private val dashboardController: DashboardController by lazy {
+        DashboardController(
+            mainScreenHost,
+            dashboardActionHost,
+            deviceManagers,
+            deviceConnection,
+            heyCyanSettings,
+            transportPermissions,
+            nativePluginShortcuts,
+            meetingCaptureUi,
+            metaRaybanUi,
+            appDestinationNavigator,
+        )
+    }
+    private val legacyControlsHost: LegacyControlsHost = object : LegacyControlsHost {
+        override var isAiHijackEnabled: Boolean
+            get() = this@MainActivity.isAiHijackEnabled
+            set(value) {
+                this@MainActivity.isAiHijackEnabled = value
+            }
+        override var isImageAssistantMode: Boolean
+            get() = this@MainActivity.isImageAssistantMode
+            set(value) {
+                this@MainActivity.isImageAssistantMode = value
+            }
+        override val deviceNotifyListener: GlassesDeviceNotifyListener
+            get() = this@MainActivity.deviceNotifyListener
+
+        override fun controlAudioRecording(start: Boolean) {
+            this@MainActivity.controlAudioRecording(start)
+        }
+
+        override fun controlVideoRecording(start: Boolean) {
+            this@MainActivity.controlVideoRecording(start)
+        }
+
+        override fun startVoiceQuestionFromUi() {
+            this@MainActivity.startVoiceQuestionFromUi()
+        }
+
+        override fun startImageQuestionFromUi() {
+            this@MainActivity.startImageQuestionFromUi()
+        }
+
+        override fun selectPhoneAssistant() {
+            this@MainActivity.selectPhoneAssistant()
+        }
+
+        override fun selectCustomAiProvider() {
+            this@MainActivity.selectCustomAiProvider()
+        }
+
+        override fun refreshAiModeButtons() {
+            this@MainActivity.refreshAiModeButtons()
+        }
+
+        override fun showOfficialHeyCyanWarningOrContinue() {
+            this@MainActivity.showOfficialHeyCyanWarningOrContinue()
+        }
+
+        override fun startMoyoungW620MediaSync() {
+            this@MainActivity.startMoyoungW620MediaSync()
+        }
+
+        override fun cancelDataDownloadAttempt(reason: String, showToast: Boolean) {
+            this@MainActivity.cancelDataDownloadAttempt(reason, showToast)
+        }
+
+        override fun dumpOtaServerInfo() {
+            this@MainActivity.dumpOtaServerInfo()
+        }
+
+        override fun testPullModeOta() {
+            this@MainActivity.testPullModeOta()
+        }
+    }
+    private val legacyGlassesControls: LegacyGlassesControlsBinder by lazy {
+        LegacyGlassesControlsBinder(
+            mainScreenHost,
+            legacyControlsHost,
+            deviceManagers,
+            deviceConnection,
+            heyCyanSettings,
+            glassesSessionGuard,
+            transportPermissions,
+            metaRaybanUi,
+            meetingCaptureUi,
+        )
+    }
+    private val taskerCommands: TaskerCommandHandler by lazy {
+        TaskerCommandHandler(mainScreenHost, legacyControlsHost)
+    }
+    private val assistantSetupGate: AssistantSetupGate by lazy {
+        AssistantSetupGate(this) { currentAssistantRoute() }
+    }
 
     private val metaAndroidPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -1177,29 +1379,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         tts?.stop()
         tts?.shutdown()
     }
-    inner class PermissionCallback : OnPermissionCallback {
-        override fun onGranted(permissions: MutableList<String>, all: Boolean) {
-            if (!all) {
-                // Permissions not fully granted; do nothing for now
-            } else {
-                this@MainActivity.startKtxActivity<DeviceBindActivity>()
-            }
-        }
-
-        override fun onDenied(permissions: MutableList<String>, never: Boolean) {
-            super.onDenied(permissions, never)
-            Toast.makeText(
-                this@MainActivity,
-                "Bluetooth permission is required to find glasses",
-                Toast.LENGTH_LONG,
-            ).show()
-            if (never) {
-                XXPermissions.startPermissionActivity(this@MainActivity, permissions)
-            }
-        }
-
-    }
-
 
     override fun onResume() {
         super.onResume()
@@ -1370,43 +1549,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         triggerAssistantVoiceQuery()
     }
 
-    private fun showAssistantSetupIfNeeded(kind: AssistantTestKind): Boolean {
-        val issue = AssistantTestReadiness.blockingIssue(this, currentAssistantRoute(), kind)
-        if (issue != null) {
-            AlertDialog.Builder(this)
-                .setTitle(issue.title)
-                .setMessage(issue.message)
-                .setNegativeButton("Not now", null)
-                .setPositiveButton(issue.actionLabel) { _, _ ->
-                    val destination = when (issue.destination) {
-                        AssistantSetupDestination.LOCAL_MODELS -> LocalModelsConfigureActivity::class.java
-                        AssistantSetupDestination.PRO_SUBSCRIPTION -> ProSubscriptionActivity::class.java
-                    }
-                    startActivity(Intent(this, destination))
-                }
-                .show()
-            return true
-        }
-        if (currentAssistantRoute() == GlassesAssistantRoute.TASKER_EXTERNAL_UI) {
-            val capability = ExternalAssistantAutomationInspector.inspect(this)
-            val reason = when (kind) {
-                AssistantTestKind.VOICE -> ExternalAssistantAutomationPolicy.voiceBlockingReason(capability)
-                AssistantTestKind.IMAGE -> ExternalAssistantAutomationPolicy.imageBlockingReason(capability)
-            }
-            if (reason != null) {
-                AlertDialog.Builder(this)
-                    .setTitle("Tasker setup required")
-                    .setMessage(reason)
-                    .setNegativeButton("Not now", null)
-                    .setPositiveButton("Open setup") { _, _ ->
-                        startActivity(Intent(this, ExternalAssistantAutomationSetupActivity::class.java))
-                    }
-                    .show()
-                return true
-            }
-        }
-        return false
-    }
+    private fun showAssistantSetupIfNeeded(kind: AssistantTestKind): Boolean =
+        assistantSetupGate.showAssistantSetupIfNeeded(kind)
 
     private fun getOrCreateMetaRaybanManager(): com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager =
         deviceManagers.getOrCreateMetaRaybanManager()
@@ -1454,16 +1598,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     }
 
-    private fun ensureBluetoothPermission(feature: String, onGranted: () -> Unit) {
-        transportPermissions.ensureBluetoothPermission(feature, onGranted)
-    }
-
     private fun ensureGlassesTransportPermissions(feature: String, onGranted: () -> Unit) {
         transportPermissions.ensureGlassesTransportPermissions(feature, onGranted)
-    }
-
-    private fun requestPendingTransportPermission() {
-        transportPermissions.requestPendingTransportPermission()
     }
 
     private fun updateDashboardState(
@@ -1500,1057 +1636,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         glassesSessionGuard.warnIfBackgroundGlassesCommandTimesOut(permit, timeoutMs)
     }
 
-    private fun isDashboardActionBlockedByExclusiveSession(action: GlassesDashboardAction): Boolean {
-        if (DashboardSessionPolicy.ignoresExclusiveSession(action)) {
-            return false
-        }
-        val activeSession = GlassesSessionCoordinator.currentSession() ?: return false
-        val isAllowed = DashboardSessionPolicy.isAllowedDuring(action, activeSession)
-        if (isAllowed) return false
-
-        Toast.makeText(
-            this,
-            "${activeSession.label.replaceFirstChar { it.uppercase() }} is using the glasses connection.",
-            Toast.LENGTH_SHORT,
-        ).show()
-        return true
-    }
-
     private fun handleDashboardAction(action: GlassesDashboardAction) {
-        if (isDashboardActionBlockedByExclusiveSession(action)) return
-        if (isTuneBudsSelected() && !action.isSupportedForTuneBudsDashboard()) {
-            Log.i("Dashboard", "Ignoring unsupported TuneBuds dashboard action: $action")
-            return
-        }
-        when (action) {
-            is GlassesDashboardAction.Navigate -> navigateToDestination(action.destination)
-            GlassesDashboardAction.Scan -> {
-                if (isMoyoungW620Selected()) {
-                    startKtxActivity<DeviceBindActivity>()
-                } else if (isEyevueSelected()) {
-                    startKtxActivity<DeviceBindActivity>()
-                } else if (isTuneBudsSelected()) {
-                    startKtxActivity<DeviceBindActivity>()
-                } else if (isMeizuMyvuSelected()) {
-                    startKtxActivity<DeviceBindActivity>()
-                } else if (isMetaRaybanSelected()) {
-                    startKtxActivity<DeviceBindActivity>()
-                } else {
-                    binding.btnScan.performClick()
-                }
-            }
-            GlassesDashboardAction.Reconnect -> {
-                if (isMoyoungW620Selected()) {
-                    DeviceProfileStore.loadLastSelected(this)?.let { profile ->
-                        getOrCreateMoyoungW620Manager().connect(profile.macAddress, profile.advertisedName)
-                    } ?: startKtxActivity<DeviceBindActivity>()
-                } else if (isEyevueSelected()) {
-                    DeviceProfileStore.loadLastSelected(this)?.let { profile ->
-                        getOrCreateEyevueManager().connect(profile.macAddress, profile.advertisedName)
-                    } ?: startKtxActivity<DeviceBindActivity>()
-                } else if (isTuneBudsSelected()) {
-                    DeviceProfileStore.loadLastSelected(this)?.let { profile ->
-                        getOrCreateTuneBudsManager().connect(profile.macAddress, profile.advertisedName)
-                    } ?: startKtxActivity<DeviceBindActivity>()
-                } else if (isMeizuMyvuSelected()) {
-                    DeviceProfileStore.loadLastSelected(this)?.macAddress?.let {
-                        getOrCreateMeizuMyvuManager().connect(it, this, userInitiated = true)
-                    } ?: startKtxActivity<DeviceBindActivity>()
-                } else if (isMetaRaybanSelected()) {
-                    startActivity(Intent(this, MetaPairingActivity::class.java))
-                } else {
-                    binding.btnConnect.performClick()
-                }
-            }
-            GlassesDashboardAction.Disconnect -> {
-                if (isMoyoungW620Selected()) {
-                    AutoPairManager.setAutoReconnectSuppressed(true, reason = "user_disconnect_button")
-                    getOrCreateMoyoungW620Manager().disconnect()
-                } else if (isEyevueSelected()) {
-                    getOrCreateEyevueManager().disconnect()
-                } else if (isTuneBudsSelected()) {
-                    AutoPairManager.setAutoReconnectSuppressed(true, reason = "user_disconnect_button")
-                    getOrCreateTuneBudsManager().disconnect()
-                } else if (isMeizuMyvuSelected()) {
-                    getOrCreateMeizuMyvuManager().disconnect()
-                } else if (isMetaRaybanSelected()) {
-                    metaRaybanManager?.stopSession()
-                    updateConnectionStatus(false)
-                } else {
-                    binding.btnDisconnect.performClick()
-                }
-            }
-            is GlassesDashboardAction.SelectMeetingTimer -> {
-                val index = action.index.coerceIn(0, meetingTimerOptions.lastIndex)
-                binding.spinnerMeetingTimer.setSelection(index)
-                updateDashboardState { state ->
-                    state.copy(meeting = state.meeting.copy(timerIndex = index))
-                }
-            }
-            GlassesDashboardAction.StartMeetingCapture -> binding.btnMeetingStart.performClick()
-            GlassesDashboardAction.StopMeetingCapture -> binding.btnMeetingStop.performClick()
-            is GlassesDashboardAction.RunNativePluginShortcut -> {
-                runNativePluginShortcut(action.action)
-            }
-            is GlassesDashboardAction.SelectAssistantMode -> when (action.mode) {
-                GlassesAssistantMode.PHONE_ASSISTANT -> selectPhoneAssistant()
-                GlassesAssistantMode.CUSTOM_AI_PROVIDER -> selectCustomAiProvider()
-            }
-            is GlassesDashboardAction.SetAiWakeWordRoute -> {
-                if (isHeyCyanOrEyevueSelected()) {
-                    AiWakeWordPreferences.setRoute(this, action.route)
-                    updateDashboardState { state -> state.copy(aiWakeWordRoute = action.route) }
-                }
-            }
-            is GlassesDashboardAction.SelectImageThumbnailQuality -> {
-                if (!isHeyCyanSelected() && !isTuneBudsSelected()) return
-                val quality = ImageQuestionPreferences.setThumbnailQuality(this, action.sdkValue)
-                pendingImageThumbnailQuality = quality
-                updateDashboardState { state ->
-                    state.copy(
-                        imageThumbnailQualitySdkValue = quality.sdkValue,
-                        imageThumbnailQualityLabel = quality.label,
-                    )
-                }
-            }
-            is GlassesDashboardAction.SetGeminiLiveImageDelay -> {
-                val seconds = GeminiLiveVisionPreferences.setImageDelaySeconds(this, action.seconds)
-                updateDashboardState { state -> state.copy(geminiLiveImageDelaySeconds = seconds) }
-            }
-            GlassesDashboardAction.TestVoiceQuestion -> binding.btnTestHijackVoice.performClick()
-            GlassesDashboardAction.TestImageQuestion -> binding.btnTestHijackImage.performClick()
-            GlassesDashboardAction.OpenExternalImageAutomationDiagnostics -> {
-                startActivity(Intent(this, ExternalAssistantAutomationSetupActivity::class.java))
-            }
-            GlassesDashboardAction.CapturePhoto -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().takeManualPhoto()
-            } else if (isTuneBudsSelected()) {
-                getOrCreateTuneBudsManager().takePhoto()
-            } else {
-                binding.btnCamera.performClick()
-            }
-            GlassesDashboardAction.ToggleVideo -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().toggleVideo()
-            } else if (isTuneBudsSelected()) {
-                getOrCreateTuneBudsManager().toggleVideo()
-            } else {
-                binding.btnVideo.performClick()
-            }
-            GlassesDashboardAction.StartAudioRecording -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().toggleAudio()
-            } else if (isTuneBudsSelected()) {
-                getOrCreateTuneBudsManager().toggleAudio()
-            } else {
-                binding.btnRecord.performClick()
-            }
-            GlassesDashboardAction.RequestMediaCount -> if (isEyevueSelected()) {
-                Toast.makeText(this, "Requesting media count…", Toast.LENGTH_SHORT).show()
-                lifecycleScope.launch {
-                    val count = try {
-                        getOrCreateEyevueManager().awaitMediaCount()
-                    } catch (_: Exception) {
-                        null
-                    }
-                    Toast.makeText(
-                        this@MainActivity,
-                        if (count != null) "Media count: $count" else "Eyevue did not report a media count",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-            } else if (isTuneBudsSelected()) {
-                getOrCreateTuneBudsManager().requestMediaCount()
-            } else if (isMoyoungW620Selected()) {
-                getOrCreateMoyoungW620Manager().requestMediaCount()
-            } else {
-                binding.btnMediaCount.performClick()
-            }
-            GlassesDashboardAction.StartSync -> if (isEyevueSelected()) {
-                startEyevueMediaSync()
-            } else if (isTuneBudsSelected()) {
-                startTuneBudsMediaSync()
-            } else if (isMoyoungW620Selected()) {
-                startMoyoungW620MediaSync()
-            } else {
-                binding.btnDataDownload.performClick()
-            }
-            GlassesDashboardAction.StopSync -> if (isEyevueSelected()) {
-                stopEyevueMediaSync()
-            } else if (isTuneBudsSelected()) {
-                stopTuneBudsMediaSync()
-            } else if (isMoyoungW620Selected()) {
-                stopMoyoungW620MediaSync()
-            } else {
-                binding.btnTransferStop.performClick()
-            }
-            GlassesDashboardAction.ToggleAdvanced -> {
-                if (!dashboardState.showAdvancedControls) return
-                binding.btnToggleAdvanced.performClick()
-                updateDashboardState { state ->
-                    state.copy(advancedExpanded = !state.advancedExpanded)
-                }
-            }
-            GlassesDashboardAction.StartAgent -> LocalAgentController.requestStatus(this)
-            GlassesDashboardAction.StopAgent -> binding.btnAgentStop.performClick()
-            GlassesDashboardAction.RunAgentDemo -> binding.btnAgentDemo.performClick()
-            GlassesDashboardAction.RequestBattery -> if (isEyevueSelected()) {
-                Toast.makeText(this, "Requesting battery level…", Toast.LENGTH_SHORT).show()
-                lifecycleScope.launch {
-                    val percent = try {
-                        getOrCreateEyevueManager().awaitBatteryPercent()
-                    } catch (_: Exception) {
-                        null
-                    }
-                    Toast.makeText(
-                        this@MainActivity,
-                        if (percent != null) "Eyevue battery: $percent%" else "Eyevue did not report battery",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-            } else if (isTuneBudsSelected()) {
-                getOrCreateTuneBudsManager().requestBattery()
-            } else if (isMoyoungW620Selected()) {
-                getOrCreateMoyoungW620Manager().requestBattery()
-            } else {
-                binding.btnBattery.performClick()
-            }
-            GlassesDashboardAction.RequestVersion -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().requestDeviceInfo()
-            } else if (isTuneBudsSelected()) {
-                getOrCreateTuneBudsManager().requestVersion()
-            } else {
-                binding.btnVersion.performClick()
-            }
-            GlassesDashboardAction.SyncTime -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().syncTime()
-            } else if (isTuneBudsSelected()) {
-                getOrCreateTuneBudsManager().syncTime()
-            } else {
-                binding.btnSetTime.performClick()
-            }
-            GlassesDashboardAction.RequestVolume -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().requestVolume()
-            } else {
-                binding.btnVolume.performClick()
-            }
-            GlassesDashboardAction.AddDeviceListener -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().requestSupportFunction()
-            } else {
-                binding.btnAddListener.performClick()
-            }
-            GlassesDashboardAction.StartClassicBluetoothScan -> binding.btnBt.performClick()
-            GlassesDashboardAction.DumpOtaInfo -> binding.btnOtaInfo.performClick()
-            GlassesDashboardAction.TestPullOta -> binding.btnPullOtaTest.performClick()
-            is GlassesDashboardAction.RequestOtaFirmware -> requestOtaFirmware(action.source)
-            is GlassesDashboardAction.SubmitFirmwarePatchRequest -> {
-                val request = dashboardState.firmwarePatchRequest ?: return
-                if (request.isSubmitting) return
-                dashboardState = dashboardState.copy(
-                    firmwarePatchRequest = request.copy(
-                        isSubmitting = true,
-                        submissionError = null,
-                    ),
-                )
-                submitFirmwarePatchRequest(request, action.contactEmail)
-            }
-            GlassesDashboardAction.DismissFirmwarePatchRequest -> {
-                if (dashboardState.firmwarePatchRequest?.isSubmitting != true) {
-                    dashboardState = dashboardState.copy(firmwarePatchRequest = null)
-                }
-            }
-            GlassesDashboardAction.CancelOta -> {
-                val managerWasActive = otaManager.isActive
-                otaPreparationJob?.cancel()
-                otaPreparationJob = null
-                pendingPersonalFirmwareTarget = null
-                stagedPersonalWifiFirmware?.takeIf { it.exists() }?.delete()
-                stagedPersonalWifiFirmware = null
-                otaManager.cancel()
-                if (!managerWasActive) {
-                    releaseExclusiveGlassesSession(otaSessionLease)
-                    resetOtaDashboardToIdle()
-                }
-            }
-            GlassesDashboardAction.StartLivePreview -> if (isEyevueSelected()) {
-                startEyevueLivePreview()
-            } else if (isTuneBudsSelected()) {
-                startTuneBudsLivePreview()
-            } else if (isHeyCyanSelected()) {
-                startLivePreview()
-            }
-            GlassesDashboardAction.StopLivePreview -> {
-                Log.i("LivePreview", "BUTTON TAP: Stop Live Preview")
-                if (isEyevueSelected()) {
-                    if (eyevueLivePreviewManager?.isActive == true) {
-                        getOrCreateEyevueLivePreviewManager().stop()
-                    }
-                    com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveForegroundService.stop(this)
-                    releaseExclusiveGlassesSession(livePreviewSessionLease)
-                    livePreviewSessionLease = null
-                } else if (isTuneBudsSelected()) {
-                    tuneBudsLivePreviewManager?.stop()
-                    // Release the session and foreground service only after cleanup.
-                } else {
-                    stopLivePreview()
-                }
-            }
-            GlassesDashboardAction.RequestStartWifiAdbDebug -> {
-                if (BuildConfig.DEBUG && isHeyCyanSelected()) startWifiAdbDebug()
-            }
-            GlassesDashboardAction.StopWifiAdbDebug -> {
-                if (BuildConfig.DEBUG && isHeyCyanSelected()) wifiAdbDebugController.stop()
-            }
-            GlassesDashboardAction.MetaRegister -> binding.btnMetaRegister.performClick()
-            GlassesDashboardAction.MetaOpenPairing ->
-                startActivity(Intent(this, MetaPairingActivity::class.java))
-            GlassesDashboardAction.MetaOpenMetaAi -> openMetaAiAppOrStore()
-            GlassesDashboardAction.MetaUnregister -> binding.btnMetaUnregister.performClick()
-            GlassesDashboardAction.MetaStartSession -> binding.btnMetaSessionStart.performClick()
-            GlassesDashboardAction.MetaStopSession -> binding.btnMetaSessionStop.performClick()
-            GlassesDashboardAction.MetaStartStream -> binding.btnMetaStreamStart.performClick()
-            GlassesDashboardAction.MetaStopStream -> binding.btnMetaStreamStop.performClick()
-            GlassesDashboardAction.MetaCapturePhoto -> binding.btnMetaCapturePhoto.performClick()
-            GlassesDashboardAction.MetaViewPhoto -> binding.btnMetaViewPhoto.performClick()
-            GlassesDashboardAction.MetaStartDisplay -> binding.btnMetaDisplayStart.performClick()
-            GlassesDashboardAction.MetaStopDisplay -> binding.btnMetaDisplayStop.performClick()
-            GlassesDashboardAction.MetaSendDiagnostics -> showMetaDiagnostics()
-            GlassesDashboardAction.MeizuConnect -> {
-                DeviceProfileStore.loadLastSelected(this)?.macAddress?.let {
-                    getOrCreateMeizuMyvuManager().connect(it, this, userInitiated = true)
-                } ?: Toast.makeText(this, "Select MYVU glasses from Scan first", Toast.LENGTH_LONG).show()
-            }
-            GlassesDashboardAction.MeizuDisconnect -> getOrCreateMeizuMyvuManager().disconnect()
-            GlassesDashboardAction.MeizuSendTestNotification -> getOrCreateMeizuMyvuManager().sendTestNotification()
-            GlassesDashboardAction.MeizuShowTestTeleprompter -> getOrCreateMeizuMyvuManager().showTeleprompter(
-                "CyanBridge",
-                "MYVU display connected\n\nNative voice plugins can now use the MYVU headset microphone and display bridge.",
-            )
-            GlassesDashboardAction.MeizuSyncClock -> getOrCreateMeizuMyvuManager().syncClock()
-            GlassesDashboardAction.MeizuSetComfortBrightness -> getOrCreateMeizuMyvuManager().setBrightness(70)
-            GlassesDashboardAction.RefreshRecordingSettings -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().requestSupportFunction()
-            } else {
-                refreshHeyCyanRecordingSettings()
-            }
-            is GlassesDashboardAction.SetVideoRecordingDuration -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().setRecordingDuration(action.seconds)
-            } else if (isHeyCyanSelected()) {
-                setHeyCyanRecordingDuration(isAudio = false, seconds = action.seconds)
-            }
-            is GlassesDashboardAction.SetAudioRecordingDuration -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().setRecordingDuration(action.seconds)
-            } else if (isHeyCyanSelected()) {
-                setHeyCyanRecordingDuration(isAudio = true, seconds = action.seconds)
-            }
-            is GlassesDashboardAction.SetWearingDetection -> if (isEyevueSelected()) {
-                getOrCreateEyevueManager().setWearingDetection(action.enabled)
-            } else if (isTuneBudsSelected()) {
-                Log.i("Dashboard", "TuneBuds wearing detection is not exposed until hardware capability is confirmed")
-            } else {
-                Log.i("Dashboard", "SetWearingDetection (no-op in temp branch)")
-            }
-            GlassesDashboardAction.DismissTransportPermissionDialog ->
-                transportPermissions.dismissTransportPermissionDialog()
-            GlassesDashboardAction.RequestTransportPermission -> requestPendingTransportPermission()
-        }
+        dashboardController.handleDashboardAction(action)
     }
 
     private fun refreshNativePluginShortcutState() {
-        syncLegacyNativePluginState()
-        dashboardState = dashboardState.copy(
-            nativePluginShortcut = buildNativePluginShortcutState(
-                CommunityPluginPrefs.getGlassesTabShortcutPluginId(this),
-            ),
-        )
-    }
-
-    private fun syncLegacyNativePluginState() {
-        LocalAgentPlugin.syncNativePluginState(this)
-        CommunityPluginPrefs.setNativePluginEnabled(
-            this,
-            NativePluginIds.AUTO_DIARY,
-            AutoDiaryService.isEnabled(this),
-        )
-        CommunityPluginPrefs.setNativePluginEnabled(
-            this,
-            NativePluginIds.AUTO_AUDIO,
-            AutoAudioCapturePrefs.isEnabled(this),
-        )
-        CommunityPluginPrefs.setNativePluginEnabled(
-            this,
-            NativePluginIds.VISUAL_DIARY,
-            VisualDiaryPreferences.isEnabled(this),
-        )
-    }
-
-    private fun buildNativePluginShortcutState(pluginId: String?): NativePluginShortcutUiState? {
-        val id = pluginId ?: return null
-        val definition = when (id) {
-            NativePluginIds.LOCAL_AGENT -> NativePluginShortcutUiState(
-                id = id,
-                title = "Local Agent",
-                description = "Run private phone automation with approval controls for risky actions.",
-                isEnabled = LocalAgentPlugin.isEnabled(this),
-                buttons = listOf(
-                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Enable automation"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Disable automation"),
-                ),
-            )
-            NativePluginIds.MEETING_SPARK_NOTES -> NativePluginShortcutUiState(
-                id = id,
-                title = "Meeting Spark Notes",
-                description = "Capture a live meeting transcript and turn it into concise notes.",
-                isEnabled = MeetingCapturePrefs.getState(this).isRecording,
-                buttons = listOf(
-                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Start capture"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop capture"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.SUMMARIZE, "Summarize"),
-                ),
-            )
-            NativePluginIds.LIVE_CAPTION_RELAY -> NativePluginShortcutUiState(
-                id = id,
-                title = "Live Caption Relay",
-                description = "Caption live speech from the phone or glasses microphone.",
-                isEnabled = CommunityPluginPrefs.isNativePluginEnabled(this, id),
-                buttons = listOf(
-                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Start captions"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop captions"),
-                ),
-            )
-            NativePluginIds.HANDS_FREE_TRANSLATOR -> NativePluginShortcutUiState(
-                id = id,
-                title = "Hands-Free Translator",
-                description = "Translate live speech while the translator service is enabled.",
-                isEnabled = CommunityPluginPrefs.isNativePluginEnabled(this, id),
-                buttons = listOf(
-                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Start translator"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop translator"),
-                ),
-            )
-            NativePluginIds.ERRAND_BRAIN -> NativePluginShortcutUiState(
-                id = id,
-                title = "Errand Brain",
-                description = "Listen for spoken tasks and reminders.",
-                isEnabled = CommunityPluginPrefs.isNativePluginEnabled(this, id),
-                buttons = listOf(
-                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Start listening"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop listening"),
-                ),
-            )
-            NativePluginIds.WALKING_AID -> NativePluginShortcutUiState(
-                id = id,
-                title = "Walking Aid",
-                description = "Start or stop scene descriptions and obstacle warnings.",
-                isEnabled = CommunityPluginPrefs.isNativePluginEnabled(this, id),
-                buttons = listOf(
-                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Start walking aid"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop walking aid"),
-                ),
-            )
-            NativePluginIds.AUTO_DIARY -> NativePluginShortcutUiState(
-                id = id,
-                title = "AutoDiary",
-                description = "Collect screen context and turn it into daily facts, bullets, and summaries.",
-                isEnabled = CommunityPluginPrefs.isNativePluginEnabled(this, id),
-                buttons = listOf(
-                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Start diary"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop diary"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.SUMMARIZE, "Summarize today"),
-                ),
-            )
-            NativePluginIds.AUTO_AUDIO -> NativePluginShortcutUiState(
-                id = id,
-                title = "Auto Audio",
-                description = "Record glasses audio in resilient loops and sync it periodically.",
-                isEnabled = CommunityPluginPrefs.isNativePluginEnabled(this, id),
-                buttons = listOf(
-                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Start audio loop"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop audio loop"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.SYNC, "Sync now"),
-                ),
-            )
-            NativePluginIds.VISUAL_DIARY -> NativePluginShortcutUiState(
-                id = id,
-                title = "Visual Diary",
-                description = "Capture a glasses scene and append a Gemma-generated diary note.",
-                isEnabled = CommunityPluginPrefs.isNativePluginEnabled(this, id),
-                buttons = listOf(
-                    NativePluginShortcutButton(NativePluginShortcutAction.START, "Start visual diary"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.STOP, "Stop visual diary"),
-                    NativePluginShortcutButton(NativePluginShortcutAction.CAPTURE, "Capture scene"),
-                ),
-            )
-            else -> null
-        }
-        return definition
-    }
-
-    private fun runNativePluginShortcut(action: NativePluginShortcutAction) {
-        val pluginId = CommunityPluginPrefs.getGlassesTabShortcutPluginId(this) ?: return
-        if (pluginId == NativePluginIds.MEETING_SPARK_NOTES) {
-            when (action) {
-                NativePluginShortcutAction.START -> {
-                    Log.i("NativePluginShortcut", "Meeting Spark Notes START -> MeetingCaptureService")
-                    startMeetingCaptureFromUi()
-                }
-                NativePluginShortcutAction.STOP -> {
-                    Log.i("NativePluginShortcut", "Meeting Spark Notes STOP -> MeetingCaptureService")
-                    stopMeetingCaptureFromUi()
-                }
-                NativePluginShortcutAction.SUMMARIZE -> MeetingSparkNotesService.summarize(this)
-                else -> Unit
-            }
-        } else when (action) {
-            NativePluginShortcutAction.START -> startNativePlugin(pluginId)
-            NativePluginShortcutAction.STOP -> stopNativePlugin(pluginId)
-            NativePluginShortcutAction.CAPTURE -> if (pluginId == NativePluginIds.VISUAL_DIARY) {
-                VisualDiaryService.captureNow(this)
-            }
-            NativePluginShortcutAction.SYNC -> if (pluginId == NativePluginIds.AUTO_AUDIO) {
-                binding.btnDataDownload.performClick()
-            }
-            NativePluginShortcutAction.SUMMARIZE -> if (pluginId == NativePluginIds.AUTO_DIARY) {
-                AutoDiaryService.summarize(this)
-            }
-        }
-        refreshNativePluginShortcutState()
-    }
-
-    private fun startNativePlugin(pluginId: String) {
-        if (isMeizuMyvuSelected() && pluginId in setOf(
-                NativePluginIds.AUTO_AUDIO,
-                NativePluginIds.VISUAL_DIARY,
-                NativePluginIds.WALKING_AID,
-            )
-        ) {
-            Toast.makeText(
-                this,
-                "This plugin requires a camera or HeyCyan onboard media. MYVU supports display and microphone plugins only.",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
-        if (isMetaRaybanSelected() && pluginId == NativePluginIds.AUTO_AUDIO) {
-            Toast.makeText(
-                this,
-                "Auto Audio records HeyCyan onboard files and is unavailable for Meta Ray-Ban.",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
-        val start = {
-            when (pluginId) {
-                NativePluginIds.AUTO_DIARY -> AutoDiaryService.enable(this)
-                NativePluginIds.VISUAL_DIARY -> VisualDiaryService.enable(this)
-                else -> {
-                    CommunityPluginPrefs.setNativePluginEnabled(this, pluginId, true)
-                    when (pluginId) {
-                        NativePluginIds.LOCAL_AGENT -> {
-                            LocalAgentPlugin.setEnabled(this, true)
-                            Toast.makeText(
-                                this,
-                                "Local Agent enabled. Complete Tasker and AutoInput setup in Plugins.",
-                                Toast.LENGTH_LONG,
-                            ).show()
-                        }
-                        NativePluginIds.MEETING_SPARK_NOTES -> {
-                            MeetingSparkNotesPreferences.setEnabled(this, true)
-                            MeetingSparkNotesService.start(this)
-                        }
-                        NativePluginIds.LIVE_CAPTION_RELAY -> {
-                            LiveCaptionRelayPreferences.setEnabled(this, true)
-                            LiveCaptionRelayService.start(this)
-                        }
-                        NativePluginIds.HANDS_FREE_TRANSLATOR -> {
-                            HandsFreeTranslatorPreferences.setEnabled(this, true)
-                            HandsFreeTranslatorService.start(this)
-                        }
-                        NativePluginIds.ERRAND_BRAIN -> {
-                            ErrandBrainPreferences.setEnabled(this, true)
-                            ErrandBrainService.start(this)
-                        }
-                        NativePluginIds.WALKING_AID -> {
-                            WalkingAidPreferences.setEnabled(this, true)
-                            WalkingAidService.start(this)
-                        }
-                        NativePluginIds.AUTO_AUDIO -> AutoAudioCaptureService.start(this)
-                    }
-                }
-            }
-            refreshNativePluginShortcutState()
-        }
-
-        if (isMetaRaybanSelected() &&
-            pluginId in setOf(NativePluginIds.WALKING_AID, NativePluginIds.VISUAL_DIARY)
-        ) {
-            val manager = getOrCreateMetaRaybanManager()
-            if (!manager.isInitialized.value) manager.initialize()
-            lifecycleScope.launch {
-                if (!manager.awaitCameraReady()) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Register and connect a Meta camera before starting this plugin.",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    return@launch
-                }
-                ensureMetaCameraReady(start)
-            }
-            return
-        }
-
-        if (pluginId == NativePluginIds.WALKING_AID ||
-            pluginId == NativePluginIds.LOCAL_AGENT ||
-            pluginId == NativePluginIds.AUTO_DIARY ||
-            pluginId == NativePluginIds.VISUAL_DIARY
-        ) {
-            if (pluginId == NativePluginIds.WALKING_AID &&
-                WalkingAidPreferences.getVideoMode(this) == com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidVideoMode.EYEVUE_VIDEO
-            ) {
-                ensureGlassesTransportPermissions("Walking Aid video", start)
-            } else start()
-        } else {
-            PluginVoicePermissions.ensure(this, onGranted = start)
-        }
-    }
-
-    private fun stopNativePlugin(pluginId: String) {
-        when (pluginId) {
-            NativePluginIds.AUTO_DIARY -> AutoDiaryService.disable(this)
-            NativePluginIds.VISUAL_DIARY -> VisualDiaryService.disable(this)
-            else -> {
-                CommunityPluginPrefs.setNativePluginEnabled(this, pluginId, false)
-                when (pluginId) {
-                    NativePluginIds.LOCAL_AGENT -> LocalAgentPlugin.stop(this)
-                    NativePluginIds.MEETING_SPARK_NOTES -> {
-                        MeetingSparkNotesPreferences.setEnabled(this, false)
-                        MeetingSparkNotesService.stop(this)
-                    }
-                    NativePluginIds.LIVE_CAPTION_RELAY -> {
-                        LiveCaptionRelayPreferences.setEnabled(this, false)
-                        LiveCaptionRelayService.stop(this)
-                    }
-                    NativePluginIds.HANDS_FREE_TRANSLATOR -> {
-                        HandsFreeTranslatorPreferences.setEnabled(this, false)
-                        HandsFreeTranslatorService.stop(this)
-                    }
-                    NativePluginIds.ERRAND_BRAIN -> {
-                        ErrandBrainPreferences.setEnabled(this, false)
-                        ErrandBrainService.stop(this)
-                    }
-                    NativePluginIds.WALKING_AID -> {
-                        WalkingAidPreferences.setEnabled(this, false)
-                        WalkingAidService.stop(this)
-                    }
-                    NativePluginIds.AUTO_AUDIO -> AutoAudioCaptureService.stop(this)
-                }
-            }
-        }
+        nativePluginShortcuts.refreshNativePluginShortcutState()
     }
 
     private fun navigateToDestination(destination: AppDestination) {
-        when (destination) {
-            AppDestination.GLASSES -> Unit
-            AppDestination.CHATS -> {
-                val last = ChatStore.listNonEmptyThreads().firstOrNull()
-                val now = System.currentTimeMillis()
-                val lastUserAt = last?.let { thread ->
-                    ChatStore.listMessages(thread.id)
-                        .lastOrNull { it.role == com.fersaiyan.cyanbridge.shared.chat.ChatRole.USER }
-                        ?.createdAt
-                } ?: 0L
-                val openChatId = last?.id?.takeIf { lastUserAt > 0L && now - lastUserAt < 30 * 60 * 1000L }
-                startActivity(Intent(this, ChatThreadActivity::class.java).apply {
-                    openChatId?.let { putExtra(ChatThreadActivity.EXTRA_CHAT_ID, it) }
-                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                })
-            }
-            AppDestination.MEDIA -> startActivity(Intent(this, RecordingsListActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
-            })
-            AppDestination.PLUGINS -> startActivity(Intent(this, CommunityPluginsActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
-            })
-            AppDestination.SETTINGS -> startActivity(Intent(this, SettingsActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
-            })
-        }
-        if (destination != AppDestination.GLASSES) {
-            overridePendingTransition(0, 0)
-        }
+        appDestinationNavigator.navigateToDestination(destination)
     }
 
     private fun initView() {
-        setOnClickListener(
-            binding.btnScan,
-            binding.btnConnect,
-            binding.btnDisconnect,
-            binding.btnAddListener,
-            binding.btnSetTime,
-            binding.btnVersion,
-            binding.btnCamera,
-            binding.btnVideo,
-            binding.btnRecord,
-            binding.btnBt,
-            binding.btnBattery,
-            binding.btnVolume,
-            binding.btnMediaCount,
-            binding.btnDataDownload,
-            binding.btnOtaInfo,
-            binding.btnPullOtaTest,
-            binding.btnModeGemini,
-            binding.btnModeChatgpt,
-            binding.btnModeTasker,
-            binding.btnTestHijackVoice,
-            binding.btnTestHijackImage,
-            binding.btnToggleAdvanced,
-            // binding.btnNotes,
-            binding.btnMeetingStart,
-            binding.btnMeetingStop,
-            binding.btnMeetingBannerStop,
-            binding.btnTransferStop,
-        ) {
-            val activeSession = GlassesSessionCoordinator.currentSession()
-            val isAllowedStop = this == binding.btnTransferStop &&
-                activeSession == GlassesSession.MEDIA_SYNC
-            if (activeSession != null && !isAllowedStop) {
-                Toast.makeText(
-                    this@MainActivity,
-                    "${activeSession.label.replaceFirstChar { it.uppercase() }} is using the glasses connection.",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                return@setOnClickListener
-            }
-
-            if (isMetaRaybanSelected() && this in setOf(
-                    binding.btnConnect,
-                    binding.btnDisconnect,
-                    binding.btnAddListener,
-                    binding.btnSetTime,
-                    binding.btnVersion,
-                    binding.btnVideo,
-                    binding.btnRecord,
-                    binding.btnBt,
-                    binding.btnBattery,
-                    binding.btnVolume,
-                    binding.btnMediaCount,
-                    binding.btnDataDownload,
-                    binding.btnOtaInfo,
-                    binding.btnPullOtaTest,
-                )
-            ) {
-                rejectHeyCyanOnlyFeature("This HeyCyan control")
-                return@setOnClickListener
-            }
-
-            val needsBluetoothPermission = this == binding.btnConnect ||
-                this == binding.btnDisconnect ||
-                this == binding.btnAddListener ||
-                this == binding.btnSetTime ||
-                this == binding.btnVersion ||
-                this == binding.btnCamera ||
-                this == binding.btnVideo ||
-                this == binding.btnRecord ||
-                this == binding.btnBt ||
-                this == binding.btnBattery ||
-                this == binding.btnVolume ||
-                this == binding.btnMediaCount ||
-                this == binding.btnDataDownload ||
-                this == binding.btnTestHijackImage ||
-                this == binding.btnOtaInfo ||
-                this == binding.btnPullOtaTest
-            if (needsBluetoothPermission && !hasBluetooth(this@MainActivity)) {
-                ensureBluetoothPermission("this glasses feature") {
-                    performClick()
-                }
-                return@setOnClickListener
-            }
-
-            // Do not queue an unawaited audio-stop command immediately before another command
-            // that needs the vendor SDK's single glassesControl response slot.
-            val actionSendsGlassesControl = this == binding.btnCamera ||
-                this == binding.btnVideo ||
-                this == binding.btnRecord ||
-                this == binding.btnMediaCount ||
-                this == binding.btnDataDownload ||
-                this == binding.btnTestHijackVoice ||
-                this == binding.btnTestHijackImage ||
-                this == binding.btnPullOtaTest
-            val shouldStopGlassesAudio = this != binding.btnScan &&
-                this != binding.btnConnect &&
-                this != binding.btnTransferStop &&
-                !actionSendsGlassesControl
-            if (shouldStopGlassesAudio) {
-                controlAudioRecording(false)
-                // If auto audio capture is enabled, give the user a short window to operate other controls.
-                if (AutoAudioCapturePrefs.isEnabled(this@MainActivity) && this != binding.btnRecord) {
-                    AutoAudioCapturePrefs.pauseForMs(this@MainActivity, 90_000)
-                }
-            }
-
-            when (this) {
-                binding.btnToggleAdvanced -> {
-                    val container = binding.layoutAdvancedContainer
-                    if (container.visibility == android.view.View.VISIBLE) {
-                        container.visibility = android.view.View.GONE
-                        binding.btnToggleAdvanced.text = "Advanced ▼"
-                    } else {
-                        container.visibility = android.view.View.VISIBLE
-                        binding.btnToggleAdvanced.text = "Advanced ▲"
-                    }
-                }
-
-                binding.btnTestHijackVoice -> {
-                    startVoiceQuestionFromUi()
-                }
-
-                binding.btnTestHijackImage -> {
-                    startImageQuestionFromUi()
-                }
-
-                binding.btnModeGemini -> {
-                    selectPhoneAssistant()
-                }
-
-                binding.btnModeChatgpt -> {
-                    selectPhoneAssistant()
-                }
-
-                binding.btnModeTasker -> {
-                    selectCustomAiProvider()
-                }
-
-                // Notes & Summaries entry removed (moved to Transcriptions & recordings section)
-
-                binding.btnMeetingStart -> {
-                    startMeetingCaptureFromUi()
-                }
-
-                binding.btnMeetingStop, binding.btnMeetingBannerStop -> {
-                    stopMeetingCaptureFromUi()
-                }
-
-                binding.btnScan -> {
-                    requestBluetoothPermission(this@MainActivity, PermissionCallback())
-                }
-
-                binding.btnConnect -> {
-                    // User explicitly wants to reconnect, so re-enable auto pairing.
-                    AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_reconnect_button")
-                    Toast.makeText(this@MainActivity, "Reconnecting to glasses…", Toast.LENGTH_SHORT).show()
-                    BleOperateManager.getInstance()
-                        .connectDirectly(DeviceManager.getInstance().deviceAddress)
-                }
-
-                binding.btnDisconnect -> {
-                    // Prevent the background reconnection loop from immediately reconnecting.
-                    AutoPairManager.setAutoReconnectSuppressed(true, reason = "user_disconnect_button")
-                    Toast.makeText(this@MainActivity, "Disconnecting from glasses…", Toast.LENGTH_SHORT).show()
-                    BleOperateManager.getInstance().unBindDevice()
-                }
-
-                binding.btnAddListener -> {
-                    Toast.makeText(this@MainActivity, "Registering device event listener…", Toast.LENGTH_SHORT).show()
-                    LargeDataHandler.getInstance().addOutDeviceListener(100, deviceNotifyListener)
-                }
-
-                binding.btnSetTime -> {
-                    Toast.makeText(this@MainActivity, "Syncing glasses time…", Toast.LENGTH_SHORT).show()
-                    Log.i("setTime", "setTime" + BleOperateManager.getInstance().isConnected)
-                    LargeDataHandler.getInstance().syncTime { _, _ -> }
-                }
-
-                binding.btnVersion -> {
-                    Toast.makeText(this@MainActivity, "Reading device version…", Toast.LENGTH_SHORT).show()
-                    LargeDataHandler.getInstance().syncDeviceInfo { _, response ->
-                        if (response != null) {
-                            val message =
-                                "WiFi FW: ${response.wifiFirmwareVersion}, BT FW: ${response.firmwareVersion}"
-                            Log.i("DeviceInfo", message)
-                            runOnUiThread {
-                                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
-                            }
-                        } else {
-                            runOnUiThread {
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Failed to get device version",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    }
-                }
-
-                binding.btnCamera -> {
-                    if (isMetaRaybanSelected()) {
-                        captureMetaPhotoForGallery()
-                        return@setOnClickListener
-                    }
-                    val permit = acquireBackgroundGlassesCommand("camera command")
-                        ?: return@setOnClickListener
-                    try {
-                        LargeDataHandler.getInstance().glassesControl(
-                            byteArrayOf(0x02, 0x01, 0x01)
-                        ) { _, it ->
-                            try {
-                                if (it.dataType == 1 && it.errorCode == 0) {
-                                    when (it.workTypeIng) {
-                                        2 -> {
-                                            //Glasses are recording video
-                                        }
-                                        4 -> {
-                                            //Glasses are in transfer mode
-                                        }
-                                        5 -> {
-                                            //Glasses are in OTA mode
-                                        }
-                                        1, 6 ->{
-                                            //Glasses are in camera mode
-                                        }
-                                        7 -> {
-                                            //Glasses are in AI conversation
-                                        }
-                                        8 ->{
-                                            //Glasses are in recording mode
-                                        }
-                                    }
-                                }
-                            } finally {
-                                GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-                            }
-                        }
-                        warnIfBackgroundGlassesCommandTimesOut(permit)
-                    } catch (e: Exception) {
-                        GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-                        Log.e("Camera", "Failed to send camera command", e)
-                    }
-                }
-
-                binding.btnVideo -> {
-                    // Toggle video recording. While video is active, pause the auto audio loop.
-                    val isRecording = GlassesMediaPrefs.isVideoRecording(this@MainActivity)
-                    if (isRecording) {
-                        Toast.makeText(this@MainActivity, "Stopping video recording…", Toast.LENGTH_SHORT).show()
-                        controlVideoRecording(false)
-                    } else {
-                        Toast.makeText(this@MainActivity, "Starting video recording…", Toast.LENGTH_SHORT).show()
-                        controlVideoRecording(true)
-                    }
-                }
-
-                binding.btnRecord -> {
-                    // Default UI behavior: start audio recording
-                    controlAudioRecording(true)
-                }
-
-                binding.btnBt -> {
-                    Toast.makeText(this@MainActivity, "Starting classic Bluetooth scan…", Toast.LENGTH_SHORT).show()
-                    //BT scan
-                    BleOperateManager.getInstance().classicBluetoothStartScan()
-
-                }
-                binding.btnBattery -> {
-                    requestBatteryStatus(showToast = true)
-                }
-                binding.btnVolume ->{
-                    Toast.makeText(this@MainActivity, "Requesting volume info…", Toast.LENGTH_SHORT).show()
-                    //Read volume control and show values
-                    LargeDataHandler.getInstance().getVolumeControl { _, response ->
-                        if (response != null) {
-                            val msg = """
-                                Music: ${response.currVolumeMusic}/${response.maxVolumeMusic}
-                                Call: ${response.currVolumeCall}/${response.maxVolumeCall}
-                                System: ${response.currVolumeSystem}/${response.maxVolumeSystem}
-                                Mode: ${response.currVolumeType}
-                            """.trimIndent()
-                            Log.i("VolumeControl", msg.replace('\n', ' '))
-                            runOnUiThread {
-                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                            }
-                        } else {
-                            runOnUiThread {
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Failed to read volume info",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    }
-                }
-                binding.btnMediaCount ->{
-                    Toast.makeText(this@MainActivity, "Requesting media count…", Toast.LENGTH_SHORT).show()
-                    val permit = acquireBackgroundGlassesCommand("media-count command")
-                        ?: return@setOnClickListener
-                    try {
-                        LargeDataHandler.getInstance().glassesControl(byteArrayOf(0x02, 0x04)) { _, it ->
-                            try {
-                                if (it.dataType == 4) {
-                                    val mediaCount = it.imageCount + it.videoCount + it.recordCount
-                                    val msg = if (mediaCount > 0) {
-                                        "Media not uploaded - Photos: ${it.imageCount}, Videos: ${it.videoCount}, Records: ${it.recordCount}"
-                                    } else {
-                                        "No pending media on glasses"
-                                    }
-                                    Log.i("MediaCount", msg)
-                                    runOnUiThread {
-                                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                                    }
-                                }
-                            } finally {
-                                GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-                            }
-                        }
-                        warnIfBackgroundGlassesCommandTimesOut(permit)
-                    } catch (e: Exception) {
-                        GlassesSessionCoordinator.releaseBackgroundCommand(permit)
-                        Log.e("MediaCount", "Failed to request media count", e)
-                    }
-                }
-                binding.btnDataDownload -> {
-                    ensureGlassesTransportPermissions("Wi-Fi media sync") {
-                        if (isMoyoungW620Selected()) {
-                            startMoyoungW620MediaSync()
-                        } else {
-                            showOfficialHeyCyanWarningOrContinue()
-                        }
-                    }
-                }
-                binding.btnTransferStop -> {
-                    cancelDataDownloadAttempt(
-                        reason = "Sync stopped by user",
-                        showToast = true,
-                    )
-                }
-                binding.btnOtaInfo -> {
-                    Toast.makeText(this@MainActivity, "Dumping OTA server info…", Toast.LENGTH_SHORT).show()
-                    dumpOtaServerInfo()
-                }
-                binding.btnPullOtaTest -> {
-                    Toast.makeText(this@MainActivity, "Triggering pull‑mode OTA test…", Toast.LENGTH_SHORT).show()
-                    testPullModeOta()
-                }
-            }
-        }
-
-        refreshAiModeButtons()
-
-        binding.cbHijackEnabled.setOnCheckedChangeListener { _, isChecked ->
-
-            isAiHijackEnabled = isChecked
-            if (isChecked) configureHeyCyanWakeWordIfNeeded()
-            Toast.makeText(this, "Hijack ${if (isChecked) "Enabled" else "Disabled"}", Toast.LENGTH_SHORT).show()
-        }
-
-        binding.cbImageAsAssistant.isChecked = isImageAssistantMode
-        binding.cbImageAsAssistant.text = if (isImageAssistantMode) "Direct Assistant" else "App Sharing"
-        
-        binding.cbImageAsAssistant.setOnCheckedChangeListener { _, isChecked ->
-            isImageAssistantMode = isChecked
-            val modeName = if (isChecked) "Direct Assistant" else "App Sharing"
-            binding.cbImageAsAssistant.text = modeName
-            Toast.makeText(this, "Image Hijack: $modeName", Toast.LENGTH_SHORT).show()
-        }
+        legacyGlassesControls.bind()
     }
 
     private fun dumpOtaServerInfo() {
@@ -6164,18 +5263,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         deviceConnection.updateConnectionStatus(connected)
     }
 
-    private fun configureHeyCyanWakeWordIfNeeded() {
-        heyCyanSettings.configureHeyCyanWakeWordIfNeeded()
-    }
-
-    private fun refreshHeyCyanRecordingSettings() {
-        heyCyanSettings.refreshHeyCyanRecordingSettings()
-    }
-
-    private fun setHeyCyanRecordingDuration(isAudio: Boolean, seconds: Int) {
-        heyCyanSettings.setHeyCyanRecordingDuration(isAudio, seconds)
-    }
-
     private fun prepareAiQuestionForLockScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
@@ -6195,94 +5282,27 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun isHeyCyanSelected(): Boolean = deviceManagers.isHeyCyanSelected()
 
-    private fun isHeyCyanOrEyevueSelected(): Boolean = deviceManagers.isHeyCyanOrEyevueSelected()
-
     private fun rejectHeyCyanOnlyFeature(feature: String): Boolean =
         deviceConnection.rejectHeyCyanOnlyFeature(feature)
 
     // --- Chapter 5: Meeting capture pipeline (start/stop, timer, indicator) ---
 
     private fun setupMeetingCaptureUi() {
-        val labels = meetingTimerOptions.map { it.second }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, labels).also {
-            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        }
-        binding.spinnerMeetingTimer.adapter = adapter
-        binding.spinnerMeetingTimer.setSelection(dashboardState.meeting.timerIndex)
-        syncMeetingCaptureUiFromPrefs()
+        meetingCaptureUi.setupMeetingCaptureUi()
     }
 
     private fun setupAgentControlsUi() {
-        binding.btnAgentStart.text = "Agent status"
-        binding.btnAgentStart.setOnClickListener {
-            Toast.makeText(this, "Enter a goal before starting the agent.", Toast.LENGTH_SHORT).show()
-            LocalAgentController.requestStatus(this)
-        }
-
-        binding.btnAgentStop.setOnClickListener {
-            val res = LocalAgentController.stop(this)
-            if (res.ok) {
-                LocalAgentPrefs.setStatus(this, "Stopping…")
-                LocalAgentPrefs.clearLastError(this)
-            } else {
-                LocalAgentPrefs.setStatus(this, "Error")
-                LocalAgentPrefs.setLastError(this, res.error ?: res.userMessage)
-            }
-            refreshAgentStatusUi()
-            Toast.makeText(this, res.userMessage, Toast.LENGTH_SHORT).show()
-            LocalAgentController.requestStatus(this)
-        }
-
-        binding.btnAgentDemo.setOnClickListener {
-            Toast.makeText(
-                this,
-                "Demo: I will read the screen content through your glasses in 5 seconds…",
-                Toast.LENGTH_LONG
-            ).show()
-
-            val res = LocalAgentController.demo(this)
-            if (res.ok) {
-                LocalAgentPrefs.setStatus(this, "Running demo…")
-                LocalAgentPrefs.clearLastError(this)
-            } else {
-                LocalAgentPrefs.setStatus(this, "Error")
-                LocalAgentPrefs.setLastError(this, res.error ?: res.userMessage)
-            }
-            refreshAgentStatusUi()
-            Toast.makeText(this, res.userMessage, Toast.LENGTH_SHORT).show()
-            LocalAgentController.requestStatus(this)
-        }
-
-        refreshAgentStatusUi()
+        agentControlsUi.setupAgentControlsUi()
     }
 
     private fun refreshAgentStatusUi() {
-        binding.tvAgentStatus.text = "Status: ${LocalAgentPrefs.getStatus(this)}"
-        binding.tvAgentLastError.text = "Last error: ${LocalAgentPrefs.getLastError(this)}"
-        updateDashboardState { state ->
-            state.copy(
-                agentStatus = LocalAgentPrefs.getStatus(this),
-                agentLastError = LocalAgentPrefs.getLastError(this),
-            )
-        }
+        agentControlsUi.refreshAgentStatusUi()
     }
 
     // --- Meta Ray-Ban UI setup ---
 
     private fun setupMetaRaybanUi() {
         metaRaybanUi.setupMetaRaybanUi()
-    }
-
-    private fun captureMetaPhotoForGallery() {
-        metaRaybanUi.captureMetaPhotoForGallery()
-    }
-
-    private fun showMetaDiagnostics() {
-        metaRaybanUi.showMetaDiagnostics()
-    }
-
-    private fun openMetaAiAppOrStore() {
-        metaRaybanUi.openMetaAiAppOrStore()
     }
 
     private fun showMetaError(operation: String, message: String) {
@@ -6293,139 +5313,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         metaRaybanUi.updateMetaRaybanUiState()
     }
 
-    private fun selectedMeetingTimerDurationSec(): Long? { 
-        val idx = dashboardState.meeting.timerIndex
-        return meetingTimerOptions.getOrNull(idx)?.first
-    }
-
-    private fun requestMeetingCapturePermissions(onGranted: () -> Unit) {
-        val perms = mutableListOf<String>(Manifest.permission.RECORD_AUDIO)
-        if (Build.VERSION.SDK_INT >= 33) {
-            perms.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        XXPermissions.with(this)
-            .permission(perms)
-            .request(object : OnPermissionCallback {
-                override fun onGranted(permissions: MutableList<String>, all: Boolean) {
-                    if (all) onGranted() else {
-                        Toast.makeText(this@MainActivity, "Missing permissions for recording", Toast.LENGTH_SHORT).show()
-                    }
-                }
-
-                override fun onDenied(permissions: MutableList<String>, never: Boolean) {
-                    super.onDenied(permissions, never)
-                    Toast.makeText(this@MainActivity, "Recording permission denied", Toast.LENGTH_SHORT).show()
-                    if (never) {
-                        XXPermissions.startPermissionActivity(this@MainActivity, permissions)
-                    }
-                }
-            })
-    }
-
-    private fun startMeetingCaptureFromUi() {
-        requestMeetingCapturePermissions {
-            val deviceClass = DeviceProfileStore.loadLastSelected(this)?.selectedClass?.name ?: "UNKNOWN"
-            val durationSec = selectedMeetingTimerDurationSec()
-
-            // Optimistic UI so user instantly sees a recording indicator.
-            setRecordingUi(isRecording = true, source = null)
-            binding.tvMeetingBanner.text = "Starting recording…"
-            updateDashboardState { state ->
-                state.copy(meeting = state.meeting.copy(bannerLabel = "Starting recording…"))
-            }
-
-            MeetingCaptureService.start(this, timerDurationSec = durationSec, deviceClass = deviceClass)
-        }
-    }
-
-    private fun stopMeetingCaptureFromUi() {
-        binding.tvMeetingBanner.text = "Stopping…"
-        updateDashboardState { state ->
-            state.copy(meeting = state.meeting.copy(bannerLabel = "Stopping…"))
-        }
-        MeetingCaptureService.stop(this)
-    }
-
     private fun registerMeetingCaptureReceiver() {
-        if (meetingCaptureStateReceiver != null) return
-
-        meetingCaptureStateReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action != MeetingCaptureService.ACTION_STATE) return
-
-                val isRecording = intent.getBooleanExtra(MeetingCaptureService.EXTRA_IS_RECORDING, false)
-                val source = intent.getStringExtra(MeetingCaptureService.EXTRA_SOURCE)?.let {
-                    runCatching { CaptureSource.valueOf(it) }.getOrNull()
-                }
-                val stopReason = intent.getStringExtra(MeetingCaptureService.EXTRA_STOP_REASON)
-                val error = intent.getStringExtra(MeetingCaptureService.EXTRA_ERROR)
-
-                setRecordingUi(isRecording = isRecording, source = source)
-
-                if (!isRecording && stopReason == "timer") {
-                    Toast.makeText(this@MainActivity, "Meeting capture auto-stopped (timer)", Toast.LENGTH_SHORT).show()
-                }
-                if (!error.isNullOrBlank()) {
-                    Toast.makeText(this@MainActivity, "Recording error: $error", Toast.LENGTH_LONG).show()
-                }
-                refreshNativePluginShortcutState()
-            }
-        }
-
-        LocalBroadcastManager.getInstance(this)
-            .registerReceiver(meetingCaptureStateReceiver!!, IntentFilter(MeetingCaptureService.ACTION_STATE))
+        meetingCaptureUi.registerMeetingCaptureReceiver()
     }
 
     private fun unregisterMeetingCaptureReceiver() {
-        val r = meetingCaptureStateReceiver ?: return
-        meetingCaptureStateReceiver = null
-        runCatching {
-            LocalBroadcastManager.getInstance(this).unregisterReceiver(r)
-        }
+        meetingCaptureUi.unregisterMeetingCaptureReceiver()
     }
 
     private fun syncMeetingCaptureUiFromPrefs() {
-        val state = MeetingCapturePrefs.getState(this)
-        setRecordingUi(isRecording = state.isRecording, source = state.source)
-    }
-
-    private fun setRecordingUi(isRecording: Boolean, source: CaptureSource?) {
-        binding.btnMeetingStart.isEnabled = !isRecording
-        binding.btnMeetingStop.isEnabled = isRecording
-        binding.btnMeetingBannerStop.isEnabled = isRecording
-
-        if (isRecording) {
-            binding.meetingRecordingBanner.visibility = android.view.View.VISIBLE
-            val src = when (source) {
-                CaptureSource.BLUETOOTH_MIC -> "Bluetooth mic"
-                CaptureSource.PHONE_MIC -> "Phone mic"
-                null -> "(detecting…)"
-            }
-            binding.tvMeetingBanner.text = "Recording active · $src"
-            binding.tvMeetingSource.text = "Source: $src"
-            updateDashboardState { state ->
-                state.copy(
-                    meeting = state.meeting.copy(
-                        isRecording = true,
-                        sourceLabel = src,
-                        bannerLabel = "Recording active · $src",
-                    ),
-                )
-            }
-        } else {
-            binding.meetingRecordingBanner.visibility = android.view.View.GONE
-            binding.tvMeetingSource.text = "Source: (not recording)"
-            updateDashboardState { state ->
-                state.copy(
-                    meeting = state.meeting.copy(
-                        isRecording = false,
-                        sourceLabel = "(not recording)",
-                        bannerLabel = "",
-                    ),
-                )
-            }
-        }
+        meetingCaptureUi.syncMeetingCaptureUiFromPrefs()
     }
 
     // --- end Chapter 5 meeting capture ---
@@ -6447,55 +5344,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun handleTaskerCommand(startIntent: Intent?) {
-        if (startIntent == null) return
-
-        val isFromTaskerAction = startIntent.action == actionTaskerCommand(packageName)
-        val command = startIntent.getStringExtra(EXTRA_TASKER_COMMAND)
-
-        if (!isFromTaskerAction && command.isNullOrBlank()) {
-            return
-        }
-
-        val normalizedCommand = command?.lowercase() ?: return
-        val activeSession = GlassesSessionCoordinator.currentSession()
-        if (activeSession != null) {
-            Log.w(
-                "GlassesSession",
-                "Ignoring Tasker command '$normalizedCommand'; ${activeSession.label} owns the SDK BLE/P2P slots",
-            )
-            Toast.makeText(
-                this,
-                "${activeSession.label.replaceFirstChar { it.uppercase() }} is using the glasses connection.",
-                Toast.LENGTH_SHORT,
-            ).show()
-            return
-        }
-
-        when (normalizedCommand) {
-            "scan" -> binding.btnScan.performClick()
-            "connect" -> binding.btnConnect.performClick()
-            "disconnect" -> binding.btnDisconnect.performClick()
-            "add_listener" -> binding.btnAddListener.performClick()
-            "set_time" -> binding.btnSetTime.performClick()
-            "version" -> binding.btnVersion.performClick()
-            "camera" -> binding.btnCamera.performClick()
-
-            // Video recording controls
-            "video" -> binding.btnVideo.performClick()
-            "video_start" -> controlVideoRecording(true)
-            "video_stop" -> controlVideoRecording(false)
-
-            // Audio recording controls
-            "record" -> binding.btnRecord.performClick()
-            "record_start" -> controlAudioRecording(true)
-            "record_stop" -> controlAudioRecording(false)
-
-            "bt_scan" -> binding.btnBt.performClick()
-            "battery" -> binding.btnBattery.performClick()
-            "volume" -> binding.btnVolume.performClick()
-            "media_count" -> binding.btnMediaCount.performClick()
-            "data_download" -> binding.btnDataDownload.performClick()
-        }
+        taskerCommands.handleTaskerCommand(startIntent)
     }
 
     private fun currentBleMacNoColonUpper(): String? {

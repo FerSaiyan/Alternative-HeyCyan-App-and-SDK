@@ -11,6 +11,9 @@ class EyevueReleaseSafetyTest {
     private val connectionCoordinatorSource = File(
         "src/main/java/com/fersaiyan/cyanbridge/ui/main/DeviceConnectionCoordinator.kt",
     ).readText()
+    private val dashboardControllerSource = File(
+        "src/main/java/com/fersaiyan/cyanbridge/ui/main/DashboardController.kt",
+    ).readText()
     private val mainScreenSources = mainSource + File("src/main/java/com/fersaiyan/cyanbridge/ui/main")
         .listFiles { file -> file.extension == "kt" }!!
         .sortedBy { it.name }
@@ -39,7 +42,7 @@ class EyevueReleaseSafetyTest {
             ),
         )
         assertFalse(mainScreenSources.contains("Eyevue live preview is available in debug builds only"))
-        assertTrue(mainSource.contains("eyevueLivePreviewManager?.isActive == true"))
+        assertTrue(dashboardControllerSource.contains("eyevueLivePreviewManager?.isActive == true"))
 
         val liveCommandBlock = managerSource.substringAfter("suspend fun startLiveAndAwaitSsid")
             .substringBefore("suspend fun stopLiveBlocking")
