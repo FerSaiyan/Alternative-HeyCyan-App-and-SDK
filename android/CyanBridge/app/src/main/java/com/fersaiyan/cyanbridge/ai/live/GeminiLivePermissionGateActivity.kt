@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.shared.live.GeminiLiveRoute
 
 /**
  * Request permissions before opening a background microphone session. If notifications
@@ -23,9 +24,7 @@ class GeminiLivePermissionGateActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val missing = requiredPermissions().filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
+        val missing = requiredPermissions().filterNot(::granted)
         if (missing.isEmpty()) launchPermittedRoute()
         else if (savedInstanceState == null) permissions.launch(missing.toTypedArray())
     }
@@ -38,21 +37,17 @@ class GeminiLivePermissionGateActivity : AppCompatActivity() {
     }
 
     private fun launchPermittedRoute() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            Toast.makeText(this, "Microphone permission is required for Gemini Live", Toast.LENGTH_LONG).show()
-            finish()
-            return
-        }
-
-        val notificationsAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
-                PackageManager.PERMISSION_GRANTED
+        val route = GeminiLiveRoute.of(
+            microphoneGranted = granted(Manifest.permission.RECORD_AUDIO),
+            notificationsAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                granted(Manifest.permission.POST_NOTIFICATIONS),
+        )
+        route.message?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show() }
         val initialImage = intent.getStringExtra(EXTRA_INITIAL_IMAGE)
         val initialPrompt = intent.getStringExtra(EXTRA_INITIAL_PROMPT)
-        if (notificationsAllowed) {
-            GeminiLiveForegroundService.start(
+        when (route) {
+            GeminiLiveRoute.DENIED -> Unit
+            GeminiLiveRoute.BACKGROUND_SERVICE -> GeminiLiveForegroundService.start(
                 context = this,
                 language = intent.getStringExtra(EXTRA_LANGUAGE).orEmpty(),
                 imagePrompt = intent.getStringExtra(EXTRA_IMAGE_PROMPT).orEmpty(),
@@ -60,13 +55,7 @@ class GeminiLivePermissionGateActivity : AppCompatActivity() {
                 initialPrompt = initialPrompt,
                 useRelay = intent.getBooleanExtra(EXTRA_USE_RELAY, false),
             )
-        } else {
-            Toast.makeText(
-                this,
-                "Notifications are off: Live will run only in the open preview. Use its Stop button.",
-                Toast.LENGTH_LONG,
-            ).show()
-            startActivity(Intent(this, GeminiLiveActivity::class.java).apply {
+            GeminiLiveRoute.VISIBLE_PREVIEW -> startActivity(Intent(this, GeminiLiveActivity::class.java).apply {
                 putExtra(GeminiLiveActivity.EXTRA_AUTO_START, true)
                 initialImage?.let { putExtra(GeminiLiveActivity.EXTRA_INITIAL_IMAGE_PATH, it) }
                 initialPrompt?.let { putExtra(GeminiLiveActivity.EXTRA_INITIAL_PROMPT, it) }
@@ -74,6 +63,9 @@ class GeminiLivePermissionGateActivity : AppCompatActivity() {
         }
         finish()
     }
+
+    private fun granted(permission: String) =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
     companion object {
         private const val EXTRA_LANGUAGE = "live_language"

@@ -1,15 +1,7 @@
 package com.fersaiyan.cyanbridge.ai.live
 
-/** States surfaced by the preview UI; no audio payload is retained in these states. */
-enum class GeminiLiveState {
-    IDLE,
-    REQUESTING_TOKEN,
-    CONNECTING,
-    LISTENING,
-    RECONNECTING,
-    STOPPED,
-    ERROR,
-}
+/** States surfaced by the preview UI; shared with the screen's ViewModel. */
+typealias GeminiLiveState = com.fersaiyan.cyanbridge.shared.live.GeminiLiveState
 
 object PcmResampler {
     /** Linear, mono PCM16 resampling for a future glasses PCM source. */
