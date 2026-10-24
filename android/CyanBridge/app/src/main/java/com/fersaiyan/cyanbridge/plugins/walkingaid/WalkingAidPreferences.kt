@@ -53,8 +53,6 @@ object WalkingAidPreferences {
         WalkingAid.imageDescriptionSource[context] = source
     }
 
-    fun getImageDescriptionCloudModelId(context: Context): String = WalkingAid.imageDescriptionCloudModelId[context]
-
     fun setImageDescriptionCloudModelId(context: Context, modelId: String) {
         WalkingAid.imageDescriptionCloudModelId[context] = modelId
     }
@@ -71,13 +69,9 @@ object WalkingAidPreferences {
         WalkingAid.depthSource[context] = source
     }
 
-    fun getDepthCloudModelId(context: Context): String = WalkingAid.depthCloudModelId[context]
-
     fun setDepthCloudModelId(context: Context, modelId: String) {
         WalkingAid.depthCloudModelId[context] = modelId
     }
-
-    fun getStateModelSource(context: Context): String = WalkingAid.stateModelSource[context]
 
     fun setStateModelSource(context: Context, source: String) {
         WalkingAid.stateModelSource[context] = source
@@ -85,15 +79,7 @@ object WalkingAidPreferences {
 
     fun isTtsEnabled(context: Context): Boolean = WalkingAid.ttsEnabled[context]
 
-    fun setTtsEnabled(context: Context, enabled: Boolean) {
-        WalkingAid.ttsEnabled[context] = enabled
-    }
-
     fun isSafetyDisclaimerEnabled(context: Context): Boolean = WalkingAid.safetyDisclaimerEnabled[context]
-
-    fun setSafetyDisclaimerEnabled(context: Context, enabled: Boolean) {
-        WalkingAid.safetyDisclaimerEnabled[context] = enabled
-    }
 
     fun getImageHistoryMaxCount(context: Context): Int = WalkingAid.imageHistoryMaxCount[context]
 
@@ -111,14 +97,14 @@ object WalkingAidPreferences {
     fun getImageDescriptionModelOverride(context: Context): String? {
         val source = getImageDescriptionSource(context)
         if (source != "cloud") return null
-        return getImageDescriptionCloudModelId(context).ifBlank { null }
+        return WalkingAid.imageDescriptionCloudModelId[context].ifBlank { null }
     }
 
     /** Returns the cloud model ID for depth estimation, or null if using local source. */
     fun getDepthModelOverride(context: Context): String? {
         val source = getDepthSource(context)
         if (source != "cloud") return null
-        return getDepthCloudModelId(context).ifBlank { null }
+        return WalkingAid.depthCloudModelId[context].ifBlank { null }
     }
 
     fun getYoloModelType(context: Context): String = WalkingAid.yoloModelType[context]
@@ -126,11 +112,6 @@ object WalkingAidPreferences {
     fun setYoloModelType(context: Context, type: String) {
         WalkingAid.yoloModelType[context] = type
     }
-
-    fun getFocusDescription(context: Context): String = WalkingAidSettings.focusDescription(WalkingAid.store(context))
-
-    fun setFocusDescription(context: Context, description: String) =
-        WalkingAidSettings.setFocusDescription(WalkingAid.store(context), description)
 
     fun getCachedFocusTranslation(context: Context, original: String, source: String): String? =
         WalkingAidSettings.cachedFocusTranslation(WalkingAid.store(context), original, source)
@@ -143,13 +124,5 @@ object WalkingAidPreferences {
 
     fun getThumbnailQualityLevel(context: Context): Int = WalkingAid.thumbnailQualityLevel[context]
 
-    fun setThumbnailQualityLevel(context: Context, level: Int) {
-        WalkingAid.thumbnailQualityLevel[context] = level
-    }
-
     fun getPhotoSettleDelayMs(context: Context): Long = WalkingAid.photoSettleDelayMs[context].toLong()
-
-    fun setPhotoSettleDelayMs(context: Context, delayMs: Int) {
-        WalkingAid.photoSettleDelayMs[context] = delayMs
-    }
 }

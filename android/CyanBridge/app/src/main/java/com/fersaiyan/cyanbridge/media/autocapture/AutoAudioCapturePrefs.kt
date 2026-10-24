@@ -57,8 +57,6 @@ object AutoAudioCapturePrefs {
         AutoAudioCapture.pauseUntilMs[context] = (now + durationMs).coerceAtLeast(now)
     }
 
-    fun getLastPauseReason(context: Context): String = AutoAudioCapture.lastPauseReason[context]
-
     fun setLastPauseReason(context: Context, reason: String) {
         AutoAudioCapture.lastPauseReason[context] = reason.take(200)
     }
