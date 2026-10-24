@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.bridge.runtimes.evenhub
 
 import android.util.Log
 import android.webkit.JavascriptInterface
-import org.json.JSONArray
 import org.json.JSONObject
 
 /**

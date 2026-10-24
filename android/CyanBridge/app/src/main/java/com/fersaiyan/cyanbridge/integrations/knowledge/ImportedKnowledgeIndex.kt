@@ -5,7 +5,6 @@ import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.data.local.entity.MemoryChunk
 import com.fersaiyan.cyanbridge.data.local.entity.MemoryChunkSources
-import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryRoomIndex
 import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.memoryvault.LocalEmbeddingService
 import com.fersaiyan.cyanbridge.memoryvault.MemoryPolicyService

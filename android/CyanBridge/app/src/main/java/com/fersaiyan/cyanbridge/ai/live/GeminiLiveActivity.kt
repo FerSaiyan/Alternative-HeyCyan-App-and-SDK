@@ -16,7 +16,6 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
-import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionRoute
 import com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences
 import com.google.android.material.button.MaterialButton
 import java.io.File

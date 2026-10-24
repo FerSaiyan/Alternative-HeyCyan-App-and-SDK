@@ -6,7 +6,6 @@ import com.fersaiyan.cyanbridge.data.local.entity.MemoryChunk
 import com.fersaiyan.cyanbridge.data.local.entity.MemoryChunkSources
 import com.fersaiyan.cyanbridge.memoryvault.MemoryPolicyService
 import com.fersaiyan.cyanbridge.memoryvault.MemoryRefMapper
-import com.fersaiyan.cyanbridge.shared.settings.MemorySourceType
 import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultBootstrap
 import com.fersaiyan.cyanbridge.memoryvault.VaultLockStateManager
 import com.fersaiyan.cyanbridge.ui.MyApplication

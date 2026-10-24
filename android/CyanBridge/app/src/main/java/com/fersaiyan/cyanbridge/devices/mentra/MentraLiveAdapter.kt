@@ -9,7 +9,6 @@ import com.fersaiyan.cyanbridge.bridge.core.GlassesDeviceAdapter
 import com.fersaiyan.cyanbridge.bridge.core.InputEvent
 import com.mentra.bluetoothsdk.Device
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeoutOrNull

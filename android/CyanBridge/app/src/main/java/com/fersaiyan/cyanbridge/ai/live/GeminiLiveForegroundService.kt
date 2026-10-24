@@ -19,7 +19,6 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
 import com.fersaiyan.cyanbridge.audio.TtsSpeaker
-import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionRoute
 import com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences
 import java.io.File
 import java.util.Locale
