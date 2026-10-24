@@ -1,32 +1,41 @@
 package com.fersaiyan.cyanbridge.shared.media
 
+import com.fersaiyan.cyanbridge.shared.platform.PlatformLogger
 import kotlin.random.Random
 
 /**
  * Wraps the glasses' raw Opus recordings into an Ogg/Opus container so standard
- * players can open them. Platform-neutral port of the Android MainActivity logic:
- * the glasses often store bare Opus packets (commonly fixed 40-byte packets).
+ * players can open them. The glasses often store bare Opus packets (commonly fixed
+ * 40-byte packets); the official app decodes the unknown layouts with jl_opus.
  */
 object OggOpusWrapper {
     private const val PACKET_DURATION_MS = 40
 
     /** Returns the wrapped bytes, or the input unchanged when the layout is unknown. */
-    fun wrapIfNeeded(raw: ByteArray): ByteArray {
+    fun wrapIfNeeded(raw: ByteArray): ByteArray = wrapOpusIfNeeded(raw).first
+
+    /** Same as [wrapIfNeeded], plus a short note describing what was done (for logs). */
+    fun wrapOpusIfNeeded(raw: ByteArray): Pair<ByteArray, String> {
         if (raw.size >= 4 && raw[0] == 'O'.code.toByte() && raw[1] == 'g'.code.toByte() &&
             raw[2] == 'g'.code.toByte() && raw[3] == 'S'.code.toByte()
         ) {
-            return raw
+            return raw to "ogg-already"
         }
-        val packets = parseLengthPrefixed(raw, littleEndian = true)
-            ?: parseLengthPrefixed(raw, littleEndian = false)
+        val packets = parseLengthPrefixedPackets(raw, littleEndian = true)
+            ?: parseLengthPrefixedPackets(raw, littleEndian = false)
             ?: parseLengthPrefixed1B(raw)
             ?: guessFixedSizePackets(raw)
-            ?: return raw
-        if (packets.isEmpty()) return raw
-        return runCatching { buildOggOpus(packets) }.getOrDefault(raw)
+        if (packets.isNullOrEmpty()) return raw to "raw-unwrapped"
+        return try {
+            buildOggOpusFromPackets(packets, PACKET_DURATION_MS) to "wrapped packets=${packets.size}"
+        } catch (e: Exception) {
+            PlatformLogger.w("DataDownload", "Failed to wrap opus into ogg: ${e.message}")
+            raw to "raw-unwrapped"
+        }
     }
 
-    private fun parseLengthPrefixed(raw: ByteArray, littleEndian: Boolean): List<ByteArray>? {
+    /** Repeated `[u16 len][len bytes]`; needs at least three packets to avoid misdetection. */
+    fun parseLengthPrefixedPackets(raw: ByteArray, littleEndian: Boolean): List<ByteArray>? {
         var i = 0
         val out = ArrayList<ByteArray>()
         while (i + 2 <= raw.size) {
@@ -68,8 +77,12 @@ object OggOpusWrapper {
         return null
     }
 
-    private fun buildOggOpus(packets: List<ByteArray>): ByteArray {
-        val serial = Random.nextInt()
+    /** Ogg/Opus stream: OpusHead and OpusTags header pages, then audio pages of up to 255 segments. */
+    fun buildOggOpusFromPackets(
+        packets: List<ByteArray>,
+        packetDurationMs: Int,
+        serial: Int = Random.nextInt(),
+    ): ByteArray {
         var sequence = 0
         var granulePosition = 0L
         val out = ByteBuilder()
@@ -77,7 +90,7 @@ object OggOpusWrapper {
         writePage(out, serial, sequence++, 0L, headerType = 0x02, packets = listOf(opusHead()))
         writePage(out, serial, sequence++, 0L, headerType = 0x00, packets = listOf(opusTags("CyanBridge")))
 
-        val samplesPerPacket = PACKET_DURATION_MS * 48_000L / 1000L
+        val samplesPerPacket = packetDurationMs * 48_000L / 1000L
         var index = 0
         while (index < packets.size) {
             val pagePackets = ArrayList<ByteArray>()
@@ -154,7 +167,7 @@ object OggOpusWrapper {
             bytes(segmentTable)
             bytes(payload.toByteArray())
         }.toByteArray()
-        val crc = crc(page)
+        val crc = oggCrc(page)
         page[22] = (crc and 0xFF).toByte()
         page[23] = ((crc shr 8) and 0xFF).toByte()
         page[24] = ((crc shr 16) and 0xFF).toByte()
@@ -168,7 +181,8 @@ object OggOpusWrapper {
         r
     }
 
-    private fun crc(data: ByteArray): Int {
+    /** Ogg's CRC-32: polynomial 0x04C11DB7, not reflected, no final XOR. */
+    fun oggCrc(data: ByteArray): Int {
         var crc = 0
         for (b in data) {
             crc = (crc shl 8) xor crcTable[((crc ushr 24) xor (b.toInt() and 0xFF)) and 0xFF]
