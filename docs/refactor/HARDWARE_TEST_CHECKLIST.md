@@ -202,3 +202,35 @@ iOS now uses the protocol code Android already ran, so check with an iPhone and 
 - Start video sends `0x00`, as the vendor app does.
 - Replies in `AC 55` frames are accepted. The old shared parser probably dropped every reply from real glasses.
 - AI photos are capped at 4 MiB.
+
+## Wave 4: TuneBuds through the shared `TuneBudsSession`
+
+Filter logcat with: `adb logcat -s TuneBudsManager TuneBudsSpp TuneBudsSession TuneBudsMediaSync TuneBudsP2p TuneBudsLive GlassesNetSession`
+
+1. **Connect over SPP (Device Bind and Reconnect)**
+   - Expect `RFCOMM connected`, then "TuneBuds connected".
+   - Battery, firmware, model, coprocessor, storage and counts fill in.
+   - New: if the optional coprocessor-version query (E9) fails, startup continues (`Optional TuneBuds capability query failed`), as on iOS.
+2. **Photo:** it saves about 2.5 s after E1 and the camera closes.
+3. **Video and audio**
+   - Start and stop.
+   - A firmware or button stop resets the toggle.
+   - Stopping while still saving retries for up to 15 s.
+   - New: recording flags read false whenever RFCOMM isn't connected.
+4. **Battery, storage, counts, time sync, version**
+   - All update.
+   - New: an E9 timeout under "read versions" no longer shows an error.
+5. **AI photo (voice image question and Live photo button):** expect `TuneBudsSession: TuneBuds AI photo completed bytes=N`. These log lines moved from the `TuneBudsManager` tag to `TuneBudsSession`.
+6. **Media sync over file-manager Wi-Fi**
+   - Hotspot mode imports files with no immediate "disconnected".
+   - P2P mode, if the Wi-Fi mask has bit 4, also works.
+   - Low battery shows the "status 4" message.
+7. **RTSP live preview:** start and stop. Video arrives in about 300 ms, and the camera closes on stop.
+8. **Reconnect**
+   - Power-cycle or toggle Bluetooth: the status says "disconnected" and the toggles reset.
+   - Reconnect: battery and versions refill.
+   - Disconnect suppresses auto-reconnect.
+   - The Device Bind probe still identifies the glasses.
+9. **iOS (needs a Mac build)**
+   - AI photos use the strict JPEG assembler, so malformed streams are dropped.
+   - A camera-close notification clears the recording flags.
