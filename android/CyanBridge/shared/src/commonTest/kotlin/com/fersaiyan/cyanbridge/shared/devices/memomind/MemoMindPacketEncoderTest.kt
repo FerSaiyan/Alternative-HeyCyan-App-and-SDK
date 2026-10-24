@@ -1,27 +1,25 @@
-package com.fersaiyan.cyanbridge.bridge.devices.memomind
+package com.fersaiyan.cyanbridge.shared.devices.memomind
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
+import com.fersaiyan.cyanbridge.shared.platform.platformCurrentTimeMillis
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
- * Characterizes the MemoMind RFCOMM frames before the encoder moves to shared code.
- * Robolectric supplies Android's org.json, which escapes '/' as "\/".
+ * MemoMind RFCOMM frames, byte for byte. The JSON expectations were recorded from the
+ * former Android encoder running on Android's org.json (which escapes '/' as "\/").
  * Sequence numbers and default ids are global counters, so the tests read them back.
  */
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
-class MemoMindPacketEncoderCharacterizationTest {
-    private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+class MemoMindPacketEncoderTest {
+    private fun Int.hex2(): String = (this and 0xFF).toString(16).padStart(2, '0')
+
+    private fun ByteArray.hex(): String = joinToString("") { it.toInt().hex2() }
 
     private fun seq(frame: ByteArray) = frame[4].toInt() and 0xFF
 
     private fun pushFrame(seq: Int, group: Int, opcode: Int, component: Int, json: String): String {
-        val payload = json.toByteArray(Charsets.UTF_8)
+        val payload = json.encodeToByteArray()
         val body = byteArrayOf(
             0xFA.toByte(), 0, 0, 0, seq.toByte(), group.toByte(), opcode.toByte(), 8, 0, 0, 1,
             component.toByte(), 5, 0, (payload.size shr 8).toByte(), payload.size.toByte(),
@@ -33,19 +31,18 @@ class MemoMindPacketEncoderCharacterizationTest {
         return frame.hex()
     }
 
-    private fun payloadJson(frame: ByteArray): String = String(frame.copyOfRange(16, frame.size - 3), Charsets.UTF_8)
+    private fun payloadJson(frame: ByteArray): String = frame.copyOfRange(16, frame.size - 3).decodeToString()
 
     @Test
     fun requestsAndSettingsWritesAreByteExact() {
         val info = MemoMindPacketEncoder.encodeDeviceInfoRequest()
-        assertEquals("fa000009%02x010201%02x".format(seq(info), (seq(info) + 6) and 0xFF), info.hex())
+        assertEquals("fa000009" + seq(info).hex2() + "010201" + (seq(info) + 6).hex2(), info.hex())
         val battery = MemoMindPacketEncoder.encodeBatteryRequest()
-        assertEquals("fa000009%02x010601%02x".format(seq(battery), (seq(battery) + 10) and 0xFF), battery.hex())
+        assertEquals("fa000009" + seq(battery).hex2() + "010601" + (seq(battery) + 10).hex2(), battery.hex())
 
         fun setting(frame: ByteArray, opcode: Int, value: Int) = assertEquals(
-            "fa00000e%02x01%02x08000001%02x01%02x".format(
-                seq(frame), opcode, value, (0xFA + 0x0E + seq(frame) + 1 + opcode + 8 + 1 + value + 1) and 0xFF,
-            ),
+            "fa00000e" + seq(frame).hex2() + "01" + opcode.hex2() + "08000001" + value.hex2() + "01" +
+                (0xFA + 0x0E + seq(frame) + 1 + opcode + 8 + 1 + value + 1).hex2(),
             frame.hex(),
         )
         setting(MemoMindPacketEncoder.encodeSetBrightness(42), 0x0B, 10)
@@ -120,9 +117,9 @@ class MemoMindPacketEncoderCharacterizationTest {
 
     @Test
     fun notificationCarriesAppPackageAndTimestamp() {
-        val before = System.currentTimeMillis() / 1000L
+        val before = platformCurrentTimeMillis() / 1000L
         val frame = MemoMindPacketEncoder.encodeNotification(title = "T/1", body = "B")
-        val after = System.currentTimeMillis() / 1000L
+        val after = platformCurrentTimeMillis() / 1000L
         val json = payloadJson(frame)
         val match = Regex("^\\{\"id\":(\\d+),\"a\":\"CyanBridge\",\"type\":0,\"ts\":(\\d+),\"c\":\"B\",\"ti\":\"T\\\\/1\"," +
             "\"pkg_name\":\"com.fersaiyan.cyanbridge\"\\}$").find(json)!!
@@ -132,7 +129,7 @@ class MemoMindPacketEncoderCharacterizationTest {
 
     @Test
     fun extractsResponsePayloads() {
-        val json = "{\"battery\":80}".toByteArray()
+        val json = "{\"battery\":80}".encodeToByteArray()
         val frame = byteArrayOf(0xFA.toByte(), 0, 0, 0, 9, 1, 6, 2, 0, 0, json.size.toByte()) + json + byteArrayOf(0, 0)
         assertEquals("{\"battery\":80}", MemoMindPacketEncoder.extractJsonPayload(frame, 1, 6))
         assertNull(MemoMindPacketEncoder.extractJsonPayload(frame, 1, 2))
