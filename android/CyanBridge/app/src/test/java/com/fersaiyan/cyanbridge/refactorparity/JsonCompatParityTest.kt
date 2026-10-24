@@ -1,4 +1,4 @@
-package com.fersaiyan.cyanbridge.ai.router
+package com.fersaiyan.cyanbridge.refactorparity
 
 import com.fersaiyan.cyanbridge.shared.json.parseJsonArray
 import com.fersaiyan.cyanbridge.shared.json.parseJsonObject

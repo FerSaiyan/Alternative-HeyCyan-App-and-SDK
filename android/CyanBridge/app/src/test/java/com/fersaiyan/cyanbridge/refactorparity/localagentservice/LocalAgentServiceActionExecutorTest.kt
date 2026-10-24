@@ -1,5 +1,6 @@
-package com.fersaiyan.cyanbridge.localagent
+package com.fersaiyan.cyanbridge.refactorparity.localagentservice
 
+import com.fersaiyan.cyanbridge.localagent.*
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

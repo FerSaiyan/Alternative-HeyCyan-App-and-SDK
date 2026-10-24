@@ -1,5 +1,6 @@
-package com.fersaiyan.cyanbridge.localagent
+package com.fersaiyan.cyanbridge.refactorparity.localagentservice
 
+import com.fersaiyan.cyanbridge.localagent.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job

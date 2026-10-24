@@ -1,4 +1,4 @@
-package com.fersaiyan.cyanbridge.localmodels.remote
+package com.fersaiyan.cyanbridge.refactorparity
 
 import com.fersaiyan.cyanbridge.shared.ai.OpenAiCompatible
 import com.fersaiyan.cyanbridge.shared.ai.OpenAiCompatible.EncodedAttachment

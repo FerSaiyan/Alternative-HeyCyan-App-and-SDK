@@ -1,8 +1,15 @@
-package com.fersaiyan.cyanbridge.ai.live
+package com.fersaiyan.cyanbridge.refactorparity
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveAnnouncement
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveAudioIo
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveClient
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveSessionState
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveState
+import com.fersaiyan.cyanbridge.ai.live.LiveTokenConfig
+import com.fersaiyan.cyanbridge.ai.live.PcmResampler
 import okhttp3.Request
 import okhttp3.WebSocket
 import okio.ByteString
