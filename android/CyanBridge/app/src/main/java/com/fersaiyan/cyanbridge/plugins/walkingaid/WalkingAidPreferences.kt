@@ -1,29 +1,25 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
 import android.content.Context
-import com.fersaiyan.cyanbridge.shared.platform.PlatformPreferences
+import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidSettings
 import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs.WalkingAid
-import com.fersaiyan.cyanbridge.shared.prefs.edit
 import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.shared.prefs.store
 
 object WalkingAidPreferences {
-    const val MODEL_TYPE_YOLO11 = "yolo11"
-    const val MODEL_TYPE_YOLO_WORLD = "yolo_world"
+    const val MODEL_TYPE_YOLO11 = WalkingAidSettings.MODEL_TYPE_YOLO11
+    const val MODEL_TYPE_YOLO_WORLD = WalkingAidSettings.MODEL_TYPE_YOLO_WORLD
 
     fun isEnabled(context: Context): Boolean = WalkingAid.enabled[context]
 
-    fun getVideoMode(context: Context): WalkingAidVideoMode =
-        WalkingAidVideoMode.entries.firstOrNull { it.name == WalkingAid.videoMode[context] }
-            ?: WalkingAidVideoMode.PERIODIC_PHOTOS
+    fun getVideoMode(context: Context): WalkingAidVideoMode = WalkingAidSettings.videoMode(WalkingAid.store(context))
 
     fun setVideoMode(context: Context, mode: WalkingAidVideoMode) {
         WalkingAid.videoMode[context] = mode.name
     }
 
-    fun getMode(context: Context): WalkingAidMode =
-        WalkingAidMode.entries.firstOrNull { it.name == WalkingAid.mode[context] } ?: WalkingAidMode.WALKING
+    fun getMode(context: Context): WalkingAidMode = WalkingAidSettings.mode(WalkingAid.store(context))
 
     fun setMode(context: Context, mode: WalkingAidMode) {
         WalkingAid.mode[context] = mode.name
@@ -131,47 +127,19 @@ object WalkingAidPreferences {
         WalkingAid.yoloModelType[context] = type
     }
 
-    fun getFocusDescription(context: Context): String =
-        WalkingAid.focusDescription[context] ?: WalkingAid.watchlistTerms[context]
+    fun getFocusDescription(context: Context): String = WalkingAidSettings.focusDescription(WalkingAid.store(context))
 
-    fun setFocusDescription(context: Context, description: String) {
-        val normalized = description.trim().take(500)
-        val translatedOriginal = WalkingAid.focusTranslationOriginal[context]
-        WalkingAid.edit(context) {
-            this[WalkingAid.focusDescription] = normalized
-            if (translatedOriginal != normalized) clearFocusTranslation()
-        }
-    }
+    fun setFocusDescription(context: Context, description: String) =
+        WalkingAidSettings.setFocusDescription(WalkingAid.store(context), description)
 
-    fun getCachedFocusTranslation(context: Context, original: String, source: String): String? {
-        val preferences = WalkingAid.store(context)
-        if (preferences[WalkingAid.focusTranslationOriginal] != original.trim().take(500)) return null
-        if (!preferences[WalkingAid.focusTranslationSource].equals(source, ignoreCase = true)) return null
-        return preferences[WalkingAid.focusTranslationEnglish]?.takeIf { it.isNotBlank() }
-    }
+    fun getCachedFocusTranslation(context: Context, original: String, source: String): String? =
+        WalkingAidSettings.cachedFocusTranslation(WalkingAid.store(context), original, source)
 
-    fun setCachedFocusTranslation(context: Context, original: String, source: String, english: String) {
-        val normalizedOriginal = original.trim().take(500)
-        WalkingAid.edit(context) {
-            this[WalkingAid.focusDescription] = normalizedOriginal
-            this[WalkingAid.stateModelSource] = source
-            this[WalkingAid.focusTranslationOriginal] = normalizedOriginal
-            this[WalkingAid.focusTranslationSource] = source
-            this[WalkingAid.focusTranslationEnglish] = english.trim()
-        }
-    }
+    fun setCachedFocusTranslation(context: Context, original: String, source: String, english: String) =
+        WalkingAidSettings.setCachedFocusTranslation(WalkingAid.store(context), original, source, english)
 
-    private fun PlatformPreferences.clearFocusTranslation() {
-        WalkingAid.focusTranslationOriginal.remove(this)
-        WalkingAid.focusTranslationSource.remove(this)
-        WalkingAid.focusTranslationEnglish.remove(this)
-    }
-
-    fun getModelFocusDescription(context: Context): String {
-        val original = getFocusDescription(context).trim()
-        val source = getStateModelSource(context)
-        return getCachedFocusTranslation(context, original, source) ?: original
-    }
+    fun getModelFocusDescription(context: Context): String =
+        WalkingAidSettings.modelFocusDescription(WalkingAid.store(context))
 
     fun getThumbnailQualityLevel(context: Context): Int = WalkingAid.thumbnailQualityLevel[context]
 
