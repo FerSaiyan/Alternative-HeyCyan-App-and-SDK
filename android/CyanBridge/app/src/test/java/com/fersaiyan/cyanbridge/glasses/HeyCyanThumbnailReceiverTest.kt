@@ -16,7 +16,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class HeyCyanThumbnailReceiverTest {
     private class Wire : HeyCyanThumbnailReceiver.Transport {
         lateinit var callback: (ByteArray) -> Unit

@@ -9,12 +9,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import java.util.Locale
 
 /** Compares the shared OpenAI-compatible protocol code with the org.json code it replaced. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class RemoteOpenAiLegacyParityTest {
     private val image = EncodedAttachment("AQID/+==", "image/jpeg")
     private val audio = EncodedAttachment("BAU=", "mp3")

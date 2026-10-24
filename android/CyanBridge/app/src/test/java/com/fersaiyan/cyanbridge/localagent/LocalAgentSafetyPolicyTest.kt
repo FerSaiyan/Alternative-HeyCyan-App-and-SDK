@@ -7,10 +7,8 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class LocalAgentSafetyPolicyTest {
     @Test
     fun `legacy cyanbridge blacklist is no longer a second blocking authority`() {

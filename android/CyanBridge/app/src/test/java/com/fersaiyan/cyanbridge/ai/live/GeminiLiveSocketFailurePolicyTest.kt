@@ -7,10 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class GeminiLiveSocketFailurePolicyTest {
     private val free = config(reservationId = "free-proxy", freeTier = true)
     private val economy = config(reservationId = "free-proxy", economy = true)

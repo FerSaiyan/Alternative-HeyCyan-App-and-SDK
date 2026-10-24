@@ -13,13 +13,11 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowToast
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class LocalAgentSettingsActivityTest {
     private lateinit var context: Context
 

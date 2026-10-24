@@ -21,14 +21,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 /**
  * Compares the shared relay client with verbatim copies of the org.json code it replaced
  * (CliRelayClient and RelayErrorLocalizer before the move to shared).
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class RelayLegacyParityTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val systemPrompt = "Answer in one line. Use \"quotes\" / slashes\nand é."

@@ -15,7 +15,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import java.io.File
 import java.lang.reflect.Proxy
 import java.security.MessageDigest
@@ -28,7 +27,6 @@ import java.security.MessageDigest
  * and the upgrade starts at version 7 (the FTS5 index is created by migration 4->5).
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class AppDatabaseSchemaTest {
 
     private lateinit var context: Context

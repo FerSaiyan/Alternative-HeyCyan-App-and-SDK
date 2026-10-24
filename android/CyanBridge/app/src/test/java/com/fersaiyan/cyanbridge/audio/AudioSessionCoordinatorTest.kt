@@ -17,10 +17,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class AudioSessionCoordinatorTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager

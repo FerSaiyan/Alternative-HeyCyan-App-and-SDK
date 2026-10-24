@@ -22,14 +22,12 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 /**
  * Pins the exact Live WebSocket traffic and listener callbacks produced by [GeminiLiveClient]
  * so internal restructuring cannot change the wire protocol or event ordering.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class GeminiLiveClientCharacterizationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val listener = RecordingListener()
