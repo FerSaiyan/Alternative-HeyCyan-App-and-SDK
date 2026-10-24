@@ -16,6 +16,7 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.ai.AiQuestionForegroundService
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers

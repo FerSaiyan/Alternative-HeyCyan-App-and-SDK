@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.localagent
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.ai.router.AgentInferenceRouter
 import kotlinx.coroutines.CancellationException
 

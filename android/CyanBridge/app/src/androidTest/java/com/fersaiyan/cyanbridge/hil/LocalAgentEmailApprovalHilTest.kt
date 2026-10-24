@@ -14,7 +14,7 @@ import com.fersaiyan.cyanbridge.localagent.LocalAgentActionParser
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
 import com.fersaiyan.cyanbridge.localagent.LocalAgentObservation
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs as RuntimePrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 import com.fersaiyan.cyanbridge.localagent.TaskerExecutionBackend
 import com.fersaiyan.cyanbridge.localagent.TaskerLocalAgentService
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs

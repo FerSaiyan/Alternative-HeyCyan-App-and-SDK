@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.ai.assistant
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.shared.chat.ChatMessage
 
 /**

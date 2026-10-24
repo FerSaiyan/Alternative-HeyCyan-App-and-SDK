@@ -2,7 +2,7 @@ package com.fersaiyan.cyanbridge.ui.main
 
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
-import com.fersaiyan.cyanbridge.localagent.LocalAgentPrefs
+import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 
 /** Optional Local Agent controls and status on the main screen. */
 internal class AgentControlsUiController(host: MainScreenHost) : MainScreenController(host) {
