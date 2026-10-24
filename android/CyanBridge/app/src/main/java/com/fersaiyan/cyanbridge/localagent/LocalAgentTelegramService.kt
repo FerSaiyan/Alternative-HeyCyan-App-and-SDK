@@ -180,7 +180,7 @@ class LocalAgentTelegramService : Service() {
         if (!AutomationPrefs.isLocalAgentAutomationEnabled(applicationContext)) {
             return "Phone control is disabled in CyanBridge settings."
         }
-        if (LocalAgentService.isRunning()) {
+        if (TaskerLocalAgentService.isRunning()) {
             return "A Local Agent task is already running. Use /status or /stop first."
         }
         val result = LocalAgentController.start(applicationContext, goal)

@@ -21,7 +21,7 @@ import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.localagent.LocalAgentAccessibilityBridge
 import com.fersaiyan.cyanbridge.localagent.LocalAgentDeviceState
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
-import com.fersaiyan.cyanbridge.localagent.LocalAgentService
+import com.fersaiyan.cyanbridge.localagent.TaskerLocalAgentService
 import com.fersaiyan.cyanbridge.localagent.LocalAgentTaskHistory
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
@@ -299,7 +299,7 @@ object DebugLogSupport {
                 else -> "disabled"
             },
         )
-        appendLine("- Local Agent service running: ${LocalAgentService.isRunning()}")
+        appendLine("- Local Agent service running: ${TaskerLocalAgentService.isRunning()}")
         appendLine("- Notification permission: ${hasNotificationPermission(context)}")
         appendLine("- Device state: ${deviceAvailability.name} (${deviceAvailability.statusText})")
         appendLine("- Runtime status: ${RuntimePrefs.getStatus(context)}")
