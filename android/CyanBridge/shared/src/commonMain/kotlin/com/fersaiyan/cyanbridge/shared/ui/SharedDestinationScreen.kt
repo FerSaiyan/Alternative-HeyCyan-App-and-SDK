@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.ui
 
+import com.fersaiyan.cyanbridge.shared.platform.platformLanguageTag
+import com.fersaiyan.cyanbridge.shared.settings.LocalizedPromptDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +37,16 @@ import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
 import com.fersaiyan.cyanbridge.shared.settings.MemorySourceType
 import com.fersaiyan.cyanbridge.shared.platform.CyanBridgeServices
+import com.fersaiyan.cyanbridge.shared.platform.SharedMediaHooks
+import com.fersaiyan.cyanbridge.shared.ui.plugins.PublishPluginScreen
+import com.fersaiyan.cyanbridge.shared.plugins.PublishPluginUiState
+import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
+import com.fersaiyan.cyanbridge.shared.platform.SharedPluginsHooks
+import com.fersaiyan.cyanbridge.shared.platform.SharedSettingsHooks
+import androidx.compose.runtime.collectAsState
+import com.fersaiyan.cyanbridge.shared.recordings.TranscriptDialogUiState
+import com.fersaiyan.cyanbridge.shared.recordings.TranscriptionProgressUiState
+import com.fersaiyan.cyanbridge.shared.platform.SharedRecordingsHooks
 import com.fersaiyan.cyanbridge.shared.platform.PlatformPreferences
 import com.fersaiyan.cyanbridge.shared.notes.NoteSummary
 import com.fersaiyan.cyanbridge.shared.platform.createPlatformPreferences
@@ -49,6 +61,7 @@ import com.fersaiyan.cyanbridge.shared.ui.recordings.SyncedMediaGalleryScreen
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsScreenActions
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsUiState
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsScreen
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -97,207 +110,6 @@ fun SharedDestinationScreen(
 
 @OptIn(ExperimentalResourceApi::class)
 @Composable
-private fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> Unit) {
-    val scope = rememberCoroutineScope()
-    val newChatTitle = stringResource(Res.string.action_new_chat)
-    val formatTimestamp = sharedTimestampFormatter()
-    var threads by remember { mutableStateOf<List<ChatThreadSummary>>(emptyList()) }
-    var notes by remember { mutableStateOf<List<NoteSummary>>(emptyList()) }
-    var pendingDelete by remember { mutableStateOf<ChatThreadSummary?>(null) }
-    var selectedThreadId by remember { mutableStateOf<String?>(null) }
-    var selectedTab by remember { mutableStateOf(NotesChatsTab.CHATS) }
-
-    fun refreshChats() {
-        scope.launch {
-            if (CyanBridgeServices.isInitialized()) {
-                threads = CyanBridgeServices.chatRepository.getAllChats()
-                    .map { ChatThreadSummary(it.id, it.title, it.updatedAt) }
-                    .sortedByDescending { it.updatedAtEpochMillis }
-            }
-        }
-    }
-
-    fun refreshNotes() {
-        scope.launch {
-            if (CyanBridgeServices.isInitialized()) {
-                // IosNotesRepository exposes notes via CyanBridgeServices.notesRepository
-                // It is a shared interface; collect as flow if available via portability.
-                // For iOS host we keep empty placeholder until notes channel is wired.
-                // This prevents crash and keeps M3 Expressive tab functional.
-                notes = emptyList()
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        refreshChats()
-        refreshNotes()
-    }
-
-    val selectedThread = threads.firstOrNull { it.id == selectedThreadId }
-    if (selectedThread != null) {
-        SharedChatThreadDestination(
-            threadSummary = selectedThread,
-            onBack = { selectedThreadId = null },
-            onDestinationSelected = onDestinationSelected,
-        )
-        return
-    }
-
-    NotesChatsScreen(
-        selectedTab = selectedTab,
-        onTabSelected = { selectedTab = it },
-        threads = threads,
-        pendingDelete = pendingDelete,
-        notes = notes,
-        formatTimestamp = formatTimestamp,
-        onOpenThread = { selectedThreadId = it.id },
-        onRequestDelete = { pendingDelete = it },
-        onConfirmDelete = {
-            val thread = pendingDelete
-            pendingDelete = null
-            if (thread != null) {
-                scope.launch {
-                    if (CyanBridgeServices.isInitialized()) {
-                        CyanBridgeServices.chatRepository.deleteChat(thread.id)
-                        refreshChats()
-                    }
-                }
-            }
-        },
-        onDismissDelete = { pendingDelete = null },
-        onNewChat = {
-            val now = sharedNowMillis()
-            val id = "ios-$now"
-            scope.launch {
-                if (CyanBridgeServices.isInitialized()) {
-                    CyanBridgeServices.chatRepository.insertChat(
-                        ChatEntity(
-                            id = id,
-                            title = newChatTitle,
-                            createdAt = now,
-                            updatedAt = now,
-                        ),
-                    )
-                    refreshChats()
-                    selectedThreadId = id
-                }
-            }
-        },
-        onOpenNote = {},
-        onNewNote = {},
-        onChatAppearance = {},
-        onOpenNotesSettings = {},
-        onDestinationSelected = onDestinationSelected,
-    )
-}
-
-@OptIn(ExperimentalResourceApi::class)
-@Composable
-private fun SharedChatThreadDestination(
-    threadSummary: ChatThreadSummary,
-    onBack: () -> Unit,
-    onDestinationSelected: (AppDestination) -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    var messages by remember(threadSummary.id) { mutableStateOf<List<ChatMessage>>(emptyList()) }
-    var composerText by remember(threadSummary.id) { mutableStateOf("") }
-    var isThinking by remember(threadSummary.id) { mutableStateOf(false) }
-    var statusText by remember(threadSummary.id) { mutableStateOf<String?>(null) }
-    val chatRequestFailed = stringResource(Res.string.chat_request_failed)
-
-    fun reloadMessages() {
-        scope.launch {
-            if (CyanBridgeServices.isInitialized()) {
-                messages = CyanBridgeServices.chatRepository.getMessages(threadSummary.id)
-                    .map(ChatMessageEntity::toSharedMessage)
-            }
-        }
-    }
-
-    LaunchedEffect(threadSummary.id) { reloadMessages() }
-
-    ChatThreadScreen(
-        state = ChatThreadUiState(
-            thread = ChatThread(
-                id = threadSummary.id,
-                title = threadSummary.title,
-                createdAt = 0L,
-                updatedAt = threadSummary.updatedAtEpochMillis,
-            ),
-            messages = messages,
-            composerText = composerText,
-            isGenerating = isThinking,
-            statusText = statusText,
-        ),
-        messages = messages,
-        composer = ChatComposerUiState(isMediaEnabled = false),
-        attachments = ChatAttachmentsUiState(),
-        modelBadge = if (CyanBridgeServices.isInitialized()) {
-            CyanBridgeServices.aiModelRegistry.getDefaultModelId()
-        } else {
-            null
-        },
-        dailySummaryProgress = null,
-        dailyReviewQueueStatus = statusText,
-        userBubbleColor = null,
-        assistantBubbleColor = null,
-        wallpaper = null,
-        isThinking = isThinking,
-        onOpenChatList = onBack,
-        onChatAppearance = {},
-        onComposerTextChanged = { composerText = it },
-        onPrimaryAction = {
-            val text = composerText.trim()
-            if (text.isNotEmpty() && !isThinking) {
-                composerText = ""
-                scope.launch {
-                    if (!CyanBridgeServices.isInitialized()) return@launch
-                    val now = sharedNowMillis()
-                    isThinking = true
-                    statusText = null
-                    CyanBridgeServices.chatRepository.insertMessage(
-                        ChatMessageEntity(
-                            id = "user-$now",
-                            chatId = threadSummary.id,
-                            role = "user",
-                            content = text,
-                            timestamp = now,
-                        ),
-                    )
-                    val history = CyanBridgeServices.chatRepository.getMessages(threadSummary.id)
-                        .map { AiChatMessage(it.role, it.content) }
-                    runCatching {
-                        CyanBridgeServices.chatAiService.chat(history).message
-                    }.onSuccess { response ->
-                        CyanBridgeServices.chatRepository.insertMessage(
-                            ChatMessageEntity(
-                                id = "assistant-${sharedNowMillis()}",
-                                chatId = threadSummary.id,
-                                role = "assistant",
-                                content = response.content,
-                                timestamp = sharedNowMillis(),
-                            ),
-                        )
-                    }.onFailure { error ->
-                         statusText = error.message ?: chatRequestFailed
-                    }
-                    reloadMessages()
-                    isThinking = false
-                }
-            }
-        },
-        onAttachImage = {},
-        onRecordAudio = {},
-        onClearAttachments = {},
-        onDestinationSelected = { destination ->
-            if (destination == AppDestination.CHATS) onBack() else onDestinationSelected(destination)
-        },
-    )
-}
-
-@OptIn(ExperimentalResourceApi::class)
-@Composable
 private fun SharedMediaDestination(onDestinationSelected: (AppDestination) -> Unit) {
     val scope = rememberCoroutineScope()
     val formatTimestamp = sharedTimestampFormatter()
@@ -307,7 +119,9 @@ private fun SharedMediaDestination(onDestinationSelected: (AppDestination) -> Un
     fun refresh() {
         scope.launch {
             if (CyanBridgeServices.isInitialized()) {
-                mediaItems = CyanBridgeServices.mediaRecordRepository.getAll().map { record ->
+                mediaItems = CyanBridgeServices.mediaRecordRepository.getAll()
+                    .sortedByDescending { it.downloadedAt }
+                    .map { record ->
                     SyncedMediaItem(
                         id = record.id.hashCode().toLong(),
                         displayName = record.filename,
@@ -319,40 +133,101 @@ private fun SharedMediaDestination(onDestinationSelected: (AppDestination) -> Un
         }
     }
 
+    val recordings = SharedRecordingsHooks.provider
+    var sessions by remember { mutableStateOf<List<RecordingItem>>(emptyList()) }
+    var transcribingId by remember { mutableStateOf<Long?>(null) }
+    var transcriptionProgress by remember { mutableStateOf<TranscriptionProgressUiState?>(null) }
+    var transcriptDialog by remember { mutableStateOf<TranscriptDialogUiState?>(null) }
+    val meetingState = recordings?.meetingState?.collectAsState()?.value ?: MeetingRecordingUiState()
+    val playingId = recordings?.playingId?.collectAsState()?.value
+
+    fun refreshRecordings() {
+        scope.launch { sessions = recordings?.recordings().orEmpty() }
+    }
+
     LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(meetingState.isRecording) { refreshRecordings() }
 
     if (showGallery) {
         SyncedMediaGalleryScreen(
             mediaItems = mediaItems,
             isLoading = false,
              folderHint = stringResource(Res.string.media_folder_hint),
-            loadThumbnail = { _: String -> null },
+            loadThumbnail = { path: String -> SharedMediaHooks.loadThumbnail?.invoke(path) },
             onNavigateBack = { showGallery = false },
             onRefresh = ::refresh,
-            onOpenMedia = {},
-            onShareItems = {},
-            onDeleteItems = {},
+            onOpenMedia = { item -> SharedMediaHooks.openMedia?.invoke(item.contentUriString) },
+            onShareItems = { items -> SharedMediaHooks.shareMedia?.invoke(items.map { it.contentUriString }) },
+            onDeleteItems = { items ->
+                scope.launch {
+                    val paths = items.map { it.contentUriString }
+                    SharedMediaHooks.deleteMediaFiles?.invoke(paths)
+                    val repository = CyanBridgeServices.mediaRecordRepository
+                    repository.getAll()
+                        .filter { it.filePath in paths }
+                        .forEach { repository.delete(it.id) }
+                    refresh()
+                }
+            },
         )
     } else {
         RecordingsScreen(
-            sessions = emptyList<RecordingItem>(),
+            sessions = sessions,
             isLoading = false,
             recentSyncedMedia = mediaItems.take(4),
-            playingSessionId = null,
-            transcribingSessionId = null,
-            meetingRecording = MeetingRecordingUiState(),
-            transcriptionProgress = null,
-            transcriptDialog = null,
+            playingSessionId = playingId,
+            transcribingSessionId = transcribingId,
+            meetingRecording = meetingState,
+            transcriptionProgress = transcriptionProgress,
+            transcriptDialog = transcriptDialog,
              formatTimestamp = formatTimestamp,
-            loadThumbnail = { _: String -> null },
+            loadThumbnail = { path: String -> SharedMediaHooks.loadThumbnail?.invoke(path) },
             onOpenSyncedMedia = { showGallery = true },
-            onOpenSyncedMediaItem = { showGallery = true },
-            onPlay = {},
-            onTranscribe = {},
-            onViewTranscript = {},
-            onStopMeetingCapture = {},
-            onDismissTranscript = {},
+            onOpenSyncedMediaItem = { item ->
+                SharedMediaHooks.openMedia?.invoke(item.contentUriString) ?: run { showGallery = true }
+            },
+            onPlay = { item -> recordings?.togglePlayback(item.id) },
+            onTranscribe = { item ->
+                val provider = recordings ?: return@RecordingsScreen
+                if (transcribingId != null) return@RecordingsScreen
+                transcribingId = item.id
+                scope.launch {
+                    runCatching {
+                        provider.transcribe(item.id) { message ->
+                            transcriptionProgress = TranscriptionProgressUiState(title = item.title, message = message)
+                        }
+                    }.onSuccess { text ->
+                        transcriptDialog = TranscriptDialogUiState(title = item.title, text = text)
+                    }.onFailure { error ->
+                        transcriptDialog = TranscriptDialogUiState(
+                            title = item.title,
+                            text = error.message ?: "Transcription failed",
+                        )
+                    }
+                    transcriptionProgress = null
+                    transcribingId = null
+                    refreshRecordings()
+                }
+            },
+            onViewTranscript = { item ->
+                scope.launch {
+                    recordings?.transcript(item.id)?.let { text ->
+                        transcriptDialog = TranscriptDialogUiState(title = item.title, text = text)
+                    }
+                }
+            },
+            onStopMeetingCapture = {
+                recordings?.stopMeetingCapture()
+                refreshRecordings()
+            },
+            onDeleteItems = { items ->
+                val deleted = recordings?.delete(items.map { it.id }).orEmpty()
+                refreshRecordings()
+                deleted
+            },
+            onDismissTranscript = { transcriptDialog = null },
             onDestinationSelected = onDestinationSelected,
+            showNavigationBar = false,
         )
     }
 }
@@ -360,39 +235,87 @@ private fun SharedMediaDestination(onDestinationSelected: (AppDestination) -> Un
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 private fun SharedPluginsDestination(onDestinationSelected: (AppDestination) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val pluginsPlatform = SharedPluginsHooks.platform
+    val enabledIds = pluginsPlatform?.enabledPluginIds?.collectAsState()?.value.orEmpty()
+    val available = pluginsPlatform?.availablePluginIds.orEmpty()
+    var communityPlugins by remember { mutableStateOf<List<CommunityPluginCardData>>(emptyList()) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    var selectedWindow by remember { mutableStateOf(PluginTimeWindow.ALL_TIME) }
+    var publishState by remember { mutableStateOf<PublishPluginUiState?>(null) }
+    val iosBadge = stringResource(Res.string.native_ios_badge)
+
+    fun refresh() {
+        val hooks = pluginsPlatform ?: return
+        if (isRefreshing) return
+        isRefreshing = true
+        scope.launch {
+            communityPlugins = runCatching { hooks.fetchCommunityPlugins() }.getOrDefault(communityPlugins)
+            isRefreshing = false
+        }
+    }
+
+    LaunchedEffect(Unit) { refresh() }
+
+    publishState?.let { state ->
+        SharedPublishPluginDestination(
+            state = state,
+            onStateChange = { publishState = it },
+            onClose = { publishState = null },
+        )
+        return
+    }
+
+    fun runnable(id: String, title: String, description: String) = NativePluginCardData(
+        id = id,
+        title = title,
+        description = description,
+        badge = iosBadge,
+        enabled = id in enabledIds,
+        hasSettings = false,
+        isAvailable = id in available,
+    )
+
     val nativePlugins = listOf(
+        runnable(
+            NativePluginIds.LIVE_CAPTION_RELAY,
+            stringResource(Res.string.native_live_caption_relay_title),
+            stringResource(Res.string.native_live_caption_relay_description),
+        ),
+        runnable(
+            NativePluginIds.HANDS_FREE_TRANSLATOR,
+            stringResource(Res.string.native_hands_free_translator_title),
+            stringResource(Res.string.native_hands_free_translator_description),
+        ),
+        runnable(
+            NativePluginIds.MEETING_SPARK_NOTES,
+            stringResource(Res.string.native_meeting_spark_notes_title),
+            stringResource(Res.string.native_meeting_spark_notes_description),
+        ),
+        runnable(
+            NativePluginIds.ERRAND_BRAIN,
+            stringResource(Res.string.native_errand_brain_title),
+            stringResource(Res.string.native_errand_brain_description),
+        ),
+        runnable(
+            NativePluginIds.WALKING_AID,
+            stringResource(Res.string.native_walking_aid_title),
+            stringResource(Res.string.native_walking_aid_description),
+        ),
         NativePluginCardData(
             id = NativePluginIds.LOCAL_AGENT,
-             title = stringResource(Res.string.native_local_agent_title),
-             description = stringResource(Res.string.native_local_agent_description),
-             badge = stringResource(Res.string.native_android_only),
+            title = stringResource(Res.string.native_local_agent_title),
+            description = stringResource(Res.string.native_local_agent_description),
+            badge = stringResource(Res.string.native_android_only),
             enabled = false,
             hasSettings = false,
             isAvailable = false,
         ),
         NativePluginCardData(
             id = NativePluginIds.AUTO_DIARY,
-             title = stringResource(Res.string.native_auto_diary_title),
-             description = stringResource(Res.string.native_auto_diary_description),
-             badge = stringResource(Res.string.native_ios_pending),
-            enabled = false,
-            hasSettings = false,
-            isAvailable = false,
-        ),
-        NativePluginCardData(
-            id = NativePluginIds.AUTO_AUDIO,
-            title = stringResource(Res.string.native_auto_audio_title),
-            description = stringResource(Res.string.native_auto_audio_description),
-            badge = stringResource(Res.string.native_ios_pending),
-            enabled = false,
-            hasSettings = false,
-            isAvailable = false,
-        ),
-        NativePluginCardData(
-            id = NativePluginIds.VISUAL_DIARY,
-            title = stringResource(Res.string.native_visual_diary_title),
-            description = stringResource(Res.string.native_visual_diary_description),
-            badge = stringResource(Res.string.native_ios_pending),
+            title = stringResource(Res.string.native_auto_diary_title),
+            description = stringResource(Res.string.native_auto_diary_description),
+            badge = stringResource(Res.string.native_android_only),
             enabled = false,
             hasSettings = false,
             isAvailable = false,
@@ -400,15 +323,63 @@ private fun SharedPluginsDestination(onDestinationSelected: (AppDestination) -> 
     )
 
     CommunityPluginsScreen(
-        plugins = emptyList(),
-        selectedWindow = PluginTimeWindow.ALL_TIME,
-        isRefreshing = false,
-        onWindowSelected = {},
-        onRefresh = {},
-        onPublishPlugin = {},
+        plugins = communityPlugins,
+        selectedWindow = selectedWindow,
+        isRefreshing = isRefreshing,
+        onWindowSelected = { selectedWindow = it },
+        onRefresh = ::refresh,
+        onOpenCommunityPlugin = { plugin ->
+            (plugin.taskerNetLink ?: plugin.downloadUrl)?.let { link -> pluginsPlatform?.openLink(link) }
+        },
+        onPublishPlugin = { publishState = PublishPluginUiState() },
         onDestinationSelected = onDestinationSelected,
         nativePlugins = nativePlugins,
-        onToggleNativePlugin = { _, _ -> },
+        onToggleNativePlugin = { id, enabled -> pluginsPlatform?.setPluginEnabled(id, enabled) },
+        showNavigationBar = false,
+    )
+}
+
+@Composable
+private fun SharedPublishPluginDestination(
+    state: PublishPluginUiState,
+    onStateChange: (PublishPluginUiState) -> Unit,
+    onClose: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val categories = listOf("Productivity", "Accessibility", "Memory", "Media", "Other")
+    PublishPluginScreen(
+        state = state,
+        categories = categories,
+        onTitleChanged = { onStateChange(state.copy(title = it, titleError = null)) },
+        onAuthorChanged = { onStateChange(state.copy(author = it, authorError = null)) },
+        onDescriptionChanged = { onStateChange(state.copy(description = it, descriptionError = null)) },
+        onCategorySelected = { onStateChange(state.copy(category = it)) },
+        onTaskerNetLinkChanged = { onStateChange(state.copy(taskerNetLink = it, taskerNetLinkError = null)) },
+        onSubmit = {
+            val checked = state.copy(
+                titleError = "Required".takeIf { state.title.isBlank() },
+                authorError = "Required".takeIf { state.author.isBlank() },
+                descriptionError = "Required".takeIf { state.description.isBlank() },
+                taskerNetLinkError = "Use an https:// link".takeIf { !state.taskerNetLink.trim().startsWith("https://") },
+            )
+            if (listOf(checked.titleError, checked.authorError, checked.descriptionError, checked.taskerNetLinkError).any { it != null }) {
+                onStateChange(checked)
+                return@PublishPluginScreen
+            }
+            val hooks = SharedPluginsHooks.platform ?: return@PublishPluginScreen
+            onStateChange(checked.copy(isSubmitting = true))
+            scope.launch {
+                val sent = hooks.publishPlugin(
+                    title = state.title.trim(),
+                    author = state.author.trim(),
+                    description = state.description.trim(),
+                    category = state.category.ifBlank { categories.last() },
+                    link = state.taskerNetLink.trim(),
+                )
+                if (sent) onClose() else onStateChange(checked.copy(isSubmitting = false, taskerNetLinkError = "Server unavailable. Try again later."))
+            }
+        },
+        onNavigateBack = onClose,
     )
 }
 
@@ -447,6 +418,7 @@ private fun SharedSettingsDestination(
             }
         },
         actions = actions,
+        showNavigationBar = false,
     )
 }
 
@@ -495,17 +467,20 @@ private class SharedSettingsScreenActions(
     private val currentState: () -> SettingsUiState,
     private val updateState: (SettingsUiState) -> Unit,
 ) : SettingsScreenActions {
+    private val platform get() = SharedSettingsHooks.platform
+    private val scope = MainScope()
+
     private fun update(transform: (SettingsUiState) -> SettingsUiState) {
         updateState(transform(currentState()))
     }
 
     override fun onDestinationSelected(destination: AppDestination) = onDestinationSelected.invoke(destination)
     override fun openAppearance() = onOpenAppearance.invoke()
-    override fun openAppLanguageSelection() = Unit
+    override fun openAppLanguageSelection() { platform?.openAppLanguageSettings() }
     override fun openSubscription() = onOpenSubscription.invoke()
     override fun setDefaultImageQuestion(question: String) = update { it.copy(defaultImageQuestion = question) }
     override fun resetDefaultImageQuestion() = update {
-        it.copy(defaultImageQuestion = SettingsUiState().defaultImageQuestion)
+        it.copy(defaultImageQuestion = LocalizedPromptDefaults.imageQuestion(platformLanguageTag()))
     }
     override fun setMemoryMode(mode: MemoryPrivacyMode) = update { it.copy(memoryMode = mode) }
     override fun setMemorySync(source: MemorySourceType, enabled: Boolean) = update { state ->
@@ -517,30 +492,40 @@ private class SharedSettingsScreenActions(
             else -> state
         }
     }
-    override fun deletePassiveCapture() = Unit
+    override fun deletePassiveCapture() { platform?.stopMeetingCapture() }
     override fun lockVault() = update { it.copy(vaultLocked = true) }
-    override fun unlockVault() = update { it.copy(vaultLocked = false) }
-    override fun setVaultPassphrase() = Unit
-    override fun clearVaultPassphrase() = Unit
+    override fun unlockVault() {
+        val hooks = platform ?: return update { it.copy(vaultLocked = false) }
+        scope.launch { if (hooks.unlockVault()) update { it.copy(vaultLocked = false) } }
+    }
+    override fun setVaultPassphrase() {
+        val hooks = platform ?: return
+        scope.launch { if (hooks.setVaultPassphrase()) update { it.copy(vaultRequiresPassphrase = true) } }
+    }
+    override fun clearVaultPassphrase() {
+        val hooks = platform ?: return
+        scope.launch { if (hooks.clearVaultPassphrase()) update { it.copy(vaultRequiresPassphrase = false) } }
+    }
     override fun resetVault() = update { it.copy(vaultLocked = false, vaultRequiresPassphrase = false) }
     override fun setTranscriptStorageEnabled(enabled: Boolean) = update { it.copy(transcriptStorageEnabled = enabled) }
     override fun setRedactNamesEnabled(enabled: Boolean) = update { it.copy(redactNamesEnabled = enabled) }
     override fun setIncludeFullTranscriptionEnabled(enabled: Boolean) = update { it.copy(includeFullTranscriptionInExports = enabled) }
-    override fun exportLocalData() = Unit
-    override fun importLocalData() = Unit
-    override fun importChatGptData() = Unit
-    override fun importClaudeData() = Unit
-    override fun clearLocalData() = Unit
-    override fun sendDebugLogs() = Unit
-    override fun stopMeetingCapture() = Unit
+    override fun exportLocalData() { platform?.exportLocalData() }
+    override fun importLocalData() { platform?.importLocalData() }
+    override fun importChatGptData() { platform?.importChatGptData() }
+    override fun importClaudeData() { platform?.importClaudeData() }
+    override fun clearLocalData() { platform?.clearLocalData() }
+    override fun sendDebugLogs() { platform?.sendDebugLogs() }
+    override fun stopMeetingCapture() { platform?.stopMeetingCapture() }
     override fun setProviderType(type: AgentProviderType) = update { it.copy(providerType = type) }
     override fun openTaskerIntegrations() = Unit
-    override fun openLocalModels() = Unit
+    override fun openLocalModels() { platform?.openLocalModels() }
 }
 
-private const val SHARED_SETTINGS_PREFS = "cyanbridge_shared_settings"
+internal const val SHARED_SETTINGS_PREFS = "cyanbridge_shared_settings"
 
 private fun loadSharedSettings(preferences: PlatformPreferences): SettingsUiState = SettingsUiState(
+    appLanguageLabel = SharedSettingsHooks.platform?.appLanguageLabel() ?: SettingsUiState().appLanguageLabel,
     providerType = AgentProviderType.valueOf(preferences.getString("provider_type", AgentProviderType.PRO_SUBSCRIPTION.name)),
     memoryMode = MemoryPrivacyMode.fromRaw(preferences.getString("memory_mode", MemoryPrivacyMode.PRIVATE_LOCAL.name)),
     syncExplicit = preferences.getBoolean("sync_explicit", true),
@@ -548,10 +533,20 @@ private fun loadSharedSettings(preferences: PlatformPreferences): SettingsUiStat
     syncOcr = preferences.getBoolean("sync_ocr", false),
     syncDerived = preferences.getBoolean("sync_derived", false),
     vaultLocked = preferences.getBoolean("vault_locked", false),
+    vaultRequiresPassphrase = SharedSettingsHooks.platform?.vaultHasPassphrase() ?: false,
     transcriptStorageEnabled = preferences.getBoolean("transcript_storage", true),
     redactNamesEnabled = preferences.getBoolean("redact_names", true),
     includeFullTranscriptionInExports = preferences.getBoolean("full_transcript_exports", false),
+    defaultImageQuestion = sharedDefaultImageQuestion(),
 )
+
+/** The image-question prompt from Settings, shared by chat attachments and glasses image questions. */
+internal fun sharedDefaultImageQuestion(): String =
+    createPlatformPreferences(SHARED_SETTINGS_PREFS)
+        .getString("default_image_question", "")
+        .takeUnless(LocalizedPromptDefaults::isDefaultImageQuestion)
+        // Untouched defaults follow the app language (English system → English text, and so on).
+        ?: LocalizedPromptDefaults.imageQuestion(platformLanguageTag())
 
 private fun saveSharedSettings(preferences: PlatformPreferences, state: SettingsUiState) {
     preferences.putString("provider_type", state.providerType.name)
@@ -564,9 +559,10 @@ private fun saveSharedSettings(preferences: PlatformPreferences, state: Settings
     preferences.putBoolean("transcript_storage", state.transcriptStorageEnabled)
     preferences.putBoolean("redact_names", state.redactNamesEnabled)
     preferences.putBoolean("full_transcript_exports", state.includeFullTranscriptionInExports)
+    preferences.putString("default_image_question", state.defaultImageQuestion)
 }
 
-private fun ChatMessageEntity.toSharedMessage(): ChatMessage = ChatMessage(
+internal fun ChatMessageEntity.toSharedMessage(): ChatMessage = ChatMessage(
     id = id,
     chatId = chatId,
     role = if (role.equals("user", ignoreCase = true)) ChatRole.USER else ChatRole.ASSISTANT,
@@ -576,7 +572,7 @@ private fun ChatMessageEntity.toSharedMessage(): ChatMessage = ChatMessage(
 
 @OptIn(ExperimentalResourceApi::class)
 @Composable
-private fun sharedTimestampFormatter(): (Long) -> String {
+internal fun sharedTimestampFormatter(): (Long) -> String {
     val unknown = stringResource(Res.string.time_unknown)
     val justNow = stringResource(Res.string.time_just_now)
     val minutesAgo = stringResource(Res.string.time_minutes_ago)
@@ -605,4 +601,4 @@ private fun formatSharedTimestamp(
     }
 }
 
-private fun sharedNowMillis(): Long = platformCurrentTimeMillis()
+internal fun sharedNowMillis(): Long = platformCurrentTimeMillis()
