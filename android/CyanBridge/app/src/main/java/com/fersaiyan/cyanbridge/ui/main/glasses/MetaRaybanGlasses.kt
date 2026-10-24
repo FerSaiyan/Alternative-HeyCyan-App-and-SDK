@@ -7,6 +7,7 @@ import com.fersaiyan.cyanbridge.bridge.core.CameraCapture
 import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
 import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
@@ -52,6 +53,28 @@ internal class MetaRaybanGlasses(context: GlassesDeviceContext) :
             }
             context.metaRaybanUi.ensureMetaCameraReady(start)
         }
+    }
+
+    /** The Meta panel: DAT registration, camera session, stream, photo and display controls. */
+    override fun handlePanelAction(action: GlassesDashboardAction): Boolean {
+        when (action) {
+            GlassesDashboardAction.MetaRegister -> binding.btnMetaRegister.performClick()
+            GlassesDashboardAction.MetaOpenPairing ->
+                activity.startActivity(Intent(activity, MetaPairingActivity::class.java))
+            GlassesDashboardAction.MetaOpenMetaAi -> context.metaRaybanUi.openMetaAiAppOrStore()
+            GlassesDashboardAction.MetaUnregister -> binding.btnMetaUnregister.performClick()
+            GlassesDashboardAction.MetaStartSession -> binding.btnMetaSessionStart.performClick()
+            GlassesDashboardAction.MetaStopSession -> binding.btnMetaSessionStop.performClick()
+            GlassesDashboardAction.MetaStartStream -> binding.btnMetaStreamStart.performClick()
+            GlassesDashboardAction.MetaStopStream -> binding.btnMetaStreamStop.performClick()
+            GlassesDashboardAction.MetaCapturePhoto -> binding.btnMetaCapturePhoto.performClick()
+            GlassesDashboardAction.MetaViewPhoto -> binding.btnMetaViewPhoto.performClick()
+            GlassesDashboardAction.MetaStartDisplay -> binding.btnMetaDisplayStart.performClick()
+            GlassesDashboardAction.MetaStopDisplay -> binding.btnMetaDisplayStop.performClick()
+            GlassesDashboardAction.MetaSendDiagnostics -> context.metaRaybanUi.showMetaDiagnostics()
+            else -> return false
+        }
+        return true
     }
 
     override fun renderConnectionStatus(connected: Boolean) {
