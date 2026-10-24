@@ -40,7 +40,14 @@ class CollapsibleSection @JvmOverloads constructor(
             setPadding(0, 0, 0, 0)
             isClickable = true
             isFocusable = true
-            background = context.obtainStyledAttributes(intArrayOf(android.R.attr.selectableItemBackground)).getDrawable(0)
+            val selectableBackground = context.obtainStyledAttributes(
+                intArrayOf(android.R.attr.selectableItemBackground)
+            )
+            background = try {
+                selectableBackground.getDrawable(0)
+            } finally {
+                selectableBackground.recycle()
+            }
         }
         
         titleText = TextView(context).apply {

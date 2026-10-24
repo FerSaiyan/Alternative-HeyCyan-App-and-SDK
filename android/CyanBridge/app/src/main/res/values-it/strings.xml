@@ -37,8 +37,6 @@
     <string name="onboarding_back">Indietro</string>
     <string name="onboarding_next">Avanti</string>
     <string name="onboarding_get_started">Inizia</string>
-    <string name="meta_diagnostics_title">Diagnostica Meta Ray-Ban</string>
-    <string name="meta_diagnostics_description">CyanBridge raccoglierà lo stato recente di Meta DAT, gli errori, i dettagli del dispositivo e le righe logcat filtrate per analizzare il problema.</string>
     <string name="nav_transcriptions_recordings">Media</string>
     <string name="text_1">Scansiona</string>
     <string name="text_2">Riconnetti</string>
@@ -100,8 +98,6 @@
     <string name="onboarding_accessibility_disclosure_body">CyanBridge usa l\'accessibilità Android solo se la attivi. L\'accessibilità consente a CyanBridge di leggere il testo e la struttura dell\'interfaccia delle app sullo schermo. Viene usata per salvare la Memoria dello schermo facoltativa e per permettere all\'agente locale di toccare, digitare, scorrere e navigare per conto tuo. Il contenuto dello schermo viene memorizzato localmente per la Memoria dello schermo. Quando richiedi un\'azione dell\'agente locale, il contenuto attuale dello schermo può essere elaborato dal provider IA che hai scelto, incluso un provider cloud se ne hai scelto uno. Gli screenshot facoltativi dell\'agente locale richiedono un\'impostazione separata e non vengono mai inviati a un pianificatore remoto, a meno che tu non autorizzi separatamente il caricamento remoto degli screenshot. Le app nella tua lista nera vengono ignorate. CyanBridge non attiva automaticamente l\'accessibilità e puoi disattivare l\'accessibilità, la Memoria dello schermo o l\'agente locale in qualsiasi momento.</string>
     <string name="onboarding_local_agent_toggle">Attiva il controllo del telefono dell\'agente locale</string>
     <string name="onboarding_open_accessibility_settings">Controlla e attiva l\'accessibilità</string>
-    <string name="meta_pairing_title">Associa gli occhiali Meta</string>
-
     <string name="onboarding_audio_capture_title">Registrazione audio continua</string>
     <string name="onboarding_audio_capture_desc">Auto Audio può registrare l\'audio degli occhiali per trascrizioni e riepiloghi quotidiani quando viene attivato da Plugin.</string>
     <string name="onboarding_audio_capture_details">Auto Audio registra segmenti di 15 minuti e poi li trascrive per creare riepiloghi facoltativi. Puoi rivedere ed eliminare le registrazioni in qualsiasi momento. CyanBridge spiega e richiede l\'accesso alle notifiche o al microfono solo se le opzioni che scegli ne hanno bisogno.</string>
@@ -137,4 +133,13 @@
     <string name="donation_intro_dialog_title">Nota di supporto CyanBridge tramite Asaas</string>
     <string name="donation_intro_dialog_message">Ciao, grazie per aver preso in considerazione una donazione a CyanBridge! Lavoro a questo progetto oltre ai miei studi di dottorato e il tuo supporto significa molto per me. Non ho ancora potuto configurare Stripe a causa dei suoi requisiti speciali per le aziende brasiliane, quindi per ora uso un elaboratore di pagamenti chiamato Asaas. La pagina di pagamento è in portoghese; usa Google Traduttore se necessario. Sto cercando attivamente un\'alternativa migliore. Grazie ancora per il tuo supporto!</string>
     <string name="donation_intro_open_button">Apri il modulo della carta Asaas</string>
+    <string name="onboarding_device_ram">Questo dispositivo: %.1f GB di RAM</string>
+    <string name="onboarding_ram_warning_title">Memoria limitata</string>
+    <string name="onboarding_ram_limited">Questo dispositivo ha %.1f GB di RAM. Sono consigliati solo modelli IA locali compatti; i modelli più grandi potrebbero essere lenti o chiudersi inaspettatamente.</string>
+    <string name="onboarding_ram_too_low">Questo dispositivo ha solo %.1f GB di RAM. L\'IA locale richiede almeno 4 GB, quindi al momento non è compatibile alcun modello locale. Puoi continuare e configurare in seguito un provider cloud o remoto.</string>
+    <string name="onboarding_bluetooth_skip_title">Continuare senza Bluetooth?</string>
+    <string name="onboarding_bluetooth_skip_body">Puoi concedere questa autorizzazione in seguito. Fino ad allora, CyanBridge non potrà trovare, associare o connettersi agli occhiali.</string>
+    <string name="onboarding_bluetooth_skip_confirm">Continua comunque</string>
+    <string name="onboarding_bluetooth_skip_cancel">Indietro</string>
+    <string name="onboarding_find_glasses">Cerca gli occhiali disponibili</string>
 </resources>

@@ -178,7 +178,6 @@
     <string name="device_class_heycyan">HeyCyan</string>
     <string name="device_class_eye_vue">Eyevue</string>
     <string name="device_class_tunebuds">TuneBuds / AB Mate</string>
-    <string name="device_class_meta_rayban">Meta Ray-Ban</string>
     <string name="device_class_meizu_myvu">Meizu MYVU / Star Air</string>
     <string name="device_class_generic_audio">耳机 / 仅音频眼镜</string>
     <string name="device_class_unknown">未知</string>
@@ -436,12 +435,11 @@
     <string name="dashboard_count">数量</string>
     <string name="dashboard_sync_wifi">通过 Wi-Fi 同步数据</string>
     <string name="dashboard_eye_vue_live_preview">Eyevue 实时预览</string>
-    <string name="dashboard_passive_rtsp_probe">被动 RTSP 实验室探测</string>
+    <string name="dashboard_rtsp_live_preview">HeyCyan RTSP 实时预览</string>
     <string name="dashboard_eye_vue_description">启动供应商实时模式，加入返回的 Eyevue Wi-Fi 网络并播放相机流。</string>
-    <string name="dashboard_passive_probe_description">不发送 BLE 模式命令。请使用批准的硬件流程单独激活模式 8。</string>
+    <string name="dashboard_rtsp_live_preview_description">通过 BLE 启动眼镜直播模式，并在可用时通过 Wi-Fi Direct 自动连接，然后显示 RTSP 视频流。</string>
     <string name="dashboard_connecting">正在连接...</string>
     <string name="dashboard_start_live_preview">开始实时预览</string>
-    <string name="dashboard_arm_passive_probe">准备被动探测</string>
     <string name="dashboard_glasses_capture_settings">眼镜捕获设置</string>
     <string name="dashboard_capture_settings_description">更改设备保存的设置前，先从已连接的眼镜读取设置。</string>
     <string name="dashboard_wearing_detection">佩戴检测</string>

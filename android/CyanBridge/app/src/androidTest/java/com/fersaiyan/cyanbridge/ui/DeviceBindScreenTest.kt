@@ -38,7 +38,6 @@ class DeviceBindScreenTest {
                     connectingDevice = null,
                     selectedClass = DeviceClass.HEY_CYAN,
                     onScan = {},
-                    onPairMetaGlasses = {},
                     onSelectDevice = {},
                     onSelectedClassChange = {},
                     onConfirmConnection = {},
@@ -51,36 +50,10 @@ class DeviceBindScreenTest {
         composeRule.onNodeWithText("Smart Glasses").assertExists()
         composeRule.onNodeWithText("Signal: -54 dBm").assertExists()
         composeRule.onAllNodesWithText(mac).assertCountEquals(0)
-        composeRule.onNodeWithText("Pair Meta Glasses").assertExists()
     }
 
     @Test
-    fun pairMetaButtonLaunchesDedicatedFlow() {
-        var clicked = false
-        composeRule.setContent {
-            CyanBridgeTheme {
-                DeviceBindScreen(
-                    devices = emptyList(),
-                    isScanning = false,
-                    connectingDevice = null,
-                    selectedClass = DeviceClass.HEY_CYAN,
-                    onScan = {},
-                    onPairMetaGlasses = { clicked = true },
-                    onSelectDevice = {},
-                    onSelectedClassChange = {},
-                    onConfirmConnection = {},
-                    onDismissConnection = {},
-                    onBack = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("Pair Meta Glasses").performClick()
-        composeRule.runOnIdle { assertTrue(clicked) }
-    }
-
-    @Test
-    fun typePickerUsesUnifiedConsumerGlassesChoiceAndKeepsMeta() {
+    fun typePickerUsesUnifiedConsumerGlassesChoice() {
         var selected: DeviceClass? = null
         var confirmed = false
         val device = ScannedDevice(
@@ -99,7 +72,6 @@ class DeviceBindScreenTest {
                     connectingDevice = device,
                     selectedClass = DeviceClass.HEY_CYAN,
                     onScan = {},
-                    onPairMetaGlasses = {},
                     onSelectDevice = {},
                     onSelectedClassChange = { selected = it },
                     onConfirmConnection = { confirmed = true },
@@ -111,9 +83,8 @@ class DeviceBindScreenTest {
 
         composeRule.onNodeWithText("HeyCyan / EyeVue / TuneBuds / MoYoung").assertExists()
         composeRule.onNodeWithText("Choose the protocol manually on the next screen").assertExists()
-        composeRule.onNodeWithText("Meta Ray-Ban").performClick()
-        composeRule.runOnIdle { assertEquals(DeviceClass.META_RAYBAN, selected) }
-
+        composeRule.onNodeWithText("Meizu MYVU / Star Air").performClick()
+        composeRule.runOnIdle { assertEquals(DeviceClass.MEIZU_MYVU, selected) }
         composeRule.onNodeWithText("Connect").performClick()
         composeRule.runOnIdle { assertTrue(confirmed) }
     }

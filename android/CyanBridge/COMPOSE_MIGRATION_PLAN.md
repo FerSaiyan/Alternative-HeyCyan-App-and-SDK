@@ -105,7 +105,7 @@ This is not a small update. Current main added or substantially changed:
 - Auto-capture, audio ingestion, image-query, and local-model behavior.
 - Asaas subscription, cancellation, quota, email, donation, and checkout behavior.
 - Studio Bridge voice approval support and encrypted remote-model credentials.
-- MemoMind, EvenHub, Mentra, terminal HUD, and Meta Ray-Ban bridge groundwork.
+- MemoMind, EvenHub, Mentra, and terminal HUD groundwork.
 - New settings, onboarding, plugin, debugging, and media behaviors.
 
 Any migration that starts from the old Compose branch would have to reconstruct these changes and is likely to regress production behavior.
@@ -259,7 +259,7 @@ Keep out of portable presentation code:
 
 - `android.*`, Android `Context`, Activities, Services, Intents, or `R` references.
 - Direct `SharedPreferences` access.
-- Android BLE, Wi-Fi P2P, MediaStore, Accessibility, Tasker, Play Billing, or Meta DAT calls.
+- Android BLE, Wi-Fi P2P, MediaStore, Accessibility, Tasker, or Play Billing calls.
 - Global service creation, internally owned application coroutine scopes, and direct singleton mutation from composables.
 
 Use constructor/callback interfaces for platform actions. Decide whether any small primitives justify `expect`/`actual` only when a second native platform requires them.
@@ -288,7 +288,7 @@ Android adapters remain responsible for:
 - Accessibility and local-agent services.
 - MediaStore and Android audio APIs.
 - Play Billing, web checkout, and deep links.
-- Meta DAT and Android MemoMind transports.
+- Android MemoMind transports.
 
 ## Toolchain Gate
 
@@ -701,7 +701,6 @@ Current route and capability inventory:
 | Meeting, local-agent, auto-audio, Studio Bridge services | android-platform | Do not move into composables |
 | Notification listener and daily reminder receiver | android-platform | Preserve manifest and permission behavior |
 | HeyCyan BLE and Wi-Fi Direct transfer | android-platform | Forked/current Android implementation remains authoritative |
-| Meta DAT and MemoMind transports | android-platform | Capability-gated Android integrations |
 | iOS KMP framework host | hybrid | CMP `ComposeUIViewController` embedded in SwiftUI via `UIViewControllerRepresentable`; CI validates framework link, Xcode build, simulator launch |
 | iOS application transport | deferred | Await vendor-wrapper, Kotlin-protocol, or hybrid decision after device tests |
 

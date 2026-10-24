@@ -3,8 +3,6 @@ package com.fersaiyan.cyanbridge.plugins.walkingaid
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.Log
-import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.communication.LargeDataHandler
@@ -32,20 +30,6 @@ class WalkingAidImageCapture(context: Context) {
         captureFreshThumbnailWithQuality(namePrefix, WalkingAidPreferences.getThumbnailQualityLevel(context))
 
     suspend fun captureFreshThumbnailWithQuality(namePrefix: String, qualityLevel: Int): CapturedThumbnail {
-        if (DeviceProfileStore.isMetaSelected(context)) {
-            val manager = MetaRaybanManager.getInstance(context)
-            if (!manager.isInitialized.value) manager.initialize()
-            val captureCommandAtMs = System.currentTimeMillis()
-            val photo = manager.capturePhotoOnce()
-            val file = manager.savePhotoForProcessing(photo, namePrefix)
-            return CapturedThumbnail(
-                file = file,
-                captureCommandAtMs = captureCommandAtMs,
-                estimatedExposureAtMs = captureCommandAtMs,
-                receivedAtMs = System.currentTimeMillis(),
-            )
-        }
-
         check(BleOperateManager.getInstance().isConnected) { "Glasses are not connected" }
         val permit = GlassesSessionCoordinator.tryAcquireBackgroundCommand()
             ?: throw IllegalStateException("Glasses are busy with another operation")

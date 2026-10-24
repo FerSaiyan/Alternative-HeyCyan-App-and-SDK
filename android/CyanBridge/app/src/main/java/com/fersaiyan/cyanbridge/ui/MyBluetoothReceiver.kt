@@ -8,7 +8,6 @@ import com.oudmon.ble.base.bluetooth.DeviceManager
 import com.oudmon.ble.base.bluetooth.QCBluetoothCallbackCloneReceiver
 import com.oudmon.ble.base.communication.Constants
 import com.oudmon.ble.base.communication.LargeDataHandler
-import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import org.greenrobot.eventbus.EventBus
 
 /**
@@ -21,7 +20,6 @@ import org.greenrobot.eventbus.EventBus
 class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
     override fun connectStatue(device: BluetoothDevice?, connected: Boolean) {
         Log.e("connectStatue","---connectStatue")
-        if (DeviceProfileStore.isMetaSelected(MyApplication.getInstance())) return
         if(device !=null && connected){
             val deviceName = try {
                 device.name
@@ -37,7 +35,6 @@ class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
     }
 
     override fun onServiceDiscovered() {
-        if (DeviceProfileStore.isMetaSelected(MyApplication.getInstance())) return
         //do init
         LargeDataHandler.getInstance().initEnable()
         // Must receive a callback before other instructions can be issued

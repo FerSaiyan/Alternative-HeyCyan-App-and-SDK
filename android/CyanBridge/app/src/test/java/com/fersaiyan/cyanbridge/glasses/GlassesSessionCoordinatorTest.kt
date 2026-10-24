@@ -36,14 +36,6 @@ class GlassesSessionCoordinatorTest {
     }
 
     @Test
-    fun metaCameraLeaseExcludesHeyCyanTransfers() {
-        assertTrue(GlassesSessionCoordinator.tryAcquire(GlassesSession.META_CAMERA))
-        assertFalse(GlassesSessionCoordinator.tryAcquire(GlassesSession.MEDIA_SYNC))
-        assertNull(GlassesSessionCoordinator.tryAcquireBackgroundCommand())
-        assertTrue(GlassesSessionCoordinator.release(GlassesSession.META_CAMERA))
-    }
-
-    @Test
     fun onlyTheOwningSessionCanReleaseTheLease() {
         assertTrue(GlassesSessionCoordinator.tryAcquire(GlassesSession.OTA))
         assertFalse(GlassesSessionCoordinator.release(GlassesSession.LIVE_PREVIEW))

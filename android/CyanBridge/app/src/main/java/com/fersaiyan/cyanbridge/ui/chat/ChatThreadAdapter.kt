@@ -3,6 +3,8 @@ package com.fersaiyan.cyanbridge.ui.chat
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.appcompat.app.AlertDialog
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.chat.ChatThread
@@ -11,13 +13,7 @@ import com.fersaiyan.cyanbridge.databinding.ItemChatThreadBinding
 class ChatThreadAdapter(
     private val onClick: (ChatThread) -> Unit,
     private val onDelete: (ChatThread) -> Unit,
-) : RecyclerView.Adapter<ChatThreadAdapter.VH>() {
-    private var items: List<ChatThread> = emptyList()
-
-    fun submitList(newItems: List<ChatThread>) {
-        items = newItems
-        notifyDataSetChanged()
-    }
+) : ListAdapter<ChatThread, ChatThreadAdapter.VH>(DIFF_CALLBACK) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val binding = ItemChatThreadBinding.inflate(
@@ -28,10 +24,18 @@ class ChatThreadAdapter(
         return VH(binding, onClick, onDelete)
     }
 
-    override fun getItemCount(): Int = items.size
-
     override fun onBindViewHolder(holder: VH, position: Int) {
-        holder.bind(items[position])
+        holder.bind(getItem(position))
+    }
+
+    private companion object {
+        val DIFF_CALLBACK = object : DiffUtil.ItemCallback<ChatThread>() {
+            override fun areItemsTheSame(oldItem: ChatThread, newItem: ChatThread): Boolean =
+                oldItem.id == newItem.id
+
+            override fun areContentsTheSame(oldItem: ChatThread, newItem: ChatThread): Boolean =
+                oldItem == newItem
+        }
     }
 
     class VH(

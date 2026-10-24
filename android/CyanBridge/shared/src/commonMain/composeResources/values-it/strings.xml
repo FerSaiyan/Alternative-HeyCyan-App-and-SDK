@@ -71,25 +71,4 @@
     <string name="onboarding_continue">Continua</string>
     <string name="onboarding_not_now">Non ora</string>
     <string name="onboarding_dont_show_again">Non mostrarlo più</string>
-    <string name="meta_rayban_title">Meta Ray-Ban</string>
-    <string name="meta_rayban_device_summary">Dispositivo: %1$s (%2$d disponibile/i)</string>
-    <string name="meta_rayban_no_device">Nessun dispositivo DAT</string>
-    <string name="meta_rayban_last_error">Ultimo errore DAT</string>
-    <string name="meta_rayban_send_diagnostics">Invia diagnostica Meta</string>
-    <string name="meta_rayban_registration_status">Registrazione: %1$s</string>
-    <string name="meta_rayban_session_status">Sessione: %1$s</string>
-    <string name="meta_rayban_stream_status">Stream: %1$s</string>
-    <string name="meta_rayban_display_status">Display: %1$s</string>
-    <string name="meta_rayban_register">Registra</string>
-    <string name="meta_rayban_unregister">Annulla registrazione</string>
-    <string name="meta_rayban_start_session">Avvia sessione</string>
-    <string name="meta_rayban_stop_session">Arresta sessione</string>
-    <string name="meta_rayban_start_stream">Avvia stream</string>
-    <string name="meta_rayban_stop_stream">Arresta stream</string>
-    <string name="meta_rayban_capture_photo">Scatta foto</string>
-    <string name="meta_rayban_view_last_photo">Visualizza ultima foto</string>
-    <string name="meta_rayban_active">Attivo</string>
-    <string name="meta_rayban_inactive">Inattivo</string>
-    <string name="meta_rayban_start_display">Avvia display</string>
-    <string name="meta_rayban_stop_display">Arresta display</string>
 </resources>

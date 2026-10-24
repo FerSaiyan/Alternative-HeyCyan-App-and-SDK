@@ -175,7 +175,7 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     private fun startLive() {
         val language = AppLanguagePreferences.selected(this).languageTag
             .ifBlank { Locale.getDefault().toLanguageTag() }
-        // Base question without strict language lock - Live's system handles 97-language switching permissively
+        // Use the base question; Live's system instruction enforces Persian responses.
         val defaultImageQuestion = ImageQuestionPromptResolver.baseQuestion(
             settings = ImageQuestionPreferences.get(this),
             userQuestion = null,

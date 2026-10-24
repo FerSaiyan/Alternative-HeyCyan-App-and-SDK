@@ -178,7 +178,6 @@
     <string name="device_class_heycyan">HeyCyan</string>
     <string name="device_class_eye_vue">Eyevue</string>
     <string name="device_class_tunebuds">TuneBuds / AB Mate</string>
-    <string name="device_class_meta_rayban">Meta Ray-Ban</string>
     <string name="device_class_meizu_myvu">Meizu MYVU / Star Air</string>
     <string name="device_class_generic_audio">Ohrhörer / reine Audiobrille</string>
     <string name="device_class_unknown">Unbekannt</string>
@@ -450,12 +449,11 @@
     <string name="dashboard_count">Anzahl</string>
     <string name="dashboard_sync_wifi">Daten über Wi-Fi synchronisieren</string>
     <string name="dashboard_eye_vue_live_preview">Eyevue-Live-Vorschau</string>
-    <string name="dashboard_passive_rtsp_probe">Passiver RTSP-Labortest</string>
+    <string name="dashboard_rtsp_live_preview">HeyCyan-RTSP-Live-Vorschau</string>
     <string name="dashboard_eye_vue_description">Startet den Live-Modus des Anbieters, verbindet das zurückgegebene Eyevue-Wi-Fi-Netzwerk und gibt den Kamerastream wieder.</string>
-    <string name="dashboard_passive_probe_description">Sendet keinen BLE-Modusbefehl. Aktivieren Sie Modus 8 separat nach dem genehmigten Hardwareverfahren.</string>
+    <string name="dashboard_rtsp_live_preview_description">Startet den Live-Modus der Brille per BLE, verbindet sie nach Möglichkeit automatisch über Wi-Fi Direct und zeigt anschließend den RTSP-Stream an.</string>
     <string name="dashboard_connecting">Verbindung wird hergestellt...</string>
     <string name="dashboard_start_live_preview">Live-Vorschau starten</string>
-    <string name="dashboard_arm_passive_probe">Passiven Test vorbereiten</string>
     <string name="dashboard_glasses_capture_settings">Aufnahmeeinstellungen der Brille</string>
     <string name="dashboard_capture_settings_description">Lesen Sie die verbundenen Brilleneinstellungen aus, bevor Sie diese gespeicherten Gerätewerte ändern.</string>
     <string name="dashboard_wearing_detection">Trageerkennung</string>

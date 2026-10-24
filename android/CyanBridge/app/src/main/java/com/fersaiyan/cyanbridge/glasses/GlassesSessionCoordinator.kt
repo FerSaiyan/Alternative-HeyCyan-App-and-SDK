@@ -9,7 +9,6 @@ enum class GlassesSession(val label: String) {
     LIVE_PREVIEW("live preview"),
     OTA("firmware update"),
     WIFI_ADB_DEBUG("Wi-Fi ADB debug"),
-    META_CAMERA("Meta camera"),
 }
 
 class GlassesSessionLease internal constructor(

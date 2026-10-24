@@ -15,7 +15,6 @@ class GlassesDashboardPresentationTest {
         assertEquals("Disconnected", state.connectionLabel)
         assertEquals("Unknown", state.deviceClassLabel)
         assertFalse(state.showHeyCyanControls)
-        assertFalse(state.showMetaRaybanControls)
         assertFalse(state.showCaptureSettings)
         assertFalse(state.showAiWakeWordRouting)
         assertFalse(state.showAdvancedControls)
@@ -88,13 +87,4 @@ class GlassesDashboardPresentationTest {
         assertEquals("Adaptive flow", GlassesSyncFlow.CUSTOM.label)
     }
 
-    @Test
-    fun metaDisplayControlsRequireReportedDisplayCapability() {
-        val cameraOnly = MetaRaybanUiState()
-        val displayDevice = MetaRaybanUiState(displayCapable = true)
-
-        assertFalse(cameraOnly.displayCapable)
-        assertFalse(cameraOnly.displayActive)
-        assertTrue(displayDevice.displayCapable)
-    }
 }

@@ -6,7 +6,7 @@ import org.junit.Test
 
 class LocalGenerationSettingsTest {
     @Test
-    fun everyProfileStartsWithEditableSpeechFirstPrompt() {
+    fun everyProfileStartsWithThePersianOnlySystemPrompt() {
         LocalModelPerformanceProfile.entries.forEach { profile ->
             val settings = LocalGenerationSettings.defaultsFor(entry = null, profile = profile)
             assertEquals(LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT, settings.systemPromptOverride)
@@ -14,23 +14,24 @@ class LocalGenerationSettingsTest {
     }
 
     @Test
-    fun defaultPromptRequestsShortUsefulOpeningWithoutHardCodingAnAnswer() {
-        val prompt = LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT
-        assertTrue(prompt.contains("most useful answer first"))
-        assertTrue(prompt.contains("1-3 short sentences"))
-        assertTrue(prompt.contains("important explanation"))
-        assertTrue(!prompt.contains("at most 8 words"))
-        assertTrue(prompt.contains("Avoid filler"))
+    fun defaultPromptRequiresPersianResponses() {
+        assertEquals(
+            "You are a helpful assistant. Always answer and describe exclusively in Persian (Farsi).",
+            LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT,
+        )
     }
 
     @Test
-    fun legacyEightWordDefaultMigratesWithoutReplacingCustomPrompts() {
-        assertEquals(
-            LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT,
-            LocalGenerationSettings.migrateDefaultSystemPrompt(
-                LocalGenerationSettings.LEGACY_EIGHT_WORD_SYSTEM_PROMPT,
-            ),
-        )
+    fun previousDefaultsMigrateWithoutReplacingCustomPrompts() {
+        listOf(
+            LocalGenerationSettings.LEGACY_EIGHT_WORD_SYSTEM_PROMPT,
+            LocalGenerationSettings.PREVIOUS_DEFAULT_SYSTEM_PROMPT,
+        ).forEach { previousPrompt ->
+            assertEquals(
+                LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT,
+                LocalGenerationSettings.migrateDefaultSystemPrompt(previousPrompt),
+            )
+        }
         assertEquals("Custom prompt", LocalGenerationSettings.migrateDefaultSystemPrompt("Custom prompt"))
     }
 }

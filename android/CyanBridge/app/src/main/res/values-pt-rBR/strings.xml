@@ -42,8 +42,6 @@
     <string name="onboarding_back">Voltar</string>
     <string name="onboarding_next">Avançar</string>
     <string name="onboarding_get_started">Começar</string>
-    <string name="meta_diagnostics_title">Diagnóstico do Meta Ray-Ban</string>
-    <string name="meta_diagnostics_description">O CyanBridge coletará o estado recente do Meta DAT, erros, detalhes do dispositivo e entradas filtradas do logcat para investigar o problema.</string>
     <string name="nav_transcriptions_recordings">Mídias</string>
     <string name="text_1">Escanear</string>
     <string name="text_2">Reconectar</string>
@@ -109,8 +107,6 @@
     <string name="onboarding_accessibility_disclosure_body">O CyanBridge usa a Acessibilidade do Android somente se você ativá-la. A Acessibilidade permite que o CyanBridge leia o texto e a estrutura da interface dos aplicativos na sua tela. Ela é usada para salvar a Memória da tela opcional e permitir que o agente local toque, digite, role e navegue em seu nome. O conteúdo da tela é armazenado localmente para a Memória da tela. Quando você solicita uma ação do agente local, o conteúdo atual da tela pode ser processado pelo provedor de IA escolhido, incluindo um provedor na nuvem se você tiver escolhido um. As capturas de tela opcionais do agente local exigem uma configuração separada e nunca são enviadas a um planejador remoto, a menos que você autorize separadamente o envio remoto de capturas de tela. Aplicativos na sua lista de bloqueio são ignorados. O CyanBridge não ativa a Acessibilidade automaticamente, e você pode desativar a Acessibilidade, a Memória da tela ou o agente local a qualquer momento.</string>
     <string name="onboarding_local_agent_toggle">Ativar o controle do telefone pelo agente local</string>
     <string name="onboarding_open_accessibility_settings">Revisar e ativar a Acessibilidade</string>
-    <string name="meta_pairing_title">Emparelhar óculos Meta</string>
-
     <string name="onboarding_audio_capture_title">Gravação contínua de áudio</string>
     <string name="onboarding_audio_capture_desc">O Auto Audio pode gravar o áudio dos óculos para transcrições e resumos diários quando ativado em Plugins.</string>
     <string name="onboarding_audio_capture_details">O Auto Audio grava trechos de 15 minutos e depois os transcreve para resumos opcionais. Você pode revisar e excluir as gravações a qualquer momento. O CyanBridge explica e solicita acesso às notificações ou ao microfone somente se as opções escolhidas precisarem dessas permissões.</string>

@@ -386,8 +386,6 @@ private class IosAppController {
                             selectedDeviceClass == DeviceClass.HEY_CYAN,
                         showAdvancedOta = connectionState == BleConnectionState.CONNECTED &&
                             selectedDeviceClass == DeviceClass.HEY_CYAN,
-                        showMetaRaybanControls = connectionState == BleConnectionState.CONNECTED &&
-                            selectedDeviceClass == DeviceClass.META_RAYBAN,
                     )
                 }
             }
@@ -474,10 +472,6 @@ private class IosAppController {
     }
 
     private fun startSync() {
-        if (selectedDeviceClass == DeviceClass.META_RAYBAN) {
-            updateState { it.copy(agentLastError = "Meta media sync requires the native MWDAT adapter") }
-            return
-        }
         syncJob?.cancel()
         updateState {
             it.copy(
@@ -639,10 +633,6 @@ private class IosAppController {
     }
 
     private fun sendGlassesCommand(label: String, command: ByteArray) {
-        if (selectedDeviceClass == DeviceClass.META_RAYBAN) {
-            updateState { it.copy(agentLastError = "Meta devices cannot receive HeyCyan BLE command bytes") }
-            return
-        }
         scope.launch {
             runCatching { bleManager.sendCommand(command) }
                 .onFailure { error ->
@@ -669,7 +659,6 @@ private class IosAppController {
                 showAdvancedImageQuality = showHeyCyan,
                 showAdvancedDeveloperTools = showHeyCyan,
                 showAdvancedOta = showHeyCyan,
-                showMetaRaybanControls = isBleConnected && selectedDeviceClass == DeviceClass.META_RAYBAN,
             )
         }
     }

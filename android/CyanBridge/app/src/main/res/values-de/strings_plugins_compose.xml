@@ -106,7 +106,7 @@
     <string name="compose_walking_ask_placeholder">Frage zur aktuellen Szene...</string>
     <string name="compose_walking_send">Senden</string>
     <string name="compose_walking_enabled">Walking Aid aktiviert</string>
-    <string name="compose_walking_camera_description">Walking Aid benötigt eine Brille mit Point-of-View-Kamera, etwa HeyCyan oder Meta Ray-Ban. %1$s</string>
+    <string name="compose_walking_camera_description">Walking Aid benötigt eine Brille mit Point-of-View-Kamera, etwa HeyCyan. %1$s</string>
     <string name="compose_walking_benchmark_running">Benchmark läuft...</string>
     <string name="compose_walking_latency_benchmark">End-to-End-Latenz testen</string>
     <string name="compose_walking_acquisition_running">Aufnahme-Benchmark läuft...</string>

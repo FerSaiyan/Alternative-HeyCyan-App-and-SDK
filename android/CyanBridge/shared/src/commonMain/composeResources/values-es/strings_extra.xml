@@ -178,7 +178,6 @@
     <string name="device_class_heycyan">HeyCyan</string>
     <string name="device_class_eye_vue">Eyevue</string>
     <string name="device_class_tunebuds">TuneBuds / AB Mate</string>
-    <string name="device_class_meta_rayban">Meta Ray-Ban</string>
     <string name="device_class_meizu_myvu">Meizu MYVU / Star Air</string>
     <string name="device_class_generic_audio">Auriculares / gafas solo de audio</string>
     <string name="device_class_unknown">Desconocido</string>
@@ -436,12 +435,11 @@
     <string name="dashboard_count">Cantidad</string>
     <string name="dashboard_sync_wifi">Sincronizar datos por Wi-Fi</string>
     <string name="dashboard_eye_vue_live_preview">Vista previa en vivo de Eyevue</string>
-    <string name="dashboard_passive_rtsp_probe">Sonda RTSP pasiva de laboratorio</string>
+    <string name="dashboard_rtsp_live_preview">Vista previa RTSP en vivo de HeyCyan</string>
     <string name="dashboard_eye_vue_description">Inicia el modo en vivo del proveedor, se une a la red Wi-Fi de Eyevue devuelta y reproduce el flujo de la camara.</string>
-    <string name="dashboard_passive_probe_description">No envia ningun comando de modo BLE. Activa el modo 8 por separado mediante el procedimiento de hardware aprobado.</string>
+    <string name="dashboard_rtsp_live_preview_description">Inicia el modo en vivo de las gafas por BLE, se conecta automaticamente mediante Wi-Fi Direct cuando esta disponible y muestra el flujo RTSP.</string>
     <string name="dashboard_connecting">Conectando...</string>
     <string name="dashboard_start_live_preview">Iniciar vista previa en vivo</string>
-    <string name="dashboard_arm_passive_probe">Preparar sonda pasiva</string>
     <string name="dashboard_glasses_capture_settings">Ajustes de captura de las gafas</string>
     <string name="dashboard_capture_settings_description">Lee los ajustes de las gafas conectadas antes de cambiar los valores almacenados en el dispositivo.</string>
     <string name="dashboard_wearing_detection">Deteccion de uso</string>

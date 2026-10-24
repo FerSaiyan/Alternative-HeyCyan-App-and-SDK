@@ -106,7 +106,7 @@
     <string name="compose_walking_ask_placeholder">Задайте вопрос о текущей сцене...</string>
     <string name="compose_walking_send">Отправить</string>
     <string name="compose_walking_enabled">Walking Aid включен</string>
-    <string name="compose_walking_camera_description">Для Walking Aid нужны очки с камерой от первого лица, например HeyCyan или Meta Ray-Ban. %1$s</string>
+    <string name="compose_walking_camera_description">Для Walking Aid нужны очки с камерой от первого лица, например HeyCyan. %1$s</string>
     <string name="compose_walking_benchmark_running">Выполняется тест...</string>
     <string name="compose_walking_latency_benchmark">Проверить сквозную задержку</string>
     <string name="compose_walking_acquisition_running">Выполняется тест захвата...</string>

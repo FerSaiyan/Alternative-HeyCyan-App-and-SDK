@@ -71,25 +71,4 @@
     <string name="onboarding_continue">계속</string>
     <string name="onboarding_not_now">나중에</string>
     <string name="onboarding_dont_show_again">다시 표시하지 않음</string>
-    <string name="meta_rayban_title">Meta Ray-Ban</string>
-    <string name="meta_rayban_device_summary">기기: %1$s (사용 가능 %2$d개)</string>
-    <string name="meta_rayban_no_device">DAT 기기 없음</string>
-    <string name="meta_rayban_last_error">최근 DAT 오류</string>
-    <string name="meta_rayban_send_diagnostics">Meta 진단 전송</string>
-    <string name="meta_rayban_registration_status">등록: %1$s</string>
-    <string name="meta_rayban_session_status">세션: %1$s</string>
-    <string name="meta_rayban_stream_status">스트림: %1$s</string>
-    <string name="meta_rayban_display_status">디스플레이: %1$s</string>
-    <string name="meta_rayban_register">등록</string>
-    <string name="meta_rayban_unregister">등록 해제</string>
-    <string name="meta_rayban_start_session">세션 시작</string>
-    <string name="meta_rayban_stop_session">세션 중지</string>
-    <string name="meta_rayban_start_stream">스트림 시작</string>
-    <string name="meta_rayban_stop_stream">스트림 중지</string>
-    <string name="meta_rayban_capture_photo">사진 촬영</string>
-    <string name="meta_rayban_view_last_photo">최근 사진 보기</string>
-    <string name="meta_rayban_active">활성</string>
-    <string name="meta_rayban_inactive">비활성</string>
-    <string name="meta_rayban_start_display">디스플레이 시작</string>
-    <string name="meta_rayban_stop_display">디스플레이 중지</string>
 </resources>

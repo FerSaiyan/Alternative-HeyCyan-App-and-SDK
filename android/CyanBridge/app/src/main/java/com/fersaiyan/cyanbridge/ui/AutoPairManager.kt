@@ -10,7 +10,6 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
-import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
@@ -79,7 +78,7 @@ object AutoPairManager {
                 }
 
                 val selectedClass = DeviceProfileStore.selectedClass(appContext)
-                if (selectedClass == DeviceClass.MENTRA_LIVE || selectedClass == DeviceClass.META_RAYBAN) {
+                if (selectedClass == DeviceClass.MENTRA_LIVE) {
                     delay(20_000L)
                     continue
                 }
@@ -163,7 +162,8 @@ object AutoPairManager {
             MoyoungW620Manager.getInstance(context).connect(mac)
             return
         }
-        if (DeviceProfileStore.isMetaSelected(context) || DeviceProfileStore.isMeizuMyvuSelected(context)) {
+        val selectedClass = DeviceProfileStore.selectedClass(context)
+        if (selectedClass != DeviceClass.HEY_CYAN && selectedClass != DeviceClass.UNKNOWN) {
             Log.d(TAG, "Skipping vendor reconnect for selected non-HeyCyan glasses ($reason)")
             return
         }
@@ -224,12 +224,6 @@ object AutoPairManager {
             }
             return null
         }
-        if (profile?.selectedClass == DeviceClass.META_RAYBAN) {
-            // Meta owns its transport through DAT. Never hand its Bluetooth identity to
-            // the Oudmon connector, even when the device is also visible to Android BLE.
-            Log.d(TAG, "Skipping vendor reconnect for selected Meta Ray-Ban")
-            return null
-        }
         val profileMac = profile
             ?.macAddress
             ?.trim()
@@ -288,17 +282,12 @@ object AutoPairManager {
         }
 
         val profile = DeviceProfileStore.loadLastSelected(context)
-        if (profile?.selectedClass == DeviceClass.MEIZU_MYVU) {
-            val address = profile.macAddress.takeIf { it.isNotBlank() } ?: return false
-            val manager = MeizuMyvuManager.getInstance(context)
-            if (manager.isReady()) return true
-            if (!manager.shouldRequestConnection()) {
-                Log.d(TAG, "Auto-pair ($reason): MYVU transport or upstream retry already active")
-                return true
-            }
-            Log.i(TAG, "Auto-pair ($reason): starting MYVU foreground connection")
-            manager.connect(address)
-            return true
+        if (profile != null &&
+            profile.selectedClass != DeviceClass.HEY_CYAN &&
+            profile.selectedClass != DeviceClass.UNKNOWN
+        ) {
+            Log.d(TAG, "Skipping auto-pair ($reason): selected device transport is not managed here")
+            return false
         }
         if (profile?.selectedClass == DeviceClass.TUNEBUDS) {
             val address = profile.macAddress.takeIf { it.isNotBlank() } ?: return false

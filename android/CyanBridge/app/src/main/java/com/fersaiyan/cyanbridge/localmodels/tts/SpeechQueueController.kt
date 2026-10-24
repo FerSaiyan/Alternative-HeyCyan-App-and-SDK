@@ -153,10 +153,7 @@ class SpeechQueueController(
             item.languageTag?.takeIf { it.isNotBlank() }?.let { tag ->
                 runCatching {
                     val loc = Locale.forLanguageTag(tag)
-                    val res = ttsEngine.setLanguage(loc)
-                    if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
-                        Log.w(TAG, "TTS voice data missing for language $tag")
-                    }
+                    ttsEngine.setLanguage(loc)
                 }
             }
 

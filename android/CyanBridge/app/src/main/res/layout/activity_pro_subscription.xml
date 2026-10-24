@@ -150,7 +150,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Keep our project alive and growing. Your subscription directly supports ongoing development, bug fixes, and expanding support to devices like Meta Ray-Ban, Rokid, and other manufacturers."
+                        android:text="Keep our project alive and growing. Your subscription directly supports ongoing development, bug fixes, and expanding support to more devices."
                         android:textColor="@color/text_secondary"
                         android:textSize="14sp" />
 

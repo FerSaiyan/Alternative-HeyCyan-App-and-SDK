@@ -5,7 +5,6 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesTransferUiState
-import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
 import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import kotlin.test.Test
@@ -21,7 +20,6 @@ class GlassesDashboardScreenTest {
         assertEquals("Disconnected", state.connectionLabel)
         assertEquals("Unknown", state.deviceClassLabel)
         assertFalse(state.showHeyCyanControls)
-        assertFalse(state.showMetaRaybanControls)
         assertNull(state.transfer.progress)
     }
 

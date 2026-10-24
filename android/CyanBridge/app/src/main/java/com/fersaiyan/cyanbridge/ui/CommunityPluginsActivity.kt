@@ -17,7 +17,6 @@ import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivit
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
 import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
@@ -53,9 +52,6 @@ import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListActivity
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
-import com.meta.wearable.dat.core.Wearables
-import com.meta.wearable.dat.core.types.Permission
-import com.meta.wearable.dat.core.types.PermissionStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -97,7 +93,6 @@ class CommunityPluginsActivity : AppCompatActivity() {
     private var serverPluginsLoaded = false
     private var communityPlugins by mutableStateOf<List<CommunityPluginCardData>>(emptyList())
     private var nativePluginsState by mutableStateOf<List<NativePluginCardData>>(emptyList())
-    private var pendingMetaCameraPlugin: String? = null
     private var pendingTaskerDownloadTitle: String? = null
     private var pendingTaskerDownloadUrl: String? = null
     private var pendingTaskerDownloadFileName: String? = null
@@ -114,23 +109,6 @@ class CommunityPluginsActivity : AppCompatActivity() {
         if (uri == null || title == null || link == null || fileName == null) return@registerForActivityResult
         saveTaskerProfile(title, link, fileName, uri)
     }
-
-    private val metaWearablePermissionLauncher =
-        registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
-            val pluginId = pendingMetaCameraPlugin
-            pendingMetaCameraPlugin = null
-            if (pluginId == null) return@registerForActivityResult
-            if (result.getOrDefault(PermissionStatus.Denied) == PermissionStatus.Granted) {
-                applyNativePluginToggle(pluginId, enabled = true)
-            } else {
-                val manager = MetaRaybanManager.getInstance(this)
-                val detail = manager.reportExternalError(
-                    "pluginCameraPermission",
-                    "Meta camera permission was denied",
-                )
-                Toast.makeText(this, detail, Toast.LENGTH_LONG).show()
-            }
-        }
 
     /**
      * These integrations are intentionally not part of the native-plugin pool. Their feature
@@ -189,15 +167,10 @@ class CommunityPluginsActivity : AppCompatActivity() {
 
     private fun nativePluginPool(): List<NativePluginCardData> {
         val selectedClass = DeviceProfileStore.selectedClass(this)
-        val hasCamera = selectedClass in setOf(
-            DeviceClass.HEY_CYAN,
-            DeviceClass.META_RAYBAN,
-            DeviceClass.UNKNOWN,
-        )
+        val hasCamera = selectedClass in setOf(DeviceClass.HEY_CYAN, DeviceClass.UNKNOWN)
         val hasOnboardStorage = selectedClass == DeviceClass.HEY_CYAN || selectedClass == DeviceClass.UNKNOWN
 
         val autoAudioDescription = when (selectedClass) {
-            DeviceClass.META_RAYBAN -> "Unavailable for Meta Ray-Ban: DAT does not expose HeyCyan onboard audio-file recording."
             DeviceClass.MEIZU_MYVU -> "Unavailable for Meizu MYVU: device has no onboard audio file storage."
             DeviceClass.GENERIC_AUDIO -> "Unavailable for Earbuds / Audio-only glasses: device has no onboard audio file storage."
             else -> "Record glasses audio in resilient 15-minute loops with optional speech extension and sync."
@@ -209,7 +182,6 @@ class CommunityPluginsActivity : AppCompatActivity() {
             DeviceClass.MOYOUNG_W620 -> "Unavailable for MoYoung / W620: direct camera capture is not validated yet."
             else -> null
         }
-
         return listOf(
             NativePluginCardData(
                 id = NativePluginIds.WALKING_AID,
@@ -349,52 +321,6 @@ class CommunityPluginsActivity : AppCompatActivity() {
     }
 
     private fun toggleNativePlugin(pluginId: String, enabled: Boolean) {
-        if (enabled && pluginId == NativePluginIds.AUTO_AUDIO && DeviceProfileStore.isMetaSelected(this)) {
-            Toast.makeText(this, "Auto Audio is unavailable for Meta Ray-Ban devices", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (enabled &&
-            DeviceProfileStore.isMetaSelected(this) &&
-            pluginId == NativePluginIds.WALKING_AID
-        ) {
-            val manager = MetaRaybanManager.getInstance(this)
-            if (!manager.isInitialized.value) manager.initialize()
-            lifecycleScope.launch {
-                if (!manager.awaitCameraReady()) {
-                    val detail = manager.lastError.value
-                        ?: "Register and connect a Meta camera before enabling $pluginId"
-                    android.util.Log.e(
-                        "CommunityPluginsActivity",
-                        "Unable to enable Meta plugin=$pluginId: $detail\n${manager.diagnosticsSnapshot()}",
-                    )
-                    Toast.makeText(
-                        this@CommunityPluginsActivity,
-                        "Meta camera unavailable: $detail",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    return@launch
-                }
-                manager.checkCameraPermission(
-                    onGranted = { applyNativePluginToggle(pluginId, enabled = true) },
-                    onRequestNeeded = {
-                        pendingMetaCameraPlugin = pluginId
-                        metaWearablePermissionLauncher.launch(Permission.CAMERA)
-                    },
-                    onError = { error ->
-                        android.util.Log.e(
-                            "CommunityPluginsActivity",
-                            "Meta camera permission error for plugin=$pluginId: $error\n${manager.diagnosticsSnapshot()}",
-                        )
-                        Toast.makeText(
-                            this@CommunityPluginsActivity,
-                            "Meta camera permission error: $error",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    },
-                )
-            }
-            return
-        }
         if (enabled && pluginId in VOICE_PLUGIN_IDS && !PluginVoicePermissions.hasRequiredPermissions(this)) {
             PluginVoicePermissions.request(this) { granted ->
                 if (granted) {

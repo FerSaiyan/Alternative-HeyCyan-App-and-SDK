@@ -18,7 +18,6 @@ object DeviceCapabilityHelper {
             DeviceClass.HEY_CYAN,
             DeviceClass.EYEVUE,
             DeviceClass.TUNEBUDS,
-            DeviceClass.META_RAYBAN,
             DeviceClass.MENTRA_LIVE,
             DeviceClass.UNKNOWN,
         )

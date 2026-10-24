@@ -178,7 +178,6 @@
     <string name="device_class_heycyan">HeyCyan</string>
     <string name="device_class_eye_vue">Eyevue</string>
     <string name="device_class_tunebuds">TuneBuds / AB Mate</string>
-    <string name="device_class_meta_rayban">Meta Ray-Ban</string>
     <string name="device_class_meizu_myvu">Meizu MYVU / Star Air</string>
     <string name="device_class_generic_audio">Наушники / очки только с аудио</string>
     <string name="device_class_unknown">Неизвестно</string>
@@ -436,12 +435,11 @@
     <string name="dashboard_count">Количество</string>
     <string name="dashboard_sync_wifi">Синхронизировать данные по Wi-Fi</string>
     <string name="dashboard_eye_vue_live_preview">Предпросмотр Eyevue</string>
-    <string name="dashboard_passive_rtsp_probe">Пассивная лабораторная проверка RTSP</string>
+    <string name="dashboard_rtsp_live_preview">Предпросмотр RTSP HeyCyan в реальном времени</string>
     <string name="dashboard_eye_vue_description">Запускает режим Live поставщика, подключается к возвращенной сети Eyevue Wi-Fi и воспроизводит поток камеры.</string>
-    <string name="dashboard_passive_probe_description">Команда режима BLE не отправляется. Отдельно включите режим 8 утвержденным способом работы с оборудованием.</string>
+    <string name="dashboard_rtsp_live_preview_description">Запускает прямую трансляцию очков по BLE, автоматически подключается к ним через Wi-Fi Direct, если это возможно, и показывает поток RTSP.</string>
     <string name="dashboard_connecting">Подключение...</string>
     <string name="dashboard_start_live_preview">Запустить предпросмотр</string>
-    <string name="dashboard_arm_passive_probe">Подготовить пассивную проверку</string>
     <string name="dashboard_glasses_capture_settings">Настройки съемки очков</string>
     <string name="dashboard_capture_settings_description">Сначала прочитайте настройки подключенных очков, а затем изменяйте сохраненные параметры устройства.</string>
     <string name="dashboard_wearing_detection">Определение ношения</string>

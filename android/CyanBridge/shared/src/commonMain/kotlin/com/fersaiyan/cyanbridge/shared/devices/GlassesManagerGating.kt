@@ -7,8 +7,6 @@ object GlassesManagerGating {
         STATUS_BATTERY,
         STATUS_STORAGE,
         HEY_CYAN_EXTRAS,
-        META_RAYBAN_CONTROLS,
-        META_RAYBAN_REGISTRATION,
         MEIZU_MYVU_CONTROLS,
         EYEVUE_CONTROLS,
         TUNEBUDS_CONTROLS,
@@ -51,10 +49,6 @@ object GlassesManagerGating {
             }
             DeviceClass.MENTRA_LIVE -> {
                 base.add(Action.STATUS_BATTERY)
-            }
-            DeviceClass.META_RAYBAN -> {
-                base.add(Action.META_RAYBAN_CONTROLS)
-                base.add(Action.META_RAYBAN_REGISTRATION)
             }
             DeviceClass.MEIZU_MYVU -> {
                 base.add(Action.MEIZU_MYVU_CONTROLS)

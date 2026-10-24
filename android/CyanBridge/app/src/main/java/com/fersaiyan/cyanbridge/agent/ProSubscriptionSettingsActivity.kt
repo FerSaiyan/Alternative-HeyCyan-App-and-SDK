@@ -653,7 +653,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
                     },
                     onStartGeminiLive = {
                         // Notification-driven Live survives lock/screen-off; activity is now optional viewer.
-                        // Use base question (no strict Answer only in X) - Live system handles 97-language switching permissively.
+                        // Use the base question; Live's system instruction enforces Persian responses.
                         val language = AppLanguagePreferences.selected(this@ProSubscriptionSettingsActivity).languageTag
                             .ifBlank { Locale.getDefault().toLanguageTag() }
                         val imagePrompt = ImageQuestionPromptResolver.baseQuestion(

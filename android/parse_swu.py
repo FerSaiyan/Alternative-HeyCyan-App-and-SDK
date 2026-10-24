@@ -21,7 +21,8 @@ def read_head(path: str, n: int = 64) -> bytes:
 
 
 def is_xml_error(head: bytes) -> bool:
-    return head.startswith(b"<?xml") or b"<Error>" in head
+    lower = head.lower()
+    return lower.startswith(b"<?xml") or b"<error>" in lower or b"<html>" in lower
 
 
 def detect_container(head: bytes) -> str:

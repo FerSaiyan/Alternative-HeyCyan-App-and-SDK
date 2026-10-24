@@ -58,7 +58,6 @@ import org.jetbrains.compose.resources.stringResource
  */
 private val pairingChoices = listOf(
     DeviceClass.HEY_CYAN,
-    DeviceClass.META_RAYBAN,
     DeviceClass.MEIZU_MYVU,
     DeviceClass.GENERIC_AUDIO,
 )
@@ -78,7 +77,6 @@ fun DeviceBindScreen(
     connectingDevice: ScannedDevice?,
     selectedClass: DeviceClass,
     onScan: () -> Unit,
-    onPairMetaGlasses: () -> Unit,
     onSelectDevice: (ScannedDevice) -> Unit,
     onSelectedClassChange: (DeviceClass) -> Unit,
     onConfirmConnection: () -> Unit,
@@ -141,16 +139,6 @@ fun DeviceBindScreen(
                             stringResource(Res.string.device_bind_scan)
                         },
                     )
-                }
-            }
-            item {
-                OutlinedButton(
-                    onClick = onPairMetaGlasses,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 52.dp),
-                ) {
-                    Text(stringResource(Res.string.device_bind_pair_meta))
                 }
             }
             item {

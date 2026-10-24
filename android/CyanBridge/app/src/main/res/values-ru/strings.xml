@@ -37,8 +37,6 @@
     <string name="onboarding_back">Назад</string>
     <string name="onboarding_next">Далее</string>
     <string name="onboarding_get_started">Начать</string>
-    <string name="meta_diagnostics_title">Диагностика Meta Ray-Ban</string>
-    <string name="meta_diagnostics_description">CyanBridge соберёт последнее состояние Meta DAT, ошибки, сведения об устройстве и отфильтрованные записи logcat для расследования проблемы.</string>
     <string name="nav_transcriptions_recordings">Медиа</string>
     <string name="text_1">Сканировать</string>
     <string name="text_2">Переподключить</string>
@@ -100,8 +98,6 @@
     <string name="onboarding_accessibility_disclosure_body">CyanBridge использует специальные возможности Android только после их включения вами. Они позволяют CyanBridge читать текст и структуру интерфейса приложений на экране. Это нужно для сохранения необязательной памяти экрана и для того, чтобы локальный агент мог нажимать, вводить текст, прокручивать и перемещаться по экрану от вашего имени. Содержимое экрана хранится локально для функции памяти экрана. Когда вы запрашиваете действие локального агента, текущее содержимое экрана может обрабатываться выбранным вами поставщиком ИИ, включая облачного поставщика, если вы его выбрали. Дополнительные снимки экрана локального агента требуют отдельной настройки и никогда не отправляются удалённому планировщику, если только вы отдельно не разрешите удалённую отправку снимков. Приложения из чёрного списка пропускаются. CyanBridge не включает специальные возможности автоматически. Вы можете в любой момент отключить специальные возможности, память экрана или локального агента.</string>
     <string name="onboarding_local_agent_toggle">Включить управление телефоном локальным агентом</string>
     <string name="onboarding_open_accessibility_settings">Проверить и включить специальные возможности</string>
-    <string name="meta_pairing_title">Сопрячь очки Meta</string>
-
     <string name="onboarding_audio_capture_title">Непрерывная запись аудио</string>
     <string name="onboarding_audio_capture_desc">Auto Audio может записывать звук с очков для расшифровки и ежедневных сводок, если включить эту функцию в разделе «Плагины».</string>
     <string name="onboarding_audio_capture_details">Auto Audio записывает 15-минутные фрагменты, а затем расшифровывает их для создания дополнительных сводок. Вы можете просматривать и удалять записи в любое время. CyanBridge объясняет назначение доступа и запрашивает доступ к уведомлениям или микрофону только при необходимости для выбранных параметров.</string>
@@ -137,4 +133,13 @@
     <string name="donation_intro_dialog_title">Информация о поддержке CyanBridge через Asaas</string>
     <string name="donation_intro_dialog_message">Здравствуйте, спасибо, что рассматриваете возможность поддержать CyanBridge пожертвованием! Я работаю над этим проектом параллельно с учёбой в докторантуре, и ваша поддержка очень важна для меня. Мне пока не удалось настроить Stripe из-за особых требований к бразильским компаниям, поэтому сейчас я использую платёжный сервис Asaas. Страница оплаты на португальском языке; при необходимости воспользуйтесь Google Переводчиком. Я активно ищу более удобную альтернативу. Ещё раз спасибо за поддержку!</string>
     <string name="donation_intro_open_button">Открыть форму оплаты Asaas</string>
+    <string name="onboarding_device_ram">На устройстве: %.1f ГБ ОЗУ</string>
+    <string name="onboarding_ram_warning_title">Недостаточно памяти</string>
+    <string name="onboarding_ram_limited">На этом устройстве %.1f ГБ ОЗУ. Рекомендуются только компактные локальные модели ИИ; более крупные модели могут работать медленно или неожиданно закрываться.</string>
+    <string name="onboarding_ram_too_low">На этом устройстве всего %.1f ГБ ОЗУ. Для локального ИИ требуется не менее 4 ГБ, поэтому сейчас нет совместимых локальных моделей. Вы можете продолжить и позже настроить облачного или удалённого провайдера.</string>
+    <string name="onboarding_bluetooth_skip_title">Продолжить без Bluetooth?</string>
+    <string name="onboarding_bluetooth_skip_body">Это разрешение можно предоставить позже. До этого CyanBridge не сможет найти, выполнить сопряжение или подключиться к вашим очкам.</string>
+    <string name="onboarding_bluetooth_skip_confirm">Всё равно продолжить</string>
+    <string name="onboarding_bluetooth_skip_cancel">Назад</string>
+    <string name="onboarding_find_glasses">Найти доступные очки</string>
 </resources>

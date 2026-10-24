@@ -1,12 +1,10 @@
 package com.fersaiyan.cyanbridge.ota
 
 import android.content.Context
-import android.annotation.SuppressLint
 import android.Manifest
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.Uri
 import android.net.wifi.WifiManager
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
@@ -14,12 +12,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.rtsp.RtspMediaSource
-import com.fersaiyan.cyanbridge.BuildConfig
+import com.fersaiyan.cyanbridge.MjpegServer
+import com.fersaiyan.cyanbridge.RtspFrames
 import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.bluetooth.DeviceManager
@@ -31,8 +25,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.IOException
-import java.net.InetSocketAddress
-import java.net.Socket
 
 private const val TAG = "LivePreview"
 
@@ -49,12 +41,12 @@ data class LivePreviewState(
 /**
  * Orchestrates live video preview from the glasses via RTSP.
  *
- * Passive lab flow:
+ * Live stream flow:
  * 1. Verify BLE connection
- * 2. Register the BLE IP listener without sending a mode-control command
+ * 2. Register the BLE IP listener and start livestream mode
  * 3. Start P2P peer discovery + connection (same as OTA)
- * 4. Wait for externally activated glasses to report their P2P IP via BLE notify (type 0x08)
- * 5. Probe the RTSP server and connect ExoPlayer
+ * 4. Wait for the glasses to report their P2P IP via BLE notify (type 0x08)
+ * 5. Decode RTSP H.264 frames and publish them on a loopback MJPEG endpoint
  *
  * All logcat tags: "LivePreview". Filter: `adb logcat -s LivePreview`
  */
@@ -65,10 +57,14 @@ class LivePreviewManager(
     private val _uiState = MutableStateFlow(LivePreviewState())
     val uiState: StateFlow<LivePreviewState> = _uiState
 
-    private var exoPlayer: ExoPlayer? = null
-    private var activePlayerListener: Player.Listener? = null
+    private var rtspFrames: RtspFrames? = null
+    private var mjpegServer: MjpegServer? = null
+    private var liveCommandSent = false
+    private var heartbeatJob: Job? = null
     private var mainJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val streamCleanupScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var streamReleaseJob: Job? = null
 
     private var p2pManager: WifiP2pManagerSingleton? = null
     private var p2pCallback: WifiP2pManagerSingleton.WifiP2pCallback? = null
@@ -91,20 +87,11 @@ class LivePreviewManager(
     val isActive: Boolean get() = mainJob?.isActive == true
 
     companion object {
-        // From static analysis: port 554 (hardcoded), stream name "testH264VideoStreamer"
-        private val RTSP_PORTS = intArrayOf(554, 8554)
-        private val STREAM_PATHS = arrayOf(
-            "testH264VideoStreamer",   // From binary: Session streamed by "testH264VideoStreamer"
-            "live",
-            "stream",
-            "video",
-            "ch0",
-            "h264",
-            "",
-        )
-        private const val PROBE_TIMEOUT_MS = 3000L
+        private const val RTSP_PORT = 8554
+        private const val MJPEG_PORT = 8080
         private const val BLE_IP_TIMEOUT_MS = 45_000L
-        private const val P2P_CONNECT_TIMEOUT_MS = 20_000L
+        private const val P2P_CONNECT_TIMEOUT_MS = 65_000L
+        private const val STREAM_START_TIMEOUT_MS = 30_000L
         private const val P2P_GROUP_REMOVAL_RETRY_MS = 1_000L
         private const val P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS = 5_000L
         private const val P2P_GROUP_DISCONNECT_TIMEOUT_MS = 5_000L
@@ -114,6 +101,10 @@ class LivePreviewManager(
     private fun elapsed(): Long = System.currentTimeMillis() - flowStartTimeMs
 
     fun start(onSessionFinished: () -> Unit) {
+        if (cleanupInProgress) {
+            Log.w(TAG, "start() called while Live Preview cleanup is still in progress, ignoring")
+            return
+        }
         if (mainJob?.isActive == true) {
             Log.w(TAG, "start() called but flow already active, ignoring")
             return
@@ -146,6 +137,7 @@ class LivePreviewManager(
         releaseScopeAfterCleanup = true
         stop()
         if (cleanupComplete) {
+            cancelStreamCleanupAfterRelease()
             scope.cancel()
         }
     }
@@ -154,13 +146,31 @@ class LivePreviewManager(
         Log.i(TAG, "Bluetooth disconnected; abandoning preview resources")
         mainJob?.cancel()
         mainJob = null
-        releasePlayer()
-        unbindP2pNetwork()
-        if (!cleanupComplete) {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
+        liveCommandSent = false
+        val streamCloseJob = releaseStream()
+        try {
+            unbindP2pNetwork()
+        } catch (error: Exception) {
+            Log.e(TAG, "[${elapsed()}ms] Failed to unbind P2P network after Bluetooth disconnect", error)
+        }
+        if (!cleanupComplete && !cleanupInProgress) {
             cleanupInProgress = true
-            p2pManager?.stopP2pOperations()
-            p2pManager?.cancelP2pConnection()
-            finishCleanup()
+            scope.launch {
+                streamCloseJob?.join()
+                try {
+                    p2pManager?.stopP2pOperations()
+                } catch (error: Exception) {
+                    Log.e(TAG, "[${elapsed()}ms] Failed to stop P2P operations after Bluetooth disconnect", error)
+                }
+                try {
+                    p2pManager?.cancelP2pConnection()
+                } catch (error: Exception) {
+                    Log.e(TAG, "[${elapsed()}ms] Failed to cancel P2P connection after Bluetooth disconnect", error)
+                }
+                finishCleanup()
+            }
         }
     }
 
@@ -168,21 +178,43 @@ class LivePreviewManager(
         if (cleanupComplete || cleanupInProgress) return
         cleanupInProgress = true
         Log.i(TAG, "[${elapsed()}ms] cleanup: releasing resources...")
-        val playerWasActive = exoPlayer != null
-        releasePlayer()
-        if (playerWasActive) Log.i(TAG, "[${elapsed()}ms] cleanup: ExoPlayer released")
+        val streamCloseJob = releaseStream()
+        scope.launch {
+            streamCloseJob?.join()
+            try {
+                sendStopLiveCommand()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to send live stream stop command during cleanup", error)
+            }
+            try {
+                unbindP2pNetwork()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to unbind P2P network during cleanup", error)
+            }
 
-        unbindP2pNetwork()
-
-        val manager = p2pManager
-        if (manager == null) {
-            finishCleanup()
-            return
+            val manager = p2pManager
+            if (manager == null) {
+                finishCleanup()
+                return@launch
+            }
+            try {
+                manager.stopP2pOperations()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to stop P2P operations during cleanup", error)
+            }
+            try {
+                manager.cancelP2pConnection()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to cancel P2P connection during cleanup", error)
+            }
+            if (!cleanupInProgress) return@launch
+            try {
+                removeP2pGroup(manager, attempt = 1)
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to remove P2P group during cleanup", error)
+                finishCleanup()
+            }
         }
-        manager.stopP2pOperations()
-        manager.cancelP2pConnection()
-        if (!cleanupInProgress) return
-        removeP2pGroup(manager, attempt = 1)
     }
 
     private fun removeP2pGroup(manager: WifiP2pManagerSingleton, attempt: Int) {
@@ -253,7 +285,11 @@ class LivePreviewManager(
 
     private fun finishCleanup() {
         if (!cleanupInProgress) return
-        p2pCallback?.let { callback -> p2pManager?.removeCallback(callback) }
+        try {
+            p2pCallback?.let { callback -> p2pManager?.removeCallback(callback) }
+        } catch (error: Exception) {
+            Log.w(TAG, "[${elapsed()}ms] cleanup: P2P callback removal failed", error)
+        }
         if (p2pReceiverRegistered) {
             try {
                 p2pManager?.unregisterReceiver()
@@ -283,6 +319,7 @@ class LivePreviewManager(
         notifySessionFinished()
         Log.i(TAG, "[${elapsed()}ms] cleanup: done")
         if (releaseScopeAfterCleanup) {
+            cancelStreamCleanupAfterRelease()
             scope.cancel()
         }
     }
@@ -290,7 +327,11 @@ class LivePreviewManager(
     private fun notifySessionFinished() {
         if (sessionFinishNotified) return
         sessionFinishNotified = true
-        onSessionFinished()
+        try {
+            onSessionFinished()
+        } catch (error: Exception) {
+            Log.e(TAG, "[${elapsed()}ms] Failed to notify that the preview session finished", error)
+        }
     }
 
     private suspend fun runLivestream() {
@@ -299,15 +340,6 @@ class LivePreviewManager(
             p2pConnected = false
             p2pInfo = null
             p2pFailure = null
-
-            if (!BuildConfig.DEBUG) {
-                Log.w(TAG, "Live preview is disabled outside debug builds until the command protocol is confirmed")
-                updateState(
-                    "Developer preview only",
-                    "Live preview is experimental and is available only in debug builds.",
-                )
-                return
-            }
 
             // ── Step 1: BLE connection check ─────────────────────────
             Log.i(TAG, "[${elapsed()}ms] [Step 1/5] Checking BLE connection...")
@@ -334,22 +366,22 @@ class LivePreviewManager(
                 return
             }
 
-            // Arm the passive probe before the hardware team activates mode 8.
-            Log.i(TAG, "[${elapsed()}ms] [Step 2/5] Arming passive BLE IP listener...")
+            // Listen before the start command because the glasses may report their IP immediately.
+            Log.i(TAG, "[${elapsed()}ms] [Step 2/5] Registering BLE IP listener...")
             if (!registerNotifyListener()) {
                 updateState("Listener unavailable", "Could not receive the glasses P2P IP notification.")
                 return
             }
-            Log.w(TAG, "[${elapsed()}ms] [Step 2/5] PASSIVE MODE: no BLE mode-control command will be sent")
+            sendStartLiveCommand()
             updateState(
-                "Awaiting mode 8",
-                "Passive lab probe armed. Activate livestream mode through the approved hardware procedure.",
+                "Starting live mode",
+                "Waiting for the glasses to enter livestream mode and report their Wi-Fi Direct address.",
                 scanning = true,
             )
 
             // ── Step 3: Start P2P ────────────────────────────────────
             Log.i(TAG, "[${elapsed()}ms] [Step 3/5] Starting P2P connection...")
-            updateState("P2P connecting", "Establishing P2P connection to glasses...", scanning = true)
+            updateState("P2P connecting", "Establishing Wi-Fi Direct with the phone as group owner...", scanning = true)
             val p2pStartTime = System.currentTimeMillis()
             if (!startP2p()) {
                 updateState("P2P unavailable", "Could not start Wi-Fi Direct discovery.")
@@ -380,46 +412,35 @@ class LivePreviewManager(
                 return
             }
             if (!bindToP2pNetwork(glassesIp)) {
-                updateState("P2P route unavailable", "Could not bind the RTSP probe to the glasses Wi-Fi Direct network.")
+                updateState("P2P route unavailable", "Could not bind the RTSP stream to the glasses Wi-Fi Direct network.")
                 return
             }
 
-            // ── Step 5: Probe RTSP server ────────────────────────────
-            Log.i(TAG, "[${elapsed()}ms] [Step 5/5] Probing RTSP server on $glassesIp...")
-            updateState("Probing", "Searching for RTSP server on $glassesIp...", scanning = true)
-            val probeStartTime = System.currentTimeMillis()
-            val streamUrl = probeRtsp(glassesIp)
-            val probeElapsed = System.currentTimeMillis() - probeStartTime
-            if (streamUrl == null) {
-                Log.e(TAG, "[${elapsed()}ms] [Step 5/5] FAIL: No RTSP server found after ${probeElapsed}ms")
-                Log.e(TAG, "[${elapsed()}ms]   Tried ports: ${RTSP_PORTS.joinToString()}")
-                Log.e(TAG, "[${elapsed()}ms]   Tried paths: ${STREAM_PATHS.joinToString()}")
-                Log.e(TAG, "[${elapsed()}ms]   Possible causes: livestream binary not running, port blocked, different stream name")
-                updateState("No RTSP found",
-                    "No RTSP server found on $glassesIp after ${probeElapsed / 1000}s. " +
-                    "The livestream binary may not have started.")
-                return
-            }
+            // ── Step 5: Decode RTSP and publish local MJPEG ───────────
+            val rtspUrl = "rtsp://$glassesIp:$RTSP_PORT/ch0"
+            Log.i(TAG, "[${elapsed()}ms] [Step 5/5] Connecting RTSP decoder to $rtspUrl...")
+            updateState("Starting stream", "Connecting to $rtspUrl...", scanning = true)
+            startFrameStream(glassesIp)
 
-            // ── Success ──────────────────────────────────────────────
             Log.i(TAG, "========================================")
             Log.i(TAG, "  LIVESTREAM SUCCESS")
-            Log.i(TAG, "  URL: $streamUrl")
+            Log.i(TAG, "  RTSP: $rtspUrl")
+            Log.i(TAG, "  MJPEG: http://127.0.0.1:$MJPEG_PORT/mjpeg")
             Log.i(TAG, "  Total time: ${elapsed()}ms")
             Log.i(TAG, "========================================")
             _uiState.value = LivePreviewState(
                 stateLabel = "Playing",
-                detail = streamUrl,
+                detail = "RTSP: $rtspUrl\nMJPEG: http://127.0.0.1:$MJPEG_PORT/mjpeg",
                 isPlaying = true,
-                streamUrl = streamUrl,
+                streamUrl = "http://127.0.0.1:$MJPEG_PORT/mjpeg",
                 canStart = false,
                 canStop = true,
             )
-            // Keep the P2P group and player alive until the user explicitly stops preview.
+            // Keep the P2P group and stream endpoint alive until the user stops preview.
             awaitCancellation()
 
         } catch (e: CancellationException) {
-            Log.i(TAG, "[${elapsed()}ms] LIVESTREAM CANCELLED by user")
+            Log.i(TAG, "[${elapsed()}ms] LIVESTREAM CANCELLED: ${e.message ?: "cancelled"}")
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "[${elapsed()}ms] LIVESTREAM EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
@@ -467,21 +488,43 @@ class LivePreviewManager(
                 }
 
                 val pairedName = try { DeviceManager.getInstance().deviceName } catch (_: Exception) { null }
+                    ?.trim()
+                    ?.takeIf(String::isNotEmpty)
                 val pairedMac = try { DeviceManager.getInstance().deviceAddress } catch (_: Exception) { null }
+                    ?.filter(Char::isLetterOrDigit)
+                    ?.uppercase()
+                    ?.takeIf(String::isNotEmpty)
                 Log.d(TAG, "[${elapsed()}ms] [P2P] Looking for paired device: name='$pairedName' mac=$pairedMac")
 
+                val macSuffix = pairedMac?.takeLast(5).orEmpty()
                 val target = peers.firstOrNull { peer ->
-                    peer.deviceName == pairedName ||
-                        peer.deviceAddress == pairedMac ||
-                        peer.deviceName?.endsWith("_${pairedMac?.takeLast(5)?.replace(":", "")}") == true
+                    val peerName = peer.deviceName.orEmpty()
+                    val peerAddress = peer.deviceAddress.orEmpty()
+                    peerName.equals(pairedName, ignoreCase = true) ||
+                        peerAddress.filter(Char::isLetterOrDigit)
+                            .equals(pairedMac, ignoreCase = true) ||
+                        (macSuffix.length == 5 &&
+                            peerName.filter(Char::isLetterOrDigit)
+                                .uppercase()
+                                .endsWith(macSuffix))
+                } ?: peers.singleOrNull()?.also { peer ->
+                    Log.w(
+                        TAG,
+                        "[${elapsed()}ms] [P2P] No name/address match for the Bluetooth-paired glasses; " +
+                            "connecting to the only discovered peer '${peer.deviceName}' (${peer.deviceAddress})",
+                    )
                 }
 
                 if (target != null) {
                     Log.i(TAG, "[${elapsed()}ms] [P2P] Matched glasses peer: '${target.deviceName}' (${target.deviceAddress})")
-                    Log.i(TAG, "[${elapsed()}ms] [P2P] Sending connect request (WPS PBC)...")
-                    p2pManager?.connectToDevice(target)
+                    Log.i(TAG, "[${elapsed()}ms] [P2P] Calling WifiP2pManager.connect (WPS PBC)...")
+                    p2pManager?.connectToDevice(target, groupOwnerIntent = 15)
                 } else {
-                    Log.w(TAG, "[${elapsed()}ms] [P2P] No matching glasses peer among ${peers.size} peers")
+                    Log.w(
+                        TAG,
+                        "[${elapsed()}ms] [P2P] No safe peer match among ${peers.size} discovered peers; " +
+                            "will not connect to an arbitrary device",
+                    )
                     Log.w(TAG, "[${elapsed()}ms] [P2P]   Paired: '$pairedName' / $pairedMac")
                     peers.forEach { peer ->
                         Log.w(TAG, "[${elapsed()}ms] [P2P]   Available: '${peer.deviceName}' / ${peer.deviceAddress}")
@@ -562,7 +605,7 @@ class LivePreviewManager(
         }
         manager.resetFailCount()
         Log.i(TAG, "[${elapsed()}ms] [P2P] Registered receiver, reset fail count, starting discovery...")
-        // The vendor-style timeout normally sends the 0x0F BLE reset. Passive preview must not.
+        // Avoid resetting the glasses automatically while livestream mode is active.
         manager.startPeerDiscovery(allowDeviceResetOnTimeout = false)
         return true
     }
@@ -576,7 +619,7 @@ class LivePreviewManager(
     }
 
     /**
-     * Register a listener for the glasses IP notification before sending the experimental trigger.
+     * Register a listener for the glasses IP notification before starting livestream mode.
      * Logs every BLE notification received.
      */
     private fun registerNotifyListener(): Boolean {
@@ -672,63 +715,14 @@ class LivePreviewManager(
                 Log.i(TAG, "[${elapsed()}ms] [P2P] P2P group is ready: $p2pInfo")
                 return true
             }
+            p2pFailure?.let { failure ->
+                Log.e(TAG, "[${elapsed()}ms] [P2P] Stopping connection wait after failure: $failure")
+                return false
+            }
             delay(250)
         }
         Log.e(TAG, "[${elapsed()}ms] [P2P] Timed out waiting for a P2P group after ${timeoutMs}ms")
         return false
-    }
-
-    /**
-     * Probe RTSP server on the glasses IP.
-     * Logs every port check and ExoPlayer attempt with timing.
-     */
-    private suspend fun probeRtsp(glassesIp: String): String? {
-        var totalAttempts = 0
-
-        for (port in RTSP_PORTS) {
-            if (mainJob?.isActive != true) {
-                Log.w(TAG, "[${elapsed()}ms] [RTSP] Probe cancelled (job inactive)")
-                return null
-            }
-
-            Log.i(TAG, "[${elapsed()}ms] [RTSP] Checking port $glassesIp:$port...")
-            val portStartTime = System.currentTimeMillis()
-            val portOpen = withContext(Dispatchers.IO) {
-                isPortOpen(glassesIp, port, 2000)
-            }
-            val portElapsed = System.currentTimeMillis() - portStartTime
-            Log.i(TAG, "[${elapsed()}ms] [RTSP] Port $port: ${if (portOpen) "OPEN" else "CLOSED"} (${portElapsed}ms)")
-
-            if (!portOpen) continue
-
-            for (path in STREAM_PATHS) {
-                if (mainJob?.isActive != true) {
-                    Log.w(TAG, "[${elapsed()}ms] [RTSP] Probe cancelled mid-path (job inactive)")
-                    return null
-                }
-                totalAttempts++
-
-                val url = if (path.isEmpty()) "rtsp://$glassesIp:$port/"
-                          else "rtsp://$glassesIp:$port/$path"
-
-                Log.i(TAG, "[${elapsed()}ms] [RTSP] Attempt #$totalAttempts: $url")
-                _uiState.value = _uiState.value.copy(detail = "Trying: $url")
-
-                val attemptStartTime = System.currentTimeMillis()
-                val success = tryPlayUrl(url)
-                val attemptElapsed = System.currentTimeMillis() - attemptStartTime
-
-                if (success) {
-                    Log.i(TAG, "[${elapsed()}ms] [RTSP] *** SUCCESS: $url (${attemptElapsed}ms) ***")
-                    return url
-                } else {
-                    Log.d(TAG, "[${elapsed()}ms] [RTSP] Failed: $url (${attemptElapsed}ms)")
-                }
-            }
-        }
-
-        Log.e(TAG, "[${elapsed()}ms] [RTSP] All probes failed: $totalAttempts attempts across ${RTSP_PORTS.size} ports")
-        return null
     }
 
     private fun hasWifiP2pPermission(): Boolean {
@@ -770,7 +764,7 @@ class LivePreviewManager(
             delay(500)
         }
 
-        Log.e(TAG, "[${elapsed()}ms] [P2P] No usable P2P route after ${P2P_CONNECT_TIMEOUT_MS}ms; RTSP probe will not use the default network")
+        Log.e(TAG, "[${elapsed()}ms] [P2P] No usable P2P route after ${P2P_CONNECT_TIMEOUT_MS}ms; RTSP will not use the default network")
         return false
     }
 
@@ -825,147 +819,121 @@ class LivePreviewManager(
         }
     }
 
-    private fun isPortOpen(host: String, port: Int, timeoutMs: Int): Boolean {
-        return try {
-            Socket().use { socket ->
-                socket.connect(InetSocketAddress(host, port), timeoutMs)
-                true
+    private suspend fun startFrameStream(glassesIp: String) {
+        val server = withContext(Dispatchers.IO) { MjpegServer(MJPEG_PORT) }
+        mjpegServer = server
+        val firstFrame = CompletableDeferred<Unit>()
+        val receiver = RtspFrames(glassesIp, object : RtspFrames.Listener {
+            override fun onFrame(jpeg: ByteArray) {
+                if (server.publish(jpeg)) firstFrame.complete(Unit)
             }
-        } catch (e: IOException) {
-            false
-        }
-    }
 
-    /**
-     * Try to play an RTSP URL with ExoPlayer.
-     * Logs state transitions, errors, and timing.
-     */
-    // Media3 marks its RTSP source as experimental; it is the intended player for this probe.
-    @SuppressLint("UnsafeOptInUsageError")
-    private suspend fun tryPlayUrl(url: String): Boolean {
-        return withContext(Dispatchers.Main) {
-            val startTime = System.currentTimeMillis()
-            val result = withTimeoutOrNull(PROBE_TIMEOUT_MS) {
-                suspendCancellableCoroutine<Boolean> { cont ->
-                    val player = ExoPlayer.Builder(context).build()
-                    val mediaSource = RtspMediaSource.Factory()
-                        .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
-                    var resolved = false
-
-                    Log.d(TAG, "[${elapsed()}ms] [ExoPlayer] Creating player for $url")
-
-                    val listener = object : Player.Listener {
-                        override fun onPlaybackStateChanged(playbackState: Int) {
-                            if (resolved) return
-                            val stateElapsed = System.currentTimeMillis() - startTime
-                            when (playbackState) {
-                                Player.STATE_IDLE -> {
-                                    Log.d(TAG, "[${elapsed()}ms] [ExoPlayer] STATE_IDLE ($stateElapsed ms)")
-                                }
-                                Player.STATE_BUFFERING -> {
-                                    Log.d(TAG, "[${elapsed()}ms] [ExoPlayer] STATE_BUFFERING ($stateElapsed ms)")
-                                }
-                                Player.STATE_READY -> {
-                                    Log.i(TAG, "[${elapsed()}ms] [ExoPlayer] STATE_READY — stream is playing! ($stateElapsed ms)")
-                                    resolved = true
-                                    player.removeListener(this)
-                                    if (!cont.isActive) {
-                                        player.release()
-                                        return
-                                    }
-                                    exoPlayer = player
-                                    observeActivePlayer(player)
-                                    cont.resume(true) {}
-                                }
-                                Player.STATE_ENDED -> {
-                                    Log.w(TAG, "[${elapsed()}ms] [ExoPlayer] STATE_ENDED ($stateElapsed ms)")
-                                    resolved = true
-                                    player.removeListener(this)
-                                    player.release()
-                                    if (cont.isActive) cont.resume(false) {}
-                                }
-                            }
+            override fun onError(message: String) {
+                val failure = IOException("RTSP stream failed: $message")
+                if (!firstFrame.completeExceptionally(failure)) {
+                    scope.launch {
+                        if (mainJob?.isActive == true) {
+                            updateState("Stream interrupted", failure.message.orEmpty())
+                            mainJob?.cancel(CancellationException(failure.message))
                         }
-
-                        override fun onPlayerError(error: PlaybackException) {
-                            if (resolved) return
-                            val errorElapsed = System.currentTimeMillis() - startTime
-                            resolved = true
-                            Log.w(TAG, "[${elapsed()}ms] [ExoPlayer] ERROR after ${errorElapsed}ms:")
-                            Log.w(TAG, "[${elapsed()}ms]   type=${error.errorCodeName}")
-                            Log.w(TAG, "[${elapsed()}ms]   code=${error.errorCode}")
-                            Log.w(TAG, "[${elapsed()}ms]   message=${error.message}")
-                            Log.w(TAG, "[${elapsed()}ms]   cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message}")
-                            player.removeListener(this)
-                            player.release()
-                            if (cont.isActive) cont.resume(false) {}
-                        }
-                    }
-
-                    player.addListener(listener)
-                    cont.invokeOnCancellation {
-                        player.removeListener(listener)
-                        player.release()
-                    }
-                    player.setMediaSource(mediaSource)
-                    player.playWhenReady = true
-                    player.prepare()
-                    Log.d(TAG, "[${elapsed()}ms] [ExoPlayer] playWhenReady=true; prepare() called for $url")
-                }
-            }
-            if (result == null) {
-                val timeoutElapsed = System.currentTimeMillis() - startTime
-                Log.w(TAG, "[${elapsed()}ms] [ExoPlayer] TIMEOUT after ${timeoutElapsed}ms for $url")
-                false
-            } else {
-                result
-            }
-        }
-    }
-
-    private fun observeActivePlayer(player: ExoPlayer) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState != Player.STATE_ENDED || exoPlayer !== player) return
-                Log.w(TAG, "[${elapsed()}ms] [ExoPlayer] Active stream ended")
-                scope.launch {
-                    if (exoPlayer === player) {
-                        updateState("Stream ended", "The glasses RTSP stream ended.")
-                        mainJob?.cancel()
                     }
                 }
             }
+        })
+        rtspFrames = receiver
+        receiver.start()
 
-            override fun onPlayerError(error: PlaybackException) {
-                if (exoPlayer !== player) return
-                Log.e(
+        val frameReceived = withTimeoutOrNull(STREAM_START_TIMEOUT_MS) {
+            firstFrame.await()
+            true
+        } ?: false
+        if (!frameReceived) {
+            throw IOException("No video frame received from rtsp://$glassesIp:$RTSP_PORT/ch0")
+        }
+    }
+
+    private fun sendStartLiveCommand() {
+        try {
+            LargeDataHandler.getInstance().glassesControl(byteArrayOf(0x02, 0x01, 0x14, 0x01)) { _, response ->
+                Log.i(
                     TAG,
-                    "[${elapsed()}ms] [ExoPlayer] Active stream error: ${error.errorCodeName} (${error.message})"
+                    "[${elapsed()}ms] [BLE] Live stream start response: dataType=${response.dataType}, " +
+                        "error=${response.errorCode}",
                 )
-                scope.launch {
-                    if (exoPlayer === player) {
-                        updateState("Stream interrupted", "${error.errorCodeName}: ${error.message}")
-                        mainJob?.cancel()
+            }
+            liveCommandSent = true
+            heartbeatJob?.cancel()
+            heartbeatJob = scope.launch {
+                while (isActive && liveCommandSent) {
+                    delay(5_000L)
+                    if (!liveCommandSent || !BleOperateManager.getInstance().isConnected) continue
+                    try {
+                        LargeDataHandler.getInstance().syncHeartBeat(4)
+                    } catch (error: Exception) {
+                        Log.e(TAG, "[${elapsed()}ms] [BLE] Failed to send livestream heartbeat", error)
                     }
                 }
             }
+            Log.i(TAG, "[${elapsed()}ms] [BLE] Sent live stream start command")
+        } catch (error: Exception) {
+            Log.e(TAG, "[${elapsed()}ms] [BLE] Failed to send live stream start command", error)
+            throw IOException("Could not start livestream mode over Bluetooth", error)
         }
-        activePlayerListener = listener
-        player.addListener(listener)
     }
 
-    private fun releasePlayer() {
-        val player = exoPlayer
-        activePlayerListener?.let { listener -> player?.removeListener(listener) }
-        activePlayerListener = null
-        player?.let {
-            Log.d(TAG, "[${elapsed()}ms] Releasing ExoPlayer")
-            it.release()
+    private fun sendStopLiveCommand() {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
+        if (!liveCommandSent) return
+        liveCommandSent = false
+        if (!BleOperateManager.getInstance().isConnected) {
+            Log.w(TAG, "[${elapsed()}ms] [BLE] Skipping live stream stop command because Bluetooth is disconnected")
+            return
         }
-        exoPlayer = null
+        try {
+            LargeDataHandler.getInstance().glassesControl(byteArrayOf(0x02, 0x01, 0x15, 0x01)) { _, response ->
+                Log.i(
+                    TAG,
+                    "[${elapsed()}ms] [BLE] Live stream stop response: dataType=${response.dataType}, " +
+                        "error=${response.errorCode}",
+                )
+            }
+            Log.i(TAG, "[${elapsed()}ms] [BLE] Sent live stream stop command")
+        } catch (error: Exception) {
+            Log.e(TAG, "[${elapsed()}ms] [BLE] Failed to send live stream stop command", error)
+        }
     }
 
-    fun getPlayer(): ExoPlayer? = exoPlayer
+    private fun releaseStream(): Job? {
+        val frames = rtspFrames
+        rtspFrames = null
+        val server = mjpegServer
+        mjpegServer = null
+        if (frames == null && server == null) return streamReleaseJob
+
+        streamReleaseJob = streamCleanupScope.launch {
+            try {
+                frames?.close()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to close the RTSP connection", error)
+            }
+            try {
+                server?.close()
+            } catch (error: Exception) {
+                Log.e(TAG, "[${elapsed()}ms] Failed to close the MJPEG server", error)
+            }
+        }
+        return streamReleaseJob
+    }
+
+    private fun cancelStreamCleanupAfterRelease() {
+        val closeJob = streamReleaseJob
+        if (closeJob == null || closeJob.isCompleted) {
+            streamCleanupScope.cancel()
+        } else {
+            closeJob.invokeOnCompletion { streamCleanupScope.cancel() }
+        }
+    }
 
     private fun updateState(label: String, detail: String, scanning: Boolean = false) {
         Log.d(TAG, "[${elapsed()}ms] State: '$label' | detail='$detail' | scanning=$scanning")
