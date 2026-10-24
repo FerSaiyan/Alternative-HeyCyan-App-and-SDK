@@ -1,8 +1,7 @@
 package com.fersaiyan.cyanbridge.devices.tunebuds
 
-import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
-import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrame
-import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFrameDecoder
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsSession
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsTransport
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
@@ -22,11 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -49,8 +45,8 @@ enum class TuneBudsSppState {
     ERROR,
 }
 
-/** Classic Bluetooth RFCOMM transport used by the TuneBuds XK ONE PRO build. */
-class TuneBudsSppClient(context: Context) {
+/** Classic Bluetooth RFCOMM transport used by the TuneBuds XK ONE PRO build; feeds [session]. */
+class TuneBudsSppClient(context: Context) : TuneBudsTransport {
     companion object {
         private const val TAG = "TuneBudsSpp"
         private const val CONNECT_TIMEOUT_MS = 15_000L
@@ -61,19 +57,21 @@ class TuneBudsSppClient(context: Context) {
     private val context = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connectionMutex = Mutex()
-    private val writeMutex = Mutex()
-    private val decoder = TuneBudsFrameDecoder()
     private val _state = MutableStateFlow(TuneBudsSppState.DISCONNECTED)
-    private val _frames = MutableSharedFlow<TuneBudsFrame>(extraBufferCapacity = 64)
 
     val state: StateFlow<TuneBudsSppState> = _state.asStateFlow()
-    val frames: SharedFlow<TuneBudsFrame> = _frames.asSharedFlow()
+
+    /** The AB Mate session over this link; reset on every RFCOMM connect. */
+    val session = TuneBudsSession(this)
+
+    override val isConnected: Boolean
+        get() = _state.value == TuneBudsSppState.CONNECTED && socket?.isConnected == true
+
+    override val maxWriteLength: Int = 260
 
     @Volatile
     private var socket: BluetoothSocket? = null
     private var readJob: Job? = null
-    private var nextHostSequence = 0
-    private var maxPacketSize = TuneBudsProtocol.DEFAULT_MAX_PACKET_SIZE
 
     @SuppressLint("MissingPermission")
     suspend fun connect(address: String): Result<Unit> = connectionMutex.withLock {
@@ -104,9 +102,7 @@ class TuneBudsSppClient(context: Context) {
             withTimeout(CONNECT_TIMEOUT_MS) {
                 runInterruptible(Dispatchers.IO) { pendingSocket.connect() }
             }
-            decoder.reset()
-            nextHostSequence = 0
-            maxPacketSize = TuneBudsProtocol.DEFAULT_MAX_PACKET_SIZE
+            session.reset()
             _state.value = TuneBudsSppState.CONNECTED
             startReadLoop(pendingSocket)
             Log.i(TAG, "RFCOMM connected to $normalizedAddress")
@@ -121,38 +117,19 @@ class TuneBudsSppClient(context: Context) {
         }
     }
 
-    suspend fun send(command: Int, payload: ByteArray = byteArrayOf()): Result<Unit> = writeMutex.withLock {
-        val currentSocket = socket
-        if (_state.value != TuneBudsSppState.CONNECTED || currentSocket?.isConnected != true) {
-            return@withLock Result.failure(IOException("TuneBuds SPP is not connected"))
-        }
-        return@withLock try {
-            val encoded = TuneBudsProtocol.encode(
-                command = command,
-                payload = payload,
-                maxPacketSize = maxPacketSize,
-                initialSequence = nextHostSequence,
-            )
+    /** The session serializes writes, so packets of one command go out back to back. */
+    override suspend fun write(packet: ByteArray) {
+        val currentSocket = socket?.takeIf { isConnected } ?: throw IOException("TuneBuds SPP is not connected")
+        try {
             withContext(Dispatchers.IO) {
-                encoded.frames.forEach { currentSocket.outputStream.write(it) }
+                currentSocket.outputStream.write(packet)
                 currentSocket.outputStream.flush()
             }
-            nextHostSequence = encoded.nextSequence
-            Result.success(Unit)
         } catch (error: Throwable) {
             _state.value = TuneBudsSppState.ERROR
-            Result.failure(error)
+            throw error
         }
     }
-
-    fun setMaxPacketSize(size: Int) {
-        if (size > TuneBudsProtocol.HEADER_SIZE) {
-            maxPacketSize = size.coerceAtMost(260)
-        }
-    }
-
-    fun isConnected(): Boolean =
-        _state.value == TuneBudsSppState.CONNECTED && socket?.isConnected == true
 
     fun disconnect() {
         disconnectInternal()
@@ -169,16 +146,13 @@ class TuneBudsSppClient(context: Context) {
                     if (!isActive || socket !== connectedSocket) break
                     if (count < 0) throw IOException("TuneBuds RFCOMM stream closed")
                     if (count == 0) continue
-                    val malformedBefore = decoder.malformedFrameCount
-                    val frames = decoder.append(buffer.copyOf(count))
-                    if (decoder.malformedFrameCount > malformedBefore) {
+                    val malformedBefore = session.malformedFrameCount
+                    session.onBytesReceived(buffer.copyOf(count))
+                    if (session.malformedFrameCount > malformedBefore) {
                         Log.w(
                             TAG,
-                            "Accepted TuneBuds data after ${decoder.malformedFrameCount - malformedBefore} frame warning(s)",
+                            "Accepted TuneBuds data after ${session.malformedFrameCount - malformedBefore} frame warning(s)",
                         )
-                    }
-                    for (frame in frames) {
-                        _frames.emit(frame)
                     }
                 }
             } catch (error: Throwable) {
@@ -247,7 +221,6 @@ class TuneBudsSppClient(context: Context) {
         val currentSocket = socket
         socket = null
         runCatching { currentSocket?.close() }
-        decoder.reset()
     }
 
     private fun hasConnectPermission(): Boolean =
