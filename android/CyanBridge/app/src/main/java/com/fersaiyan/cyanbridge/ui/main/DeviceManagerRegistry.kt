@@ -16,25 +16,35 @@ import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLivePreviewManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsState
 import com.fersaiyan.cyanbridge.ota.LivePreviewState
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 /**
- * Lazily created managers for every supported glasses family, plus the device-selection
- * predicates. Each manager's state is collected on the activity's lifecycle scope and handed
- * to [listener] so the dashboard can mirror it.
+ * Lazily created managers for every supported glasses family. Each manager's state is collected
+ * on the activity's lifecycle scope and handed to [listener] while that family is the selected
+ * device profile, so the dashboard only mirrors the selected glasses.
  */
 internal class DeviceManagerRegistry(
     private val activity: AppCompatActivity,
     private val listener: () -> Listener,
 ) {
-    /** Receives manager state changes on the main thread. */
+    /**
+     * Receives manager state changes on the main thread. Meta and MYVU panel updates and the
+     * MYVU failure prompt arrive for any selection; the other callbacks only while their family
+     * is selected.
+     */
     interface Listener {
         fun onMetaRaybanStateChanged()
         fun onMeizuMyvuStateChanged(state: MeizuMyvuManager.MeizuMyvuUiState)
         fun onMeizuMyvuFailure(failure: MeizuMyvuFailure)
+
+        /** The selected family's manager reported a change its connection status shows. */
+        fun onSelectedGlassesStateChanged()
         fun onEyevueStateChanged(eyevue: EyevueState)
         fun onEyevueWakeWord()
         fun onTuneBudsStateChanged(tuneBuds: TuneBudsState)
@@ -69,26 +79,25 @@ internal class DeviceManagerRegistry(
     private var tuneBudsLivePreviewUiJob: Job? = null
     var tuneBudsLiveStopReceiver: BroadcastReceiver? = null
 
-    fun isMetaRaybanSelected(): Boolean = DeviceProfileStore.isMetaSelected(activity)
+    /** True when [deviceClass] is the selected device profile; filters each family's events. */
+    fun isSelected(deviceClass: DeviceClass): Boolean = DeviceProfileStore.selectedClass(activity) == deviceClass
 
-    fun isMeizuMyvuSelected(): Boolean = DeviceProfileStore.isMeizuMyvuSelected(activity)
+    /** Capability profile of the selected device class. */
+    fun selectedProfile(): GlassesFamilyProfile =
+        GlassesFamilyProfiles.forClass(DeviceProfileStore.selectedClass(activity))
 
-    fun isEyevueSelected(): Boolean =
-        DeviceProfileStore.selectedClass(activity) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.EYEVUE
+    // Selection predicates kept for the activity's AI and voice flows.
+    fun isMetaRaybanSelected(): Boolean = isSelected(DeviceClass.META_RAYBAN)
 
-    fun isTuneBudsSelected(): Boolean =
-        DeviceProfileStore.selectedClass(activity) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.TUNEBUDS
+    fun isMeizuMyvuSelected(): Boolean = isSelected(DeviceClass.MEIZU_MYVU)
 
-    fun isMoyoungW620Selected(): Boolean = DeviceProfileStore.isMoyoungW620Selected(activity)
+    fun isEyevueSelected(): Boolean = isSelected(DeviceClass.EYEVUE)
 
-    fun isHeyCyanSelected(): Boolean =
-        DeviceProfileStore.selectedClass(activity) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.HEY_CYAN
+    fun isTuneBudsSelected(): Boolean = isSelected(DeviceClass.TUNEBUDS)
 
-    fun isHeyCyanOrEyevueSelected(): Boolean =
-        DeviceProfileStore.selectedClass(activity) in setOf(
-            com.fersaiyan.cyanbridge.shared.devices.DeviceClass.HEY_CYAN,
-            com.fersaiyan.cyanbridge.shared.devices.DeviceClass.EYEVUE,
-        )
+    fun isMoyoungW620Selected(): Boolean = isSelected(DeviceClass.MOYOUNG_W620)
+
+    fun isHeyCyanSelected(): Boolean = isSelected(DeviceClass.HEY_CYAN)
 
     fun getOrCreateMetaRaybanManager(): com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager {
         return metaRaybanManager
@@ -116,6 +125,7 @@ internal class DeviceManagerRegistry(
                 manager.lastError.map { Unit },
             ).collect {
                 listener().onMetaRaybanStateChanged()
+                if (isSelected(DeviceClass.META_RAYBAN)) listener().onSelectedGlassesStateChanged()
             }
         }
     }
@@ -127,6 +137,7 @@ internal class DeviceManagerRegistry(
                 meizuMyvuUiJob = activity.lifecycleScope.launch {
                     manager.state.collect { state ->
                         listener().onMeizuMyvuStateChanged(state)
+                        if (isSelected(DeviceClass.MEIZU_MYVU)) listener().onSelectedGlassesStateChanged()
                     }
                 }
             }
@@ -146,14 +157,14 @@ internal class DeviceManagerRegistry(
             if (eyevueUiJob == null) {
                 eyevueUiJob = activity.lifecycleScope.launch {
                     manager.state.collect { eyevue ->
-                        listener().onEyevueStateChanged(eyevue)
+                        if (isSelected(DeviceClass.EYEVUE)) listener().onEyevueStateChanged(eyevue)
                     }
                 }
             }
             if (eyevueWakeWordJob == null) {
                 eyevueWakeWordJob = activity.lifecycleScope.launch {
                     manager.wakeWordEvents.collect {
-                        listener().onEyevueWakeWord()
+                        if (isSelected(DeviceClass.EYEVUE)) listener().onEyevueWakeWord()
                     }
                 }
             }
@@ -165,7 +176,7 @@ internal class DeviceManagerRegistry(
             if (tuneBudsUiJob == null) {
                 tuneBudsUiJob = activity.lifecycleScope.launch {
                     manager.state.collect { tuneBuds ->
-                        listener().onTuneBudsStateChanged(tuneBuds)
+                        if (isSelected(DeviceClass.TUNEBUDS)) listener().onTuneBudsStateChanged(tuneBuds)
                     }
                 }
             }
@@ -176,7 +187,7 @@ internal class DeviceManagerRegistry(
             tuneBudsLivePreviewManager = manager
             tuneBudsLivePreviewUiJob = activity.lifecycleScope.launch {
                 manager.uiState.collect { lp ->
-                    listener().onTuneBudsLivePreviewStateChanged(manager, lp)
+                    if (isSelected(DeviceClass.TUNEBUDS)) listener().onTuneBudsLivePreviewStateChanged(manager, lp)
                 }
             }
             val receiver = object : android.content.BroadcastReceiver() {
@@ -196,7 +207,7 @@ internal class DeviceManagerRegistry(
             if (moyoungW620UiJob == null) {
                 moyoungW620UiJob = activity.lifecycleScope.launch {
                     manager.state.collect { moyoung ->
-                        listener().onMoyoungW620StateChanged(moyoung)
+                        if (isSelected(DeviceClass.MOYOUNG_W620)) listener().onMoyoungW620StateChanged(moyoung)
                     }
                 }
             }
@@ -211,7 +222,7 @@ internal class DeviceManagerRegistry(
             if (eyevueLivePreviewUiJob == null) {
                 eyevueLivePreviewUiJob = activity.lifecycleScope.launch {
                     manager.uiState.collect { lp ->
-                        listener().onEyevueLivePreviewStateChanged(manager, lp)
+                        if (isSelected(DeviceClass.EYEVUE)) listener().onEyevueLivePreviewStateChanged(manager, lp)
                     }
                 }
             }

@@ -4,15 +4,10 @@ import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 
 /**
  * The vendor SDK exposes singleton BLE response/listener slots and a singleton P2P controller.
- * Only one workflow may control those resources at a time.
+ * Only one workflow may control those resources at a time. The session kinds are shared with
+ * the dashboard policy in `:shared`.
  */
-enum class GlassesSession(val label: String) {
-    MEDIA_SYNC("media sync"),
-    LIVE_PREVIEW("live preview"),
-    OTA("firmware update"),
-    WIFI_ADB_DEBUG("Wi-Fi ADB debug"),
-    META_CAMERA("Meta camera"),
-}
+typealias GlassesSession = com.fersaiyan.cyanbridge.shared.glasses.GlassesSession
 
 class GlassesSessionLease internal constructor(
     val session: GlassesSession,

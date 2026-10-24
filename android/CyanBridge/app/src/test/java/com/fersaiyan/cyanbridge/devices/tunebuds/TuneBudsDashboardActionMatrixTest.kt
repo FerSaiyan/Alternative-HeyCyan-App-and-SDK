@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.devices.tunebuds
 
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
+import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
@@ -91,7 +93,7 @@ class TuneBudsDashboardActionMatrixTest {
 
     @Test
     fun tuneBudsDashboardAllowsExactlyTheValidatedActions() {
-        allowed.forEach { assertEquals(it.toString(), true, it.isSupportedForTuneBudsDashboard()) }
-        rejected.forEach { assertEquals(it.toString(), false, it.isSupportedForTuneBudsDashboard()) }
+        allowed.forEach { assertEquals(it.toString(), true, GlassesManagerGating.isActionSupported(GlassesFamilyProfiles.tuneBuds, it)) }
+        rejected.forEach { assertEquals(it.toString(), false, GlassesManagerGating.isActionSupported(GlassesFamilyProfiles.tuneBuds, it)) }
     }
 }

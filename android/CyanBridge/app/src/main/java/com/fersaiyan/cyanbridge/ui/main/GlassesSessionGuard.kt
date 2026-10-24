@@ -54,7 +54,7 @@ internal class GlassesSessionGuard(
     fun isGlassesCommandBlocked(source: String): Boolean {
         val activeSession = GlassesSessionCoordinator.currentSession() ?: return false
         if (activeSession == GlassesSession.META_CAMERA &&
-            devices.isMetaRaybanSelected() &&
+            devices.selectedProfile().voiceQueriesBypassCameraSession &&
             source == "voice-query command"
         ) {
             // Meta voice queries use Android's audio route and do not contend for the
