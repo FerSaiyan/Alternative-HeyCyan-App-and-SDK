@@ -568,7 +568,7 @@ class GeminiLiveClient(
             Log.i(TAG, "Live capture waiting for the microphone")
             return
         }
-        if (audio.isMentraSelected()) {
+        if (audio.usesVendorPcmInput()) {
             audio.startMentraInput(::offerMentraPcm)
             return
         }

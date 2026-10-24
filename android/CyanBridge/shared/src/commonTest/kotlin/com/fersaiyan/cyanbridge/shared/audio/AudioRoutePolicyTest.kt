@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.shared.audio
 
 import com.fersaiyan.cyanbridge.shared.audio.AudioRouteCandidate.Type.BLE_HEADSET
 import com.fersaiyan.cyanbridge.shared.audio.AudioRouteCandidate.Type.BLUETOOTH_SCO
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -122,5 +123,19 @@ class AudioRoutePolicyTest {
         ledger.join(2, AudioRouteState(communicationMode = true, legacySco = true))
         ledger.leave(2)
         assertEquals(AudioRouteState(communicationMode = true, legacySco = true), ledger.leave(1))
+    }
+
+    @Test
+    fun deviceProfileDecidesVendorPcmAndPlaybackSignal() {
+        val mentra = GlassesFamilyProfiles.mentraLive.audio
+        val heyCyan = GlassesFamilyProfiles.heyCyan.audio
+        val conversation = AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED
+        assertEquals(AudioRoutePreference.DEVICE_SDK, AudioRoutePolicy.forDevice(conversation, mentra))
+        assertEquals(conversation, AudioRoutePolicy.forDevice(conversation, heyCyan))
+        assertEquals(conversation, AudioRoutePolicy.forDevice(conversation, null))
+        assertEquals(AudioRoutePreference.SYSTEM_DEFAULT, AudioRoutePolicy.forDevice(AudioRoutePreference.SYSTEM_DEFAULT, mentra))
+        assertTrue(AudioRoutePolicy.needsPlaybackSignal(mentra))
+        assertFalse(AudioRoutePolicy.needsPlaybackSignal(heyCyan))
+        assertFalse(AudioRoutePolicy.needsPlaybackSignal(null))
     }
 }

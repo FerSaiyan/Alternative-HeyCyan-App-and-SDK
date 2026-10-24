@@ -9,8 +9,11 @@ import com.fersaiyan.cyanbridge.ai.transcription.OfflineQuestionTranscriber
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantSpeechStream
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantVoice
+import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePolicy
+import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePreference
 import com.fersaiyan.cyanbridge.shared.audio.AudioRouteWait
 import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
+import com.fersaiyan.cyanbridge.shared.devices.GlassesAudioProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -24,7 +27,8 @@ import java.util.Locale
  *
  * Integration points (taken as parameters, owned by MainActivity / the glasses layer):
  * [languageTag] (ImageQuestionPreferences app language), [glassesDeviceName] (the connected glasses'
- * Bluetooth name) and [waitCueText] (the "one moment" phrase, which Android does not have yet).
+ * Bluetooth name), [deviceAudio] (the family audio profile, which keeps vendor-PCM glasses off the
+ * headset route) and [waitCueText] (the "one moment" phrase, which Android does not have yet).
  */
 class AndroidAssistantVoice(
     context: Context,
@@ -32,6 +36,8 @@ class AndroidAssistantVoice(
     private val languageTag: () -> String,
     private val glassesDeviceName: () -> String? = { null },
     private val waitCueText: (languageTag: String) -> String = { "" },
+    /** The selected glasses' audio profile (GlassesFamilyProfile.audio); null = unknown. */
+    private val deviceAudio: () -> GlassesAudioProfile? = { null },
 ) : AssistantVoice {
     private val appContext = context.applicationContext
     private val tts = TtsSpeaker(appContext, TAG)
@@ -41,7 +47,7 @@ class AndroidAssistantVoice(
 
     override suspend fun listen(initialTimeoutMs: Long): String? {
         val handle = session?.takeUnless { it.isClosed }
-            ?: AudioSessionCoordinator.tryOpen(appContext, AudioSessionRequest.VoiceCapture(TAG))?.also { session = it }
+            ?: AudioSessionCoordinator.tryOpen(appContext, voiceCaptureRequest())?.also { session = it }
             ?: run {
                 Log.w(TAG, "Microphone is busy; not listening")
                 return null
@@ -63,6 +69,11 @@ class AndroidAssistantVoice(
             recording.delete()
         }
     }
+
+    private fun voiceCaptureRequest() = AudioSessionRequest.VoiceCapture(
+        owner = TAG,
+        route = AudioRoutePolicy.forDevice(AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED, deviceAudio()),
+    )
 
     override fun stopSpeaking() = tts.stop()
 

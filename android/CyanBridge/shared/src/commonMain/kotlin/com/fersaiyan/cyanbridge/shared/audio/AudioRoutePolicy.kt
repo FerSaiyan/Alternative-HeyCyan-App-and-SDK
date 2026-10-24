@@ -1,5 +1,9 @@
 package com.fersaiyan.cyanbridge.shared.audio
 
+import com.fersaiyan.cyanbridge.shared.devices.GlassesAudioInput
+import com.fersaiyan.cyanbridge.shared.devices.GlassesAudioOutput
+import com.fersaiyan.cyanbridge.shared.devices.GlassesAudioProfile
+
 /** A Bluetooth device the platform offers for communication audio (microphone plus speaker). */
 data class AudioRouteCandidate(
     val id: Int,
@@ -85,6 +89,21 @@ data class AudioRouteWait(
 }
 
 object AudioRoutePolicy {
+    /**
+     * Applies the selected glasses' audio profile to the route a feature asked for: glasses that
+     * stream microphone PCM through their SDK must not also get the Bluetooth headset route
+     * (it duplicates audio and pulls output off their media profile).
+     */
+    fun forDevice(requested: AudioRoutePreference, device: GlassesAudioProfile?): AudioRoutePreference = when {
+        requested == AudioRoutePreference.SYSTEM_DEFAULT -> requested
+        device?.input == GlassesAudioInput.VENDOR_PCM_STREAM -> AudioRoutePreference.DEVICE_SDK
+        else -> requested
+    }
+
+    /** True when the glasses' SDK must be told whenever the app plays audio to them. */
+    fun needsPlaybackSignal(device: GlassesAudioProfile?): Boolean =
+        device?.output == GlassesAudioOutput.BLUETOOTH_WITH_PLAYBACK_SIGNAL
+
     /**
      * Picks the headset to route to. A candidate whose name matches [preferredName] wins; without a
      * match the first candidate is used unless [requireUnambiguous] is set and several are offered.

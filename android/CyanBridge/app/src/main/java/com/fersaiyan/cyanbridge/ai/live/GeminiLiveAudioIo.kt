@@ -22,9 +22,10 @@ import com.fersaiyan.cyanbridge.audio.AudioSessionListener
 import com.fersaiyan.cyanbridge.audio.PcmRecorder
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
+import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePolicy
 import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePreference
 import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
-import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -106,8 +107,12 @@ internal class GeminiLiveAudioIo(
         ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
-    fun isMentraSelected(): Boolean =
-        DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE
+    private fun deviceAudio() = GlassesFamilyProfiles.forClass(DeviceProfileStore.selectedClass(appContext)).audio
+
+    /** True when the selected glasses stream microphone PCM through their SDK (Mentra Live). */
+    fun usesVendorPcmInput(): Boolean =
+        AudioRoutePolicy.forDevice(AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED, deviceAudio()) ==
+            AudioRoutePreference.DEVICE_SDK
 
     /**
      * Uses Mentra SDK PCM as the ONLY input. SCO and a second AudioRecord can duplicate audio
@@ -243,9 +248,9 @@ internal class GeminiLiveAudioIo(
         }
     }
 
-    /** Tells Mentra glasses whether app audio is playing, when Mentra is the selected device. */
+    /** Tells Mentra glasses whether app audio is playing, when the selected glasses need that signal. */
     fun setMentraOwnAudioPlaying(playing: Boolean) {
-        if (isMentraSelected()) {
+        if (AudioRoutePolicy.needsPlaybackSignal(deviceAudio())) {
             runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(playing) }
         }
     }
@@ -280,7 +285,7 @@ internal class GeminiLiveAudioIo(
     }
 
     private fun openSession(): AudioSessionHandle? {
-        val route = if (isMentraSelected()) AudioRoutePreference.DEVICE_SDK else AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED
+        val route = AudioRoutePolicy.forDevice(AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED, deviceAudio())
         return when (
             val grant = AudioSessionCoordinator.open(appContext, AudioSessionRequest.Conversation(TAG, route), sessionListener)
         ) {
