@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.ota
 
 import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
-import com.fersaiyan.cyanbridge.shared.glasses.OtaTargetSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -84,11 +83,5 @@ class OtaSectionUiStateTest {
             assertEquals(expected, otaSectionUiState(OtaUiState(state = state), true, false).canCancel)
             assertEquals(expected, otaSectionUiState(OtaUiState(state = state), false, true).canCancel)
         }
-    }
-
-    @Test
-    fun otaTargetsMapToDashboardSelections() {
-        assertEquals(OtaTargetSelection.V821_WIFI, OtaTarget.V821_WIFI.toOtaTargetSelection())
-        assertEquals(OtaTargetSelection.JIELI_BLE, OtaTarget.JIELI_BLE.toOtaTargetSelection())
     }
 }

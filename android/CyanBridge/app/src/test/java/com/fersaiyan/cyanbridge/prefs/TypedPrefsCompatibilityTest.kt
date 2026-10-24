@@ -19,11 +19,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 /** Settings saved by earlier builds, straight through SharedPreferences, read back unchanged. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class TypedPrefsCompatibilityTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 

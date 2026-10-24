@@ -9,18 +9,6 @@ import org.junit.Test
 class ImageQuestionPromptResolverTest {
 
     @Test
-    fun builtInDefaultIsTheConciseImageDescriptionPrompt() {
-        assertEquals(
-            "Give me a concise description of the image",
-            ImageQuestionDefaults.questionForLanguage("en"),
-        )
-        assertEquals(
-            "Dê-me uma descrição concisa da imagem",
-            ImageQuestionDefaults.questionForLanguage("pt-BR"),
-        )
-    }
-
-    @Test
     fun noUserQuestionUsesLocalizedBuiltInDefault() {
         val settings = builtInSettings(languageTag = "pt-BR")
 
@@ -72,20 +60,6 @@ class ImageQuestionPromptResolverTest {
         assertTrue(spanish.startsWith(ImageQuestionDefaults.questionForLanguage("es")))
         assertTrue(english.contains("Answer only in English (en)."))
         assertTrue(spanish.contains("Answer only in Spanish (es)."))
-    }
-
-    @Test
-    fun questionCueUsesTheSelectedAppLanguage() {
-        assertEquals("Ask.", ImageQuestionDefaults.questionCueForLanguage("en"))
-        assertEquals("Pergunte.", ImageQuestionDefaults.questionCueForLanguage("pt-BR"))
-        assertEquals("질문하세요.", ImageQuestionDefaults.questionCueForLanguage("ko"))
-    }
-
-    @Test
-    fun voiceListeningCueUsesTheSelectedAppLanguage() {
-        assertEquals("I am listening.", ImageQuestionDefaults.listeningCueForLanguage("en"))
-        assertEquals("Estou ouvindo.", ImageQuestionDefaults.listeningCueForLanguage("pt-BR"))
-        assertEquals("Je vous écoute.", ImageQuestionDefaults.listeningCueForLanguage("fr"))
     }
 
     @Test

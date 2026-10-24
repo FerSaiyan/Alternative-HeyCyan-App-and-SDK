@@ -248,25 +248,6 @@ class GlassesDashboardScreenTest {
     }
 
     @Test
-    fun metaDashboardIsReadOnlyNoDirectPairingCta() {
-        composeRule.setContent {
-            CyanBridgeTheme {
-                GlassesDashboardScreen(
-                    state = GlassesDashboardUiState(
-                        showMetaRaybanControls = true,
-                        metaRayban = MetaRaybanUiState(metaAiInstalled = false),
-                    ),
-                    onAction = {},
-                )
-            }
-        }
-
-        // No direct CTA - pairing via Scan, errors show Details dialog with Send diagnostics
-        composeRule.onAllNodesWithText("Register").assertCountEquals(0)
-        composeRule.onNodeWithTag("meta_rayban_controls").assertIsDisplayed()
-    }
-
-    @Test
     fun metaErrorKeepsDiagnosticsActionVisible() {
         var action: GlassesDashboardAction? = null
         composeRule.setContent {

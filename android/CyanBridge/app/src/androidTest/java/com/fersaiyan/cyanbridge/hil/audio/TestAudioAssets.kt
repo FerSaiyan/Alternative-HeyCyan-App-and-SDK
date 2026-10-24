@@ -39,14 +39,6 @@ object TestAudioAssets {
     fun readWavBytes(assetWav: String): ByteArray =
         testContext.assets.open(assetWav).readBytes()
 
-    fun copyAssetToCache(assetName: String, fileName: String? = null): File {
-        val out = File(targetContext.cacheDir, fileName ?: File(assetName).name)
-        testContext.assets.open(assetName).use { input ->
-            out.outputStream().use { output -> input.copyTo(output) }
-        }
-        return out
-    }
-
     fun copyAssetToFiles(assetName: String, fileName: String? = null): File {
         val out = File(targetContext.filesDir, fileName ?: File(assetName).name)
         testContext.assets.open(assetName).use { input ->

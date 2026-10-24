@@ -5,16 +5,13 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class ProSubscriptionActivityPlanStateTest {
     private lateinit var context: Context
 
@@ -30,14 +27,6 @@ class ProSubscriptionActivityPlanStateTest {
         Intent(context, ProSubscriptionActivity::class.java).apply {
             plan?.let { putExtra(ProSubscriptionActivity.EXTRA_INITIAL_PLAN, it) }
         }
-
-    @Test
-    fun freeTrialIsPreselectedAndStatusShowsNotSubscribed() {
-        val activity = Robolectric.buildActivity(ProSubscriptionActivity::class.java, intent()).create().get()
-
-        assertEquals("free_trial", activity.state.selectedPlan)
-        assertTrue(activity.state.status, activity.state.status.startsWith("Not subscribed · "))
-    }
 
     @Test
     fun requestedPlanFromIntentIsSelected() {

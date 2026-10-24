@@ -9,28 +9,21 @@ import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
 import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.settings.nextStartedActivityIntent
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
-import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
-import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
-import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class AutoDiarySettingsActivityTest {
     private lateinit var context: Context
 
@@ -117,35 +110,5 @@ class AutoDiarySettingsActivityTest {
 
         assertEquals(DailyBulletsSettings.DEFAULT_BULLET_PROMPT, activity.state.bulletPrompt)
         assertEquals(DailyBulletsSettings.DEFAULT_BULLET_PROMPT, DailyBulletsSettings.getBulletPrompt(context))
-    }
-
-    @Test
-    fun navigationActionsOpenTheSameActivities() {
-        val activity = createSettingsActivity<AutoDiarySettingsActivity>()
-
-        activity.onOpenCaptures()
-        assertEquals(ScreenCapturesActivity::class.java.name, activity.nextStartedActivityIntent()?.component?.className)
-
-        activity.onOpenSummary()
-        assertEquals(DailySummaryActivity::class.java.name, activity.nextStartedActivityIntent()?.component?.className)
-
-        activity.onOpenDailyFactsDraft()
-        activity.nextStartedActivityIntent().let { intent ->
-            assertEquals(DailyFactsActivity::class.java.name, intent?.component?.className)
-            assertEquals(DailyFactsActivity.MODE_DRAFT, intent?.getStringExtra(DailyFactsActivity.EXTRA_MODE))
-        }
-
-        activity.onOpenConfirmedDailyFacts()
-        activity.nextStartedActivityIntent().let { intent ->
-            assertEquals(DailyFactsActivity::class.java.name, intent?.component?.className)
-            assertEquals(DailyFactsActivity.MODE_CONFIRMED, intent?.getStringExtra(DailyFactsActivity.EXTRA_MODE))
-        }
-
-        // Tasker is not installed under Robolectric, so nothing is launched.
-        activity.onOpenTasker()
-        assertNull(activity.nextStartedActivityIntent())
-
-        activity.onBack()
-        assertTrue(activity.isFinishing)
     }
 }

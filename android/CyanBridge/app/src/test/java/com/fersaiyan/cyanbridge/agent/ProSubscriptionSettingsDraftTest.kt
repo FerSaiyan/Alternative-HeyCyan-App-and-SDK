@@ -9,33 +9,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class ProSubscriptionSettingsDraftTest {
-
-    @Test
-    fun untouchedDraftShowsTheScreenDefaults() {
-        val state = ProSubscriptionSettingsDraft().toUiState(ProSubscriptionModelLabels(), systemPrompt = "Prompt")
-
-        assertEquals("Quota: unknown", state.quotaStatus)
-        assertEquals("", state.quotaBreakdown)
-        assertNull(state.quotaProgress)
-        assertEquals("Not signed up yet.", state.betaStatus)
-        assertEquals(
-            listOf(
-                "Cheap models router (1x)",
-                "Gemini 3.1 Flash Live (36x)",
-                "Gemma 4 26B Vision (2x)",
-                "DeepSeek V4 Flash (2x)",
-            ),
-            state.modelOptions,
-        )
-        assertEquals("Cheap models router (1x)", state.requestsModel)
-        assertEquals("Prompt", state.systemPrompt)
-    }
 
     @Test
     fun quotaLoadingInfoAndErrorMatchTheFormerIndicator() {

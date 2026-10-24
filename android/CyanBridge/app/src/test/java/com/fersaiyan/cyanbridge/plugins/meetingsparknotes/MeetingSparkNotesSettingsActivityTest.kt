@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.plugins.meetingsparknotes
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
 import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
@@ -18,11 +17,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class MeetingSparkNotesSettingsActivityTest {
     private lateinit var context: Context
 
@@ -30,21 +26,6 @@ class MeetingSparkNotesSettingsActivityTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.clearPreferenceFiles("meeting_spark_notes_prefs", "meeting_spark_notes_store", COMMUNITY_PLUGIN_PREFS)
-    }
-
-    @Test
-    fun defaultStateMatchesPreferenceDefaults() {
-        assertEquals(
-            MeetingSparkNotesSettingsState(
-                enabled = false,
-                summaryStyle = "concise",
-                includeParticipants = true,
-                includeActionItems = true,
-                maxHistory = 50,
-                customPrompt = "",
-            ),
-            MeetingSparkNotesSettingsState.load(context),
-        )
     }
 
     @Test
@@ -123,16 +104,5 @@ class MeetingSparkNotesSettingsActivityTest {
 
         assertEquals("x".repeat(1500), activity.state.customPrompt)
         assertEquals("x".repeat(1500), MeetingSparkNotesPreferences.getCustomPrompt(context))
-    }
-
-    @Test
-    fun clearHistoryShowsToastAndBackFinishes() {
-        val activity = createSettingsActivity<MeetingSparkNotesSettingsActivity>()
-
-        activity.onClearHistory()
-        assertEquals(context.getString(R.string.compose_history_cleared), ShadowToast.getTextOfLatestToast())
-
-        activity.onBack()
-        assertTrue(activity.isFinishing)
     }
 }

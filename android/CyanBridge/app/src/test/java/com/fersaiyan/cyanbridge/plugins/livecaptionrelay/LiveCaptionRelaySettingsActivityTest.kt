@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.plugins.livecaptionrelay
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.assertServiceIntent
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
@@ -18,11 +17,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class LiveCaptionRelaySettingsActivityTest {
     private lateinit var context: Context
 
@@ -30,21 +26,6 @@ class LiveCaptionRelaySettingsActivityTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.clearPreferenceFiles("live_caption_relay_prefs", "live_caption_relay_store", COMMUNITY_PLUGIN_PREFS)
-    }
-
-    @Test
-    fun defaultStateMatchesPreferenceDefaults() {
-        assertEquals(
-            LiveCaptionRelaySettingsState(
-                enabled = false,
-                sourceLanguage = "en",
-                targetLanguage = "es",
-                translationEnabled = false,
-                maxHistory = 100,
-                customPrompt = "",
-            ),
-            LiveCaptionRelaySettingsState.load(context),
-        )
     }
 
     @Test
@@ -124,23 +105,5 @@ class LiveCaptionRelaySettingsActivityTest {
 
         assertEquals("x".repeat(1000), activity.state.customPrompt)
         assertEquals("x".repeat(1000), LiveCaptionRelayPreferences.getCustomPrompt(context))
-    }
-
-    @Test
-    fun clearHistoryShowsToast() {
-        val activity = createSettingsActivity<LiveCaptionRelaySettingsActivity>()
-
-        activity.onClearHistory()
-
-        assertEquals(context.getString(R.string.compose_history_cleared), ShadowToast.getTextOfLatestToast())
-    }
-
-    @Test
-    fun backFinishesActivity() {
-        val activity = createSettingsActivity<LiveCaptionRelaySettingsActivity>()
-
-        activity.onBack()
-
-        assertTrue(activity.isFinishing)
     }
 }

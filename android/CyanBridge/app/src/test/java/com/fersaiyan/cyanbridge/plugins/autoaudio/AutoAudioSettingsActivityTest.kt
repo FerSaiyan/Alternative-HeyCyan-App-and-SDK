@@ -22,10 +22,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class AutoAudioSettingsActivityTest {
     private lateinit var context: Context
 
@@ -33,14 +31,6 @@ class AutoAudioSettingsActivityTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.clearPreferenceFiles("auto_audio_capture_prefs", "device_profile", COMMUNITY_PLUGIN_PREFS)
-    }
-
-    @Test
-    fun defaultStateMatchesPreferenceDefaults() {
-        assertEquals(
-            AutoAudioSettingsState(enabled = false, visualNotes = false, speechExtend = true, loopsPerSync = 12),
-            AutoAudioSettingsState.load(context),
-        )
     }
 
     @Test

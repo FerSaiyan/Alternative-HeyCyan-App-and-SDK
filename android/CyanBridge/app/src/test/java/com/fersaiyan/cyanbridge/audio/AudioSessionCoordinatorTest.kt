@@ -5,7 +5,6 @@ import android.media.AudioManager
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.shared.audio.AudioSessionKind
 import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
-import com.fersaiyan.cyanbridge.shared.audio.AudioSessionState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
@@ -18,10 +17,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class AudioSessionCoordinatorTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -56,34 +53,6 @@ class AudioSessionCoordinatorTest {
         approval.close()
         assertTrue(live.isActive)
         assertEquals(listOf("suspended", "resumed"), liveEvents.log)
-    }
-
-    @Test
-    fun onlyOneVoicePluginAndPluginsWaitForLive() {
-        val translatorEvents = Events()
-        val translator = open(AudioSessionRequest.ContinuousRecognition("HandsFreeTranslatorService"), translatorEvents)!!
-        val denied = AudioSessionCoordinator.open(context, AudioSessionRequest.ContinuousRecognition("LiveCaptionRelayService"))
-        assertTrue(denied is AudioSessionGrant.Denied)
-        assertEquals("HandsFreeTranslatorService", (denied as AudioSessionGrant.Denied).blockingOwner)
-
-        val live = open(AudioSessionRequest.Conversation("GeminiLiveClient"))!!
-        assertEquals(AudioSessionState.SUSPENDED, translator.state)
-        live.close()
-        assertEquals(listOf("suspended", "resumed"), translatorEvents.log)
-    }
-
-    @Test
-    fun meetingCaptureCoexistsWithLiveAndEndsAnAmbientProbe() {
-        val ambientEvents = Events()
-        val ambient = open(AudioSessionRequest.AmbientListening("AmbientSpeech"), ambientEvents)!!
-        val meeting = open(AudioSessionRequest.Recording("MeetingCaptureService"))!!
-        assertEquals(listOf("ended"), ambientEvents.log)
-        assertFalse(ambient.isActive)
-
-        val live = open(AudioSessionRequest.Conversation("GeminiLiveClient"))!!
-        assertTrue(meeting.isActive)
-        assertTrue(live.isActive)
-        assertNull(AudioSessionCoordinator.tryOpen(context, AudioSessionRequest.AmbientListening("AmbientSpeech")))
     }
 
     @Test

@@ -36,13 +36,23 @@ class MultilingualSpeechChunkerTest {
     }
 
     @Test
-    fun testEnglishSentencesAndDecimals() = runBlocking {
-        chunker.append("Dr. Smith is here. He is waiting.")
-        chunker.finish()
+    fun testAbbreviationsAndSentencesInEachLanguageKeepAllText() = runBlocking {
+        listOf(
+            "Dr. Smith is here. He is waiting." to listOf("Dr. Smith", "Smith is here"),
+            "O Dr. Silva chegou. Ele está esperando. Há uma porta à frente." to listOf("Dr. Silva", "esperando"),
+            "Dr. Müller ist hier. Er wartet. Links befindet sich eine Tür." to listOf("Dr. Müller", "eine Tür"),
+            "Le Dr Martin est arrivé. Il attend. Attention ! Une marche devant vous." to listOf("Dr Martin", "Attention !"),
+            "Il dott. Rossi è arrivato. Sta aspettando. C'è una porta davanti." to listOf("dott. Rossi", "davanti"),
+            "Доктор Иванов здесь. Он ждёт. Впереди дверь." to listOf("Доктор Иванов", "дверь"),
+        ).forEachIndexed { index, (text, expected) ->
+            producedChunks.clear()
+            chunker.startSession(100L + index)
+            chunker.append(text)
+            chunker.finish()
 
-        val fullSpoken = producedChunks.joinToString(" ")
-        assertTrue("No text lost in English stream", fullSpoken.contains("Smith is here"))
-        assertTrue("Decimal/Abbreviation preserved", fullSpoken.contains("Dr. Smith"))
+            val fullSpoken = producedChunks.joinToString(" ")
+            expected.forEach { assertTrue("'$it' kept in: $fullSpoken", fullSpoken.contains(it)) }
+        }
     }
 
     @Test
@@ -98,56 +108,6 @@ class MultilingualSpeechChunkerTest {
 
         assertEquals(listOf("Door ahead."), fastChunks)
         fastChunker.reset()
-    }
-
-    @Test
-    fun testPortugueseSentences() = runBlocking {
-        chunker.append("O Dr. Silva chegou. Ele está esperando. Há uma porta à frente.")
-        chunker.finish()
-
-        val fullSpoken = producedChunks.joinToString(" ")
-        assertTrue(fullSpoken.contains("Dr. Silva"))
-        assertTrue(fullSpoken.contains("esperando"))
-    }
-
-    @Test
-    fun testGermanSentences() = runBlocking {
-        chunker.append("Dr. Müller ist hier. Er wartet. Links befindet sich eine Tür.")
-        chunker.finish()
-
-        val fullSpoken = producedChunks.joinToString(" ")
-        assertTrue(fullSpoken.contains("Dr. Müller"))
-        assertTrue(fullSpoken.contains("eine Tür"))
-    }
-
-    @Test
-    fun testFrenchSentences() = runBlocking {
-        chunker.append("Le Dr Martin est arrivé. Il attend. Attention ! Une marche devant vous.")
-        chunker.finish()
-
-        val fullSpoken = producedChunks.joinToString(" ")
-        assertTrue(fullSpoken.contains("Dr Martin"))
-        assertTrue(fullSpoken.contains("Attention !"))
-    }
-
-    @Test
-    fun testItalianSentences() = runBlocking {
-        chunker.append("Il dott. Rossi è arrivato. Sta aspettando. C'è una porta davanti.")
-        chunker.finish()
-
-        val fullSpoken = producedChunks.joinToString(" ")
-        assertTrue(fullSpoken.contains("dott. Rossi"))
-        assertTrue(fullSpoken.contains("davanti"))
-    }
-
-    @Test
-    fun testRussianSentences() = runBlocking {
-        chunker.append("Доктор Иванов здесь. Он ждёт. Впереди дверь.")
-        chunker.finish()
-
-        val fullSpoken = producedChunks.joinToString(" ")
-        assertTrue(fullSpoken.contains("Доктор Иванов"))
-        assertTrue(fullSpoken.contains("дверь"))
     }
 
     @Test

@@ -9,10 +9,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class EmailGroundedDraftTest {
     private val goal = "Open Chrome, search for 'latest smartglasses news', open the first result, " +
         "read the article, and prepare an email to ana@example.com with the exact subject 'Article summary'. " +

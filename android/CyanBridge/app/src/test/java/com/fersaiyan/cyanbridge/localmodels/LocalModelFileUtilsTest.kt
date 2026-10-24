@@ -64,12 +64,13 @@ class LocalModelFileUtilsTest {
     }
 
     @Test
-    fun sha256_is_stable() {
+    fun sha256_matches_the_reference_digest() {
         val tmp = File.createTempFile("local-model", ".gguf")
         tmp.writeText("abc")
-        val first = LocalModelFileUtils.sha256Hex(tmp)
-        val second = LocalModelFileUtils.sha256Hex(tmp)
-        assertEquals(first, second)
+        assertEquals(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            LocalModelFileUtils.sha256Hex(tmp),
+        )
         tmp.delete()
     }
 }

@@ -77,9 +77,11 @@ E dentro do app: juntar os dois `LocalAgentPrefs` (`agent/` e `localagent/`) e o
 
 `TuneBudsManager` (≈600 linhas) repete o que `shared/devices/tunebuds/TuneBudsSession.kt` já faz.
 
-- [ ] `TuneBudsSppClient` implementa `TuneBudsTransport` (`write`, `maxWriteLength = 260`) e passa os bytes lidos para `session.onBytesReceived`.
-- [ ] `TuneBudsManager` vira um adaptador: estado de conexão do SPP, `TuneBudsSession` para os comandos, mais o que é só do Android: Wi-Fi do gerenciador de arquivos (`startFileManager`), que pode ir para a sessão se o iOS um dia precisar.
-- [ ] Os campos de capacidade que só o Android lê (`deviceAbility`, `screenConfig`, volume…) vão para `TuneBudsSessionState`.
+- [x] `TuneBudsSppClient` implementa `TuneBudsTransport` (`write`, `maxWriteLength = 260`) e passa os bytes lidos para `session.onBytesReceived`.
+- [x] `TuneBudsManager` vira um adaptador: estado de conexão do SPP, `TuneBudsSession` para os comandos, mais o que é só do Android: Wi-Fi do gerenciador de arquivos (`startFileManager`), que pode ir para a sessão se o iOS um dia precisar.
+- [x] Os campos de capacidade que só o Android lê (`deviceAbility`, `screenConfig`, volume…) vão para `TuneBudsSessionState`.
+- Feito: o `TuneBudsManager` caiu de 634 para 254 linhas. O handshake do hotspot (`TuneBudsFileStartup`, `TuneBudsRtspStartup`) continua no app, sobre `session.frames` e `session.request`. O iOS não mudou (`initialize()` sem `readCapabilities`).
+- [ ] Testar com os óculos: conectar, foto, vídeo, áudio, bateria, armazenamento, contagem, hora, versão, foto de IA, sincronização de mídia e prévia ao vivo.
 
 ### A3. Assistente comum no Android (grande, maior ganho)
 
