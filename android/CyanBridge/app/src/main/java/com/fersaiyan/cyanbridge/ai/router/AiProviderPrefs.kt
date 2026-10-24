@@ -1,28 +1,10 @@
 package com.fersaiyan.cyanbridge.ai.router
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.ai.DEFAULT_RELAY_URL
 
-enum class AiProviderType(val wire: String, val label: String) {
-    MOCK("mock", "Mock (local demo)"),
-    COMPANY_BACKEND("company_backend", "Company Backend (stub)"),
-    CLI_RELAY("cli_relay", "CLI Relay (Codex/Gemini)"),
-    LOCAL_MODELS("local_models", "Local Models (on-device)");
-
-    companion object {
-        fun fromWire(value: String?): AiProviderType =
-            entries.firstOrNull { it.wire == value } ?: MOCK
-    }
-}
-
-enum class CliRelayBackend(val wire: String, val label: String) {
-    GEMINI("gemini", "Gemini CLI"),
-    CODEX("codex", "Codex CLI");
-
-    companion object {
-        fun fromWire(value: String?): CliRelayBackend =
-            entries.firstOrNull { it.wire == value } ?: GEMINI
-    }
-}
+typealias AiProviderType = com.fersaiyan.cyanbridge.shared.ai.AiProviderType
+typealias CliRelayBackend = com.fersaiyan.cyanbridge.shared.ai.CliRelayBackend
 
 object AiProviderPrefs {
     private const val PREFS_NAME = "ai_provider_prefs"
@@ -30,7 +12,7 @@ object AiProviderPrefs {
     private const val KEY_RELAY_BASE_URL = "relay_base_url"
     private const val KEY_RELAY_BACKEND = "relay_backend"
     private const val LEGACY_PUBLIC_RELAY_URL = "https://carelens-wine.vercel.app"
-    private const val DEFAULT_PUBLIC_RELAY_URL = "https://cyanbridge.vercel.app"
+    private const val DEFAULT_PUBLIC_RELAY_URL = DEFAULT_RELAY_URL
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
