@@ -44,6 +44,18 @@ class GlassesMediaSyncHelpersTest {
     }
 
     @Test
+    fun `formats transfer sizes like the progress card`() {
+        assertEquals("0 B", TransferProgressPresenter.formatTransferBytes(0L))
+        assertEquals("0 B", TransferProgressPresenter.formatTransferBytes(-5L))
+        assertEquals("1023 B", TransferProgressPresenter.formatTransferBytes(1023L))
+        assertEquals("1.0 KB", TransferProgressPresenter.formatTransferBytes(1024L))
+        assertEquals("99.9 KB", TransferProgressPresenter.formatTransferBytes(102_297L))
+        assertEquals("100 KB", TransferProgressPresenter.formatTransferBytes(102_400L))
+        assertEquals("1.5 MB", TransferProgressPresenter.formatTransferBytes(1_572_864L))
+        assertEquals("2048 GB", TransferProgressPresenter.formatTransferBytes(2_199_023_255_552L))
+    }
+
+    @Test
     fun `scores likely glasses peer names`() {
         val score = GlassesP2pPeerSelector::likelyGlassesPeerNameStrength
         assertEquals(-1, score(null, "C4E3BFC3A402"))

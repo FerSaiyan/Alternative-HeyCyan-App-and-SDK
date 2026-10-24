@@ -38,7 +38,10 @@ import com.fersaiyan.cyanbridge.media.OggOpusPackager
 import com.fersaiyan.cyanbridge.media.sync.GallerySaveResult
 import com.fersaiyan.cyanbridge.media.sync.GlassesMediaLibrary
 import com.fersaiyan.cyanbridge.media.sync.GlassesP2pPeerSelector
+import com.fersaiyan.cyanbridge.media.sync.TransferProgressPresenter
 import com.fersaiyan.cyanbridge.media.sync.VendorMediaItem
+import com.fersaiyan.cyanbridge.media.sync.VendorMediaSyncController
+import com.fersaiyan.cyanbridge.media.sync.VendorMediaSyncHost
 import com.fersaiyan.cyanbridge.media.sync.VendorMediaType
 import com.fersaiyan.cyanbridge.ota.FirmwareClient
 import com.fersaiyan.cyanbridge.ota.InstalledFirmwareVersions
@@ -504,14 +507,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var heyCyanLivePlayer by mutableStateOf<org.videolan.libvlc.MediaPlayer?>(null)
     private var heyCyanLiveStopReceiver: android.content.BroadcastReceiver? = null
     private var mediaSessionLease: GlassesSessionLease? = null
-    private var eyevueMediaJob: Job? = null
-    private var eyevueMediaTransport: EyevueWifiTransport? = null
-    private var eyevueMediaCancelled = false
-    private var tuneBudsMediaJob: Job? = null
-    private var tuneBudsMediaHotspot: TuneBudsLocalHotspot? = null
-    private var tuneBudsMediaCancelled = false
-    private var moyoungMediaJob: Job? = null
-    private var moyoungMediaCancelled = false
     private var wifiAdbDebugSessionLease: GlassesSessionLease? = null
     private val otaManager by lazy { OtaManager(this) }
     private var otaPreparationJob: Job? = null
@@ -552,7 +547,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var downloadSessionScope: CoroutineScope? = null
     // Must outlive Activity destruction long enough to confirm P2P teardown.
     private val glassesTeardownScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val transferProgress = TransferProgressPresenter(
+        bindingProvider = { binding },
+        updateDashboardState = { transform -> updateDashboardState(transform) },
+    )
     private val glassesMediaLibrary by lazy { GlassesMediaLibrary(this) }
+    private val vendorMediaSync by lazy {
+        VendorMediaSyncController(this, mediaSyncHost, transferProgress, glassesMediaLibrary)
+    }
+    private val eyevueMediaJob: Job? get() = vendorMediaSync.eyevueMediaJob
+    private val tuneBudsMediaJob: Job? get() = vendorMediaSync.tuneBudsMediaJob
     private var downloadSessionId: Long = 0L
     private var vendorAlbumDownloader: VendorAlbumDownloader? = null
     private var downloadResolvedHttpIp: String? = null
@@ -627,15 +631,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     // one for the download flow so we don't duplicate thumbnail/audio handling.
     private val downloadNotifyListener by lazy { DownloadNotifyListener() }
     private var downloadNotifyListenerRegistered = false
-
-    // UI state for P2P sync progress
-    private var transferTotalJpg = 0
-    private var transferTotalMp4 = 0
-    private var transferTotalOpus = 0
-    private var transferDoneJpg = 0
-    private var transferDoneMp4 = 0
-    private var transferDoneOpus = 0
-    private var lastFileProgressUiAtMs: Long = 0L
     private var batteryPollJob: Job? = null
     private val batteryPollIntervalMs = 60_000L
     private val downloadInitialPhaseTimeoutMs = 45_000L
@@ -1072,20 +1067,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         heyCyanLiveStopReceiver?.let { runCatching { unregisterReceiver(it) } }
         heyCyanLiveStopReceiver = null
         com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveForegroundService.stop(this)
-        if (eyevueMediaJob?.isActive == true) {
-            eyevueMediaCancelled = true
-            eyevueMediaTransport?.disconnect()
-            eyevueMediaJob?.cancel()
-        }
-        if (tuneBudsMediaJob?.isActive == true) {
-            tuneBudsMediaCancelled = true
-            tuneBudsMediaJob?.cancel()
-        }
-        if (moyoungMediaJob?.isActive == true) {
-            moyoungMediaCancelled = true
-            moyoungW620Manager?.stopMediaSync()
-            moyoungMediaJob?.cancel()
-        }
+        vendorMediaSync.cancelSyncJobsForDestroy(moyoungW620Manager)
         otaPreparationJob?.cancel()
         otaPreparationJob = null
         otaManager.cancel()
@@ -1101,7 +1083,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             mediaSessionLease = null
         } else if (isEyevueSelected() && GlassesSessionCoordinator.currentSession() == GlassesSession.MEDIA_SYNC) {
             getOrCreateEyevueManager().finishTransfer()
-            eyevueMediaTransport?.disconnect()
+            vendorMediaSync.disconnectEyevueTransport()
             releaseExclusiveGlassesSession(mediaSessionLease)
             mediaSessionLease = null
         } else if (GlassesSessionCoordinator.currentSession() == GlassesSession.MEDIA_SYNC) {
@@ -7646,404 +7628,64 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private val mediaSyncHost = object : VendorMediaSyncHost {
+        override var mediaSessionLease: GlassesSessionLease?
+            get() = this@MainActivity.mediaSessionLease
+            set(value) {
+                this@MainActivity.mediaSessionLease = value
+            }
+
+        override fun ensureGlassesTransportPermissions(feature: String, onGranted: () -> Unit) =
+            this@MainActivity.ensureGlassesTransportPermissions(feature, onGranted)
+
+        override fun acquireExclusiveGlassesSession(session: GlassesSession): GlassesSessionLease? =
+            this@MainActivity.acquireExclusiveGlassesSession(session)
+
+        override fun releaseExclusiveGlassesSession(lease: GlassesSessionLease?) =
+            this@MainActivity.releaseExclusiveGlassesSession(lease)
+
+        override fun getOrCreateEyevueManager(): EyevueManager = this@MainActivity.getOrCreateEyevueManager()
+
+        override fun getOrCreateTuneBudsManager(): TuneBudsManager = this@MainActivity.getOrCreateTuneBudsManager()
+
+        override fun getOrCreateMoyoungW620Manager(): MoyoungW620Manager =
+            this@MainActivity.getOrCreateMoyoungW620Manager()
+
+        override fun isTuneBudsAiPhotoInProgress(): Boolean = tuneBudsAiPhotoInProgress.get()
+
+        override fun isImageQuestionWorkActive(): Boolean = this@MainActivity.isImageQuestionWorkActive()
+    }
+
     private fun startEyevueMediaSync() {
-        if (eyevueMediaJob?.isActive == true) return
-        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
-            ensureGlassesTransportPermissions("Eyevue media sync") {
-                startEyevueMediaSync()
-            }
-            return
-        }
-
-        val manager = getOrCreateEyevueManager()
-        if (!manager.isConnected()) {
-            Toast.makeText(this, "Connect to Eyevue over Bluetooth first.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (GlassesSessionCoordinator.currentSession() != null) {
-            Toast.makeText(this, "Another glasses session is already active.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val lease = acquireExclusiveGlassesSession(GlassesSession.MEDIA_SYNC) ?: return
-        mediaSessionLease = lease
-        eyevueMediaCancelled = false
-        setTransferUiVisible(true)
-        setTransferFlowLabel(GlassesSyncFlow.CUSTOM)
-        setTransferDetail("Starting Eyevue media sync...")
-        resetTransferUiState()
-        setTransferUiVisible(true)
-
-        val transport = EyevueWifiTransport(this)
-        eyevueMediaTransport = transport
-        val temporaryDirectory = File(cacheDir, "eyevue_media_${System.currentTimeMillis()}")
-        eyevueMediaJob = lifecycleScope.launch(Dispatchers.IO) {
-            var result: Result<Int>? = null
-            try {
-                val project = manager.awaitProject()
-                    ?: throw IOException("Eyevue did not report its project/model; refusing to guess AP vs P2P")
-                val profile = EyevueMediaProfile.fromProject(project)
-                val sync = EyevueMediaSync(manager, transport, temporaryDirectory)
-                result = sync.sync(
-                    profile = profile,
-                    onState = { syncState ->
-                        withContext(Dispatchers.Main) {
-                            if (eyevueMediaCancelled) return@withContext
-                            if (syncState.total > 0) {
-                                transferTotalJpg = syncState.total
-                                transferTotalMp4 = 0
-                                transferTotalOpus = 0
-                                transferDoneJpg = syncState.completed
-                                transferDoneMp4 = 0
-                                transferDoneOpus = 0
-                            }
-                            renderTransferProgress()
-                            setTransferDetail("${syncState.detail} (${profile.mode.name})")
-                        }
-                    },
-                    onProgress = { item, downloaded, total ->
-                        if (total > 0L) {
-                            withContext(Dispatchers.Main) {
-                                if (!eyevueMediaCancelled) {
-                                    setTransferDetail(
-                                        "Downloading ${item.fileName}: " +
-                                            "${downloaded / 1024} / ${total / 1024} KB",
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    onFile = { item, file ->
-                        val vendorItem = VendorMediaItem(
-                            fileName = item.fileName,
-                            type = when (item.type) {
-                                EyevueMediaType.PHOTO -> VendorMediaType.PHOTO
-                                EyevueMediaType.VIDEO -> VendorMediaType.VIDEO
-                                EyevueMediaType.AUDIO -> VendorMediaType.AUDIO
-                            },
-                        )
-                        glassesMediaLibrary.importVendorMediaFile(file, vendorItem)
-                    },
-                )
-            } finally {
-                withContext(Dispatchers.Main) {
-                    val completed = result?.getOrNull()
-                    val failureDetail = result?.exceptionOrNull()?.message
-                    val cancelled = eyevueMediaCancelled
-                    eyevueMediaJob = null
-                    eyevueMediaTransport = null
-                    setTransferUiVisible(false)
-                    releaseExclusiveGlassesSession(lease)
-                    if (!cancelled) {
-                        if (completed != null) {
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Eyevue sync complete: $completed files",
-                                Toast.LENGTH_LONG,
-                            ).show()
-                        } else {
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Eyevue media sync failed: " + (failureDetail?.take(140) ?: "unknown error"),
-                                Toast.LENGTH_LONG,
-                            ).show()
-                        }
-                    }
-                }
-            }
-        }
+        vendorMediaSync.startEyevueMediaSync()
     }
 
     private fun stopEyevueMediaSync() {
-        if (eyevueMediaJob?.isActive != true) return
-        eyevueMediaCancelled = true
-        getOrCreateEyevueManager().finishTransfer()
-        eyevueMediaTransport?.disconnect()
-        eyevueMediaJob?.cancel()
-        setTransferUiVisible(false)
-        releaseExclusiveGlassesSession(mediaSessionLease)
-        mediaSessionLease = null
+        vendorMediaSync.stopEyevueMediaSync()
     }
 
     private fun startTuneBudsMediaSync() {
-        if (tuneBudsMediaJob != null) return
-        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
-            ensureGlassesTransportPermissions("TuneBuds media sync") {
-                startTuneBudsMediaSync()
-            }
-            return
-        }
-
-        val manager = getOrCreateTuneBudsManager()
-        if (!manager.isConnected()) {
-            Toast.makeText(this, "Connect TuneBuds glasses first.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (manager.state.value.isVideoRecording || manager.state.value.isAudioRecording ||
-            tuneBudsAiPhotoInProgress.get() || isImageQuestionWorkActive()
-        ) {
-            Toast.makeText(this, "Stop recording or photo capture before syncing TuneBuds media.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (GlassesSessionCoordinator.currentSession() != null) {
-            Toast.makeText(this, "Another glasses session is already active.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val lease = acquireExclusiveGlassesSession(GlassesSession.MEDIA_SYNC) ?: return
-        mediaSessionLease = lease
-        tuneBudsMediaCancelled = false
-        resetTransferUiState()
-        setTransferUiVisible(true)
-        setTransferFlowLabel(GlassesSyncFlow.CUSTOM)
-        setTransferDetail("Starting TuneBuds media sync...")
-
-        val hotspot = TuneBudsLocalHotspot(this)
-        tuneBudsMediaHotspot = hotspot
-        val temporaryDirectory = File(cacheDir, "tunebuds_media_${System.currentTimeMillis()}")
-        tuneBudsMediaJob = lifecycleScope.launch(Dispatchers.IO, start = kotlinx.coroutines.CoroutineStart.ATOMIC) {
-            var result: Result<Int>? = null
-            try {
-                val sync = TuneBudsMediaSync(manager, hotspot, temporaryDirectory, context = this@MainActivity)
-                result = sync.sync(
-                    onState = { syncState ->
-                        withContext(Dispatchers.Main) {
-                            if (tuneBudsMediaCancelled) return@withContext
-                            if (syncState.total > 0) {
-                                transferTotalJpg = syncState.totalsByType[TuneBudsMediaType.PHOTO] ?: 0
-                                transferTotalMp4 = syncState.totalsByType[TuneBudsMediaType.VIDEO] ?: 0
-                                transferTotalOpus = syncState.totalsByType[TuneBudsMediaType.AUDIO] ?: 0
-                                transferDoneJpg = syncState.completedByType[TuneBudsMediaType.PHOTO] ?: 0
-                                transferDoneMp4 = syncState.completedByType[TuneBudsMediaType.VIDEO] ?: 0
-                                transferDoneOpus = syncState.completedByType[TuneBudsMediaType.AUDIO] ?: 0
-                            }
-                            renderTransferProgress()
-                            setTransferDetail(
-                                syncState.lastError?.let { "${syncState.detail}: $it" }
-                                    ?: syncState.detail,
-                            )
-                        }
-                    },
-                    onProgress = { item, downloaded, total ->
-                        if (total > 0L) {
-                            withContext(Dispatchers.Main) {
-                                if (!tuneBudsMediaCancelled) {
-                                    setTransferDetail(
-                                        "Downloading ${item.fileName}: ${downloaded / 1024} / ${total / 1024} KB",
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    onFile = { item, file ->
-                        glassesMediaLibrary.importVendorMediaFile(
-                            file,
-                            VendorMediaItem(
-                                fileName = item.fileName,
-                                type = when (item.type) {
-                                    TuneBudsMediaType.PHOTO -> VendorMediaType.PHOTO
-                                    TuneBudsMediaType.VIDEO -> VendorMediaType.VIDEO
-                                    TuneBudsMediaType.AUDIO -> VendorMediaType.AUDIO
-                                },
-                            ),
-                        )
-                    },
-                )
-            } finally {
-                withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
-                    val completed = result?.getOrNull()
-                    val cancelled = tuneBudsMediaCancelled
-                    tuneBudsMediaJob = null
-                    tuneBudsMediaHotspot = null
-                    setTransferUiVisible(false)
-                    releaseExclusiveGlassesSession(lease)
-                    mediaSessionLease = null
-                    if (!cancelled) {
-                        Toast.makeText(
-                            this@MainActivity,
-                            completed?.let { "TuneBuds sync complete: $it files" }
-                                ?: "TuneBuds media sync failed. Check the transfer details and retry.",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }
-                }
-            }
-        }
+        vendorMediaSync.startTuneBudsMediaSync()
     }
 
     private fun stopTuneBudsMediaSync() {
-        if (tuneBudsMediaJob?.isActive != true) return
-        tuneBudsMediaCancelled = true
-        // The sync job owns cancellation-safe camera/hotspot cleanup and its lease.
-        tuneBudsMediaJob?.cancel()
-        setTransferUiVisible(false)
+        vendorMediaSync.stopTuneBudsMediaSync()
     }
 
     private fun startMoyoungW620MediaSync() {
-        if (moyoungMediaJob?.isActive == true) return
-        if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
-            ensureGlassesTransportPermissions("MoYoung media sync") {
-                startMoyoungW620MediaSync()
-            }
-            return
-        }
-
-        val manager = getOrCreateMoyoungW620Manager()
-        if (!manager.isConnected()) {
-            Toast.makeText(this, "Connect MoYoung / W620 glasses first.", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (GlassesSessionCoordinator.currentSession() != null) {
-            Toast.makeText(this, "Another glasses session is already active.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        showMoyoungWifiCredentialsDialog(manager)
-    }
-
-    private fun showMoyoungWifiCredentialsDialog(manager: MoyoungW620Manager) {
-        val prefs = getSharedPreferences("moyoung_w620", Context.MODE_PRIVATE)
-        val ssidInput = android.widget.EditText(this).apply {
-            hint = "Glasses Wi-Fi name (SSID)"
-            setText(prefs.getString("file_wifi_ssid", "Glass-01"))
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-        }
-        val passwordInput = android.widget.EditText(this).apply {
-            hint = "Glasses Wi-Fi password"
-            setText(prefs.getString("file_wifi_password", "12345678"))
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-        val padding = (24 * resources.displayMetrics.density).toInt()
-        val fields = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(padding, 0, padding, 0)
-            addView(ssidInput)
-            addView(passwordInput)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("W620 Wi-Fi credentials")
-            .setMessage(
-                "Confirm the access-point details for these glasses. Glass-01 / 12345678 " +
-                    "are upstream example defaults and may not match every W620.",
-            )
-            .setView(fields)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Start sync") { _, _ ->
-                val credentials = MoyoungWifiCredentials(
-                    ssid = ssidInput.text.toString().trim(),
-                    password = passwordInput.text.toString(),
-                )
-                if (credentials.ssid.isBlank()) {
-                    Toast.makeText(this, "Enter the glasses Wi-Fi name.", Toast.LENGTH_LONG).show()
-                    return@setPositiveButton
-                }
-                prefs.edit()
-                    .putString("file_wifi_ssid", credentials.ssid)
-                    .putString("file_wifi_password", credentials.password)
-                    .apply()
-                beginMoyoungW620MediaSync(manager, credentials)
-            }
-            .show()
-    }
-
-    private fun beginMoyoungW620MediaSync(
-        manager: MoyoungW620Manager,
-        wifiCredentials: MoyoungWifiCredentials,
-    ) {
-        if (moyoungMediaJob?.isActive == true) return
-
-        val lease = acquireExclusiveGlassesSession(GlassesSession.MEDIA_SYNC) ?: return
-        mediaSessionLease = lease
-        moyoungMediaCancelled = false
-        resetTransferUiState()
-        setTransferUiVisible(true)
-        setTransferFlowLabel(GlassesSyncFlow.CUSTOM)
-        setTransferDetail("Starting MoYoung / W620 media sync...")
-
-        val temporaryDirectory = File(cacheDir, "moyoung_media_${System.currentTimeMillis()}")
-        moyoungMediaJob = lifecycleScope.launch(Dispatchers.IO) {
-            var result: Result<Int>? = null
-            try {
-                result = runCatching {
-                    val files = manager.downloadMedia(
-                        targetDirectory = temporaryDirectory,
-                        wifiCredentials = wifiCredentials,
-                    ) { current, total ->
-                        runOnUiThread {
-                            if (!moyoungMediaCancelled) {
-                                setTransferDetail(
-                                    if (total > 0) "Downloading from W620: $current / $total"
-                                    else "Downloading from W620...",
-                                )
-                            }
-                        }
-                    }
-                    val items = files.mapNotNull { file ->
-                        val type = when (file.extension.lowercase()) {
-                            "jpg", "jpeg", "png", "heic" -> VendorMediaType.PHOTO
-                            "mp4", "mov", "m4v" -> VendorMediaType.VIDEO
-                            "opus", "ogg", "wav" -> VendorMediaType.AUDIO
-                            else -> null
-                        } ?: return@mapNotNull null
-                        file to VendorMediaItem(file.name, type)
-                    }
-                    withContext(Dispatchers.Main) {
-                        transferTotalJpg = items.count { it.second.type == VendorMediaType.PHOTO }
-                        transferTotalMp4 = items.count { it.second.type == VendorMediaType.VIDEO }
-                        transferTotalOpus = items.count { it.second.type == VendorMediaType.AUDIO }
-                        renderTransferProgress()
-                    }
-                    var imported = 0
-                    items.forEach { (file, item) ->
-                        if (glassesMediaLibrary.importVendorMediaFile(file, item)) imported++
-                        withContext(Dispatchers.Main) {
-                            when (item.type) {
-                                VendorMediaType.PHOTO -> transferDoneJpg++
-                                VendorMediaType.VIDEO -> transferDoneMp4++
-                                VendorMediaType.AUDIO -> transferDoneOpus++
-                            }
-                            renderTransferProgress()
-                        }
-                    }
-                    imported
-                }
-            } finally {
-                manager.stopMediaSync()
-                temporaryDirectory.deleteRecursively()
-                withContext(Dispatchers.Main) {
-                    val completed = result?.getOrNull()
-                    val failure = result?.exceptionOrNull()
-                    val cancelled = moyoungMediaCancelled
-                    moyoungMediaJob = null
-                    setTransferUiVisible(false)
-                    releaseExclusiveGlassesSession(lease)
-                    mediaSessionLease = null
-                    if (!cancelled) {
-                        if (failure != null) {
-                            Log.e("MoyoungW620", "Media sync failed", failure)
-                        }
-                        Toast.makeText(
-                            this@MainActivity,
-                            completed?.let { "MoYoung / W620 sync complete: $it files" }
-                                ?: "MoYoung / W620 sync failed: ${failure?.message ?: "unknown error"}",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }
-                }
-            }
-        }
+        vendorMediaSync.startMoyoungW620MediaSync()
     }
 
     private fun stopMoyoungW620MediaSync() {
-        if (moyoungMediaJob?.isActive != true) return
-        moyoungMediaCancelled = true
-        getOrCreateMoyoungW620Manager().stopMediaSync()
-        moyoungMediaJob?.cancel()
-        setTransferUiVisible(false)
-        releaseExclusiveGlassesSession(mediaSessionLease)
-        mediaSessionLease = null
+        vendorMediaSync.stopMoyoungW620MediaSync()
     }
+
+    private fun setTransferPlan(jpg: Int, mp4: Int, opus: Int) {
+        finishDownloadInitialPhase("media list resolved")
+        transferProgress.setTransferPlan(jpg, mp4, opus)
+    }
+
+    private fun formatTransferBytes(bytes: Long): String = TransferProgressPresenter.formatTransferBytes(bytes)
 
     private fun startDataDownload(
         mode: GlassesSyncFlow = GlassesSyncFlow.CUSTOM,
@@ -8168,10 +7810,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             adaptiveSuccessfulWarmupMs = null
         }
 
-        resetTransferUiState()
-        setTransferUiVisible(true)
-        setTransferFlowLabel(mode)
-        setTransferDetail("Starting sync (${mode.label})...")
+        transferProgress.resetTransferUiState()
+        transferProgress.setTransferUiVisible(true)
+        transferProgress.setTransferFlowLabel(mode)
+        transferProgress.setTransferDetail("Starting sync (${mode.label})...")
         startDownloadInitialPhaseWatchdog()
 
         if (!downloadNotifyListenerRegistered) {
@@ -8228,7 +7870,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             "DataDownload",
                             "Official flow: no exact glasses peer yet; paired=$pairedName/$pairedMac; discovered=${peers.map { "${it.deviceName}/${it.deviceAddress}" }}"
                         )
-                        setTransferDetail("Waiting for exact glasses P2P peer...")
+                        transferProgress.setTransferDetail("Waiting for exact glasses P2P peer...")
                         return
                     }
 
@@ -8250,7 +7892,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         "DataDownload",
                         "No likely glasses peer yet (x$noMatchPeerCount); paired=$pairedName/$pairedMac; ignoring discovered peers: ${peers.map { "${it.deviceName}/${it.deviceAddress}" }}"
                     )
-                    setTransferDetail("Waiting for glasses P2P peer...")
+                    transferProgress.setTransferDetail("Waiting for glasses P2P peer...")
                     return
                 }
 
@@ -8301,7 +7943,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (shouldRecover) {
                     if (downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN) {
                         Log.i("DataDownload", "Official flow: P2P disconnected during sync; restarting discovery in 2000ms")
-                        setTransferDetail("P2P disconnected; retrying official flow...")
+                        transferProgress.setTransferDetail("P2P disconnected; retrying official flow...")
                         downloadWifiP2pManager?.discoverPeersStable()
                         officialDisconnectRecoveryJob?.cancel()
                         officialDisconnectRecoveryJob = CoroutineScope(Dispatchers.Main).launch {
@@ -8312,7 +7954,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         }
                     } else {
                         Log.i("DataDownload", "P2P disconnected during sync; restarting peer discovery")
-                        setTransferDetail("P2P disconnected; retrying discovery...")
+                        transferProgress.setTransferDetail("P2P disconnected; retrying discovery...")
                         downloadWifiP2pManager?.discoverPeersStable()
                         downloadWifiP2pManager?.startPeerDiscovery()
                     }
@@ -8382,7 +8024,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             allowDeviceResetOnTimeout = mode == GlassesSyncFlow.OFFICIAL_HEYCYAN,
         )
 
-        setTransferDetail(
+        transferProgress.setTransferDetail(
             when (mode) {
                 GlassesSyncFlow.OFFICIAL_HEYCYAN -> "Waiting for P2P + BLE IP (HeyCyan flow)..."
                 GlassesSyncFlow.CUSTOM -> "Waiting for glasses IP and HTTP server..."
@@ -8451,14 +8093,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     "and no P2P/BLE-IP evidence arrived (attempt $attempt/$maxAttempts)",
             )
             withContext(Dispatchers.Main) {
-                setTransferDetail("Glasses did not acknowledge transfer mode")
+                transferProgress.setTransferDetail("Glasses did not acknowledge transfer mode")
                 if (downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN) {
                     stopOfficialFlowForRetry(
                         "The glasses did not acknowledge transfer mode within 10 seconds.",
                         resetDeviceP2p = false,
                     )
                 } else {
-                    setTransferDetail("No transfer response yet; adaptive recovery is continuing...")
+                    transferProgress.setTransferDetail("No transfer response yet; adaptive recovery is continuing...")
                 }
             }
         }
@@ -8590,103 +8232,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return resetAccepted && isDownloadControlActive(sessionId)
     }
 
-    private fun setTransferUiVisible(visible: Boolean) {
-        binding.cardTransferProgress.visibility = if (visible) View.VISIBLE else View.GONE
-        updateDashboardState { state ->
-            state.copy(transfer = state.transfer.copy(isVisible = visible))
-        }
-    }
-
-    private fun resetTransferUiState() {
-        transferTotalJpg = 0
-        transferTotalMp4 = 0
-        transferTotalOpus = 0
-        transferDoneJpg = 0
-        transferDoneMp4 = 0
-        transferDoneOpus = 0
-        lastFileProgressUiAtMs = 0L
-
-        binding.tvTransferFlow.text = "Flow: --"
-        binding.tvTransferCounts.text = "Photos: --  Videos: --  Audio: --"
-        binding.progressTransfer.isIndeterminate = true
-        binding.progressTransfer.max = 100
-        binding.progressTransfer.progress = 0
-        binding.tvTransferDetail.text = "Idle"
-        updateDashboardState { state ->
-            state.copy(
-                transfer = GlassesTransferUiState(
-                    isVisible = state.transfer.isVisible,
-                ),
-            )
-        }
-    }
-
-    private fun setTransferPlan(jpg: Int, mp4: Int, opus: Int) {
-        finishDownloadInitialPhase("media list resolved")
-        transferTotalJpg = jpg
-        transferTotalMp4 = mp4
-        transferTotalOpus = opus
-        transferDoneJpg = 0
-        transferDoneMp4 = 0
-        transferDoneOpus = 0
-        renderTransferProgress()
-    }
-
-    private fun onTransferItemDone(type: String) {
-        when (type) {
-            "jpg" -> transferDoneJpg++
-            "mp4" -> transferDoneMp4++
-            "opus" -> transferDoneOpus++
-        }
-        renderTransferProgress()
-    }
-
-    private fun transferItemSummary(): String {
-        val done = transferDoneJpg + transferDoneMp4 + transferDoneOpus
-        val total = transferTotalJpg + transferTotalMp4 + transferTotalOpus
-        return "$done/$total"
-    }
-
-    private fun renderTransferProgress() {
-        val total = transferTotalJpg + transferTotalMp4 + transferTotalOpus
-        val done = transferDoneJpg + transferDoneMp4 + transferDoneOpus
-
-        binding.tvTransferCounts.text =
-            "Photos: ${transferDoneJpg}/${transferTotalJpg}  Videos: ${transferDoneMp4}/${transferTotalMp4}  Audio: ${transferDoneOpus}/${transferTotalOpus}"
-
-        if (total <= 0) {
-            binding.progressTransfer.isIndeterminate = true
-            binding.progressTransfer.max = 100
-            binding.progressTransfer.progress = 0
-        } else {
-            binding.progressTransfer.isIndeterminate = false
-            binding.progressTransfer.max = total * 1000
-            binding.progressTransfer.progress = (done * 1000).coerceAtMost(binding.progressTransfer.max)
-        }
-        updateDashboardState { state ->
-            state.copy(
-                transfer = state.transfer.copy(
-                    countsLabel = "Photos: $transferDoneJpg/$transferTotalJpg  Videos: $transferDoneMp4/$transferTotalMp4  Audio: $transferDoneOpus/$transferTotalOpus",
-                    progress = if (total > 0) done.toFloat() / total.toFloat() else null,
-                ),
-            )
-        }
-    }
-
-    private fun setTransferDetail(text: String) {
-        binding.tvTransferDetail.text = text
-        updateDashboardState { state ->
-            state.copy(transfer = state.transfer.copy(detail = text))
-        }
-    }
-
-    private fun setTransferFlowLabel(mode: GlassesSyncFlow) {
-        binding.tvTransferFlow.text = "Flow: ${mode.label}"
-        updateDashboardState { state ->
-            state.copy(transfer = state.transfer.copy(flowLabel = mode.label))
-        }
-    }
-
     private fun createDownloadSession() {
         downloadSessionJob?.cancel()
         val job = SupervisorJob()
@@ -8736,22 +8281,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (!isDownloadSessionActive(sessionId)) return
         runOnUiThread {
             if (isDownloadSessionActive(sessionId)) {
-                setTransferDetail(text)
+                transferProgress.setTransferDetail(text)
             }
         }
-    }
-
-    private fun formatTransferBytes(bytes: Long): String {
-        if (bytes <= 0L) return "0 B"
-        val units = arrayOf("B", "KB", "MB", "GB")
-        var value = bytes.toDouble()
-        var unitIndex = 0
-        while (value >= 1024.0 && unitIndex < units.lastIndex) {
-            value /= 1024.0
-            unitIndex++
-        }
-        val pattern = if (value >= 100 || unitIndex == 0) "%.0f" else "%.1f"
-        return pattern.format(Locale.US, value) + " " + units[unitIndex]
     }
 
     private fun maybeReportFileProgress(
@@ -8763,8 +8295,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         startedAtMs: Long,
     ) {
         val now = System.currentTimeMillis()
-        if (now - lastFileProgressUiAtMs < 750L && bytesCopied < totalBytes) return
-        lastFileProgressUiAtMs = now
+        if (now - transferProgress.lastFileProgressUiAtMs < 750L && bytesCopied < totalBytes) return
+        transferProgress.lastFileProgressUiAtMs = now
 
         val speedBps = if (startedAtMs > 0L) {
             val elapsedMs = (now - startedAtMs).coerceAtLeast(1L)
@@ -8774,9 +8306,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         val percent = if (totalBytes > 0L) ((bytesCopied * 100L) / totalBytes).coerceIn(0L, 100L) else -1L
         val (typeDone, typeTotal) = when (mediaType) {
-            "photo" -> transferDoneJpg to transferTotalJpg
-            "video" -> transferDoneMp4 to transferTotalMp4
-            else -> transferDoneOpus to transferTotalOpus
+            "photo" -> transferProgress.transferDoneJpg to transferProgress.transferTotalJpg
+            "video" -> transferProgress.transferDoneMp4 to transferProgress.transferTotalMp4
+            else -> transferProgress.transferDoneOpus to transferProgress.transferTotalOpus
         }
         val detail = if (percent >= 0L) {
             "Downloading $mediaType ${typeDone + 1}/$typeTotal: ${percent}% (${formatTransferBytes(bytesCopied)}/${formatTransferBytes(totalBytes)} at ${formatTransferBytes(speedBps)}/s)"
@@ -8786,27 +8318,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (!isDownloadSessionActive(sessionId)) return
         runOnUiThread {
             if (!isDownloadSessionActive(sessionId)) return@runOnUiThread
-            setTransferDetail(detail)
-            val totalItems = transferTotalJpg + transferTotalMp4 + transferTotalOpus
-            val completedItems = transferDoneJpg + transferDoneMp4 + transferDoneOpus
-            if (totalItems > 0) {
-                val fraction = if (totalBytes > 0L) {
-                    (bytesCopied.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0)
-                } else {
-                    0.0
-                }
-                binding.progressTransfer.isIndeterminate = false
-                binding.progressTransfer.max = totalItems * 1000
-                binding.progressTransfer.progress = (completedItems * 1000 + fraction * 1000).toInt()
-                    .coerceAtMost(binding.progressTransfer.max)
-                updateDashboardState { state ->
-                    state.copy(
-                        transfer = state.transfer.copy(
-                            progress = ((completedItems + fraction) / totalItems).toFloat(),
-                        ),
-                    )
-                }
-            }
+            transferProgress.renderFileProgress(detail, bytesCopied, totalBytes)
         }
         Log.i(
             "DataDownload",
@@ -8860,7 +8372,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 return@launch
             }
 
-            setTransferDetail("Sync is taking longer than expected")
+            transferProgress.setTransferDetail("Sync is taking longer than expected")
             maybeShowP2pSyncLogHelp(
                 reason = "CyanBridge got stuck before media transfer started. The sync button was pressed ${waitedSeconds}s ago and the transfer counters never advanced.",
             )
@@ -9028,7 +8540,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             "DataDownload",
             "Official flow retrying whole import sequence ($nextRetry/$officialFlowRetryLimit) because $reason"
         )
-        setTransferDetail("Official flow retrying sync...")
+        transferProgress.setTransferDetail("Official flow retrying sync...")
         startDataDownload(
             mode = GlassesSyncFlow.OFFICIAL_HEYCYAN,
             retryCount = nextRetry,
@@ -9189,11 +8701,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             withContext(Dispatchers.Main) {
                 if (!isDownloadSessionActive(sessionId)) return@withContext
-                binding.progressTransfer.isIndeterminate = true
-                updateDashboardState { state ->
-                    state.copy(transfer = state.transfer.copy(progress = null))
-                }
-                setTransferDetail("Fetching media list...")
+                transferProgress.showIndeterminateProgress()
+                transferProgress.setTransferDetail("Fetching media list...")
             }
 
             var content: String? = null
@@ -9256,11 +8765,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         Log.i("DataDownload", "HeyCyan vendor downloader fetching media list: $url")
         withContext(Dispatchers.Main) {
             if (isDownloadSessionActive(sessionId)) {
-                binding.progressTransfer.isIndeterminate = true
-                updateDashboardState { state ->
-                    state.copy(transfer = state.transfer.copy(progress = null))
-                }
-                setTransferDetail("Fetching media list with HeyCyan downloader...")
+                transferProgress.showIndeterminateProgress()
+                transferProgress.setTransferDetail("Fetching media list with HeyCyan downloader...")
             }
         }
 
@@ -9362,7 +8868,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     if (!isDownloadSessionActive(sessionId)) return@withContext
                     setTransferPlan(jpgFiles.size, mp4Files.size, opusFiles.size)
                     val total = jpgFiles.size + mp4Files.size + opusFiles.size
-                    setTransferDetail("Preparing downloads (0/$total)...")
+                    transferProgress.setTransferDetail("Preparing downloads (0/$total)...")
                 }
 
                 if (jpgFiles.isEmpty() && mp4Files.isEmpty() && opusFiles.isEmpty()) {
@@ -9429,7 +8935,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         withContext(Dispatchers.Main) {
             if (isDownloadSessionActive(sessionId)) {
-                setTransferDetail("Downloading latest full-resolution photo...")
+                transferProgress.setTransferDetail("Downloading latest full-resolution photo...")
             }
         }
         Log.i("ImageQuestion", "Requesting full-resolution HeyCyan photo: $url")
@@ -9576,7 +9082,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 withContext(Dispatchers.Main) {
                     if (isDownloadSessionActive(sessionId)) {
                         val (done, total) = vendorTypeProgress(item.type)
-                        setTransferDetail(
+                        transferProgress.setTransferDetail(
                             "Downloading ${item.type.progressLabel} ${done + 1}/$total with HeyCyan downloader..."
                         )
                     }
@@ -9621,7 +9127,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (!imported && officialMediaErrorCount <= 1) {
                     withContext(Dispatchers.Main) {
                         if (isDownloadSessionActive(sessionId)) {
-                            setTransferDetail("Download failed; retrying ${item.fileName}...")
+                            transferProgress.setTransferDetail("Download failed; retrying ${item.fileName}...")
                         }
                     }
                 }
@@ -9640,14 +9146,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             withContext(Dispatchers.Main) {
                 if (!isDownloadSessionActive(sessionId)) return@withContext
-                onTransferItemDone(
+                transferProgress.onTransferItemDone(
                     when (item.type) {
                         VendorMediaType.PHOTO -> "jpg"
                         VendorMediaType.VIDEO -> "mp4"
                         VendorMediaType.AUDIO -> "opus"
                     }
                 )
-                setTransferDetail("Downloaded ${transferItemSummary()}")
+                transferProgress.setTransferDetail("Downloaded ${transferProgress.transferItemSummary()}")
             }
         }
 
@@ -9660,9 +9166,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun vendorTypeProgress(type: VendorMediaType): Pair<Int, Int> {
         return when (type) {
-            VendorMediaType.PHOTO -> transferDoneJpg to transferTotalJpg
-            VendorMediaType.VIDEO -> transferDoneMp4 to transferTotalMp4
-            VendorMediaType.AUDIO -> transferDoneOpus to transferTotalOpus
+            VendorMediaType.PHOTO -> transferProgress.transferDoneJpg to transferProgress.transferTotalJpg
+            VendorMediaType.VIDEO -> transferProgress.transferDoneMp4 to transferProgress.transferTotalMp4
+            VendorMediaType.AUDIO -> transferProgress.transferDoneOpus to transferProgress.transferTotalOpus
         }
     }
 
@@ -9682,12 +9188,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             withContext(Dispatchers.Main) {
                 if (!isDownloadSessionActive(sessionId)) return@withContext
                 if (totalAll > 0) {
-                    binding.progressTransfer.isIndeterminate = false
-                    updateDashboardState { state ->
-                        state.copy(transfer = state.transfer.copy(progress = 0f))
-                    }
+                    transferProgress.showDeterminateProgressStart()
                 }
-                setTransferDetail("Downloading 0/$totalAll...")
+                transferProgress.setTransferDetail("Downloading 0/$totalAll...")
             }
             
             var jpgSuccess = 0
@@ -9703,7 +9206,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     if (!isDownloadSessionActive(sessionId)) return
                     withContext(Dispatchers.Main) {
                         if (!isDownloadSessionActive(sessionId)) return@withContext
-                        setTransferDetail("Downloading photo ${index + 1}/${jpgFiles.size}...")
+                        transferProgress.setTransferDetail("Downloading photo ${index + 1}/${jpgFiles.size}...")
                     }
                     Log.i("DataDownload", "Downloading file ${index + 1}/${jpgFiles.size}: $fileName")
 
@@ -9718,8 +9221,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                     withContext(Dispatchers.Main) {
                         if (!isDownloadSessionActive(sessionId)) return@withContext
-                        onTransferItemDone("jpg")
-                        setTransferDetail("Downloaded ${transferItemSummary()}")
+                        transferProgress.onTransferItemDone("jpg")
+                        transferProgress.setTransferDetail("Downloaded ${transferProgress.transferItemSummary()}")
                     }
                     
                     // Add a small delay to avoid excessively fast requests
@@ -9734,8 +9237,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                     withContext(Dispatchers.Main) {
                         if (!isDownloadSessionActive(sessionId)) return@withContext
-                        onTransferItemDone("jpg")
-                        setTransferDetail("Downloaded ${transferItemSummary()} (with errors)")
+                        transferProgress.onTransferItemDone("jpg")
+                        transferProgress.setTransferDetail("Downloaded ${transferProgress.transferItemSummary()} (with errors)")
                     }
                 }
             }
@@ -9746,7 +9249,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     if (!isDownloadSessionActive(sessionId)) return
                     withContext(Dispatchers.Main) {
                         if (!isDownloadSessionActive(sessionId)) return@withContext
-                        setTransferDetail("Downloading video ${index + 1}/${mp4Files.size}...")
+                        transferProgress.setTransferDetail("Downloading video ${index + 1}/${mp4Files.size}...")
                     }
                     Log.i("DataDownload", "Downloading video ${index + 1}/${mp4Files.size}: $fileName")
 
@@ -9769,8 +9272,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                     withContext(Dispatchers.Main) {
                         if (!isDownloadSessionActive(sessionId)) return@withContext
-                        onTransferItemDone("mp4")
-                        setTransferDetail("Downloaded ${transferItemSummary()}")
+                        transferProgress.onTransferItemDone("mp4")
+                        transferProgress.setTransferDetail("Downloaded ${transferProgress.transferItemSummary()}")
                     }
 
                     // Videos are larger; be gentler.
@@ -9792,8 +9295,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                     withContext(Dispatchers.Main) {
                         if (!isDownloadSessionActive(sessionId)) return@withContext
-                        onTransferItemDone("mp4")
-                        setTransferDetail("Downloaded ${transferItemSummary()} (with errors)")
+                        transferProgress.onTransferItemDone("mp4")
+                        transferProgress.setTransferDetail("Downloaded ${transferProgress.transferItemSummary()} (with errors)")
                     }
                 }
             }
@@ -9804,7 +9307,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     if (!isDownloadSessionActive(sessionId)) return
                     withContext(Dispatchers.Main) {
                         if (!isDownloadSessionActive(sessionId)) return@withContext
-                        setTransferDetail("Downloading audio ${index + 1}/${opusFiles.size}...")
+                        transferProgress.setTransferDetail("Downloading audio ${index + 1}/${opusFiles.size}...")
                     }
                     Log.i("DataDownload", "Downloading audio ${index + 1}/${opusFiles.size}: $fileName")
 
@@ -9819,8 +9322,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                     withContext(Dispatchers.Main) {
                         if (!isDownloadSessionActive(sessionId)) return@withContext
-                        onTransferItemDone("opus")
-                        setTransferDetail("Downloaded ${transferItemSummary()}")
+                        transferProgress.onTransferItemDone("opus")
+                        transferProgress.setTransferDetail("Downloaded ${transferProgress.transferItemSummary()}")
                     }
 
                     delay(500)
@@ -9833,8 +9336,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                     withContext(Dispatchers.Main) {
                         if (!isDownloadSessionActive(sessionId)) return@withContext
-                        onTransferItemDone("opus")
-                        setTransferDetail("Downloaded ${transferItemSummary()} (with errors)")
+                        transferProgress.onTransferItemDone("opus")
+                        transferProgress.setTransferDetail("Downloaded ${transferProgress.transferItemSummary()} (with errors)")
                     }
                 }
             }
@@ -10120,8 +9623,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         downloadP2pTeardownInProgress = false
         downloadExitTransferRequested = false
         releaseExclusiveGlassesSession(lease)
-        setTransferUiVisible(false)
-        resetTransferUiState()
+        transferProgress.setTransferUiVisible(false)
+        transferProgress.resetTransferUiState()
     }
     
     private fun teardownDownloadP2pSession(
@@ -10150,8 +9653,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         if (hideTransferUi) {
             runOnUiThread {
-                setTransferUiVisible(false)
-                resetTransferUiState()
+                transferProgress.setTransferUiVisible(false)
+                transferProgress.resetTransferUiState()
             }
         }
 
@@ -10307,12 +9810,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
         downloadCancelledByUser = true
         finishDownloadInitialPhase("cancelled by user")
-        setTransferDetail("Stopping sync...")
+        transferProgress.setTransferDetail("Stopping sync...")
         if (downloadP2pTeardownInProgress) {
             // A pre-start retry owns the teardown callback. Keep its confirmed-disconnect
             // barrier, but make the cancellation visible immediately.
-            setTransferUiVisible(false)
-            resetTransferUiState()
+            transferProgress.setTransferUiVisible(false)
+            transferProgress.resetTransferUiState()
         }
         teardownDownloadP2pSession(
             sendExitTransfer = true,
@@ -10685,7 +10188,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         val bleIp = downloadBleIp
         if (!officialBleCallbackSuccess || bleIp.isNullOrBlank()) {
-            setTransferDetail("Waiting for BLE-reported glasses IP...")
+            transferProgress.setTransferDetail("Waiting for BLE-reported glasses IP...")
             Log.i(
                 "DataDownload",
                 "Ignoring HTTP start trigger from $source; HeyCyan flow is waiting for BLE 0x08 IP notify"
@@ -10724,7 +10227,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             .filter { it.isNotBlank() && !isProbablyGroupOwnerIp(it) }
             .distinct()
         if (deviceIps.isEmpty()) {
-            setTransferDetail("Waiting for BLE-reported glasses IP...")
+            transferProgress.setTransferDetail("Waiting for BLE-reported glasses IP...")
             Log.i("DataDownload", "Ignoring HTTP start trigger from $source; waiting for device IP notify")
             return
         }
@@ -11339,7 +10842,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             )
         }
         finishDownloadInitialPhase("official flow retry required: $message")
-        setTransferDetail("$message Retry sync.")
+        transferProgress.setTransferDetail("$message Retry sync.")
         if (resetDeviceP2p) {
             WifiP2pManagerSingleton.getInstance(this).resetDeviceP2p()
         }
