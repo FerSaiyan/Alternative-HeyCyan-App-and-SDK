@@ -330,8 +330,9 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         }
     }
 
+    /** [onInfo] additionally receives this request's answer after the registered callbacks. */
     @SuppressLint("MissingPermission")
-    fun requestConnectionInfo() {
+    fun requestConnectionInfo(onInfo: ((WifiP2pInfo) -> Unit)? = null) {
         if (!hasWifiP2pPermission()) {
             Log.w(TAG, "Cannot request P2P connection info: required permission is not granted")
             return
@@ -343,6 +344,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
                     // Forward to the outer singleton; avoid recursive
                     // calls to this anonymous listener implementation.
                     this@WifiP2pManagerSingleton.onConnectionInfoAvailable(info)
+                    onInfo?.invoke(info)
                 }
             })
         }

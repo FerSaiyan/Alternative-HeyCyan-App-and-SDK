@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.media.sync
 
 import android.content.Context
-import android.net.ConnectivityManager
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import android.os.Build
@@ -25,6 +24,14 @@ import com.fersaiyan.cyanbridge.media.OfficialHeyCyanApp
 import com.fersaiyan.cyanbridge.media.OggOpusPackager
 import com.fersaiyan.cyanbridge.media.VendorAlbumDownloader
 import com.fersaiyan.cyanbridge.media.autocapture.GlassesSyncedAudioIngestor
+import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
+import com.fersaiyan.cyanbridge.network.HeyCyanP2pLink
+import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
+import com.fersaiyan.cyanbridge.shared.network.GlassesWifiNotify
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClient
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesWifiErrorAction
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesWifiErrorContext
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesWifiErrorPolicy
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.bleIpBridge
@@ -37,28 +44,21 @@ import com.oudmon.ble.base.bluetooth.DeviceManager
 import com.oudmon.ble.base.communication.LargeDataHandler
 import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyListener
 import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyRsp
-import com.oudmon.ble.base.communication.utils.ByteUtil
 import java.io.File
 import java.io.IOException
 import java.net.URL
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -72,8 +72,9 @@ internal class GlassesMediaSyncCoordinator(
     private val host: GlassesMediaSyncHost,
     private val transferUi: TransferProgressPresenter,
     private val mediaLibrary: GlassesMediaLibrary,
-    // Must outlive Activity destruction long enough to confirm P2P teardown.
-    private val glassesTeardownScope: CoroutineScope,
+    // P2P teardown now outlives the Activity inside GlassesNetworkSessionCoordinator; the scope
+    // stays in the constructor so the Activity wiring is unchanged.
+    @Suppress("unused") private val glassesTeardownScope: CoroutineScope,
 ) {
     var downloadP2pConnected = false
         private set
@@ -90,9 +91,10 @@ internal class GlassesMediaSyncCoordinator(
     private var downloadSessionId: Long = 0L
     private var vendorAlbumDownloader: VendorAlbumDownloader? = null
     private var downloadResolvedHttpIp: String? = null
-    private var lastP2pResetAtMs: Long = 0L
-    private var downloadWifiP2pManager: WifiP2pManagerSingleton? = null
-    private var downloadWifiP2pCallback: WifiP2pManagerSingleton.WifiP2pCallback? = null
+    /** The media-sync claim on the glasses link, owned by [GlassesNetworkSessionCoordinator]. */
+    private var downloadP2pLink: HeyCyanP2pLink? = null
+    private val downloadWifiP2pManager: WifiP2pManagerSingleton?
+        get() = downloadP2pLink?.manager
     private var downloadP2pTeardownInProgress = false
     private var downloadExitTransferRequested = false
     private var downloadCancelledByUser = false
@@ -141,6 +143,7 @@ internal class GlassesMediaSyncCoordinator(
 
     private val p2pNetwork = GlassesP2pNetwork(
         context = activity,
+        linkClaim = { downloadP2pLink?.claim },
         downloadFlowMode = { downloadFlowMode },
         adaptiveActiveRoute = { adaptiveActiveRoute },
         adaptiveSyncSession = { adaptiveSyncSession },
@@ -321,15 +324,6 @@ internal class GlassesMediaSyncCoordinator(
             }
         }
 
-        val wifiP2pManager = WifiP2pManagerSingleton.getInstance(activity)
-        downloadWifiP2pManager = wifiP2pManager
-
-        // Mirror vendor flow: clear internal retry state.
-        wifiP2pManager.resetFailCount()
-
-        // Register receiver and listen for P2P state/peer changes
-        wifiP2pManager.registerReceiver()
-
         val callback = object : WifiP2pManagerSingleton.WifiP2pCallback {
             override fun onWifiP2pEnabled() {
                 Log.i("DataDownload", "WiFi P2P enabled")
@@ -373,7 +367,8 @@ internal class GlassesMediaSyncCoordinator(
                         "DataDownload",
                         "Official flow connecting to peer: ${target.deviceName} / ${target.deviceAddress}"
                     )
-                    wifiP2pManager.connectToDevice(target)
+                    downloadP2pLink?.markConnectRequested()
+                    downloadWifiP2pManager?.connectToDevice(target)
                     return
                 }
 
@@ -400,7 +395,8 @@ internal class GlassesMediaSyncCoordinator(
                     "DataDownload",
                     "Connecting to peer: ${target.deviceName} / ${target.deviceAddress}"
                 )
-                wifiP2pManager.connectToDevice(target)
+                downloadP2pLink?.markConnectRequested()
+                downloadWifiP2pManager?.connectToDevice(target)
             }
 
             override fun onThisDeviceChanged(device: WifiP2pDevice) {
@@ -421,6 +417,7 @@ internal class GlassesMediaSyncCoordinator(
             override fun onDisconnected() {
                 Log.i("DataDownload", "P2P disconnected")
                 downloadP2pConnected = false
+                downloadP2pLink?.markGroupFormed(false)
                 p2pNetwork.downloadP2pNetwork = null
                 p2pNetwork.unbindProcessFromNetwork()
 
@@ -511,26 +508,45 @@ internal class GlassesMediaSyncCoordinator(
             }
         }
 
-        downloadWifiP2pCallback = callback
-        wifiP2pManager.addCallback(callback)
-
-        // Start scanning for the glasses over WiFi Direct
-        wifiP2pManager.startPeerDiscovery(
-            allowDeviceResetOnTimeout = mode == GlassesSyncFlow.OFFICIAL_HEYCYAN,
-        )
-
-        transferUi.setTransferDetail(
-            when (mode) {
-                GlassesSyncFlow.OFFICIAL_HEYCYAN -> "Waiting for P2P + BLE IP (HeyCyan flow)..."
-                GlassesSyncFlow.CUSTOM -> "Waiting for glasses IP and HTTP server..."
+        // The shared session registers the receiver and callback and clears the vendor retry
+        // state; it first waits for any previous owner's group teardown to be confirmed.
+        val sessionId = downloadSessionId
+        GlassesNetworkSessionCoordinator.openHeyCyanLinkAsync(
+            activity,
+            GlassesLinkClient.HEYCYAN_MEDIA_SYNC,
+            callback,
+        ) { link ->
+            if (link == null) {
+                if (isDownloadSessionActive(sessionId)) {
+                    showDownloadError("Wi-Fi Direct is still busy with another glasses session. Please retry sync.")
+                }
+                return@openHeyCyanLinkAsync
             }
-        )
+            if (!isDownloadSessionActive(sessionId) || downloadP2pTeardownInProgress) {
+                Log.i("DataDownload", "Sync ended while claiming the glasses link; releasing it")
+                GlassesNetworkSessionCoordinator.closeHeyCyanLink(activity, link) {}
+                return@openHeyCyanLinkAsync
+            }
+            downloadP2pLink = link
 
-        // Ask the glasses (over BLE) to bring up WiFi/P2P and report their IP,
-        // mirroring the official app's importAlbum() flow.
-        sendTransferModeCommandWithRetry(sessionId = downloadSessionId)
-        if (mode == GlassesSyncFlow.CUSTOM) {
-            startAdaptiveCheckpointRecovery(downloadSessionId)
+            // Start scanning for the glasses over WiFi Direct
+            link.manager.startPeerDiscovery(
+                allowDeviceResetOnTimeout = mode == GlassesSyncFlow.OFFICIAL_HEYCYAN,
+            )
+
+            transferUi.setTransferDetail(
+                when (mode) {
+                    GlassesSyncFlow.OFFICIAL_HEYCYAN -> "Waiting for P2P + BLE IP (HeyCyan flow)..."
+                    GlassesSyncFlow.CUSTOM -> "Waiting for glasses IP and HTTP server..."
+                }
+            )
+
+            // Ask the glasses (over BLE) to bring up WiFi/P2P and report their IP,
+            // mirroring the official app's importAlbum() flow.
+            sendTransferModeCommandWithRetry(sessionId = sessionId)
+            if (mode == GlassesSyncFlow.CUSTOM) {
+                startAdaptiveCheckpointRecovery(sessionId)
+            }
         }
     }
 
@@ -1172,18 +1188,6 @@ internal class GlassesMediaSyncCoordinator(
                 startDataDownload()
             }
             .show()
-    }
-
-    private fun getDeviceIpFromBLE(): String? {
-        // Prefer IP detected from BLE notifications, fall back to the
-        // known sample IP if we have not seen one yet.
-        val ipFromBle = bleIpBridge.ip.value
-        if (!ipFromBle.isNullOrEmpty()) {
-            Log.i("DataDownload", "Device IP from BleIpBridge: $ipFromBle")
-            return ipFromBle
-        }
-        // No safe fallback: the glasses IP varies per session.
-        return null
     }
 
     private suspend fun downloadMediaList(deviceIp: String, sessionId: Long) {
@@ -2084,7 +2088,7 @@ internal class GlassesMediaSyncCoordinator(
         val lease = host.mediaSessionLease
         if (
             lease == null &&
-            downloadWifiP2pManager == null &&
+            downloadP2pLink == null &&
             !downloadNotifyListenerRegistered &&
             !downloadP2pTeardownInProgress
         ) {
@@ -2109,13 +2113,10 @@ internal class GlassesMediaSyncCoordinator(
             downloadNotifyListenerRegistered = false
         }
 
-        val manager = downloadWifiP2pManager
-        downloadWifiP2pCallback?.let { callback -> manager?.removeCallback(callback) }
-        manager?.stopP2pOperations()
-        manager?.cancelP2pConnection()
-        manager?.unregisterReceiver()
-        downloadWifiP2pManager = null
-        downloadWifiP2pCallback = null
+        // Bluetooth is gone: drop the link without waiting for group removal. The next claim
+        // removes any group it left behind before connecting again.
+        downloadP2pLink?.let { link -> GlassesNetworkSessionCoordinator.abandonHeyCyanLink(activity, link) }
+        downloadP2pLink = null
         downloadP2pConnected = false
         downloadInProgress = false
         p2pNetwork.downloadP2pNetwork = null
@@ -2171,20 +2172,10 @@ internal class GlassesMediaSyncCoordinator(
 
         sendExitTransferModeIfRequested()
 
-        val manager = downloadWifiP2pManager
-        val callback = downloadWifiP2pCallback
-        if (manager != null && callback != null) {
-            manager.removeCallback(callback)
-        }
-
-        // Mirror official app: cancel the P2P connection as part of cleanup.
-        manager?.stopP2pOperations()
-        manager?.cancelP2pConnection()
+        val link = downloadP2pLink
 
         val finishTeardown = {
-            manager?.unregisterReceiver()
-            downloadWifiP2pManager = null
-            downloadWifiP2pCallback = null
+            downloadP2pLink = null
             downloadP2pConnected = false
             downloadInProgress = false
             p2pNetwork.downloadP2pNetwork = null
@@ -2197,99 +2188,19 @@ internal class GlassesMediaSyncCoordinator(
             Unit
         }
 
-        if (manager == null) {
+        if (link == null) {
             finishTeardown()
             return
         }
 
+        // Mirror official app: cancel the P2P connection as part of cleanup. The shared session
+        // keeps the media-sync lease until the group removal is confirmed (retrying it while
+        // quarantined), because a delayed removal could tear down a newly formed group.
         downloadP2pTeardownInProgress = true
-        removeDownloadP2pGroup(
-            manager = manager,
-            attempt = 1,
-            onRemoved = finishTeardown,
-        )
-    }
-
-    private fun removeDownloadP2pGroup(
-        manager: WifiP2pManagerSingleton,
-        attempt: Int,
-        onRemoved: () -> Unit,
-    ) {
-        val resultHandled = java.util.concurrent.atomic.AtomicBoolean(false)
-        val handleResult: (Boolean) -> Unit = { success ->
-            if (success) {
-                Log.i("DataDownload", "P2P group removal accepted on teardown attempt $attempt; waiting for disconnect")
-            } else {
-                Log.w(
-                    "DataDownload",
-                    "P2P group removal failed on attempt $attempt; checking whether the group is already gone",
-                )
-            }
-            awaitDownloadP2pDisconnect(manager, attempt, onRemoved)
-        }
-        glassesTeardownScope.launch {
-            delay(P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS)
-            if (downloadP2pTeardownInProgress && resultHandled.compareAndSet(false, true)) {
-                Log.w("DataDownload", "P2P group removal gave no callback on attempt $attempt; checking group state")
-                awaitDownloadP2pDisconnect(manager, attempt, onRemoved)
-            }
-        }
-        try {
-            manager.removeGroup { success ->
-                if (resultHandled.compareAndSet(false, true)) {
-                    handleResult(success)
-                } else {
-                    Log.d("DataDownload", "Ignoring late P2P group removal callback for attempt $attempt")
-                }
-            }
-        } catch (e: Exception) {
-            if (resultHandled.compareAndSet(false, true)) {
-                Log.w("DataDownload", "P2P group removal threw on attempt $attempt; checking group state", e)
-                awaitDownloadP2pDisconnect(manager, attempt, onRemoved)
-            }
-        }
-    }
-
-    private fun awaitDownloadP2pDisconnect(
-        manager: WifiP2pManagerSingleton,
-        attempt: Int,
-        onDisconnected: () -> Unit,
-    ) {
-        glassesTeardownScope.launch {
-            val deadline = System.currentTimeMillis() + P2P_GROUP_DISCONNECT_TIMEOUT_MS
-            while (downloadP2pTeardownInProgress && System.currentTimeMillis() < deadline) {
-                manager.requestConnectionInfo()
-                delay(250)
-                if (!manager.isConnecting() && !manager.isConnected()) {
-                    Log.i("DataDownload", "Confirmed P2P group is gone after teardown attempt $attempt")
-                    onDisconnected()
-                    return@launch
-                }
-            }
-
-            if (downloadP2pTeardownInProgress) {
-                if (!manager.canUseP2p() || attempt >= P2P_GROUP_REMOVAL_MAX_ATTEMPTS) {
-                    Log.e(
-                        "DataDownload",
-                        "P2P teardown could not be confirmed; keeping the media-sync lease quarantined until Bluetooth reconnect",
-                    )
-                } else {
-                    Log.w("DataDownload", "P2P group still present after teardown attempt $attempt; retaining the media-sync lease and retrying")
-                    scheduleDownloadP2pRemovalRetry(manager, attempt + 1, onDisconnected)
-                }
-            }
-        }
-    }
-
-    private fun scheduleDownloadP2pRemovalRetry(
-        manager: WifiP2pManagerSingleton,
-        attempt: Int,
-        onRemoved: () -> Unit,
-    ) {
-        glassesTeardownScope.launch {
-            delay(P2P_GROUP_REMOVAL_RETRY_MS)
-            if (downloadP2pTeardownInProgress) {
-                removeDownloadP2pGroup(manager, attempt, onRemoved)
+        GlassesNetworkSessionCoordinator.closeHeyCyanLink(activity, link) {
+            if (downloadP2pLink === link) {
+                Log.i("DataDownload", "Confirmed P2P group is gone after media-sync teardown")
+                finishTeardown()
             }
         }
     }
@@ -2386,150 +2297,6 @@ internal class GlassesMediaSyncCoordinator(
         )
     }
 
-    private fun isProbablyGroupOwnerIp(ip: String?): Boolean {
-        if (ip.isNullOrBlank()) return false
-
-        // If the phone is not the group owner, then we shouldn't block the group owner IP (.1)
-        // because it belongs to the glasses.
-        if (downloadPhoneIsGroupOwner != true) return false
-
-        // Typical Wi‑Fi Direct GO address when phone is GO.
-        return ip == "192.168.49.1"
-    }
-
-    private fun guessDownloadSubnetPrefix(): String? {
-        // Prefer authoritative device IPs when available; otherwise fall back to
-        // the group owner's subnet and finally the active Wi‑Fi/P2P interface subnet.
-        GlassesP2pNetwork.ipv4Prefix24(downloadBleIp)?.let { return it }
-        GlassesP2pNetwork.ipv4Prefix24(bleIpBridge.ip.value)?.let { return it }
-        GlassesP2pNetwork.ipv4Prefix24(downloadWifiIp)?.let { return it }
-
-        val network = p2pNetwork.downloadP2pNetwork ?: p2pNetwork.findLikelyP2pNetwork()
-        if (network != null) {
-            try {
-                val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                val lp = cm.getLinkProperties(network)
-                val addr = lp?.linkAddresses
-                    ?.mapNotNull { it.address.hostAddress }
-                    ?.firstOrNull { it.count { ch -> ch == '.' } == 3 }
-                GlassesP2pNetwork.ipv4Prefix24(addr)?.let { return it }
-            } catch (_: Exception) {
-                // ignore
-            }
-        }
-        return null
-    }
-
-    private fun buildCandidateIps(): List<String> {
-        val set = LinkedHashSet<String>()
-
-        downloadBleIp?.let { set.add(it) }
-        bleIpBridge.ip.value?.let { set.add(it) }
-
-        if (downloadPhoneIsGroupOwner == false && downloadWifiIp != null) {
-            set.add(downloadWifiIp!!)
-        } else {
-            downloadWifiIp?.let { set.add(it) }
-        }
-
-        guessDownloadSubnetPrefix()?.let { prefix ->
-            set.add("${prefix}1") // Glasses might be the group owner
-            set.add("${prefix}79")
-            set.add("${prefix}2")
-            set.add("${prefix}3")
-        }
-
-        return set.toList()
-    }
-
-    private fun mediaConfigOk(ip: String, timeoutMs: Int, logFailures: Boolean = false): Boolean {
-        if (!p2pNetwork.isPortOpen(ip, 80, (timeoutMs / 2).coerceAtLeast(400))) {
-            if (logFailures) {
-                Log.w("DataDownload", "media.config probe skipped for $ip (port 80 closed/unreachable)")
-            }
-            return false
-        }
-        val url = URL("http://$ip/files/media.config")
-        val ok = p2pNetwork.httpGet(url, timeoutMs, timeoutMs)
-        if (!ok && logFailures) {
-            Log.w("DataDownload", "media.config probe failed for $ip")
-        }
-        return ok
-    }
-
-    /**
-     * Probe media.config with retry. The glasses' HTTP server may not be
-     * immediately ready after P2P connects — it can take a few seconds
-     * for the firmware to start serving.
-     */
-    private suspend fun mediaConfigOkWithRetry(
-        ip: String,
-        timeoutMs: Int = 2000,
-        maxRetries: Int = 3,
-        delayMs: Long = 2000L,
-    ): Boolean {
-        for (attempt in 1..maxRetries) {
-            if (mediaConfigOk(ip, timeoutMs, logFailures = (attempt == maxRetries))) {
-                return true
-            }
-            if (attempt < maxRetries) {
-                Log.i("DataDownload", "media.config probe attempt $attempt/$maxRetries failed for $ip, retrying in ${delayMs}ms")
-                delay(delayMs)
-            }
-        }
-        return false
-    }
-
-    private suspend fun discoverGlassesIpByScan(prefix: String = "192.168.49."): String? {
-        // Fast scan for an HTTP server on port 80 in the P2P subnet.
-        // Concurrency is limited to avoid overwhelming the device/network stack.
-        return supervisorScope {
-            val sem = Semaphore(32)
-            val connectTimeoutMs = 300
-            val verifyTimeoutMs = 1200
-            val found = CompletableDeferred<String?>()
-            val firstOpenPortIp = AtomicReference<String?>(null)
-
-            for (host in 1..254) {
-                val ip = "$prefix$host"
-                if (downloadPhoneIsGroupOwner == true && ip == "192.168.49.1") continue
-                launch(Dispatchers.IO) {
-                    sem.withPermit {
-                        if (found.isCompleted) return@withPermit
-                        if (p2pNetwork.isPortOpen(ip, 80, connectTimeoutMs)) {
-                            firstOpenPortIp.compareAndSet(null, ip)
-                            // Prefer an IP that actually serves media.config.
-                            if (mediaConfigOk(ip, verifyTimeoutMs)) {
-                                found.complete(ip)
-                            }
-                        }
-                    }
-                }
-            }
-
-            val res = withTimeoutOrNull(20_000L) { found.await() } ?: firstOpenPortIp.get()
-            coroutineContext.cancelChildren()
-            res
-        }
-    }
-
-    private fun testConnection(deviceIp: String): Boolean {
-        Log.i("DataDownload", "Testing connection to $deviceIp...")
-        val url = URL("http://$deviceIp/files/media.config")
-        var bytesRead = 0
-        val ok = p2pNetwork.httpGet(url, 5000, 5000) { stream, _ ->
-            val buffer = ByteArray(1024)
-            bytesRead = stream.read(buffer)
-            stream.close()
-        }
-        if (ok) {
-            Log.i("DataDownload", "Connection test successful - read $bytesRead bytes")
-        } else {
-            Log.e("DataDownload", "Connection test failed for $deviceIp")
-        }
-        return ok
-    }
-
     fun onDownloadBleIp(ip: String) {
         val now = System.currentTimeMillis()
         val ipChanged = ip != downloadBleIp
@@ -2562,6 +2329,7 @@ internal class GlassesMediaSyncCoordinator(
     private fun onDownloadP2pConnected(info: WifiP2pInfo) {
         if (info.groupFormed) markTransferModeEvidence("P2P group formed")
         downloadP2pConnected = info.groupFormed
+        downloadP2pLink?.markGroupFormed(info.groupFormed)
         downloadWifiIp = info.groupOwnerAddress?.hostAddress
         downloadPhoneIsGroupOwner = info.isGroupOwner
         if (downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN) {
@@ -2674,9 +2442,10 @@ internal class GlassesMediaSyncCoordinator(
     }
 
     private fun maybeStartCustomHttpDownload(source: String) {
-        val deviceIps = listOfNotNull(downloadBleIp, bleIpBridge.ip.value)
-            .filter { it.isNotBlank() && !isProbablyGroupOwnerIp(it) }
-            .distinct()
+        val deviceIps = GlassesNetworkAddressing.glassesHttpTargets(
+            listOf(downloadBleIp, bleIpBridge.ip.value),
+            phoneIsGroupOwner = downloadPhoneIsGroupOwner,
+        )
         if (deviceIps.isEmpty()) {
             transferUi.setTransferDetail("Waiting for BLE-reported glasses IP...")
             Log.i("DataDownload", "Ignoring HTTP start trigger from $source; waiting for device IP notify")
@@ -2797,89 +2566,51 @@ internal class GlassesMediaSyncCoordinator(
         override fun parseData(cmdType: Int, response: GlassesDeviceNotifyRsp) {
             // Only handle download-relevant notifications here to avoid duplicating
             // other flows already handled by MyDeviceNotifyListener.
-            val load = response.loadData
-            if (load.size < 7) return
-            when (load[6].toInt()) {
-                0x08 -> {
-                    if (load.size >= 11) {
-                        val ip = "${ByteUtil.byteToInt(load[7])}." +
-                                "${ByteUtil.byteToInt(load[8])}." +
-                                "${ByteUtil.byteToInt(load[9])}." +
-                                "${ByteUtil.byteToInt(load[10])}"
-                        Log.i("DeviceNotify", "(download) BLE reported WiFi IP: $ip")
-                        onDownloadBleIp(ip)
-                    }
+            when (val notify = GlassesWifiNotify.parse(response.loadData) ?: return) {
+                is GlassesWifiNotify.GlassesIp -> {
+                    Log.i("DeviceNotify", "(download) BLE reported WiFi IP: ${notify.ip}")
+                    onDownloadBleIp(notify.ip)
                 }
 
-                0x09 -> {
-                    val raw = load.getOrNull(7) ?: 0
-                    val errorCode = ByteUtil.byteToInt(raw)
-                    Log.e("DeviceNotify", "(download) P2P/WiFi error from device: $errorCode (raw=$raw)")
-                    if (errorCode == 255) {
+                is GlassesWifiNotify.WifiError -> {
+                    Log.e("DeviceNotify", "(download) P2P/WiFi error from device: ${notify.code} (raw=${notify.raw ?: 0})")
+                    if (notify.isNoisyVendorError) {
                         maybeResetP2pAfterError255("download")
                     }
                 }
+
+                else -> Unit
             }
         }
     }
 
     fun maybeResetP2pAfterError255(source: String) {
-        val now = System.currentTimeMillis()
-
-        if (downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN) {
-            val sessionActive = isOfficialSyncActive() || downloadP2pConnected || downloadInProgress || downloadAttemptJob?.isActive == true
-            if (!sessionActive) {
-                Log.i("DataDownload", "Ignoring error=255 reset (source=$source) outside download session")
-                return
-            }
-            lastP2pResetAtMs = now
-            stopOfficialFlowForRetry(
+        // Only react while we're actually in (or attempting) a download session. Otherwise
+        // resets can interfere with normal camera/recording usage.
+        val official = downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN
+        val sessionActive = downloadP2pConnected || downloadInProgress || downloadAttemptJob?.isActive == true ||
+            if (official) isOfficialSyncActive() else isDownloadInitialPhaseActive()
+        val action = GlassesWifiErrorPolicy.decide(
+            context = if (official) GlassesWifiErrorContext.OFFICIAL_MEDIA_SYNC else GlassesWifiErrorContext.ADAPTIVE_MEDIA_SYNC,
+            errorCode = GlassesWifiNotify.NOISY_WIFI_ERROR_CODE,
+            sessionActive = sessionActive,
+        )
+        when (action) {
+            GlassesWifiErrorAction.STOP_FOR_RETRY_WITH_DEVICE_RESET -> stopOfficialFlowForRetry(
                 "The glasses reported Wi-Fi Direct error 255.",
                 resetDeviceP2p = true,
             )
-            return
-        }
-
-        // Only attempt P2P resets when we're actually in (or attempting) a download session.
-        // Otherwise these resets can interfere with normal camera/recording usage.
-        val sessionActive = when (downloadFlowMode) {
-            GlassesSyncFlow.OFFICIAL_HEYCYAN -> {
-                downloadInProgress || downloadAttemptJob?.isActive == true || downloadP2pConnected || isDownloadInitialPhaseActive()
+            GlassesWifiErrorAction.DEFER_TO_ADAPTIVE_RECOVERY -> {
+                // Error 255 is noisy on the vendor firmware. Preserve any progress and let the
+                // bounded adaptive timeline decide whether its single reset is actually needed.
+                adaptiveSyncSession?.mark(
+                    AdaptiveSyncCheckpoint.DEVICE_ERROR,
+                    "device_error_255_source=$source",
+                )
+                Log.i("DataDownload", "Adaptive flow observed error=255; deferring reset to checkpoint recovery")
             }
-
-            GlassesSyncFlow.CUSTOM -> {
-                downloadInProgress || downloadAttemptJob?.isActive == true || downloadP2pConnected || isDownloadInitialPhaseActive()
-            }
+            else -> Log.i("DataDownload", "Ignoring error=255 reset (source=$source) outside download session")
         }
-        if (!sessionActive) {
-            Log.i("DataDownload", "Ignoring error=255 reset (source=$source) outside download session")
-            return
-        }
-
-        if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
-            // Error 255 is noisy on the vendor firmware. Preserve any progress and let the
-            // bounded adaptive timeline decide whether its single reset is actually needed.
-            adaptiveSyncSession?.mark(
-                AdaptiveSyncCheckpoint.DEVICE_ERROR,
-                "device_error_255_source=$source",
-            )
-            Log.i("DataDownload", "Adaptive flow observed error=255; deferring reset to checkpoint recovery")
-            return
-        }
-
-        // Once the media list has been resolved, suppress resets because they can kill an
-        // otherwise healthy HTTP transfer on some devices. During the initial unresolved phase,
-        // the vendor app recovers by resetting P2P and continuing to wait for the glasses peer.
-        if (downloadInProgress || downloadInitialPhaseCompleted || !downloadResolvedHttpIp.isNullOrBlank()) {
-            Log.i("DataDownload", "Suppressing resetDeviceP2p on error=255 (source=$source) after HTTP/media resolution")
-            return
-        }
-
-        if (now - lastP2pResetAtMs < 10_000) {
-            return
-        }
-        lastP2pResetAtMs = now
-        WifiP2pManagerSingleton.getInstance(activity).resetDeviceP2p()
     }
 
     private fun stopOfficialFlowForRetry(message: String, resetDeviceP2p: Boolean) {
@@ -2914,10 +2645,6 @@ internal class GlassesMediaSyncCoordinator(
     }
 
     companion object {
-        private const val P2P_GROUP_REMOVAL_RETRY_MS = 1_000L
-        private const val P2P_GROUP_REMOVE_ACTION_TIMEOUT_MS = 5_000L
-        private const val P2P_GROUP_DISCONNECT_TIMEOUT_MS = 5_000L
-        private const val P2P_GROUP_REMOVAL_MAX_ATTEMPTS = 3
         private const val TRANSFER_MODE_COMMAND_TIMEOUT_MS = 10_000L
         private const val ADAPTIVE_INITIAL_PHASE_TIMEOUT_MS = 85_000L
         private const val ADAPTIVE_COMMAND_RETRY_AT_MS = 12_000L

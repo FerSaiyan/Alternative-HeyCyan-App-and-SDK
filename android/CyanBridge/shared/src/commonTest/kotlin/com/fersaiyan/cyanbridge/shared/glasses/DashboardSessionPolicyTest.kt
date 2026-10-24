@@ -1,14 +1,9 @@
-package com.fersaiyan.cyanbridge.ui.main
+package com.fersaiyan.cyanbridge.shared.glasses
 
-import com.fersaiyan.cyanbridge.glasses.GlassesSession
-import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
-import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
-import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
-import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class DashboardSessionPolicyTest {
     private val allActions: List<GlassesDashboardAction> = listOf(
@@ -112,6 +107,9 @@ class DashboardSessionPolicyTest {
         "MetaSendDiagnostics",
     )
 
+    private fun assertEqualsWithMessage(message: String, expected: Any?, actual: Any?) =
+        assertEquals(expected, actual, message)
+
     private fun GlassesDashboardAction.name(): String = this::class.simpleName!!
 
     /** Fails to compile when a new action is added without extending [allActions]. */
@@ -194,7 +192,7 @@ class DashboardSessionPolicyTest {
     @Test
     fun onlyAppStateActionsIgnoreTheExclusiveSession() {
         allActions.forEach { action ->
-            assertEquals(
+            assertEqualsWithMessage(
                 action.name(),
                 action.name() in ignoringSession,
                 DashboardSessionPolicy.ignoresExclusiveSession(action),
@@ -205,7 +203,7 @@ class DashboardSessionPolicyTest {
     @Test
     fun wifiAdbDebugOnlyAllowsItsOwnStop() {
         allActions.forEach { action ->
-            assertEquals(
+            assertEqualsWithMessage(
                 action.name(),
                 action == GlassesDashboardAction.StopWifiAdbDebug,
                 DashboardSessionPolicy.isAllowedDuring(action, GlassesSession.WIFI_ADB_DEBUG),
@@ -216,7 +214,7 @@ class DashboardSessionPolicyTest {
     @Test
     fun metaCameraAllowsMetaAssistantAndAppActions() {
         allActions.forEach { action ->
-            assertEquals(
+            assertEqualsWithMessage(
                 action.name(),
                 action.name() in allowedDuringMetaCamera,
                 DashboardSessionPolicy.isAllowedDuring(action, GlassesSession.META_CAMERA),
@@ -234,7 +232,7 @@ class DashboardSessionPolicyTest {
         ownStop.keys.forEach { session ->
             allActions.forEach { action ->
                 val expected = action is GlassesDashboardAction.Navigate || action == ownStop[session]
-                assertEquals(
+                assertEqualsWithMessage(
                     "${action.name()} during $session",
                     expected,
                     DashboardSessionPolicy.isAllowedDuring(action, session),

@@ -1,5 +1,9 @@
 package com.fersaiyan.cyanbridge.shared.glasses
 
+import com.fersaiyan.cyanbridge.bridge.core.GlassesCapability
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
+import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
+import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating.Action
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
@@ -216,6 +220,57 @@ data class WifiAdbDebugUiState(
     val canStart: Boolean = true,
     val canStop: Boolean = false,
 )
+
+/**
+ * Applies the selected family's capability gating ([GlassesManagerGating]) to the dashboard.
+ *
+ * @param livePreview the selected family's live preview state; ignored unless the family
+ *   declares [GlassesCapability.LIVE_PREVIEW].
+ */
+fun GlassesDashboardUiState.withFamilyGating(
+    family: GlassesFamilyProfile,
+    aiWakeWordRoute: AiWakeWordRoute,
+    isDebugBuild: Boolean,
+    livePreview: LivePreviewUiState?,
+): GlassesDashboardUiState {
+    val model = GlassesManagerGating.UiModel(GlassesManagerGating.visibleActions(family))
+    val showBattery = model.isVisible(Action.STATUS_BATTERY)
+    val showStorage = model.isVisible(Action.STATUS_STORAGE)
+    return copy(
+        showHeyCyanControls = model.isVisible(Action.HEY_CYAN_EXTRAS),
+        showEyevueControls = model.isVisible(Action.EYEVUE_CONTROLS),
+        showTuneBudsControls = model.isVisible(Action.TUNEBUDS_CONTROLS),
+        showCaptureSettings = model.isVisible(Action.CAPTURE_SETTINGS),
+        showMediaSync = true,
+        showAiWakeWordRouting = model.isVisible(Action.AI_WAKE_WORD_ROUTING),
+        showAdvancedControls = model.isVisible(Action.ADVANCED_CONTROLS),
+        showAdvancedLocalAgent = model.isVisible(Action.ADVANCED_LOCAL_AGENT),
+        showAdvancedDeviceInfo = model.isVisible(Action.ADVANCED_DEVICE_INFO),
+        showAdvancedDeviceVolume = model.isVisible(Action.ADVANCED_DEVICE_VOLUME),
+        showAdvancedImageQuality = model.isVisible(Action.ADVANCED_IMAGE_QUALITY),
+        showAdvancedDeveloperTools = model.isVisible(Action.ADVANCED_DEVELOPER_TOOLS),
+        showAdvancedOta = model.isVisible(Action.ADVANCED_OTA),
+        deviceInfoLabel = deviceInfoLabel.takeIf {
+            model.isVisible(Action.TUNEBUDS_CONTROLS)
+        },
+        firmwarePatchRequest = firmwarePatchRequest.takeIf {
+            model.isVisible(Action.ADVANCED_OTA)
+        },
+        aiWakeWordRoute = aiWakeWordRoute,
+        showMetaRaybanControls = model.isVisible(Action.META_RAYBAN_CONTROLS),
+        showMeizuMyvuControls = model.isVisible(Action.MEIZU_MYVU_CONTROLS),
+        showBattery = showBattery,
+        showStorage = showStorage,
+        storageLabel = if (showStorage) storageLabel else "--",
+        wifiAdbDebug = wifiAdbDebug.copy(
+            isAvailable = isDebugBuild &&
+                model.isVisible(Action.WIFI_ADB_DEBUG),
+        ),
+        livePreview = livePreview
+            ?.takeIf { family.supports(GlassesCapability.LIVE_PREVIEW) }
+            ?: LivePreviewUiState(),
+    )
+}
 
 /** User intents emitted by the portable dashboard presentation. */
 sealed interface GlassesDashboardAction {

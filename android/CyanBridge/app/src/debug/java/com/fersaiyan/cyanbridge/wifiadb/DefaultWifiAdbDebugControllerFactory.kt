@@ -11,6 +11,9 @@ import android.net.wifi.p2p.WifiP2pInfo
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
+import com.fersaiyan.cyanbridge.network.HeyCyanP2pLink
+import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClient
 import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.bluetooth.DeviceManager
@@ -19,8 +22,6 @@ import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyListene
 import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyRsp
 import com.oudmon.ble.base.communication.utils.ByteUtil
 import java.net.InetSocketAddress
-import java.net.Socket
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,10 +51,6 @@ private class DebugWifiAdbDebugController(
         private const val FLOW_TIMEOUT_MS = 45_000L
         private const val NETWORK_TIMEOUT_MS = 20_000L
         private const val PROBE_TIMEOUT_MS = 3_000
-        private const val GROUP_REMOVE_TIMEOUT_MS = 5_000L
-        private const val GROUP_DISCONNECT_TIMEOUT_MS = 5_000L
-        private const val GROUP_REMOVE_RETRY_MS = 1_000L
-        private const val GROUP_REMOVE_MAX_ATTEMPTS = 3
         private const val PREFERRED_COMMAND =
             "adb -s <phone-serial> forward tcp:15555 tcp:15555\nadb connect 127.0.0.1:15555"
     }
@@ -64,9 +61,7 @@ private class DebugWifiAdbDebugController(
 
     private var mainJob: Job? = null
     private var relay: RawTcpRelay? = null
-    private var p2pManager: WifiP2pManagerSingleton? = null
-    private var p2pCallback: WifiP2pManagerSingleton.WifiP2pCallback? = null
-    private var receiverRegistered = false
+    private var p2pLink: HeyCyanP2pLink? = null
     private var notifyListener: GlassesDeviceNotifyListener? = null
     private var notifyRegistered = false
     private var onSessionFinished: () -> Unit = {}
@@ -144,8 +139,7 @@ private class DebugWifiAdbDebugController(
         mainJob = null
         relay?.close()
         relay = null
-        p2pManager?.stopP2pOperations()
-        p2pManager?.cancelP2pConnection()
+        p2pLink?.let { GlassesNetworkSessionCoordinator.abandonHeyCyanLink(context, it) }
         cleanupInProgress = true
         p2pTeardownConfirmed = true
         exitAcknowledged = true
@@ -157,7 +151,7 @@ private class DebugWifiAdbDebugController(
         stop()
         if (cleanupInProgress) {
             val generation = activeGeneration
-            val manager = p2pManager
+            val manager = p2pLink?.manager
             if (manager != null && !manager.isConnecting() && !manager.isConnected()) {
                 p2pTeardownConfirmed = true
                 finishCleanup(generation)
@@ -305,10 +299,9 @@ private class DebugWifiAdbDebugController(
         }
     }
 
-    private fun startP2p(generation: Long): Boolean {
+    private suspend fun startP2p(generation: Long): Boolean {
         val manager = WifiP2pManagerSingleton.getInstance(context)
-        p2pManager = manager
-        p2pCallback = object : WifiP2pManagerSingleton.WifiP2pCallback {
+        val callback = object : WifiP2pManagerSingleton.WifiP2pCallback {
             override fun onWifiP2pEnabled() = Unit
             override fun onWifiP2pDisabled() {
                 if (isCurrentGeneration(generation)) failP2p(generation, "Wi-Fi Direct was disabled.")
@@ -326,23 +319,21 @@ private class DebugWifiAdbDebugController(
                         pairedName = pairedName,
                         pairedAddress = pairedMac,
                     )
-                }?.let(manager::connectToDevice)
+                }?.let { peer ->
+                    p2pLink?.markConnectRequested()
+                    manager.connectToDevice(peer)
+                }
             }
             override fun onConnected(info: WifiP2pInfo) {
                 if (!isCurrentGeneration(generation)) return
                 p2pGroupFormed = info.groupFormed
-                if (cleanupInProgress && !info.groupFormed) {
-                    p2pTeardownConfirmed = true
-                    finishCleanup(generation)
-                }
+                p2pLink?.markGroupFormed(info.groupFormed)
             }
             override fun onDisconnected() {
                 if (!isCurrentGeneration(generation)) return
                 p2pGroupFormed = false
-                if (cleanupInProgress) {
-                    p2pTeardownConfirmed = true
-                    finishCleanup(generation)
-                } else {
+                p2pLink?.markGroupFormed(false)
+                if (!cleanupInProgress) {
                     failP2p(generation, "The Wi-Fi Direct group disconnected.")
                 }
             }
@@ -366,16 +357,20 @@ private class DebugWifiAdbDebugController(
                 if (isCurrentGeneration(generation)) failP2p(generation, "P2P connection retry failed.")
             }
         }
-        val callback = requireNotNull(p2pCallback)
+        val link = GlassesNetworkSessionCoordinator.openHeyCyanLink(
+            context,
+            GlassesLinkClient.HEYCYAN_WIFI_ADB,
+            callback,
+        ) ?: return false
+        if (!isCurrentGeneration(generation)) {
+            GlassesNetworkSessionCoordinator.closeHeyCyanLink(context, link) {}
+            return false
+        }
+        p2pLink = link
         return try {
-            manager.addCallback(callback)
-            manager.registerReceiver()
-            receiverRegistered = true
-            manager.resetFailCount()
             manager.startPeerDiscovery(allowDeviceResetOnTimeout = false)
             true
         } catch (error: Exception) {
-            manager.removeCallback(callback)
             Log.e(TAG, "Could not start P2P", error)
             false
         }
@@ -416,15 +411,20 @@ private class DebugWifiAdbDebugController(
         relay?.close()
         relay = null
         sendExitOnce(generation)
-        val manager = p2pManager
-        if (manager == null) {
+        val link = p2pLink
+        if (link == null) {
             p2pTeardownConfirmed = true
             finishCleanup(generation)
             return
         }
-        manager.stopP2pOperations()
-        manager.cancelP2pConnection()
-        removeP2pGroup(manager, 1, generation)
+        // The shared session keeps the link reserved (retrying a quarantined removal) until the
+        // group is confirmed gone; only then does this session report itself finished.
+        GlassesNetworkSessionCoordinator.closeHeyCyanLink(context, link) {
+            if (isCleanupCurrent(generation)) {
+                p2pTeardownConfirmed = true
+                finishCleanup(generation)
+            }
+        }
     }
 
     private fun sendExitOnce(generation: Long) {
@@ -453,65 +453,14 @@ private class DebugWifiAdbDebugController(
         }.onFailure { Log.w(TAG, "Exit-transfer command could not be sent", it) }
     }
 
-    private fun removeP2pGroup(manager: WifiP2pManagerSingleton, attempt: Int, generation: Long) {
-        val handled = AtomicBoolean(false)
-        scope.launch {
-            delay(GROUP_REMOVE_TIMEOUT_MS)
-            if (isCleanupCurrent(generation) && handled.compareAndSet(false, true)) {
-                awaitP2pDisconnect(manager, attempt, generation)
-            }
-        }
-        runCatching {
-            manager.removeGroup {
-                if (isCleanupCurrent(generation) && handled.compareAndSet(false, true)) {
-                    awaitP2pDisconnect(manager, attempt, generation)
-                }
-            }
-        }.onFailure {
-            if (isCleanupCurrent(generation) && handled.compareAndSet(false, true)) {
-                awaitP2pDisconnect(manager, attempt, generation)
-            }
-        }
-    }
-
-    private fun awaitP2pDisconnect(
-        manager: WifiP2pManagerSingleton,
-        attempt: Int,
-        generation: Long,
-    ) {
-        scope.launch {
-            val deadline = System.currentTimeMillis() + GROUP_DISCONNECT_TIMEOUT_MS
-            while (isCleanupCurrent(generation) && System.currentTimeMillis() < deadline) {
-                manager.requestConnectionInfo()
-                delay(250)
-                if (!manager.isConnecting() && !manager.isConnected()) {
-                    p2pTeardownConfirmed = true
-                    finishCleanup(generation)
-                    return@launch
-                }
-            }
-            if (!isCleanupCurrent(generation)) return@launch
-            if (manager.canUseP2p() && attempt < GROUP_REMOVE_MAX_ATTEMPTS) {
-                delay(GROUP_REMOVE_RETRY_MS)
-                if (isCleanupCurrent(generation)) removeP2pGroup(manager, attempt + 1, generation)
-            } else {
-                Log.e(TAG, "P2P teardown unconfirmed; retaining the Wi-Fi ADB lease until Bluetooth reconnect")
-            }
-        }
-    }
-
     private fun finishCleanup(generation: Long) {
         if (!isCleanupCurrent(generation)) return
         if (!p2pTeardownConfirmed || !exitAcknowledged) return
         activeGeneration = generation + 1
-        p2pCallback?.let { p2pManager?.removeCallback(it) }
-        if (receiverRegistered) runCatching { p2pManager?.unregisterReceiver() }
         if (notifyRegistered) runCatching { LargeDataHandler.getInstance().removeOutDeviceListener(2) }
         runCatching { LargeDataHandler.getInstance().removeGlassesControlCallback() }
-        receiverRegistered = false
         notifyRegistered = false
-        p2pCallback = null
-        p2pManager = null
+        p2pLink = null
         notifyListener = null
         p2pGroupFormed = false
         cleanupInProgress = false
@@ -537,14 +486,11 @@ private class DebugWifiAdbDebugController(
         activeGeneration = generation + 1
         relay?.close()
         relay = null
-        p2pCallback?.let { p2pManager?.removeCallback(it) }
-        if (receiverRegistered) runCatching { p2pManager?.unregisterReceiver() }
+        // The shared session finishes (and retries) the group removal on its own scope.
         if (notifyRegistered) runCatching { LargeDataHandler.getInstance().removeOutDeviceListener(2) }
         runCatching { LargeDataHandler.getInstance().removeGlassesControlCallback() }
-        receiverRegistered = false
         notifyRegistered = false
-        p2pCallback = null
-        p2pManager = null
+        p2pLink = null
         notifyListener = null
         cleanupInProgress = false
         mainJob = null

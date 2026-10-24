@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ota
 
+import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing.selectLocalP2pIpv4
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -23,7 +23,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -282,10 +281,9 @@ class TuneBudsMediaSync(
                 val endpoint = manager.startP2pFileManager(ssid) { address ->
                     onStatus("Connecting TuneBuds P2P peer $address")
                     val network = transport.connect(address, ssid)
-                    client = CLIENT.newBuilder().connectionPool(ConnectionPool()).socketFactory(network.socketFactory)
-                        .dns(object : okhttp3.Dns {
-                            override fun lookup(hostname: String) = network.getAllByName(hostname).toList()
-                        }).build()
+                    client = com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
+                        .routes(context)
+                        .networkBoundHttpClient(CLIENT, network)
                 }
                 return endpoint
             } catch (error: Exception) {

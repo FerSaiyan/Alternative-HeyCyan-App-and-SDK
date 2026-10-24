@@ -2,9 +2,11 @@ package com.fersaiyan.cyanbridge.devices
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 
 /**
- * Utility helper to query hardware capabilities for the currently selected device profile.
+ * Queries the capability profile ([GlassesFamilyProfiles]) of the currently selected device.
  */
 object DeviceCapabilityHelper {
 
@@ -12,29 +14,10 @@ object DeviceCapabilityHelper {
         return DeviceProfileStore.selectedClass(context)
     }
 
-    fun hasCamera(context: Context): Boolean {
-        val selected = selectedClass(context)
-        return selected in setOf(
-            DeviceClass.HEY_CYAN,
-            DeviceClass.EYEVUE,
-            DeviceClass.TUNEBUDS,
-            DeviceClass.META_RAYBAN,
-            DeviceClass.MENTRA_LIVE,
-            DeviceClass.UNKNOWN,
-        )
-    }
+    fun selectedProfile(context: Context): GlassesFamilyProfile =
+        GlassesFamilyProfiles.forClass(selectedClass(context))
 
-    fun hasOnboardStorage(context: Context): Boolean {
-        val selected = selectedClass(context)
-        return selected in setOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.UNKNOWN)
-    }
+    fun hasCamera(context: Context): Boolean = selectedProfile(context).hasCamera
 
-    fun unavailableCameraReason(context: Context): String? {
-        return when (selectedClass(context)) {
-            DeviceClass.MEIZU_MYVU -> "Selected device profile (Meizu MYVU) has no camera."
-            DeviceClass.GENERIC_AUDIO -> "Selected device profile (Earbuds / Audio-only glasses) has no camera."
-            DeviceClass.MOYOUNG_W620 -> "The MoYoung / W620 adapter supports media sync, but direct camera capture is not validated yet."
-            else -> null
-        }
-    }
+    fun unavailableCameraReason(context: Context): String? = selectedProfile(context).cameraUnavailableReason
 }

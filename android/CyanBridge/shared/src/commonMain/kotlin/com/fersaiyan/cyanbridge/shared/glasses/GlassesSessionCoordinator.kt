@@ -1,15 +1,17 @@
 package com.fersaiyan.cyanbridge.shared.glasses
 
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import kotlin.jvm.Synchronized
+
 /**
  * The vendor SDK exposes singleton BLE response/listener slots and a singleton P2P controller.
  * Only one workflow may control those resources at a time.
- *
- * Note: Thread safety is managed by the caller (single-threaded coroutine context).
  */
 enum class GlassesSession(val label: String) {
     MEDIA_SYNC("media sync"),
     LIVE_PREVIEW("live preview"),
     OTA("firmware update"),
+    WIFI_ADB_DEBUG("Wi-Fi ADB debug"),
     META_CAMERA("Meta camera"),
 }
 
@@ -18,23 +20,32 @@ class GlassesSessionLease internal constructor(
     internal val id: Long,
 )
 
-class BackgroundGlassesCommandPermit internal constructor(internal val id: Long)
+class BackgroundGlassesCommandPermit internal constructor(internal val id: Long, val device: DeviceClass)
 
+/**
+ * Exclusive workflow leases and one-shot command permits for the glasses. There is no
+ * preemption: a held lease or an outstanding one-shot permit refuses every other request, and
+ * only the exact lease/permit object can release itself. A real Bluetooth disconnect clears
+ * everything so a stale lease cannot outlive the link it protected.
+ */
 object GlassesSessionCoordinator {
     private var activeLease: GlassesSessionLease? = null
     private var nextSessionId = 0L
     private var nextBackgroundCommandId = 0L
-    private val activeBackgroundCommandIds = mutableSetOf<Long>()
+    private val activeBackgroundCommandIds = mutableMapOf<Long, DeviceClass>()
 
+    @Synchronized
     fun tryAcquire(session: GlassesSession): Boolean {
         return tryAcquireLease(session) != null
     }
 
+    @Synchronized
     fun tryAcquireLease(session: GlassesSession): GlassesSessionLease? {
         if (activeLease != null || activeBackgroundCommandIds.isNotEmpty()) return null
         return GlassesSessionLease(session, ++nextSessionId).also { activeLease = it }
     }
 
+    @Synchronized
     fun release(session: GlassesSession): Boolean {
         val lease = activeLease ?: return false
         if (lease.session != session) return false
@@ -42,44 +53,59 @@ object GlassesSessionCoordinator {
         return true
     }
 
+    @Synchronized
     fun release(lease: GlassesSessionLease): Boolean {
         if (activeLease !== lease) return false
         activeLease = null
         return true
     }
 
+    @Synchronized
     fun currentSession(): GlassesSession? = activeLease?.session
 
+    @Synchronized
     fun isOwnedBy(session: GlassesSession): Boolean = activeLease?.session == session
 
+    @Synchronized
     fun isActive(lease: GlassesSessionLease): Boolean = activeLease === lease
 
+    @Synchronized
     fun canRunBackgroundCommand(): Boolean =
         activeLease == null && activeBackgroundCommandIds.isEmpty()
 
     /** Atomically reserves the shared SDK response slot for a short one-shot command. */
-    fun tryAcquireBackgroundCommand(): BackgroundGlassesCommandPermit? {
+    @Synchronized
+    fun tryAcquireBackgroundCommand(device: DeviceClass = DeviceClass.HEY_CYAN): BackgroundGlassesCommandPermit? {
         if (activeLease != null || activeBackgroundCommandIds.isNotEmpty()) return null
-        val permit = BackgroundGlassesCommandPermit(++nextBackgroundCommandId)
-        activeBackgroundCommandIds += permit.id
+        val permit = BackgroundGlassesCommandPermit(++nextBackgroundCommandId, device)
+        activeBackgroundCommandIds[permit.id] = device
         return permit
     }
 
+    @Synchronized
     fun releaseBackgroundCommand(permit: BackgroundGlassesCommandPermit) {
-        activeBackgroundCommandIds -= permit.id
+        activeBackgroundCommandIds.remove(permit.id)
     }
 
+    @Synchronized
     fun isBackgroundCommandActive(permit: BackgroundGlassesCommandPermit): Boolean =
         permit.id in activeBackgroundCommandIds
 
     /** A BLE reconnect discards any vendor callback slot that may have been left pending. */
-    fun clearBackgroundCommands() {
-        activeBackgroundCommandIds.clear()
+    @Synchronized
+    fun clearBackgroundCommands(device: DeviceClass? = null) {
+        if (device == null) {
+            activeBackgroundCommandIds.clear()
+        } else {
+            val stale = activeBackgroundCommandIds.filterValues { it == device }.keys.toList()
+            stale.forEach(activeBackgroundCommandIds::remove)
+        }
     }
 
     /** A real BLE disconnect invalidates every pending vendor response and P2P workflow. */
-    fun clearForDisconnectedDevice() {
+    @Synchronized
+    fun clearForDisconnectedDevice(device: DeviceClass? = null) {
         activeLease = null
-        activeBackgroundCommandIds.clear()
+        clearBackgroundCommands(device)
     }
 }
