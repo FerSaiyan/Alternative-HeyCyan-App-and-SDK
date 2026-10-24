@@ -58,3 +58,65 @@ Filter logcat with:
 
 **VPN on/off**
 - Expect `"process bound to the glasses network"` / `"restored the default process network"`. AI requests must work after any session.
+
+## Phase 2: per-family glasses devices (shared `GlassesDevice` / `GlassesFamilyProfile`)
+
+Dashboard dispatch was ported one-to-one. Families without their own transport still go through the hidden HeyCyan controls, as before. The intended changes only affect controls the dashboard already hides for that family.
+
+**Every family**
+- Scan, Reconnect and Disconnect behave as before.
+- Status line, battery and storage update.
+- Dashboard sections are unchanged after switching profiles in Device Bind.
+
+**HeyCyan**
+- Photo, video, audio, Count, Sync and Stop sync.
+- Live preview start and stop.
+- Advanced: battery toast, version, time, volume, Add listener, BT scan, and OTA dump, pull, request and cancel.
+- Image quality picker and wake-word route.
+- Wi-Fi ADB in a debug build.
+- Battery polling every 60 s.
+- Tasker `camera` and `data_download`.
+- Plugin shortcut SYNC.
+
+**Eyevue**
+- Photo, video and audio toggles. The Count toast ("Media count: N").
+- Sync and stop.
+- Live preview start and stop, the notification Stop, and the lease released afterwards.
+- Battery toast and battery request on selection.
+- Volume, Add listener, wearing toggle.
+- Wake-word route.
+- Closing the activity mid-sync finishes the transfer and disconnects.
+
+**TuneBuds**
+- Same media actions as Eyevue, plus live preview.
+- Status refreshes on selection.
+- Unsupported actions are still ignored; the log line now says "Ignoring unsupported TUNEBUDS dashboard action".
+
+**MoYoung W620**
+- Reconnect works, and Disconnect suppresses auto-reconnect.
+- Battery and media count are requested on selection.
+- Plugin SYNC and Tasker `data_download` start the MoYoung sync, which now goes through the family hook.
+- The transfer card Stop works, and closing the activity stops the sync.
+
+**Meta Ray-Ban**
+- Reconnect opens Meta pairing, and Disconnect stops the session.
+- HeyCyan controls and Tasker commands show the same "…unavailable for Meta Ray-Ban" toast.
+- Tasker `camera` saves a DAT photo.
+- Walking Aid and Visual Diary wait for the Meta camera. Auto Audio is refused with the same message.
+- A voice question is not blocked during a Meta camera session.
+
+**Meizu MYVU**
+- Reconnect is user-initiated.
+- onResume creates the manager.
+- The notification permission is requested for the connection service.
+- The background-feature restart reconnects.
+- The failure dialog appears only while MYVU is selected.
+- Camera and Auto Audio plugins are refused as before.
+
+**Mentra, generic audio, unknown**
+- Connection buttons go through the legacy SDK controls, as before.
+
+**Changes to controls that are already hidden**
+- StopLivePreview no longer calls the HeyCyan stop for families without live preview.
+- RefreshRecordingSettings no longer toasts "Connect HeyCyan…" for families other than HeyCyan or Eyevue.
+- The SetWearingDetection log text changed.
