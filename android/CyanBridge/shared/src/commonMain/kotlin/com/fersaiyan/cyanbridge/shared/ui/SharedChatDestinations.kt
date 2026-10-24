@@ -1,52 +1,41 @@
 package com.fersaiyan.cyanbridge.shared.ui
 
-import com.fersaiyan.cyanbridge.shared.chat.ChatImageMarkup
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.text.input.TextFieldValue
-import com.fersaiyan.cyanbridge.shared.ai.ChatMessage as AiChatMessage
 import com.fersaiyan.cyanbridge.shared.chat.ChatAppearanceMenuAction
-import com.fersaiyan.cyanbridge.shared.chat.ChatAttachmentsUiState
-import com.fersaiyan.cyanbridge.shared.chat.ChatComposerUiState
-import com.fersaiyan.cyanbridge.shared.chat.ChatMessage
-import com.fersaiyan.cyanbridge.shared.chat.ChatThread
-import com.fersaiyan.cyanbridge.shared.chat.ChatThreadSummary
-import com.fersaiyan.cyanbridge.shared.chat.ChatThreadUiState
 import com.fersaiyan.cyanbridge.shared.generated.resources.Res
-import com.fersaiyan.cyanbridge.shared.generated.resources.action_new_chat
-import com.fersaiyan.cyanbridge.shared.generated.resources.chat_request_failed
 import com.fersaiyan.cyanbridge.shared.generated.resources.notes_edit_title
 import com.fersaiyan.cyanbridge.shared.generated.resources.notes_new_title
 import com.fersaiyan.cyanbridge.shared.generated.resources.notes_source_app
 import com.fersaiyan.cyanbridge.shared.generated.resources.notes_source_meeting
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.notes.NoteSource
-import com.fersaiyan.cyanbridge.shared.notes.NoteSummary
-import com.fersaiyan.cyanbridge.shared.persistence.ChatEntity
-import com.fersaiyan.cyanbridge.shared.persistence.ChatMessageEntity
 import com.fersaiyan.cyanbridge.shared.persistence.NoteEntity
 import com.fersaiyan.cyanbridge.shared.platform.CyanBridgeServices
-import com.fersaiyan.cyanbridge.shared.platform.PlatformFilePaths
 import com.fersaiyan.cyanbridge.shared.platform.SharedChatHooks
 import com.fersaiyan.cyanbridge.shared.platform.SharedMediaHooks
 import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.Pref
 import com.fersaiyan.cyanbridge.shared.ui.chat.ChatAppearanceMenuDialog
+import com.fersaiyan.cyanbridge.shared.ui.chat.ChatListEffect
+import com.fersaiyan.cyanbridge.shared.ui.chat.ChatListViewModel
+import com.fersaiyan.cyanbridge.shared.ui.chat.ChatThreadArgs
+import com.fersaiyan.cyanbridge.shared.ui.chat.ChatThreadEffect
 import com.fersaiyan.cyanbridge.shared.ui.chat.ChatThreadScreen
+import com.fersaiyan.cyanbridge.shared.ui.chat.ChatThreadViewModel
 import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsScreen
-import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsTab
 import com.fersaiyan.cyanbridge.shared.ui.notes.MarkdownNoteEditorScreen
+import com.fersaiyan.cyanbridge.shared.ui.notes.NoteEditorEvent
+import com.fersaiyan.cyanbridge.shared.ui.notes.NoteEditorViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
-
-private const val WALLPAPER_FILE = "chat_wallpaper.jpg"
 
 // Preset bubble colors cycled by the appearance menu (ARGB).
 private val USER_BUBBLE_COLORS = listOf(0xFF1E6A7A, 0xFF3A5BA0, 0xFF6B4FA0, 0xFF2E7D32, 0xFFB3261E, 0xFF8B5000)
@@ -54,65 +43,42 @@ private val USER_BUBBLE_COLORS = listOf(0xFF1E6A7A, 0xFF3A5BA0, 0xFF6B4FA0, 0xFF
 private val ASSISTANT_BUBBLE_COLORS = listOf(0xFFE3EEF0, 0xFFE8E0F0, 0xFFF3E9DC, 0xFFE2F0E3, 0xFFF0E0E0, 0xFFEDEDED)
     .map { it.toInt() }
 
+/** The chat a destination shows; a null [id] is a new chat, created with its first message. */
+private data class OpenChat(val id: String?)
+
 /** Chats and notes for hosts that render shared destinations (iOS). */
-@OptIn(ExperimentalResourceApi::class)
 @Composable
 internal fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> Unit) {
+    val viewModel = rememberScreenViewModel(Unit) { ChatListViewModel(SharedChatListSource) }
+    var openChat by remember {
+        mutableStateOf(SharedChatHooks.initialThreadId?.let(::OpenChat).also { SharedChatHooks.initialThreadId = null })
+    }
+    var editingNote by remember { mutableStateOf<Pair<NoteEntity, Boolean>?>(null) }
     val scope = rememberCoroutineScope()
-    val newChatTitle = stringResource(Res.string.action_new_chat)
-    val formatTimestamp = sharedTimestampFormatter()
-    var threads by remember { mutableStateOf<List<ChatThreadSummary>>(emptyList()) }
-    var notes by remember { mutableStateOf<List<NoteEntity>>(emptyList()) }
-    var pendingDelete by remember { mutableStateOf<ChatThreadSummary?>(null) }
-    var selectedThreadId by remember {
-        mutableStateOf(SharedChatHooks.initialThreadId.also { SharedChatHooks.initialThreadId = null })
-    }
-    var selectedTab by remember { mutableStateOf(NotesChatsTab.CHATS) }
-    var editingNote by remember { mutableStateOf<NoteEntity?>(null) }
-    var showAppearance by remember { mutableStateOf(false) }
 
-    fun refreshChats() {
-        scope.launch {
-            if (CyanBridgeServices.isInitialized()) {
-                threads = CyanBridgeServices.chatRepository.getAllChats()
-                    .map { ChatThreadSummary(it.id, it.title, it.updatedAt) }
-                    .sortedByDescending { it.updatedAtEpochMillis }
-            }
+    DisposableEffect(viewModel) {
+        viewModel.onStart()
+        viewModel.refresh()
+        onDispose { viewModel.onStop() }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.effects.collect { effect ->
+            // There is one kind of chat here and no local models to install.
+            if (effect == ChatListEffect.ChooseNewChat) openChat = OpenChat(null)
         }
     }
 
-    fun refreshNotes() {
-        scope.launch {
-            if (CyanBridgeServices.isInitialized()) {
-                notes = CyanBridgeServices.notesRepository.getAllNotes().sortedByDescending { it.updatedAt }
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        refreshChats()
-        refreshNotes()
-    }
-
-    editingNote?.let { note ->
-        SharedNoteEditorDestination(
-            note = note,
-            isNew = notes.none { it.id == note.id },
-            onClose = {
-                editingNote = null
-                refreshNotes()
-            },
-        )
+    editingNote?.let { (note, isNew) ->
+        SharedNoteEditorDestination(note = note, isNew = isNew, onClose = { editingNote = null })
         return
     }
 
-    val selectedThread = threads.firstOrNull { it.id == selectedThreadId }
-    if (selectedThread != null) {
+    openChat?.let { chat ->
         SharedChatThreadDestination(
-            threadSummary = selectedThread,
+            chat = chat,
             onBack = {
-                selectedThreadId = null
-                refreshChats()
+                openChat = null
+                viewModel.refresh()
             },
             onDestinationSelected = onDestinationSelected,
         )
@@ -120,248 +86,105 @@ internal fun SharedChatsDestination(onDestinationSelected: (AppDestination) -> U
     }
 
     NotesChatsScreen(
-        selectedTab = selectedTab,
-        onTabSelected = { selectedTab = it },
-        threads = threads,
-        pendingDelete = pendingDelete,
-        notes = notes.map { it.toSummary() },
-        formatTimestamp = formatTimestamp,
-        onOpenThread = { selectedThreadId = it.id },
-        onRequestDelete = { pendingDelete = it },
-        onConfirmDelete = {
-            val thread = pendingDelete
-            pendingDelete = null
-            if (thread != null) {
-                scope.launch {
-                    if (CyanBridgeServices.isInitialized()) {
-                        CyanBridgeServices.chatRepository.deleteChat(thread.id)
-                        refreshChats()
-                    }
-                }
-            }
-        },
-        onDismissDelete = { pendingDelete = null },
-        onNewChat = {
-            val now = sharedNowMillis()
-            val id = "ios-$now"
+        selectedTab = viewModel.selectedTab,
+        onTabSelected = { viewModel.selectedTab = it },
+        threads = viewModel.threads,
+        pendingDelete = viewModel.pendingDelete,
+        notes = viewModel.notes,
+        formatTimestamp = sharedTimestampFormatter(),
+        onOpenThread = { openChat = OpenChat(it.id) },
+        onRequestDelete = { viewModel.pendingDelete = it },
+        onConfirmDelete = viewModel::confirmDelete,
+        onDismissDelete = { viewModel.pendingDelete = null },
+        onNewChat = viewModel::newChat,
+        onOpenNote = { summary ->
             scope.launch {
-                if (CyanBridgeServices.isInitialized()) {
-                    CyanBridgeServices.chatRepository.insertChat(
-                        ChatEntity(id = id, title = newChatTitle, createdAt = now, updatedAt = now),
-                    )
-                    refreshChats()
-                    selectedThreadId = id
-                }
+                CyanBridgeServices.notesRepository.getAllNotes().firstOrNull { it.summaryId() == summary.id }
+                    ?.let { editingNote = it to false }
             }
         },
-        onOpenNote = { summary -> editingNote = notes.firstOrNull { it.summaryId() == summary.id } },
         onNewNote = {
             val now = sharedNowMillis()
-            editingNote = NoteEntity(
-                id = "note-$now",
-                title = "",
-                content = "",
-                createdAt = now,
-                updatedAt = now,
-                source = "manual",
-            )
+            editingNote = NoteEntity(id = "note-$now", title = "", content = "", createdAt = now, updatedAt = now, source = "manual") to true
         },
-        onChatAppearance = { showAppearance = true },
+        onChatAppearance = { viewModel.appearanceMenuVisible = true },
         // Obsidian sync relies on Android storage access; iOS has no equivalent yet.
         onOpenNotesSettings = {},
         onDestinationSelected = onDestinationSelected,
         showNavigationBar = false,
     )
 
-    if (showAppearance) {
+    if (viewModel.appearanceMenuVisible) {
         ChatAppearanceMenuDialog(
             modelOptionLabel = null,
-            onDismissRequest = { showAppearance = false },
+            onDismissRequest = { viewModel.appearanceMenuVisible = false },
             onAction = { action ->
-                showAppearance = false
+                viewModel.appearanceMenuVisible = false
                 scope.launch { applyChatAppearanceAction(action) }
             },
         )
     }
 }
 
-@OptIn(ExperimentalResourceApi::class)
 @Composable
 private fun SharedChatThreadDestination(
-    threadSummary: ChatThreadSummary,
+    chat: OpenChat,
     onBack: () -> Unit,
     onDestinationSelected: (AppDestination) -> Unit,
 ) {
+    val viewModel = rememberScreenViewModel(chat) { ChatThreadViewModel(SharedChatStore, SharedChatBackend, SharedChatRecorder) }
     val scope = rememberCoroutineScope()
-    var messages by remember(threadSummary.id) { mutableStateOf<List<ChatMessage>>(emptyList()) }
-    var composerText by remember(threadSummary.id) { mutableStateOf("") }
-    var isThinking by remember(threadSummary.id) { mutableStateOf(false) }
-    var statusText by remember(threadSummary.id) { mutableStateOf<String?>(null) }
-    var pendingImage by remember(threadSummary.id) { mutableStateOf<ByteArray?>(null) }
-    var isRecording by remember(threadSummary.id) { mutableStateOf(false) }
-    var showAppearance by remember { mutableStateOf(false) }
-    var appearance by remember { mutableStateOf(ChatAppearance.load()) }
-    var wallpaper by remember { mutableStateOf<ImageBitmap?>(null) }
-    val chatRequestFailed = stringResource(Res.string.chat_request_failed)
+    // Notices (toasts on Android) show in the status line until the next message is sent.
+    var notice by remember(chat) { mutableStateOf<String?>(null) }
 
-    fun reloadMessages() {
-        scope.launch {
-            if (CyanBridgeServices.isInitialized()) {
-                messages = CyanBridgeServices.chatRepository.getMessages(threadSummary.id)
-                    .map(ChatMessageEntity::toSharedMessage)
-            }
-        }
-    }
-
-    suspend fun reloadWallpaper() {
-        wallpaper = if (appearance.hasWallpaper) {
-            SharedMediaHooks.loadImage?.invoke(PlatformFilePaths.dataDirectory() + "/" + WALLPAPER_FILE)
-        } else {
-            null
-        }
-    }
-
-    LaunchedEffect(threadSummary.id) {
-        reloadMessages()
-        reloadWallpaper()
-    }
-
-    fun send() {
-        val text = composerText.trim()
-        val image = pendingImage
-        if ((text.isEmpty() && image == null) || isThinking) return
-        composerText = ""
-        pendingImage = null
-        scope.launch {
-            if (!CyanBridgeServices.isInitialized()) return@launch
-            val now = sharedNowMillis()
-            isThinking = true
-            statusText = null
-            val prompt = text.ifEmpty { sharedDefaultImageQuestion() }
-            // Keep the photo next to the question so the bubble can show it.
-            val imageFile = image?.let { bytes ->
-                "chat-image-$now.jpg".takeIf { SharedMediaHooks.saveDocument?.invoke(it, bytes) != null }
-            }
-            CyanBridgeServices.chatRepository.insertMessage(
-                ChatMessageEntity(
-                    id = "user-$now",
-                    chatId = threadSummary.id,
-                    role = "user",
-                    content = when {
-                        imageFile != null -> ChatImageMarkup.attach(imageFile, "📷 $prompt")
-                        image != null -> "📷 $prompt"
-                        else -> text
-                    },
-                    timestamp = now,
-                ),
-            )
-            reloadMessages()
-            runCatching {
-                if (image != null) {
-                    CyanBridgeServices.imageAiService.analyzeImage(image, prompt)
-                } else {
-                    val history = CyanBridgeServices.chatRepository.getMessages(threadSummary.id)
-                        .map { AiChatMessage(it.role, ChatImageMarkup.stripImage(it.content)) }
-                    CyanBridgeServices.chatAiService.chat(history).message.content
-                }
-            }.onSuccess { reply ->
-                CyanBridgeServices.chatRepository.insertMessage(
-                    ChatMessageEntity(
-                        id = "assistant-${sharedNowMillis()}",
-                        chatId = threadSummary.id,
-                        role = "assistant",
-                        content = reply,
-                        timestamp = sharedNowMillis(),
-                    ),
-                )
-            }.onFailure { error ->
-                statusText = error.message ?: chatRequestFailed
-            }
-            reloadMessages()
-            isThinking = false
+    LaunchedEffect(viewModel) {
+        viewModel.openOnce(ChatThreadArgs(chatId = chat.id))
+        viewModel.effects.collect { effect ->
+            if (effect is ChatThreadEffect.Message) notice = effect.message.text
         }
     }
 
     SystemBackHandler(onBack = onBack)
     ChatThreadScreen(
-        state = ChatThreadUiState(
-            thread = ChatThread(
-                id = threadSummary.id,
-                title = threadSummary.title,
-                createdAt = 0L,
-                updatedAt = threadSummary.updatedAtEpochMillis,
-            ),
-            messages = messages,
-            composerText = composerText,
-            isGenerating = isThinking,
-            statusText = statusText,
-        ),
-        messages = messages,
-        composer = ChatComposerUiState(isMediaEnabled = SharedChatHooks.pickImage != null),
-        attachments = ChatAttachmentsUiState(
-            label = when {
-                isRecording -> "Recording… tap the microphone again to stop"
-                pendingImage != null -> "1 image attached"
-                else -> null
-            },
-            isRecording = isRecording,
-        ),
-        modelBadge = if (CyanBridgeServices.isInitialized()) {
-            CyanBridgeServices.aiModelRegistry.getDefaultModelId()
-        } else {
-            null
-        },
+        state = viewModel.state,
+        messages = viewModel.visibleMessages,
+        composer = viewModel.composer,
+        attachments = viewModel.attachments,
+        modelBadge = viewModel.modelBadge,
         dailySummaryProgress = null,
-        dailyReviewQueueStatus = statusText,
-        userBubbleColor = appearance.userBubbleColor,
-        assistantBubbleColor = appearance.assistantBubbleColor,
-        wallpaper = wallpaper,
-        isThinking = isThinking,
+        dailyReviewQueueStatus = viewModel.dailyReviewQueueStatus ?: notice,
+        userBubbleColor = viewModel.userBubbleColor,
+        assistantBubbleColor = viewModel.assistantBubbleColor,
+        wallpaper = viewModel.wallpaper,
+        isThinking = viewModel.isThinking,
         onOpenChatList = onBack,
-        onChatAppearance = { showAppearance = true },
-        onComposerTextChanged = { composerText = it },
-        onPrimaryAction = ::send,
+        onChatAppearance = { viewModel.appearanceMenuVisible = true },
+        onComposerTextChanged = viewModel::updateComposerText,
+        onPrimaryAction = {
+            notice = null
+            viewModel.onPrimaryAction()
+        },
         onAttachImage = {
             val pick = SharedChatHooks.pickImage ?: return@ChatThreadScreen
-            scope.launch { pick()?.let { pendingImage = it } }
+            scope.launch { pick()?.let { viewModel.addImageAttachment(attachPickedImage(it)) } }
         },
-        onRecordAudio = {
-            scope.launch {
-                if (!isRecording) {
-                    isRecording = SharedChatHooks.startAudioRecording?.invoke() == true
-                    if (!isRecording) statusText = "Microphone access is needed to record audio"
-                } else {
-                    isRecording = false
-                    val audio = SharedChatHooks.stopAudioRecording?.invoke() ?: return@launch
-                    statusText = "Transcribing…"
-                    runCatching {
-                        CyanBridgeServices.voiceAiService.transcribe(audio, SharedChatHooks.audioMimeType)
-                    }.onSuccess { transcript ->
-                        statusText = null
-                        composerText = listOf(composerText.trim(), transcript.trim()).filter { it.isNotEmpty() }.joinToString(" ")
-                    }.onFailure { error ->
-                        statusText = error.message ?: chatRequestFailed
-                    }
-                }
-            }
-        },
-        onClearAttachments = { pendingImage = null },
+        onRecordAudio = viewModel::onRecordAudio,
+        onClearAttachments = viewModel::clearAttachments,
         onDestinationSelected = { destination ->
             if (destination == AppDestination.CHATS) onBack() else onDestinationSelected(destination)
         },
         showNavigationBar = false,
     )
 
-    if (showAppearance) {
+    if (viewModel.appearanceMenuVisible) {
         ChatAppearanceMenuDialog(
             modelOptionLabel = null,
-            onDismissRequest = { showAppearance = false },
+            onDismissRequest = { viewModel.appearanceMenuVisible = false },
             onAction = { action ->
-                showAppearance = false
+                viewModel.appearanceMenuVisible = false
                 scope.launch {
                     applyChatAppearanceAction(action)
-                    appearance = ChatAppearance.load()
-                    reloadWallpaper()
+                    viewModel.refreshAppearance()
                 }
             },
         )
@@ -370,71 +193,41 @@ private fun SharedChatThreadDestination(
 
 @OptIn(ExperimentalResourceApi::class)
 @Composable
-private fun SharedNoteEditorDestination(
-    note: NoteEntity,
-    isNew: Boolean,
-    onClose: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    var title by remember(note.id) { mutableStateOf(note.title) }
-    var tags by remember(note.id) { mutableStateOf(AppPrefs.NoteTags.tags[note.id].get()) }
-    var body by remember(note.id) { mutableStateOf(TextFieldValue(note.content)) }
-    var isSaving by remember { mutableStateOf(false) }
+private fun SharedNoteEditorDestination(note: NoteEntity, isNew: Boolean, onClose: () -> Unit) {
+    val viewModel = rememberScreenViewModel(note.id) { NoteEditorViewModel(SharedNoteStore(note, isNew)) }
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            if (event == NoteEditorEvent.Saved || event == NoteEditorEvent.Close) onClose()
+        }
+    }
 
     fun exportText(): String = listOfNotNull(
-        title.takeIf { it.isNotBlank() }?.let { "# $it" },
-        body.text,
+        viewModel.title.takeIf { it.isNotBlank() }?.let { "# $it" },
+        viewModel.body.text,
     ).joinToString("\n\n")
 
     SystemBackHandler(onBack = onClose)
     MarkdownNoteEditorScreen(
-        screenTitle = stringResource(if (isNew) Res.string.notes_new_title else Res.string.notes_edit_title),
-        title = title,
-        tags = tags,
-        body = body,
+        screenTitle = stringResource(if (viewModel.isNew) Res.string.notes_new_title else Res.string.notes_edit_title),
+        title = viewModel.title,
+        tags = viewModel.tags,
+        body = viewModel.body,
         sourceLabel = stringResource(
-            if (note.source == "meeting") Res.string.notes_source_meeting else Res.string.notes_source_app,
+            if (viewModel.source == NoteSource.MEETING) Res.string.notes_source_meeting else Res.string.notes_source_app,
         ),
-        isSaving = isSaving,
-        onTitleChange = { title = it },
-        onTagsChange = { tags = it },
-        onBodyChange = { body = it },
-        onSave = {
-            isSaving = true
-            scope.launch {
-                val updated = note.copy(
-                    title = title.trim(),
-                    content = body.text,
-                    updatedAt = sharedNowMillis(),
-                )
-                if (isNew) {
-                    CyanBridgeServices.notesRepository.insertNote(updated)
-                } else {
-                    CyanBridgeServices.notesRepository.updateNote(updated)
-                }
-                AppPrefs.NoteTags.tags[note.id].set(tags.trim())
-                isSaving = false
-                onClose()
-            }
-        },
+        isSaving = viewModel.isSaving,
+        onTitleChange = { viewModel.title = it },
+        onTagsChange = { viewModel.tags = it },
+        onBodyChange = { viewModel.body = it },
+        onSave = viewModel::save,
         onCopy = { SharedChatHooks.copyText?.invoke(exportText()) },
         onShare = { SharedChatHooks.shareText?.invoke(exportText()) },
         onBack = onClose,
     )
 }
 
-private fun NoteEntity.summaryId(): Long = id.hashCode().toLong()
-
-private fun NoteEntity.toSummary(): NoteSummary = NoteSummary(
-    id = summaryId(),
-    title = title.ifBlank { content.lineSequence().firstOrNull { it.isNotBlank() }?.trim()?.take(60).orEmpty() },
-    summary = content.take(160),
-    createdAt = updatedAt,
-    source = if (source == "meeting") NoteSource.MEETING else NoteSource.APP,
-)
-
-/** Chat appearance persisted for the iOS host (Android stores its own in ChatThreadActivity). */
-private data class ChatAppearance(
+/** Chat appearance persisted for the iOS host (Android keeps its own in ChatAppearancePrefs). */
+internal data class ChatAppearance(
     val userBubbleColor: Int?,
     val assistantBubbleColor: Int?,
     val hasWallpaper: Boolean,
