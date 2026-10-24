@@ -1,6 +1,9 @@
 package com.fersaiyan.cyanbridge.analytics
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import java.util.UUID
 
 /**
@@ -8,16 +11,12 @@ import java.util.UUID
  * This is deliberately separate from the Pro bearer token.
  */
 object InstallationIdentity {
-    private const val PREFS = "pro_feature_feedback"
-    private const val KEY_INSTALLATION_ID = "installation_id"
-
     fun getOrCreate(context: Context): String {
-        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val existing = prefs.getString(KEY_INSTALLATION_ID, "").orEmpty().trim()
+        val existing = ProPrefs.Feedback.installationId[context].trim()
         if (existing.isNotBlank()) return existing
 
         val generated = UUID.randomUUID().toString()
-        prefs.edit().putString(KEY_INSTALLATION_ID, generated).apply()
+        ProPrefs.Feedback.installationId[context] = generated
         return generated
     }
 }

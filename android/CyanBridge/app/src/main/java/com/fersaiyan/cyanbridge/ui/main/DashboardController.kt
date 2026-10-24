@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.ui.main
 import android.content.Intent
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.BuildConfig
-import com.fersaiyan.cyanbridge.ai.AiWakeWordPreferences
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivity
 import com.fersaiyan.cyanbridge.ai.image.ImageThumbnailQuality
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveVisionPreferences
@@ -23,6 +22,8 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.main.glasses.AndroidGlassesDevices
 
 /**
@@ -115,7 +116,9 @@ internal class DashboardController(
         GlassesAssistantMode.CUSTOM_AI_PROVIDER -> actions.selectCustomAiProvider()
     }
 
-    override fun saveAiWakeWordRoute(route: AiWakeWordRoute) = AiWakeWordPreferences.setRoute(activity, route)
+    override fun saveAiWakeWordRoute(route: AiWakeWordRoute) {
+        AssistantPrefs.WakeWord.route[activity] = route
+    }
 
     override fun saveImageThumbnailQuality(sdkValue: Int): ImageThumbnailQuality {
         val quality = ImageQuestionPreferences.setThumbnailQuality(activity, sdkValue)

@@ -83,13 +83,12 @@ These were left untouched, or tidied without dropping any assertion.
 
 ## Deferred: prefs-centric tests
 
-A typed-preferences layer is being built concurrently, so these tests were not edited. They are candidates to revisit once it lands:
+A typed-preferences layer was built concurrently, so these tests were not edited. It has landed: shared `PrefsInventoryTest` (P) pins every preference file, key, type and default, and `TypedPrefsCompatibilityTest` (U) reads settings written the old way back through it. GeminiLiveModePreferencesTest was removed with its wrapper. The rest are candidates to revisit:
 - WalkingAidPreferencesTest (229; 29 getter/setter cases, some for unused APIs)
 - MemoryModeManagerTest (41)
 - AppearancePreferencesTest (43)
 - CommunityPluginPrefsTest (44)
 - LocalAgentTaskHistoryTest (45)
 - PrivacyPrefsTest (39)
-- GeminiLiveModePreferencesTest (29)
 - LocalMtpSettingsRepositoryTest (86)
 - the `firstFrameStateComesFromPreferences` cases in the plugin settings tests

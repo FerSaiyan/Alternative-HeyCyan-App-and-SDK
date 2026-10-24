@@ -112,7 +112,7 @@ Depois de A3 e A4, as 66 `GlassesDashboardAction` são tratadas por um controlad
 
 ### A7. Preferências e telas (contínua)
 
-- [ ] 73 arquivos chamam `getSharedPreferences` direto: trocar por preferências tipadas sobre `PlatformPreferences`, começando pelas que o iOS também usa (assistente, palavra de ativação, qualidade de imagem).
+- [x] 73 arquivos chamam `getSharedPreferences` direto: trocar por preferências tipadas sobre `PlatformPreferences`, começando pelas que o iOS também usa (assistente, palavra de ativação, qualidade de imagem). Feito: cada arquivo, chave, tipo e padrão está declarado uma vez em `shared/prefs` (`PrefsInventoryTest` fixa todos). Faltam `ImageQuestionPreferences`, `SettingsActivity`, `OnboardingFeatureActivity` e `WelcomeActivity`, que leem as mesmas chaves direto, e os repositórios JSON do iOS.
 - [ ] Seguir o `COMPOSE_MIGRATION_PLAN.md` para as 42 Activities e 54 layouts XML, começando pelas telas que o iOS também precisa.
 
 ## 5. Um repositório ou dois?

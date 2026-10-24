@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.privacy
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.audio.MeetingCapturePrefs
 import com.fersaiyan.cyanbridge.audio.MeetingCaptureService
 import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.memoryvault.MemoryVaultService
@@ -48,7 +49,7 @@ object LocalDataWiper {
 
         val prefsCleared = runCatching {
             // Meeting capture state
-            context.getSharedPreferences("meeting_capture", Context.MODE_PRIVATE).edit().clear().apply()
+            MeetingCapturePrefs.clear(context)
             // Privacy settings
             PrivacyPrefs.clear(context)
         }.onFailure {

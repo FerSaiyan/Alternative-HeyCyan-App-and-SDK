@@ -5,12 +5,14 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyBulletsSettings
-import com.fersaiyan.cyanbridge.localagent.userfacts.ChatMemoryPrefs
 import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
 import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,8 +42,8 @@ class AutoDiarySettingsActivityTest {
     @Test
     fun firstFrameStateComesFromPreferences() {
         LocalAgentPrefs.setDailyFactsReminderEnabled(context, true)
-        ChatMemoryPrefs.setAutoSaveDailyFactsEnabled(context, false)
-        ChatMemoryPrefs.setExtractUserFactCandidatesEnabled(context, false)
+        MemoryPrefs.ChatMemory.autoSaveDailyFacts[context] = false
+        MemoryPrefs.ChatMemory.extractUserFactCandidates[context] = false
         DailyBulletsSettings.setMaxTokensPerBullet(context, 64)
         MemoryModeManager.setScreenOcrRetentionDays(context, 9)
         DailyBulletsSettings.setCustomBulletPrompt(context, "One short bullet")
@@ -92,8 +94,8 @@ class AutoDiarySettingsActivityTest {
 
         assertEquals(30, MemoryModeManager.getScreenOcrRetentionDays(context))
         assertTrue(LocalAgentPrefs.isDailyFactsReminderEnabled(context))
-        assertFalse(ChatMemoryPrefs.isAutoSaveDailyFactsEnabled(context))
-        assertFalse(ChatMemoryPrefs.isExtractUserFactCandidatesEnabled(context))
+        assertFalse(MemoryPrefs.ChatMemory.autoSaveDailyFacts[context])
+        assertFalse(MemoryPrefs.ChatMemory.extractUserFactCandidates[context])
         assertEquals(128, DailyBulletsSettings.getMaxTokensPerBullet(context))
         assertEquals("Custom prompt", DailyBulletsSettings.getBulletPrompt(context))
         assertEquals(AutoDiarySettingsState.load(context), activity.state)

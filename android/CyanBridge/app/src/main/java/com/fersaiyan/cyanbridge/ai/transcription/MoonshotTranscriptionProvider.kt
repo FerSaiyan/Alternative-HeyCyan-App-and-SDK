@@ -2,12 +2,14 @@ package com.fersaiyan.cyanbridge.ai.transcription
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.BuildConfig
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
 import java.io.File
 
 /**
  * OpenAI-compatible audio transcription provider configured for Moonshot/Kimi-style endpoints.
  *
- * Endpoint and key can be overridden through [TranscriptionEndpointPrefs].
+ * Endpoint and key can be overridden through [AssistantPrefs.TranscriptionEndpoint].
  */
 class MoonshotTranscriptionProvider(
     private val context: Context,
@@ -17,12 +19,12 @@ class MoonshotTranscriptionProvider(
     override val name: String = "moonshot"
 
     override suspend fun transcribe(audioFile: File, mimeType: String, language: String?): String {
-        val endpoint = TranscriptionEndpointPrefs.getEndpointUrl(context)
+        val endpoint = AssistantPrefs.TranscriptionEndpoint.endpointUrl[context]
             ?.trim()
             ?.takeIf { it.isNotBlank() }
             ?: DEFAULT_MOONSHOT_TRANSCRIBE_ENDPOINT
 
-        val apiKey = TranscriptionEndpointPrefs.getApiKey(context)
+        val apiKey = AssistantPrefs.TranscriptionEndpoint.apiKey[context]
             ?.trim()
             ?.takeIf { it.isNotBlank() }
             ?: BuildConfig.OPENAI_API_KEY.trim()

@@ -2,13 +2,14 @@ package com.fersaiyan.cyanbridge.plugins.livecaptionrelay
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONArray
 import org.json.JSONObject
 
 class LiveCaptionRelayStore {
     private val TAG = "LiveCaptionRelayStore"
-    private val PREFS = "live_caption_relay_store"
-    private val KEY_CAPTIONS = "captions_json"
 
     private val lock = Any()
     private val captions = mutableListOf<CaptionEntry>()
@@ -54,7 +55,7 @@ class LiveCaptionRelayStore {
                         .put("confidence", caption.confidence.toDouble())
                 )
             }
-            prefs(context).edit().putString(KEY_CAPTIONS, arr.toString()).apply()
+            PluginPrefs.LiveCaptionRelayStore.captionsJson[context] = arr.toString()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to persist captions", e)
         }
@@ -69,7 +70,7 @@ class LiveCaptionRelayStore {
             if (loaded) return
             loaded = true
             try {
-                val raw = prefs(context).getString(KEY_CAPTIONS, "[]") ?: "[]"
+                val raw = PluginPrefs.LiveCaptionRelayStore.captionsJson[context]
                 val arr = JSONArray(raw)
                 for (i in 0 until arr.length()) {
                     val obj = arr.optJSONObject(i) ?: continue
@@ -91,7 +92,4 @@ class LiveCaptionRelayStore {
             }
         }
     }
-
-    private fun prefs(context: Context) =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

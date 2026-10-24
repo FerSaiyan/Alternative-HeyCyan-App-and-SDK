@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.os.StatFs
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
+import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs.LocalModelRegistry
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -25,13 +28,6 @@ data class InstalledLocalModel(
 )
 
 object LocalModelStorageRepository {
-    private const val PREFS = "local_models_registry"
-    private const val KEY_INSTALLED_MODELS = "installed_models"
-    private const val KEY_SELECTED_MODEL_ID = "selected_model_id"
-
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
     fun baseDir(context: Context): File = File(context.filesDir, "local_models")
     fun modelsDir(context: Context): File = File(baseDir(context), "models")
     fun tempDir(context: Context): File = File(baseDir(context), "tmp")
@@ -47,7 +43,7 @@ object LocalModelStorageRepository {
     }
 
     fun listInstalled(context: Context): List<InstalledLocalModel> {
-        val raw = prefs(context).getString(KEY_INSTALLED_MODELS, "[]") ?: "[]"
+        val raw = LocalModelRegistry.installedModels[context]
         val arr = runCatching { JSONArray(raw) }.getOrDefault(JSONArray())
         val models = mutableListOf<InstalledLocalModel>()
         for (i in 0 until arr.length()) {
@@ -118,11 +114,11 @@ object LocalModelStorageRepository {
     }
 
     fun getSelectedModelId(context: Context): String? {
-        return prefs(context).getString(KEY_SELECTED_MODEL_ID, null)
+        return LocalModelRegistry.selectedModelId[context]
     }
 
     fun setSelectedModelId(context: Context, modelId: String?) {
-        prefs(context).edit().putString(KEY_SELECTED_MODEL_ID, modelId).apply()
+        LocalModelRegistry.selectedModelId[context] = modelId
     }
 
     fun resolveSelectedModel(context: Context): InstalledLocalModel? {
@@ -231,7 +227,7 @@ object LocalModelStorageRepository {
                     .put("imported_at_ms", model.importedAtMs),
             )
         }
-        prefs(context).edit().putString(KEY_INSTALLED_MODELS, arr.toString()).apply()
+        LocalModelRegistry.installedModels[context] = arr.toString()
     }
 
     private fun uniqueFileIn(dir: File, fileName: String): File {

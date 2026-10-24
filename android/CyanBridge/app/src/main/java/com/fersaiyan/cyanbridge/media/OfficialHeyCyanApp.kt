@@ -7,12 +7,12 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 object OfficialHeyCyanApp {
     const val PACKAGE_NAME = "com.glasssutdio.wear"
-
-    private const val PREFS_NAME = "media_sync_warnings"
-    private const val KEY_WARNING_SUPPRESSED = "official_heycyan_warning_suppressed"
 
     fun shouldWarn(
         selectedClass: DeviceClass,
@@ -27,11 +27,7 @@ object OfficialHeyCyanApp {
     )
 
     fun suppressWarning(context: Context) {
-        context.applicationContext
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_WARNING_SUPPRESSED, true)
-            .apply()
+        MediaPrefs.SyncWarnings.officialHeyCyanWarningSuppressed[context] = true
     }
 
     fun appInfoIntent(): Intent = Intent(
@@ -40,9 +36,7 @@ object OfficialHeyCyanApp {
     )
 
     private fun isWarningSuppressed(context: Context): Boolean =
-        context.applicationContext
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_WARNING_SUPPRESSED, false)
+        MediaPrefs.SyncWarnings.officialHeyCyanWarningSuppressed[context]
 
     fun isInstalled(context: Context): Boolean = try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

@@ -1,6 +1,11 @@
 package com.fersaiyan.cyanbridge.ai.image
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs.ExternalImageAutomation as Automation
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.prefs.store
 import java.util.UUID
 
 data class ExternalImageAutomationSession(
@@ -34,19 +39,6 @@ object ExternalImageAutomationIntents {
 
 /** Persists enough state to diagnose callbacks after Gemini has taken the foreground. */
 object ExternalImageAutomationStore {
-    private const val PREFS = "external_image_automation"
-    private const val KEY_SESSION = "session"
-    private const val KEY_TOKEN = "token"
-    private const val KEY_PATH = "path"
-    private const val KEY_URI = "uri"
-    private const val KEY_QUESTION = "question"
-    private const val KEY_SOURCE = "source"
-    private const val KEY_STAGE = "stage"
-    private const val KEY_ERROR = "error"
-    private const val KEY_FOLLOW_UP_PROMPT_SHOWN = "follow_up_prompt_shown"
-
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
     fun begin(
         context: Context,
         imagePath: String,
@@ -69,25 +61,25 @@ object ExternalImageAutomationStore {
     }
 
     fun current(context: Context): ExternalImageAutomationSession? {
-        val values = prefs(context)
-        val sessionId = values.getString(KEY_SESSION, null) ?: return null
-        val token = values.getString(KEY_TOKEN, null) ?: return null
-        val path = values.getString(KEY_PATH, null) ?: return null
-        val uri = values.getString(KEY_URI, null) ?: return null
+        val values = Automation.store(context)
+        val sessionId = values[Automation.session] ?: return null
+        val token = values[Automation.token] ?: return null
+        val path = values[Automation.path] ?: return null
+        val uri = values[Automation.uri] ?: return null
         val source = ImageQuestionSource.entries.firstOrNull {
-            it.wireName == values.getString(KEY_SOURCE, null)
+            it.wireName == values[Automation.source]
         } ?: return null
-        val stage = ExternalImageAutomationStage.fromWireName(values.getString(KEY_STAGE, null))
+        val stage = ExternalImageAutomationStage.fromWireName(values[Automation.stage])
             ?: ExternalImageAutomationStage.IDLE
         return ExternalImageAutomationSession(
             sessionId = sessionId,
             callbackToken = token,
             imagePath = path,
             imageUri = uri,
-            question = values.getString(KEY_QUESTION, "").orEmpty(),
+            question = values[Automation.question],
             source = source,
-            state = ExternalImageAutomationState(stage, values.getString(KEY_ERROR, null)),
-            followUpPromptShown = values.getBoolean(KEY_FOLLOW_UP_PROMPT_SHOWN, false),
+            state = ExternalImageAutomationState(stage, values[Automation.error]),
+            followUpPromptShown = values[Automation.followUpPromptShown],
         )
     }
 
@@ -119,16 +111,16 @@ object ExternalImageAutomationStore {
     }
 
     private fun write(context: Context, session: ExternalImageAutomationSession) {
-        prefs(context).edit()
-            .putString(KEY_SESSION, session.sessionId)
-            .putString(KEY_TOKEN, session.callbackToken)
-            .putString(KEY_PATH, session.imagePath)
-            .putString(KEY_URI, session.imageUri)
-            .putString(KEY_QUESTION, session.question)
-            .putString(KEY_SOURCE, session.source.wireName)
-            .putString(KEY_STAGE, session.state.stage.wireName)
-            .putString(KEY_ERROR, session.state.error)
-            .putBoolean(KEY_FOLLOW_UP_PROMPT_SHOWN, session.followUpPromptShown)
-            .apply()
+        Automation.edit(context) {
+            this[Automation.session] = session.sessionId
+            this[Automation.token] = session.callbackToken
+            this[Automation.path] = session.imagePath
+            this[Automation.uri] = session.imageUri
+            this[Automation.question] = session.question
+            this[Automation.source] = session.source.wireName
+            this[Automation.stage] = session.state.stage.wireName
+            this[Automation.error] = session.state.error
+            this[Automation.followUpPromptShown] = session.followUpPromptShown
+        }
     }
 }

@@ -1,171 +1,114 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.platform.PlatformPreferences
+import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs.WalkingAid
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.prefs.store
 
 object WalkingAidPreferences {
-    private const val PREFS = "walking_aid_prefs"
-
-    private const val KEY_ENABLED = "enabled"
-    private const val KEY_VIDEO_MODE = "video_mode"
-    private const val KEY_MODE = "mode"
-    private const val KEY_SPEECH_RATE = "speech_rate"
-    private const val KEY_ANNOUNCEMENT_PAUSE_MS = "announcement_pause_ms"
-    private const val KEY_CAPTURE_INTERVAL_SECONDS = "capture_interval_seconds"
-    private const val KEY_IMAGE_DESCRIPTION_SOURCE = "image_description_source"
-    private const val KEY_IMAGE_DESCRIPTION_CLOUD_MODEL_ID = "image_description_cloud_model_id"
-    private const val KEY_DEPTH_ENABLED = "depth_enabled"
-    private const val KEY_DEPTH_SOURCE = "depth_source"
-    private const val KEY_DEPTH_CLOUD_MODEL_ID = "depth_cloud_model_id"
-    private const val KEY_STATE_MODEL_SOURCE = "state_model_source"
-    private const val KEY_TTS_ENABLED = "tts_enabled"
-    private const val KEY_SAFETY_DISCLAIMER_ENABLED = "safety_disclaimer_enabled"
-    private const val KEY_IMAGE_HISTORY_MAX_COUNT = "image_history_max_count"
-    private const val KEY_CUSTOM_PROMPT = "custom_prompt"
-    private const val KEY_YOLO_MODEL_TYPE = "yolo_model_type"
-    private const val KEY_WATCHLIST_TERMS = "watchlist_terms"
-    private const val KEY_FOCUS_DESCRIPTION = "focus_description"
-    private const val KEY_FOCUS_TRANSLATION_ORIGINAL = "focus_translation_original"
-    private const val KEY_FOCUS_TRANSLATION_SOURCE = "focus_translation_source"
-    private const val KEY_FOCUS_TRANSLATION_ENGLISH = "focus_translation_english"
-    private const val KEY_THUMBNAIL_QUALITY_LEVEL = "thumbnail_quality_level"
-    private const val KEY_PHOTO_SETTLE_DELAY_MS = "photo_settle_delay_ms"
-    private const val MAX_CUSTOM_PROMPT_CHARS = 1_500
-
-    private const val DEFAULT_ENABLED = false
-    private const val DEFAULT_CAPTURE_INTERVAL_SECONDS = 5
-    private const val DEFAULT_IMAGE_DESCRIPTION_SOURCE = "local"
-    private const val DEFAULT_IMAGE_DESCRIPTION_CLOUD_MODEL_ID = "cyanbridge/walking-aid-vision"
-    private const val DEFAULT_DEPTH_ENABLED = true
-    private const val DEFAULT_DEPTH_SOURCE = "cloud"
-    private const val DEFAULT_DEPTH_CLOUD_MODEL_ID = "cyanbridge/walking-aid-vision"
-    private const val DEFAULT_STATE_MODEL_SOURCE = "local"
-    private const val DEFAULT_TTS_ENABLED = true
-    private const val DEFAULT_SAFETY_DISCLAIMER_ENABLED = true
-    private const val DEFAULT_IMAGE_HISTORY_MAX_COUNT = 50
     const val MODEL_TYPE_YOLO11 = "yolo11"
     const val MODEL_TYPE_YOLO_WORLD = "yolo_world"
-    private const val DEFAULT_YOLO_MODEL_TYPE = MODEL_TYPE_YOLO11
 
-    private fun prefs(context: Context) =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    fun isEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_ENABLED, DEFAULT_ENABLED)
+    fun isEnabled(context: Context): Boolean = WalkingAid.enabled[context]
 
     fun getVideoMode(context: Context): WalkingAidVideoMode =
-        WalkingAidVideoMode.entries.firstOrNull { it.name == prefs(context).getString(KEY_VIDEO_MODE, null) }
+        WalkingAidVideoMode.entries.firstOrNull { it.name == WalkingAid.videoMode[context] }
             ?: WalkingAidVideoMode.PERIODIC_PHOTOS
 
     fun setVideoMode(context: Context, mode: WalkingAidVideoMode) {
-        prefs(context).edit().putString(KEY_VIDEO_MODE, mode.name).apply()
+        WalkingAid.videoMode[context] = mode.name
     }
 
     fun getMode(context: Context): WalkingAidMode =
-        WalkingAidMode.entries.firstOrNull { it.name == prefs(context).getString(KEY_MODE, null) }
-            ?: WalkingAidMode.WALKING
+        WalkingAidMode.entries.firstOrNull { it.name == WalkingAid.mode[context] } ?: WalkingAidMode.WALKING
 
     fun setMode(context: Context, mode: WalkingAidMode) {
-        prefs(context).edit().putString(KEY_MODE, mode.name).apply()
+        WalkingAid.mode[context] = mode.name
     }
 
-    fun getSpeechRate(context: Context): Float =
-        prefs(context).getFloat(KEY_SPEECH_RATE, 1f).let {
-            if (it.isFinite()) it.coerceIn(0.5f, 2f) else 1f
-        }
+    fun getSpeechRate(context: Context): Float = WalkingAid.speechRate[context]
 
     fun setSpeechRate(context: Context, rate: Float) {
-        prefs(context).edit().putFloat(KEY_SPEECH_RATE, if (rate.isFinite()) rate.coerceIn(0.5f, 2f) else 1f).apply()
+        WalkingAid.speechRate[context] = rate
     }
 
-    fun getAnnouncementPauseMs(context: Context): Long =
-        prefs(context).getLong(KEY_ANNOUNCEMENT_PAUSE_MS, 1_000L).coerceIn(0L, 5_000L)
+    fun getAnnouncementPauseMs(context: Context): Long = WalkingAid.announcementPauseMs[context]
 
     fun setAnnouncementPauseMs(context: Context, pauseMs: Long) {
-        prefs(context).edit().putLong(KEY_ANNOUNCEMENT_PAUSE_MS, pauseMs.coerceIn(0L, 5_000L)).apply()
+        WalkingAid.announcementPauseMs[context] = pauseMs
     }
 
     fun setEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_ENABLED, enabled).apply()
+        WalkingAid.enabled[context] = enabled
     }
 
-    fun getCaptureIntervalSeconds(context: Context): Int =
-        prefs(context).getInt(KEY_CAPTURE_INTERVAL_SECONDS, DEFAULT_CAPTURE_INTERVAL_SECONDS)
-            .coerceIn(2, 60)
+    fun getCaptureIntervalSeconds(context: Context): Int = WalkingAid.captureIntervalSeconds[context]
 
     fun setCaptureIntervalSeconds(context: Context, seconds: Int) {
-        prefs(context).edit().putInt(KEY_CAPTURE_INTERVAL_SECONDS, seconds.coerceIn(2, 60)).apply()
+        WalkingAid.captureIntervalSeconds[context] = seconds
     }
 
-    fun getImageDescriptionSource(context: Context): String =
-        prefs(context).getString(KEY_IMAGE_DESCRIPTION_SOURCE, DEFAULT_IMAGE_DESCRIPTION_SOURCE).orEmpty()
+    fun getImageDescriptionSource(context: Context): String = WalkingAid.imageDescriptionSource[context]
 
     fun setImageDescriptionSource(context: Context, source: String) {
-        prefs(context).edit().putString(KEY_IMAGE_DESCRIPTION_SOURCE, source).apply()
+        WalkingAid.imageDescriptionSource[context] = source
     }
 
-    fun getImageDescriptionCloudModelId(context: Context): String =
-        prefs(context).getString(KEY_IMAGE_DESCRIPTION_CLOUD_MODEL_ID, DEFAULT_IMAGE_DESCRIPTION_CLOUD_MODEL_ID).orEmpty()
+    fun getImageDescriptionCloudModelId(context: Context): String = WalkingAid.imageDescriptionCloudModelId[context]
 
     fun setImageDescriptionCloudModelId(context: Context, modelId: String) {
-        prefs(context).edit().putString(KEY_IMAGE_DESCRIPTION_CLOUD_MODEL_ID, modelId).apply()
+        WalkingAid.imageDescriptionCloudModelId[context] = modelId
     }
 
-    fun isDepthEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_DEPTH_ENABLED, DEFAULT_DEPTH_ENABLED)
+    fun isDepthEnabled(context: Context): Boolean = WalkingAid.depthEnabled[context]
 
     fun setDepthEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_DEPTH_ENABLED, enabled).apply()
+        WalkingAid.depthEnabled[context] = enabled
     }
 
-    fun getDepthSource(context: Context): String =
-        prefs(context).getString(KEY_DEPTH_SOURCE, DEFAULT_DEPTH_SOURCE).orEmpty()
+    fun getDepthSource(context: Context): String = WalkingAid.depthSource[context]
 
     fun setDepthSource(context: Context, source: String) {
-        prefs(context).edit().putString(KEY_DEPTH_SOURCE, source).apply()
+        WalkingAid.depthSource[context] = source
     }
 
-    fun getDepthCloudModelId(context: Context): String =
-        prefs(context).getString(KEY_DEPTH_CLOUD_MODEL_ID, DEFAULT_DEPTH_CLOUD_MODEL_ID).orEmpty()
+    fun getDepthCloudModelId(context: Context): String = WalkingAid.depthCloudModelId[context]
 
     fun setDepthCloudModelId(context: Context, modelId: String) {
-        prefs(context).edit().putString(KEY_DEPTH_CLOUD_MODEL_ID, modelId).apply()
+        WalkingAid.depthCloudModelId[context] = modelId
     }
 
-    fun getStateModelSource(context: Context): String =
-        prefs(context).getString(KEY_STATE_MODEL_SOURCE, DEFAULT_STATE_MODEL_SOURCE).orEmpty()
+    fun getStateModelSource(context: Context): String = WalkingAid.stateModelSource[context]
 
     fun setStateModelSource(context: Context, source: String) {
-        prefs(context).edit().putString(KEY_STATE_MODEL_SOURCE, source).apply()
+        WalkingAid.stateModelSource[context] = source
     }
 
-    fun isTtsEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_TTS_ENABLED, DEFAULT_TTS_ENABLED)
+    fun isTtsEnabled(context: Context): Boolean = WalkingAid.ttsEnabled[context]
 
     fun setTtsEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_TTS_ENABLED, enabled).apply()
+        WalkingAid.ttsEnabled[context] = enabled
     }
 
-    fun isSafetyDisclaimerEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_SAFETY_DISCLAIMER_ENABLED, DEFAULT_SAFETY_DISCLAIMER_ENABLED)
+    fun isSafetyDisclaimerEnabled(context: Context): Boolean = WalkingAid.safetyDisclaimerEnabled[context]
 
     fun setSafetyDisclaimerEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_SAFETY_DISCLAIMER_ENABLED, enabled).apply()
+        WalkingAid.safetyDisclaimerEnabled[context] = enabled
     }
 
-    fun getImageHistoryMaxCount(context: Context): Int =
-        prefs(context).getInt(KEY_IMAGE_HISTORY_MAX_COUNT, DEFAULT_IMAGE_HISTORY_MAX_COUNT)
-            .coerceIn(10, 200)
+    fun getImageHistoryMaxCount(context: Context): Int = WalkingAid.imageHistoryMaxCount[context]
 
     fun setImageHistoryMaxCount(context: Context, count: Int) {
-        prefs(context).edit().putInt(KEY_IMAGE_HISTORY_MAX_COUNT, count.coerceIn(10, 200)).apply()
+        WalkingAid.imageHistoryMaxCount[context] = count
     }
 
-    fun getCustomPrompt(context: Context): String =
-        prefs(context).getString(KEY_CUSTOM_PROMPT, "").orEmpty()
-            .take(MAX_CUSTOM_PROMPT_CHARS)
+    fun getCustomPrompt(context: Context): String = WalkingAid.customPrompt[context]
 
     fun setCustomPrompt(context: Context, prompt: String) {
-        prefs(context).edit().putString(KEY_CUSTOM_PROMPT, prompt.trim().take(MAX_CUSTOM_PROMPT_CHARS)).apply()
+        WalkingAid.customPrompt[context] = prompt
     }
 
     /** Returns the cloud model ID for image description, or null if using local source. */
@@ -188,45 +131,46 @@ object WalkingAidPreferences {
 
     fun shouldUseCloud(context: Context): Boolean = usesCloudSource(context)
 
-    fun getYoloModelType(context: Context): String =
-        prefs(context).getString(KEY_YOLO_MODEL_TYPE, DEFAULT_YOLO_MODEL_TYPE) ?: DEFAULT_YOLO_MODEL_TYPE
+    fun getYoloModelType(context: Context): String = WalkingAid.yoloModelType[context]
 
     fun setYoloModelType(context: Context, type: String) {
-        prefs(context).edit().putString(KEY_YOLO_MODEL_TYPE, type).apply()
+        WalkingAid.yoloModelType[context] = type
     }
 
     fun getFocusDescription(context: Context): String =
-        prefs(context).getString(KEY_FOCUS_DESCRIPTION, null)
-            ?: prefs(context).getString(KEY_WATCHLIST_TERMS, "").orEmpty()
+        WalkingAid.focusDescription[context] ?: WalkingAid.watchlistTerms[context]
 
     fun setFocusDescription(context: Context, description: String) {
         val normalized = description.trim().take(500)
-        val preferences = prefs(context)
-        val edit = preferences.edit().putString(KEY_FOCUS_DESCRIPTION, normalized)
-        if (preferences.getString(KEY_FOCUS_TRANSLATION_ORIGINAL, null) != normalized) {
-            edit.remove(KEY_FOCUS_TRANSLATION_ORIGINAL)
-                .remove(KEY_FOCUS_TRANSLATION_SOURCE)
-                .remove(KEY_FOCUS_TRANSLATION_ENGLISH)
+        val translatedOriginal = WalkingAid.focusTranslationOriginal[context]
+        WalkingAid.edit(context) {
+            this[WalkingAid.focusDescription] = normalized
+            if (translatedOriginal != normalized) clearFocusTranslation()
         }
-        edit.apply()
     }
 
     fun getCachedFocusTranslation(context: Context, original: String, source: String): String? {
-        val preferences = prefs(context)
-        if (preferences.getString(KEY_FOCUS_TRANSLATION_ORIGINAL, null) != original.trim().take(500)) return null
-        if (!preferences.getString(KEY_FOCUS_TRANSLATION_SOURCE, null).equals(source, ignoreCase = true)) return null
-        return preferences.getString(KEY_FOCUS_TRANSLATION_ENGLISH, null)?.takeIf { it.isNotBlank() }
+        val preferences = WalkingAid.store(context)
+        if (preferences[WalkingAid.focusTranslationOriginal] != original.trim().take(500)) return null
+        if (!preferences[WalkingAid.focusTranslationSource].equals(source, ignoreCase = true)) return null
+        return preferences[WalkingAid.focusTranslationEnglish]?.takeIf { it.isNotBlank() }
     }
 
     fun setCachedFocusTranslation(context: Context, original: String, source: String, english: String) {
         val normalizedOriginal = original.trim().take(500)
-        prefs(context).edit()
-            .putString(KEY_FOCUS_DESCRIPTION, normalizedOriginal)
-            .putString(KEY_STATE_MODEL_SOURCE, source)
-            .putString(KEY_FOCUS_TRANSLATION_ORIGINAL, normalizedOriginal)
-            .putString(KEY_FOCUS_TRANSLATION_SOURCE, source)
-            .putString(KEY_FOCUS_TRANSLATION_ENGLISH, english.trim())
-            .apply()
+        WalkingAid.edit(context) {
+            this[WalkingAid.focusDescription] = normalizedOriginal
+            this[WalkingAid.stateModelSource] = source
+            this[WalkingAid.focusTranslationOriginal] = normalizedOriginal
+            this[WalkingAid.focusTranslationSource] = source
+            this[WalkingAid.focusTranslationEnglish] = english.trim()
+        }
+    }
+
+    private fun PlatformPreferences.clearFocusTranslation() {
+        WalkingAid.focusTranslationOriginal.remove(this)
+        WalkingAid.focusTranslationSource.remove(this)
+        WalkingAid.focusTranslationEnglish.remove(this)
     }
 
     fun getModelFocusDescription(context: Context): String {
@@ -235,20 +179,16 @@ object WalkingAidPreferences {
         return getCachedFocusTranslation(context, original, source) ?: original
     }
 
-    fun getThumbnailQualityLevel(context: Context): Int =
-        prefs(context).getInt(KEY_THUMBNAIL_QUALITY_LEVEL, 3)
-            .coerceIn(0, 5)
+    fun getThumbnailQualityLevel(context: Context): Int = WalkingAid.thumbnailQualityLevel[context]
 
     fun setThumbnailQualityLevel(context: Context, level: Int) {
-        prefs(context).edit().putInt(KEY_THUMBNAIL_QUALITY_LEVEL, level.coerceIn(0, 5)).apply()
+        WalkingAid.thumbnailQualityLevel[context] = level
     }
 
-    fun getPhotoSettleDelayMs(context: Context): Long =
-        prefs(context).getInt(KEY_PHOTO_SETTLE_DELAY_MS, 250)
-            .coerceIn(0, 500).toLong()
+    fun getPhotoSettleDelayMs(context: Context): Long = WalkingAid.photoSettleDelayMs[context].toLong()
 
     fun setPhotoSettleDelayMs(context: Context, delayMs: Int) {
-        prefs(context).edit().putInt(KEY_PHOTO_SETTLE_DELAY_MS, delayMs.coerceIn(0, 500)).apply()
+        WalkingAid.photoSettleDelayMs[context] = delayMs
     }
 
     fun getWatchlistTerms(context: Context): List<String> =
@@ -256,9 +196,9 @@ object WalkingAidPreferences {
 
     fun setWatchlistTerms(context: Context, terms: List<String>) {
         val csv = terms.map { it.trim() }.filter { it.isNotBlank() }.joinToString(",")
-        prefs(context).edit()
-            .putString(KEY_WATCHLIST_TERMS, csv)
-            .putString(KEY_FOCUS_DESCRIPTION, csv)
-            .apply()
+        WalkingAid.edit(context) {
+            this[WalkingAid.watchlistTerms] = csv
+            this[WalkingAid.focusDescription] = csv
+        }
     }
 }

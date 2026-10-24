@@ -1,6 +1,5 @@
 package com.fersaiyan.cyanbridge.media.sync
 
-import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -18,6 +17,10 @@ import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsMediaType
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
+import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.hasBluetooth
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import java.io.File
@@ -301,15 +304,15 @@ internal class VendorMediaSyncController(
     }
 
     private fun showMoyoungWifiCredentialsDialog(manager: MoyoungW620Manager) {
-        val prefs = activity.getSharedPreferences("moyoung_w620", Context.MODE_PRIVATE)
+        val wifi = MediaPrefs.MoyoungW620
         val ssidInput = android.widget.EditText(activity).apply {
             hint = "Glasses Wi-Fi name (SSID)"
-            setText(prefs.getString("file_wifi_ssid", "Glass-01"))
+            setText(wifi.fileWifiSsid[activity])
             inputType = android.text.InputType.TYPE_CLASS_TEXT
         }
         val passwordInput = android.widget.EditText(activity).apply {
             hint = "Glasses Wi-Fi password"
-            setText(prefs.getString("file_wifi_password", "12345678"))
+            setText(wifi.fileWifiPassword[activity])
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
@@ -337,10 +340,10 @@ internal class VendorMediaSyncController(
                     Toast.makeText(activity, "Enter the glasses Wi-Fi name.", Toast.LENGTH_LONG).show()
                     return@setPositiveButton
                 }
-                prefs.edit()
-                    .putString("file_wifi_ssid", credentials.ssid)
-                    .putString("file_wifi_password", credentials.password)
-                    .apply()
+                wifi.edit(activity) {
+                    this[wifi.fileWifiSsid] = credentials.ssid
+                    this[wifi.fileWifiPassword] = credentials.password
+                }
                 beginMoyoungW620MediaSync(manager, credentials)
             }
             .show()

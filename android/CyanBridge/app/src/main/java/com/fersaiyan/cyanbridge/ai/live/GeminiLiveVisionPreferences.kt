@@ -1,6 +1,9 @@
 package com.fersaiyan.cyanbridge.ai.live
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 /** Gemini Live-only visual refresh mode. Zero keeps the initial image only. */
 object GeminiLiveVisionPreferences {
@@ -11,8 +14,7 @@ object GeminiLiveVisionPreferences {
     private val legacyDelaySeconds = listOf(5, 10, 15)
 
     fun imageDelaySeconds(context: Context): Int {
-        val stored = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getInt(KEY_IMAGE_DELAY_SECONDS, DEFAULT_IMAGE_DELAY_SECONDS)
+        val stored = AssistantPrefs.GeminiLive.imageDelaySeconds[context]
         if (stored in delayOptionsSeconds) return stored
         // Migrates 5/10/15 from older builds to the new "every turn" mode.
         if (stored in legacyDelaySeconds) return 2
@@ -25,17 +27,12 @@ object GeminiLiveVisionPreferences {
             in legacyDelaySeconds -> 2
             else -> DEFAULT_IMAGE_DELAY_SECONDS
         }
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putInt(KEY_IMAGE_DELAY_SECONDS, normalized)
-            .apply()
+        AssistantPrefs.GeminiLive.imageDelaySeconds[context] = normalized
         return normalized
     }
 
     fun automaticRefreshIntervalMs(context: Context): Long? =
         if (imageDelaySeconds(context) > 0) 0L else null
 
-    private const val PREFS_NAME = "gemini_live"
-    private const val KEY_IMAGE_DELAY_SECONDS = "live_image_delay"
     private const val DEFAULT_IMAGE_DELAY_SECONDS = 0
 }

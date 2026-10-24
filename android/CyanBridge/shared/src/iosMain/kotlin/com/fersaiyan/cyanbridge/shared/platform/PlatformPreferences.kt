@@ -38,6 +38,13 @@ actual class PlatformPreferences(private val defaults: NSUserDefaults) {
         defaults.setBool(value, forKey = key)
     }
 
+    actual fun getStringSet(key: String): Set<String>? =
+        defaults.arrayForKey(key)?.filterIsInstance<String>()?.toSet()
+
+    actual fun putStringSet(key: String, value: Set<String>) {
+        defaults.setObject(value.toList(), forKey = key)
+    }
+
     actual fun remove(key: String) {
         defaults.removeObjectForKey(key)
     }
@@ -55,3 +62,5 @@ actual fun createPlatformPreferences(name: String): PlatformPreferences {
     val defaults = NSUserDefaults(suiteName = name) ?: NSUserDefaults.standardUserDefaults
     return PlatformPreferences(defaults)
 }
+
+internal actual val usesIosPreferenceNames: Boolean = true

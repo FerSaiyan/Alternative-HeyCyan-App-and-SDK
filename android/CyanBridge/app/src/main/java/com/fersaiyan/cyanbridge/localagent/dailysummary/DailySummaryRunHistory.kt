@@ -1,6 +1,9 @@
 package com.fersaiyan.cyanbridge.localagent.dailysummary
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.roundToInt
@@ -25,12 +28,7 @@ object DailySummaryRunHistory {
         val sampleCount: Int,
     )
 
-    private const val PREFS_NAME = "daily_summary_run_history"
-    private const val KEY_RUNS = "runs_json"
     private const val MAX_RUNS = 20
-
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     fun estimateTokenCount(text: String): Int {
         val cleaned = text.trim()
@@ -49,7 +47,7 @@ object DailySummaryRunHistory {
             totalMs = metrics.totalMs.coerceAtLeast(1L),
         )
         val trimmed = runs.takeLast(MAX_RUNS)
-        prefs(context).edit().putString(KEY_RUNS, encode(trimmed)).apply()
+        MemoryPrefs.DailySummaryRuns.runsJson[context] = encode(trimmed)
     }
 
     fun estimate(
@@ -81,7 +79,7 @@ object DailySummaryRunHistory {
     }
 
     private fun loadRuns(context: Context): List<RunMetrics> {
-        val raw = prefs(context).getString(KEY_RUNS, "[]") ?: "[]"
+        val raw = MemoryPrefs.DailySummaryRuns.runsJson[context]
         val arr = runCatching { JSONArray(raw) }.getOrElse { JSONArray() }
         val out = ArrayList<RunMetrics>(arr.length())
         for (i in 0 until arr.length()) {

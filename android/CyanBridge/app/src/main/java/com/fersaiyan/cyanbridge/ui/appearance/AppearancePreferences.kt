@@ -7,35 +7,23 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import com.fersaiyan.cyanbridge.shared.appearance.AccentProfiles
 import com.fersaiyan.cyanbridge.shared.appearance.AppearanceSettings
-import com.fersaiyan.cyanbridge.shared.appearance.ThemeMode
+import com.fersaiyan.cyanbridge.shared.appearance.AppearanceSettingsStore
+import com.fersaiyan.cyanbridge.shared.platform.PlatformPreferences
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.sharedPreferences
 
+/** Android appearance settings: the shared store over the `appearance_settings` file. */
 class AppearancePreferences(context: Context) {
-    private val preferences = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val preferences = AppPrefs.Appearance.sharedPreferences(context.applicationContext)
+    private val platformPreferences = PlatformPreferences(preferences)
+    private val store = AppearanceSettingsStore(platformPreferences)
 
-    fun load(): AppearanceSettings {
-        val themeMode = runCatching {
-            ThemeMode.valueOf(preferences.getString(KEY_THEME_MODE, null) ?: ThemeMode.SYSTEM.name)
-        }.getOrDefault(ThemeMode.SYSTEM)
-        val accentId = preferences.getString(KEY_ACCENT_PROFILE, AccentProfiles.CYAN_ID)
-            ?.takeIf { candidate -> AccentProfiles.all.any { it.id == candidate } }
-            ?: AccentProfiles.CYAN_ID
-        return AppearanceSettings(
-            themeMode = themeMode,
-            accentProfileId = accentId,
-            useDynamicColor = preferences.getBoolean(KEY_DYNAMIC_COLOR, false),
-            highContrast = preferences.getBoolean(KEY_HIGH_CONTRAST, false),
-        )
-    }
+    fun load(): AppearanceSettings = store.load()
 
+    /** One edit, so listeners never see a half-saved appearance. */
     fun save(settings: AppearanceSettings) {
-        preferences.edit()
-            .putString(KEY_THEME_MODE, settings.themeMode.name)
-            .putString(KEY_ACCENT_PROFILE, settings.accentProfileId)
-            .putBoolean(KEY_DYNAMIC_COLOR, settings.useDynamicColor)
-            .putBoolean(KEY_HIGH_CONTRAST, settings.highContrast)
-            .apply()
+        platformPreferences.edit { store.save(settings) }
     }
 
     fun reset() = save(AppearanceSettings())
@@ -46,14 +34,6 @@ class AppearancePreferences(context: Context) {
 
     fun unregisterListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
         preferences.unregisterOnSharedPreferenceChangeListener(listener)
-    }
-
-    private companion object {
-        const val PREFS_NAME = "appearance_settings"
-        const val KEY_THEME_MODE = "theme_mode"
-        const val KEY_ACCENT_PROFILE = "accent_profile"
-        const val KEY_DYNAMIC_COLOR = "dynamic_color"
-        const val KEY_HIGH_CONTRAST = "high_contrast"
     }
 }
 

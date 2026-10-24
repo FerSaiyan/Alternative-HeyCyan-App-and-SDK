@@ -8,7 +8,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.ai.transcription.ChunkingTranscriptionService
-import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionEndpointPrefs
 import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionEvent
 import com.fersaiyan.cyanbridge.ai.transcription.TranscriptionRequest
 import com.fersaiyan.cyanbridge.ai.transcription.backend.FakeTranscriptionBackend
@@ -17,6 +16,9 @@ import com.fersaiyan.cyanbridge.ai.transcription.backend.TranscriptionBackend
 import com.fersaiyan.cyanbridge.ai.transcription.storage.RoomTranscriptStore
 import com.fersaiyan.cyanbridge.data.local.entity.CaptureSession
 import com.fersaiyan.cyanbridge.privacy.PrivacyPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.shared.ui.debug.TranscriptionDebugScreen
@@ -53,8 +55,8 @@ class TranscriptionDebugActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        endpointUrl = TranscriptionEndpointPrefs.getEndpointUrl(this).orEmpty()
-        apiKey = TranscriptionEndpointPrefs.getApiKey(this).orEmpty()
+        endpointUrl = AssistantPrefs.TranscriptionEndpoint.endpointUrl[this].orEmpty()
+        apiKey = AssistantPrefs.TranscriptionEndpoint.apiKey[this].orEmpty()
         transcriptStorageEnabled = PrivacyPrefs.isTranscriptStorageEnabled(this)
         val appearancePreferences = AppearancePreferences(this)
         setContent {
@@ -182,8 +184,8 @@ class TranscriptionDebugActivity : AppCompatActivity() {
     }
 
     private fun saveEndpointConfig() {
-        TranscriptionEndpointPrefs.setEndpointUrl(this, endpointUrl)
-        TranscriptionEndpointPrefs.setApiKey(this, apiKey)
+        AssistantPrefs.TranscriptionEndpoint.endpointUrl[this] = endpointUrl.takeIf { it.isNotBlank() }?.trim()
+        AssistantPrefs.TranscriptionEndpoint.apiKey[this] = apiKey.takeIf { it.isNotBlank() }
         Toast.makeText(this, "Saved endpoint config", Toast.LENGTH_SHORT).show()
     }
 }

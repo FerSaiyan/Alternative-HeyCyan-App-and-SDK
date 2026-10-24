@@ -2,14 +2,12 @@ package com.fersaiyan.cyanbridge.agent
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalGenerationSettings
+import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs.Ai
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.remove
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 object ProSubscriptionAiPrefs {
-    private const val PREFS_NAME = "pro_subscription_ai_prefs"
-    private const val KEY_REQUESTS_MODEL = "requests_model"
-    private const val KEY_QUESTIONS_MODEL = "questions_model"
-    private const val KEY_TASKS_MODEL = "tasks_model"
-    private const val KEY_SYSTEM_PROMPT = "system_prompt"
-
     private const val DEFAULT_MODEL = "auto"
     private const val LEGACY_FREE_GEMMA_MODEL = "google/gemma-4-26b-a4b-it:free"
     private const val GEMMA_MODEL = "google/gemma-4-26b-a4b-it"
@@ -28,14 +26,11 @@ object ProSubscriptionAiPrefs {
         }
     }
 
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
     fun getRequestsModel(context: Context): String =
-        normalizeModel(prefs(context).getString(KEY_REQUESTS_MODEL, DEFAULT_MODEL))
+        normalizeModel(Ai.requestsModel[context])
 
     fun setRequestsModel(context: Context, model: String) {
-        prefs(context).edit().putString(KEY_REQUESTS_MODEL, normalizeModel(model)).apply()
+        Ai.requestsModel[context] = normalizeModel(model)
     }
 
     private const val LIVE_MODEL = "google/gemini-3.1-flash-live-preview"
@@ -49,7 +44,7 @@ object ProSubscriptionAiPrefs {
     }
 
     fun getQuestionsModel(context: Context): String {
-        val stored = prefs(context).getString(KEY_QUESTIONS_MODEL, null)
+        val stored = Ai.questionsModel[context]
         // Default for multimodal (image/voice) is Gemini Live until user changes it manually in Pro settings
         if (stored == null) return LIVE_MODEL
         val normalized = normalizeModel(stored)
@@ -58,18 +53,18 @@ object ProSubscriptionAiPrefs {
     }
 
     fun setQuestionsModel(context: Context, model: String) {
-        prefs(context).edit().putString(KEY_QUESTIONS_MODEL, normalizeModel(model)).apply()
+        Ai.questionsModel[context] = normalizeModel(model)
     }
 
     fun getTasksModel(context: Context): String =
-        normalizeModel(prefs(context).getString(KEY_TASKS_MODEL, DEFAULT_MODEL))
+        normalizeModel(Ai.tasksModel[context])
 
     fun setTasksModel(context: Context, model: String) {
-        prefs(context).edit().putString(KEY_TASKS_MODEL, normalizeModel(model)).apply()
+        Ai.tasksModel[context] = normalizeModel(model)
     }
 
     fun getSystemPrompt(context: Context): String {
-        val stored = prefs(context).getString(KEY_SYSTEM_PROMPT, null)
+        val stored = Ai.systemPrompt[context]
         return LocalGenerationSettings.migrateDefaultSystemPrompt(stored.orEmpty())
             .trim()
             .ifBlank { LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT }
@@ -77,10 +72,10 @@ object ProSubscriptionAiPrefs {
     }
 
     fun setSystemPrompt(context: Context, prompt: String) {
-        prefs(context).edit().putString(KEY_SYSTEM_PROMPT, prompt.take(MAX_SYSTEM_PROMPT_CHARS)).apply()
+        Ai.systemPrompt[context] = prompt.take(MAX_SYSTEM_PROMPT_CHARS)
     }
 
     fun resetSystemPrompt(context: Context) {
-        prefs(context).edit().remove(KEY_SYSTEM_PROMPT).apply()
+        Ai.systemPrompt.remove(context)
     }
 }

@@ -1,6 +1,11 @@
 package com.fersaiyan.cyanbridge.media
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs.AdaptiveP2pProfiles as Profiles
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.prefs.store
 import java.security.MessageDigest
 import java.util.Locale
 
@@ -182,8 +187,6 @@ internal class AdaptiveP2pSyncSession(
 }
 
 internal object AdaptiveP2pProfileStore {
-    private const val PREFS = "adaptive_p2p_sync_profiles"
-
     fun profileKey(
         phoneManufacturer: String,
         phoneModel: String,
@@ -209,22 +212,16 @@ internal object AdaptiveP2pProfileStore {
     }
 
     fun load(context: Context, key: String): AdaptiveP2pProfile {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        fun route(name: String): AdaptiveHttpRoute? = prefs.getString("$key.$name", null)
-            ?.let { stored -> AdaptiveHttpRoute.entries.firstOrNull { it.name == stored } }
-        fun optionalLong(name: String): Long? = if (prefs.contains("$key.$name")) {
-            prefs.getLong("$key.$name", 0L)
-        } else {
-            null
-        }
+        val prefs = Profiles.store(context)
+        fun route(stored: String?): AdaptiveHttpRoute? = AdaptiveHttpRoute.entries.firstOrNull { it.name == stored }
         return AdaptiveP2pProfile(
-            preferredRoute = route("preferred_route"),
-            preferredWarmupMs = optionalLong("preferred_warmup_ms"),
-            candidateRoute = route("candidate_route"),
-            candidateWarmupMs = optionalLong("candidate_warmup_ms"),
-            candidateSuccesses = prefs.getInt("$key.candidate_successes", 0),
-            completedSyncs = prefs.getInt("$key.completed_syncs", 0),
-            consecutiveFailures = prefs.getInt("$key.consecutive_failures", 0),
+            preferredRoute = route(prefs[Profiles.preferredRoute[key]]),
+            preferredWarmupMs = prefs[Profiles.preferredWarmupMs[key]],
+            candidateRoute = route(prefs[Profiles.candidateRoute[key]]),
+            candidateWarmupMs = prefs[Profiles.candidateWarmupMs[key]],
+            candidateSuccesses = prefs[Profiles.candidateSuccesses[key]],
+            completedSyncs = prefs[Profiles.completedSyncs[key]],
+            consecutiveFailures = prefs[Profiles.consecutiveFailures[key]],
         )
     }
 
@@ -246,20 +243,14 @@ internal object AdaptiveP2pProfileStore {
     }
 
     private fun save(context: Context, key: String, profile: AdaptiveP2pProfile) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
-            fun putRoute(name: String, route: AdaptiveHttpRoute?) {
-                if (route == null) remove("$key.$name") else putString("$key.$name", route.name)
-            }
-            fun putOptionalLong(name: String, value: Long?) {
-                if (value == null) remove("$key.$name") else putLong("$key.$name", value)
-            }
-            putRoute("preferred_route", profile.preferredRoute)
-            putOptionalLong("preferred_warmup_ms", profile.preferredWarmupMs)
-            putRoute("candidate_route", profile.candidateRoute)
-            putOptionalLong("candidate_warmup_ms", profile.candidateWarmupMs)
-            putInt("$key.candidate_successes", profile.candidateSuccesses)
-            putInt("$key.completed_syncs", profile.completedSyncs)
-            putInt("$key.consecutive_failures", profile.consecutiveFailures)
-        }.apply()
+        Profiles.edit(context) {
+            this[Profiles.preferredRoute[key]] = profile.preferredRoute?.name
+            this[Profiles.preferredWarmupMs[key]] = profile.preferredWarmupMs
+            this[Profiles.candidateRoute[key]] = profile.candidateRoute?.name
+            this[Profiles.candidateWarmupMs[key]] = profile.candidateWarmupMs
+            this[Profiles.candidateSuccesses[key]] = profile.candidateSuccesses
+            this[Profiles.completedSyncs[key]] = profile.completedSyncs
+            this[Profiles.consecutiveFailures[key]] = profile.consecutiveFailures
+        }
     }
 }

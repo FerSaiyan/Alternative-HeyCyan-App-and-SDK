@@ -2,14 +2,14 @@ package com.fersaiyan.cyanbridge.plugins.meetingsparknotes
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONArray
 import org.json.JSONObject
 
 class MeetingSparkNotesStore {
     private val TAG = "MeetingSparkNotesStore"
-    private val PREFS = "meeting_spark_notes_store"
-    private val KEY_SUMMARIES = "summaries_json"
-    private val KEY_CURRENT_AUDIO = "current_audio_buffer"
 
     private val lock = Any()
     private val summaries = mutableListOf<MeetingSummary>()
@@ -77,7 +77,7 @@ class MeetingSparkNotesStore {
                         .put("audioPath", summary.audioPath ?: JSONObject.NULL)
                 )
             }
-            prefs(context).edit().putString(KEY_SUMMARIES, arr.toString()).apply()
+            PluginPrefs.MeetingSparkNotesStore.summariesJson[context] = arr.toString()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to persist summaries", e)
         }
@@ -92,7 +92,7 @@ class MeetingSparkNotesStore {
             if (loaded) return
             loaded = true
             try {
-                val raw = prefs(context).getString(KEY_SUMMARIES, "[]") ?: "[]"
+                val raw = PluginPrefs.MeetingSparkNotesStore.summariesJson[context]
                 val arr = JSONArray(raw)
                 for (i in 0 until arr.length()) {
                     val obj = arr.optJSONObject(i) ?: continue
@@ -126,7 +126,4 @@ class MeetingSparkNotesStore {
             }
         }
     }
-
-    private fun prefs(context: Context) =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

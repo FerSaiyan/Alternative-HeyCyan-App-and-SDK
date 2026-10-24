@@ -1,15 +1,11 @@
 package com.fersaiyan.cyanbridge.localagent.dailyfacts
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs.DailyBullets
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 object DailyBulletsSettings {
-    private const val PREFS = "daily_bullets_settings"
-
-    private const val KEY_CUSTOM_REVIEW_PROMPT = "custom_review_prompt"
-    private const val KEY_CUSTOM_SUMMARY_PROMPT = "custom_summary_prompt"
-    private const val KEY_CUSTOM_BULLET_PROMPT = "custom_bullet_prompt"
-    private const val KEY_MAX_TOKENS_PER_BULLET = "max_tokens_per_bullet"
-
     val DEFAULT_BULLET_PROMPT = """
         You summarize one mobile screen OCR event into exactly one bullet.
 
@@ -30,44 +26,34 @@ object DailyBulletsSettings {
         - Do not invent details outside OCR
     """.trimIndent()
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    fun getCustomReviewPrompt(context: Context): String {
-        return prefs(context).getString(KEY_CUSTOM_REVIEW_PROMPT, "") ?: ""
-    }
+    fun getCustomReviewPrompt(context: Context): String = DailyBullets.customReviewPrompt[context]
 
     fun setCustomReviewPrompt(context: Context, prompt: String) {
-        prefs(context).edit().putString(KEY_CUSTOM_REVIEW_PROMPT, prompt).apply()
+        DailyBullets.customReviewPrompt[context] = prompt
     }
 
-    fun getCustomSummaryPrompt(context: Context): String {
-        return prefs(context).getString(KEY_CUSTOM_SUMMARY_PROMPT, "") ?: ""
-    }
+    fun getCustomSummaryPrompt(context: Context): String = DailyBullets.customSummaryPrompt[context]
 
     fun setCustomSummaryPrompt(context: Context, prompt: String) {
-        prefs(context).edit().putString(KEY_CUSTOM_SUMMARY_PROMPT, prompt).apply()
+        DailyBullets.customSummaryPrompt[context] = prompt
     }
 
-    fun getCustomBulletPrompt(context: Context): String {
-        return prefs(context).getString(KEY_CUSTOM_BULLET_PROMPT, "") ?: ""
-    }
+    fun getCustomBulletPrompt(context: Context): String = DailyBullets.customBulletPrompt[context]
 
     fun getBulletPrompt(context: Context): String =
         getCustomBulletPrompt(context).ifBlank { DEFAULT_BULLET_PROMPT }
 
     fun setCustomBulletPrompt(context: Context, prompt: String) {
-        prefs(context).edit().putString(KEY_CUSTOM_BULLET_PROMPT, prompt).apply()
+        DailyBullets.customBulletPrompt[context] = prompt
     }
 
     fun restoreDefaultBulletPrompt(context: Context) {
         setCustomBulletPrompt(context, DEFAULT_BULLET_PROMPT)
     }
 
-    fun getMaxTokensPerBullet(context: Context): Int {
-        return prefs(context).getInt(KEY_MAX_TOKENS_PER_BULLET, 0)
-    }
+    fun getMaxTokensPerBullet(context: Context): Int = DailyBullets.maxTokensPerBullet[context]
 
     fun setMaxTokensPerBullet(context: Context, tokens: Int) {
-        prefs(context).edit().putInt(KEY_MAX_TOKENS_PER_BULLET, tokens.coerceAtLeast(0)).apply()
+        DailyBullets.maxTokensPerBullet[context] = tokens.coerceAtLeast(0)
     }
 }

@@ -1,12 +1,15 @@
 package com.fersaiyan.cyanbridge.localagent
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.remove
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONArray
 import org.json.JSONObject
 
 /** Local, bounded task metadata. Screen content and action payloads are intentionally excluded. */
 object LocalAgentTaskHistory {
-
     data class Entry(
         val goal: String,
         val status: String,
@@ -15,8 +18,6 @@ object LocalAgentTaskHistory {
         val createdAtMs: Long = System.currentTimeMillis(),
     )
 
-    private const val PREFS_NAME = "local_agent_task_history"
-    private const val KEY_ENTRIES = "entries_json"
     private const val MAX_ENTRIES = 20
 
     fun record(context: Context, entry: Entry) {
@@ -34,11 +35,11 @@ object LocalAgentTaskHistory {
     }
 
     fun clear(context: Context) {
-        prefs(context).edit().remove(KEY_ENTRIES).apply()
+        AgentPrefs.TaskHistory.entriesJson.remove(context)
     }
 
     private fun load(context: Context): List<Entry> {
-        val raw = prefs(context).getString(KEY_ENTRIES, "[]") ?: "[]"
+        val raw = AgentPrefs.TaskHistory.entriesJson[context]
         val array = runCatching { JSONArray(raw) }.getOrElse { JSONArray() }
         return buildList {
             for (index in 0 until array.length()) {
@@ -70,11 +71,8 @@ object LocalAgentTaskHistory {
                     .put("created_at_ms", entry.createdAtMs),
             )
         }
-        prefs(context).edit().putString(KEY_ENTRIES, array.toString()).apply()
+        AgentPrefs.TaskHistory.entriesJson[context] = array.toString()
     }
-
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private const val MAX_GOAL_CHARS = 240
     private const val MAX_STATUS_CHARS = 80

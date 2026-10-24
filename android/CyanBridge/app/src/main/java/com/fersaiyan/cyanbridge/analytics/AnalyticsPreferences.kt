@@ -1,69 +1,43 @@
 package com.fersaiyan.cyanbridge.analytics
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs.Analytics
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.remove
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 /** Privacy controls and local delivery state for first-party product analytics. */
 object AnalyticsPreferences {
-    private const val PREFS = "cyanbridge_product_analytics"
-    private const val KEY_SHARING_ENABLED = "sharing_enabled"
-    private const val KEY_SHARING_CHOICE_MADE = "sharing_choice_made"
-    private const val KEY_LAST_HEARTBEAT_DAY = "last_heartbeat_day"
-    private const val KEY_ACQUISITION_COMPLETE = "acquisition_complete"
-    private const val KEY_PENDING_ACQUISITION = "pending_acquisition"
-
     /** No operational heartbeat is sent until the user has seen and saved this choice. */
-    fun isSharingEnabled(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return prefs.getBoolean(KEY_SHARING_CHOICE_MADE, false) &&
-            prefs.getBoolean(KEY_SHARING_ENABLED, true)
-    }
+    fun isSharingEnabled(context: Context): Boolean =
+        Analytics.sharingChoiceMade[context] && Analytics.sharingEnabled[context]
 
     /** The disclosure UI may recommend sharing while still requiring an explicit saved choice. */
     fun suggestedSharingChoice(): Boolean = true
 
     fun setSharingEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_SHARING_ENABLED, enabled)
-            .putBoolean(KEY_SHARING_CHOICE_MADE, true)
-            .apply()
+        Analytics.edit(context) {
+            this[Analytics.sharingEnabled] = enabled
+            this[Analytics.sharingChoiceMade] = true
+        }
     }
 
-    fun getLastHeartbeatDay(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_LAST_HEARTBEAT_DAY, "")
-            .orEmpty()
+    fun getLastHeartbeatDay(context: Context): String = Analytics.lastHeartbeatDay[context]
 
     fun setLastHeartbeatDay(context: Context, day: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_LAST_HEARTBEAT_DAY, day)
-            .apply()
+        Analytics.lastHeartbeatDay[context] = day
     }
 
-    fun isAcquisitionComplete(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_ACQUISITION_COMPLETE, false)
+    fun isAcquisitionComplete(context: Context): Boolean = Analytics.acquisitionComplete[context]
 
     fun markAcquisitionComplete(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_ACQUISITION_COMPLETE, true)
-            .apply()
+        Analytics.acquisitionComplete[context] = true
     }
 
-    fun getPendingAcquisition(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_PENDING_ACQUISITION, "")
-            .orEmpty()
+    fun getPendingAcquisition(context: Context): String = Analytics.pendingAcquisition[context]
 
     fun setPendingAcquisition(context: Context, json: String?) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .apply {
-                if (json.isNullOrBlank()) remove(KEY_PENDING_ACQUISITION)
-                else putString(KEY_PENDING_ACQUISITION, json)
-            }
-            .apply()
+        if (json.isNullOrBlank()) Analytics.pendingAcquisition.remove(context) else Analytics.pendingAcquisition[context] = json
     }
 }

@@ -16,7 +16,6 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
 import androidx.compose.ui.uikit.OnFocusBehavior
 import androidx.compose.ui.window.ComposeUIViewController
-import com.fersaiyan.cyanbridge.shared.appearance.APPEARANCE_PREFERENCES_NAME
 import com.fersaiyan.cyanbridge.shared.appearance.AppearanceSettingsStore
 import com.fersaiyan.cyanbridge.shared.billing.ProSubscriptionAction
 import com.fersaiyan.cyanbridge.shared.billing.ProSubscriptionUiState
@@ -24,6 +23,7 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsPlatformFeatures
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
 import com.fersaiyan.cyanbridge.shared.ui.CyanBridgeApp
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindScreen
 import com.fersaiyan.cyanbridge.shared.ui.LocalPlatformBackHandler
@@ -119,15 +119,14 @@ private fun IosCyanBridgeApp(
 ) {
     val appearanceStore = remember {
         AppearanceSettingsStore(
-            preferences = createPlatformPreferences(APPEARANCE_PREFERENCES_NAME),
+            preferences = AppPrefs.Appearance.store(),
             dynamicColorAvailable = false,
         )
     }
     var appearanceSettings by remember { mutableStateOf(appearanceStore.load()) }
 
     val deviceBindState by controller.deviceBindState.collectAsState()
-    val onboardingPreferences = remember { createPlatformPreferences("cyanbridge_onboarding") }
-    var welcomeDone by remember { mutableStateOf(onboardingPreferences.getBoolean("welcome_done", false)) }
+    var welcomeDone by remember { mutableStateOf(AppPrefs.IosOnboarding.welcomeDone.get()) }
 
     // Re-keying on the language rebuilds the tree so Compose resources pick up the new locale.
     key(IosAppLanguage.selectedId) {
@@ -143,7 +142,7 @@ private fun IosCyanBridgeApp(
                 languageSelectionComplete = true,
                 onLanguageSelected = { option -> IosAppLanguage.select(option.id) },
                 onStartSetup = {
-                    onboardingPreferences.putBoolean("welcome_done", true)
+                    AppPrefs.IosOnboarding.welcomeDone.set(true)
                     welcomeDone = true
                 },
             )

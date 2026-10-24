@@ -4,7 +4,6 @@ import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.BuildConfig
-import com.fersaiyan.cyanbridge.ai.AiWakeWordPreferences
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLivePreviewManager
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLivePreviewPolicy
@@ -18,6 +17,8 @@ import com.fersaiyan.cyanbridge.ota.LivePreviewState
 import com.fersaiyan.cyanbridge.shared.devices.DeviceProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
 import com.fersaiyan.cyanbridge.shared.glasses.withFamilyGating
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.ui.main.glasses.AndroidGlassesDevices
 import com.oudmon.ble.base.communication.LargeDataHandler
 
@@ -217,7 +218,7 @@ internal class DeviceConnectionCoordinator(
         updateDashboardState { state ->
             state.withFamilyGating(
                 family = device.profile,
-                aiWakeWordRoute = AiWakeWordPreferences.route(activity),
+                aiWakeWordRoute = AssistantPrefs.WakeWord.route[activity],
                 isDebugBuild = BuildConfig.DEBUG,
                 livePreview = device.dashboardLivePreview(),
             )

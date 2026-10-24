@@ -3,15 +3,13 @@ package com.fersaiyan.cyanbridge.ui.chat
 import android.content.Context
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.R
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs.ChatAppearance
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.remove
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 object ChatAppearancePrefs {
-    private const val PREFS = "chat_appearance_prefs"
-    private const val KEY_USER_BUBBLE_COLOR = "user_bubble_color"
-    private const val KEY_ASSISTANT_BUBBLE_COLOR = "assistant_bubble_color"
-    private const val KEY_WALLPAPER_URI = "chat_wallpaper_uri"
-
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
     fun defaultUserBubbleColor(context: Context): Int =
         ContextCompat.getColor(context, R.color.cyan_accent)
 
@@ -19,35 +17,36 @@ object ChatAppearancePrefs {
         ContextCompat.getColor(context, R.color.card_bg)
 
     fun getUserBubbleColor(context: Context): Int =
-        prefs(context).getInt(KEY_USER_BUBBLE_COLOR, defaultUserBubbleColor(context))
+        ChatAppearance.userBubbleColor[context] ?: defaultUserBubbleColor(context)
 
     fun setUserBubbleColor(context: Context, color: Int) {
-        prefs(context).edit().putInt(KEY_USER_BUBBLE_COLOR, color).apply()
+        ChatAppearance.userBubbleColor[context] = color
     }
 
     fun getAssistantBubbleColor(context: Context): Int =
-        prefs(context).getInt(KEY_ASSISTANT_BUBBLE_COLOR, defaultAssistantBubbleColor(context))
+        ChatAppearance.assistantBubbleColor[context] ?: defaultAssistantBubbleColor(context)
 
     fun setAssistantBubbleColor(context: Context, color: Int) {
-        prefs(context).edit().putInt(KEY_ASSISTANT_BUBBLE_COLOR, color).apply()
+        ChatAppearance.assistantBubbleColor[context] = color
     }
 
-    fun getWallpaperUri(context: Context): String =
-        prefs(context).getString(KEY_WALLPAPER_URI, "") ?: ""
+    fun getWallpaperUri(context: Context): String = ChatAppearance.wallpaperUri[context]
 
     fun setWallpaperUri(context: Context, uri: String) {
-        prefs(context).edit().putString(KEY_WALLPAPER_URI, uri).apply()
+        ChatAppearance.wallpaperUri[context] = uri
     }
 
     fun clearWallpaper(context: Context) {
-        prefs(context).edit().remove(KEY_WALLPAPER_URI).apply()
+        ChatAppearance.wallpaperUri.remove(context)
     }
 
     fun reset(context: Context) {
-        prefs(context).edit()
-            .putInt(KEY_USER_BUBBLE_COLOR, defaultUserBubbleColor(context))
-            .putInt(KEY_ASSISTANT_BUBBLE_COLOR, defaultAssistantBubbleColor(context))
-            .remove(KEY_WALLPAPER_URI)
-            .apply()
+        val userColor = defaultUserBubbleColor(context)
+        val assistantColor = defaultAssistantBubbleColor(context)
+        ChatAppearance.edit(context) {
+            this[ChatAppearance.userBubbleColor] = userColor
+            this[ChatAppearance.assistantBubbleColor] = assistantColor
+            ChatAppearance.wallpaperUri.remove(this)
+        }
     }
 }

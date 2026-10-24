@@ -5,6 +5,8 @@ import android.net.Uri
 import android.util.Log
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
@@ -89,8 +91,7 @@ internal fun firmwarePatchUnavailableMessage(
 
 /** Keep patch requests on the same relay that resolved the firmware catalog. */
 internal fun firmwareRelayBaseUrl(context: Context): String =
-    context.getSharedPreferences("relay_server", Context.MODE_PRIVATE)
-        .getString("base_url", null)
+    AppPrefs.RelayServer.baseUrl[context]
         ?.trim()
         .takeUnless { it.isNullOrBlank() }
         ?: "https://cyanbridge.vercel.app"

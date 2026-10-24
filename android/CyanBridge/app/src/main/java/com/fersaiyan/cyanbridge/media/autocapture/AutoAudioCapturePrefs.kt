@@ -1,131 +1,68 @@
 package com.fersaiyan.cyanbridge.media.autocapture
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs.AutoAudioCapture
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 object AutoAudioCapturePrefs {
-    private const val PREFS = "auto_audio_capture_prefs"
-    private const val KEY_ENABLED = "enabled"
-    private const val KEY_SUCCESSFUL_LOOPS = "successful_loops"
-    private const val KEY_LOOPS_PER_SYNC = "loops_per_sync"
-    private const val KEY_VISUAL_NOTES_ENABLED = "visual_notes_enabled"
-    private const val KEY_SPEECH_EXTEND_ENABLED = "speech_extend_enabled"
-
-    private const val KEY_PAUSED_MEETING = "paused_meeting"
-    private const val KEY_PAUSED_VIDEO = "paused_video"
-    private const val KEY_PAUSE_UNTIL_MS = "pause_until_ms"
-    private const val KEY_LAST_PAUSE_REASON = "last_pause_reason"
-    fun isEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_ENABLED, false)
-    }
+    fun isEnabled(context: Context): Boolean = AutoAudioCapture.enabled[context]
 
     fun setEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_ENABLED, enabled)
-            .apply()
+        AutoAudioCapture.enabled[context] = enabled
     }
 
-    fun getSuccessfulLoops(context: Context): Int {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_SUCCESSFUL_LOOPS, 0)
-            .coerceAtLeast(0)
-    }
+    fun getSuccessfulLoops(context: Context): Int = AutoAudioCapture.successfulLoops[context].coerceAtLeast(0)
 
     fun incrementSuccessfulLoops(context: Context): Int {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val next = (prefs.getInt(KEY_SUCCESSFUL_LOOPS, 0) + 1).coerceAtLeast(0)
-        prefs.edit().putInt(KEY_SUCCESSFUL_LOOPS, next).apply()
+        val next = (AutoAudioCapture.successfulLoops[context] + 1).coerceAtLeast(0)
+        AutoAudioCapture.successfulLoops[context] = next
         return next
     }
 
     fun resetSuccessfulLoops(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putInt(KEY_SUCCESSFUL_LOOPS, 0)
-            .apply()
+        AutoAudioCapture.successfulLoops[context] = 0
     }
 
-    fun getLoopsPerSync(context: Context): Int {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_LOOPS_PER_SYNC, 12)
-        return raw.coerceIn(1, 96)
-    }
+    fun getLoopsPerSync(context: Context): Int = AutoAudioCapture.loopsPerSync[context]
 
     fun setLoopsPerSync(context: Context, loops: Int) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putInt(KEY_LOOPS_PER_SYNC, loops.coerceIn(1, 96))
-            .apply()
+        AutoAudioCapture.loopsPerSync[context] = loops
     }
 
-    fun isVisualNotesEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_VISUAL_NOTES_ENABLED, false)
-    }
+    fun isVisualNotesEnabled(context: Context): Boolean = AutoAudioCapture.visualNotesEnabled[context]
 
     fun setVisualNotesEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_VISUAL_NOTES_ENABLED, enabled)
-            .apply()
+        AutoAudioCapture.visualNotesEnabled[context] = enabled
     }
 
-    fun isSpeechExtendEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_SPEECH_EXTEND_ENABLED, true)
-    }
+    fun isSpeechExtendEnabled(context: Context): Boolean = AutoAudioCapture.speechExtendEnabled[context]
 
     fun setSpeechExtendEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_SPEECH_EXTEND_ENABLED, enabled)
-            .apply()
+        AutoAudioCapture.speechExtendEnabled[context] = enabled
     }
 
-    fun isPausedForMeeting(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_PAUSED_MEETING, false)
-    }
+    fun isPausedForMeeting(context: Context): Boolean = AutoAudioCapture.pausedForMeeting[context]
 
     fun setPausedForMeeting(context: Context, paused: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_PAUSED_MEETING, paused)
-            .apply()
+        AutoAudioCapture.pausedForMeeting[context] = paused
     }
 
-    fun isPausedForVideo(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_PAUSED_VIDEO, false)
-    }
+    fun isPausedForVideo(context: Context): Boolean = AutoAudioCapture.pausedForVideo[context]
 
     fun setPausedForVideo(context: Context, paused: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_PAUSED_VIDEO, paused)
-            .apply()
+        AutoAudioCapture.pausedForVideo[context] = paused
     }
 
-    fun getPauseUntilMs(context: Context): Long {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getLong(KEY_PAUSE_UNTIL_MS, 0L)
-    }
+    fun getPauseUntilMs(context: Context): Long = AutoAudioCapture.pauseUntilMs[context]
 
     fun pauseForMs(context: Context, durationMs: Long) {
         val now = System.currentTimeMillis()
-        val until = (now + durationMs).coerceAtLeast(now)
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putLong(KEY_PAUSE_UNTIL_MS, until)
-            .apply()
+        AutoAudioCapture.pauseUntilMs[context] = (now + durationMs).coerceAtLeast(now)
     }
 
     fun clearPauseUntil(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putLong(KEY_PAUSE_UNTIL_MS, 0L)
-            .apply()
+        AutoAudioCapture.pauseUntilMs[context] = 0L
     }
 
     fun shouldPauseNow(context: Context): Boolean {
@@ -133,17 +70,10 @@ object AutoAudioCapturePrefs {
         return isPausedForMeeting(context) || isPausedForVideo(context) || getPauseUntilMs(context) > now
     }
 
-    fun getLastPauseReason(context: Context): String {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_LAST_PAUSE_REASON, "")
-            .orEmpty()
-    }
+    fun getLastPauseReason(context: Context): String = AutoAudioCapture.lastPauseReason[context]
 
     fun setLastPauseReason(context: Context, reason: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_LAST_PAUSE_REASON, reason.take(200))
-            .apply()
+        AutoAudioCapture.lastPauseReason[context] = reason.take(200)
     }
 
     fun clearLastPauseReason(context: Context) {
