@@ -1,67 +1,40 @@
 package com.fersaiyan.cyanbridge.localagent
 
 import android.content.Context
-import android.speech.tts.TextToSpeech
+import com.fersaiyan.cyanbridge.audio.TtsSpeaker
 import java.util.Locale
 
 /** Process-scoped TTS for explicitly enabled notification announcements. */
 object LocalAgentNotificationSpeaker {
     private const val MAX_ANNOUNCEMENT_CHARS = 600
+    private const val TAG = "LocalAgentNotification"
 
     private val lock = Any()
-    private var tts: TextToSpeech? = null
-    private var ready = false
-    private var pendingText: String? = null
+    private var speaker: TtsSpeaker? = null
 
     fun speak(context: Context, text: String) {
         val clean = text.trim().take(MAX_ANNOUNCEMENT_CHARS)
         if (clean.isBlank()) return
 
-        synchronized(lock) {
-            val existing = tts
-            if (existing != null && ready) {
-                existing.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "local_agent_notification")
-                return
-            }
-
-            pendingText = clean
-            if (existing != null) return
-
-            tts = TextToSpeech(context.applicationContext) { status ->
-                val initialization = synchronized(lock) {
-                    val initialized = status == TextToSpeech.SUCCESS
-                    ready = initialized
-                    if (initialized) tts?.language = Locale.US
-                    val pending = pendingText.also { pendingText = null }
-                    val failedEngine = if (initialized) null else tts.also { tts = null }
-                    InitializationResult(initialized, pending, failedEngine)
-                }
-                initialization.failedEngine?.shutdown()
-                if (initialization.ready && !initialization.pendingText.isNullOrBlank()) {
-                    tts?.speak(
-                        initialization.pendingText,
-                        TextToSpeech.QUEUE_FLUSH,
-                        null,
-                        "local_agent_notification",
-                    )
-                }
-            }
+        val current = synchronized(lock) {
+            speaker ?: TtsSpeaker(context.applicationContext, TAG, onInit = ::onEngineInit).also { speaker = it }
         }
+        // Until the engine is ready only the newest announcement is kept.
+        current.whenReady { it.speak(clean, "local_agent_notification") }
     }
 
     fun stop() {
-        val engine = synchronized(lock) {
-            pendingText = null
-            ready = false
-            tts.also { tts = null }
-        }
-        engine?.stop()
+        val engine = synchronized(lock) { speaker.also { speaker = null } }
         engine?.shutdown()
     }
 
-    private data class InitializationResult(
-        val ready: Boolean,
-        val pendingText: String?,
-        val failedEngine: TextToSpeech?,
-    )
+    private fun onEngineInit(engine: TtsSpeaker, ok: Boolean) {
+        if (ok) {
+            engine.setLanguage(Locale.US)
+            return
+        }
+        // A failed engine is dropped so the next announcement creates a fresh one.
+        val failed = synchronized(lock) { engine.takeIf { speaker === it }?.also { speaker = null } }
+        failed?.shutdown()
+    }
 }

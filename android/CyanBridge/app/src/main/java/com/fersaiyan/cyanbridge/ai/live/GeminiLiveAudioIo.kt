@@ -6,20 +6,26 @@ import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
-import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
-import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
-import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveProtocol.INPUT_SAMPLE_RATE_HZ
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveProtocol.OUTPUT_SAMPLE_RATE_HZ
+import com.fersaiyan.cyanbridge.audio.AudioFocusChange
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
+import com.fersaiyan.cyanbridge.audio.AudioSessionGrant
+import com.fersaiyan.cyanbridge.audio.AudioSessionHandle
+import com.fersaiyan.cyanbridge.audio.AudioSessionListener
+import com.fersaiyan.cyanbridge.audio.PcmRecorder
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
-import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePolicy
+import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePreference
+import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -27,8 +33,12 @@ import kotlinx.coroutines.launch
 
 /**
  * Gemini Live audio I/O: microphone capture (phone AudioRecord or Mentra SDK PCM), model speech
- * playback, communication routing and audio focus. Session decisions stay in [GeminiLiveClient];
+ * playback, and the Live [AudioSessionRequest.Conversation] session that owns communication
+ * routing, audio focus and the microphone slot. Session decisions stay in [GeminiLiveClient];
  * this component reports back only through the constructor callbacks.
+ *
+ * A spoken prompt (approval, voice question) suspends the conversation like a transient focus
+ * loss: [onFocusLostTransiently] pauses capture and [onFocusGained] resumes it afterwards.
  */
 internal class GeminiLiveAudioIo(
     context: Context,
@@ -49,22 +59,36 @@ internal class GeminiLiveAudioIo(
     @Volatile var mentraMicActive = false
         private set
 
-    private var recorder: AudioRecord? = null
+    private var recorder: PcmRecorder? = null
     private var recorderJob: Job? = null
     private var playback: AudioTrack? = null
-    private var audioFocusRequest: AudioFocusRequest? = null
-    private var previousAudioMode: Int? = null
-    private var previousCommunicationDevice: AudioDeviceInfo? = null
+
+    @Volatile
+    private var session: AudioSessionHandle? = null
     private var liveAudioRouteConfigured = false
 
-    private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { focus ->
-        when (focus) {
-            AudioManager.AUDIOFOCUS_LOSS -> onFocusLost()
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> onFocusLostTransiently()
-            AudioManager.AUDIOFOCUS_GAIN -> onFocusGained()
+    private val sessionListener = object : AudioSessionListener {
+        override fun onSuspended() {
+            Log.i(TAG, "Live microphone suspended for another audio session")
+            onFocusLostTransiently()
         }
+
+        override fun onResumed() {
+            Log.i(TAG, "Live microphone available again")
+            onFocusGained()
+        }
+
+        override fun onEnded() = onFocusLost()
     }
+
+    private fun onFocusChange(change: AudioFocusChange) = when (change) {
+        AudioFocusChange.LOST -> onFocusLost()
+        AudioFocusChange.LOST_TRANSIENTLY -> onFocusLostTransiently()
+        AudioFocusChange.GAINED -> onFocusGained()
+    }
+
+    /** False while another audio session holds the microphone (capture must wait). */
+    val microphoneAvailable: Boolean get() = session?.isActive == true
 
     private val audioDeviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = onRouteChanged()
@@ -83,8 +107,12 @@ internal class GeminiLiveAudioIo(
         ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
-    fun isMentraSelected(): Boolean =
-        DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE
+    private fun deviceAudio() = GlassesFamilyProfiles.forClass(DeviceProfileStore.selectedClass(appContext)).audio
+
+    /** True when the selected glasses stream microphone PCM through their SDK (Mentra Live). */
+    fun usesVendorPcmInput(): Boolean =
+        AudioRoutePolicy.forDevice(AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED, deviceAudio()) ==
+            AudioRoutePreference.DEVICE_SDK
 
     /**
      * Uses Mentra SDK PCM as the ONLY input. SCO and a second AudioRecord can duplicate audio
@@ -112,35 +140,31 @@ internal class GeminiLiveAudioIo(
     fun startPhoneInput(keepRunning: () -> Boolean, onPcm: (ByteArray) -> Unit) {
         configureAudioRoute()
         startPlayback()
-        val minBuffer = AudioRecord.getMinBufferSize(
-            INPUT_SAMPLE_RATE_HZ,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-        )
-        if (minBuffer <= 0) {
+        val owner = session
+        val newRecorder = try {
+            checkNotNull(owner) { "Live audio session is not open" }.openRecorder(
+                source = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                sampleRateHz = INPUT_SAMPLE_RATE_HZ,
+                bufferBytes = { minBuffer -> maxOf(minBuffer, INPUT_CHUNK_BYTES * 4) },
+            )
+        } catch (error: PcmRecorder.OpenException) {
             captureEnabled.set(false)
-            onCaptureError("Microphone is unavailable")
+            onCaptureError(
+                if (error.failure == PcmRecorder.Failure.NO_BUFFER) "Microphone is unavailable"
+                else "Microphone could not be initialized",
+            )
             return
-        }
-        val newRecorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-            INPUT_SAMPLE_RATE_HZ,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            maxOf(minBuffer, INPUT_CHUNK_BYTES * 4),
-        )
-        if (newRecorder.state != AudioRecord.STATE_INITIALIZED) {
+        } catch (error: IllegalStateException) {
             captureEnabled.set(false)
-            newRecorder.release()
             onCaptureError("Microphone could not be initialized")
             return
         }
         recorder = newRecorder
         recorderJob = scope.launch {
             val buffer = ByteArray(INPUT_CHUNK_BYTES)
-            newRecorder.startRecording()
+            newRecorder.start()
             while (keepRunning() && captureEnabled.get()) {
-                val count = newRecorder.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
+                val count = newRecorder.read(buffer, 0, buffer.size, blocking = true)
                 if (count > 0) {
                     val packet = if (count == buffer.size) buffer else buffer.copyOf(count)
                     onPcm(packet)
@@ -165,10 +189,7 @@ internal class GeminiLiveAudioIo(
     fun stopPhoneInput() {
         recorderJob?.cancel()
         recorderJob = null
-        recorder?.let {
-            runCatching { it.stop() }
-            it.release()
-        }
+        recorder?.let { active -> session?.closeRecorder(active) ?: active.close() }
         recorder = null
     }
 
@@ -227,9 +248,9 @@ internal class GeminiLiveAudioIo(
         }
     }
 
-    /** Tells Mentra glasses whether app audio is playing, when Mentra is the selected device. */
+    /** Tells Mentra glasses whether app audio is playing, when the selected glasses need that signal. */
     fun setMentraOwnAudioPlaying(playing: Boolean) {
-        if (isMentraSelected()) {
+        if (AudioRoutePolicy.needsPlaybackSignal(deviceAudio())) {
             runCatching { MentraLiveManager.getInstance(appContext).setOwnAudioPlaying(playing) }
         }
     }
@@ -246,73 +267,41 @@ internal class GeminiLiveAudioIo(
 
     private fun configureAudioRoute() {
         if (liveAudioRouteConfigured) return
-        previousAudioMode = audioManager.mode
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            previousCommunicationDevice = audioManager.communicationDevice
-        }
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        val bluetooth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            audioManager.availableCommunicationDevices.firstOrNull {
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-            }
-        } else {
-            null
-        }
-        val selected = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && bluetooth != null) {
-            audioManager.setCommunicationDevice(bluetooth)
-        } else {
-            false
-        }
-        @Suppress("DEPRECATION")
-        runCatching { audioManager.startBluetoothSco() }
+        val route = session?.connectRouteNow() ?: return
         liveAudioRouteConfigured = true
-        Log.i(TAG, "Live audio route selectedBluetooth=$selected device=${bluetooth?.productName}")
+        Log.i(TAG, "Live audio route selectedBluetooth=${route.bluetoothActive} device=${route.inputDevice?.productName}")
     }
 
-    fun restoreAudioRoute() {
-        if (!liveAudioRouteConfigured) return
-        @Suppress("DEPRECATION")
-        runCatching { audioManager.stopBluetoothSco() }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val previous = previousCommunicationDevice
-            if (previous != null) runCatching { audioManager.setCommunicationDevice(previous) }
-            else runCatching { audioManager.clearCommunicationDevice() }
-        }
-        previousAudioMode?.let { audioManager.mode = it }
-        previousAudioMode = null
-        previousCommunicationDevice = null
-        liveAudioRouteConfigured = false
-    }
-
+    /**
+     * Opens the Live conversation session on first use and (re)asserts its audio focus. Mentra
+     * input leaves phone routing alone. A session that must wait for the microphone reports
+     * [microphoneAvailable] false until the blocking session ends.
+     */
     fun requestAudioFocus() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                        .build(),
-                )
-                .setOnAudioFocusChangeListener(audioFocusListener)
-                .build()
-            audioManager.requestAudioFocus(audioFocusRequest!!)
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.requestAudioFocus(
-                audioFocusListener,
-                AudioManager.STREAM_VOICE_CALL,
-                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE,
-            )
+        val current = session ?: synchronized(this) {
+            session ?: openSession()?.also { session = it }
+        } ?: return
+        current.requestFocus(::onFocusChange)
+    }
+
+    private fun openSession(): AudioSessionHandle? {
+        val route = AudioRoutePolicy.forDevice(AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED, deviceAudio())
+        return when (
+            val grant = AudioSessionCoordinator.open(appContext, AudioSessionRequest.Conversation(TAG, route), sessionListener)
+        ) {
+            is AudioSessionGrant.Granted -> grant.handle
+            is AudioSessionGrant.Denied -> {
+                Log.w(TAG, "Live audio session denied: ${grant.reason}")
+                null
+            }
         }
     }
 
-    fun abandonAudioFocus() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest?.let(audioManager::abandonAudioFocusRequest)
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.abandonAudioFocus(audioFocusListener)
-        }
-        audioFocusRequest = null
+    /** Ends the Live session: releases focus, the shared route and the microphone slot. */
+    fun endSession() {
+        val ended = synchronized(this) { session.also { session = null } }
+        liveAudioRouteConfigured = false
+        ended?.close()
     }
 
     private companion object {

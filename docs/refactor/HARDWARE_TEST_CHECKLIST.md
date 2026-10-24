@@ -120,3 +120,52 @@ Dashboard dispatch was ported one-to-one. Families without their own transport s
 - StopLivePreview no longer calls the HeyCyan stop for families without live preview.
 - RefreshRecordingSettings no longer toasts "Connect HeyCyan…" for families other than HeyCyan or Eyevue.
 - The SetWearingDetection log text changed.
+
+## Phase 2: process audio sessions (`audio.AudioSessionCoordinator`)
+
+Filter logcat with:
+`adb logcat -s AudioSession GeminiLiveClient PluginVoiceRecognizer MeetingCaptureService AmbientSpeech AudioQuestionRecorder LocalAgentApprovalVoice StudioApprovalHandler HandsFreeTranslator WalkingAidService SpeechQueueController ImageQuestionAudio`
+
+Every session logs `"<owner> <KIND> granted state=…"`, `"<owner> route plan=… users=N mode=…, sco=…, communication=…"`, `"<owner> <KIND> -> SUSPENDED|ACTIVE|ENDED"` and `"<owner> <KIND> released restoredRoute=…"`. MainActivity's voice and image questions still do their own routing (not migrated yet).
+
+**Shared route (applies everywhere)**
+- The Bluetooth route is restored only when the last session using it ends (`restoredRoute=true` once). Before, ending any feature reset the mode and dropped SCO under the others.
+- Restoration clears the communication device instead of re-selecting the "previous" one (Live, Local Agent approvals), and restores the previous audio mode instead of forcing NORMAL (meeting, ambient, plugins, Studio). A phone-mic meeting or ambient check no longer touches the mode or SCO at all.
+- Android 12+: every feature accepts LE Audio (`BLE_HEADSET`) as well as SCO headsets. Legacy SCO is used only when no communication device is offered and a headset looks connected.
+
+**Gemini Live** (glasses and earbuds, phone-only)
+1. Start Live: audio goes to the glasses mic/speaker as before. Log: `"Live audio route selectedBluetooth=…"`. Android 12+ no longer also calls `startBluetoothSco`; check the mic still comes from the glasses.
+2. During Live, trigger a Local Agent spoken approval (or a Studio approval, a voice question, or a chat voice note): expect `GeminiLiveClient -> SUSPENDED`, Live stops sending audio (`audioStreamEnd`), the prompt is heard and answered, then `-> ACTIVE` and Live hears you again.
+3. Start Live while a spoken approval is listening: `"Live capture waiting for the microphone"`, and Live starts listening when the approval ends.
+4. Phone call / other app taking focus: unchanged (focus loss pauses, permanent loss stops).
+5. Mentra Live: the PCM path and the playback signal are now chosen from the family audio profile (`VENDOR_PCM_STREAM` / `BLUETOOTH_WITH_PLAYBACK_SIGNAL`); behavior should be identical.
+
+**Meeting capture**
+1. With glasses: notification says "Source: Bluetooth mic". Android 12+ now waits up to 3 s for the communication device to become current (plus 250 ms) instead of a fixed 250 ms; if it never does, the source is "Phone mic".
+2. Android 11 and older: SCO now waits for a real "connected" broadcast (up to 6 s) and ignores the stale sticky state, which used to fail instantly.
+3. Start Gemini Live, a voice question or a translator during a meeting: the meeting keeps recording (never interrupted). Stop that feature: the meeting route must stay on the glasses (`users=` drops, no `restoredRoute=true`). Listen to the recording for gaps.
+4. Stop the meeting while Live runs: Live keeps its route.
+
+**Auto Audio speech check (AmbientSpeech)**
+- While Live, a meeting, a plugin or a spoken prompt holds the mic: `"Skipping speech detection: the microphone is in use"` and the loop does not extend.
+- If one starts during the 60 s check: `"Speech check stopped early: another session took the microphone"`; the result uses the frames so far.
+- After a check, a concurrent plugin or Live keeps its Bluetooth route (previously the check reset it).
+
+**Voice plugins (Hands-Free Translator, Live Caption Relay, Errand Brain, Meeting Spark Notes)**
+1. Start one plugin, then another: "Another voice plugin is already listening" (unchanged).
+2. Plugin running, then start Live / a spoken approval / a voice question: `"pausing recognition while another session uses the microphone"`, recognition resumes ~350 ms after it ends.
+3. Start a plugin while Live runs: it shows Listening but hears nothing until Live stops.
+4. Translator speech output still uses voice-communication audio on the glasses when the BT mic route is up, media otherwise.
+
+**Local Agent spoken approval and Studio approval**
+1. The prompt is spoken, then listening starts after the glasses route is confirmed (up to 3 s + 500 ms on Android 12+, up to 6 s SCO on older phones). Listening may start slightly later than before.
+2. Studio now uses `setCommunicationDevice` on Android 12+ instead of legacy SCO; check the beep and the reply both go through the glasses.
+3. Two approvals at once: the second one gets no microphone and falls back to its existing no-reply path (external reply / "No response received. Denied.").
+4. Prompt speech that is stopped (e.g. screen off) no longer waits for its timeout.
+
+**Voice questions / chat voice notes**
+- A voice question recorded while another spoken prompt is listening fails with "The microphone is busy; please ask again" (spoken). A chat voice note in that case shows "Unable to start recording".
+- Live and voice plugins pause during question and voice-note recording.
+
+**TTS (all features)**
+- Walking Aid warnings/explore, Walking Aid chat, translator, notification announcements, Live announcements, Studio and Local Agent speech sound and route exactly as before. Streaming local-model replies still request transient focus once per reply and release it at the end.

@@ -1,31 +1,17 @@
 package com.fersaiyan.cyanbridge.localagent
 
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.atomic.AtomicBoolean
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator as ProcessAudioSessions
 
+/**
+ * The speech-playing flag under its original name, kept for callers that have not moved to
+ * [com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator] yet (MainActivity's TTS).
+ */
 object AudioSessionCoordinator {
+    fun isBusy(): Boolean = ProcessAudioSessions.isSpeechBusy()
 
-    private val busy = AtomicBoolean(false)
-    @Volatile
-    private var idleDeferred: CompletableDeferred<Unit>? = null
+    fun markBusy() = ProcessAudioSessions.markSpeechBusy()
 
-    fun isBusy(): Boolean = busy.get()
+    fun markIdle() = ProcessAudioSessions.markSpeechIdle()
 
-    fun markBusy() {
-        busy.set(true)
-        idleDeferred = CompletableDeferred()
-    }
-
-    fun markIdle() {
-        idleDeferred?.complete(Unit)
-        idleDeferred = null
-        busy.set(false)
-    }
-
-    suspend fun waitUntilIdle(timeoutMs: Long = 5_000L) {
-        if (!busy.get()) return
-        val deferred = idleDeferred ?: return
-        withTimeoutOrNull(timeoutMs) { deferred.await() }
-    }
+    suspend fun waitUntilIdle(timeoutMs: Long = 5_000L) = ProcessAudioSessions.awaitSpeechIdle(timeoutMs)
 }
