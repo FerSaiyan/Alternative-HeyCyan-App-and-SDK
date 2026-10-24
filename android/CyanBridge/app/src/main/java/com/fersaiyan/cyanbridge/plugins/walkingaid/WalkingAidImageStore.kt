@@ -2,14 +2,15 @@ package com.fersaiyan.cyanbridge.plugins.walkingaid
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONArray
 import org.json.JSONObject
 
 object WalkingAidImageStore {
     private const val TAG = "WalkingAidImageStore"
     private const val MAX_IN_MEMORY = 10
-    private const val PREFS = "walking_aid_image_store"
-    private const val KEY_HISTORY = "history_json"
 
     private val lock = Any()
     private val recentDescriptions = ArrayDeque<SceneRecord>(MAX_IN_MEMORY)
@@ -104,7 +105,7 @@ object WalkingAidImageStore {
                         .put("description", entry.description)
                 )
             }
-            prefs(context).edit().putString(KEY_HISTORY, arr.toString()).apply()
+            PluginPrefs.WalkingAidImageStore.historyJson[context] = arr.toString()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to persist image store", e)
         }
@@ -119,7 +120,7 @@ object WalkingAidImageStore {
             if (loaded) return
             loaded = true
             try {
-                val raw = prefs(context).getString(KEY_HISTORY, "[]") ?: "[]"
+                val raw = PluginPrefs.WalkingAidImageStore.historyJson[context]
                 val arr = JSONArray(raw)
                 for (i in 0 until arr.length()) {
                     val obj = arr.optJSONObject(i) ?: continue
@@ -138,7 +139,4 @@ object WalkingAidImageStore {
             }
         }
     }
-
-    private fun prefs(context: Context) =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

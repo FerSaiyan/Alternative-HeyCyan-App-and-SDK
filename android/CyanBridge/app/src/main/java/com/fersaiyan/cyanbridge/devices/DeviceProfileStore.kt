@@ -3,6 +3,12 @@ import com.fersaiyan.cyanbridge.shared.devices.DeviceProfile
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs.DeviceProfile as Profile
+import com.fersaiyan.cyanbridge.shared.prefs.edit
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.remove
+import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.prefs.store
 
 /**
  * SharedPreferences-backed storage for device class selection.
@@ -12,25 +18,14 @@ import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
  * - per-MAC class overrides (so user choices survive later scans).
  */
 object DeviceProfileStore {
-    private const val PREFS = "device_profile"
-
-    private const val KEY_LAST_MAC = "last_mac"
-    private const val KEY_LAST_NAME = "last_name"
-    private const val KEY_LAST_DETECTED_CLASS = "last_detected_class"
-    private const val KEY_LAST_SELECTED_CLASS = "last_selected_class"
-    private const val KEY_LAST_USER_OVERRIDDEN = "last_user_overridden"
-
-    private fun prefs(context: Context) =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
     fun saveLastSelected(context: Context, profile: DeviceProfile) {
-        prefs(context).edit()
-            .putString(KEY_LAST_MAC, profile.macAddress)
-            .putString(KEY_LAST_NAME, profile.advertisedName)
-            .putString(KEY_LAST_DETECTED_CLASS, profile.detectedClass.name)
-            .putString(KEY_LAST_SELECTED_CLASS, profile.selectedClass.name)
-            .putBoolean(KEY_LAST_USER_OVERRIDDEN, profile.userOverridden)
-            .apply()
+        Profile.edit(context) {
+            this[Profile.lastMac] = profile.macAddress
+            this[Profile.lastName] = profile.advertisedName
+            this[Profile.lastDetectedClass] = profile.detectedClass.name
+            this[Profile.lastSelectedClass] = profile.selectedClass.name
+            this[Profile.lastUserOverridden] = profile.userOverridden
+        }
 
         // Also persist per-device override so a later scan remembers the user's choice.
         if (profile.userOverridden) {
@@ -41,12 +36,12 @@ object DeviceProfileStore {
     }
 
     fun loadLastSelected(context: Context): DeviceProfile? {
-        val p = prefs(context)
-        val mac = p.getString(KEY_LAST_MAC, null) ?: return null
-        val name = p.getString(KEY_LAST_NAME, null)
-        val detected = p.getString(KEY_LAST_DETECTED_CLASS, null)?.let { safeClass(it) } ?: DeviceClass.UNKNOWN
-        val selected = p.getString(KEY_LAST_SELECTED_CLASS, null)?.let { safeClass(it) } ?: detected
-        val overridden = p.getBoolean(KEY_LAST_USER_OVERRIDDEN, false)
+        val p = Profile.store(context)
+        val mac = p[Profile.lastMac] ?: return null
+        val name = p[Profile.lastName]
+        val detected = p[Profile.lastDetectedClass]?.let { safeClass(it) } ?: DeviceClass.UNKNOWN
+        val selected = p[Profile.lastSelectedClass]?.let { safeClass(it) } ?: detected
+        val overridden = p[Profile.lastUserOverridden]
         return DeviceProfile(mac, name, detected, selected, overridden)
     }
 
@@ -69,23 +64,20 @@ object DeviceProfileStore {
         selectedClass(context) == DeviceClass.MOYOUNG_W620
 
     fun getUserOverrideForMac(context: Context, mac: String): DeviceClass? {
-        val key = overrideKey(mac)
-        val raw = prefs(context).getString(key, null) ?: return null
+        val raw = overrideFor(mac)[context] ?: return null
         return safeClass(raw)
     }
 
     fun setUserOverrideForMac(context: Context, mac: String, deviceClass: DeviceClass) {
-        prefs(context).edit().putString(overrideKey(mac), deviceClass.name).apply()
+        overrideFor(mac)[context] = deviceClass.name
     }
 
     fun clearUserOverrideForMac(context: Context, mac: String) {
-        prefs(context).edit().remove(overrideKey(mac)).apply()
+        overrideFor(mac).remove(context)
     }
 
-    private fun overrideKey(mac: String): String {
-        // SharedPreferences keys must be simple strings; normalize ':' to '_'.
-        return "override_${mac.uppercase().replace(':', '_')}"
-    }
+    // SharedPreferences keys must be simple strings; normalize ':' to '_'.
+    private fun overrideFor(mac: String) = Profile.classOverride[mac.uppercase().replace(':', '_')]
 
     private fun safeClass(name: String): DeviceClass {
         return try {

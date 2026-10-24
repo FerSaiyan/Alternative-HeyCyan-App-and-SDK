@@ -2,14 +2,14 @@ package com.fersaiyan.cyanbridge.plugins.errandbrain
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONArray
 import org.json.JSONObject
 
 class ErrandBrainStore {
     private val TAG = "ErrandBrainStore"
-    private val PREFS = "errand_brain_store"
-    private val KEY_TASKS = "tasks_json"
-    private val KEY_REMINDERS = "reminders_json"
 
     private val lock = Any()
     private val tasks = mutableListOf<TaskEntry>()
@@ -108,7 +108,7 @@ class ErrandBrainStore {
                         .put("category", task.category)
                 )
             }
-            prefs(context).edit().putString(KEY_TASKS, tasksArr.toString()).apply()
+            PluginPrefs.ErrandBrainStore.tasksJson[context] = tasksArr.toString()
 
             // Persist reminders
             val remindersArr = JSONArray()
@@ -124,7 +124,7 @@ class ErrandBrainStore {
                         .put("isTriggered", reminder.isTriggered)
                 )
             }
-            prefs(context).edit().putString(KEY_REMINDERS, remindersArr.toString()).apply()
+            PluginPrefs.ErrandBrainStore.remindersJson[context] = remindersArr.toString()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to persist data", e)
         }
@@ -140,7 +140,7 @@ class ErrandBrainStore {
             loaded = true
             try {
                 // Load tasks
-                val tasksRaw = prefs(context).getString(KEY_TASKS, "[]") ?: "[]"
+                val tasksRaw = PluginPrefs.ErrandBrainStore.tasksJson[context]
                 val tasksArr = JSONArray(tasksRaw)
                 for (i in 0 until tasksArr.length()) {
                     val obj = tasksArr.optJSONObject(i) ?: continue
@@ -164,7 +164,7 @@ class ErrandBrainStore {
                 }
 
                 // Load reminders
-                val remindersRaw = prefs(context).getString(KEY_REMINDERS, "[]") ?: "[]"
+                val remindersRaw = PluginPrefs.ErrandBrainStore.remindersJson[context]
                 val remindersArr = JSONArray(remindersRaw)
                 for (i in 0 until remindersArr.length()) {
                     val obj = remindersArr.optJSONObject(i) ?: continue
@@ -187,7 +187,4 @@ class ErrandBrainStore {
             }
         }
     }
-
-    private fun prefs(context: Context) =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

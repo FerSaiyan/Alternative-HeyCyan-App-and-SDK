@@ -2,6 +2,10 @@ package com.fersaiyan.cyanbridge.localagent
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentActionManager
+import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.remove
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -10,7 +14,6 @@ import org.json.JSONObject
  * Higher-risk actions still go through the normal model and approval path.
  */
 object LocalAgentSkillStore {
-
     data class Skill(
         val normalizedGoal: String,
         val actions: List<LocalAgentAction>,
@@ -18,8 +21,6 @@ object LocalAgentSkillStore {
         val replayFailures: Int = 0,
     )
 
-    private const val PREFS_NAME = "local_agent_skills"
-    private const val KEY_SKILLS = "skills_json"
     private const val MAX_SKILLS = 12
     private const val MAX_REPLAY_FAILURES = 2
 
@@ -55,7 +56,7 @@ object LocalAgentSkillStore {
     }
 
     fun clear(context: Context) {
-        prefs(context).edit().remove(KEY_SKILLS).apply()
+        AgentPrefs.Skills.skillsJson.remove(context)
     }
 
     private fun isUnsafeToReplay(action: LocalAgentAction): Boolean {
@@ -63,7 +64,7 @@ object LocalAgentSkillStore {
     }
 
     private fun load(context: Context): List<Skill> {
-        val raw = prefs(context).getString(KEY_SKILLS, "[]") ?: "[]"
+        val raw = AgentPrefs.Skills.skillsJson[context]
         val array = runCatching { JSONArray(raw) }.getOrElse { JSONArray() }
         return buildList {
             for (index in 0 until array.length()) {
@@ -102,14 +103,11 @@ object LocalAgentSkillStore {
                     .put("replay_failures", skill.replayFailures),
             )
         }
-        prefs(context).edit().putString(KEY_SKILLS, array.toString()).apply()
+        AgentPrefs.Skills.skillsJson[context] = array.toString()
     }
 
     private fun normalizeGoal(goal: String): String =
         goal.trim().lowercase().replace(Regex("\\s+"), " ").take(MAX_GOAL_CHARS)
-
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private const val MAX_GOAL_CHARS = 240
 }

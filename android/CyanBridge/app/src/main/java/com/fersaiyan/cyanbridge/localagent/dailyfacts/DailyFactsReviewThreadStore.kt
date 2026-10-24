@@ -1,6 +1,9 @@
 package com.fersaiyan.cyanbridge.localagent.dailyfacts
 
 import android.content.Context
+import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import org.json.JSONObject
 
 object DailyFactsReviewThreadStore {
@@ -8,11 +11,6 @@ object DailyFactsReviewThreadStore {
         val date: String,
         val lookbackDays: Int,
     )
-
-    private const val PREFS = "daily_facts_review_threads"
-    private const val KEY_MAP = "thread_map_json"
-
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun save(
         context: Context,
@@ -31,7 +29,7 @@ object DailyFactsReviewThreadStore {
                 .put("date", d)
                 .put("lookback_days", lookbackDays.coerceIn(1, 365)),
         )
-        prefs(context).edit().putString(KEY_MAP, obj.toString()).apply()
+        MemoryPrefs.DailyFactsReviewThreads.threadMapJson[context] = obj.toString()
     }
 
     fun load(context: Context, chatId: String): Config? {
@@ -50,11 +48,11 @@ object DailyFactsReviewThreadStore {
         if (id.isBlank()) return
         val obj = loadMap(context)
         obj.remove(id)
-        prefs(context).edit().putString(KEY_MAP, obj.toString()).apply()
+        MemoryPrefs.DailyFactsReviewThreads.threadMapJson[context] = obj.toString()
     }
 
     private fun loadMap(context: Context): JSONObject {
-        val raw = prefs(context).getString(KEY_MAP, "{}") ?: "{}"
+        val raw = MemoryPrefs.DailyFactsReviewThreads.threadMapJson[context]
         return runCatching { JSONObject(raw) }.getOrElse { JSONObject() }
     }
 }
