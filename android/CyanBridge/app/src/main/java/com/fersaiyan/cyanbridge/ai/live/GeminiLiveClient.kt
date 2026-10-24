@@ -16,7 +16,6 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Build
-import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
@@ -33,7 +32,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -41,7 +39,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -66,15 +63,6 @@ class GeminiLiveClient(
         fun onModelTurnComplete() = Unit
         fun onAnnouncement(kind: GeminiLiveAnnouncement) = Unit
     }
-
-    @Deprecated("Use LiveTokenConfig")
-    private data class TokenConfig(
-        val token: String,
-        val model: String,
-        val websocketUrl: String,
-        val expiresAtMs: Long,
-        val reservationId: String,
-    )
 
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -301,17 +289,7 @@ class GeminiLiveClient(
 
     fun sendTextTurn(text: String) {
         if (!active.get() || !setupComplete.get() || text.isBlank()) return
-        val content = JSONObject()
-            .put(
-                "turns",
-                JSONArray().put(
-                    JSONObject()
-                        .put("role", "user")
-                        .put("parts", JSONArray().put(JSONObject().put("text", text.take(2_000)))),
-                ),
-            )
-            .put("turnComplete", true)
-        socket?.send(JSONObject().put("clientContent", content).toString())
+        socket?.send(GeminiLiveProtocol.buildClientTextTurn(text))
     }
 
     /** Sends one JPEG frame through the current realtimeInput.video field. */
@@ -324,7 +302,9 @@ class GeminiLiveClient(
             ready = active.get() && setupComplete.get(),
             bytes = jpegBytes,
             limit = limit,
-        ) { sendRealtimeBlob("video", "image/jpeg", jpegBytes) }
+        ) {
+            sendRealtimeBlob(GeminiLiveProtocol.REALTIME_VIDEO_FIELD, GeminiLiveProtocol.IMAGE_MIME_TYPE, jpegBytes)
+        }
         Log.i(TAG, "Live image queued=$accepted diagnostics=${visionDiagnostics.snapshot()}")
         scheduleVisionDiagnosticsReport()
         return accepted
@@ -476,30 +456,10 @@ class GeminiLiveClient(
             if (reconnectAttempt == 0) GeminiLiveState.CONNECTING else GeminiLiveState.RECONNECTING,
             "Connecting to Google",
         )
-        val liveUrl = if (config.freeTier || config.economy) {
-            config.websocketUrl.replaceFirst("wss://", "https://").toHttpUrl().newBuilder()
-                .addQueryParameter("vision_session_id", visionReportId).build().toString()
-                .replaceFirst("https://", "wss://")
-        } else config.websocketUrl
-        val builder = Request.Builder().url(liveUrl)
-        // A constrained Google URL already carries its ephemeral access_token.
-        // Do not send the same credential in a second Authorization header.
-        // Free/Economy proxies still require their own CyanBridge Bearer header.
-        config.authorizationHeader?.takeIf { it.isNotBlank() }?.let {
-            builder.header("Authorization", it)
-        } ?: config.token.takeIf { it.isNotBlank() && !config.websocketUrl.contains("access_token=") }?.let {
-            builder.header("Authorization", "Token $it")
-        }
-        // Free-tier Live requires x-goog-api-key alongside the ephemeral token (or alone).
-        // DefaultGeminiLiveTokenProvider populates apiKey from debug prefs; Direct provider always does.
-        config.apiKey?.takeIf { it.isNotBlank() }?.let { builder.header("x-goog-api-key", it) }
-        // Send app language so free queue 429 can be localized (too many free users)
-        runCatching {
-            val langTag = com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences.selected(appContext).languageTag
+        val request = GeminiLiveProtocol.buildConnectRequest(config, visionReportId) {
+            com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences.selected(appContext).languageTag
                 .ifBlank { java.util.Locale.getDefault().toLanguageTag() }
-            if (langTag.isNotBlank()) builder.header("Accept-Language", langTag)
         }
-        val request = builder.build()
         if (GeminiLiveSessionPolicy.requiresExplicitRestart(config.freeTier, config.economy) &&
             !meteredConnectionAttempted.compareAndSet(false, true)
         ) {
@@ -680,72 +640,17 @@ class GeminiLiveClient(
     }
 
     private fun sendSetup(webSocket: WebSocket, config: LiveTokenConfig) {
-        // If the token was minted with an exact bidiGenerateContentSetup (Pro Live), echo it exactly
-        // to avoid hanging in CONNECTING (server waits for matching setup). Free proxy does
-        // upstream.send({setup: provisioningRequest.bidiGenerateContentSetup}) — we do the same for Pro.
-        val serverSetup = config.setupJson?.let { raw ->
-            runCatching { JSONObject(raw) }.getOrNull()
-        }
-        val setup: JSONObject = if (serverSetup != null) {
-            // Inject sessionResumption handle if present, keep everything else from server
-            val resumption = JSONObject().apply {
-                sessionResumptionHandle?.takeIf { it.isNotBlank() }?.let { put("handle", it) }
-            }
-            // Ensure sessionResumption is updated, keep other fields from server
-            serverSetup.put("sessionResumption", resumption)
-            // Ensure model matches token (in case server setup had different)
-            serverSetup.put("model", config.model)
-            serverSetup
-        } else {
-            val resumption = JSONObject().apply {
-                sessionResumptionHandle?.takeIf { it.isNotBlank() }?.let { put("handle", it) }
-            }
-            val automaticActivityDetection = JSONObject()
-                .put("disabled", false)
-                .put("startOfSpeechSensitivity", "START_SENSITIVITY_HIGH")
-                .put("endOfSpeechSensitivity", "END_SENSITIVITY_LOW")
-                .put("prefixPaddingMs", 40)
-                .put("silenceDurationMs", 500)
-            val realtimeInputConfig = JSONObject()
-                .put("automaticActivityDetection", automaticActivityDetection)
-                .put("activityHandling", "START_OF_ACTIVITY_INTERRUPTS")
-                .put("turnCoverage", "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO")
-            // Build systemInstruction to match token's bidiGenerateContentSetup (see lib/gemini-live.ts buildLiveSystemInstruction)
-            // The token's setup is built server-side with the same language/imagePrompt/systemPrompt, and the Live setup we send
-            // must include the same systemInstruction + contextWindowCompression to avoid hanging in CONNECTING
-            // (seen when setup omitted these and server waited for matching setup).
-            val cleanPrompt = lastImagePrompt.trim().replace(Regex("\\s+"), " ").take(400)
-                .ifBlank { "Describe what you can see and answer the user's question." }
-            val systemPrompt = lastSystemPrompt.ifBlank { ProSubscriptionAiPrefs.getSystemPrompt(appContext) }
-            // Replicate resolveAssistantSystemPrompt + buildLiveSystemInstruction
-            val assistantPrompt = systemPrompt.trim().take(4000).ifBlank {
-                "You are CyanBridge's assistant for smart glasses. Answer the user's request directly. Give the most useful answer first in one clear sentence, then stop when the request is fully answered. For simple spoken requests, usually use 1-3 short sentences; for complex requests, include the important explanation, steps, caveats, and safety information needed. Use the shortest complete answer. Avoid filler, long preambles, repetition, and unnecessary formatting unless the user asks for them. Use the latest glasses image as visual context when the user refers to what they see."
-            }
-            val systemInstructionText = listOf(
-                assistantPrompt,
-                "You are Gemini Live in CyanBridge smart glasses.",
-                "You support 97 languages. Respond in the language the user is currently speaking, defaulting to ${lastLanguage} only when unclear. Switch immediately when the user asks to speak another language.",
-                "Keep spoken answers concise, helpful, and safe for a hands-free conversation.",
-                "Default image question when the user gives no specific question and you have a fresh glasses image: $cleanPrompt"
-            ).joinToString(" ")
-            val systemInstruction = JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstructionText)))
-            val contextWindowCompression = JSONObject()
-                .put("triggerTokens", 25000)
-                .put("slidingWindow", JSONObject().put("targetTokens", 8000))
-            JSONObject()
-                .put("model", config.model)
-                .put("generationConfig", JSONObject().put("responseModalities", JSONArray().put("AUDIO")))
-                .put("realtimeInputConfig", realtimeInputConfig)
-                .put("inputAudioTranscription", JSONObject())
-                .put("outputAudioTranscription", JSONObject())
-                .put("sessionResumption", resumption)
-                .put("contextWindowCompression", contextWindowCompression)
-                .put("systemInstruction", systemInstruction)
-        }
-        val setupJson = JSONObject().put("setup", setup).toString()
+        val setup = GeminiLiveProtocol.buildSetup(
+            config = config,
+            sessionResumptionHandle = sessionResumptionHandle,
+            language = lastLanguage,
+            imagePrompt = lastImagePrompt,
+            systemPrompt = lastSystemPrompt,
+            storedSystemPrompt = { ProSubscriptionAiPrefs.getSystemPrompt(appContext) },
+        )
         // Do not log the user-provided system instruction or session-resumption handle.
-        Log.i(TAG, "Sending Live setup model=${config.model} serverProvided=${serverSetup != null} resuming=${!sessionResumptionHandle.isNullOrBlank()}")
-        check(webSocket.send(setupJson)) {
+        Log.i(TAG, "Sending Live setup model=${config.model} serverProvided=${setup.serverProvided} resuming=${!sessionResumptionHandle.isNullOrBlank()}")
+        check(webSocket.send(setup.json)) {
             "Live setup could not be sent"
         }
     }
@@ -753,109 +658,76 @@ class GeminiLiveClient(
     private fun handleServerMessage(raw: String) {
         // Verbose log for diagnosing why Live never reaches setupComplete (user reported no listening cue / notification)
         Log.d(TAG, "Live server message raw=${raw.take(2000)}")
-        val message = runCatching { JSONObject(raw) }.getOrElse {
+        val events = GeminiLiveProtocol.parseServerMessage(raw) ?: run {
             Log.w(TAG, "Ignoring malformed Gemini Live message raw=${raw.take(500)}")
             return
         }
-        message.optJSONObject("error")?.let { error ->
-            val quotaExhausted = error.optString("message") == "live_quota_exhausted"
-            if (!quotaExhausted) listener.onAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
-            stop()
-            val detail = if (quotaExhausted)
-                "Live quota exhausted. Please wait for quota reset or upgrade."
-            else "Gemini Live session failed. Please try again."
-            setState(GeminiLiveState.ERROR, detail)
-            return
-        }
-
-        if (message.has("setupComplete") && setupComplete.compareAndSet(false, true)) {
-            socketListeningStartedAtMs = System.currentTimeMillis()
-            tokenConfig?.takeIf { it.freeTier || it.economy }?.let { config ->
-                // The proxy/economy route can debit a daily allowance. Do not silently renew.
-                if (meteredSessionLimitJob == null) {
-                    meteredSessionLimitJob = scope.launch {
-                        delay(GeminiLiveSessionPolicy.METERED_SESSION_LIMIT_MS)
-                        if (active.get()) {
-                            Log.i(TAG, "Free/Economy Live reached five-minute limit; stopping without renewal")
-                            listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
-                            stop()
-                        }
-                    }
-                    Log.i(TAG, "Metered Live five-minute cap armed")
+        for (event in events) {
+            when (event) {
+                is GeminiLiveServerEvent.Error -> {
+                    if (!event.quotaExhausted) listener.onAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
+                    stop()
+                    val detail = if (event.quotaExhausted)
+                        "Live quota exhausted. Please wait for quota reset or upgrade."
+                    else "Gemini Live session failed. Please try again."
+                    setState(GeminiLiveState.ERROR, detail)
                 }
-            }
-            startCapture()
-            setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
-            listener.onSetupComplete()
-        }
-
-        message.optJSONObject("sessionResumptionUpdate")
-            ?.optString("newHandle")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { sessionResumptionHandle = it }
-
-        message.optJSONObject("goAway")?.let { goAway ->
-            val timeLeft = goAway.optString("timeLeft")
-            Log.i(TAG, "Gemini Live goAway received; timeLeft=$timeLeft")
-        }
-
-        // Google-recommended metering: usageMetadata is the billed tokens for this turn
-        // (includes re-billed sliding window). Forward it for server-side quota debit.
-        message.optJSONObject("usageMetadata")?.let { usage ->
-            handleUsageMetadata(usage)
-        }
-
-        val serverContent = message.optJSONObject("serverContent")
-        if (serverContent != null) {
-            serverContent.optJSONObject("inputTranscription")
-                ?.optString("text")
-                ?.takeIf { it.isNotBlank() }
-                ?.let { listener.onTranscription(true, it) }
-            serverContent.optJSONObject("outputTranscription")
-                ?.optString("text")
-                ?.takeIf { it.isNotBlank() }
-                ?.let { listener.onTranscription(false, it) }
-
-            if (serverContent.optBoolean("interrupted", false)) {
-                // A server interruption alone is not enough to refresh vision: it can be
-                // caused by noise/echo. Require simultaneous local energy evidence so barge-in
-                // speech still gets a fresh image without reintroducing spontaneous captures.
-                val locallyConfirmedSpeech = speechActive.get()
-                playback?.let { track ->
-                    runCatching { track.pause() }
-                    runCatching { track.flush() }
+                GeminiLiveServerEvent.SetupComplete -> if (setupComplete.compareAndSet(false, true)) onSetupComplete()
+                is GeminiLiveServerEvent.SessionResumptionUpdate -> sessionResumptionHandle = event.newHandle
+                is GeminiLiveServerEvent.GoAway -> Log.i(TAG, "Gemini Live goAway received; timeLeft=${event.timeLeft}")
+                // Google-recommended metering: usageMetadata is the billed tokens for this turn
+                // (includes re-billed sliding window). Forward it for server-side quota debit.
+                is GeminiLiveServerEvent.UsageMetadata -> handleUsageMetadata(event.usage)
+                is GeminiLiveServerEvent.Transcription -> listener.onTranscription(event.input, event.text)
+                GeminiLiveServerEvent.Interrupted -> onServerInterrupted()
+                is GeminiLiveServerEvent.ModelAudio -> playPcm(event.pcm)
+                GeminiLiveServerEvent.TurnComplete -> if (active.get()) {
+                    finishModelPlayback()
+                    listener.onModelTurnComplete()
+                    setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
+                    reportTurnUsageIfNeeded()
                 }
-                finishModelPlayback()
-                if (locallyConfirmedSpeech) listener.onUserSpeechActivity(true)
-                listener.onInterrupted()
-                // Interrupted still ends a turn — bill the partial turn via usageMetadata if present,
-                // otherwise via audio ms delta.
-                reportTurnUsageIfNeeded()
-            }
-
-            val parts = serverContent.optJSONObject("modelTurn")?.optJSONArray("parts")
-            if (parts != null) {
-                for (index in 0 until parts.length()) {
-                    val encoded = parts.optJSONObject(index)
-                        ?.optJSONObject("inlineData")
-                        ?.optString("data")
-                        .orEmpty()
-                    if (encoded.isNotBlank()) {
-                        runCatching { Base64.decode(encoded, Base64.DEFAULT) }
-                            .getOrNull()
-                            ?.let(::playPcm)
-                    }
-                }
-            }
-
-            if (serverContent.optBoolean("turnComplete", false) && active.get()) {
-                finishModelPlayback()
-                listener.onModelTurnComplete()
-                setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
-                reportTurnUsageIfNeeded()
             }
         }
         // If message had only usageMetadata and no serverContent, billing already happened via handleUsageMetadata
+    }
+
+    private fun onSetupComplete() {
+        socketListeningStartedAtMs = System.currentTimeMillis()
+        tokenConfig?.takeIf { it.freeTier || it.economy }?.let { config ->
+            // The proxy/economy route can debit a daily allowance. Do not silently renew.
+            if (meteredSessionLimitJob == null) {
+                meteredSessionLimitJob = scope.launch {
+                    delay(GeminiLiveSessionPolicy.METERED_SESSION_LIMIT_MS)
+                    if (active.get()) {
+                        Log.i(TAG, "Free/Economy Live reached five-minute limit; stopping without renewal")
+                        listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
+                        stop()
+                    }
+                }
+                Log.i(TAG, "Metered Live five-minute cap armed")
+            }
+        }
+        startCapture()
+        setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
+        listener.onSetupComplete()
+    }
+
+    private fun onServerInterrupted() {
+        // A server interruption alone is not enough to refresh vision: it can be
+        // caused by noise/echo. Require simultaneous local energy evidence so barge-in
+        // speech still gets a fresh image without reintroducing spontaneous captures.
+        val locallyConfirmedSpeech = speechActive.get()
+        playback?.let { track ->
+            runCatching { track.pause() }
+            runCatching { track.flush() }
+        }
+        finishModelPlayback()
+        if (locallyConfirmedSpeech) listener.onUserSpeechActivity(true)
+        listener.onInterrupted()
+        // Interrupted still ends a turn — bill the partial turn via usageMetadata if present,
+        // otherwise via audio ms delta.
+        reportTurnUsageIfNeeded()
     }
 
     private fun handleUsageMetadata(usage: JSONObject) {
@@ -1043,8 +915,7 @@ class GeminiLiveClient(
     private fun stopCapture() = pauseCapture()
 
     private fun sendAudioStreamEnd() {
-        val realtimeInput = JSONObject().put("audioStreamEnd", true)
-        socket?.send(JSONObject().put("realtimeInput", realtimeInput).toString())
+        socket?.send(GeminiLiveProtocol.buildAudioStreamEnd())
     }
 
     private fun sendPcm(bytes: ByteArray) {
@@ -1102,20 +973,13 @@ class GeminiLiveClient(
     }
 
     private fun sendAudioPacket(bytes: ByteArray) {
-        if (sendRealtimeBlob("audio", "audio/pcm;rate=$INPUT_SAMPLE_RATE_HZ", bytes)) {
+        if (sendRealtimeBlob(GeminiLiveProtocol.REALTIME_AUDIO_FIELD, GeminiLiveProtocol.INPUT_AUDIO_MIME_TYPE, bytes)) {
             inputAudioMs += bytes.size.toLong() * 1_000L / (INPUT_SAMPLE_RATE_HZ * 2L)
         }
     }
 
-    private fun sendRealtimeBlob(field: String, mimeType: String, bytes: ByteArray): Boolean {
-        val realtimeInput = JSONObject().put(
-            field,
-            JSONObject()
-                .put("mimeType", mimeType)
-                .put("data", Base64.encodeToString(bytes, Base64.NO_WRAP)),
-        )
-        return socket?.send(JSONObject().put("realtimeInput", realtimeInput).toString()) == true
-    }
+    private fun sendRealtimeBlob(field: String, mimeType: String, bytes: ByteArray): Boolean =
+        socket?.send(GeminiLiveProtocol.buildRealtimeBlob(field, mimeType, bytes)) == true
 
     private fun startPlayback() {
         if (playback != null) return
@@ -1313,8 +1177,8 @@ class GeminiLiveClient(
 
     private companion object {
         const val TAG = "GeminiLiveClient"
-        const val INPUT_SAMPLE_RATE_HZ = 16_000
-        const val OUTPUT_SAMPLE_RATE_HZ = 24_000
+        const val INPUT_SAMPLE_RATE_HZ = GeminiLiveProtocol.INPUT_SAMPLE_RATE_HZ
+        const val OUTPUT_SAMPLE_RATE_HZ = GeminiLiveProtocol.OUTPUT_SAMPLE_RATE_HZ
         const val INPUT_CHUNK_BYTES = 1_280 // 40 ms PCM16 mono at 16 kHz; halves WS message rate vs 20 ms.
         // Keep more than the detector's 600 ms trailing-silence window. During a still transfer,
         // speech streams normally while this tail is held back from Gemini's 500 ms server VAD.
