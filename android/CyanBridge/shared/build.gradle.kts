@@ -65,6 +65,9 @@ kotlin {
             // The app database (Room KMP). Android keeps the framework SQLite through Room's
             // open helper; other targets use the bundled SQLite driver.
             api(libs.androidx.room.runtime)
+            // Screen state holders shared by the Android and iOS hosts.
+            api(libs.jetbrains.lifecycle.viewmodel)
+            implementation(libs.jetbrains.lifecycle.viewmodel.compose)
         }
         androidMain.dependencies {
             // Keystore-backed storage for secure preference files (API keys, account tokens).

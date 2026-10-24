@@ -10,6 +10,7 @@ lifecycleRuntimeKtx = "2.9.2"
 activityCompose = "1.10.1"
 composeBom = "2025.06.01"
 compose-multiplatform = "1.8.2"
+jetbrains-lifecycle = "2.8.4"
 appcompat = "1.7.1"
 room = "2.7.0"
 sqlite = "2.5.0"
@@ -18,6 +19,8 @@ serialization = "1.7.3"
 atomicfu = "0.26.1"
 
 [libraries]
+jetbrains-lifecycle-viewmodel = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-viewmodel", version.ref = "jetbrains-lifecycle" }
+jetbrains-lifecycle-viewmodel-compose = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "jetbrains-lifecycle" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
