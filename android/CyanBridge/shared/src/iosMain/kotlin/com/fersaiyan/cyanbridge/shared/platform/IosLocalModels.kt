@@ -17,11 +17,11 @@ import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelDownloadUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelGenerationUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelOptionField
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelTextField
-import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelToggleField
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsAction
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsConfigureUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsSection
 import com.fersaiyan.cyanbridge.shared.localmodels.RemoteInferenceUiState
+import com.fersaiyan.cyanbridge.shared.localmodels.withDraftEdit
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -326,30 +326,14 @@ object IosLocalModels {
                 preferences.putBoolean(KEY_USE_GPU, action.index == 0 && bridge?.gpuAvailable() == true)
                 refreshUi()
             }
-            is LocalModelsAction.UpdateText -> when (action.field) {
-                LocalModelTextField.SYSTEM_PROMPT -> uiState = uiState.copy(
-                    generation = uiState.generation.copy(systemPrompt = action.value),
-                    hasUnsavedChanges = true,
-                )
-                LocalModelTextField.TEMPERATURE -> editGeneration { it.copy(temperature = action.value) }
-                LocalModelTextField.TOP_P -> editGeneration { it.copy(topP = action.value) }
-                LocalModelTextField.TOP_K -> editGeneration { it.copy(topK = action.value) }
-                LocalModelTextField.MAX_TOKENS -> editGeneration { it.copy(maxTokens = action.value) }
-                LocalModelTextField.REPETITION_PENALTY -> editGeneration { it.copy(repetitionPenalty = action.value) }
-                LocalModelTextField.CONTEXT_SIZE -> editGeneration { it.copy(contextSize = action.value) }
-                LocalModelTextField.SEED -> editGeneration { it.copy(seed = action.value) }
-                LocalModelTextField.HUGGING_FACE_TOKEN -> {
-                    saveHuggingFaceToken(action.value)
-                    uiState = uiState.copy(generation = uiState.generation.copy(huggingFaceToken = action.value))
-                }
-                LocalModelTextField.REMOTE_BASE_URL -> editRemote { it.copy(baseUrl = action.value) }
-                LocalModelTextField.REMOTE_MODEL_NAME -> editRemote { it.copy(modelName = action.value) }
-                LocalModelTextField.REMOTE_API_KEY -> editRemote { it.copy(apiKey = action.value) }
-                else -> Unit
+            // The download token is stored in the Keychain as it is typed; other edits wait for Save.
+            is LocalModelsAction.UpdateText -> if (action.field == LocalModelTextField.HUGGING_FACE_TOKEN) {
+                saveHuggingFaceToken(action.value)
+                uiState = uiState.copy(generation = uiState.generation.copy(huggingFaceToken = action.value))
+            } else {
+                uiState.withDraftEdit(action)?.let { uiState = it }
             }
-            is LocalModelsAction.SetToggle -> if (action.field == LocalModelToggleField.REMOTE_SERVER_ENABLED) {
-                editRemote { it.copy(enabled = action.enabled) }
-            }
+            is LocalModelsAction.SetToggle -> uiState.withDraftEdit(action)?.let { uiState = it }
             LocalModelsAction.TestRemoteServer -> {
                 val draft = uiState.remoteServer
                 setRemoteStatus("Testing ${draft.baseUrl.trim()}…")
@@ -362,10 +346,6 @@ object IosLocalModels {
             }
             else -> Unit
         }
-    }
-
-    private fun editRemote(change: (RemoteInferenceUiState) -> RemoteInferenceUiState) {
-        uiState = uiState.copy(remoteServer = change(uiState.remoteServer), hasUnsavedChanges = true)
     }
 
     private fun setRemoteStatus(status: String) {
@@ -433,10 +413,6 @@ object IosLocalModels {
             ).withSettings(generationSettings),
             remoteServer = remote,
         )
-    }
-
-    private fun editGeneration(change: (LocalModelGenerationUiState) -> LocalModelGenerationUiState) {
-        uiState = uiState.copy(generation = change(uiState.generation), hasUnsavedChanges = true)
     }
 
     /** Validates the Assistant behavior + Advanced options drafts like Android's saveGenerationSettings. */

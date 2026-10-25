@@ -18,27 +18,8 @@ data class TaskerIntegrationStatus(
             autoInputAccessibilityEnabled
 }
 
-enum class IntegrationHealth {
-    READY,
-    NEEDS_SETUP,
-    OUTDATED,
-    WRONG_PROFILE,
-    NOT_SELECTED,
-    ENVIRONMENT_BLOCKED,
-    NOT_VERSIONED,
-}
-
-data class IntegrationState(
-    val id: String,
-    val name: String,
-    val installedVersion: String? = null,
-    val requiredVersion: String? = null,
-    val health: IntegrationHealth = IntegrationHealth.NEEDS_SETUP,
-    val detail: String = "",
-    val actionHint: String? = null,
-) {
-    val ready: Boolean get() = health == IntegrationHealth.READY
-}
+typealias IntegrationHealth = com.fersaiyan.cyanbridge.shared.automation.IntegrationHealth
+typealias IntegrationState = com.fersaiyan.cyanbridge.shared.automation.IntegrationState
 
 /** Pure compatibility logic shared by UI, policy and unit tests. */
 object TaskerProfileVersionClassifier {

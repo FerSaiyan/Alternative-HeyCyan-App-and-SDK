@@ -1,11 +1,13 @@
 package com.fersaiyan.cyanbridge.ai.image
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -40,27 +42,32 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.tasker.IntegrationHealth
-import com.fersaiyan.cyanbridge.tasker.IntegrationState
 import com.fersaiyan.cyanbridge.tasker.TaskerIntegrationManager
 import com.fersaiyan.cyanbridge.tasker.TaskerProfileGuidance
+import com.fersaiyan.cyanbridge.shared.automation.AssistantAutomationPlatform
+import com.fersaiyan.cyanbridge.shared.automation.AssistantAutomationSetupViewModel
+import com.fersaiyan.cyanbridge.shared.automation.AssistantAutomationSnapshot
+import com.fersaiyan.cyanbridge.shared.automation.AssistantSetupCheck
+import com.fersaiyan.cyanbridge.shared.automation.ExternalAssistantSetupUiState
+import com.fersaiyan.cyanbridge.shared.automation.ImportTaskerProfile
+import com.fersaiyan.cyanbridge.shared.automation.IntegrationHealth
+import com.fersaiyan.cyanbridge.shared.automation.IntegrationState
 import com.fersaiyan.cyanbridge.ui.CommunityPluginsActivity
+import com.fersaiyan.cyanbridge.ui.collectScreenEffects
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -71,7 +78,9 @@ import java.io.File
  * Tasker/AutoInput environment and the Tasker-dependent CyanBridge plugins.
  */
 class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
-    private var uiState by mutableStateOf(ExternalAssistantSetupUiState())
+    private val viewModel by viewModels<AssistantAutomationSetupViewModel> {
+        viewModelFactory { initializer { AssistantAutomationSetupViewModel(AndroidAssistantAutomationPlatform(applicationContext)) } }
+    }
     private var pendingProfileAsset: String? = null
     private var pendingProfileFileName: String? = null
 
@@ -92,7 +101,7 @@ class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
             TaskerProfileGuidance.showSavedDialog(this, fileName, uri)
         }.onFailure { error ->
             runCatching { contentResolver.delete(uri, null, null) }
-            showLongToast("Could not save the Tasker profile: ${error.message}")
+            Toast.makeText(this, "Could not save the Tasker profile: ${error.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -100,22 +109,26 @@ class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         pendingProfileAsset = savedInstanceState?.getString(STATE_PENDING_PROFILE_ASSET)
         pendingProfileFileName = savedInstanceState?.getString(STATE_PENDING_PROFILE_FILE_NAME)
-        refreshSetupState()
+        collectScreenEffects(viewModel.effectFlow) { effect ->
+            if (effect is ImportTaskerProfile) importProfile(effect.assetName)
+        }
+        viewModel.refresh()
         val appearancePreferences = AppearancePreferences(this)
         setContent {
             val appearance by rememberAppearanceSettings(appearancePreferences)
+            val state by viewModel.state.collectAsState()
             CyanBridgeTheme(appearance) {
                 ExternalAssistantAutomationSetupScreen(
-                    state = uiState,
+                    state = state,
                     onBack = ::finish,
                     onChooseDefaultAssistant = ::openDefaultAssistantSettings,
-                    onImportProfile = ::importMatchingProfile,
-                    onVerifyProfile = ::verifyImportedProfile,
-                    onOpenAccessibility = ::openAccessibilitySettings,
-                    onOpenPlugins = ::openPlugins,
+                    onImportProfile = viewModel::importProfile,
+                    onVerifyProfile = viewModel::verifyProfile,
+                    onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                    onOpenPlugins = { startActivity(Intent(this, CommunityPluginsActivity::class.java)) },
                     onWatchTutorial = { TaskerProfileGuidance.openTutorial(this) },
-                    onTestVoice = ::testTaskerVoiceLaunch,
-                    onRefresh = ::refreshSetupState,
+                    onTestVoice = viewModel::testVoice,
+                    onRefresh = viewModel::refresh,
                 )
             }
         }
@@ -129,7 +142,7 @@ class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        refreshSetupState()
+        viewModel.refresh()
     }
 
     private fun openDefaultAssistantSettings() {
@@ -137,202 +150,23 @@ class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
             .onFailure { startActivity(Intent(Settings.ACTION_SETTINGS)) }
     }
 
-    private fun openAccessibilitySettings() {
-        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-    }
-
-    private fun openPlugins() {
-        startActivity(Intent(this, CommunityPluginsActivity::class.java))
-    }
-
-    private fun importMatchingProfile() {
-        val capability = ExternalAssistantAutomationInspector.inspect(this)
-        val assetName = when (capability.target) {
-            ImageAutomationTarget.GEMINI -> "tasker/CyanBridge_Gemini.xml"
-            ImageAutomationTarget.CHATGPT -> "tasker/CyanBridge_ChatGPT.xml"
-            ImageAutomationTarget.NONE -> {
-                showLongToast("Set Gemini or ChatGPT as the default assistant first.")
-                return
-            }
-        }
-        if (!capability.taskerInstalled) {
-            showLongToast("Install Tasker before importing the profile.")
-            return
-        }
-
-        val fileName = profileFileName(assetName)
+    /** Opens Tasker's importer with the bundled profile, or saves it where the user chooses. */
+    private fun importProfile(assetName: String) {
+        val fileName = assetName.substringAfterLast('/').removeSuffix(".xml") + ".prf.xml"
         val profileFile = File(cacheDir, "tasker/$fileName")
         val imported = runCatching {
             profileFile.parentFile?.mkdirs()
-            assets.open(assetName).use { input ->
-                profileFile.outputStream().use(input::copyTo)
-            }
+            assets.open(assetName).use { input -> profileFile.outputStream().use(input::copyTo) }
             val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", profileFile)
             TaskerProfileGuidance.openImporter(this, uri, fileName)
         }.getOrDefault(false)
         if (!imported) {
             pendingProfileAsset = assetName
-            val fallbackFileName = fileName.removeSuffix(".prf.xml") +
-                "_${System.currentTimeMillis()}.prf.xml"
+            val fallbackFileName = fileName.removeSuffix(".prf.xml") + "_${System.currentTimeMillis()}.prf.xml"
             pendingProfileFileName = fallbackFileName
-            showLongToast("Tasker could not import directly. Choose where to save the profile, then import it from Tasker.")
+            Toast.makeText(this, "Tasker could not import directly. Choose where to save the profile, then import it from Tasker.", Toast.LENGTH_LONG).show()
             saveProfileLauncher.launch(fallbackFileName)
         }
-    }
-
-    private fun profileFileName(assetName: String): String =
-        assetName.substringAfterLast('/').removeSuffix(".xml") + ".prf.xml"
-
-    private fun verifyImportedProfile() {
-        val capability = ExternalAssistantAutomationInspector.inspect(this)
-        if (capability.target == ImageAutomationTarget.NONE) {
-            showLongToast("Set Gemini or ChatGPT as the default assistant first.")
-            return
-        }
-        if (!capability.taskerInstalled) {
-            showLongToast("Tasker is not installed.")
-            return
-        }
-
-        val token = TaskerImageProfileStore.beginVerification(this)
-        sendBroadcast(Intent(MainActivity.aiEventAction(packageName)).apply {
-            setPackage(ExternalImageAutomationIntents.TASKER_PACKAGE)
-            putExtra(ImageQuestionBroadcast.EXTRA_TYPE, "profile_check")
-            putExtra(ImageQuestionBroadcast.EXTRA_ASSISTANT, capability.target.label)
-            putExtra(ExternalImageAutomationIntents.EXTRA_PROFILE_TOKEN, token)
-            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-        })
-        Toast.makeText(this, "Waiting for the Tasker profile handshake...", Toast.LENGTH_SHORT).show()
-        lifecycleScope.launch {
-            delay(1_500L)
-            refreshSetupState()
-            val verified = ExternalAssistantAutomationInspector.inspect(this@ExternalAssistantAutomationSetupActivity)
-                .profileCompatible
-            showLongToast(
-                if (verified) {
-                    "${capability.target.label} Tasker profile verified."
-                } else {
-                    "No compatible profile response received. Import/update the current profile and try again."
-                },
-            )
-        }
-    }
-
-    private fun testTaskerVoiceLaunch() {
-        val capability = ExternalAssistantAutomationInspector.inspect(this)
-        val reason = ExternalAssistantAutomationPolicy.voiceBlockingReason(capability)
-        if (reason != null) {
-            showLongToast(reason)
-            return
-        }
-        sendBroadcast(Intent(MainActivity.aiEventAction(packageName)).apply {
-            setPackage(ExternalImageAutomationIntents.TASKER_PACKAGE)
-            putExtra(ImageQuestionBroadcast.EXTRA_TYPE, "voice")
-            putExtra(ImageQuestionBroadcast.EXTRA_ASSISTANT, capability.target.label)
-            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-        })
-    }
-
-    private fun refreshSetupState() {
-        val capability = ExternalAssistantAutomationInspector.inspect(this)
-        val taskerStatus = TaskerIntegrationManager.inspect(this)
-        val defaultPackage = DefaultAssistantResolver.packageName(this)
-        val selectedIntegration = taskerStatus.integrations.firstOrNull { it.id == capability.target.wireName }
-        val checks = listOf(
-            AssistantSetupCheck(
-                title = "Tasker installed",
-                passed = taskerStatus.taskerInstalled,
-                detail = taskerStatus.taskerVersion?.let { "Version $it" }
-                    ?: ExternalImageAutomationIntents.TASKER_PACKAGE,
-            ),
-            AssistantSetupCheck(
-                title = "Tasker Accessibility Access",
-                passed = taskerStatus.taskerAccessibilityEnabled,
-                detail = if (taskerStatus.taskerAccessibilityEnabled) {
-                    "Enabled. Required for reliable foreground-app detection (%WIN)."
-                } else {
-                    "Enable it through Tasker's own Accessibility Access disclosure flow; direct Android settings writes are not sufficient."
-                },
-            ),
-            AssistantSetupCheck(
-                title = "AutoInput installed",
-                passed = taskerStatus.autoInputInstalled,
-                detail = taskerStatus.autoInputVersion?.let { "Version $it" }
-                    ?: "Install AutoInput; if actions silently no-op, restore the purchased entitlement through the official AutoApps app.",
-            ),
-            AssistantSetupCheck(
-                title = "AutoInput Accessibility Access",
-                passed = taskerStatus.autoInputAccessibilityEnabled,
-                detail = "Required for observing, clicking and typing in Android/external-app UI.",
-            ),
-            AssistantSetupCheck(
-                title = "Android default assistant",
-                passed = capability.target != ImageAutomationTarget.NONE,
-                detail = when (capability.target) {
-                    ImageAutomationTarget.NONE -> "${defaultPackage ?: "Not detected"}; choose Gemini or ChatGPT"
-                    else -> "${capability.target.label} ($defaultPackage)"
-                },
-            ),
-            AssistantSetupCheck(
-                title = "Default assistant app installed",
-                passed = capability.targetPackage != null,
-                detail = capability.targetPackage ?: "No supported assistant package",
-            ),
-            AssistantSetupCheck(
-                title = "Current assistant Tasker profile",
-                passed = capability.profileCompatible,
-                detail = selectedIntegration?.detail ?: "Choose Gemini or ChatGPT as the default assistant to verify its profile.",
-            ),
-            AssistantSetupCheck(
-                title = "Phone unlocked",
-                passed = !capability.phoneLocked,
-                detail = "External UI automation fails immediately while locked.",
-            ),
-            AssistantSetupCheck(
-                title = "Assistant accepts image shares",
-                passed = capability.imageShareAvailable,
-                detail = capability.targetPackage ?: "No supported assistant selected",
-            ),
-        )
-        val firstFailure = checks.firstOrNull { !it.passed }
-        val session = ExternalImageAutomationStore.current(this)
-        val migrationNotice = selectedIntegration?.takeIf {
-            it.health == IntegrationHealth.OUTDATED ||
-                it.health == IntegrationHealth.WRONG_PROFILE ||
-                it.health == IntegrationHealth.NEEDS_SETUP
-        }?.let {
-            "If this device still has an older Tasker_AI profile, import the current ${capability.target.label} profile, replace/enable it in Tasker, then press Verify profile."
-        }
-        uiState = ExternalAssistantSetupUiState(
-            targetLabel = capability.target.takeUnless { it == ImageAutomationTarget.NONE }?.let {
-                "Tasker integrations · ${it.label} selected"
-            } ?: "Tasker integrations",
-            ready = firstFailure == null,
-            nextStep = taskerStatus.nextAction
-                ?: firstFailure?.let { "${it.title}: ${it.detail}" }
-                ?: "Tasker and external assistant automation are ready.",
-            checks = checks,
-            integrations = taskerStatus.integrations,
-            canImportProfile = capability.target != ImageAutomationTarget.NONE && capability.taskerInstalled,
-            canVerifyProfile = capability.target != ImageAutomationTarget.NONE && capability.taskerInstalled,
-            canTestVoice = ExternalAssistantAutomationPolicy.voiceBlockingReason(capability) == null,
-            profileActionLabel = if (selectedIntegration?.health == IntegrationHealth.READY) {
-                "Re-import current ${capability.target.label} profile"
-            } else {
-                "Import / update ${capability.target.label} profile"
-            },
-            migrationNotice = migrationNotice,
-            lastImageState = session?.let {
-                buildString {
-                    append(it.state.stage.wireName)
-                    it.state.error?.takeIf(String::isNotBlank)?.let { error -> append(" ($error)") }
-                }
-            },
-        )
-    }
-
-    private fun showLongToast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
     private companion object {
@@ -341,25 +175,56 @@ class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
     }
 }
 
-data class ExternalAssistantSetupUiState(
-    val targetLabel: String = "Checking...",
-    val ready: Boolean = false,
-    val nextStep: String = "Checking Tasker integration setup",
-    val checks: List<AssistantSetupCheck> = emptyList(),
-    val integrations: List<IntegrationState> = emptyList(),
-    val canImportProfile: Boolean = false,
-    val canVerifyProfile: Boolean = false,
-    val canTestVoice: Boolean = false,
-    val profileActionLabel: String = "Import / update profile",
-    val migrationNotice: String? = null,
-    val lastImageState: String? = null,
-)
+/** The phone inspection and Tasker broadcasts behind the shared setup screen. */
+private class AndroidAssistantAutomationPlatform(private val context: Context) : AssistantAutomationPlatform {
+    override fun inspect(): AssistantAutomationSnapshot {
+        val capability = ExternalAssistantAutomationInspector.inspect(context)
+        val tasker = TaskerIntegrationManager.inspect(context)
+        return AssistantAutomationSnapshot(
+            taskerInstalled = tasker.taskerInstalled,
+            taskerVersion = tasker.taskerVersion,
+            taskerPackage = ExternalImageAutomationIntents.TASKER_PACKAGE,
+            taskerAccessibilityEnabled = tasker.taskerAccessibilityEnabled,
+            autoInputInstalled = tasker.autoInputInstalled,
+            autoInputVersion = tasker.autoInputVersion,
+            autoInputAccessibilityEnabled = tasker.autoInputAccessibilityEnabled,
+            integrations = tasker.integrations,
+            nextAction = tasker.nextAction,
+            targetId = capability.target.takeUnless { it == ImageAutomationTarget.NONE }?.wireName,
+            targetLabel = capability.target.label,
+            targetPackage = capability.targetPackage,
+            defaultAssistantPackage = DefaultAssistantResolver.packageName(context),
+            assistantTaskerInstalled = capability.taskerInstalled,
+            profileCompatible = capability.profileCompatible,
+            phoneLocked = capability.phoneLocked,
+            imageShareAvailable = capability.imageShareAvailable,
+            voiceBlockingReason = ExternalAssistantAutomationPolicy.voiceBlockingReason(capability),
+            lastImageState = ExternalImageAutomationStore.current(context)?.let {
+                buildString {
+                    append(it.state.stage.wireName)
+                    it.state.error?.takeIf(String::isNotBlank)?.let { error -> append(" ($error)") }
+                }
+            },
+        )
+    }
 
-data class AssistantSetupCheck(
-    val title: String,
-    val passed: Boolean,
-    val detail: String,
-)
+    override fun beginProfileCheck(targetLabel: String) {
+        val token = TaskerImageProfileStore.beginVerification(context)
+        sendTaskerEvent("profile_check", targetLabel) { putExtra(ExternalImageAutomationIntents.EXTRA_PROFILE_TOKEN, token) }
+    }
+
+    override fun sendVoiceTest(targetLabel: String) = sendTaskerEvent("voice", targetLabel)
+
+    private fun sendTaskerEvent(type: String, assistant: String, extras: Intent.() -> Unit = {}) {
+        context.sendBroadcast(Intent(MainActivity.aiEventAction(context.packageName)).apply {
+            setPackage(ExternalImageAutomationIntents.TASKER_PACKAGE)
+            putExtra(ImageQuestionBroadcast.EXTRA_TYPE, type)
+            putExtra(ImageQuestionBroadcast.EXTRA_ASSISTANT, assistant)
+            extras()
+            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        })
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
