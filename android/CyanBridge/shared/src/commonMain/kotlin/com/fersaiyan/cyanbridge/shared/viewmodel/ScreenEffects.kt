@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.viewmodel
 
+import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -10,8 +11,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
  */
 interface ScreenEffect
 
-/** A short (or [long]) transient message. */
-data class ScreenToast(val text: String, val long: Boolean = false) : ScreenEffect
+/** A short notice (a toast on Android). */
+data class ShowMessage(val message: UiMessage) : ScreenEffect
 
 /** A plain alert: a message or a list of [items], with up to three buttons. */
 data class ScreenDialog(
@@ -39,5 +40,5 @@ class ScreenEffects {
         channel.trySend(effect)
     }
 
-    fun toast(text: String, long: Boolean = false) = send(ScreenToast(text, long))
+    fun toast(text: String, long: Boolean = false) = send(ShowMessage(UiMessage(text, long)))
 }

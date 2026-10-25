@@ -31,15 +31,18 @@ import com.fersaiyan.cyanbridge.shared.viewmodel.ScreenEffect
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.collectScreenEffects
-import com.fersaiyan.cyanbridge.ui.sharedViewModelFactory
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.Dispatchers
 
 /** Hosts the shared Pro checkout screen; [ProSubscriptionViewModel] owns its state and flows. */
 class ProSubscriptionActivity : AppCompatActivity() {
     private val viewModel: ProSubscriptionViewModel by viewModels {
-        sharedViewModelFactory {
-            ProSubscriptionViewModel(AndroidProAccountPlatform(this), PlayStoreBilling(this), Dispatchers.IO)
+        viewModelFactory {
+            initializer {
+                ProSubscriptionViewModel(AndroidProAccountPlatform(applicationContext), PlayStoreBilling(applicationContext), Dispatchers.IO)
+            }
         }
     }
 

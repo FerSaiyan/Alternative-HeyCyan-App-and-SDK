@@ -2,7 +2,8 @@ package com.fersaiyan.cyanbridge.shared.billing
 
 import com.fersaiyan.cyanbridge.shared.viewmodel.CloseScreen
 import com.fersaiyan.cyanbridge.shared.viewmodel.ScreenEffect
-import com.fersaiyan.cyanbridge.shared.viewmodel.ScreenToast
+import com.fersaiyan.cyanbridge.shared.ui.UiMessage
+import com.fersaiyan.cyanbridge.shared.viewmodel.ShowMessage
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -59,7 +60,7 @@ class ProSubscriptionViewModelTest {
         assertEquals(listOf("standard", "play_billing", "tok"), listOf(platform.entitlement.plan, platform.entitlement.provider, platform.entitlement.purchaseToken))
         assertTrue(platform.entitlement.isSubscribed)
         assertEquals(1, billing.acknowledged)
-        assertTrue(ScreenToast("✓ Subscribed to Standard ($5.00 per month) · Switched provider to Pro Subscription", long = true) in effects)
+        assertTrue(ShowMessage(UiMessage("✓ Subscribed to Standard ($5.00 per month) · Switched provider to Pro Subscription", long = true)) in effects)
         assertEquals(listOf(ReportActivated, OpenProSettings(deferred = false)), effects.takeLast(2))
     }
 
@@ -73,7 +74,7 @@ class ProSubscriptionViewModelTest {
 
         assertFalse(platform.entitlement.isSubscribed)
         assertEquals("play_purchase_missing", platform.entitlement.provider)
-        assertTrue(ScreenToast("No active Play subscription found for this account.", long = true) in effects)
+        assertTrue(ShowMessage(UiMessage("No active Play subscription found for this account.", long = true)) in effects)
     }
 
     @Test
@@ -92,7 +93,7 @@ class ProSubscriptionViewModelTest {
         assertEquals("Email verified, but no active Pro subscription was found for this account.", vm.state.value.ui.status)
         vm.sendRestoreFailureLogs()
         assertEquals(null, vm.state.value.restoreNotFoundEmail)
-        assertTrue(ScreenToast("Logs sent to the developer. Reference: log-1", long = true) in effects)
+        assertTrue(ShowMessage(UiMessage("Logs sent to the developer. Reference: log-1", long = true)) in effects)
     }
 }
 
@@ -127,7 +128,7 @@ class ProSubscriptionSettingsViewModelTest {
 
         vm.cancelSubscription()
         assertFalse(platform.entitlement.isSubscribed)
-        assertEquals(listOf(ScreenToast("Cancelled", long = true), CloseScreen), effects.takeLast(2))
+        assertEquals(listOf(ShowMessage(UiMessage("Cancelled", long = true)), CloseScreen), effects.takeLast(2))
     }
 }
 

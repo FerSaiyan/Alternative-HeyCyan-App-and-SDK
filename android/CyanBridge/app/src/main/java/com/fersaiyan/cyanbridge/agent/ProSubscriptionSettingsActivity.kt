@@ -22,7 +22,8 @@ import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.collectScreenEffects
 import com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences
-import com.fersaiyan.cyanbridge.ui.sharedViewModelFactory
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -30,8 +31,10 @@ import kotlinx.coroutines.Dispatchers
 /** Hosts the shared Pro settings screen; [ProSubscriptionSettingsViewModel] owns its state. */
 class ProSubscriptionSettingsActivity : AppCompatActivity() {
     private val viewModel: ProSubscriptionSettingsViewModel by viewModels {
-        sharedViewModelFactory {
-            ProSubscriptionSettingsViewModel(AndroidProAccountPlatform(this), AndroidProSettingsStore(this), Dispatchers.IO)
+        viewModelFactory {
+            initializer {
+                ProSubscriptionSettingsViewModel(AndroidProAccountPlatform(applicationContext), AndroidProSettingsStore(applicationContext), Dispatchers.IO)
+            }
         }
     }
 

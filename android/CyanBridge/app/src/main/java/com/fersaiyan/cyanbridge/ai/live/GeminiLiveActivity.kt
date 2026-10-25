@@ -26,7 +26,8 @@ import com.fersaiyan.cyanbridge.shared.live.LiveImageRequest
 import com.fersaiyan.cyanbridge.shared.live.RequestMicrophone
 import com.fersaiyan.cyanbridge.ui.collectScreenEffects
 import com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences
-import com.fersaiyan.cyanbridge.ui.sharedViewModelFactory
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.google.android.material.button.MaterialButton
 import java.io.File
 import java.util.Locale
@@ -44,14 +45,16 @@ import kotlinx.coroutines.withContext
  */
 class GeminiLiveActivity : AppCompatActivity() {
     private val viewModel: GeminiLiveViewModel by viewModels {
-        sharedViewModelFactory {
-            val session = AndroidGeminiLiveSession(
-                context = this,
-                initialImagePath = intent.getStringExtra(EXTRA_INITIAL_IMAGE_PATH)?.takeIf { it.isNotBlank() },
-                initialPrompt = intent.getStringExtra(EXTRA_INITIAL_PROMPT)?.takeIf { it.isNotBlank() },
-            )
-            val platform = AndroidProAccountPlatform(this)
-            GeminiLiveViewModel(session) { platform.entitlement.hasPaidPlan() }.also(session::attach)
+        viewModelFactory {
+            initializer {
+                val session = AndroidGeminiLiveSession(
+                    context = applicationContext,
+                    initialImagePath = intent.getStringExtra(EXTRA_INITIAL_IMAGE_PATH)?.takeIf { it.isNotBlank() },
+                    initialPrompt = intent.getStringExtra(EXTRA_INITIAL_PROMPT)?.takeIf { it.isNotBlank() },
+                )
+                val platform = AndroidProAccountPlatform(applicationContext)
+                GeminiLiveViewModel(session) { platform.entitlement.hasPaidPlan() }.also(session::attach)
+            }
         }
     }
 
