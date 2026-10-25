@@ -123,13 +123,14 @@ class MemoMindWebPluginHost(
         val status = CompletableDeferred<MemoMindEvent.FrameStatus>()
     }
 
-    /** Starts listening to the glasses; probes the Web Bridge plugin once when its state is unknown. */
+    /** Starts listening to the glasses; probes the Web Bridge plugin on start and reconnect while its state is unknown. */
     fun start() {
         if (jobs.isNotEmpty()) return
         jobs += scope.launch { device.events.collect(::onDeviceEvent) }
         jobs += scope.launch {
             device.connected.drop(1).collect { connected ->
                 if (!connected) failFrame()
+                if (connected && device.webBridgeRunning != true) launch { probeWebBridge() }
                 emitDevice("device.connection", "connection", buildJsonObject { put("connected", connected); put("source", "link") })
             }
         }
@@ -137,8 +138,12 @@ class MemoMindWebPluginHost(
             for ((sessionId, frames) in audioFrames) onAudioFrames(sessionId, frames)
         }
         if (device.connected.value && device.webBridgeRunning != true) {
-            jobs += scope.launch { runCatching { device.probeWebBridge() }.onFailure(::rethrowCancellation) }
+            jobs += scope.launch { probeWebBridge() }
         }
+    }
+
+    private suspend fun probeWebBridge() {
+        runCatching { device.probeWebBridge() }.onFailure(::rethrowCancellation)
     }
 
     /**
