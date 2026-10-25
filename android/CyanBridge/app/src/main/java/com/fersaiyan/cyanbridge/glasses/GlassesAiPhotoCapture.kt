@@ -4,6 +4,7 @@ import android.content.Context
 import com.fersaiyan.cyanbridge.bridge.core.GlassesCapability
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
+import com.fersaiyan.cyanbridge.devices.mentra.MentraPhotoCapture
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
@@ -44,6 +45,7 @@ class GlassesAiPhotoCapture(context: Context) {
             },
             DeviceClass.EYEVUE to nativeSource(DeviceClass.EYEVUE) { EyevueManager.getInstance(it).capturePhotoForAi() },
             DeviceClass.TUNEBUDS to nativeSource(DeviceClass.TUNEBUDS) { TuneBudsManager.getInstance(it).capturePhotoForAi() },
+            DeviceClass.MENTRA_LIVE to nativeSource(DeviceClass.MENTRA_LIVE) { MentraPhotoCapture(it).capture() },
         )
     }
 }

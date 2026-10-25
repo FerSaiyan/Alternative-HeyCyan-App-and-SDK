@@ -115,7 +115,7 @@ internal class AndroidGlassesDevices(context: GlassesDeviceContext) {
         DeviceClass.MOYOUNG_W620 to lazy { MoyoungW620Glasses(context) },
         DeviceClass.META_RAYBAN to lazy { MetaRaybanGlasses(context) },
         DeviceClass.MEIZU_MYVU to lazy { MeizuMyvuGlasses(context) },
-        DeviceClass.MENTRA_LIVE to lazy { LegacySdkGlasses(GlassesFamilyProfiles.mentraLive, context) },
+        DeviceClass.MENTRA_LIVE to lazy { MentraLiveGlasses(context) },
         DeviceClass.GENERIC_AUDIO to lazy { LegacySdkGlasses(GlassesFamilyProfiles.genericAudio, context) },
         DeviceClass.UNKNOWN to lazy { LegacySdkGlasses(GlassesFamilyProfiles.unknown, context) },
     )

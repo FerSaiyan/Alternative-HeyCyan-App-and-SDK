@@ -2,6 +2,9 @@ package com.fersaiyan.cyanbridge.devices.mentra
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.util.Log
+import com.fersaiyan.cyanbridge.glasses.GlassesPhotoCapture
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.mentra.bluetoothsdk.PhotoCompression
 import com.mentra.bluetoothsdk.PhotoRequest
 import com.mentra.bluetoothsdk.PhotoSize
@@ -21,13 +24,17 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 /**
- * BLE transfer through the phone to a one-shot loopback photo receiver.
- * Never uploads private photos to an external server.
+ * AI photo from Mentra Live: the SDK's phone-delivery flow (the glasses send the JPEG over BLE
+ * and the phone SDK posts it to the request's webhook) aimed at a one-shot loopback receiver.
+ * Never uploads private photos to an external server. Holds the shared camera lease
+ * ([GlassesPhotoCapture]) like the other native AI-photo transports.
  */
 class MentraPhotoCapture(context: Context) {
     private val appContext = context.applicationContext
 
-    suspend fun capture(): ByteArray = withContext(Dispatchers.IO) {
+    suspend fun capture(): ByteArray = GlassesPhotoCapture.withCapture(DeviceClass.MENTRA_LIVE) { captureNow() }
+
+    private suspend fun captureNow(): ByteArray = withContext(Dispatchers.IO) {
         val manager = MentraLiveManager.getInstance(appContext)
         check(manager.ready) { "Mentra Live is not ready for photo capture" }
         val requestId = UUID.randomUUID().toString()
@@ -52,7 +59,7 @@ class MentraPhotoCapture(context: Context) {
                         transferMethod = "ble",
                     )
                 )
-                upload.await()
+                upload.await().also { Log.i(MentraLiveManager.TAG, "AI photo received bytes=${it.size}") }
             }
         } finally {
             receiver.close()
