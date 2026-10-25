@@ -31,7 +31,7 @@ class DebugLogSupportTest {
         val diagnostics = DebugLogSupport.buildAutomationDiagnostics(context)
 
         assertTrue(diagnostics.contains("Feature enabled: true"))
-        assertTrue(diagnostics.contains("Accessibility service connected: false"))
+        assertTrue(diagnostics.contains("AutoInput accessibility enabled: false"))
         assertTrue(diagnostics.contains("Runtime status: Waiting for accessibility"))
         assertTrue(diagnostics.contains("Last error: accessibility_not_connected"))
         assertTrue(diagnostics.contains("Last task: none recorded"))

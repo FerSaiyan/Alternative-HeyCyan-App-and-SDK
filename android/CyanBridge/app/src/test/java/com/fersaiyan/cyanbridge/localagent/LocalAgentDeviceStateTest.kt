@@ -5,11 +5,9 @@ import android.content.ContextWrapper
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import kotlinx.coroutines.runBlocking
 
 @RunWith(RobolectricTestRunner::class)
 class LocalAgentDeviceStateTest {
@@ -48,22 +46,6 @@ class LocalAgentDeviceStateTest {
 
         assertFalse(result.ok)
         assertEquals("device_state_unavailable", result.error)
-    }
-
-    @Test
-    fun `screenshot planning fails before accessibility when device state is unavailable`() = runBlocking {
-        val capture = LocalAgentScreenshotCapture.captureForPlanning(
-            context = unavailableDeviceContext(),
-            observation = LocalAgentObservation(
-                createdAtMs = 1L,
-                packageName = "com.android.settings",
-                screenText = "Settings",
-                screenSnapshot = null,
-            ),
-        )
-
-        assertTrue(capture is LocalAgentScreenshotCapture.Capture.Unavailable)
-        assertTrue((capture as LocalAgentScreenshotCapture.Capture.Unavailable).reason.contains("Unable to verify"))
     }
 
     private fun unavailableDeviceContext(): Context = object : ContextWrapper(

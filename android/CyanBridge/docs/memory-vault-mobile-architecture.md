@@ -48,7 +48,7 @@ Room v7 adds:
 ## Ingestion Adaptation
 
 - Passive OCR capture:
-  - still ingested via `LocalAgentAccessibilityService`
+  - ingested from Tasker AutoDiary (`AutoDiaryCaptureCoordinator`)
   - now gated by privacy settings and vault lock state
   - policy metadata defaults to local-only
 - File-based memory writes:

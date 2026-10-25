@@ -99,9 +99,6 @@ object LocalAgentPrefs {
     }
 
     /** Legacy CyanBridge Accessibility-based screen capture switch. */
-    fun isAutoCaptureEnabled(context: Context): Boolean = LocalAgent.autoCaptureEnabled[context]
-
-    /** Legacy CyanBridge Accessibility-based screen capture switch. */
     fun setAutoCaptureEnabled(context: Context, enabled: Boolean) {
         LocalAgent.autoCaptureEnabled[context] = enabled
     }
@@ -121,11 +118,6 @@ object LocalAgentPrefs {
     fun setTaskerAutoDiaryEnabled(context: Context, enabled: Boolean) {
         LocalAgent.taskerAutoDiaryEnabled[context] = enabled
     }
-
-    fun getCaptureIntervalMin(context: Context): Int = LocalAgent.captureIntervalMin[context]
-
-    fun getCaptureBlacklistPackages(context: Context): Set<String> =
-        cleanPackages(LocalAgent.captureBlacklist[context].orEmpty())
 
     fun setCaptureBlacklistPackages(context: Context, packages: Set<String>) {
         // Use commit() for reliability: users may blacklist many apps at once and immediately

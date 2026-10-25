@@ -15,7 +15,6 @@ import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
-import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentActionManager
 import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -196,25 +195,8 @@ class LocalAgentTelegramService : Service() {
         return "Stop request sent to CyanBridge."
     }
 
-    private suspend fun handleReadScreen(): String {
-        deviceUnavailableReply()?.let { return it }
-        if (!AutomationPrefs.isLocalAgentAutomationEnabled(applicationContext)) {
-            return "Phone control is disabled in CyanBridge settings."
-        }
-        if (!hasNotificationPermission(this) || !LocalAgentAccessibilityBridge.isConnected()) {
-            return "Screen reading is unavailable. Check CyanBridge Accessibility and notification access on the phone."
-        }
-        val executed = LocalAgentActionManager.processPlannedAction(
-            context = applicationContext,
-            action = LocalAgentAction.ReadScreenAloud,
-            source = "telegram",
-        )
-        return if (executed) {
-            "CyanBridge is reading the current screen aloud."
-        } else {
-            "Screen reading is waiting for approval in CyanBridge."
-        }
-    }
+    private fun handleReadScreen(): String =
+        "Screen reading is not available. CyanBridge cannot read the phone screen remotely."
 
     private fun deviceUnavailableReply(): String? {
         val availability = LocalAgentDeviceState.availability(applicationContext)
