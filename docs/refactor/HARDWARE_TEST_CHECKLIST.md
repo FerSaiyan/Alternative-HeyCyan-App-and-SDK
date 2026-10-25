@@ -374,3 +374,22 @@ Smoke test:
 
 - **Eyevue selected at startup:** the baseline started a connect, cancelled it, and showed "Eyevue error". The refactor makes a single attempt. With real Eyevue glasses, check that launching the app with Eyevue selected connects once, and that the status goes Connecting → connected with no transient "Eyevue error".
 - **Settings and icons changed by the iOS branch's shared UI:** see SCREEN_PARITY.md. These are product changes to confirm with the collaborator, not refactor regressions.
+
+## Mentra Live through Device Bind (see MENTRA_AUDIT.md)
+
+Filter logcat with:
+`adb logcat -s MentraLive DeviceBindActivity AutoPair AudioQuestionRecorder GeminiLiveClient GlassesAiPhotoCapture`
+The SDK's own lines appear under its `Bridge` log tags (`MAN:`, `LIVE:`).
+
+1. **Fresh pair from Device Bind.** Unpair the glasses from any other phone (three power-button presses open the pairing window). Open Scan. The Mentra Live row appears in the normal list (`"SDK scan started"`), and the type dialog preselects "Mentra Live". Connect. Accept any Android pairing dialog. Expect `"Connecting to <name>"`, then `"Glasses ready=true"` and `"Gallery mode off…"`. The dashboard shows "Connected - <name>" and the battery. There is no "Pair Mentra Live" button any more.
+2. **No Mentra SDK for other users.** With HeyCyan or Eyevue glasses and no Mentra nearby, open Scan. There is no "Mentra Connected" notification and no `MentraLive` log lines.
+3. **Reconnect on launch.** Force-stop the app with the glasses on. Relaunch. Expect `AutoPair`/`MentraLive` `"Reconnect (startup) to <name> requested"` and a connection without opening Scan. Also turn Bluetooth off and on, and walk out of range and back: the SDK reconnects by itself.
+4. **Switching away.** Pair HeyCyan from Scan. Expect `"Released (selected HEY_CYAN)"`. Mentra no longer reconnects.
+5. **Photo.** Dashboard Photo saves on the glasses ("Photo saved on the Mentra Live glasses."). The count action shows the photo and video counts.
+6. **AI photo.** Gemini Live auto image and Walking Aid with Mentra selected: expect `"AI photo received bytes=…"`.
+7. **AI photo question (button press and dashboard Image test).** Needs the frozen-region capture branch (MENTRA_AUDIT.md, item 1). Before that, expect the HeyCyan "not connected" toast. Expect `"Button press -> image question"`.
+8. **Button voice question.** Long press. Expect `"Button long press -> voice question"`, `AudioQuestionRecorder` `"Capture started input=glasses SDK PCM"` and `MentraLive` `"Microphone opened by AudioQuestionRecorder"`. The answer plays on the glasses (media output).
+9. **Gemini Live mic.** Start Live with Mentra selected. Expect `"Microphone opened by GeminiLiveClient"`. Speech is heard, and the reply plays on the glasses with no SCO switch. Ask a voice question during Live: both listeners coexist, and Live resumes afterwards.
+10. **Video.** Video starts and stops a recording on the glasses ("Video recording started/stopped").
+11. **Advanced → Device info.** Battery, Version (firmware), Sync time, Volume (0-15).
+12. **Not wired (should say so, not fail silently).** Sync Wi-Fi shows "not supported yet". Audio recording points to meeting capture. There is no live preview card.
