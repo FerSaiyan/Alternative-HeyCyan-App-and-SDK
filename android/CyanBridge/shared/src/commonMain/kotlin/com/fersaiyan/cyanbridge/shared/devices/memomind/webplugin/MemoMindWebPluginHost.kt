@@ -95,7 +95,6 @@ class MemoMindWebPluginHost(
     private var sessionToken: String? = null
     private var generation = 0L
     private var foreground = true
-    private var pageLoaded = false
     var lifecycle = WebPluginLifecycle.STARTING
         private set
 
@@ -142,20 +141,21 @@ class MemoMindWebPluginHost(
         }
     }
 
-    /** A new document started loading: the previous runtime and everything it held is dropped. */
+    /**
+     * A new document started loading: the previous runtime and everything it held is dropped,
+     * and the new one runs at once (page scripts may call the Bridge before the load event).
+     */
     fun onPageStarted() {
         endRuntime(WebPluginErrorCode.RUNTIME_REPLACED)
         generation++
         sessionToken = secureToken()
-        pageLoaded = false
-        setLifecycle(WebPluginLifecycle.STARTING)
+        lifecycle = WebPluginLifecycle.STARTING
+        setLifecycle(if (foreground) WebPluginLifecycle.RUNNING else WebPluginLifecycle.SUSPENDED)
     }
 
-    /** The document finished loading: deliver the bootstrap and enter `running` when in the foreground. */
+    /** The document finished loading: deliver the bootstrap in case the SDK did not ask for it. */
     fun onPageLoaded() {
-        pageLoaded = true
         deliverBootstrap()
-        if (foreground) setLifecycle(WebPluginLifecycle.RUNNING)
     }
 
     /** Text from `MemoPluginBridge.postMessage` of the plugin's main frame. */
@@ -179,7 +179,7 @@ class MemoMindWebPluginHost(
             capture?.let { finishCapture(it, emitError = WebPluginErrorCode.RUNTIME_CLOSED, reason = "suspended") }
             failFrame()
             setLifecycle(WebPluginLifecycle.SUSPENDED)
-        } else if (pageLoaded) {
+        } else if (sessionToken != null) {
             setLifecycle(WebPluginLifecycle.RUNNING)
         }
     }
