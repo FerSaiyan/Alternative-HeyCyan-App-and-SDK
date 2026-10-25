@@ -1,10 +1,8 @@
 package com.fersaiyan.cyanbridge.agent
 
 import android.content.Context
-import com.fersaiyan.cyanbridge.localagent.LocalAgentTelegramProtocol
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs.LocalAgent
-import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs.LocalAgentSecrets
 import com.fersaiyan.cyanbridge.shared.prefs.edit
 import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.shared.prefs.isSet
@@ -14,13 +12,11 @@ import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 
 /**
  * Local agent settings in `local_agent_prefs`: automation and routing (provider, glasses mode,
- * capture), runtime status and approvals, Telegram/screenshot/Shizuku controls, and the
- * on-device runtime toggle. The Telegram bot token lives in encrypted `local_agent_secrets`.
+ * capture), runtime status and approvals, screenshot/Shizuku controls, and the on-device
+ * runtime toggle.
  * Keys, types and defaults are declared in [LocalAgent].
  */
 object LocalAgentPrefs {
-    private const val MAX_TELEGRAM_TOKEN_CHARS = 256
-
     /** Opt-in fast path: EmbeddingGemma cosine gate ahead of the single-token LLM. Default off. */
     fun isEmbeddingDecisionEnabled(context: Context): Boolean = LocalAgent.embeddingDecisionEnabled[context]
 
@@ -200,65 +196,6 @@ object LocalAgentPrefs {
     fun getLastContextInjectionDebug(context: Context): String = LocalAgent.lastContextInjectionDebug[context]
 
     fun getLastContextInjectionAtMs(context: Context): Long = LocalAgent.lastContextInjectionAtMs[context]
-
-    fun isTelegramRemoteControlEnabled(context: Context): Boolean = LocalAgent.telegramRemoteEnabled[context]
-
-    fun setTelegramRemoteControlEnabled(context: Context, enabled: Boolean) {
-        LocalAgent.telegramRemoteEnabled[context] = enabled
-    }
-
-    fun getTelegramAllowedChatId(context: Context): String =
-        LocalAgentTelegramProtocol.normalizeChatId(LocalAgent.telegramAllowedChatId[context]).orEmpty()
-
-    fun setTelegramAllowedChatId(context: Context, chatId: String): Boolean {
-        val normalized = LocalAgentTelegramProtocol.normalizeChatId(chatId) ?: return false
-        return LocalAgent.edit(context, commit = true) { this[LocalAgent.telegramAllowedChatId] = normalized }
-    }
-
-    fun getTelegramBotToken(context: Context): String = runCatching {
-        LocalAgentSecrets.telegramBotToken[context].trim()
-    }.getOrDefault("")
-
-    /** Stores a user-provided token only in encrypted preferences, never in plaintext prefs. */
-    fun setTelegramBotToken(context: Context, token: String): Boolean {
-        val clean = token.trim()
-        if (clean.length > MAX_TELEGRAM_TOKEN_CHARS || !LocalAgentTelegramProtocol.isValidBotToken(clean)) {
-            return false
-        }
-        return runCatching {
-            LocalAgentSecrets.edit(context, commit = true) { this[LocalAgentSecrets.telegramBotToken] = clean }
-        }.getOrDefault(false)
-    }
-
-    fun clearTelegramBotToken(context: Context): Boolean = runCatching {
-        LocalAgentSecrets.edit(context, commit = true) { LocalAgentSecrets.telegramBotToken.remove(this) }
-    }.getOrDefault(false)
-
-    fun isTelegramConfigured(context: Context): Boolean =
-        getTelegramBotToken(context).isNotBlank() && getTelegramAllowedChatId(context).isNotBlank()
-
-    fun getTelegramUpdateOffset(context: Context): Long =
-        LocalAgent.telegramUpdateOffset[context].coerceAtLeast(0L)
-
-    /** Commit before handling an update so a process death cannot replay a phone-control command. */
-    fun setTelegramUpdateOffset(context: Context, offset: Long): Boolean =
-        LocalAgent.edit(context, commit = true) { this[LocalAgent.telegramUpdateOffset] = offset.coerceAtLeast(0L) }
-
-    fun getTelegramStatus(context: Context): String = LocalAgent.telegramStatus[context]
-
-    fun setTelegramStatus(context: Context, status: String) {
-        LocalAgent.telegramStatus[context] = status
-    }
-
-    fun getTelegramLastError(context: Context): String = LocalAgent.telegramLastError[context]
-
-    fun setTelegramLastError(context: Context, error: String) {
-        LocalAgent.telegramLastError[context] = error
-    }
-
-    fun clearTelegramLastError(context: Context) {
-        setTelegramLastError(context, "(none)")
-    }
 
     fun isScreenshotPlanningEnabled(context: Context): Boolean = LocalAgent.screenshotPlanningEnabled[context]
 

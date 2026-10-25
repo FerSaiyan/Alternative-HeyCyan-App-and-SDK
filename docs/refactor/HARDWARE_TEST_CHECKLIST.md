@@ -189,7 +189,7 @@ Known issue, not caused by this change: the memory search index needs SQLite FTS
 - **Android relay chat, voice and image questions:** same fields, headers, timeouts, retries and error texts. The JSON bytes differ slightly (`/` is no longer escaped, and a whole-number temperature is written as `0.0`), but the values are the same.
 - **Relay errors:** test a real 402, 403 and 401 and check you get the same localized quota/subscription/auth messages. A 2xx response that isn't JSON now shows a different "Relay error: …" text.
 - **OpenAI-compatible endpoints:** URLs, payload with image/audio parts, streaming, and the health text should be unchanged.
-- **Local agent:** one UI-control run and one Telegram command, to confirm model-output parsing is as tolerant as before.
+- **Local agent:** one UI-control run, to confirm model-output parsing is as tolerant as before.
 - **iOS (intentional changes to match Android):**
   - Relay chat retries up to 3 times and checks `/capabilities` first.
   - Errors read "Error: <relay error>".
@@ -242,7 +242,7 @@ Every prefs file, key, type and default is declared once in `shared/prefs`, and 
    - language, wake-word route, thumbnail quality, assistant mode and provider;
    - relay URL, Pro Live economy;
    - one plugin's settings, appearance and accent;
-   - remote server with an API key, the Telegram token, and Pro login.
+   - remote server with an API key, and Pro login.
 2. Install this build over it (`adb install -r`).
 3. Check:
    - Every setting is unchanged.
@@ -280,8 +280,7 @@ Smoke test per family:
 
 ## Wave 6: dead-code removal
 
-No glasses needed. Deleted code had no caller, so behavior is unchanged apart from one deliberate fix:
-- **Telegram `/task` while a task runs:** the guard now asks `TaskerLocalAgentService` (the service that actually runs tasks) instead of the never-started `LocalAgentService`. With a Local Agent task or a screen read in progress, a second `/task` should reply "A Local Agent task is already running…" instead of "Task accepted". The automation diagnostics in the debug log show the same running state.
+No glasses needed. Deleted code had no caller, so behavior is unchanged:
 - **Pairing:** `DeviceBindActivity` lost its unused protocol auto-detection probes; pair one glasses family through manual selection to confirm the dialog still finishes on connect.
 
 ## Wave 7: shared screen ViewModels — chats, notes, recordings
@@ -379,9 +378,9 @@ Smoke test:
 
 - **iOS default assistant mode:** on a fresh install (nothing saved), the Glasses screen selects the custom-provider button, not Phone assistant. After picking Phone assistant and relaunching, it stays on Phone assistant.
 - **iOS without Tasker:** Settings → AI provider lists only Local and Pro, with no "Tasker integrations" button and a description without Tasker; the dashboard button reads "Local / Pro"; HeyCyan's advanced section has no Local Agent entry. An install that had Tasker saved shows Local selected. Android still shows Tasker everywhere.
-- **Transcription endpoint cleanup (Android):** on an install that had `shared_prefs/transcription_endpoint.xml`, the file is gone after one launch. Meeting transcription with Local and with Pro still works.
+- **Meeting transcription (Android):** works with Local and with Pro.
 - **Local Agent settings, "Accessibility service" row (Android):** it shows Enabled when AutoInput's accessibility service is on and Disabled when it is off. Tapping it shows the disclosure and opens Android's Accessibility settings.
-- **Telegram `/read`:** replies "Screen reading is not available…". `/task` still runs through Tasker, with text-only planning.
+- Local Agent settings no longer shows Telegram Remote Control.
 
 ## MemoMind (new family, shared `MemoMindSession`)
 

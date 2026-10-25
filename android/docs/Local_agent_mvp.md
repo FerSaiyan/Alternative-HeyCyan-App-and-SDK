@@ -56,7 +56,7 @@ The “native plugin” is a built-in facade, not a dynamically loaded plugin:
 - `plugins/localagent/LocalAgentPlugin.kt` synchronizes the plugin registry with the existing automation preference.
 - Enabling it permits phone automation.
 - Starting it delegates to `LocalAgentController`.
-- Disabling it stops the Local Agent and Telegram listener.
+- Disabling it stops the Local Agent.
 - Planning can use a local model or Pro/remote provider.
 
 This distinction matters: enabling the plugin does not necessarily mean all processing is local. Accessibility observations are sent to whichever planning backend is selected. Remote screenshot upload has a separate consent switch, but structured screen text is still sent to a remote planner when a remote provider is selected.
@@ -260,7 +260,6 @@ Clearly adopted architectural ideas include:
 - Repetition detection.
 - Task history.
 - Skill replay.
-- Telegram commands.
 - Optional Shizuku fallback.
 
 CyanBridge improvements include:

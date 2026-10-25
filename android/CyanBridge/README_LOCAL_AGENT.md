@@ -28,17 +28,9 @@ To verify what text is actually being injected into the prompt:
 
 ## Phone-Control Extensions
 
-### Telegram remote control
-
-- Remote control is disabled by default.
-- A user must save a Telegram bot token and one exact allowed chat ID in **Native Plugins** > **Local Agent** before the listener can start. The token is stored with Android encrypted preferences and is never committed to source control.
-- Only explicit `/task <request>`, `/status`, `/read`, `/stop`, and `/help` commands from that exact chat ID are accepted. Other chats receive no response and cannot start a task.
-- Telegram tasks use the same Local Agent privacy blacklist and approval queue as requests started on the phone. `/read` is queued for approval under the default policy.
-- Local Agent tasks, direct screen reading, and screenshot planning require an interactive, unlocked phone. An active task stops before additional actions if the screen turns off or the device becomes locked.
-- Use a private Telegram chat. If a group ID is configured, every member of that group can issue the restricted command set.
-
 ### Screenshot planning
 
+- Local Agent tasks, direct screen reading, and screenshot planning require an interactive, unlocked phone. An active task stops before additional actions if the screen turns off or the device becomes locked.
 - Screenshot planning is off by default and requires Android 11+ plus the enabled Accessibility service.
 - CyanBridge first verifies the exact active package against the Local Agent privacy blacklist. If the screen changes during capture or vision is unavailable, it continues with structured text-only planning.
 - Screenshot capture and remote screenshot upload are separate settings. A screenshot is never sent to a cloud, relay, or remote OpenAI-compatible planner unless **Allow screenshots to be sent to remote planners** is explicitly enabled.
