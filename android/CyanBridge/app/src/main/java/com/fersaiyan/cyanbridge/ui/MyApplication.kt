@@ -38,7 +38,6 @@ import com.fersaiyan.cyanbridge.studiobridge.StudioBridgeForegroundService
 import com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences
 import com.fersaiyan.cyanbridge.shared.platform.CyanBridgeServices
 import com.fersaiyan.cyanbridge.shared.platform.initPlatformPreferences
-import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -91,7 +90,6 @@ class MyApplication : Application(){
         }
 
         runCatching { MemoryVaultBootstrap.ensureInitialized(this) }
-        appScope.launch { deleteSharedPreferences(AssistantPrefs.LegacyTranscriptionEndpoint.name) }
 
         if (AutoDiaryService.isEnabled(this) && !AutoDiaryService.isRunning()) {
             AutoDiaryService.startIfEnabled(this)

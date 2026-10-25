@@ -15,7 +15,7 @@ This app lives under:
 - Pluggable transcription service and chunking pipeline (`ai/transcription/`).
 - Structured meeting summarization and notes storage (`ai/summarization/`, `notes/`).
 - Privacy toggles for transcript storage, redaction, and export behavior (`privacy/`, `ui/SettingsActivity.kt`).
-- Accessibility-driven Local Agent for foreground phone control, including structured UI observation, action approval, keyboard submission, safe low-risk skill replay, local task history, opt-in screenshot planning, allowlisted Telegram control, and optional fixed-operation Shizuku recovery (`localagent/`, `plugins/localagent/`).
+- Accessibility-driven Local Agent for foreground phone control, including structured UI observation, action approval, keyboard submission, safe low-risk skill replay, local task history, opt-in screenshot planning, and optional fixed-operation Shizuku recovery (`localagent/`, `plugins/localagent/`).
 
 ## Local Agent Inspiration
 

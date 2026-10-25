@@ -178,7 +178,6 @@
         </receiver>
         <service android:name=".audio.MeetingCaptureService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".localagent.TaskerLocalAgentService" android:exported="false" android:foregroundServiceType="dataSync" />
-        <service android:name=".localagent.LocalAgentTelegramService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".media.autocapture.AutoAudioCaptureService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".studiobridge.StudioBridgeForegroundService" android:exported="false" android:foregroundServiceType="microphone" />
         <service
