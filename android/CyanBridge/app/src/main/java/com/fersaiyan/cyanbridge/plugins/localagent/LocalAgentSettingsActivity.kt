@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.localagent
 
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
@@ -58,13 +57,13 @@ import com.fersaiyan.cyanbridge.localagent.LocalAgentShizukuFallback
 import com.fersaiyan.cyanbridge.localagent.LocalAgentTaskHistory
 import com.fersaiyan.cyanbridge.localagent.LocalAgentTelegramService
 import com.fersaiyan.cyanbridge.localagent.LocalAgentTelegramProtocol
-import com.fersaiyan.cyanbridge.localagent.accessibility.LocalAgentAccessibilityService
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
 import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsActivity
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
+import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
 import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
 import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsActivity
 import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
@@ -140,7 +139,7 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
         uiState = LocalAgentSettingsUiState(
             enabled = LocalAgentPlugin.isEnabled(this),
             providerType = AutomationPrefs.getProviderType(this),
-            accessibilityEnabled = isAccessibilityServiceEnabled(),
+            accessibilityEnabled = hasAccessibilityServicePermission(this),
             maxSteps = AutomationPrefs.getMaxSteps(this),
             requireActionConfirmation = RuntimePrefs.isRequireActionConfirmationEnabled(this),
             autoExecuteLowRisk = RuntimePrefs.isAutoExecuteLowRiskEnabled(this),
@@ -457,15 +456,6 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
             }
             .setPositiveButton(R.string.compose_close, null)
             .show()
-    }
-
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val enabled = Settings.Secure.getInt(contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0) == 1
-        if (!enabled) return false
-        val expected = ComponentName(this, LocalAgentAccessibilityService::class.java).flattenToString()
-        val services = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-            ?: return false
-        return services.split(':').any { it.equals(expected, ignoreCase = true) }
     }
 }
 

@@ -98,7 +98,7 @@ fun NotesChatsScreen(
                     ) {
                         Icon(
                             imageVector = if (selectedTab == NotesChatsTab.CHATS) {
-                                AppIcon.Chat.imageVector()
+                                AppIcon.Appearance.imageVector()
                             } else {
                                 AppIcon.Settings.imageVector()
                             },

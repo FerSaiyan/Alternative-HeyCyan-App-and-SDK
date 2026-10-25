@@ -97,41 +97,17 @@ class RemoteUiControlLocalAgentBrain(
             )
         )
 
-        val screenshot = when {
-            LocalAgentPrefs.isScreenshotPlanningEnabled(context) &&
-                AgentInferenceRouter.isRemotePlanner(context) &&
-                !LocalAgentPrefs.isRemoteScreenshotUploadEnabled(context) -> {
-                LocalAgentPrefs.setScreenshotStatus(
-                    context,
-                    "Remote screenshot upload is off; used text-only planning.",
-                )
-                null
-            }
-
-            else -> when (val capture = LocalAgentScreenshotCapture.captureForPlanning(context, observation)) {
-                is LocalAgentScreenshotCapture.Capture.Available -> capture
-                is LocalAgentScreenshotCapture.Capture.Unavailable -> {
-                    LocalAgentPrefs.setScreenshotStatus(context, capture.reason)
-                    null
-                }
-            }
-        }
-
-        val raw = try {
-            val inference = AgentInferenceRouter.completeUiPlanning(
-                context = context,
-                sessionId = "local-agent-ui-${taskState.startedAtMs}",
-                systemPrompt = prompt.system + USER_ANSWER_GROUNDING_PROMPT,
-                userPrompt = prompt.user,
-                imagePath = screenshot?.file?.absolutePath,
-                allowRemoteImageUpload = LocalAgentPrefs.isRemoteScreenshotUploadEnabled(context),
-            )
-            LocalAgentPrefs.setScreenshotStatus(context, inference.mediaStatus)
-            inference.content
-        } finally {
-            // Screenshots are transient planner attachments, never history or memory artifacts.
-            LocalAgentScreenshotCapture.delete(screenshot)
-        }
+        // Planning is text-only: CyanBridge has no screen capture of its own.
+        val inference = AgentInferenceRouter.completeUiPlanning(
+            context = context,
+            sessionId = "local-agent-ui-${taskState.startedAtMs}",
+            systemPrompt = prompt.system + USER_ANSWER_GROUNDING_PROMPT,
+            userPrompt = prompt.user,
+            imagePath = null,
+            allowRemoteImageUpload = false,
+        )
+        LocalAgentPrefs.setScreenshotStatus(context, inference.mediaStatus)
+        val raw = inference.content
 
         val decision = LocalAgentUiControlProtocol.parseDecision(raw)
         return LocalAgentBrainOutput(

@@ -1,9 +1,11 @@
 package com.fersaiyan.cyanbridge.shared.glasses
 
+import com.fersaiyan.cyanbridge.shared.ai.AgentProviderAvailability
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
 import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating.Action
+import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -127,7 +129,7 @@ class GlassesDashboardGatingTest {
                 )
                 val expected = listOf(
                     heyCyan, heyCyan, heyCyan,
-                    heyCyan || eyevue || Action.ADVANCED_CONTROLS in other, heyCyan,
+                    heyCyan || eyevue || Action.ADVANCED_CONTROLS in other, false,
                     heyCyan || eyevue || Action.ADVANCED_DEVICE_INFO in other,
                     heyCyan, heyCyan || Action.ADVANCED_IMAGE_QUALITY in other, heyCyan,
                     heyCyan, Action.META_RAYBAN_CONTROLS in other, Action.MEIZU_MYVU_CONTROLS in other,
@@ -139,5 +141,21 @@ class GlassesDashboardGatingTest {
                 assertEquals(LivePreviewUiState(), state.livePreview)
             }
         }
+    }
+
+    /**
+     * iOS has no Tasker: no Tasker provider (a saved one runs as Local) and no Local Agent.
+     * Android keeps all three providers; its dashboard gating is pinned by the test above.
+     */
+    @Test
+    fun iosHasNoTaskerProviderOrLocalAgent() {
+        assertEquals(AgentProviderType.entries, AgentProviderAvailability.available(supportsTasker = true))
+        val ios = AgentProviderAvailability.available(supportsTasker = false)
+        assertEquals(listOf(AgentProviderType.LOCAL_AGENT, AgentProviderType.PRO_SUBSCRIPTION), ios)
+        assertEquals(AgentProviderType.LOCAL_AGENT, AgentProviderAvailability.effective(AgentProviderType.TASKER, ios))
+        assertEquals(AgentProviderType.TASKER, AgentProviderAvailability.effective(AgentProviderType.TASKER, AgentProviderType.entries))
+
+        val heyCyan = GlassesFamilyProfiles.forClass(DeviceClass.HEY_CYAN)
+        assertEquals(false, sample.withIosFamilyGating(heyCyan, linked = true).showAdvancedLocalAgent)
     }
 }

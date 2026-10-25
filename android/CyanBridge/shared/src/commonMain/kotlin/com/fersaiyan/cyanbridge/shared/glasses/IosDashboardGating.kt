@@ -14,8 +14,9 @@ private val PANELS_WITHOUT_LINK = setOf(GlassesControlPanel.META_RAYBAN, Glasses
 /**
  * The shared family gating ([withFamilyGating]) with the iOS differences:
  * - glasses sections need a live link ([linked]), except the Meta and Meizu cards;
- * - capture settings, wake-word routing, volume, developer tools, firmware and the local agent
- *   only show for HeyCyan: on iOS only its QCSDK path implements them;
+ * - capture settings, wake-word routing, volume, developer tools and firmware only show for
+ *   HeyCyan: on iOS only its QCSDK path implements them;
+ * - the Local Agent never shows: it runs through Tasker, which iOS does not have;
  * - the device-info label is kept: iOS fills it for HeyCyan and the SDK glasses too;
  * - iOS has no Wi-Fi ADB debugging and no live preview.
  */
@@ -46,7 +47,7 @@ internal fun GlassesDashboardUiState.withIosFamilyGating(
         showMemoMindControls = sections && gated.showMemoMindControls,
         showCaptureSettings = heyCyan && gated.showCaptureSettings,
         showAiWakeWordRouting = heyCyan && gated.showAiWakeWordRouting,
-        showAdvancedLocalAgent = heyCyan,
+        showAdvancedLocalAgent = false,
         showAdvancedDeviceInfo = deviceInfo,
         showAdvancedDeviceVolume = volume,
         showAdvancedImageQuality = imageQuality,

@@ -95,8 +95,7 @@ class PrefsInventoryTest {
         app_language/selected_language STRING null ios=cyanbridge_app_language/selected_language
         gemini_live/pro_economy BOOLEAN true
         gemini_live/live_image_delay INT 0
-        transcription_endpoint/endpoint_url STRING null
-        transcription_endpoint/api_key STRING null
+        transcription_endpoint: no keys
         remote_openai_prefs/base_url STRING "" ios=cyanbridge_remote_openai/base_url
         remote_openai_prefs/api_key STRING ""
         remote_openai_prefs/model STRING "" ios=cyanbridge_remote_openai/model
@@ -104,7 +103,7 @@ class PrefsInventoryTest {
         remote_openai_prefs/studio_bridge_enabled BOOLEAN false
         remote_openai_secrets (secure)/api_key STRING ""
         local_agent_prefs/provider_type STRING null
-        local_agent_prefs/glasses_assistant_mode STRING null ios=cyanbridge_ios_glasses/assistant_mode
+        local_agent_prefs/glasses_assistant_mode STRING "CUSTOM_AI_PROVIDER" ios=cyanbridge_ios_glasses/assistant_mode
         local_agent_prefs/require_confirmation BOOLEAN true
         local_agent_prefs/max_steps INT 8
         local_agent_prefs/automation_enabled BOOLEAN false

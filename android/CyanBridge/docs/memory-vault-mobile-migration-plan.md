@@ -21,7 +21,7 @@ The app had a mixed local-memory design before this migration:
   - `LocalAgentContextBuilder.buildSystemMessage(...)`
   - `MainActivity.buildCompactMemoryAwareSystemPrompt(...)`
 - Ingestion paths:
-  - passive accessibility OCR (`LocalAgentAccessibilityService`)
+  - passive screen text from Tasker AutoDiary (`AutoDiaryCaptureCoordinator`)
   - chat fact extraction (`ChatMemoryAutoUpdater`)
   - daily summary generation (`DailySummaryGenerator`)
 

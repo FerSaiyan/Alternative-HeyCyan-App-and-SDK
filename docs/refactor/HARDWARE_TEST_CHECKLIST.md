@@ -375,6 +375,14 @@ Smoke test:
 - **Eyevue selected at startup:** the baseline started a connect, cancelled it, and showed "Eyevue error". The refactor makes a single attempt. With real Eyevue glasses, check that launching the app with Eyevue selected connects once, and that the status goes Connecting → connected with no transient "Eyevue error".
 - **Settings and icons changed by the iOS branch's shared UI:** see SCREEN_PARITY.md. These are product changes to confirm with the collaborator, not refactor regressions.
 
+## Small cleanups: default mode, transcription endpoint, accessibility service, Tasker on iOS
+
+- **iOS default assistant mode:** on a fresh install (nothing saved), the Glasses screen selects the custom-provider button, not Phone assistant. After picking Phone assistant and relaunching, it stays on Phone assistant.
+- **iOS without Tasker:** Settings → AI provider lists only Local and Pro, with no "Tasker integrations" button and a description without Tasker; the dashboard button reads "Local / Pro"; HeyCyan's advanced section has no Local Agent entry. An install that had Tasker saved shows Local selected. Android still shows Tasker everywhere.
+- **Transcription endpoint cleanup (Android):** on an install that had `shared_prefs/transcription_endpoint.xml`, the file is gone after one launch. Meeting transcription with Local and with Pro still works.
+- **Local Agent settings, "Accessibility service" row (Android):** it shows Enabled when AutoInput's accessibility service is on and Disabled when it is off. Tapping it shows the disclosure and opens Android's Accessibility settings.
+- **Telegram `/read`:** replies "Screen reading is not available…". `/task` still runs through Tasker, with text-only planning.
+
 ## MemoMind (new family, shared `MemoMindSession`)
 
 Filter logcat with:

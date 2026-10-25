@@ -1,0 +1,5 @@
+<resources>
+    <!-- Platforms without Tasker (iOS). -->
+    <string name="dashboard_custom_provider_no_tasker">Local / Pro</string>
+    <string name="settings_provider_description_no_tasker">选择眼镜页面中本地 / Pro 模式使用的提供商。</string>
+</resources>
