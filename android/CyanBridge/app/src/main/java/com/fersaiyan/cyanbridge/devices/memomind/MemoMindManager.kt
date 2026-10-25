@@ -23,9 +23,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -83,6 +86,16 @@ class MemoMindManager private constructor(context: Context) {
 
     /** The glasses asked for a voice question (see [MemoMindAssistantTrigger]). */
     val voiceQuestionRequests: SharedFlow<Unit> = _voiceQuestionRequests.asSharedFlow()
+
+    /** Connected and brought up: the session accepts requests. */
+    val ready: StateFlow<Boolean> = _bridgeState.map { it == GlassesBridgeState.Connected }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
+    /**
+     * True while a MemoMind Web plugin runs in the foreground: glasses input then belongs to the
+     * plugin and starts no voice question or display-bridge gesture.
+     */
+    @Volatile var webPluginOwnsInput = false
 
     private val adapter = MemoMindDisplayAdapter(
         session = session,
@@ -249,6 +262,7 @@ class MemoMindManager private constructor(context: Context) {
     }
 
     private fun onEvent(event: MemoMindEvent) {
+        if (webPluginOwnsInput) return
         MemoMindAssistantTrigger.inputEvent(event)?.let { GlassesBridge.onInputEvent(MemoMindDisplayAdapter.ADAPTER_ID, it) }
         when {
             MemoMindAssistantTrigger.isVoiceQuestion(event) -> {

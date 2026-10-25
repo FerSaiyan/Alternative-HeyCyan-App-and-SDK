@@ -179,6 +179,8 @@ data class MemoMindPanelLabels(
     val testMicrophone: String = "Test microphone",
     val forwardNotificationsOn: String = "Forwarding notifications",
     val forwardNotificationsOff: String = "Forward notifications",
+    /** The Web plugins entry; hosts without a Web plugin runtime leave it null and the button is hidden. */
+    val webPlugins: String? = null,
 )
 
 /** Actions of the MemoMind panel (one dashboard action, see [GlassesDashboardAction.MemoMindPanel]). */
@@ -191,6 +193,7 @@ enum class MemoMindPanelCommand {
     COMFORT_BRIGHTNESS,
     TEST_MICROPHONE,
     TOGGLE_NOTIFICATION_FORWARDING,
+    OPEN_WEB_PLUGINS,
 }
 
 data class OtaSectionUiState(

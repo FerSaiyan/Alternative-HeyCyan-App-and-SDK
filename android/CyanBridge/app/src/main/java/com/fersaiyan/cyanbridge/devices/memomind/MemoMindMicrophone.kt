@@ -41,6 +41,7 @@ class MemoMindMicrophone internal constructor(
     inner class Capture internal constructor(
         private val onPcm: PcmListener?,
         private val onOpus: MemoMindAudioListener?,
+        private val options: MemoMindCaptureOptions,
     ) : Closeable {
         private val packets = Channel<List<ByteArray>>(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST)
         private val decoder = MemoMindOpusDecoder()
@@ -56,7 +57,7 @@ class MemoMindMicrophone internal constructor(
             }
 
             override fun onResumed() {
-                if (!isClosed) scope.launch { runCatching { session.startMicrophone(OPTIONS) } }
+                if (!isClosed) scope.launch { runCatching { session.startMicrophone(options) } }
             }
 
             override fun onEnded() = close()
@@ -74,7 +75,7 @@ class MemoMindMicrophone internal constructor(
                 if (onPcm != null) packets.trySend(frames)
             }
             // A waiting session starts in onResumed once the microphone is free.
-            if (handle?.isActive == true) session.startMicrophone(OPTIONS)
+            if (handle?.isActive == true) session.startMicrophone(options)
         }
 
         override fun close() {
@@ -93,15 +94,16 @@ class MemoMindMicrophone internal constructor(
     }
 
     /**
-     * Opens a capture for [request]. Throws [MemoMindMicrophoneBusyException] when arbitration
+     * Opens a capture for [request] with the glasses' [options] (noise and pickup). Throws [MemoMindMicrophoneBusyException] when arbitration
      * denies it, or the start failure of the glasses.
      */
     suspend fun open(
         request: AudioSessionRequest = AudioSessionRequest.VoiceCapture(OWNER, route = AudioRoutePreference.DEVICE_SDK),
         onPcm: PcmListener? = null,
         onOpus: MemoMindAudioListener? = null,
+        options: MemoMindCaptureOptions = OPTIONS,
     ): Capture {
-        val capture = Capture(onPcm, onOpus)
+        val capture = Capture(onPcm, onOpus, options)
         when (val grant = AudioSessionCoordinator.open(context, request, capture.listener)) {
             is AudioSessionGrant.Denied -> throw MemoMindMicrophoneBusyException(grant.blockingOwner)
             is AudioSessionGrant.Granted -> capture.handle = grant.handle

@@ -137,6 +137,10 @@
         <activity android:name=".plugins.autoaudio.AutoAudioSettingsActivity" android:exported="false" android:label="Auto Audio Settings" />
         <activity android:name=".plugins.visualdiary.VisualDiarySettingsActivity" android:exported="false" android:label="Visual Diary Settings" />
         <activity android:name=".bridge.runtimes.evenhub.EvenHubRuntimeActivity" android:exported="false" />
+        <activity
+            android:name=".devices.memomind.webplugin.MemoMindWebPluginsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:exported="false" />
 
         <service android:name=".localmodels.download.ModelDownloadForegroundService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service

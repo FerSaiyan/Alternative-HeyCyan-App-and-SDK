@@ -68,6 +68,7 @@ Shared (`shared/src/commonMain/.../devices/memomind/`):
 - `MemoMindHud.kt`: display policy (Web Bridge drawing when a plugin runs, else teleprompter for
   text and notification cards), the `GlassesDeviceAdapter` for the display bridge, and the
   assistant trigger (primary long press).
+- `webplugin/`: the Web plugin host and `.mmpkg` reader, see [Web plugins](#web-plugins).
 
 Android (`app/.../devices/memomind/`, `ui/main/glasses/MemoMindGlasses.kt`): SPP transport,
 manager (bring-up, reconnect, battery polling, notifications forwarding, button → voice question),
@@ -140,6 +141,110 @@ iAP2 transport stays inactive. To use it:
    bundle ID to the accessory's MFi product plan and supply the PPID for App Review; Apple rejects
    apps that declare accessory protocols without it. Development builds do not need it.
    The vendor's guide notes that publishing a protocol name does not grant an accessory session.
+
+## Web plugins
+
+MemoMind's PhoneSDK (`PhoneSDK/` in the open platform) lets developers write phone-side Web
+plugins: an HTML/JS app packaged as `.mmpkg` that runs in the companion app's WebView and talks
+to the glasses through the Bridge (`packages/bridge-contract`, revision p7-handoff-r1; the
+contract calls itself Bridge **2.0**: `bridgeVersion "2.0"`, `schemaVersion 2`,
+`permissionPolicyVersion 1`). CyanBridge hosts these plugins: MemoMind panel ▸ **Web plugins**.
+
+**Platform limit.** A Web plugin draws and receives input through a *glasses* plugin: the stock
+Web Bridge (`com.gm.example.web-bridge`, scene channels 1–9, input channels `0x0100`–`0x0104`)
+or the plugin's own paired `.gmp`. Installing and starting glasses plugins is withheld by the
+vendor; only the official MemoMind app can do it. So: start Web Bridge (or the paired plugin) in
+the official app, force-stop the official app, and connect CyanBridge. The plugin list and the
+running plugin say so while `webBridgeRunning` is not true. Without it, `display.updateText`,
+`display.rebuildPage` (text only) and `display.closePage` fall back to the native teleprompter
+(results carry `fallback: "teleprompter"`, capabilities report `display: ["text", "clear"]`);
+images, atomic frames, glasses input and messages to a missing plugin fail with
+`CAPABILITY_UNAVAILABLE` (or the plugin's GM status). The microphone does not need a glasses
+plugin.
+
+### Bridge coverage
+
+Shared host: `shared/src/commonMain/.../devices/memomind/webplugin/` (`MemoMindWebPluginHost`,
+`WebPluginPolicy`, `MmpkgPackage`); Android WebView glue: `app/.../devices/memomind/webplugin/`.
+
+| Contract | CyanBridge |
+| --- | --- |
+| `runtime.ready/ping/getBridgeVersion/getCapabilities/getLifecycleState` | Implemented. Capabilities list only granted, implemented methods; `audio` only when granted and the WebView can transfer binary ports. |
+| `storage.get/set/remove/clear` | Implemented: JSON values private to the plugin (`files/memomind/webplugins/<key>/data/storage.json`), 1 MiB per plugin, keys up to 256 characters; never the app's preferences. |
+| `display.createPage/closePage/updateText/updateImage/updateImageLz4/rebuildPage` | Implemented on Web Bridge channels 1, 2, 6, 7 (regions checked against 600×350, payloads ≤ 81,901 bytes, LZ4 tiles not decoded on the phone). Teleprompter fallback for text, see above. |
+| `display.beginFrame/updateFrameImageLz4` | Implemented on channels 8/9; each call waits (5 s) for the `0x0104` frame status, `tileIndex` must follow `nextIndex`. |
+| `device.getInfo` | Implemented: connected, model, name, firmware, battery, `webBridgeRunning`. Serial number and MAC are not exposed. |
+| `device.subscribeEvents/unsubscribeEvents`; events `device.button/imuGesture/rawImu/connection` | Implemented from Web Bridge input (`0x0100`–`0x0103`) and the link state; at most 16 subscriptions; types limited to the granted scope. While a plugin is in the foreground, glasses input goes to it only (no assistant voice question). |
+| `plugin.sendMessage`; event `plugin.message` | Implemented on GM `0F/28` and `0F/29`; both directions filtered by the granted channels plus the extra `display` / `device.events` rule for standard channels; payload 1..81,901 bytes; success means the GM delivery status was 0. |
+| `audio.openCapture/stopCapture`; event `audio.captureState` | Implemented: the Opus microphone (`52 …` recording link) through the app's audio arbitration (`AUDIO_BUSY` when another feature holds it), profiles `interactive/balanced/reliable/custom`, pickup mode and noise reduction mapped to `01/2F`, chunks in the V1 `GMAU` envelope over a WebView message port with pull flow control, queue overflow strategies, `maxDurationMs`, tail flush on stop. A recording indicator shows outside the WebView; leaving the screen stops capture. |
+| `runtime.lifecycleChanged` | `starting` → `running`; `suspended` when the screen is in the background (events stop, audio stops); `stopped` on close. Every reload is a new runtime generation and session token. |
+| `files.*` | Not implemented: answer `CAPABILITY_UNAVAILABLE` (after the permission check) and are left out of capabilities. |
+| `location.*`, events `location.position/error` | Not implemented: `CAPABILITY_UNAVAILABLE`. |
+| `audio.playback`, `network` (no methods) | Enforced as WebView policy: without `audio.playback` the page's CSP has `media-src 'none'`; without `network` every non-package request is refused and the CSP limits `connect-src` to the package (WebRTC is not covered by CSP, as in the official app). |
+
+Errors use the contract's codes; device failures map to `DEVICE_DISCONNECTED`, `TIMEOUT`, `BUSY`
+or `CAPABILITY_UNAVAILABLE` (Web Bridge plugin status 2/6/7/8).
+
+### Packages
+
+`MmpkgPackage.read` verifies a picked file before anything is written: at most 10 MB, a strict
+ZIP reader (one disk, no ZIP64 or encryption, STORED/DEFLATE only, CRC-32 checked, sizes from
+the central directory, inflation capped at the declared size), at most 500 regular files and
+30 MB expanded (10 MB each), safe relative paths only (no `..`, absolute paths, backslashes,
+symbolic links or other Unix file types, no duplicates even by case). The manifest must be the
+final packager output: `schemaVersion 2`, `bridgeVersion "2.0"`, `permissionPolicyVersion 1`,
+reverse-domain `id`, semantic `version`, an `.html` `entry`, permissions normalized with the
+contract's policy (known names, scopes for `device.events` / `device.messaging`), optional
+`deviceRequirements`, and a `files` table that covers every payload file exactly with matching
+SHA-256. `signature.sig` is ignored: MemoMind publishes no signing keys, so every package is an
+unsigned sideload and the install dialog says so. Installing the same `id` replaces the package
+atomically and keeps its data; removing deletes package, data, choices and its WebView storage.
+
+Permissions are asked before the first launch (nothing is pre-checked; required ones gate Start)
+and again when the declaration changes; the plugin list has a Permissions action to change them.
+
+### Sandbox (Android)
+
+- Each plugin has its own origin `https://<sha256(id)[0..32]>.mmplugin.androidplatform.net`,
+  answered from the package by `shouldInterceptRequest`, which serves only files listed in the
+  manifest (`nosniff`, `no-store`, CSP on HTML). Web storage is per origin, so plugins cannot
+  read each other's or other app pages' storage.
+- File and content access, file-URL universal access, geolocation, pop-ups, mixed content,
+  third-party cookies, camera/microphone prompts and file choosers are off; navigation outside
+  the origin is blocked; a renderer crash closes the plugin instead of the app.
+- The Bridge is `MemoPluginBridge` from an origin-scoped `addWebMessageListener` (androidx.webkit),
+  only main frames of the plugin origin are accepted, and no `addJavascriptInterface` object
+  exists. A document-start script asks for the bootstrap as soon as the SDK installs
+  `__memoPluginBootstrap`. Requests over 128 KiB, more than 300 per second or 64 in flight, a
+  wrong session token or a stale runtime generation are rejected before dispatch; every argument
+  is validated.
+- WebViews without `WEB_MESSAGE_LISTENER` refuse to run plugins; without binary message ports
+  the audio capability is absent.
+
+### Web plugins on iOS
+
+Not hosted yet (the panel hides the entry: `MemoMindPanelLabels.webPlugins` stays null). The
+shared host is platform-neutral; an iOS host needs, in `iosMain` or Swift:
+
+1. A `WKWebView` with a non-persistent or per-plugin `WKWebsiteDataStore`, a
+   `WKURLSchemeHandler` for a custom scheme (for example `mmplugin://<key>/`) that serves only
+   manifest files with the same headers and CSP as Android, and `WKContentRuleList` rules that
+   block other loads unless `network` is granted.
+2. A `WKScriptMessageHandler` named `MemoPluginBridge` added to a `WKContentWorld.page` user
+   content controller, accepting only main-frame messages from that origin and passing the body
+   string to `MemoMindWebPluginHost.onMessage`; `WKUserScript` at document start that defines
+   `window.MemoPluginBridge = { postMessage: s => webkit.messageHandlers.MemoPluginBridge.postMessage(s) }`
+   plus the bootstrap hook from `WebPluginRuntime.BOOTSTRAP_HOOK`.
+3. `WebPluginPage` calls as `evaluateJavaScript` on the main thread; the host's scope on
+   `Dispatchers.Main`.
+4. Audio: WKWebView cannot transfer native message ports, so either pass
+   `audioPortsSupported = false` (capability absent) or emulate the port in JavaScript (a page
+   `MessageChannel` fed by `evaluateJavaScript` with base64 chunks) and post the
+   `gm-plugin:stream-port` message from the page itself.
+5. Device: `MemoMindWebPluginDevice(IosAppController.memoMindSession, <ready flow>, <opener on the
+   iAP2 recording link>)`; BLE has no recording link, so capture fails there.
+6. Store packages in Application Support with `MmpkgPackage.read` and an inflater over
+   `compression_decode_buffer(COMPRESSION_ZLIB)` (raw DEFLATE), capped at the declared size.
 
 ## Discrepancies with the older notes
 

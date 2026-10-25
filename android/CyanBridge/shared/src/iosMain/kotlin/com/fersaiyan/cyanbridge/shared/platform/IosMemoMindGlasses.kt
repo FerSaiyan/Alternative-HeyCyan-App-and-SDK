@@ -247,6 +247,8 @@ internal class IosMemoMindGlasses(
             MemoMindPanelCommand.COMFORT_BRIGHTNESS -> launchCommand("set brightness") { session.setBrightness(COMFORT_BRIGHTNESS) }
             MemoMindPanelCommand.TEST_MICROPHONE -> testMicrophone()
             MemoMindPanelCommand.TOGGLE_NOTIFICATION_FORWARDING -> host.updateDashboard { it.copy(agentLastError = NOTIFICATIONS_UNAVAILABLE) }
+            // No Web plugin host on iOS yet; the panel hides the entry without its label.
+            MemoMindPanelCommand.OPEN_WEB_PLUGINS -> return false
         }
         return true
     }

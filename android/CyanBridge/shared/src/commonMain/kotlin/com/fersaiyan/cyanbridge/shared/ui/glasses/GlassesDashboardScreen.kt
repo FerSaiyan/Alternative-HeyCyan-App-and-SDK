@@ -1387,6 +1387,13 @@ private fun MemoMindControls(
             secondaryEnabled = state.canSend,
             secondaryStyle = if (state.forwardingNotifications) ActionButtonStyle.Primary else ActionButtonStyle.Neutral,
         )
+        state.labels.webPlugins?.let { label ->
+            ActionButton(
+                label = label,
+                onClick = { panel(MemoMindPanelCommand.OPEN_WEB_PLUGINS) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
