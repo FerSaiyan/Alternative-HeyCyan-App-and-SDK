@@ -18,7 +18,6 @@ import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
-import com.fersaiyan.cyanbridge.localagent.LocalAgentAccessibilityBridge
 import com.fersaiyan.cyanbridge.localagent.LocalAgentDeviceState
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 import com.fersaiyan.cyanbridge.localagent.TaskerLocalAgentService
@@ -284,21 +283,12 @@ object DebugLogSupport {
 
     private fun StringBuilder.appendAutomationDiagnostics(context: Context) {
         val accessibilityEnabled = hasAccessibilityServicePermission(context)
-        val accessibilityConnected = LocalAgentAccessibilityBridge.isConnected()
         val deviceAvailability = LocalAgentDeviceState.availability(context)
         val lastTask = LocalAgentTaskHistory.recent(context, limit = 1).firstOrNull()
 
         appendLine("Automation diagnostics:")
         appendLine("- Feature enabled: ${AutomationPrefs.isLocalAgentAutomationEnabled(context)}")
-        appendLine("- Accessibility enabled in Android settings: $accessibilityEnabled")
-        appendLine("- Accessibility service connected: $accessibilityConnected")
-        appendLine(
-            "- Accessibility state: " + when {
-                accessibilityEnabled && accessibilityConnected -> "ready"
-                accessibilityEnabled -> "enabled_but_not_connected"
-                else -> "disabled"
-            },
-        )
+        appendLine("- AutoInput accessibility enabled: $accessibilityEnabled")
         appendLine("- Local Agent service running: ${TaskerLocalAgentService.isRunning()}")
         appendLine("- Notification permission: ${hasNotificationPermission(context)}")
         appendLine("- Device state: ${deviceAvailability.name} (${deviceAvailability.statusText})")

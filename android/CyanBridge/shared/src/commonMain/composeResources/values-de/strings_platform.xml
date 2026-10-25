@@ -1,0 +1,5 @@
+<resources>
+    <!-- Platforms without Tasker (iOS). -->
+    <string name="dashboard_custom_provider_no_tasker">Lokal / Pro</string>
+    <string name="settings_provider_description_no_tasker">Wählen Sie den Anbieter für den lokalen oder Pro-Modus auf der Brillenseite.</string>
+</resources>
