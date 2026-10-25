@@ -104,7 +104,7 @@ class PrefsInventoryTest {
         remote_openai_prefs/studio_bridge_enabled BOOLEAN false
         remote_openai_secrets (secure)/api_key STRING ""
         local_agent_prefs/provider_type STRING null
-        local_agent_prefs/glasses_assistant_mode STRING null ios=cyanbridge_ios_glasses/assistant_mode
+        local_agent_prefs/glasses_assistant_mode STRING "CUSTOM_AI_PROVIDER" ios=cyanbridge_ios_glasses/assistant_mode
         local_agent_prefs/require_confirmation BOOLEAN true
         local_agent_prefs/max_steps INT 8
         local_agent_prefs/automation_enabled BOOLEAN false

@@ -58,7 +58,7 @@ object LocalAgentPrefs {
     }
 
     fun getGlassesAssistantMode(context: Context): GlassesAssistantMode {
-        val stored = LocalAgent.glassesAssistantMode[context]?.trim()?.uppercase()
+        val stored = LocalAgent.glassesAssistantMode[context].trim().uppercase()
         val mode = when (stored) {
             GlassesAssistantMode.CUSTOM_AI_PROVIDER.name,
             "CHOSEN_PROVIDER" -> GlassesAssistantMode.CUSTOM_AI_PROVIDER
@@ -68,7 +68,6 @@ object LocalAgentPrefs {
             "CHAT_GPT",
             "PHONE_DEFAULT" -> GlassesAssistantMode.PHONE_ASSISTANT
 
-            null,
             "" -> GlassesAssistantMode.CUSTOM_AI_PROVIDER
 
             else -> GlassesAssistantMode.PHONE_ASSISTANT
