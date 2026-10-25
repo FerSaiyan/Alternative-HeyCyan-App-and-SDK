@@ -18,7 +18,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * for text, card, or brightness commands. SDK hardware callbacks own the link.
  */
 class MentraLiveAdapter(private val manager: MentraLiveManager) : GlassesDeviceAdapter {
-    override val adapterId = "mentra_live"
+    override val adapterId = MentraLiveManager.ADAPTER_ID
     override val displayName = "Mentra Live"
     override val capabilities = setOf(
         GlassesCapability.MICROPHONE_AUDIO,
@@ -40,10 +40,10 @@ class MentraLiveAdapter(private val manager: MentraLiveManager) : GlassesDeviceA
 
     override suspend fun scan(): List<DeviceInfo> {
         val firstResults = CompletableDeferred<List<Device>>()
-        manager.scan { devices ->
+        manager.startScan { devices ->
             if (devices.isNotEmpty() && !firstResults.isCompleted) firstResults.complete(devices)
         }
-        // The dedicated pairing screen shows progressive results instead.
+        // Device Bind shows progressive results instead.
         val devices = withTimeoutOrNull(10_500L) { firstResults.await() }
             ?: manager.discoveredDevices()
         return devices.map { it.toDeviceInfo() }
@@ -51,9 +51,8 @@ class MentraLiveAdapter(private val manager: MentraLiveManager) : GlassesDeviceA
 
     override suspend fun connect(device: DeviceInfo) {
         require(device.adapterId == adapterId) { "Not a Mentra device" }
-        val match = manager.findDiscovered(device.id)
-            ?: throw BridgeError.ConnectionFailed("Mentra device must be scanned before connecting")
-        manager.connect(match)
+        runCatching { manager.connect(device.address, device.name) }
+            .onFailure { throw BridgeError.ConnectionFailed(it.message ?: "Mentra Live connection failed") }
     }
     override suspend fun disconnect() = manager.disconnect()
 
@@ -73,7 +72,7 @@ class MentraLiveAdapter(private val manager: MentraLiveManager) : GlassesDeviceA
             ?: Result.failure(BridgeError.NotConnected())
 
     override suspend fun startMic(): Result<Unit> =
-        runCatching { manager.setMicrophoneEnabled(true) }
+        runCatching { manager.openMicrophone(adapterId) {} }
     override suspend fun stopMic(): Result<Unit> =
-        runCatching { manager.setMicrophoneEnabled(false) }
+        runCatching { manager.closeMicrophone(adapterId) }
 }

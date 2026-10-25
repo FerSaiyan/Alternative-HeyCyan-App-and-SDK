@@ -80,6 +80,16 @@ class DeviceBindViewModel : ViewModel() {
             DeviceClass.MOYOUNG_W620,
         )
 
+        /**
+         * Type choices offered only for devices detected as that family: Mentra Live pairs
+         * through its SDK, so other devices never show it.
+         */
+        fun detectedOnlyChoicesFor(device: ScannedDevice): List<DeviceClass> = listOfNotNull(
+            DeviceClass.MENTRA_LIVE.takeIf {
+                device.detectedClass == DeviceClass.MENTRA_LIVE || device.selectedClass == DeviceClass.MENTRA_LIVE
+            },
+        )
+
         fun pairingChoiceFor(detected: DeviceClass): DeviceClass =
             if (detected in CONSUMER_PROTOCOLS || detected == DeviceClass.UNKNOWN) DeviceClass.HEY_CYAN else detected
     }

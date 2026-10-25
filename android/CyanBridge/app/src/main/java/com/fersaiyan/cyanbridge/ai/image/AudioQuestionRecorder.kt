@@ -9,6 +9,7 @@ import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
 import com.fersaiyan.cyanbridge.audio.AudioSessionGrant
 import com.fersaiyan.cyanbridge.audio.AudioSessionHandle
 import com.fersaiyan.cyanbridge.audio.PcmRecorder
+import com.fersaiyan.cyanbridge.audio.VendorPcmMicrophone
 import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePreference
 import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import com.fersaiyan.cyanbridge.shared.audio.PcmEnergy
@@ -20,6 +21,7 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.LinkedBlockingQueue
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -43,33 +45,21 @@ class AudioQuestionRecorder(private val context: Context) {
         return session.use { record(it, onsetTimeoutMs, preferredInput) }
     }
 
-    /** Records into a session the caller already owns (and closes); its route is left as is. */
+    /**
+     * Records into a session the caller already owns (and closes); its route is left as is.
+     * Glasses whose SDK streams the microphone as PCM (Mentra Live) are recorded from that
+     * stream instead of an Android input, so no Bluetooth headset route is needed.
+     */
     suspend fun record(session: AudioSessionHandle, onsetTimeoutMs: Long, preferredInput: AudioDeviceInfo?): File? =
         withContext(Dispatchers.IO) {
             val file = File.createTempFile("question-", ".wav", File(context.cacheDir, "audio-questions").apply { mkdirs() })
             var completed = false
-            var recorder: PcmRecorder? = null
+            var source: SampleSource? = null
             try {
-                val active = try {
-                    session.openRecorder(
-                        source = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                        sampleRateHz = SAMPLE_RATE,
-                        bufferBytes = { minBuffer -> maxOf(minBuffer * 2, 2560) },
-                        preferredDevice = preferredInput,
-                        requirePreferredDevice = true,
-                    )
-                } catch (failure: PcmRecorder.OpenException) {
-                    error(
-                        when (failure.failure) {
-                            PcmRecorder.Failure.NO_BUFFER -> "Microphone input is unavailable"
-                            PcmRecorder.Failure.PREFERRED_DEVICE_REJECTED -> "Could not select glasses microphone"
-                            else -> "Microphone could not initialize"
-                        },
-                    )
-                }
-                recorder = active
-                check(active.start()) { "Microphone could not start" }
-                Log.i(TAG, "Capture started input=${active.routedDevice?.productName} id=${active.routedDevice?.id}")
+                val vendor = VendorPcmMicrophone.forSelectedGlasses(context)?.takeIf { it.sampleRateHz == SAMPLE_RATE }
+                val active = if (vendor != null) VendorSource(vendor) else recorderSource(session, preferredInput)
+                source = active
+                Log.i(TAG, "Capture started input=${active.label}")
                 val endpoint = QuestionEndpoint(onsetTimeoutMs = onsetTimeoutMs)
                 val start = SystemClock.elapsedRealtime()
                 val samples = ShortArray(320)
@@ -79,7 +69,7 @@ class AudioQuestionRecorder(private val context: Context) {
                     while (true) {
                         coroutineContext.ensureActive()
                         // Nonblocking reads let cancellation interrupt even a stalled audio driver.
-                        val count = active.read(samples, 0, samples.size, blocking = false)
+                        val count = active.read(samples)
                         check(count >= 0) { "Microphone read failed ($count)" }
                         val elapsed = SystemClock.elapsedRealtime() - start
                         if (count == 0) {
@@ -107,13 +97,86 @@ class AudioQuestionRecorder(private val context: Context) {
                 }
                 coroutineContext.ensureActive()
                 completed = true
-                Log.i(TAG, "Capture complete bytes=${file.length()} input=${active.routedDevice?.productName}")
+                Log.i(TAG, "Capture complete bytes=${file.length()} input=${active.label}")
                 file
             } finally {
-                recorder?.let(session::closeRecorder)
+                source?.close(session)
                 if (!completed) file.delete()
             }
         }
+
+    private fun recorderSource(session: AudioSessionHandle, preferredInput: AudioDeviceInfo?): SampleSource {
+        val recorder = try {
+            session.openRecorder(
+                source = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                sampleRateHz = SAMPLE_RATE,
+                bufferBytes = { minBuffer -> maxOf(minBuffer * 2, 2560) },
+                preferredDevice = preferredInput,
+                requirePreferredDevice = true,
+            )
+        } catch (failure: PcmRecorder.OpenException) {
+            error(
+                when (failure.failure) {
+                    PcmRecorder.Failure.NO_BUFFER -> "Microphone input is unavailable"
+                    PcmRecorder.Failure.PREFERRED_DEVICE_REJECTED -> "Could not select glasses microphone"
+                    else -> "Microphone could not initialize"
+                },
+            )
+        }
+        if (!recorder.start()) {
+            session.closeRecorder(recorder)
+            error("Microphone could not start")
+        }
+        return RecorderSource(recorder)
+    }
+
+    /** 16 kHz mono PCM16 samples, read without blocking. */
+    private interface SampleSource {
+        val label: String
+
+        /** Fills [samples] with what is available; 0 when nothing is yet. */
+        fun read(samples: ShortArray): Int
+
+        fun close(session: AudioSessionHandle)
+    }
+
+    private class RecorderSource(private val recorder: PcmRecorder) : SampleSource {
+        override val label: String get() = "${recorder.routedDevice?.productName} id=${recorder.routedDevice?.id}"
+
+        override fun read(samples: ShortArray): Int = recorder.read(samples, 0, samples.size, blocking = false)
+
+        override fun close(session: AudioSessionHandle) = session.closeRecorder(recorder)
+    }
+
+    /** Buffers the PCM the glasses SDK pushes and hands it out in reads. */
+    private class VendorSource(private val microphone: VendorPcmMicrophone) : SampleSource {
+        private val chunks = LinkedBlockingQueue<ByteArray>()
+        private var pending: ByteBuffer? = null
+
+        init {
+            microphone.open(TAG) { pcm -> if (chunks.size < MAX_QUEUED_CHUNKS) chunks.offer(pcm) }
+        }
+
+        override val label: String get() = "glasses SDK PCM"
+
+        override fun read(samples: ShortArray): Int {
+            var count = 0
+            while (count < samples.size) {
+                val buffer = pending?.takeIf { it.remaining() >= 2 }
+                    ?: chunks.poll()?.let { ByteBuffer.wrap(it).order(ByteOrder.LITTLE_ENDIAN) }?.also { pending = it }
+                    ?: break
+                while (count < samples.size && buffer.remaining() >= 2) samples[count++] = buffer.short
+            }
+            return count
+        }
+
+        override fun close(session: AudioSessionHandle) = microphone.close(TAG)
+
+        private companion object {
+            /** About 20 s of 20 ms packets; older audio is dropped rather than growing without bound. */
+            const val MAX_QUEUED_CHUNKS = 1_000
+        }
+    }
 
     companion object {
         const val SAMPLE_RATE = 16_000

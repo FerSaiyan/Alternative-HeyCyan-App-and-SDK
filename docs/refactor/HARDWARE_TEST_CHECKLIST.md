@@ -189,7 +189,7 @@ Known issue, not caused by this change: the memory search index needs SQLite FTS
 - **Android relay chat, voice and image questions:** same fields, headers, timeouts, retries and error texts. The JSON bytes differ slightly (`/` is no longer escaped, and a whole-number temperature is written as `0.0`), but the values are the same.
 - **Relay errors:** test a real 402, 403 and 401 and check you get the same localized quota/subscription/auth messages. A 2xx response that isn't JSON now shows a different "Relay error: …" text.
 - **OpenAI-compatible endpoints:** URLs, payload with image/audio parts, streaming, and the health text should be unchanged.
-- **Local agent:** one UI-control run and one Telegram command, to confirm model-output parsing is as tolerant as before.
+- **Local agent:** one UI-control run, to confirm model-output parsing is as tolerant as before.
 - **iOS (intentional changes to match Android):**
   - Relay chat retries up to 3 times and checks `/capabilities` first.
   - Errors read "Error: <relay error>".
@@ -242,7 +242,7 @@ Every prefs file, key, type and default is declared once in `shared/prefs`, and 
    - language, wake-word route, thumbnail quality, assistant mode and provider;
    - relay URL, Pro Live economy;
    - one plugin's settings, appearance and accent;
-   - remote server with an API key, the Telegram token, and Pro login.
+   - remote server with an API key, and Pro login.
 2. Install this build over it (`adb install -r`).
 3. Check:
    - Every setting is unchanged.
@@ -280,8 +280,7 @@ Smoke test per family:
 
 ## Wave 6: dead-code removal
 
-No glasses needed. Deleted code had no caller, so behavior is unchanged apart from one deliberate fix:
-- **Telegram `/task` while a task runs:** the guard now asks `TaskerLocalAgentService` (the service that actually runs tasks) instead of the never-started `LocalAgentService`. With a Local Agent task or a screen read in progress, a second `/task` should reply "A Local Agent task is already running…" instead of "Task accepted". The automation diagnostics in the debug log show the same running state.
+No glasses needed. Deleted code had no caller, so behavior is unchanged:
 - **Pairing:** `DeviceBindActivity` lost its unused protocol auto-detection probes; pair one glasses family through manual selection to confirm the dialog still finishes on connect.
 
 ## Wave 7: shared screen ViewModels — chats, notes, recordings
@@ -379,9 +378,9 @@ Smoke test:
 
 - **iOS default assistant mode:** on a fresh install (nothing saved), the Glasses screen selects the custom-provider button, not Phone assistant. After picking Phone assistant and relaunching, it stays on Phone assistant.
 - **iOS without Tasker:** Settings → AI provider lists only Local and Pro, with no "Tasker integrations" button and a description without Tasker; the dashboard button reads "Local / Pro"; HeyCyan's advanced section has no Local Agent entry. An install that had Tasker saved shows Local selected. Android still shows Tasker everywhere.
-- **Transcription endpoint cleanup (Android):** on an install that had `shared_prefs/transcription_endpoint.xml`, the file is gone after one launch. Meeting transcription with Local and with Pro still works.
+- **Meeting transcription (Android):** works with Local and with Pro.
 - **Local Agent settings, "Accessibility service" row (Android):** it shows Enabled when AutoInput's accessibility service is on and Disabled when it is off. Tapping it shows the disclosure and opens Android's Accessibility settings.
-- **Telegram `/read`:** replies "Screen reading is not available…". `/task` still runs through Tasker, with text-only planning.
+- Local Agent settings no longer shows Telegram Remote Control.
 
 ## MemoMind (new family, shared `MemoMindSession`)
 
@@ -404,3 +403,35 @@ Force-stop the official MemoMind app first: the glasses accept one app connectio
 6. **Notifications.** Forward notifications (grant notification access when asked): phone notifications appear as native cards with the app name; WhatsApp read-aloud is unaffected. Disconnect turns forwarding off.
 7. **Reconnect.** Power the glasses off and on: the link-loss log, then reconnection within ~5–30 s (manager retries and the ACL-connected auto-pair). Disconnect in the panel stays disconnected (auto-reconnect suppressed) until Connect.
 8. **Other families unchanged:** the device type dialog shows one extra choice (MemoMind); HeyCyan, MYVU and the rest pair and connect as before, and MYVU notification forwarding (if enabled elsewhere) still shows "app: title" text.
+
+### MemoMind on iOS (Mac build: `-PenableAppleTargets=true :shared:compileKotlinIosSimulatorArm64`, then the host app on an iPhone)
+
+Filter the Xcode console with `IosMemoMind` (covers `IosMemoMind`, `IosMemoMindBle`, `IosMemoMindIap2`) and `MemoMindSession`. Close the official MemoMind app first (swipe it away): it may hold the glasses' only app connection.
+
+1. **Does the firmware expose BLE GM at all?** This decides whether iOS works without MFi. Select the glasses in Scan (they appear as "MemoMind One …", classified MemoMind; also when another app keeps them connected, since iOS lists connected MemoMind peripherals). Expected: `GM GATT ready service=… frame=N`, then `Ready over BLE model=H001Y fw=… webBridge=…`. Record the logged service UUID (`FB349B5F-…` or `2020`) and `frame` (MTU - 3) with the firmware version. If the panel instead shows "…expose no GM Bluetooth LE service (0x2021/0x2022)…", the release firmware is an MFi build without the GATT service: go to step 7.
+2. **Battery.** The dashboard and MemoMind panel show the battery from `01/06`; Battery refreshes it. Compare with the official app.
+3. **HUD.** Test notification (native card "CyanBridge"), Show text (teleprompter, two lines), Clear display, Comfort brightness (level 7), as on Android. Long text checks fragmenting: Show text with a plugin card (Live Caption Relay) longer than `frame` bytes must arrive whole (each fragment waits for the empty flow-control reply). Note any lost or garbled long *replies* (device info is the longest): the firmware sizes notifications to 512 bytes, not the MTU.
+4. **Button question.** With the Web Bridge plugin started from the official app (then that app closed): reconnect, `webBridge=true`; a primary long press logs `Voice question requested by the glasses button` and runs the voice question: the cue and answer play on the glasses (HFP) and the question is heard through their microphone.
+5. **Microphone.** Over BLE, Test microphone shows "Bluetooth LE has no recording stream…" and starts a voice question through HFP (no Opus stream: the firmware has no BLE recording channel).
+6. **Notifications / disconnect.** The Notifications button shows the iOS limitation message (no forwarding). Disconnect in the panel drops the BLE link; Connect reconnects to the saved glasses. Power-cycling the glasses shows Disconnected; Reconnect brings them back.
+7. **iAP2 (development build only).** Add `ql.iap2.protocol02` and `ql.iap2.protocol01` to `UISupportedExternalAccessoryProtocols` in `ios/CyanBridgeKMPHost/Info.plist`, pair the glasses in iOS Settings ▸ Bluetooth, close the official app, then Connect in the MemoMind panel: `iAP2 session open: … protocols=[…]`, `Ready over iAP2 …`. HUD and battery as above; Test microphone then reports "N Opus frames in 3 s (iAP2)" (about 150). If iOS refuses the session ("iOS did not open the MemoMind ql.iap2.protocol02 session"), record whether the official app was running. Without the Info.plist entries the app never tries iAP2.
+8. **Other iOS families unchanged:** HeyCyan, Eyevue and TuneBuds still connect and use their own write characteristics.
+
+## Mentra Live through Device Bind (see MENTRA_AUDIT.md)
+
+Filter logcat with:
+`adb logcat -s MentraLive DeviceBindActivity AutoPair AudioQuestionRecorder GeminiLiveClient GlassesAiPhotoCapture`
+The SDK's own lines appear under its `Bridge` log tags (`MAN:`, `LIVE:`).
+
+1. **Fresh pair from Device Bind.** Unpair the glasses from any other phone (three power-button presses open the pairing window). Open Scan. The Mentra Live row appears in the normal list (`"SDK scan started"`), and the type dialog preselects "Mentra Live". Connect. Accept any Android pairing dialog. Expect `"Connecting to <name>"`, then `"Glasses ready=true"` and `"Gallery mode off…"`. The dashboard shows "Connected - <name>" and the battery. There is no "Pair Mentra Live" button any more.
+2. **No Mentra SDK for other users.** With HeyCyan or Eyevue glasses and no Mentra nearby, open Scan. There is no "Mentra Connected" notification and no `MentraLive` log lines.
+3. **Reconnect on launch.** Force-stop the app with the glasses on. Relaunch. Expect `AutoPair`/`MentraLive` `"Reconnect (startup) to <name> requested"` and a connection without opening Scan. Also turn Bluetooth off and on, and walk out of range and back: the SDK reconnects by itself.
+4. **Switching away.** Pair HeyCyan from Scan. Expect `"Released (selected HEY_CYAN)"`. Mentra no longer reconnects.
+5. **Photo.** Dashboard Photo saves on the glasses ("Photo saved on the Mentra Live glasses."). The count action shows the photo and video counts.
+6. **AI photo.** Gemini Live auto image and Walking Aid with Mentra selected: expect `"AI photo received bytes=…"`.
+7. **AI photo question (button press and dashboard Image test).** Needs the frozen-region capture branch (MENTRA_AUDIT.md, item 1). Before that, expect the HeyCyan "not connected" toast. Expect `"Button press -> image question"`.
+8. **Button voice question.** Long press. Expect `"Button long press -> voice question"`, `AudioQuestionRecorder` `"Capture started input=glasses SDK PCM"` and `MentraLive` `"Microphone opened by AudioQuestionRecorder"`. The answer plays on the glasses (media output).
+9. **Gemini Live mic.** Start Live with Mentra selected. Expect `"Microphone opened by GeminiLiveClient"`. Speech is heard, and the reply plays on the glasses with no SCO switch. Ask a voice question during Live: both listeners coexist, and Live resumes afterwards.
+10. **Video.** Video starts and stops a recording on the glasses ("Video recording started/stopped").
+11. **Advanced → Device info.** Battery, Version (firmware), Sync time, Volume (0-15).
+12. **Not wired (should say so, not fail silently).** Sync Wi-Fi shows "not supported yet". Audio recording points to meeting capture. There is no live preview card.

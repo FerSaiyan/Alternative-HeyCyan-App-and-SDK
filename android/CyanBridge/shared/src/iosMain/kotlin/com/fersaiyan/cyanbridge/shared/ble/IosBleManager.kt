@@ -32,6 +32,7 @@ import platform.CoreBluetooth.CBManagerStatePoweredOn
 import platform.CoreBluetooth.CBPeripheral
 import platform.CoreBluetooth.CBPeripheralDelegateProtocol
 import platform.CoreBluetooth.CBService
+import platform.CoreBluetooth.CBUUID
 import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSNumber
@@ -204,6 +205,34 @@ class IosBleManager : BleManager {
     fun maximumWriteLength(): Int =
         connectedPeripheral?.maximumWriteValueLengthForType(CBCharacteristicWriteWithoutResponse)?.toInt()
             ?.takeIf { it > 0 } ?: 20
+
+    /** True once notifications are enabled on the connected peripheral's [characteristicUuid]. */
+    fun isNotifying(characteristicUuid: String): Boolean =
+        notifyCharacteristic(characteristicUuid)?.isNotifying == true
+
+    /** The service the discovered [characteristicUuid] belongs to, for diagnostics. */
+    fun serviceUuidOf(characteristicUuid: String): String? =
+        notifyCharacteristic(characteristicUuid)?.service?.UUID?.UUIDString
+
+    private fun notifyCharacteristic(characteristicUuid: String): CBCharacteristic? {
+        val wanted = BleDeviceClassifier.normalizeUuid(characteristicUuid)
+        return notifyCharacteristics.values.firstOrNull { BleDeviceClassifier.normalizeUuid(it.UUID.UUIDString) == wanted }
+    }
+
+    /**
+     * Peripherals with one of [serviceUuids] that are already connected to iOS (for example by
+     * another app) and therefore no longer advertise; they become connectable by identifier.
+     */
+    fun connectedPeripherals(serviceUuids: List<String>): List<BleScannedDevice> {
+        if (central.state != CBManagerStatePoweredOn) return emptyList()
+        return central.retrieveConnectedPeripheralsWithServices(serviceUuids.map { CBUUID.UUIDWithString(it) })
+            .filterIsInstance<CBPeripheral>()
+            .map { peripheral ->
+                val identifier = peripheral.identifier.UUIDString
+                peripherals[identifier] = peripheral
+                BleScannedDevice(identifier = identifier, name = peripheral.name, rssi = 0, advertisementData = emptyMap())
+            }
+    }
 
     override fun addNotificationListener(listener: BleNotificationListener) {
         if (!listeners.contains(listener)) listeners += listener

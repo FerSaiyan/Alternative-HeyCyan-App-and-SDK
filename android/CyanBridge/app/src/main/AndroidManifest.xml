@@ -70,7 +70,6 @@
         <meta-data android:name="com.meta.wearable.mwdat.CLIENT_TOKEN" android:value="${mwdat_client_token}" />
         <meta-data android:name="com.meta.wearable.mwdat.DAM_ENABLED" android:value="true" />
         <meta-data android:name="com.mentra.bluetoothsdk.analytics.disabled" android:value="true" />
-        <activity android:name=".ui.MentraPairingActivity" android:exported="false" />
 
         <activity android:name=".ui.WelcomeActivity" android:exported="true">
             <intent-filter>
@@ -178,7 +177,6 @@
         </receiver>
         <service android:name=".audio.MeetingCaptureService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".localagent.TaskerLocalAgentService" android:exported="false" android:foregroundServiceType="dataSync" />
-        <service android:name=".localagent.LocalAgentTelegramService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".media.autocapture.AutoAudioCaptureService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".studiobridge.StudioBridgeForegroundService" android:exported="false" android:foregroundServiceType="microphone" />
         <service

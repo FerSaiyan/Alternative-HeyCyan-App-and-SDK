@@ -73,8 +73,73 @@ Android (`app/.../devices/memomind/`, `ui/main/glasses/MemoMindGlasses.kt`): SPP
 manager (bring-up, reconnect, battery polling, notifications forwarding, button → voice question),
 MediaCodec Opus decoder to 16 kHz PCM, and the microphone as an `AudioSessionCoordinator` session.
 
-Not implemented: GMP install/list/remove (withheld), screenshot download, navigation, HOGP,
-iOS links (stage 2: BLE GATT or iAP2 plus the same session).
+iOS (`shared/src/iosMain/`): see [iOS](#ios) below.
+
+Not implemented: GMP install/list/remove (withheld), screenshot download, navigation, HOGP.
+
+## iOS
+
+The iOS host runs the same `MemoMindSession`, `MemoMindHud` and `MemoMindDisplayAdapter` over one
+of two links, chosen when connecting (`platform/IosMemoMindGlasses.kt`):
+
+| Link | Class | When it is used |
+| --- | --- | --- |
+| iAP2 `ql.iap2.protocol02` (commands) and `ql.iap2.protocol01` (recording) | `ble/IosMemoMindAccessoryTransport.kt` (ExternalAccessory, `EASession` streams on the main run loop; 512-byte frames, no fragment acks, like SPP) | Only when the app's Info.plist declares the protocol **and** a connected accessory offers it (`findAccessory()`); otherwise never tried |
+| BLE GATT, write `0x2021` / notify `0x2022` | `ble/IosMemoMindBleTransport.kt` over the shared `IosBleManager` (0x2021 is its preferred write characteristic for MemoMind) | Every other case: the glasses picked in Scan connect like other BLE families |
+
+BLE details: frames are sized to the ATT write limit (`maximumWriteValueLength`, MTU - 3, capped at
+512), one complete GM frame per write, and `awaitsFragmentAcks = true` (each fragment waits for the
+empty flow-control response). Bring-up waits until 0x2021 is discovered and 0x2022 notifies (the
+firmware ignores writes from a central that has not subscribed), then heartbeat, device info,
+status and the Web Bridge probe; the discovered service UUID is logged. Scan also lists MemoMind
+peripherals that are already connected to iOS (they stop advertising). The BLE link has no
+recording channel (`recordingLink = null`).
+
+What works on iOS:
+
+- Connect/disconnect (Scan, Reconnect, the MemoMind panel), battery (5-minute poll and on demand),
+  HUD text, cards and clear through `MemoMindHud` (Web Bridge drawing when the plugin runs),
+  comfort brightness, the panel's test notification.
+- Button questions: a primary long press from the Web Bridge plugin starts the assistant's voice
+  question (`GlassesAssistant.askByVoice`), which listens and answers through the glasses' HFP
+  microphone and speaker (the existing iOS voice path).
+- `IosAppController.memoMindSession` / `memoMindDisplay` expose the session and the display adapter
+  for a web plugin host.
+- Over iAP2 only: the Opus recording stream (the panel's microphone test counts frames).
+
+Not available on iOS, and why:
+
+- **Phone notification forwarding.** iOS apps cannot read other apps' notifications. ANCS shares
+  them with BLE accessories, not apps: only glasses firmware that subscribes to ANCS could show
+  them, which the published protocol does not describe.
+- **Microphone stream over BLE.** The firmware's BLE recording path is not implemented
+  (`BLUETOOTH_DEVELOPER_GUIDE.md`, "Current implementation versus the BLE release promise");
+  voice input uses HFP.
+- **BLE on MFi firmware builds.** The firmware registers the GM GATT service only when MFi is
+  disabled, so a release built for MFi may have no 0x2021/0x2022 at all. Connecting then fails with
+  a message naming the missing service; only iAP2 can reach such glasses.
+- **Long uplink messages over BLE** may be cut: the firmware packs notifications up to 512 bytes,
+  not the negotiated MTU. Short replies (heartbeat, status) are unaffected; record device-info
+  behavior per firmware.
+
+### iAP2 requirements (not enabled in this repository)
+
+The shipped `ios/CyanBridgeKMPHost/Info.plist` does not declare the MemoMind protocols, so the
+iAP2 transport stays inactive. To use it:
+
+1. Add both strings to the existing `UISupportedExternalAccessoryProtocols` array (the
+   `external-accessory` background mode is already present):
+   ```xml
+   <string>ql.iap2.protocol02</string>
+   <string>ql.iap2.protocol01</string>
+   ```
+   No entitlement or code change is needed; builds without them compile and simply use BLE.
+2. Pair the glasses in iOS Settings ▸ Bluetooth (iAP2 runs over Classic Bluetooth) and close the
+   official MemoMind app: iOS gives each protocol to one app session at a time.
+3. For App Store or TestFlight distribution, the accessory maker (MFi licensee) must add the app's
+   bundle ID to the accessory's MFi product plan and supply the PPID for App Review; Apple rejects
+   apps that declare accessory protocols without it. Development builds do not need it.
+   The vendor's guide notes that publishing a protocol name does not grant an accessory session.
 
 ## Discrepancies with the older notes
 

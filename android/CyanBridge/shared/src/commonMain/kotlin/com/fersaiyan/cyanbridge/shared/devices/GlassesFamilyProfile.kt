@@ -212,14 +212,25 @@ object GlassesFamilyProfiles {
         ),
     )
 
+    /**
+     * Mentra Live over the Mentra Bluetooth SDK. Not declared because the SDK path is not wired
+     * here: live preview (the glasses push RTMP/SRT/WHIP to a server), gallery download (over
+     * the glasses' Wi-Fi hotspot) and firmware updates (the SDK's own OTA flow).
+     */
     val mentraLive = GlassesFamilyProfile(
         deviceClass = DeviceClass.MENTRA_LIVE,
         capabilities = setOf(
             GlassesCapability.MICROPHONE_AUDIO,
             GlassesCapability.SPEAKER_AUDIO,
             GlassesCapability.PHOTO_CAPTURE,
+            GlassesCapability.AI_PHOTO_CAPTURE,
+            GlassesCapability.VIDEO_RECORDING,
+            GlassesCapability.MEDIA_COUNT,
             GlassesCapability.BUTTON_INPUT,
             GlassesCapability.BATTERY_STATUS,
+            GlassesCapability.DEVICE_INFO,
+            GlassesCapability.TIME_SYNC,
+            GlassesCapability.VOLUME_STATUS,
         ),
         audio = GlassesAudioProfile(
             input = GlassesAudioInput.VENDOR_PCM_STREAM,
