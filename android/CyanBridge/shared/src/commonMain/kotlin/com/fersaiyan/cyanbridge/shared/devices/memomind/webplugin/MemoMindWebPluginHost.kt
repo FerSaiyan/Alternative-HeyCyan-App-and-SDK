@@ -15,6 +15,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -95,6 +98,11 @@ class MemoMindWebPluginHost(
     private var pageLoaded = false
     var lifecycle = WebPluginLifecycle.STARTING
         private set
+
+    private val _microphoneActive = MutableStateFlow(false)
+
+    /** The plugin holds the glasses microphone (the platform shows a recording indicator). */
+    val microphoneActive: StateFlow<Boolean> = _microphoneActive.asStateFlow()
 
     private val subscriptions = linkedMapOf<String, Set<String>>()
     private var subscriptionSequence = 0
@@ -781,6 +789,7 @@ class MemoMindWebPluginHost(
         opening = active
         capture = active
         microphone = opened
+        _microphoneActive.value = true
         emitCaptureState(sessionId, "capturing")
         return buildJsonObject {
             put("sessionId", sessionId)
@@ -837,6 +846,7 @@ class MemoMindWebPluginHost(
         val opened = microphone
         microphone = null
         runCatching { opened?.close() }.onFailure(::rethrowCancellation)
+        _microphoneActive.value = false
         while (true) {
             val (sessionId, frames) = audioFrames.tryReceive().getOrNull() ?: break
             onAudioFrames(sessionId, frames)
@@ -850,6 +860,7 @@ class MemoMindWebPluginHost(
         if (capture === active) capture = null
         val opened = microphone
         microphone = null
+        _microphoneActive.value = false
         active.fail(emitError, "Audio capture ended: ${emitError.name}")
         if (opened != null) scope.launch { runCatching { opened.close() }.onFailure(::rethrowCancellation) }
         emitCaptureState(active.sessionId, "stopped", reason, emitError)
