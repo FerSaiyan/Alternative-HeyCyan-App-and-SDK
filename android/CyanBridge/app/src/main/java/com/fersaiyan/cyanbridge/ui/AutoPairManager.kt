@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.devices.memomind.MemoMindManager
 import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
@@ -86,6 +87,13 @@ object AutoPairManager {
                 val connected = BleOperateManager.getInstance().isConnected
                 if (selectedClass == DeviceClass.EYEVUE) {
                     if (EyevueManager.getInstance(appContext).isConnected()) {
+                        backoffMs = 5_000L
+                        delay(20_000L)
+                        continue
+                    }
+                }
+                if (selectedClass == DeviceClass.MEMOMIND) {
+                    if (MemoMindManager.getInstance(appContext).isConnected()) {
                         backoffMs = 5_000L
                         delay(20_000L)
                         continue
@@ -180,6 +188,14 @@ object AutoPairManager {
                 return
             }
             MoyoungW620Manager.getInstance(context).connect(mac)
+            return
+        }
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MEMOMIND) {
+            if (suppressAutoReconnect) {
+                Log.d(TAG, "Skipping MemoMind reconnect ($reason): suppressed")
+                return
+            }
+            MemoMindManager.getInstance(context).connect(mac)
             return
         }
         if (DeviceProfileStore.isMetaSelected(context) || DeviceProfileStore.isMeizuMyvuSelected(context)) {
@@ -317,6 +333,14 @@ object AutoPairManager {
             }
             Log.i(TAG, "Auto-pair ($reason): starting MYVU foreground connection")
             manager.connect(address)
+            return true
+        }
+        if (profile?.selectedClass == DeviceClass.MEMOMIND) {
+            val address = profile.macAddress.takeIf { it.isNotBlank() } ?: return false
+            val manager = MemoMindManager.getInstance(context)
+            if (manager.isConnected()) return true
+            Log.i(TAG, "Auto-pair ($reason): MemoMind SPP")
+            manager.connect(address, profile.advertisedName)
             return true
         }
         if (profile?.selectedClass == DeviceClass.TUNEBUDS) {

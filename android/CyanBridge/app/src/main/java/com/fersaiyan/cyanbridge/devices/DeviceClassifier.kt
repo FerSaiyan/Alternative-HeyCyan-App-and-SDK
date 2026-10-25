@@ -20,6 +20,9 @@ object DeviceClassifier {
         UUID.fromString("00000bd3-0000-1000-8000-00805f9b34fb")
     private val MYVU_GATT_SERVICE_UUID: UUID =
         UUID.fromString("00000bd1-0000-1000-8000-00805f9b34fb")
+    /** MemoMind's legacy GM control service as the official App declares it. */
+    private val MEMOMIND_GM_SERVICE_UUID: UUID =
+        UUID.fromString("fb349b5f-8000-0080-0010-002020000000")
     private val MOYOUNG_SERVICE_UUID: UUID =
         UUID.fromString("0000fea8-0000-1000-8000-00805f9b34fb")
     private val TUNEBUDS_COMPANY_IDS = setOf(0x475A, 0x455A, 0x535A, 0x4D5A)
@@ -45,6 +48,10 @@ object DeviceClassifier {
 
         if (serviceUuids.any { it.uuid == MYVU_ADVERTISED_SERVICE_UUID || it.uuid == MYVU_GATT_SERVICE_UUID }) {
             return DeviceClass.MEIZU_MYVU
+        }
+
+        if (serviceUuids.any { it.uuid == MEMOMIND_GM_SERVICE_UUID }) {
+            return DeviceClass.MEMOMIND
         }
 
         if (serviceUuids.any { it.uuid == MOYOUNG_SERVICE_UUID }) {
@@ -99,6 +106,11 @@ object DeviceClassifier {
         // Meizu MYVU / Star Air (XGA010C) advertises as MYVU on the BLE link.
         if (lower.contains("myvu") || lower.contains("star air") || lower.contains("starair")) {
             return DeviceClass.MEIZU_MYVU
+        }
+
+        // MemoMind One glasses advertise as "MemoMind One <n>".
+        if (BleDeviceClassifier.isMemoMindName(lower)) {
+            return DeviceClass.MEMOMIND
         }
 
         // Generic audio heuristics (best-effort).

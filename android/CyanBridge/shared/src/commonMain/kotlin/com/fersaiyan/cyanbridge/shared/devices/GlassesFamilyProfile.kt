@@ -11,6 +11,7 @@ enum class GlassesControlPanel {
     TUNEBUDS,
     META_RAYBAN,
     MEIZU_MYVU,
+    MEMOMIND,
 }
 
 /** Where the selected glasses deliver microphone audio to the phone. */
@@ -263,6 +264,40 @@ object GlassesFamilyProfiles {
         ),
     )
 
+    private const val MEMOMIND_PLUGIN_MESSAGE =
+        "This plugin requires a camera or HeyCyan onboard media. MemoMind supports display and microphone plugins only."
+
+    /**
+     * MemoMind glasses over the published GM protocol: native HUD screens (notification cards,
+     * teleprompter, Web Bridge drawing), battery and brightness, Web Bridge button/head input,
+     * HFP microphone and speaker, and an Opus microphone stream on the recording link.
+     */
+    val memoMind = GlassesFamilyProfile(
+        deviceClass = DeviceClass.MEMOMIND,
+        capabilities = setOf(
+            GlassesCapability.TEXT_DISPLAY,
+            GlassesCapability.LINE_DISPLAY,
+            GlassesCapability.CARD_DISPLAY,
+            GlassesCapability.CLEAR_DISPLAY,
+            GlassesCapability.NOTIFICATIONS,
+            GlassesCapability.BATTERY_STATUS,
+            GlassesCapability.BRIGHTNESS_CONTROL,
+            GlassesCapability.BUTTON_INPUT,
+            GlassesCapability.HEAD_GESTURE_INPUT,
+            GlassesCapability.MICROPHONE_AUDIO,
+            GlassesCapability.SPEAKER_AUDIO,
+        ),
+        controlPanel = GlassesControlPanel.MEMOMIND,
+        // Voice questions use the HFP route like other headsets; the Opus stream is opt-in.
+        audio = bluetoothHeadsetAudio,
+        cameraUnavailableReason = "Selected device profile (MemoMind) has no camera.",
+        unsupportedNativePlugins = mapOf(
+            NativePluginIds.AUTO_AUDIO to MEMOMIND_PLUGIN_MESSAGE,
+            NativePluginIds.VISUAL_DIARY to MEMOMIND_PLUGIN_MESSAGE,
+            NativePluginIds.WALKING_AID to MEMOMIND_PLUGIN_MESSAGE,
+        ),
+    )
+
     val genericAudio = GlassesFamilyProfile(
         deviceClass = DeviceClass.GENERIC_AUDIO,
         capabilities = setOf(
@@ -290,6 +325,7 @@ object GlassesFamilyProfiles {
         metaRayban,
         mentraLive,
         meizuMyvu,
+        memoMind,
         genericAudio,
         unknown,
     )

@@ -57,11 +57,13 @@ data class GlassesDashboardUiState(
     val showAdvancedOta: Boolean = false,
     val showMetaRaybanControls: Boolean = false,
     val showMeizuMyvuControls: Boolean = false,
+    val showMemoMindControls: Boolean = false,
     val advancedExpanded: Boolean = false,
     val agentStatus: String = "Unknown",
     val agentLastError: String = "(none)",
     val metaRayban: MetaRaybanUiState = MetaRaybanUiState(),
     val meizuMyvu: MeizuMyvuUiState = MeizuMyvuUiState(),
+    val memoMind: MemoMindUiState = MemoMindUiState(),
     val ota: OtaSectionUiState = OtaSectionUiState(),
     val firmwarePatchRequest: FirmwarePatchRequestUiState? = null,
     val livePreview: LivePreviewUiState = LivePreviewUiState(),
@@ -150,6 +152,46 @@ data class MeizuMyvuUiState(
     val canDisconnect: Boolean = false,
     val canSend: Boolean = false,
 )
+
+/**
+ * The MemoMind panel. Texts that only this panel shows arrive in [labels] from the platform host
+ * (Android string resources), so the shared dashboard resources stay unchanged.
+ */
+data class MemoMindUiState(
+    val connectionLabel: String = "Disconnected",
+    val deviceName: String? = null,
+    /** Model and firmware, for example "H001Y  1.0.0.267". */
+    val detail: String? = null,
+    val batteryPercent: Int? = null,
+    /** Microphone test progress or result; null when no test ran. */
+    val microphoneLabel: String? = null,
+    val lastError: String? = null,
+    val canConnect: Boolean = true,
+    val canDisconnect: Boolean = false,
+    val canSend: Boolean = false,
+    val forwardingNotifications: Boolean = false,
+    val labels: MemoMindPanelLabels = MemoMindPanelLabels(),
+)
+
+data class MemoMindPanelLabels(
+    val description: String = "MemoMind connects over Classic Bluetooth. Pair the glasses in Bluetooth settings and close the official MemoMind app first.",
+    val clearDisplay: String = "Clear display",
+    val testMicrophone: String = "Test microphone",
+    val forwardNotificationsOn: String = "Forwarding notifications",
+    val forwardNotificationsOff: String = "Forward notifications",
+)
+
+/** Actions of the MemoMind panel (one dashboard action, see [GlassesDashboardAction.MemoMindPanel]). */
+enum class MemoMindPanelCommand {
+    CONNECT,
+    DISCONNECT,
+    SEND_TEST_NOTIFICATION,
+    SHOW_TEST_TEXT,
+    CLEAR_DISPLAY,
+    COMFORT_BRIGHTNESS,
+    TEST_MICROPHONE,
+    TOGGLE_NOTIFICATION_FORWARDING,
+}
 
 data class OtaSectionUiState(
     val stateLabel: String = "Idle",
@@ -259,6 +301,7 @@ fun GlassesDashboardUiState.withFamilyGating(
         aiWakeWordRoute = aiWakeWordRoute,
         showMetaRaybanControls = model.isVisible(Action.META_RAYBAN_CONTROLS),
         showMeizuMyvuControls = model.isVisible(Action.MEIZU_MYVU_CONTROLS),
+        showMemoMindControls = model.isVisible(Action.MEMOMIND_CONTROLS),
         showBattery = showBattery,
         showStorage = showStorage,
         storageLabel = if (showStorage) storageLabel else "--",
@@ -338,6 +381,7 @@ sealed interface GlassesDashboardAction {
     data object MeizuShowTestTeleprompter : GlassesDashboardAction
     data object MeizuSyncClock : GlassesDashboardAction
     data object MeizuSetComfortBrightness : GlassesDashboardAction
+    data class MemoMindPanel(val command: MemoMindPanelCommand) : GlassesDashboardAction
     data object DismissTransportPermissionDialog : GlassesDashboardAction
     data object RequestTransportPermission : GlassesDashboardAction
 }

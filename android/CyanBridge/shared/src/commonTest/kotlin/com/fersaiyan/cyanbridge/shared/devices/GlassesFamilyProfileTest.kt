@@ -109,8 +109,13 @@ class GlassesFamilyProfileTest {
             mapOf(NativePluginIds.AUTO_AUDIO to "Auto Audio records HeyCyan onboard files and is unavailable for Meta Ray-Ban."),
             GlassesFamilyProfiles.metaRayban.unsupportedNativePlugins,
         )
+        assertEquals(
+            setOf(NativePluginIds.AUTO_AUDIO, NativePluginIds.VISUAL_DIARY, NativePluginIds.WALKING_AID),
+            GlassesFamilyProfiles.memoMind.unsupportedNativePlugins.keys,
+        )
+        val withMessages = setOf(DeviceClass.MEIZU_MYVU, DeviceClass.META_RAYBAN, DeviceClass.MEMOMIND)
         GlassesFamilyProfiles.all
-            .filter { it.deviceClass != DeviceClass.MEIZU_MYVU && it.deviceClass != DeviceClass.META_RAYBAN }
+            .filter { it.deviceClass !in withMessages }
             .forEach { assertTrue(it.unsupportedNativePlugins.isEmpty(), "${it.deviceClass}") }
     }
 

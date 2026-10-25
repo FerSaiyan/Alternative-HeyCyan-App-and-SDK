@@ -1,10 +1,12 @@
 package com.fersaiyan.cyanbridge.ui
 
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
+import com.fersaiyan.cyanbridge.shared.devices.BleDeviceClassifier
 import com.fersaiyan.cyanbridge.shared.devices.DeviceProfile
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice as SharedScannedDevice
 
 import android.annotation.SuppressLint
+import com.fersaiyan.cyanbridge.R
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.ScanResult
@@ -25,6 +27,7 @@ import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.devices.memomind.MemoMindManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.ScannedDevice
@@ -138,6 +141,7 @@ class DeviceBindActivity : BaseActivity() {
         }
         scanSize = 0
         viewModel.isScanning = true
+        addBondedMemoMindGlasses()
         BleScannerHelper.getInstance().scanDevice(this, null, bleScanCallback)
         handler.postDelayed(scanTimeout, 15_000)
         mentraSdkAddresses.clear()
@@ -255,6 +259,11 @@ class DeviceBindActivity : BaseActivity() {
                 connectMeizuMyvu(device)
             }
 
+            DeviceClass.MEMOMIND -> {
+                saveSelectedProfile(device, DeviceClass.MEMOMIND, userOverridden = true)
+                connectMemoMind(device)
+            }
+
             DeviceClass.GENERIC_AUDIO -> {
                 saveSelectedProfile(device, DeviceClass.GENERIC_AUDIO, userOverridden = true)
                 Toast.makeText(this, "Audio device selected.", Toast.LENGTH_SHORT).show()
@@ -359,6 +368,45 @@ class DeviceBindActivity : BaseActivity() {
             Toast.LENGTH_LONG,
         ).show()
         finish()
+    }
+
+    /**
+     * MemoMind glasses already bonded in Android may not advertise over BLE while the official
+     * App holds them, so bonded devices with a MemoMind name are listed too.
+     */
+    @SuppressLint("MissingPermission")
+    private fun addBondedMemoMindGlasses() {
+        val bonded = runCatching { BluetoothAdapter.getDefaultAdapter()?.bondedDevices.orEmpty() }.getOrDefault(emptySet())
+        bonded.filter { BleDeviceClassifier.isMemoMindName(it.name.orEmpty().lowercase()) }
+            .forEach { upsertDevice(it.address, it.name, rssi = 0) }
+    }
+
+    /** MemoMind talks Classic SPP, which needs an Android bond (the RFCOMM connect can also prompt). */
+    @SuppressLint("MissingPermission")
+    private fun connectMemoMind(device: ScannedDevice) {
+        val bonded = runCatching {
+            BluetoothAdapter.getDefaultAdapter()
+                ?.getRemoteDevice(device.macAddress)
+                ?.bondState == BluetoothDevice.BOND_BONDED
+        }.getOrDefault(false)
+        val start = {
+            MemoMindManager.getInstance(this).connect(device.connectionAddress, device.advertisedName)
+            Toast.makeText(this, R.string.memomind_connecting_toast, Toast.LENGTH_LONG).show()
+            finish()
+        }
+        if (bonded) {
+            start()
+            return
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.memomind_pair_first_title)
+            .setMessage(R.string.memomind_pair_first_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.memomind_bluetooth_settings) { _, _ ->
+                startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            }
+            .setPositiveButton(R.string.memomind_connect_anyway) { _, _ -> start() }
+            .show()
     }
 
     private fun upsertDevice(

@@ -165,3 +165,8 @@ interface GlassesDeviceAdapter {
     suspend fun startMic(): Result<Unit>
     suspend fun stopMic(): Result<Unit>
 }
+
+/** Implemented by adapters with a native phone-notification screen (instead of plain text). */
+interface GlassesNotificationDisplay {
+    suspend fun showNotification(appName: String, title: String, body: String, packageName: String): Result<Unit>
+}

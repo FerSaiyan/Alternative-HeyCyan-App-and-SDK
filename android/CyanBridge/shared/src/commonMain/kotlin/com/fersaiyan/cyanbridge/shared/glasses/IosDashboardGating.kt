@@ -44,6 +44,7 @@ internal fun GlassesDashboardUiState.withIosFamilyGating(
         showTuneBudsControls = sections && gated.showTuneBudsControls,
         showMetaRaybanControls = sections && gated.showMetaRaybanControls,
         showMeizuMyvuControls = sections && gated.showMeizuMyvuControls,
+        showMemoMindControls = sections && gated.showMemoMindControls,
         showCaptureSettings = heyCyan && gated.showCaptureSettings,
         showAiWakeWordRouting = heyCyan && gated.showAiWakeWordRouting,
         showAdvancedLocalAgent = false,

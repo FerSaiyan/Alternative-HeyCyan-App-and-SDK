@@ -60,6 +60,7 @@ private val pairingChoices = listOf(
     DeviceClass.HEY_CYAN,
     DeviceClass.META_RAYBAN,
     DeviceClass.MEIZU_MYVU,
+    DeviceClass.MEMOMIND,
     DeviceClass.GENERIC_AUDIO,
 )
 

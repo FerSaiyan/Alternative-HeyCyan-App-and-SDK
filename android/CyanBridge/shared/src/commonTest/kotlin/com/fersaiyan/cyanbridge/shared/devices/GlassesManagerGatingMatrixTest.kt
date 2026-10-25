@@ -69,6 +69,11 @@ class GlassesManagerGatingMatrixTest {
             Action.MEIZU_MYVU_CONTROLS,
             Action.STATUS_BATTERY,
         ),
+        DeviceClass.MEMOMIND to setOf(
+            Action.MEETING_CAPTURE,
+            Action.MEMOMIND_CONTROLS,
+            Action.STATUS_BATTERY,
+        ),
         DeviceClass.GENERIC_AUDIO to setOf(Action.MEETING_CAPTURE),
         DeviceClass.UNKNOWN to setOf(Action.MEETING_CAPTURE),
     )
