@@ -374,3 +374,25 @@ Smoke test:
 
 - **Eyevue selected at startup:** the baseline started a connect, cancelled it, and showed "Eyevue error". The refactor makes a single attempt. With real Eyevue glasses, check that launching the app with Eyevue selected connects once, and that the status goes Connecting → connected with no transient "Eyevue error".
 - **Settings and icons changed by the iOS branch's shared UI:** see SCREEN_PARITY.md. These are product changes to confirm with the collaborator, not refactor regressions.
+
+## MemoMind (new family, shared `MemoMindSession`)
+
+Filter logcat with:
+`adb logcat -s MemoMindManager MemoMindSpp MemoMindSession MemoMindHud MemoMindMic MemoMindOpus AudioSession GlassesBridge NotificationForwarder`
+
+Force-stop the official MemoMind app first: the glasses accept one app connection. Protocol summary: `android/CyanBridge/docs/memomind/README.md`.
+
+1. **Pairing.** Pair the glasses in Android Bluetooth settings. Scan: the glasses appear as "MemoMind One …" (also when only bonded, not advertising), classified MemoMind; the type dialog has a MemoMind choice. Connect: log `SPP connected on 00007033-…` (or the `00001101-…` fallback; note which), then `Ready model=H001Y fw=… webBridge=… service=…`. Unpaired glasses: the "Pair MemoMind in Android first" dialog appears.
+2. **Battery.** The dashboard status and the MemoMind panel show the battery from `01/06` (`bat`); it refreshes every 5 minutes and on the Battery action. Compare with the official app; check charging.
+3. **HUD.**
+   - Test notification: a native notification card titled CyanBridge.
+   - Show text: the native teleprompter opens with two lines. Note how pages and scrolling behave and whether `TeleprompterPage` events are logged (`Unsolicited`/page requests).
+   - Clear display: the teleprompter closes.
+   - Comfort brightness: the display dims to level 7 (`01/0E`).
+   - With the Web Bridge plugin started from the official app (then the official app closed): reconnect, log shows `webBridge=true`; Show text is drawn as a text box instead of the teleprompter, Clear wipes it.
+   - Plugins: Live Caption Relay / Errand Brain cards appear on the HUD (teleprompter for text, notification cards for cards).
+4. **Buttons and head gestures.** Only with the Web Bridge plugin running: presses log `Input Button(...)`; a primary long press logs `Voice question requested by the glasses button` and starts the dashboard voice question (CyanBridge open). Without the plugin, record any `Unsolicited service=… command=…` lines the native buttons produce; they map future native triggers.
+5. **Mic question.** "Test voice" in the assistant card listens through the glasses' HFP microphone and speaks the answer on the glasses speaker. "Test microphone" in the MemoMind panel: `Microphone streaming compact=…`, then "N Opus frames, peak level X%" (expect about 150 frames in 3 s and a level that follows your voice); log `Opus decoder output 48000 Hz` or 16000. During the test start a voice question: the MemoMind capture is suspended and resumes (`AudioSession` log).
+6. **Notifications.** Forward notifications (grant notification access when asked): phone notifications appear as native cards with the app name; WhatsApp read-aloud is unaffected. Disconnect turns forwarding off.
+7. **Reconnect.** Power the glasses off and on: the link-loss log, then reconnection within ~5–30 s (manager retries and the ACL-connected auto-pair). Disconnect in the panel stays disconnected (auto-reconnect suppressed) until Connect.
+8. **Other families unchanged:** the device type dialog shows one extra choice (MemoMind); HeyCyan, MYVU and the rest pair and connect as before, and MYVU notification forwarding (if enabled elsewhere) still shows "app: title" text.

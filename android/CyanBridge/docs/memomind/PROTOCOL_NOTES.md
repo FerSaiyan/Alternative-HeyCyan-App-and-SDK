@@ -1,5 +1,10 @@
 # MemoMind BLE / RFCOMM Protocol Notes
 
+> **Superseded.** These reverse-engineered notes predate the vendor's published protocol. The
+> implementation follows the official docs; see [README.md](README.md) for the summary and the
+> list of points where these notes are wrong (header layout, brightness command, the `52 9x`
+> stream, UUID roles).
+
 ## Device Tested
 - **Device model:** MemoMind One 209 (H001Y)
 - **Firmware version:** 1.0.0.267
