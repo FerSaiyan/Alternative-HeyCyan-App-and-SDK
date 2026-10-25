@@ -127,9 +127,8 @@ internal class GeminiLiveAudioIo(
         }
         startPlayback()
         mentraMicActive = true
-        manager.setPcmListener(onPcm)
-        runCatching { manager.setMicrophoneEnabled(true) }.onFailure { error ->
-            manager.setPcmListener(null)
+        runCatching { manager.openMicrophone(TAG, onPcm) }.onFailure { error ->
+            runCatching { manager.closeMicrophone(TAG) }
             mentraMicActive = false
             captureEnabled.set(false)
             onCaptureError(error.message ?: "Mentra microphone failed")
@@ -178,8 +177,7 @@ internal class GeminiLiveAudioIo(
             mentraMicActive = false
             runCatching {
                 MentraLiveManager.getInstance(appContext).apply {
-                    setPcmListener(null)
-                    setMicrophoneEnabled(false)
+                    closeMicrophone(TAG)
                     setOwnAudioPlaying(false)
                 }
             }

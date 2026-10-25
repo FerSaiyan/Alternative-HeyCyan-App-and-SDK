@@ -60,6 +60,9 @@ class GlassesManagerGatingMatrixTest {
         DeviceClass.MENTRA_LIVE to setOf(
             Action.MEETING_CAPTURE,
             Action.STATUS_BATTERY,
+            Action.ADVANCED_CONTROLS,
+            Action.ADVANCED_DEVICE_INFO,
+            Action.ADVANCED_DEVICE_VOLUME,
         ),
         DeviceClass.MEIZU_MYVU to setOf(
             Action.MEETING_CAPTURE,

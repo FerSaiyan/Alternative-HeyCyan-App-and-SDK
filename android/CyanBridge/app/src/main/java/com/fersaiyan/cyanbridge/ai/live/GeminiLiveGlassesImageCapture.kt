@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.ai.live
 import android.content.Context
 import com.fersaiyan.cyanbridge.ai.image.ImageThumbnailQuality
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.mentra.MentraPhotoCapture
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.glasses.HeyCyanPhotoCapture
 import com.fersaiyan.cyanbridge.glasses.GlassesAiPhotoCapture
@@ -16,9 +15,8 @@ class GeminiLiveGlassesImageCapture(context: Context) {
     suspend fun capture(quality: ImageThumbnailQuality): ByteArray = when (
         DeviceProfileStore.selectedClass(appContext)
     ) {
-        DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS ->
+        DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MENTRA_LIVE ->
             GlassesAiPhotoCapture(appContext).capture(quality.sdkValue).jpeg
-        DeviceClass.MENTRA_LIVE -> MentraPhotoCapture(appContext).capture()
         else -> error("Selected glasses do not support automatic Live images")
     }
 

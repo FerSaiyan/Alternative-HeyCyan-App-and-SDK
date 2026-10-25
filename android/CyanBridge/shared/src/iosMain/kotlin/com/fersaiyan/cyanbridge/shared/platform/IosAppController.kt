@@ -444,7 +444,12 @@ internal class IosAppController {
         val device = connection.device
         when (connection.deviceClass) {
             DeviceClass.META_RAYBAN -> pairMetaGlasses()
-            DeviceClass.MENTRA_LIVE -> pairMentraGlasses()
+            // The Mentra SDK connects to the chosen glasses (by identifier, then name).
+            DeviceClass.MENTRA_LIVE -> pairSdkGlasses(
+                DeviceClass.MENTRA_LIVE,
+                device.advertisedName ?: DeviceClass.MENTRA_LIVE.displayName(),
+                identifier = device.macAddress,
+            )
             DeviceClass.GENERIC_AUDIO -> saveProfileAndConnect(device, DeviceClass.GENERIC_AUDIO, connect = false)
             // The MYVU app relay is RFCOMM-only; keep the profile for the assistant over Bluetooth audio.
             DeviceClass.MEIZU_MYVU -> saveProfileAndConnect(device, DeviceClass.MEIZU_MYVU, connect = false)
@@ -459,12 +464,8 @@ internal class IosAppController {
         pairSdkGlasses(DeviceClass.META_RAYBAN, "Meta glasses")
     }
 
-    /** Mentra Live: the Mentra SDK scans and connects (Android: MentraPairingActivity). */
-    fun pairMentraGlasses() {
-        pairSdkGlasses(DeviceClass.MENTRA_LIVE, "Mentra Live")
-    }
-
-    private fun pairSdkGlasses(deviceClass: DeviceClass, name: String) {
+    /** [identifier] empty: the SDK connects to the first glasses it finds (Meta pairs in the Meta AI app). */
+    private fun pairSdkGlasses(deviceClass: DeviceClass, name: String, identifier: String = "") {
         closeDeviceBind()
         scope.launch { if (bleManager.isConnected()) bleManager.disconnect() }
         applySelectedClass(deviceClass)
@@ -476,9 +477,9 @@ internal class IosAppController {
         scope.launch {
             // Meta finishes pairing in the Meta AI app, so keep the choice even if that is still pending.
             if (deviceClass == DeviceClass.META_RAYBAN) saveProfile(deviceClass.name, name, deviceClass)
-            otherGlasses.connectSdk(identifier = "", name = name).onSuccess { identifier ->
-                lastDiscoveredIdentifier = identifier
-                saveProfile(identifier.ifBlank { deviceClass.name }, name, deviceClass)
+            otherGlasses.connectSdk(identifier = identifier, name = name).onSuccess { connected ->
+                lastDiscoveredIdentifier = connected
+                saveProfile(connected.ifBlank { deviceClass.name }, name, deviceClass)
                 updateState { it.copy(agentLastError = "") }
             }
         }

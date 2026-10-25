@@ -72,6 +72,8 @@ object DeviceClassifier {
 
         if (name.isEmpty()) return DeviceClass.UNKNOWN
 
+        if (BleDeviceClassifier.isMentraLiveName(name)) return DeviceClass.MENTRA_LIVE
+
         if (lower.contains("eyevue")) {
             return DeviceClass.EYEVUE
         }
