@@ -36,7 +36,6 @@ Useful patterns worth adopting:
 Initially deferred from the MVP (implemented later with explicit safety gates):
 
 - Flutter UI architecture.
-- Telegram remote-control path (exact configured chat ID only; disabled by default).
 - Voice-control extras.
 - Optional Shizuku fallback (fixed input operations only after Accessibility failure).
 - Opt-in screenshot planning with separate remote-upload consent.
@@ -81,7 +80,7 @@ And have CyanBridge:
 ## Non-Goals For MVP
 
 - Full autonomous background control without user awareness.
-- Remote control from unconfigured or arbitrary Telegram/web clients.
+- Remote control from unconfigured or arbitrary web clients.
 - Screenshot vision models as a hard dependency; text-only planning remains the fallback.
 - Arbitrary device admin actions.
 - General-purpose plugin/tool ecosystem for phone control.

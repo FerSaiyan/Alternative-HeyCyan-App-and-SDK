@@ -42,7 +42,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
@@ -55,8 +54,6 @@ import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 import com.fersaiyan.cyanbridge.localagent.LocalAgentShizukuFallback
 import com.fersaiyan.cyanbridge.localagent.LocalAgentTaskHistory
-import com.fersaiyan.cyanbridge.localagent.LocalAgentTelegramService
-import com.fersaiyan.cyanbridge.localagent.LocalAgentTelegramProtocol
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
 import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsActivity
@@ -64,7 +61,6 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
-import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
 import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsActivity
 import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import kotlinx.coroutines.Dispatchers
@@ -82,18 +78,12 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
 
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: Intent?) {
-            when (intent?.action) {
-                LocalAgentIntents.ACTION_STATUS_CHANGED -> {
-                    intent.getStringExtra(LocalAgentIntents.EXTRA_STATUS)?.let {
-                        RuntimePrefs.setStatus(this@LocalAgentSettingsActivity, it)
-                    }
-                    intent.getStringExtra(LocalAgentIntents.EXTRA_LAST_ERROR)?.let {
-                        RuntimePrefs.setLastError(this@LocalAgentSettingsActivity, it)
-                    }
-                }
-
-                LocalAgentIntents.ACTION_TELEGRAM_STATUS_CHANGED -> Unit
-                else -> return
+            if (intent?.action != LocalAgentIntents.ACTION_STATUS_CHANGED) return
+            intent.getStringExtra(LocalAgentIntents.EXTRA_STATUS)?.let {
+                RuntimePrefs.setStatus(this@LocalAgentSettingsActivity, it)
+            }
+            intent.getStringExtra(LocalAgentIntents.EXTRA_LAST_ERROR)?.let {
+                RuntimePrefs.setLastError(this@LocalAgentSettingsActivity, it)
             }
             refreshUi()
         }
@@ -110,10 +100,7 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
         if (!receiverRegistered) {
             LocalBroadcastManager.getInstance(this).registerReceiver(
                 statusReceiver,
-                IntentFilter().apply {
-                    addAction(LocalAgentIntents.ACTION_STATUS_CHANGED)
-                    addAction(LocalAgentIntents.ACTION_TELEGRAM_STATUS_CHANGED)
-                },
+                IntentFilter(LocalAgentIntents.ACTION_STATUS_CHANGED),
             )
             receiverRegistered = true
         }
@@ -145,11 +132,6 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
             autoExecuteLowRisk = RuntimePrefs.isAutoExecuteLowRiskEnabled(this),
             notificationListenerEnabled = NotificationForwarderService.isListenerBound(this),
             whatsappNotificationReadAloud = RuntimePrefs.isWhatsAppNotificationReadAloudEnabled(this),
-            telegramConfigured = RuntimePrefs.isTelegramConfigured(this),
-            telegramAllowedChatId = RuntimePrefs.getTelegramAllowedChatId(this),
-            telegramRemoteControlEnabled = RuntimePrefs.isTelegramRemoteControlEnabled(this),
-            telegramStatus = RuntimePrefs.getTelegramStatus(this),
-            telegramLastError = RuntimePrefs.getTelegramLastError(this),
             screenshotPlanningEnabled = RuntimePrefs.isScreenshotPlanningEnabled(this),
             remoteScreenshotUploadEnabled = RuntimePrefs.isRemoteScreenshotUploadEnabled(this),
             screenshotStatus = RuntimePrefs.getScreenshotStatus(this),
@@ -211,83 +193,6 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
 
     override fun onOpenPendingActions() {
         startActivity(Intent(this, PendingActionsActivity::class.java))
-    }
-
-    override fun onSaveTelegramConfiguration(botToken: String, allowedChatId: String): Boolean {
-        if (LocalAgentTelegramProtocol.normalizeChatId(allowedChatId) == null) {
-            Toast.makeText(this, R.string.compose_local_agent_valid_chat_id, Toast.LENGTH_SHORT).show()
-            return false
-        }
-        if (botToken.isNotBlank() && !LocalAgentTelegramProtocol.isValidBotToken(botToken)) {
-            Toast.makeText(this, R.string.compose_local_agent_valid_bot_token, Toast.LENGTH_SHORT).show()
-            return false
-        }
-        if (botToken.isNotBlank() && !RuntimePrefs.setTelegramBotToken(this, botToken)) {
-            Toast.makeText(this, R.string.compose_local_agent_save_token_failed, Toast.LENGTH_SHORT).show()
-            return false
-        }
-        if (!RuntimePrefs.setTelegramAllowedChatId(this, allowedChatId)) {
-            Toast.makeText(this, R.string.compose_local_agent_save_chat_failed, Toast.LENGTH_SHORT).show()
-            return false
-        }
-        if (!RuntimePrefs.isTelegramConfigured(this)) {
-            Toast.makeText(this, R.string.compose_local_agent_token_required, Toast.LENGTH_SHORT).show()
-            return false
-        }
-        RuntimePrefs.setTelegramStatus(
-            this,
-            if (RuntimePrefs.isTelegramRemoteControlEnabled(this)) {
-                getString(R.string.compose_local_agent_configuration_updated)
-            } else {
-                getString(R.string.compose_local_agent_remote_off)
-            },
-        )
-        RuntimePrefs.clearTelegramLastError(this)
-        refreshUi()
-        Toast.makeText(this, R.string.compose_local_agent_configuration_saved, Toast.LENGTH_SHORT).show()
-        return true
-    }
-
-    override fun onClearTelegramToken() {
-        RuntimePrefs.setTelegramRemoteControlEnabled(this, false)
-        LocalAgentTelegramService.stop(this)
-        if (RuntimePrefs.clearTelegramBotToken(this)) {
-            RuntimePrefs.setTelegramStatus(this, getString(R.string.compose_local_agent_configuration_required))
-            RuntimePrefs.clearTelegramLastError(this)
-            Toast.makeText(this, R.string.compose_local_agent_token_cleared, Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, R.string.compose_local_agent_clear_token_failed, Toast.LENGTH_SHORT).show()
-        }
-        refreshUi()
-    }
-
-    override fun onTelegramRemoteControlChange(enabled: Boolean) {
-        if (enabled) {
-            when {
-                !LocalAgentPlugin.isEnabled(this) -> {
-                    Toast.makeText(this, R.string.compose_local_agent_enable_first, Toast.LENGTH_SHORT).show()
-                    return
-                }
-                !RuntimePrefs.isTelegramConfigured(this) -> {
-                    Toast.makeText(this, R.string.compose_local_agent_save_first, Toast.LENGTH_SHORT).show()
-                    return
-                }
-                !hasNotificationPermission(this) -> {
-                    Toast.makeText(this, R.string.compose_local_agent_notification_required, Toast.LENGTH_SHORT).show()
-                    return
-                }
-            }
-            RuntimePrefs.setTelegramRemoteControlEnabled(this, true)
-            RuntimePrefs.setTelegramStatus(this, getString(R.string.compose_local_agent_starting))
-            RuntimePrefs.clearTelegramLastError(this)
-            LocalAgentTelegramService.start(this)
-        } else {
-            RuntimePrefs.setTelegramRemoteControlEnabled(this, false)
-            RuntimePrefs.setTelegramStatus(this, getString(R.string.compose_disabled))
-            RuntimePrefs.clearTelegramLastError(this)
-            LocalAgentTelegramService.stop(this)
-        }
-        refreshUi()
     }
 
     override fun onShizukuFallbackChange(enabled: Boolean) {
@@ -468,11 +373,6 @@ data class LocalAgentSettingsUiState(
     val autoExecuteLowRisk: Boolean = true,
     val notificationListenerEnabled: Boolean = false,
     val whatsappNotificationReadAloud: Boolean = false,
-    val telegramConfigured: Boolean = false,
-    val telegramAllowedChatId: String = "",
-    val telegramRemoteControlEnabled: Boolean = false,
-    val telegramStatus: String = "Disabled",
-    val telegramLastError: String = "(none)",
     val screenshotPlanningEnabled: Boolean = false,
     val remoteScreenshotUploadEnabled: Boolean = false,
     val screenshotStatus: String = "Text-only planning",
@@ -496,11 +396,6 @@ interface LocalAgentSettingsActions {
     fun onAutoExecuteLowRiskChange(enabled: Boolean)
     fun onOpenPendingActions()
     fun onShowTaskHistory()
-
-    /** Returns true when the configuration was saved, so the screen can clear the typed token. */
-    fun onSaveTelegramConfiguration(botToken: String, allowedChatId: String): Boolean
-    fun onClearTelegramToken()
-    fun onTelegramRemoteControlChange(enabled: Boolean)
     fun onShizukuFallbackChange(enabled: Boolean)
     fun onRequestShizukuPermission()
     fun onOpenNotificationListenerSettings()
@@ -520,10 +415,6 @@ fun LocalAgentSettingsScreen(
     state: LocalAgentSettingsUiState,
     actions: LocalAgentSettingsActions,
 ) {
-    var telegramBotToken by remember { mutableStateOf("") }
-    var telegramAllowedChatId by remember(state.telegramAllowedChatId) {
-        mutableStateOf(state.telegramAllowedChatId)
-    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -654,78 +545,6 @@ fun LocalAgentSettingsScreen(
                 actionLabel = stringResource(R.string.compose_view),
                 onClick = actions::onShowTaskHistory,
             )
-
-            SectionTitle(stringResource(R.string.compose_local_agent_telegram))
-            Text(
-                stringResource(R.string.compose_local_agent_telegram_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(
-                value = telegramBotToken,
-                onValueChange = { telegramBotToken = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.compose_telegram_bot_token)) },
-                placeholder = {
-                    Text(
-                        if (state.telegramConfigured) stringResource(R.string.compose_telegram_token_saved)
-                        else stringResource(R.string.compose_telegram_token_placeholder),
-                    )
-                },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            )
-            OutlinedTextField(
-                value = telegramAllowedChatId,
-                onValueChange = { telegramAllowedChatId = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.compose_telegram_chat_id)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        if (actions.onSaveTelegramConfiguration(telegramBotToken, telegramAllowedChatId)) {
-                            telegramBotToken = ""
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.compose_save_configuration))
-                }
-                OutlinedButton(
-                    onClick = actions::onClearTelegramToken,
-                    enabled = state.telegramConfigured,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.compose_clear_token))
-                }
-            }
-            SwitchSetting(
-                label = stringResource(R.string.compose_enable_telegram),
-                checked = state.telegramRemoteControlEnabled,
-                enabled = state.telegramConfigured,
-                onCheckedChange = actions::onTelegramRemoteControlChange,
-            )
-            Text(
-                stringResource(R.string.compose_telegram_commands),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                stringResource(R.string.compose_telegram_status, state.telegramStatus),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (state.telegramLastError.isNotBlank() && state.telegramLastError != "(none)") {
-                Text(
-                    stringResource(R.string.compose_telegram_error, state.telegramLastError),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
 
             SectionTitle(stringResource(R.string.compose_local_agent_shizuku))
             Text(

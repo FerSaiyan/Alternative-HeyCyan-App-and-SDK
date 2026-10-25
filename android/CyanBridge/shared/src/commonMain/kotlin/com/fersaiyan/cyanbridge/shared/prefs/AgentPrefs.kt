@@ -38,13 +38,6 @@ object AgentPrefs {
         val autoExecuteLowRisk = boolean("auto_execute_low_risk", true)
         val whatsAppNotificationReadAloud = boolean("whatsapp_notification_read_aloud", false)
 
-        /** Remote Telegram control; the bot token is in [LocalAgentSecrets]. */
-        val telegramRemoteEnabled = boolean("telegram_remote_enabled", false)
-        val telegramAllowedChatId = string("telegram_allowed_chat_id", "")
-        val telegramUpdateOffset = long("telegram_update_offset", 0L)
-        val telegramStatus = string("telegram_status", "Disabled")
-        val telegramLastError = string("telegram_last_error", "(none)")
-
         /** Capture and remote upload are separate opt-ins. */
         val screenshotPlanningEnabled = boolean("screenshot_planning_enabled", false)
         val remoteScreenshotUploadEnabled = boolean("remote_screenshot_upload_enabled", false)
@@ -57,9 +50,7 @@ object AgentPrefs {
         val modelId = optionalString("model_id")
     }
 
-    object LocalAgentSecrets : PrefsFile("local_agent_secrets", secure = true) {
-        val telegramBotToken = string("telegram_bot_token", "")
-    }
+    object LocalAgentSecrets : PrefsFile("local_agent_secrets", secure = true)
 
     /** Debug-only trace switch read by LocalAgentShadowTrace. */
     object ShadowTrace : PrefsFile("local_agent_hil_shadow") {

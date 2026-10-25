@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.plugins.localagent
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
 import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
@@ -13,7 +12,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.shadows.ShadowToast
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 
@@ -43,7 +41,6 @@ class LocalAgentSettingsActivityTest {
         assertTrue(state.remoteScreenshotUploadEnabled)
         assertFalse(state.requireActionConfirmation)
         assertEquals("Idle", state.status)
-        assertFalse(state.telegramConfigured)
     }
 
     @Test
@@ -72,23 +69,5 @@ class LocalAgentSettingsActivityTest {
         assertFalse(state.requireActionConfirmation)
         assertFalse(state.autoExecuteLowRisk)
         assertTrue(state.whatsappNotificationReadAloud)
-    }
-
-    @Test
-    fun invalidTelegramChatIdIsRejectedWithToast() {
-        val activity = createSettingsActivity<LocalAgentSettingsActivity>()
-
-        assertFalse(activity.onSaveTelegramConfiguration(botToken = "", allowedChatId = "not a chat"))
-        assertEquals(context.getString(R.string.compose_local_agent_valid_chat_id), ShadowToast.getTextOfLatestToast())
-    }
-
-    @Test
-    fun remoteControlNeedsTheAgentEnabledFirst() {
-        val activity = createSettingsActivity<LocalAgentSettingsActivity>()
-
-        activity.onTelegramRemoteControlChange(true)
-
-        assertFalse(RuntimePrefs.isTelegramRemoteControlEnabled(context))
-        assertEquals(context.getString(R.string.compose_local_agent_enable_first), ShadowToast.getTextOfLatestToast())
     }
 }

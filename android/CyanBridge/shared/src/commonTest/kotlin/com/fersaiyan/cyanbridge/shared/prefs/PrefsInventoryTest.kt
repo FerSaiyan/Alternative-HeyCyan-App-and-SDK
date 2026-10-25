@@ -126,11 +126,6 @@ class PrefsInventoryTest {
         local_agent_prefs/require_action_confirmation BOOLEAN true
         local_agent_prefs/auto_execute_low_risk BOOLEAN true
         local_agent_prefs/whatsapp_notification_read_aloud BOOLEAN false
-        local_agent_prefs/telegram_remote_enabled BOOLEAN false
-        local_agent_prefs/telegram_allowed_chat_id STRING ""
-        local_agent_prefs/telegram_update_offset LONG 0
-        local_agent_prefs/telegram_status STRING "Disabled"
-        local_agent_prefs/telegram_last_error STRING "(none)"
         local_agent_prefs/screenshot_planning_enabled BOOLEAN false
         local_agent_prefs/remote_screenshot_upload_enabled BOOLEAN false
         local_agent_prefs/screenshot_status STRING "Text-only planning"
@@ -138,7 +133,7 @@ class PrefsInventoryTest {
         local_agent_prefs/shizuku_status STRING "Disabled"
         local_agent_prefs/enabled BOOLEAN false
         local_agent_prefs/model_id STRING null
-        local_agent_secrets (secure)/telegram_bot_token STRING ""
+        local_agent_secrets (secure): no keys
         local_agent_hil_shadow/youtube_shadow_enabled BOOLEAN false
         local_agent_task_history/entries_json STRING "[]"
         local_agent_skills/skills_json STRING "[]"
