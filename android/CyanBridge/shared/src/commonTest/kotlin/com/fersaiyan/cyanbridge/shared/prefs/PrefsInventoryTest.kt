@@ -95,7 +95,6 @@ class PrefsInventoryTest {
         app_language/selected_language STRING null ios=cyanbridge_app_language/selected_language
         gemini_live/pro_economy BOOLEAN true
         gemini_live/live_image_delay INT 0
-        transcription_endpoint: no keys
         remote_openai_prefs/base_url STRING "" ios=cyanbridge_remote_openai/base_url
         remote_openai_prefs/api_key STRING ""
         remote_openai_prefs/model STRING "" ios=cyanbridge_remote_openai/model
