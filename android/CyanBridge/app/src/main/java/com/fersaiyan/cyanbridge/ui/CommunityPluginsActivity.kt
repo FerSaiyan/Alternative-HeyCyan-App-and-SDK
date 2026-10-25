@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.R
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -490,12 +491,14 @@ private class AndroidCommunityPluginsPlatform(private val context: Context) : Co
         val autoAudioDescription = when (selectedClass) {
             DeviceClass.META_RAYBAN -> "Unavailable for Meta Ray-Ban: DAT does not expose HeyCyan onboard audio-file recording."
             DeviceClass.MEIZU_MYVU -> "Unavailable for Meizu MYVU: device has no onboard audio file storage."
+            DeviceClass.MEMOMIND -> context.getString(R.string.memomind_no_onboard_audio)
             DeviceClass.GENERIC_AUDIO -> "Unavailable for Earbuds / Audio-only glasses: device has no onboard audio file storage."
             else -> "Record glasses audio in resilient 15-minute loops with optional speech extension and sync."
         }
 
         val cameraUnavailableReason = when (selectedClass) {
             DeviceClass.MEIZU_MYVU -> "Unavailable for Meizu MYVU: device has no camera."
+            DeviceClass.MEMOMIND -> context.getString(R.string.memomind_no_camera)
             DeviceClass.GENERIC_AUDIO -> "Unavailable for Earbuds / Audio-only glasses: device has no camera."
             DeviceClass.MOYOUNG_W620 -> "Unavailable for MoYoung / W620: direct camera capture is not validated yet."
             else -> null
@@ -525,6 +528,8 @@ private class AndroidCommunityPluginsPlatform(private val context: Context) : Co
                 title = "Live Caption Relay",
                 description = if (selectedClass == DeviceClass.MEIZU_MYVU) {
                     "Captions live speech and streams text directly to your Meizu MYVU heads-up display."
+                } else if (selectedClass == DeviceClass.MEMOMIND) {
+                    context.getString(R.string.memomind_live_caption_description)
                 } else {
                     "Captions live speech from your phone or Bluetooth glasses mic, with optional translation."
                 },
@@ -537,6 +542,8 @@ private class AndroidCommunityPluginsPlatform(private val context: Context) : Co
                 title = "Hands-Free Translator",
                 description = if (selectedClass == DeviceClass.MEIZU_MYVU) {
                     "Continuously translates live speech and displays translated subtitles on your Meizu MYVU HUD."
+                } else if (selectedClass == DeviceClass.MEMOMIND) {
+                    context.getString(R.string.memomind_translator_description)
                 } else {
                     "Continuously translates live speech from your phone or Bluetooth glasses mic while enabled."
                 },

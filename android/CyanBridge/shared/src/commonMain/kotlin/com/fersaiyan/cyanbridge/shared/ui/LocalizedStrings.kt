@@ -90,6 +90,7 @@ fun localizedDestinationSubtitle(destination: AppDestination): String = stringRe
 @Composable
 fun localizedDeviceClass(deviceClass: DeviceClass): String {
     if (deviceClass == DeviceClass.MENTRA_LIVE) return "Mentra Live"
+    if (deviceClass == DeviceClass.MEMOMIND) return "MemoMind"
     return stringResource(
         when (deviceClass) {
             DeviceClass.HEY_CYAN -> Res.string.device_class_heycyan
@@ -99,6 +100,7 @@ fun localizedDeviceClass(deviceClass: DeviceClass): String {
             DeviceClass.META_RAYBAN -> Res.string.device_class_meta_rayban
             DeviceClass.MENTRA_LIVE -> Res.string.device_class_unknown
             DeviceClass.MEIZU_MYVU -> Res.string.device_class_meizu_myvu
+            DeviceClass.MEMOMIND -> Res.string.device_class_unknown
             DeviceClass.GENERIC_AUDIO -> Res.string.device_class_generic_audio
             DeviceClass.UNKNOWN -> Res.string.device_class_unknown
         },

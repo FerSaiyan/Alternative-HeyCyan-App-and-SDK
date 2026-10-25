@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="memomind_panel_description">MemoMind connects over Classic Bluetooth. Pair the glasses in Android Bluetooth settings and force-stop the official MemoMind app first: the glasses accept one app connection at a time. Button questions need the Web Bridge plugin running on the glasses.</string>
+    <string name="memomind_clear_display">Clear display</string>
+    <string name="memomind_test_microphone">Test microphone</string>
+    <string name="memomind_forward_notifications_on">Forwarding notifications</string>
+    <string name="memomind_forward_notifications_off">Forward notifications</string>
+    <string name="memomind_detail">Model %1$s  Firmware %2$s</string>
+    <string name="memomind_test_notification_title">CyanBridge</string>
+    <string name="memomind_test_notification_body">MemoMind connection is working.</string>
+    <string name="memomind_test_text">CyanBridge is connected to MemoMind.\nAssistant answers and plugin text appear here.</string>
+    <string name="memomind_microphone_listening">Microphone: listening for 3 seconds…</string>
+    <string name="memomind_microphone_result">Microphone: %1$d Opus frames, peak level %2$d%%</string>
+    <string name="memomind_microphone_failed">Microphone test failed: %1$s</string>
+    <string name="memomind_microphone_busy">Microphone is in use by %1$s</string>
+    <string name="memomind_select_first">Select MemoMind glasses from Scan first</string>
+    <string name="memomind_connecting_toast">Connecting to MemoMind. Force-stop the official MemoMind app while using CyanBridge.</string>
+    <string name="memomind_pair_first_title">Pair MemoMind in Android first</string>
+    <string name="memomind_pair_first_message">MemoMind talks over Classic Bluetooth (SPP). Pair the glasses in Android Bluetooth settings, then force-stop the official MemoMind app, which holds the only app connection.</string>
+    <string name="memomind_bluetooth_settings">Bluetooth settings</string>
+    <string name="memomind_connect_anyway">Connect anyway</string>
+    <string name="memomind_notification_access_needed">Allow CyanBridge notification access to forward phone notifications to MemoMind.</string>
+    <string name="memomind_no_camera">Unavailable for MemoMind: device has no camera.</string>
+    <string name="memomind_no_onboard_audio">Unavailable for MemoMind: device has no onboard audio file storage.</string>
+    <string name="memomind_live_caption_description">Captions live speech and shows the text on your MemoMind heads-up display.</string>
+    <string name="memomind_translator_description">Continuously translates live speech and shows translated subtitles on your MemoMind HUD.</string>
+</resources>

@@ -13,6 +13,7 @@ object GlassesManagerGating {
         META_RAYBAN_CONTROLS,
         META_RAYBAN_REGISTRATION,
         MEIZU_MYVU_CONTROLS,
+        MEMOMIND_CONTROLS,
         EYEVUE_CONTROLS,
         TUNEBUDS_CONTROLS,
         CAPTURE_SETTINGS,
@@ -55,6 +56,7 @@ object GlassesManagerGating {
                 visible.add(Action.META_RAYBAN_REGISTRATION)
             }
             GlassesControlPanel.MEIZU_MYVU -> visible.add(Action.MEIZU_MYVU_CONTROLS)
+            GlassesControlPanel.MEMOMIND -> visible.add(Action.MEMOMIND_CONTROLS)
             GlassesControlPanel.NONE -> Unit
         }
         capabilityActions.forEach { (capability, action) ->
@@ -167,7 +169,8 @@ object GlassesManagerGating {
         GlassesDashboardAction.MeizuSendTestNotification,
         GlassesDashboardAction.MeizuShowTestTeleprompter,
         GlassesDashboardAction.MeizuSyncClock,
-        GlassesDashboardAction.MeizuSetComfortBrightness -> null
+        GlassesDashboardAction.MeizuSetComfortBrightness,
+        is GlassesDashboardAction.MemoMindPanel -> null
     }
 
     /** The vendor panel that emits an action, or null for actions of the shared sections. */
@@ -191,6 +194,7 @@ object GlassesManagerGating {
         GlassesDashboardAction.MeizuShowTestTeleprompter,
         GlassesDashboardAction.MeizuSyncClock,
         GlassesDashboardAction.MeizuSetComfortBrightness -> GlassesControlPanel.MEIZU_MYVU
+        is GlassesDashboardAction.MemoMindPanel -> GlassesControlPanel.MEMOMIND
         else -> null
     }
 }

@@ -5,6 +5,7 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
+import com.fersaiyan.cyanbridge.shared.glasses.MemoMindPanelCommand
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
@@ -83,12 +84,13 @@ class TuneBudsDashboardActionMatrixTest {
         GlassesDashboardAction.MeizuShowTestTeleprompter,
         GlassesDashboardAction.MeizuSyncClock,
         GlassesDashboardAction.MeizuSetComfortBrightness,
+        GlassesDashboardAction.MemoMindPanel(MemoMindPanelCommand.CONNECT),
     )
 
     @Test
     fun everyDashboardActionTypeIsCovered() {
         val covered = (allowed + rejected).map { it::class }.toSet()
-        assertEquals(66, covered.size)
+        assertEquals(67, covered.size)
     }
 
     @Test

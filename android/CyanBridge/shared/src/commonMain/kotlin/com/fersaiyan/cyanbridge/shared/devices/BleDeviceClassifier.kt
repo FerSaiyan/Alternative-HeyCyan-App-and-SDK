@@ -10,6 +10,7 @@ object BleDeviceClassifier {
     private const val TUNEBUDS_BLE_SERVICE_UUID = "0000fdb3-0000-1000-8000-00805f9b34fb"
     private const val MYVU_ADVERTISED_SERVICE_UUID = "00000bd3-0000-1000-8000-00805f9b34fb"
     private const val MYVU_GATT_SERVICE_UUID = "00000bd1-0000-1000-8000-00805f9b34fb"
+    private const val MEMOMIND_GM_SERVICE_UUID = "fb349b5f-8000-0080-0010-002020000000"
     private const val MOYOUNG_SERVICE_UUID = "0000fea8-0000-1000-8000-00805f9b34fb"
     private val TUNEBUDS_COMPANY_IDS = setOf(0x475A, 0x455A, 0x535A, 0x4D5A)
 
@@ -21,6 +22,10 @@ object BleDeviceClassifier {
             else -> value
         }
     }
+
+    /** MemoMind glasses name themselves "MemoMind One <n>" (model H001Y). */
+    fun isMemoMindName(lowercaseName: String): Boolean =
+        lowercaseName.contains("memomind") || lowercaseName.contains("memo mind") || lowercaseName.contains("memo-mind")
 
     fun guessDeviceClass(
         advertisedName: String?,
@@ -37,6 +42,7 @@ object BleDeviceClassifier {
         if (EYEVUE_SERVICE_UUID in uuids) return DeviceClass.EYEVUE
         if (TUNEBUDS_BLE_SERVICE_UUID in uuids) return DeviceClass.TUNEBUDS
         if (MYVU_ADVERTISED_SERVICE_UUID in uuids || MYVU_GATT_SERVICE_UUID in uuids) return DeviceClass.MEIZU_MYVU
+        if (MEMOMIND_GM_SERVICE_UUID in uuids) return DeviceClass.MEMOMIND
         if (MOYOUNG_SERVICE_UUID in uuids) return DeviceClass.MOYOUNG_W620
         if (heyCyanUuids.any { it in uuids }) return DeviceClass.HEY_CYAN
         if (manufacturerCompanyIds.any(TUNEBUDS_COMPANY_IDS::contains)) return DeviceClass.TUNEBUDS
@@ -66,6 +72,7 @@ object BleDeviceClassifier {
         if (lower.contains("myvu") || lower.contains("star air") || lower.contains("starair")) {
             return DeviceClass.MEIZU_MYVU
         }
+        if (isMemoMindName(lower)) return DeviceClass.MEMOMIND
         if (
             lower.contains("airpods") ||
             lower.contains("headset") ||
