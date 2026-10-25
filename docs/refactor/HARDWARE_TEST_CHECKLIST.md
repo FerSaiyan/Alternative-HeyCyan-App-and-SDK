@@ -333,3 +333,66 @@ Smoke test:
 - Selecting a device: Mentra Live keeps Mentra (and connects through the Mentra SDK); other unknown classes still map to HeyCyan.
 - Confirming EyeVue, TuneBuds or MoYoung in the first picker now connects as that protocol instead of HeyCyan.
 - Confirming an unknown class closes the screen with "Unknown device type."
+
+## Wave 7: shared screen ViewModels — Pro, Gemini Live, Tasker setup, local models
+
+**Android behavior changes**
+- **Rotation:** ViewModels now survive it.
+  - The Pro checkout doesn't reconnect billing.
+  - Pro settings doesn't refetch.
+  - The model test doesn't rerun.
+  - Gemini Live pauses and resumes instead of closing and auto-restarting.
+- **Closing a screen mid-request** cancels the work. Leaving during free-trial activation skips the local entitlement write; the next server check restores it.
+- **Pro settings "cancel with the plan still active"** reloads in place instead of calling `recreate()`.
+
+**Device checks**
+- **Pro checkout (Play test account)**
+  - Buy each plan; check the price toast and that settings opens.
+  - Restore with a matching and a non-matching email.
+  - Email code dialog: resend, link, wrong code.
+  - Web checkout return.
+  - Donation flow and return.
+  - Cancel for web and for Play.
+- **Pro settings:** model pickers and quota, plan change, cancel, starting Gemini Live.
+- **Local models**
+  - Gated download, with and without a token, plus the warnings dialog and cancel.
+  - Import a GGUF and an mmproj file.
+  - Delete and unload.
+  - The unsaved-changes prompt on back.
+  - Remote server test.
+  - Studio bridge, including its permission prompt.
+  - Performance test: LiteRT MTP and the llama.cpp baseline.
+- **Gemini Live**
+  - Start from the Free and Pro dialogs.
+  - Permission gate with notifications denied (preview runs) and allowed (service runs).
+  - Auto-start with an initial image.
+  - AI-photo button.
+  - 30 s idle stop.
+- **Tasker setup:** import, verify, test voice.
+
+## Wave 7: shared screen ViewModels — plugins, devices, local agent
+
+**Android behavior changes**
+- Moved screens keep their state through a rotation; Community Plugins no longer refetches on rotate.
+- A JSON `null` in the community catalog now counts as missing.
+- Meeting-notes focus edits are saved as separate preference writes; the stored values are the same.
+
+**Device checks**
+- **Device Bind per family:** HeyCyan, EyeVue, TuneBuds, MoYoung, Meta → Meta pairing, the Meizu bond dialog, audio-only.
+- **Plugin on/off,** from Community Plugins and from each settings screen:
+  - Auto Audio with and without the microphone permission.
+  - The Walking Aid readiness dialog.
+  - Clear history on each screen.
+- **Walking Aid**
+  - Model download progress.
+  - Latency and acquisition benchmarks.
+  - Focus translate and the cloud model pickers.
+  - Explore/Walking switch.
+  - Surroundings chat with speech.
+- **Community:** refresh, Tasker profile download, and publish (errors, then success).
+- **Local agent screens:** pending actions approve/reject, daily summary regenerate and share.
+- **Others:** the battery guide answers and EvenHub app load.
+
+**iOS device bind (Mac build)**
+- Mentra stays Mentra and pairs through `pairMentraGlasses()`.
+- EyeVue, TuneBuds and MoYoung connect with their own protocol, not as HeyCyan.
