@@ -85,7 +85,6 @@ fun DeviceBindScreen(
     onConfirmManualProtocol: (DeviceClass) -> Unit = {},
     onDismissConnection: () -> Unit,
     onBack: () -> Unit,
-    onPairMentraGlasses: () -> Unit = {},
 ) {
     var showManualProtocolPicker by remember { mutableStateOf(false) }
     var manualSelection by remember { mutableStateOf(DeviceClass.HEY_CYAN) }
@@ -152,12 +151,6 @@ fun DeviceBindScreen(
                 ) {
                     Text(stringResource(Res.string.device_bind_pair_meta))
                 }
-            }
-            item {
-                OutlinedButton(
-                    onClick = onPairMentraGlasses,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                ) { Text("Pair Mentra Live") }
             }
             if (devices.isEmpty()) {
                 item {
@@ -244,7 +237,7 @@ fun DeviceBindScreen(
                                 ?: stringResource(Res.string.device_bind_unnamed_device),
                             style = MaterialTheme.typography.bodyMedium,
                         )
-                        pairingChoices.forEach { type ->
+                        (pairingChoices + DeviceBindViewModel.detectedOnlyChoicesFor(device)).forEach { type ->
                             FilterChip(
                                 selected = selectedClass == type,
                                 onClick = { onSelectedClassChange(type) },

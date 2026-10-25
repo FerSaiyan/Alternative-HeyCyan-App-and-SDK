@@ -18,10 +18,12 @@ import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.lifecycleScope
+import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.devices.DeviceClassifier
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
+import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
@@ -56,6 +58,10 @@ class DeviceBindActivity : BaseActivity() {
 
     /** Not retained across recreation: the scan records behind its devices live in [deviceList]. */
     private val viewModel = DeviceBindViewModel()
+
+    /** Addresses the Mentra SDK scanner reported; their rows are Mentra Live whatever their name. */
+    private val mentraSdkAddresses = mutableSetOf<String>()
+    private var mentraScanStarted = false
     private var initialScanStarted = false
     private var lastDeviceListPublishAtMs = 0L
 
@@ -73,7 +79,6 @@ class DeviceBindActivity : BaseActivity() {
                     selectedClass = viewModel.selectedClass,
                     onScan = ::startScan,
                     onPairMetaGlasses = ::openMetaPairing,
-                    onPairMentraGlasses = ::openMentraPairing,
                     onSelectDevice = { sharedDevice -> scannedDevice(sharedDevice)?.let { viewModel.selectDevice(it.toShared()) } },
                     onSelectedClassChange = viewModel::selectDeviceClass,
                     onConfirmConnection = { viewModel.confirmConnection(::canConnect)?.let(::connect) },
@@ -91,13 +96,6 @@ class DeviceBindActivity : BaseActivity() {
             initialScanStarted = true
             startScan()
         }
-    }
-
-    /** Mentra has its own SDK scanner; never hand these devices to Oudmon. */
-    private fun openMentraPairing() {
-        stopScan()
-        startActivity(Intent(this, MentraPairingActivity::class.java))
-        finish()
     }
 
     /** Meta wearables are registered through DAT, never through the Oudmon Bluetooth connector. */
@@ -142,12 +140,39 @@ class DeviceBindActivity : BaseActivity() {
         viewModel.isScanning = true
         BleScannerHelper.getInstance().scanDevice(this, null, bleScanCallback)
         handler.postDelayed(scanTimeout, 15_000)
+        mentraSdkAddresses.clear()
+        mentraScanStarted = false
+        // An existing Mentra SDK means Mentra Live was used before: scan with it right away.
+        if (MentraLiveManager.instanceOrNull() != null) startMentraScan()
     }
 
     private fun stopScan() {
         handler.removeCallbacks(scanTimeout)
         BleScannerHelper.getInstance().stopScan(this)
+        MentraLiveManager.instanceOrNull()?.stopScan()
         viewModel.isScanning = false
+    }
+
+    /**
+     * Adds the Mentra Bluetooth SDK scanner to this scan, so Mentra Live rows carry the SDK's own
+     * device records. Started only once Mentra Live shows up (or was used before), because
+     * creating the SDK starts its foreground service.
+     */
+    private fun startMentraScan() {
+        if (mentraScanStarted) return
+        mentraScanStarted = true
+        runCatching {
+            MentraLiveManager.getInstance(this).startScan { devices ->
+                runOnUiThread {
+                    devices.forEach { device ->
+                        val address = device.address?.takeIf { it.isNotBlank() } ?: device.id
+                        mentraSdkAddresses += address.uppercase()
+                        upsertDevice(address, device.name, device.rssi ?: 0)
+                    }
+                    publishDevices(force = true)
+                }
+            }
+        }.onFailure { Log.w(TAG, "Mentra SDK scan did not start: ${it.message}") }
     }
 
     private fun scannedDevice(device: SharedScannedDevice): ScannedDevice? =
@@ -170,6 +195,7 @@ class DeviceBindActivity : BaseActivity() {
         stopScan()
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
         val deviceClass = connection.deviceClass
+        if (deviceClass != DeviceClass.MENTRA_LIVE) MentraLiveManager.releaseIfStarted("selected $deviceClass")
         if (deviceClass in DeviceBindViewModel.CONSUMER_PROTOCOLS) {
             saveSelectedProfile(device, deviceClass, userOverridden = true)
             // Apply device-specific maximum capture defaults (HeyCyan video/audio,
@@ -205,6 +231,24 @@ class DeviceBindActivity : BaseActivity() {
 
             // Selecting Meta in the normal scan flow routes directly into DAT pairing.
             DeviceClass.META_RAYBAN -> openMetaPairing()
+
+            // The Mentra SDK bonds, connects and saves the glasses as its default device.
+            DeviceClass.MENTRA_LIVE -> {
+                saveSelectedProfile(device, DeviceClass.MENTRA_LIVE, userOverridden = true)
+                runCatching { MentraLiveManager.getInstance(this).connect(device.connectionAddress, device.advertisedName) }
+                    .onSuccess {
+                        Toast.makeText(this, R.string.mentra_connecting, Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                    .onFailure { error ->
+                        Log.w(TAG, "Mentra Live connect failed", error)
+                        Toast.makeText(
+                            this,
+                            getString(R.string.mentra_connect_failed, error.message.orEmpty()),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+            }
 
             DeviceClass.MEIZU_MYVU -> {
                 saveSelectedProfile(device, DeviceClass.MEIZU_MYVU, userOverridden = true)
@@ -370,6 +414,7 @@ class DeviceBindActivity : BaseActivity() {
         }
         scanSize++
         deviceList += newDevice
+        if (newDevice.detectedClass == DeviceClass.MENTRA_LIVE) startMentraScan()
         publishDevices(force = true)
         if (scanSize > 30) BleScannerHelper.getInstance().stopScan(this)
     }
@@ -386,6 +431,7 @@ class DeviceBindActivity : BaseActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacks(scanTimeout)
+        MentraLiveManager.instanceOrNull()?.stopScan()
         if (EventBus.getDefault().isRegistered(this)) EventBus.getDefault().unregister(this)
         super.onDestroy()
     }
@@ -481,7 +527,7 @@ class DeviceBindActivity : BaseActivity() {
         macAddress = macAddress,
         advertisedName = advertisedName,
         rssi = rssi,
-        detectedClass = detectedClass,
+        detectedClass = if (macAddress.uppercase() in mentraSdkAddresses) DeviceClass.MENTRA_LIVE else detectedClass,
         selectedClass = userSelectedClass,
         userOverridden = userOverridden(),
     )

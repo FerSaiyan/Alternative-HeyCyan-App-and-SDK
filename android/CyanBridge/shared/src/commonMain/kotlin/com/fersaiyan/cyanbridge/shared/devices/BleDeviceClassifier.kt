@@ -22,6 +22,15 @@ object BleDeviceClassifier {
         }
     }
 
+    /** Mentra Live's BLE names, as the Mentra Bluetooth SDK's scanner matches them. */
+    fun isMentraLiveName(advertisedName: String?): Boolean {
+        val name = advertisedName?.trim().orEmpty()
+        return name.startsWith("XyBLE_") ||
+            name.startsWith("MENTRA_LIVE_BLE") ||
+            name.startsWith("MENTRA_LIVE_BT") ||
+            name.lowercase().startsWith("mentra_live")
+    }
+
     fun guessDeviceClass(
         advertisedName: String?,
         serviceUuids: List<String> = emptyList(),
@@ -48,6 +57,7 @@ object BleDeviceClassifier {
 
         if (name.isEmpty()) return DeviceClass.UNKNOWN
 
+        if (isMentraLiveName(name)) return DeviceClass.MENTRA_LIVE
         if (lower.contains("eyevue")) return DeviceClass.EYEVUE
         if (lower.contains("xk one") || lower.contains("tunebuds") || lower.contains("ab mate")) {
             return DeviceClass.TUNEBUDS

@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
@@ -77,6 +78,7 @@ object AutoPairManager {
                 }
 
                 val selectedClass = DeviceProfileStore.selectedClass(appContext)
+                // The Mentra SDK runs its own link-loss and Bluetooth-on reconnects.
                 if (selectedClass == DeviceClass.MENTRA_LIVE || selectedClass == DeviceClass.META_RAYBAN) {
                     delay(20_000L)
                     continue
@@ -129,14 +131,33 @@ object AutoPairManager {
             return
         }
         val appContext = context.applicationContext
-        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) return
+        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
+            scope.launch { reconnectMentraLive(appContext, reason) }
+            return
+        }
         scope.launch {
             tryConnectOnce(appContext, reason)
         }
     }
 
+    /**
+     * Mentra Live reconnects the SDK's way: restore the saved device as the SDK default and
+     * call connectDefault (see MentraLiveManager.reconnectSaved).
+     */
+    private fun reconnectMentraLive(context: Context, reason: String) {
+        val profile = DeviceProfileStore.loadLastSelected(context)
+            ?.takeIf { it.selectedClass == DeviceClass.MENTRA_LIVE } ?: return
+        MentraLiveManager.getInstance(context).reconnectSaved(profile.advertisedName, profile.macAddress, reason)
+    }
+
     fun requestConnectToMac(context: Context, mac: String, reason: String) {
-        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) return
+        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) {
+            if (!suppressAutoReconnect) {
+                val appContext = context.applicationContext
+                scope.launch { reconnectMentraLive(appContext, reason) }
+            }
+            return
+        }
         if (DeviceProfileStore.selectedClass(context) == DeviceClass.EYEVUE) {
             if (suppressAutoReconnect) {
                 Log.d(TAG, "Skipping Eyevue reconnect ($reason): suppressed")

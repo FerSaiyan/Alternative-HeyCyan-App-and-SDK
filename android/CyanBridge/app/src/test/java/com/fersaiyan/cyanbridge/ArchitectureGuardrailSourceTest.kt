@@ -56,7 +56,6 @@ class ArchitectureGuardrailSourceTest {
             "ui/BluetoothReceiver.kt",
             "ui/CommunityPluginsActivity.kt",
             "ui/DeviceBindActivity.kt",
-            "ui/MentraPairingActivity.kt",
             "ui/MetaPairingActivity.kt",
             "ui/MyApplication.kt",
             "ui/MyBluetoothReceiver.kt",
