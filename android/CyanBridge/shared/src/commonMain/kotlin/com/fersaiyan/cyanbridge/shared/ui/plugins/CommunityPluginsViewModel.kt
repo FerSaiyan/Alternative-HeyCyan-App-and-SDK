@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.PluginTimeWindow
+import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -18,7 +19,7 @@ interface CommunityPluginsPlatform {
 
     suspend fun fetchCommunityPlugins(): List<CommunityPluginCardData>
 
-    fun showMessage(message: String, long: Boolean = false)
+    fun showMessage(message: UiMessage)
 }
 
 /** State of [CommunityPluginsScreen]: the server catalog, its time window and the native plugin switches. */
@@ -53,7 +54,7 @@ class CommunityPluginsViewModel(private val platform: CommunityPluginsPlatform) 
 
     fun refresh() {
         if (isRefreshing) return
-        if (!serverPluginsLoaded) platform.showMessage("Fetching plugins from server...")
+        if (!serverPluginsLoaded) platform.showMessage(UiMessage("Fetching plugins from server..."))
         isRefreshing = true
         viewModelScope.launch {
             val plugins = try {
@@ -67,9 +68,9 @@ class CommunityPluginsViewModel(private val platform: CommunityPluginsPlatform) 
             if (plugins != null) {
                 communityPlugins = plugins
                 serverPluginsLoaded = true
-                platform.showMessage("Plugins refreshed from server!")
+                platform.showMessage(UiMessage("Plugins refreshed from server!"))
             } else {
-                platform.showMessage("Server unavailable. Official Tasker integrations are still available above.", long = true)
+                platform.showMessage(UiMessage("Server unavailable. Official Tasker integrations are still available above.", long = true))
             }
         }
     }

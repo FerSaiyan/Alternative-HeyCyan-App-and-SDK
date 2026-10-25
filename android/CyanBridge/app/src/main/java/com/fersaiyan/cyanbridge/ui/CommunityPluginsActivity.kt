@@ -14,10 +14,8 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivity
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
-import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
@@ -34,7 +32,6 @@ import com.fersaiyan.cyanbridge.plugins.settings.AndroidNativePluginHost
 import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiarySettingsActivity
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidService
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidSettingsActivity
-import com.fersaiyan.cyanbridge.shared.chat.ChatRole
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
@@ -43,13 +40,14 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.settings.nativePluginEnabledPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 import com.fersaiyan.cyanbridge.shared.ui.plugins.CommunityPluginsPlatform
 import com.fersaiyan.cyanbridge.shared.ui.plugins.CommunityPluginsScreen
 import com.fersaiyan.cyanbridge.shared.ui.plugins.CommunityPluginsViewModel
 import com.fersaiyan.cyanbridge.tasker.TaskerProfileGuidance
+import com.fersaiyan.cyanbridge.ui.main.openAppDestination
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListActivity
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
@@ -209,7 +207,7 @@ class CommunityPluginsActivity : AppCompatActivity() {
                     onPublishPlugin = {
                         startActivity(Intent(this, PublishPluginActivity::class.java))
                     },
-                    onDestinationSelected = ::navigateTo,
+                    onDestinationSelected = { if (it != AppDestination.PLUGINS) openAppDestination(it) },
                 )
             }
         }
@@ -459,36 +457,6 @@ class CommunityPluginsActivity : AppCompatActivity() {
         }
     }
 
-    private fun navigateTo(destination: AppDestination) {
-        val target = when (destination) {
-            AppDestination.GLASSES -> Intent(this, MainActivity::class.java)
-            AppDestination.CHATS -> buildRecentChatIntent()
-            AppDestination.MEDIA -> Intent(this, RecordingsListActivity::class.java)
-            AppDestination.PLUGINS -> return
-            AppDestination.SETTINGS -> Intent(this, SettingsActivity::class.java)
-        }
-        target.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
-        startActivity(target)
-        overridePendingTransition(0, 0)
-    }
-
-    private fun buildRecentChatIntent(): Intent {
-        val last = ChatStore.listNonEmptyThreads().firstOrNull()
-        val lastUserAt = last?.let { thread ->
-            ChatStore.listMessages(thread.id)
-                .lastOrNull { it.role == ChatRole.USER }
-                ?.createdAt
-        } ?: 0L
-        val openChatId = last?.id?.takeIf {
-            lastUserAt > 0L && System.currentTimeMillis() - lastUserAt < 30 * 60 * 1_000
-        }
-        return Intent(this, ChatThreadActivity::class.java).apply {
-            if (openChatId != null) {
-                putExtra(ChatThreadActivity.EXTRA_CHAT_ID, openChatId)
-            }
-        }
-    }
-
     private companion object {
         private const val TASKER_AI_ID = "tasker_ai_assistant"
         private const val TASKER_PROFILE_BASE_URL =
@@ -613,7 +581,5 @@ private class AndroidCommunityPluginsPlatform(private val context: Context) : Co
         }
     }
 
-    override fun showMessage(message: String, long: Boolean) {
-        Toast.makeText(context, message, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
-    }
+    override fun showMessage(message: UiMessage) = context.showToast(message)
 }

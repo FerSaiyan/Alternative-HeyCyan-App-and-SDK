@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.ui.localagent
 
 import android.content.Context
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -15,7 +14,9 @@ import com.fersaiyan.cyanbridge.shared.ui.localagent.PendingActionReply
 import com.fersaiyan.cyanbridge.shared.ui.localagent.PendingActionsPlatform
 import com.fersaiyan.cyanbridge.shared.ui.localagent.PendingActionsScreen
 import com.fersaiyan.cyanbridge.shared.ui.localagent.PendingActionsViewModel
+import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 import com.fersaiyan.cyanbridge.ui.MyApplication
+import com.fersaiyan.cyanbridge.ui.showToast
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
@@ -65,5 +66,5 @@ private class AndroidPendingActionsPlatform(private val context: Context) : Pend
 
     override fun prettyJson(json: String): String = JSONObject(json).toString(2)
 
-    override fun showMessage(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    override fun showMessage(message: UiMessage) = context.showToast(message)
 }

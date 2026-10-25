@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.fersaiyan.cyanbridge.data.local.entity.PendingAction
 import com.fersaiyan.cyanbridge.localagent.LocalAgentAction
 import com.fersaiyan.cyanbridge.localagent.LocalAgentActionParser
+import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 import kotlinx.coroutines.launch
 
 /** What the platform did with an approval reply: the oldest pending action, and whether it ran. */
@@ -22,7 +23,7 @@ interface PendingActionsPlatform {
 
     /** Indents a JSON object; other text comes back unchanged. */
     fun prettyJson(json: String): String
-    fun showMessage(message: String)
+    fun showMessage(message: UiMessage)
 }
 
 /** The Local Agent's approval queue: the oldest pending action, approved or rejected one at a time. */
@@ -51,13 +52,12 @@ class PendingActionsViewModel(private val platform: PendingActionsPlatform) : Vi
     fun approve() {
         viewModelScope.launch {
             val reply = platform.reply(approve = true)
-            platform.showMessage(
-                when {
-                    reply.actionId == null -> "No pending action"
-                    reply.executed -> "Executed action #${reply.actionId}"
-                    else -> "Tasker failed action #${reply.actionId}"
-                },
-            )
+            val message = when {
+                reply.actionId == null -> "No pending action"
+                reply.executed -> "Executed action #${reply.actionId}"
+                else -> "Tasker failed action #${reply.actionId}"
+            }
+            platform.showMessage(UiMessage(message))
             refresh()
         }
     }
@@ -65,7 +65,7 @@ class PendingActionsViewModel(private val platform: PendingActionsPlatform) : Vi
     fun reject() {
         viewModelScope.launch {
             val reply = platform.reply(approve = false)
-            platform.showMessage(if (reply.actionId != null) "Rejected action #${reply.actionId}" else "No pending action")
+            platform.showMessage(UiMessage(if (reply.actionId != null) "Rejected action #${reply.actionId}" else "No pending action"))
             refresh()
         }
     }

@@ -23,8 +23,10 @@ import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryPlatform
 import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryScreen
 import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryViewModel
 import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryWork
+import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
+import com.fersaiyan.cyanbridge.ui.showToast
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -151,7 +153,5 @@ private class AndroidDailySummaryPlatform(private val context: Context, private 
         )
     }
 
-    override fun showMessage(message: String, long: Boolean) {
-        Toast.makeText(context, message, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
-    }
+    override fun showMessage(message: UiMessage) = context.showToast(message)
 }

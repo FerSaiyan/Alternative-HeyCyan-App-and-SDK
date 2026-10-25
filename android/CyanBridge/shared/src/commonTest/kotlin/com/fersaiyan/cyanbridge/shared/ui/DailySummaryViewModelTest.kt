@@ -19,7 +19,7 @@ class DailySummaryViewModelTest {
         override fun estimate() = DailySummaryEstimate("local", 125_000L, 0)
         override fun providerHint() = "local"
         override fun startRegeneration() = Unit
-        override fun showMessage(message: String, long: Boolean) { messages += message }
+        override fun showMessage(message: UiMessage) { messages += message.text }
     })
 
     @Test

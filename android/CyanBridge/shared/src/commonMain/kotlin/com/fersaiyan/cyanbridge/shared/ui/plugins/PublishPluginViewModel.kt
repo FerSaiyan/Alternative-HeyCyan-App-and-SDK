@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCatalog
 import com.fersaiyan.cyanbridge.shared.plugins.PublishPluginUiState
+import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 import kotlinx.coroutines.launch
 
 /** Sends a plugin to the relay's review queue. */
@@ -17,7 +18,7 @@ fun interface PublishPluginPlatform {
 /** Form state and submission of [PublishPluginScreen]; [submitted] turns true once the relay accepted it. */
 class PublishPluginViewModel(
     private val platform: PublishPluginPlatform,
-    private val showMessage: (String) -> Unit,
+    private val showMessage: (UiMessage) -> Unit,
 ) : ViewModel() {
     val categories = CommunityPluginCatalog.categories
     var state by mutableStateOf(PublishPluginUiState())
@@ -65,11 +66,11 @@ class PublishPluginViewModel(
         state = state.copy(isSubmitting = true)
         viewModelScope.launch {
             if (platform.submit(title, author, description, category, taskerNetLink)) {
-                showMessage("Plugin submitted for review! It will appear in the list once approved.")
+                showMessage(UiMessage("Plugin submitted for review! It will appear in the list once approved.", long = true))
                 submitted = true
             } else {
                 state = state.copy(isSubmitting = false)
-                showMessage("Server unavailable. Please try again later.")
+                showMessage(UiMessage("Server unavailable. Please try again later.", long = true))
             }
         }
     }

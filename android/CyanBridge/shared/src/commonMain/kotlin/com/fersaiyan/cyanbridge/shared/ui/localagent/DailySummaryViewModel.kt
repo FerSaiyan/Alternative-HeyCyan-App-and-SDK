@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 
 /** A run of the background summary job as the platform's scheduler reports it. */
 data class DailySummaryWork(
@@ -36,7 +37,7 @@ interface DailySummaryPlatform {
 
     /** Starts the background job, replacing a running one; the host reports it back through [DailySummaryViewModel.onWork]. */
     fun startRegeneration()
-    fun showMessage(message: String, long: Boolean = false)
+    fun showMessage(message: UiMessage)
 }
 
 /** The day's summary file and the progress of regenerating it in the background. */
@@ -66,7 +67,7 @@ class DailySummaryViewModel(private val platform: DailySummaryPlatform) : ViewMo
     fun regenerate() {
         val cooldown = platform.remainingCooldownMs()
         if (cooldown > 0L) {
-            platform.showMessage("Please wait ${(cooldown / 1000L).coerceAtLeast(1L)}s before regenerating.")
+            platform.showMessage(UiMessage("Please wait ${(cooldown / 1000L).coerceAtLeast(1L)}s before regenerating."))
             return
         }
         isRegenerating = true
@@ -76,7 +77,7 @@ class DailySummaryViewModel(private val platform: DailySummaryPlatform) : ViewMo
         progressDetail = etaText(estimate.expectedTotalMs, estimate.sampleCount, stage = "Queued")
         status = "Generating…"
         platform.startRegeneration()
-        platform.showMessage("Generating daily summary in background…")
+        platform.showMessage(UiMessage("Generating daily summary in background…"))
     }
 
     /** The latest run of the job, or null when it never ran for this day. */
@@ -102,12 +103,12 @@ class DailySummaryViewModel(private val platform: DailySummaryPlatform) : ViewMo
                 progress = 100
                 status = "Generation complete"
                 refresh()
-                platform.showMessage("Daily summary saved")
+                platform.showMessage(UiMessage("Daily summary saved"))
             }
             DailySummaryWork.State.FAILED -> {
                 isRegenerating = false
                 status = "Generation failed"
-                platform.showMessage(work.error.trim().ifBlank { "Failed to regenerate summary" }, long = true)
+                platform.showMessage(UiMessage(work.error.trim().ifBlank { "Failed to regenerate summary" }, long = true))
             }
         }
     }

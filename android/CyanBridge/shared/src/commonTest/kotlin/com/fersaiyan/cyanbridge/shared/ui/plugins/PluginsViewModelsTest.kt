@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.shared.ui.plugins
 
 import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
+import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,7 +32,7 @@ class PluginsViewModelsTest {
         val viewModel = CommunityPluginsViewModel(object : CommunityPluginsPlatform {
             override fun nativePlugins() = listOf(NativePluginCardData("walking_aid", "Walking Aid", "", "", enabled = false, hasSettings = true))
             override suspend fun fetchCommunityPlugins() = responses.removeFirst().getOrThrow()
-            override fun showMessage(message: String, long: Boolean) { messages += message }
+            override fun showMessage(message: UiMessage) { messages += message.text }
         })
 
         viewModel.refresh()
@@ -53,7 +54,7 @@ class PluginsViewModelsTest {
     @Test
     fun publishValidatesFieldsAndFinishesOnlyOnceTheRelayAccepts() {
         val accepted = CompletableDeferred<Boolean>()
-        val viewModel = PublishPluginViewModel({ _, _, _, _, _ -> accepted.await() }, messages::add)
+        val viewModel = PublishPluginViewModel({ _, _, _, _, _ -> accepted.await() }) { messages += it.text }
 
         viewModel.submit()
         assertEquals("Title is required", viewModel.state.titleError)

@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.ui
 
 import android.content.Context
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -30,7 +29,7 @@ class PublishPluginActivity : AppCompatActivity() {
                     platform = { title, author, description, category, link ->
                         submitPluginToServer(context, title, author, description, category, link)
                     },
-                    showMessage = { Toast.makeText(context, it, Toast.LENGTH_LONG).show() },
+                    showMessage = context::showToast,
                 )
             }
         }
