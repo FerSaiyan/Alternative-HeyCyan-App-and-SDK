@@ -1,6 +1,5 @@
 package com.fersaiyan.cyanbridge.plugins.autoaudio
 
-import android.content.Context
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +22,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,105 +31,45 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
 import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
+import com.fersaiyan.cyanbridge.plugins.settings.nativePluginViewModel
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
-import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
+import com.fersaiyan.cyanbridge.shared.plugins.settings.AutoAudioSettingsViewModel
+import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs.AutoAudioCapture
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 
-data class AutoAudioSettingsState(
-    val enabled: Boolean,
-    val visualNotes: Boolean,
-    val speechExtend: Boolean,
-    val loopsPerSync: Int,
-) {
-    companion object {
-        fun load(context: Context) = AutoAudioSettingsState(
-            enabled = AutoAudioCapturePrefs.isEnabled(context),
-            visualNotes = AutoAudioCapturePrefs.isVisualNotesEnabled(context),
-            speechExtend = AutoAudioCapturePrefs.isSpeechExtendEnabled(context),
-            loopsPerSync = AutoAudioCapturePrefs.getLoopsPerSync(context),
-        )
-    }
-}
+class AutoAudioSettingsActivity : AppCompatActivity() {
 
-interface AutoAudioSettingsActions {
-    fun onBack()
-
-    /** Master switch and the "stop loop" button (which always passes `false`). */
-    fun onEnabledChange(enabled: Boolean)
-    fun onSpeechExtendChange(enabled: Boolean)
-    fun onVisualNotesChange(enabled: Boolean)
-    fun onLoopsPerSyncChange(loops: Int)
-
-    /**
-     * Read while composing, not cached in state: the capture service updates this
-     * preference on its own, and the screen has always shown the value current at
-     * its latest recomposition.
-     */
-    fun readLastPauseReason(): String
-}
-
-class AutoAudioSettingsActivity : AppCompatActivity(), AutoAudioSettingsActions {
-
-    private lateinit var uiState: MutableState<AutoAudioSettingsState>
-
-    internal val state: AutoAudioSettingsState get() = uiState.value
+    internal val viewModel by nativePluginViewModel(AutoAudioCapture, ::AutoAudioSettingsViewModel)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        uiState = mutableStateOf(AutoAudioSettingsState.load(this))
         setThemedComposeScreen {
-            AutoAudioSettingsScreen(state = uiState.value, actions = this)
+            AutoAudioSettingsScreen(viewModel, onEnabledChange = ::onEnabledChange, onBack = ::finish)
         }
     }
 
-    private inline fun update(transform: AutoAudioSettingsState.() -> AutoAudioSettingsState) {
-        uiState.value = uiState.value.transform()
-    }
-
-    override fun onBack() = finish()
-
-    override fun onEnabledChange(enabled: Boolean) {
-        update { copy(enabled = enabled) }
-        AutoAudioCapturePrefs.setEnabled(this, enabled)
-        if (!enabled) {
-            CommunityPluginPrefs.setNativePluginEnabled(this, NativePluginIds.AUTO_AUDIO, false)
-            AutoAudioCaptureService.stop(this)
-            return
-        }
+    /** Capture starts from the Activity: the permission prompts, and the service's own Bluetooth one, need it. */
+    internal fun onEnabledChange(enabled: Boolean) {
+        viewModel.onEnabledChange(enabled)
+        if (!enabled) return
         PluginVoicePermissions.ensure(this) {
-            CommunityPluginPrefs.setNativePluginEnabled(this, NativePluginIds.AUTO_AUDIO, true)
+            viewModel.setCatalogEnabled(true)
             AutoAudioCaptureService.start(this)
         }
     }
-
-    override fun onSpeechExtendChange(enabled: Boolean) {
-        update { copy(speechExtend = enabled) }
-        AutoAudioCapturePrefs.setSpeechExtendEnabled(this, enabled)
-    }
-
-    override fun onVisualNotesChange(enabled: Boolean) {
-        update { copy(visualNotes = enabled) }
-        AutoAudioCapturePrefs.setVisualNotesEnabled(this, enabled)
-    }
-
-    override fun onLoopsPerSyncChange(loops: Int) {
-        update { copy(loopsPerSync = loops) }
-        AutoAudioCapturePrefs.setLoopsPerSync(this, loops)
-    }
-
-    override fun readLastPauseReason(): String = AutoAudioCapturePrefs.getLastPauseReason(this)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AutoAudioSettingsScreen(
-    state: AutoAudioSettingsState,
-    actions: AutoAudioSettingsActions,
+    viewModel: AutoAudioSettingsViewModel,
+    onEnabledChange: (Boolean) -> Unit,
+    onBack: () -> Unit,
 ) {
+    val state = viewModel.state
     val scrollState = rememberScrollState()
 
     Scaffold(
@@ -139,7 +77,7 @@ fun AutoAudioSettingsScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.compose_plugin_settings_title, stringResource(R.string.compose_plugin_name_auto_audio))) },
                 navigationIcon = {
-                    IconButton(onClick = actions::onBack) {
+                    IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.compose_back))
                     }
                 },
@@ -158,23 +96,23 @@ fun AutoAudioSettingsScreen(
                 stringResource(R.string.compose_auto_audio_description),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            SwitchSetting(stringResource(R.string.compose_auto_audio_capture_enabled), state.enabled, actions::onEnabledChange)
+            SwitchSetting(stringResource(R.string.compose_auto_audio_capture_enabled), state.enabled, onEnabledChange)
             NativePluginShortcutPreference(
                 pluginId = NativePluginIds.AUTO_AUDIO,
                 pluginTitle = stringResource(R.string.compose_plugin_name_auto_audio),
             )
-            SwitchSetting(stringResource(R.string.compose_auto_audio_extend), state.speechExtend, actions::onSpeechExtendChange)
-            SwitchSetting(stringResource(R.string.compose_auto_audio_visual_notes), state.visualNotes, actions::onVisualNotesChange)
+            SwitchSetting(stringResource(R.string.compose_auto_audio_extend), state.speechExtend, viewModel::onSpeechExtendChange)
+            SwitchSetting(stringResource(R.string.compose_auto_audio_visual_notes), state.visualNotes, viewModel::onVisualNotesChange)
             NumberSetting(
                 label = stringResource(R.string.compose_auto_audio_loops),
                 value = state.loopsPerSync,
                 range = 1..96,
-                onValueChanged = actions::onLoopsPerSyncChange,
+                onValueChanged = viewModel::onLoopsPerSyncChange,
             )
             Text(
                 stringResource(
                     R.string.compose_status,
-                    actions.readLastPauseReason().ifBlank {
+                    viewModel.readLastPauseReason().ifBlank {
                         stringResource(R.string.compose_ready)
                     },
                 ),
@@ -182,7 +120,7 @@ fun AutoAudioSettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedButton(
-                onClick = { actions.onEnabledChange(false) },
+                onClick = { onEnabledChange(false) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.compose_auto_audio_stop_loop)) }
         }

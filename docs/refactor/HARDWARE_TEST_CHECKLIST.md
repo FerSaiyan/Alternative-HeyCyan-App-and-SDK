@@ -283,3 +283,53 @@ Smoke test per family:
 No glasses needed. Deleted code had no caller, so behavior is unchanged apart from one deliberate fix:
 - **Telegram `/task` while a task runs:** the guard now asks `TaskerLocalAgentService` (the service that actually runs tasks) instead of the never-started `LocalAgentService`. With a Local Agent task or a screen read in progress, a second `/task` should reply "A Local Agent task is already running…" instead of "Task accepted". The automation diagnostics in the debug log show the same running state.
 - **Pairing:** `DeviceBindActivity` lost its unused protocol auto-detection probes; pair one glasses family through manual selection to confirm the dialog still finishes on connect.
+
+## Wave 7: shared screen ViewModels — chats, notes, recordings
+
+**Android**
+
+Screens and strings are meant to be identical, and the emulator pixel comparison will check this. Known changes:
+- A generation or a voice-note recording now continues through a rotation. Before, rotating stopped and attached the recording.
+- Closing the chat screen while recording now discards the voice note silently. There is no late "Voice note attached" toast.
+- `KnowledgeSyncWorker.schedule` runs once per screen ViewModel instead of on every `onCreate`.
+
+Smoke test:
+- Send text, an image and a voice note in a chat.
+- Title generation.
+- Delete a chat.
+- The daily-facts review chat.
+- Note edit and save.
+- Recordings list, gallery open and share.
+- Transcription debug.
+- Knowledge integrations sync.
+
+**iOS (Mac build; chats now run on Android's logic)**
+- Empty chats are hidden. A new chat is created on the first send.
+- Titles are generated the Android way: the first 32 characters, then a 2–6 word AI title, with one extra AI call.
+- Voice records a voice note (30 s auto-stop) that is transcribed when sent. Before, the transcript went straight into the composer.
+- Errors read `message ?: "Failed to get response"`.
+- A note save with an empty body is ignored.
+
+## Wave 7: shared screen ViewModels — plugins and devices
+
+**Android**
+
+Screens and strings are meant to be identical. Known changes:
+- Plugin settings, Walking Aid, Community Plugins, Publish, Pending actions, Daily summary, battery guide and EvenHub keep their state through a rotation. Before, rotating reloaded it. Community Plugins no longer re-fetches the catalog on rotation.
+- Toasts from these screens use the application context. Service stops and history clears are unchanged; Auto Audio and Walking Aid still start from the Activity so their permission prompts appear.
+- The community catalog is parsed by the shared parser. Only malformed entries differ: a JSON `null` field now counts as missing instead of the text "null".
+- The device bind screen still resets on rotation and rescans, as before.
+
+Smoke test:
+- Device bind for each family: HeyCyan, EyeVue, TuneBuds and MoYoung through the second picker; Meta (opens Meta pairing); Meizu (bond dialog); audio-only.
+- Meta pairing and Mentra pairing are unchanged; open each once from device bind.
+- Plugin switches on/off from Community Plugins and from each settings screen: Live Caption, Translator, Meeting notes (also "summarize now"), Errand Brain, Auto Audio (with and without microphone permission), Walking Aid.
+- Clear history on each plugin settings screen.
+- Walking Aid: model download progress for the detector and depth model, latency and acquisition benchmarks, focus translate and save, cloud model pickers, readiness dialog with a missing model, Explore/Walking mode switch, "Ask about surroundings" chat with speech.
+- Community plugin refresh, Tasker profile download, plugin publish (validation errors, then a successful submit).
+- Pending actions approve/reject; daily summary regenerate and share; battery guide answers; EvenHub app load and display.
+
+**iOS (Mac build; device bind now runs on Android's pairing choices)**
+- Selecting a device: Mentra Live keeps Mentra (and connects through the Mentra SDK); other unknown classes still map to HeyCyan.
+- Confirming EyeVue, TuneBuds or MoYoung in the first picker now connects as that protocol instead of HeyCyan.
+- Confirming an unknown class closes the screen with "Unknown device type."

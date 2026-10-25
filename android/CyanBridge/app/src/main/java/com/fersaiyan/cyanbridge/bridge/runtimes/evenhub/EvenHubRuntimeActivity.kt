@@ -8,36 +8,31 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.bridge.core.DisplayCommand
 import com.fersaiyan.cyanbridge.bridge.core.GlassesBridge
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
 /** Compose shell around the Android-only WebView and EvenHub JavaScript bridge. */
 class EvenHubRuntimeActivity : AppCompatActivity() {
     companion object {
-        private const val TAG = "EvenHubRuntime"
-        private const val DEFAULT_URL = "http://10.0.2.2:5173"
+        private const val TAG = EvenHubRuntimeViewModel.TAG
         private const val SHIM_ASSET_PATH = "evenhub-compat-shim.js"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val viewModel by viewModels<EvenHubRuntimeViewModel> {
+        viewModelFactory { initializer { EvenHubRuntimeViewModel(::showOnGlasses) } }
+    }
     private lateinit var webView: WebView
     private var isLoaded = false
-    private var currentUrl = DEFAULT_URL
-    private var urlInput by mutableStateOf(DEFAULT_URL)
-    private var runtimeLog by mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,10 +41,10 @@ class EvenHubRuntimeActivity : AppCompatActivity() {
             val appearance by rememberAppearanceSettings(appearancePreferences)
             CyanBridgeTheme(appearance) {
                 EvenHubRuntimeScreen(
-                    url = urlInput,
-                    logs = runtimeLog,
-                    onUrlChange = { urlInput = it },
-                    onLoad = { loadUrl(urlInput) },
+                    url = viewModel.url,
+                    logs = viewModel.logs,
+                    onUrlChange = viewModel::onUrlChange,
+                    onLoad = ::loadUrl,
                     onStop = ::shutdown,
                     onWebViewCreated = ::configureWebView,
                 )
@@ -100,49 +95,34 @@ class EvenHubRuntimeActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
-                currentUrl = url ?: currentUrl
-                log("Loading: $url")
+                viewModel.log("Loading: $url")
                 injectShim(view)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                log("Page loaded: $url")
+                viewModel.log("Page loaded: $url")
                 injectShim(view)
             }
         }
     }
 
     private fun createJsBridge(): EvenHubJsBridge = EvenHubJsBridge(
-        onDisplayText = { text ->
-            log("Display text: ${text.take(80)}")
-            scope.launch { GlassesBridge.showText(DisplayCommand.Text(text = text)) }
-        },
-        onDisplayLines = { lines, page, totalPages ->
-            log("Display lines: ${lines.size} items")
-            scope.launch { GlassesBridge.showLines(DisplayCommand.Lines(lines, page, totalPages)) }
-        },
-        onDisplayCard = { title, body ->
-            log("Display card: $title")
-            scope.launch { GlassesBridge.showCard(DisplayCommand.Card(title, body)) }
-        },
-        onClearDisplay = {
-            log("Clear display")
-            scope.launch { GlassesBridge.clearDisplay() }
-        },
+        onDisplayText = viewModel::displayText,
+        onDisplayLines = viewModel::displayLines,
+        onDisplayCard = viewModel::displayCard,
+        onClearDisplay = viewModel::clearDisplay,
         onExit = {
-            log("Exit requested")
+            viewModel.log("Exit requested")
             finish()
         },
-        onLog = ::log,
+        onLog = viewModel::log,
     )
 
-    private fun loadUrl(url: String) {
+    private fun loadUrl() {
         if (!::webView.isInitialized) return
-        val fullUrl = if (url.startsWith("http://") || url.startsWith("https://")) url else "http://$url"
-        currentUrl = fullUrl
         isLoaded = true
-        webView.loadUrl(fullUrl)
+        webView.loadUrl(viewModel.loadableUrl())
     }
 
     private fun shutdown() {
@@ -162,16 +142,16 @@ class EvenHubRuntimeActivity : AppCompatActivity() {
             .onFailure { Log.e(TAG, "Failed to inject shim", it) }
     }
 
-    private fun log(message: String) {
-        runOnUiThread {
-            runtimeLog = buildString {
-                if (runtimeLog.isNotBlank()) append(runtimeLog).append('\n')
-                append("[$TAG] ").append(message)
-            }.takeLast(16_000)
-        }
-    }
-
     private fun readAsset(path: String): String = assets.open(path).use { inputStream ->
         BufferedReader(InputStreamReader(inputStream)).use { it.readText() }
+    }
+}
+
+private suspend fun showOnGlasses(command: DisplayCommand) {
+    when (command) {
+        is DisplayCommand.Text -> GlassesBridge.showText(command)
+        is DisplayCommand.Lines -> GlassesBridge.showLines(command)
+        is DisplayCommand.Card -> GlassesBridge.showCard(command)
+        DisplayCommand.Clear -> GlassesBridge.clearDisplay()
     }
 }

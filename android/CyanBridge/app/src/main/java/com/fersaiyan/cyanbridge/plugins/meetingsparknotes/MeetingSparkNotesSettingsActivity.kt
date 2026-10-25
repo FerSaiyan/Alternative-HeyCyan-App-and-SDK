@@ -1,8 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.meetingsparknotes
 
-import android.content.Context
 import android.os.Bundle
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -13,8 +11,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -26,110 +22,23 @@ import com.fersaiyan.cyanbridge.plugins.settings.PluginSettingsCard
 import com.fersaiyan.cyanbridge.plugins.settings.PluginSettingsScaffold
 import com.fersaiyan.cyanbridge.plugins.settings.PluginSettingsSectionTitle
 import com.fersaiyan.cyanbridge.plugins.settings.PluginSwitchRow
-import com.fersaiyan.cyanbridge.plugins.settings.applyNativePluginSwitch
+import com.fersaiyan.cyanbridge.plugins.settings.nativePluginViewModel
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
+import com.fersaiyan.cyanbridge.shared.plugins.settings.MeetingSparkNotesSettingsViewModel
+import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs.MeetingSparkNotes
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 
-data class MeetingSparkNotesSettingsState(
-    val enabled: Boolean,
-    val summaryStyle: String,
-    val includeParticipants: Boolean,
-    val includeActionItems: Boolean,
-    val maxHistory: Int,
-    val customPrompt: String,
-) {
-    companion object {
-        fun load(context: Context) = MeetingSparkNotesSettingsState(
-            enabled = MeetingSparkNotesPreferences.isEnabled(context),
-            summaryStyle = MeetingSparkNotesPreferences.getSummaryStyle(context),
-            includeParticipants = MeetingSparkNotesPreferences.isIncludeParticipants(context),
-            includeActionItems = MeetingSparkNotesPreferences.isIncludeActionItems(context),
-            maxHistory = MeetingSparkNotesPreferences.getMaxHistory(context),
-            customPrompt = MeetingSparkNotesPreferences.getCustomPrompt(context),
-        )
+class MeetingSparkNotesSettingsActivity : AppCompatActivity() {
+
+    internal val viewModel by nativePluginViewModel(MeetingSparkNotes) { store, catalog, host ->
+        val app = applicationContext
+        MeetingSparkNotesSettingsViewModel(store, catalog, host) { MeetingSparkNotesService.summarize(app) }
     }
-}
-
-interface MeetingSparkNotesSettingsActions {
-    fun onBack()
-    fun onEnabledChange(enabled: Boolean)
-    fun onSummaryStyleSelected(style: String)
-    fun onIncludeParticipantsChange(include: Boolean)
-    fun onIncludeActionItemsChange(include: Boolean)
-    fun onCustomPromptChange(prompt: String)
-    fun onMaxHistoryChange(maxHistory: Int)
-    fun onClearHistory()
-    fun onSummarizeCurrentMeeting()
-}
-
-class MeetingSparkNotesSettingsActivity : AppCompatActivity(), MeetingSparkNotesSettingsActions {
-
-    private lateinit var uiState: MutableState<MeetingSparkNotesSettingsState>
-
-    internal val state: MeetingSparkNotesSettingsState get() = uiState.value
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        uiState = mutableStateOf(MeetingSparkNotesSettingsState.load(this))
-        setThemedComposeScreen {
-            MeetingSparkNotesSettingsScreen(state = uiState.value, actions = this)
-        }
-    }
-
-    private inline fun update(transform: MeetingSparkNotesSettingsState.() -> MeetingSparkNotesSettingsState) {
-        uiState.value = uiState.value.transform()
-    }
-
-    override fun onBack() = finish()
-
-    override fun onEnabledChange(enabled: Boolean) {
-        update { copy(enabled = enabled) }
-        applyNativePluginSwitch(
-            pluginId = NativePluginIds.MEETING_SPARK_NOTES,
-            enabled = enabled,
-            persistPluginFlag = { MeetingSparkNotesPreferences.setEnabled(this, it) },
-            onDisabled = { MeetingSparkNotesService.deactivate(this) },
-        )
-    }
-
-    override fun onSummaryStyleSelected(style: String) {
-        update { copy(summaryStyle = style) }
-        MeetingSparkNotesPreferences.setSummaryStyle(this, style)
-    }
-
-    override fun onIncludeParticipantsChange(include: Boolean) {
-        update { copy(includeParticipants = include) }
-        MeetingSparkNotesPreferences.setIncludeParticipants(this, include)
-    }
-
-    override fun onIncludeActionItemsChange(include: Boolean) {
-        update { copy(includeActionItems = include) }
-        MeetingSparkNotesPreferences.setIncludeActionItems(this, include)
-    }
-
-    override fun onCustomPromptChange(prompt: String) {
-        if (prompt.length > MAX_CUSTOM_PROMPT_LENGTH) return
-        update { copy(customPrompt = prompt) }
-        MeetingSparkNotesPreferences.setCustomPrompt(this, prompt)
-    }
-
-    override fun onMaxHistoryChange(maxHistory: Int) {
-        update { copy(maxHistory = maxHistory) }
-        MeetingSparkNotesPreferences.setMaxHistory(this, maxHistory)
-    }
-
-    override fun onClearHistory() {
-        MeetingSparkNotesStore().clear(this)
-        Toast.makeText(this, getString(R.string.compose_history_cleared), Toast.LENGTH_SHORT).show()
-    }
-
-    override fun onSummarizeCurrentMeeting() {
-        MeetingSparkNotesService.summarize(this)
-    }
-
-    internal companion object {
-        const val MAX_CUSTOM_PROMPT_LENGTH = 1500
+        setThemedComposeScreen { MeetingSparkNotesSettingsScreen(viewModel, onBack = ::finish) }
     }
 }
 
@@ -137,12 +46,13 @@ private val styleOptions = listOf("concise", "detailed", "action_focused")
 
 @Composable
 fun MeetingSparkNotesSettingsScreen(
-    state: MeetingSparkNotesSettingsState,
-    actions: MeetingSparkNotesSettingsActions,
+    viewModel: MeetingSparkNotesSettingsViewModel,
+    onBack: () -> Unit,
 ) {
+    val state = viewModel.state
     PluginSettingsScaffold(
         title = stringResource(R.string.compose_plugin_settings_title, stringResource(R.string.compose_plugin_name_meeting_spark_notes)),
-        onBack = actions::onBack,
+        onBack = onBack,
     ) {
         // Section: General
         PluginSettingsSectionTitle(stringResource(R.string.compose_general))
@@ -150,7 +60,7 @@ fun MeetingSparkNotesSettingsScreen(
             PluginSwitchRow(
                 label = stringResource(R.string.compose_meeting_enabled),
                 checked = state.enabled,
-                onCheckedChange = actions::onEnabledChange,
+                onCheckedChange = viewModel::onEnabledChange,
             )
         }
 
@@ -173,7 +83,7 @@ fun MeetingSparkNotesSettingsScreen(
                 styleOptions.forEach { style ->
                     PluginFilterChip(
                         selected = state.summaryStyle == style,
-                        onClick = { actions.onSummaryStyleSelected(style) },
+                        onClick = { viewModel.onSummaryStyleSelected(style) },
                         label = stringResource(
                             when (style) {
                                 "concise" -> R.string.compose_summary_style_concise
@@ -192,7 +102,7 @@ fun MeetingSparkNotesSettingsScreen(
             PluginSwitchRow(
                 label = stringResource(R.string.compose_include_participants),
                 checked = state.includeParticipants,
-                onCheckedChange = actions::onIncludeParticipantsChange,
+                onCheckedChange = viewModel::onIncludeParticipantsChange,
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -200,7 +110,7 @@ fun MeetingSparkNotesSettingsScreen(
             PluginSwitchRow(
                 label = stringResource(R.string.compose_include_action_items),
                 checked = state.includeActionItems,
-                onCheckedChange = actions::onIncludeActionItemsChange,
+                onCheckedChange = viewModel::onIncludeActionItemsChange,
             )
         }
 
@@ -211,10 +121,10 @@ fun MeetingSparkNotesSettingsScreen(
             label = stringResource(R.string.compose_meeting_instructions),
             placeholder = stringResource(R.string.compose_meeting_hint),
             value = state.customPrompt,
-            maxLength = MeetingSparkNotesSettingsActivity.MAX_CUSTOM_PROMPT_LENGTH,
+            maxLength = MeetingSparkNotesSettingsViewModel.MAX_CUSTOM_PROMPT_LENGTH,
             minLines = 3,
             maxLines = 6,
-            onValueChange = actions::onCustomPromptChange,
+            onValueChange = viewModel::onCustomPromptChange,
         )
 
         // Section: History
@@ -224,15 +134,15 @@ fun MeetingSparkNotesSettingsScreen(
             maxHistory = state.maxHistory,
             valueRange = 10f..200f,
             steps = 18,
-            onMaxHistoryChange = actions::onMaxHistoryChange,
-            onClearHistory = actions::onClearHistory,
+            onMaxHistoryChange = viewModel::onMaxHistoryChange,
+            onClearHistory = viewModel::onClearHistory,
         )
 
         // Section: Actions
         PluginSettingsSectionTitle(stringResource(R.string.compose_actions))
         PluginSettingsCard {
             Button(
-                onClick = actions::onSummarizeCurrentMeeting,
+                onClick = viewModel::onSummarizeCurrentMeeting,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.compose_summarize_current_meeting))

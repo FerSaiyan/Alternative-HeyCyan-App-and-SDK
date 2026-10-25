@@ -8,6 +8,7 @@ import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
 import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
 import com.fersaiyan.cyanbridge.plugins.settings.nextStartedServiceIntent
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
+import com.fersaiyan.cyanbridge.shared.plugins.settings.LiveCaptionRelaySettingsState
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -45,8 +46,7 @@ class LiveCaptionRelaySettingsActivityTest {
             maxHistory = 250,
             customPrompt = "Be brief",
         )
-        assertEquals(expected, LiveCaptionRelaySettingsState.load(context))
-        assertEquals(expected, createSettingsActivity<LiveCaptionRelaySettingsActivity>().state)
+        assertEquals(expected, createSettingsActivity<LiveCaptionRelaySettingsActivity>().viewModel.state)
     }
 
     @Test
@@ -55,9 +55,9 @@ class LiveCaptionRelaySettingsActivityTest {
         CommunityPluginPrefs.setNativePluginEnabled(context, NativePluginIds.LIVE_CAPTION_RELAY, true)
         val activity = createSettingsActivity<LiveCaptionRelaySettingsActivity>()
 
-        activity.onEnabledChange(false)
+        activity.viewModel.onEnabledChange(false)
 
-        assertFalse(activity.state.enabled)
+        assertFalse(activity.viewModel.state.enabled)
         assertFalse(LiveCaptionRelayPreferences.isEnabled(context))
         assertFalse(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.LIVE_CAPTION_RELAY))
         assertServiceIntent(
@@ -72,9 +72,9 @@ class LiveCaptionRelaySettingsActivityTest {
     fun enablingPersistsBothFlagsWithoutStartingService() {
         val activity = createSettingsActivity<LiveCaptionRelaySettingsActivity>()
 
-        activity.onEnabledChange(true)
+        activity.viewModel.onEnabledChange(true)
 
-        assertTrue(activity.state.enabled)
+        assertTrue(activity.viewModel.state.enabled)
         assertTrue(LiveCaptionRelayPreferences.isEnabled(context))
         assertTrue(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.LIVE_CAPTION_RELAY))
         assertNull(activity.nextStartedServiceIntent())
@@ -84,26 +84,26 @@ class LiveCaptionRelaySettingsActivityTest {
     fun languageTranslationAndHistoryActionsPersist() {
         val activity = createSettingsActivity<LiveCaptionRelaySettingsActivity>()
 
-        activity.onSourceLanguageSelected("it")
-        activity.onTranslationEnabledChange(true)
-        activity.onTargetLanguageSelected("pt")
-        activity.onMaxHistoryChange(320)
+        activity.viewModel.onSourceLanguageSelected("it")
+        activity.viewModel.onTranslationEnabledChange(true)
+        activity.viewModel.onTargetLanguageSelected("pt")
+        activity.viewModel.onMaxHistoryChange(320)
 
         assertEquals("it", LiveCaptionRelayPreferences.getSourceLanguage(context))
         assertTrue(LiveCaptionRelayPreferences.isTranslationEnabled(context))
         assertEquals("pt", LiveCaptionRelayPreferences.getTargetLanguage(context))
         assertEquals(320, LiveCaptionRelayPreferences.getMaxHistory(context))
-        assertEquals(LiveCaptionRelaySettingsState.load(context), activity.state)
+        assertEquals(createSettingsActivity<LiveCaptionRelaySettingsActivity>().viewModel.state, activity.viewModel.state)
     }
 
     @Test
     fun customPromptOverTheLimitIsIgnored() {
         val activity = createSettingsActivity<LiveCaptionRelaySettingsActivity>()
 
-        activity.onCustomPromptChange("x".repeat(1000))
-        activity.onCustomPromptChange("y".repeat(1001))
+        activity.viewModel.onCustomPromptChange("x".repeat(1000))
+        activity.viewModel.onCustomPromptChange("y".repeat(1001))
 
-        assertEquals("x".repeat(1000), activity.state.customPrompt)
+        assertEquals("x".repeat(1000), activity.viewModel.state.customPrompt)
         assertEquals("x".repeat(1000), LiveCaptionRelayPreferences.getCustomPrompt(context))
     }
 }

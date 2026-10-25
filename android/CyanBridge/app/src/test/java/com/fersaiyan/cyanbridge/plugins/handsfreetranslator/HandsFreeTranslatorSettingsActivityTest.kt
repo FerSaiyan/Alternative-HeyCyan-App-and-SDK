@@ -8,6 +8,7 @@ import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
 import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
 import com.fersaiyan.cyanbridge.plugins.settings.nextStartedServiceIntent
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
+import com.fersaiyan.cyanbridge.shared.plugins.settings.HandsFreeTranslatorSettingsState
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -47,8 +48,7 @@ class HandsFreeTranslatorSettingsActivityTest {
             maxHistory = 400,
             customPrompt = "Keep it formal",
         )
-        assertEquals(expected, HandsFreeTranslatorSettingsState.load(context))
-        assertEquals(expected, createSettingsActivity<HandsFreeTranslatorSettingsActivity>().state)
+        assertEquals(expected, createSettingsActivity<HandsFreeTranslatorSettingsActivity>().viewModel.state)
     }
 
     @Test
@@ -57,9 +57,9 @@ class HandsFreeTranslatorSettingsActivityTest {
         CommunityPluginPrefs.setNativePluginEnabled(context, NativePluginIds.HANDS_FREE_TRANSLATOR, true)
         val activity = createSettingsActivity<HandsFreeTranslatorSettingsActivity>()
 
-        activity.onEnabledChange(false)
+        activity.viewModel.onEnabledChange(false)
 
-        assertFalse(activity.state.enabled)
+        assertFalse(activity.viewModel.state.enabled)
         assertFalse(HandsFreeTranslatorPreferences.isEnabled(context))
         assertFalse(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.HANDS_FREE_TRANSLATOR))
         assertServiceIntent(
@@ -74,7 +74,7 @@ class HandsFreeTranslatorSettingsActivityTest {
     fun enablingPersistsBothFlagsWithoutStartingService() {
         val activity = createSettingsActivity<HandsFreeTranslatorSettingsActivity>()
 
-        activity.onEnabledChange(true)
+        activity.viewModel.onEnabledChange(true)
 
         assertTrue(HandsFreeTranslatorPreferences.isEnabled(context))
         assertTrue(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.HANDS_FREE_TRANSLATOR))
@@ -85,28 +85,28 @@ class HandsFreeTranslatorSettingsActivityTest {
     fun languageOutputAndHistoryActionsPersist() {
         val activity = createSettingsActivity<HandsFreeTranslatorSettingsActivity>()
 
-        activity.onAutoDetectChange(false)
-        activity.onSourceLanguageSelected("it")
-        activity.onTargetLanguageSelected("pt")
-        activity.onSpeakTranslationChange(false)
-        activity.onMaxHistoryChange(60)
+        activity.viewModel.onAutoDetectChange(false)
+        activity.viewModel.onSourceLanguageSelected("it")
+        activity.viewModel.onTargetLanguageSelected("pt")
+        activity.viewModel.onSpeakTranslationChange(false)
+        activity.viewModel.onMaxHistoryChange(60)
 
         assertFalse(HandsFreeTranslatorPreferences.isAutoDetect(context))
         assertEquals("it", HandsFreeTranslatorPreferences.getSourceLanguage(context))
         assertEquals("pt", HandsFreeTranslatorPreferences.getTargetLanguage(context))
         assertFalse(HandsFreeTranslatorPreferences.isSpeakTranslation(context))
         assertEquals(60, HandsFreeTranslatorPreferences.getMaxHistory(context))
-        assertEquals(HandsFreeTranslatorSettingsState.load(context), activity.state)
+        assertEquals(createSettingsActivity<HandsFreeTranslatorSettingsActivity>().viewModel.state, activity.viewModel.state)
     }
 
     @Test
     fun customPromptOverTheLimitIsIgnored() {
         val activity = createSettingsActivity<HandsFreeTranslatorSettingsActivity>()
 
-        activity.onCustomPromptChange("x".repeat(1000))
-        activity.onCustomPromptChange("y".repeat(1001))
+        activity.viewModel.onCustomPromptChange("x".repeat(1000))
+        activity.viewModel.onCustomPromptChange("y".repeat(1001))
 
-        assertEquals("x".repeat(1000), activity.state.customPrompt)
+        assertEquals("x".repeat(1000), activity.viewModel.state.customPrompt)
         assertEquals("x".repeat(1000), HandsFreeTranslatorPreferences.getCustomPrompt(context))
     }
 }

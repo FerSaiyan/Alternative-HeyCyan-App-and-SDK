@@ -1,6 +1,8 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
+import android.content.Context
 import android.os.Bundle
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
@@ -32,18 +34,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
@@ -51,58 +51,115 @@ import com.fersaiyan.cyanbridge.audio.TtsSpeaker
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelRequestPriority
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
+import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidChatPlatform
+import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidChatViewModel
+import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.store
 import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
 class WalkingAidChatActivity : AppCompatActivity() {
 
-    private lateinit var composeView: ComposeView
-    private var tts: TtsSpeaker? = null
+    private val viewModel by viewModels<WalkingAidChatViewModel> {
+        viewModelFactory {
+            initializer {
+                val context = applicationContext
+                WalkingAidChatViewModel(PluginPrefs.WalkingAid.store(context), AndroidWalkingAidChatPlatform(context))
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        composeView = ComposeView(this).also(::setContentView)
-
-        tts = TtsSpeaker(this, "WalkingAidChat")
+        val composeView = ComposeView(this).also(::setContentView)
 
         WalkingAidImageStore.load(this)
 
         setThemedComposeContent(composeView) {
-            WalkingAidChatScreen(
-                onBack = ::finish,
-                onSpeak = { speakTts(it) },
-            )
+            WalkingAidChatScreen(viewModel, onBack = ::finish)
+        }
+    }
+}
+
+/** Answers from the relay (cloud source) or the on-device model, spoken with the app language. */
+private class AndroidWalkingAidChatPlatform(private val context: Context) : WalkingAidChatPlatform {
+    private val localModelsProvider = LocalModelsProvider()
+    private var tts: TtsSpeaker? = TtsSpeaker(context, "WalkingAidChat")
+
+    override suspend fun answer(question: String, imagePath: String?): String = withContext(Dispatchers.IO) {
+        val latestImage = imagePath
+        val settings = ImageQuestionPreferences.get(context)
+        val basePrompt = ImageQuestionPromptResolver.resolve(
+            settings = settings,
+            userQuestion = question,
+        ).text
+        val telemetryJson = WalkingAidWarningEngine.getRecentSceneTelemetryJson()
+        val prompt = if (telemetryJson != "[]") {
+            "$basePrompt\n\nReal-time Vision Sensor Tracking Telemetry Log:\n$telemetryJson"
+        } else {
+            basePrompt
+        }
+
+        val source = WalkingAidPreferences.getImageDescriptionSource(context)
+        if (source == "cloud") {
+            val modelOverride = WalkingAidPreferences.getImageDescriptionModelOverride(context)
+            val result = if (latestImage != null && File(latestImage).exists()) {
+                CliRelayClient.imageQuery(
+                    context = context,
+                    imagePath = latestImage,
+                    prompt = prompt,
+                    modelOverride = modelOverride,
+                )
+            } else {
+                CliRelayClient.voiceQuery(
+                    context = context,
+                    prompt = prompt,
+                    modelOverride = modelOverride,
+                )
+            }
+            result.getOrDefault("I couldn't get an answer. Please try again.")
+        } else {
+            try {
+                val imagePaths = if (latestImage != null && File(latestImage).exists())
+                    listOf(latestImage) else emptyList()
+                localModelsProvider.streamChat(
+                    context = context,
+                    messages = listOf(
+                        mapOf("role" to "User", "content" to prompt)
+                    ),
+                    imagePaths = imagePaths,
+                    requestPriority = LocalModelRequestPriority.HIGH,
+                )
+            } catch (e: Exception) {
+                "Error: ${e.message}"
+            }
         }
     }
 
-    override fun onDestroy() {
-        tts?.shutdown()
-        tts = null
-        super.onDestroy()
+    override fun speak(text: String) {
+        val speaker = tts?.takeIf { it.isReady } ?: return
+        speaker.setLanguage(Locale.forLanguageTag(ImageQuestionPreferences.get(context).appLanguageTag))
+        speaker.speak(text, "walking_chat_${System.currentTimeMillis()}")
     }
 
-    private fun speakTts(text: String) {
-        val speaker = tts?.takeIf { it.isReady } ?: return
-        speaker.setLanguage(Locale.forLanguageTag(ImageQuestionPreferences.get(this).appLanguageTag))
-        speaker.speak(text, "walking_chat_${System.currentTimeMillis()}")
+    override fun close() {
+        tts?.shutdown()
+        tts = null
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalkingAidChatScreen(
+    viewModel: WalkingAidChatViewModel,
     onBack: () -> Unit,
-    onSpeak: (String) -> Unit,
 ) {
-    val context = LocalContext.current
-    var question by remember { mutableStateOf("") }
-    var response by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    val localModelsProvider = remember { LocalModelsProvider() }
+    val question = viewModel.question
+    val response = viewModel.response
+    val isLoading = viewModel.isLoading
     val history = remember { WalkingAidImageStore.getImageHistory(10) }
 
     Scaffold(
@@ -222,77 +279,14 @@ fun WalkingAidChatScreen(
             ) {
                 OutlinedTextField(
                     value = question,
-                    onValueChange = { question = it },
+                    onValueChange = viewModel::onQuestionChange,
                     placeholder = { Text(stringResource(R.string.compose_walking_ask_placeholder)) },
                     modifier = Modifier.weight(1f),
                     enabled = !isLoading,
                     singleLine = true,
                 )
                 IconButton(
-                    onClick = {
-                        if (question.isBlank() || isLoading) return@IconButton
-                        isLoading = true
-                        val userQuestion = question.trim()
-                        question = ""
-
-                        // Get the latest image
-                        val latestImage = history.lastOrNull()?.imagePath
-                        val settings = ImageQuestionPreferences.get(context)
-
-                        CoroutineScope(Dispatchers.IO).launch {
-                            val basePrompt = ImageQuestionPromptResolver.resolve(
-                                settings = settings,
-                                userQuestion = userQuestion,
-                            ).text
-                            val telemetryJson = WalkingAidWarningEngine.getRecentSceneTelemetryJson()
-                            val prompt = if (telemetryJson != "[]") {
-                                "$basePrompt\n\nReal-time Vision Sensor Tracking Telemetry Log:\n$telemetryJson"
-                            } else {
-                                basePrompt
-                            }
-
-                            val source = WalkingAidPreferences.getImageDescriptionSource(context)
-                            val reply = if (source == "cloud") {
-                                val modelOverride = WalkingAidPreferences.getImageDescriptionModelOverride(context)
-                                val result = if (latestImage != null && File(latestImage).exists()) {
-                                    CliRelayClient.imageQuery(
-                                        context = context,
-                                        imagePath = latestImage,
-                                        prompt = prompt,
-                                        modelOverride = modelOverride,
-                                    )
-                                } else {
-                                    CliRelayClient.voiceQuery(
-                                        context = context,
-                                        prompt = prompt,
-                                        modelOverride = modelOverride,
-                                    )
-                                }
-                                result.getOrDefault("I couldn't get an answer. Please try again.")
-                            } else {
-                                try {
-                                    val imagePaths = if (latestImage != null && File(latestImage).exists())
-                                        listOf(latestImage) else emptyList()
-                                    localModelsProvider.streamChat(
-                                        context = context,
-                                        messages = listOf(
-                                            mapOf("role" to "User", "content" to prompt)
-                                        ),
-                                        imagePaths = imagePaths,
-                                        requestPriority = LocalModelRequestPriority.HIGH,
-                                    )
-                                } catch (e: Exception) {
-                                    "Error: ${e.message}"
-                                }
-                            }
-
-                            response = reply.trim()
-                            if (WalkingAidPreferences.isTtsEnabled(context) && reply.isNotBlank()) {
-                                onSpeak(reply)
-                            }
-                            isLoading = false
-                        }
-                    },
+                    onClick = { viewModel.ask(history.lastOrNull()?.imagePath) },
                     enabled = question.isNotBlank() && !isLoading,
                 ) {
                     Icon(

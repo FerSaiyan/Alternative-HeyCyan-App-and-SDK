@@ -1,20 +1,9 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
 import android.content.Intent
-import android.graphics.BitmapFactory
-import android.os.Bundle
-import android.os.SystemClock
 import android.os.Build
-import android.widget.Toast
+import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.material3.CircularProgressIndicator
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
-import com.fersaiyan.cyanbridge.plugins.walkingaid.vision.LiteRtVisionBackend
-import com.fersaiyan.cyanbridge.plugins.walkingaid.vision.VisionFrame
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,17 +13,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -51,56 +41,47 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
-import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
-import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
-import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
-
-
-import com.fersaiyan.cyanbridge.devices.DeviceCapabilityHelper
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaDatPermissions
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
+import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
+import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidModelDownload
+import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidModelOption
+import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidSettingsViewModel
+import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.store
 import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
-import com.fersaiyan.cyanbridge.ui.hasBluetooth
-import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
-import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
+import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.ensureNotificationPermission
+import com.fersaiyan.cyanbridge.ui.hasBluetooth
+import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
+import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import com.fersaiyan.cyanbridge.ui.requestBluetoothPermission
 import com.fersaiyan.cyanbridge.ui.requestWifiP2pPermission
+import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.XXPermissions
-import kotlinx.coroutines.delay
-import androidx.compose.material.icons.filled.Warning
 
 class WalkingAidSettingsActivity : AppCompatActivity() {
 
-    private lateinit var composeView: ComposeView
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        composeView = setThemedComposeScreen {
+        setThemedComposeScreen {
             WalkingAidSettingsScreen(
                 onBack = ::finish,
                 onStartService = ::startWithPermissions,
@@ -168,25 +149,36 @@ class WalkingAidSettingsActivity : AppCompatActivity() {
     }
 }
 
+/** The screen's ViewModel, kept by the hosting Activity (or navigation entry) across recreation. */
+@Composable
+internal fun walkingAidSettingsViewModel(): WalkingAidSettingsViewModel {
+    val context = LocalContext.current.applicationContext
+    return viewModel {
+        WalkingAidSettingsViewModel(
+            store = PluginPrefs.WalkingAid.store(context),
+            catalog = PluginPrefs.Community.store(context),
+            platform = AndroidWalkingAidSettingsPlatform(context),
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalkingAidSettingsScreen(
     onBack: () -> Unit,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
+    viewModel: WalkingAidSettingsViewModel = walkingAidSettingsViewModel(),
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
-    val uiScope = rememberCoroutineScope()
-
-    val hasCamera = remember { DeviceCapabilityHelper.hasCamera(context) }
-    val cameraUnavailableReason = remember { DeviceCapabilityHelper.unavailableCameraReason(context) }
-
-    // State
-    var enabled by remember { mutableStateOf(WalkingAidPreferences.isEnabled(context)) }
-    var running by remember { mutableStateOf(WalkingAidService.isRunning()) }
-    var videoMode by remember { mutableStateOf(WalkingAidPreferences.getVideoMode(context)) }
-    var aidMode by remember { mutableStateOf(WalkingAidPreferences.getMode(context)) }
+    val vm = viewModel
+    val hasCamera = vm.hasCamera
+    val cameraUnavailableReason = vm.cameraUnavailableReason
+    val enabled = vm.enabled
+    val running = vm.running
+    val videoMode = vm.videoMode
+    val aidMode = vm.aidMode
     val selectedDevice = DeviceProfileStore.selectedClass(context)
     val serviceFailure by WalkingAidService.lastFailure.collectAsState()
     serviceFailure?.let { message ->
@@ -197,50 +189,10 @@ fun WalkingAidSettingsScreen(
             confirmButton = { TextButton(onClick = WalkingAidService::dismissFailure) { Text(stringResource(android.R.string.ok)) } },
         )
     }
-    LaunchedEffect(Unit) {
-        while (true) {
-            enabled = WalkingAidPreferences.isEnabled(context)
-            running = WalkingAidService.isRunning()
-            delay(500)
-        }
-    }
-    var captureInterval by remember { mutableIntStateOf(WalkingAidPreferences.getCaptureIntervalSeconds(context)) }
-    var imageDescriptionSource by remember { mutableStateOf(WalkingAidPreferences.getImageDescriptionSource(context)) }
-    var imageDescriptionCloudModelId by remember { mutableStateOf(WalkingAidPreferences.getImageDescriptionCloudModelId(context)) }
-    var depthEnabled by remember { mutableStateOf(WalkingAidPreferences.isDepthEnabled(context)) }
-    var depthSource by remember { mutableStateOf(WalkingAidPreferences.getDepthSource(context)) }
-    var depthCloudModelId by remember { mutableStateOf(WalkingAidPreferences.getDepthCloudModelId(context)) }
-    var ttsEnabled by remember { mutableStateOf(WalkingAidPreferences.isTtsEnabled(context)) }
-    var speechRate by remember { mutableFloatStateOf(WalkingAidPreferences.getSpeechRate(context)) }
-    var announcementPause by remember { mutableFloatStateOf(WalkingAidPreferences.getAnnouncementPauseMs(context) / 1000f) }
-    var safetyDisclaimerEnabled by remember { mutableStateOf(WalkingAidPreferences.isSafetyDisclaimerEnabled(context)) }
-    var historyMaxCount by remember { mutableIntStateOf(WalkingAidPreferences.getImageHistoryMaxCount(context)) }
-    var customPrompt by remember { mutableStateOf(WalkingAidPreferences.getCustomPrompt(context)) }
-
-    // Model picker, latency test & readiness dialogs
-    var yoloModelType by remember { mutableStateOf(WalkingAidPreferences.getYoloModelType(context)) }
-    var focusDescriptionText by remember { mutableStateOf(WalkingAidPreferences.getFocusDescription(context)) }
-    var savedFocusOriginal by remember { mutableStateOf(WalkingAidPreferences.getFocusDescription(context)) }
-    var savedModelFocusText by remember { mutableStateOf(WalkingAidPreferences.getModelFocusDescription(context)) }
-    var focusTranslationSource by remember { mutableStateOf(WalkingAidPreferences.getStateModelSource(context)) }
-    var savedFocusTranslationSource by remember { mutableStateOf(WalkingAidPreferences.getStateModelSource(context)) }
-    var isTranslatingFocus by remember { mutableStateOf(false) }
-    var focusTranslationError by remember { mutableStateOf<String?>(null) }
-    var isTestingLatency by remember { mutableStateOf(false) }
-    var showLatencyReportDialog by remember { mutableStateOf(false) }
-    var latencyReportText by remember { mutableStateOf("") }
-    var isTestingAcquisition by remember { mutableStateOf(false) }
-    var showAcquisitionReportDialog by remember { mutableStateOf(false) }
-    var acquisitionReportText by remember { mutableStateOf("") }
-    var thumbnailQuality by remember { mutableIntStateOf(WalkingAidPreferences.getThumbnailQualityLevel(context)) }
-    var settleDelayMs by remember { mutableIntStateOf(WalkingAidPreferences.getPhotoSettleDelayMs(context).toInt()) }
-    var showImageModelPicker by remember { mutableStateOf(false) }
-    var showDepthModelPicker by remember { mutableStateOf(false) }
-    var availableModels by remember { mutableStateOf<List<ProSubscriptionRelayClient.ModelOption>>(emptyList()) }
-    var modelsLoading by remember { mutableStateOf(false) }
-    var showReadinessResult by remember { mutableStateOf<WalkingAidReadinessResult?>(null) }
-    var downloadingModelId by remember { mutableStateOf<String?>(null) }
-    var modelDownloadStatus by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) { vm.followService() }
+    val focusDescriptionText = vm.focusDescriptionText
+    val savedFocusOriginal = vm.savedFocusOriginal
+    val focusTranslationSource = vm.focusTranslationSource
 
     val intervalOptions = listOf(2, 3, 5, 10, 15, 30)
 
@@ -318,27 +270,7 @@ fun WalkingAidSettingsScreen(
                         Switch(
                             enabled = hasCamera,
                             checked = enabled && hasCamera,
-                            onCheckedChange = { newValue ->
-                                if (newValue) {
-                                    val readiness = WalkingAidReadinessChecker.checkReadiness(context)
-                                    if (!readiness.isReady) {
-                                        showReadinessResult = readiness
-                                        return@Switch
-                                    }
-                                }
-                                enabled = newValue
-                                WalkingAidPreferences.setEnabled(context, newValue)
-                                CommunityPluginPrefs.setNativePluginEnabled(
-                                    context,
-                                    NativePluginIds.WALKING_AID,
-                                    newValue,
-                                )
-                                if (newValue) {
-                                    onStartService()
-                                } else {
-                                    onStopService()
-                                }
-                            },
+                            onCheckedChange = { vm.onEnabledChange(it, onStartService, onStopService) },
                         )
                     }
 
@@ -350,10 +282,7 @@ fun WalkingAidSettingsScreen(
                             FilterChip(
                                 selected = aidMode == mode,
                                 enabled = !enabled && !running,
-                                onClick = {
-                                    aidMode = mode
-                                    WalkingAidPreferences.setMode(context, mode)
-                                },
+                                onClick = { vm.onAidModeSelected(mode) },
                                 label = { Text(stringResource(if (mode == WalkingAidMode.EXPLORE)
                                     R.string.walking_aid_mode_explore else R.string.walking_aid_mode_walking)) },
                             )
@@ -371,10 +300,7 @@ fun WalkingAidSettingsScreen(
                         deviceClass = selectedDevice,
                         sdk = Build.VERSION.SDK_INT,
                         enabled = !enabled && !running,
-                        onSelected = { mode ->
-                            videoMode = mode
-                            WalkingAidPreferences.setVideoMode(context, mode)
-                        },
+                        onSelected = vm::onVideoModeSelected,
                     )
                     Text(
                         stringResource(R.string.walking_aid_video_source_help),
@@ -395,12 +321,9 @@ fun WalkingAidSettingsScreen(
                     ) {
                         intervalOptions.forEach { option ->
                             FilterChip(
-                                selected = captureInterval == option,
+                                selected = vm.captureInterval == option,
                                 enabled = videoMode == WalkingAidVideoMode.PERIODIC_PHOTOS,
-                                onClick = {
-                                    captureInterval = option
-                                    WalkingAidPreferences.setCaptureIntervalSeconds(context, option)
-                                },
+                                onClick = { vm.onCaptureIntervalSelected(option) },
                                 label = { Text(stringResource(R.string.compose_walking_seconds, option)) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -413,139 +336,11 @@ fun WalkingAidSettingsScreen(
 
                     // Latency Test Button
                     Button(
-                        onClick = {
-                            isTestingLatency = true
-                            CoroutineScope(Dispatchers.IO).launch {
-                                try {
-                                    val captureStartedAt = SystemClock.elapsedRealtime()
-                                    val capturedThumbnail = WalkingAidImageCapture(context)
-                                        .captureFreshThumbnail("WALKING_AID_BENCHMARK")
-                                    val captureMs = SystemClock.elapsedRealtime() - captureStartedAt
-                                    val report = try {
-                                        val testBitmap = checkNotNull(BitmapFactory.decodeFile(capturedThumbnail.file.absolutePath)) {
-                                            "Fresh glasses thumbnail could not be decoded"
-                                        }
-                                        val inputDescription =
-                                            "Fresh glasses thumbnail, quality ${WalkingAidPreferences.getThumbnailQualityLevel(context)} (${testBitmap.width}x${testBitmap.height})"
-                                        val frame = VisionFrame(
-                                            bitmap = testBitmap,
-                                            timestampMs = capturedThumbnail.captureCommandAtMs,
-                                            captureCommandAtMs = capturedThumbnail.captureCommandAtMs,
-                                            estimatedExposureAtMs = capturedThumbnail.estimatedExposureAtMs,
-                                            receivedAtMs = capturedThumbnail.receivedAtMs,
-                                        )
-                                        val backend = LiteRtVisionBackend(context)
-                                        try {
-                                            val t0 = SystemClock.elapsedRealtime()
-                                            val detResult = backend.detect(frame)
-                                            val t1 = SystemClock.elapsedRealtime()
-                                            val depthResult = if (depthEnabled && depthSource == "local") {
-                                                backend.estimateDepth(frame)
-                                            } else {
-                                                null
-                                            }
-                                            val t2 = SystemClock.elapsedRealtime()
-
-                                            WalkingAidWarningEngine.reset()
-                                            WalkingAidWarningEngine.evaluate(detResult, depthResult, focusDescriptionText)
-                                            val t3 = SystemClock.elapsedRealtime()
-
-                                            val accelInfo = backend.acceleratorInfo()
-                                            val analysisMs = t3 - t0
-                                            val detectorThroughput = if (!detResult.isError && analysisMs > 0) {
-                                                String.format("%.1f FPS local detector throughput", 1000f / analysisMs)
-                                            } else {
-                                                "unavailable because detection failed"
-                                            }
-                                            val inferenceValue = if (detResult.isError) {
-                                                "not completed"
-                                            } else {
-                                                "${detResult.inferenceTimeMs} ms"
-                                            }
-                                            val depthValue = when {
-                                                !depthEnabled -> "skipped (disabled)"
-                                                depthSource != "local" -> "skipped (cloud source selected)"
-                                                else -> "${depthResult?.inferenceTimeMs ?: 0} ms"
-                                            }
-                                            val detectorStatus = if (detResult.isError) {
-                                                "ERROR: ${detResult.errorMessage ?: "unknown detector error"}"
-                                            } else {
-                                                "OK"
-                                            }
-                                            val delegation = if (accelInfo.totalOperators > 0) {
-                                                "${accelInfo.delegatedOperators}/${accelInfo.totalOperators}"
-                                            } else {
-                                                "not reported by LiteRT"
-                                            }
-
-                                            // Measured start-to-start cadence: run two captures back-to-back
-                                            val secondCaptureStart = SystemClock.elapsedRealtime()
-                                            val secondThumbnail = WalkingAidImageCapture(context)
-                                                .captureFreshThumbnail("WALKING_AID_BENCHMARK_2")
-                                            val secondCaptureMs = SystemClock.elapsedRealtime() - secondCaptureStart
-                                            secondThumbnail.file.delete()
-                                            val measuredCadenceMs = captureMs + secondCaptureMs
-                                            val measuredFps = if (measuredCadenceMs > 0) 1000f / measuredCadenceMs else 0f
-
-                                            """
-                                                Pipeline Latency Benchmark
-
-                                                Input: $inputDescription
-                                                Detector status: $detectorStatus
-
-                                                Capture breakdown:
-                                                  BLE command → photo-ready: ${capturedThumbnail.estimatedExposureAtMs - capturedThumbnail.captureCommandAtMs} ms
-                                                  Settle delay: ${WalkingAidPreferences.getPhotoSettleDelayMs(context)} ms
-                                                  BLE transfer + decode: $captureMs ms total
-                                                  Measured start-to-start cadence (2 captures): ${measuredCadenceMs} ms (${String.format("%.2f fps", measuredFps)})
-
-                                                Analysis breakdown:
-                                                  Preprocessing: ${detResult.preprocessTimeMs} ms
-                                                  YOLO inference: $inferenceValue
-                                                  Postprocessing (NMS): ${detResult.postprocessTimeMs} ms
-                                                  Detector call total: ${t1 - t0} ms (${detResult.objects.size} objects)
-                                                  Depth estimation: $depthValue
-                                                  Rule evaluation: ${t3 - t2} ms
-
-                                                Detector throughput: $analysisMs ms ($detectorThroughput)
-                                                Capture-to-decision total: $captureMs + $analysisMs = ${captureMs + analysisMs} ms
-                                                Effective rate at configured ${WalkingAidPreferences.getCaptureIntervalSeconds(context)}s interval: ${String.format("%.2f fps", 1000f / (captureMs + WalkingAidPreferences.getCaptureIntervalSeconds(context) * 1000f).coerceAtLeast(1f))}
-                                                Hardware accelerator: ${accelInfo.type}
-                                                Delegated operators: $delegation
-                                                Details: ${accelInfo.details}
-                                            """.trimIndent()
-                                        } finally {
-                                            backend.close()
-                                            testBitmap.recycle()
-                                        }
-                                    } finally {
-                                        capturedThumbnail.file.delete()
-                                    }
-
-                                    withContext(Dispatchers.Main) {
-                                        latencyReportText = report
-                                        showLatencyReportDialog = true
-                                        isTestingLatency = false
-                                    }
-                                } catch (e: Exception) {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(
-                                                R.string.compose_walking_latency_error,
-                                                e.message ?: context.getString(R.string.compose_unknown_error),
-                                            ),
-                                            Toast.LENGTH_LONG,
-                                        ).show()
-                                        isTestingLatency = false
-                                    }
-                                }
-                            }
-                        },
-                        enabled = !isTestingLatency && !running && videoMode == WalkingAidVideoMode.PERIODIC_PHOTOS,
+                        onClick = vm::onRunLatencyBenchmark,
+                        enabled = !vm.isTestingLatency && !running && videoMode == WalkingAidVideoMode.PERIODIC_PHOTOS,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        if (isTestingLatency) {
+                        if (vm.isTestingLatency) {
                             CircularProgressIndicator(
                                 modifier = Modifier.height(20.dp).width(20.dp),
                                 strokeWidth = 2.dp,
@@ -562,62 +357,11 @@ fun WalkingAidSettingsScreen(
 
                     // Acquisition Benchmark Button
                     Button(
-                        onClick = {
-                            isTestingAcquisition = true
-                            CoroutineScope(Dispatchers.IO).launch {
-                                try {
-                                    val sb = StringBuilder()
-                                    sb.appendLine("Thumbnail Acquisition Benchmark (quality 0-5)")
-                                    sb.appendLine("Each level: 2 consecutive captures")
-                                    sb.appendLine("Settle delay: ${WalkingAidPreferences.getPhotoSettleDelayMs(context)} ms")
-                                    sb.appendLine()
-                                    for (quality in 0..5) {
-                                        val times = mutableListOf<Long>()
-                                        var sizeBytes = 0L
-                                        var width = 0
-                                        var height = 0
-                                        repeat(2) {
-                                            val start = SystemClock.elapsedRealtime()
-                                            val thumbnail = WalkingAidImageCapture(context)
-                                                .captureFreshThumbnailWithQuality("ACQ_BENCH_Q$quality", quality)
-                                            val elapsed = SystemClock.elapsedRealtime() - start
-                                            times += elapsed
-                                            sizeBytes = thumbnail.file.length()
-                                            val bmp = BitmapFactory.decodeFile(thumbnail.file.absolutePath)
-                                            if (bmp != null) {
-                                                width = bmp.width
-                                                height = bmp.height
-                                                bmp.recycle()
-                                            }
-                                            thumbnail.file.delete()
-                                        }
-                                        val avg = times.average().toLong()
-                                        sb.appendLine("Quality $quality: ${avg}ms avg, ${width}x${height}, ${sizeBytes / 1024}KB")
-                                    }
-                                    withContext(Dispatchers.Main) {
-                                        acquisitionReportText = sb.toString().trimEnd()
-                                        showAcquisitionReportDialog = true
-                                        isTestingAcquisition = false
-                                    }
-                                } catch (e: Exception) {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(
-                                                R.string.compose_walking_acquisition_error,
-                                                e.message ?: context.getString(R.string.compose_unknown_error),
-                                            ),
-                                            Toast.LENGTH_LONG,
-                                        ).show()
-                                        isTestingAcquisition = false
-                                    }
-                                }
-                            }
-                        },
-                        enabled = !isTestingAcquisition && hasCamera && !running && videoMode == WalkingAidVideoMode.PERIODIC_PHOTOS,
+                        onClick = vm::onRunAcquisitionBenchmark,
+                        enabled = !vm.isTestingAcquisition && hasCamera && !running && videoMode == WalkingAidVideoMode.PERIODIC_PHOTOS,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        if (isTestingAcquisition) {
+                        if (vm.isTestingAcquisition) {
                             CircularProgressIndicator(
                                 modifier = Modifier.height(20.dp).width(20.dp),
                                 strokeWidth = 2.dp,
@@ -649,11 +393,8 @@ fun WalkingAidSettingsScreen(
                     ) {
                         (0..5).forEach { level ->
                             FilterChip(
-                                selected = thumbnailQuality == level,
-                                onClick = {
-                                    thumbnailQuality = level
-                                    WalkingAidPreferences.setThumbnailQualityLevel(context, level)
-                                },
+                                selected = vm.thumbnailQuality == level,
+                                onClick = { vm.onThumbnailQualitySelected(level) },
                                 label = { Text("$level") },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -665,7 +406,7 @@ fun WalkingAidSettingsScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        stringResource(R.string.compose_walking_photo_settle_delay, settleDelayMs),
+                        stringResource(R.string.compose_walking_photo_settle_delay, vm.settleDelayMs),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                     )
@@ -676,11 +417,8 @@ fun WalkingAidSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Slider(
-                        value = settleDelayMs.toFloat(),
-                        onValueChange = { newValue ->
-                            settleDelayMs = newValue.toInt()
-                            WalkingAidPreferences.setPhotoSettleDelayMs(context, newValue.toInt())
-                        },
+                        value = vm.settleDelayMs.toFloat(),
+                        onValueChange = { vm.onSettleDelayChange(it.toInt()) },
                         valueRange = 0f..500f,
                         steps = 9,
                         modifier = Modifier.fillMaxWidth(),
@@ -710,20 +448,13 @@ fun WalkingAidSettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(
-                                selected = imageDescriptionSource == "local",
-                                onClick = {
-                                    imageDescriptionSource = "local"
-                                    WalkingAidPreferences.setImageDescriptionSource(context, "local")
-                                },
+                                selected = vm.imageDescriptionSource == "local",
+                                onClick = { vm.onImageDescriptionSourceSelected("local") },
                                 label = { Text(stringResource(R.string.compose_walking_local_safety)) },
                             )
                             FilterChip(
-                                selected = imageDescriptionSource == "cloud",
-                                onClick = {
-                                    imageDescriptionSource = "cloud"
-                                    WalkingAidPreferences.setImageDescriptionSource(context, "cloud")
-                                    showImageModelPicker = true
-                                },
+                                selected = vm.imageDescriptionSource == "cloud",
+                                onClick = { vm.onImageDescriptionSourceSelected("cloud") },
                                 label = { Text(stringResource(R.string.compose_walking_cloud_context)) },
                             )
                         }
@@ -734,12 +465,12 @@ fun WalkingAidSettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
 
-                        if (imageDescriptionSource == "cloud") {
+                        if (vm.imageDescriptionSource == "cloud") {
                             Spacer(modifier = Modifier.height(8.dp))
-                            TextButton(onClick = { showImageModelPicker = true }) {
+                            TextButton(onClick = vm::openImageModelPicker) {
                                 Text(
-                                    text = if (imageDescriptionCloudModelId.isNotBlank())
-                                        "Model: $imageDescriptionCloudModelId"
+                                    text = if (vm.imageDescriptionCloudModelId.isNotBlank())
+                                        "Model: ${vm.imageDescriptionCloudModelId}"
                                     else
                                         stringResource(R.string.compose_walking_select_model),
                                 )
@@ -755,59 +486,19 @@ fun WalkingAidSettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
-                            selected = yoloModelType == WalkingAidPreferences.MODEL_TYPE_YOLO11,
-                            onClick = {
-                                yoloModelType = WalkingAidPreferences.MODEL_TYPE_YOLO11
-                                WalkingAidPreferences.setYoloModelType(context, WalkingAidPreferences.MODEL_TYPE_YOLO11)
-                            },
+                            selected = vm.yoloModelType == WalkingAidPreferences.MODEL_TYPE_YOLO11,
+                            onClick = { vm.onYoloModelTypeSelected(WalkingAidPreferences.MODEL_TYPE_YOLO11) },
                             label = { Text(stringResource(R.string.compose_walking_yolo_fast)) },
                         )
                         FilterChip(
-                            selected = yoloModelType == WalkingAidPreferences.MODEL_TYPE_YOLO_WORLD,
-                            onClick = {
-                                yoloModelType = WalkingAidPreferences.MODEL_TYPE_YOLO_WORLD
-                                WalkingAidPreferences.setYoloModelType(context, WalkingAidPreferences.MODEL_TYPE_YOLO_WORLD)
-                            },
+                            selected = vm.yoloModelType == WalkingAidPreferences.MODEL_TYPE_YOLO_WORLD,
+                            onClick = { vm.onYoloModelTypeSelected(WalkingAidPreferences.MODEL_TYPE_YOLO_WORLD) },
                             label = { Text(stringResource(R.string.compose_walking_yolo_larger)) },
                         )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
-                    WalkingAidModelDownloadCard(
-                        entry = WalkingAidModelCatalog.detectorFor(yoloModelType),
-                        installed = WalkingAidModelInstaller.isInstalled(
-                            context,
-                            WalkingAidModelCatalog.detectorFor(yoloModelType),
-                        ),
-                        isDownloading = downloadingModelId == WalkingAidModelCatalog.detectorFor(yoloModelType).id,
-                        status = modelDownloadStatus,
-                        onDownload = { entry ->
-                            downloadingModelId = entry.id
-                            modelDownloadStatus = context.getString(R.string.compose_walking_model_starting, entry.displayName)
-                            CoroutineScope(Dispatchers.IO).launch {
-                                runCatching {
-                                    WalkingAidModelInstaller.install(context, entry) { progress ->
-                                        CoroutineScope(Dispatchers.Main).launch {
-                                            modelDownloadStatus = context.getString(R.string.compose_walking_model_downloading, progress.percent)
-                                        }
-                                    }
-                                }.onSuccess {
-                                    withContext(Dispatchers.Main) {
-                                        modelDownloadStatus = context.getString(R.string.compose_walking_model_ready, entry.displayName)
-                                        downloadingModelId = null
-                                    }
-                                }.onFailure { error ->
-                                    withContext(Dispatchers.Main) {
-                                        modelDownloadStatus = context.getString(
-                                            R.string.compose_walking_model_download_failed,
-                                            error.message ?: "unknown error",
-                                        )
-                                        downloadingModelId = null
-                                    }
-                                }
-                            }
-                        },
-                    )
+                    WalkingAidModelDownloadCard(vm, WalkingAidModelCatalog.detectorFor(vm.yoloModelType))
 
                     if (aidMode == WalkingAidMode.EXPLORE) return@Column
 
@@ -820,23 +511,15 @@ fun WalkingAidSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     TextField(
                         value = focusDescriptionText,
-                        onValueChange = { newValue ->
-                            focusDescriptionText = newValue
-                            focusTranslationError = null
-                        },
+                        onValueChange = vm::onFocusTextChange,
                         placeholder = { Text(stringResource(R.string.compose_walking_attention_hint)) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
                         maxLines = 4,
                         supportingText = {
-                            val understood = WalkingAidFocusMapper.resolve(
-                                savedModelFocusText.takeIf { focusDescriptionText.trim() == savedFocusOriginal } ?: "",
-                            )
+                            val understood = WalkingAidFocusMapper.resolve(vm.understoodFocusText)
                             Text(
-                                if (
-                                    focusDescriptionText.trim() != savedFocusOriginal ||
-                                    focusTranslationSource != savedFocusTranslationSource
-                                ) {
+                                if (vm.focusUnsaved) {
                                     stringResource(R.string.compose_walking_attention_unsaved)
                                 } else if (understood.isEmpty()) {
                                     stringResource(R.string.compose_walking_attention_support)
@@ -858,53 +541,21 @@ fun WalkingAidSettingsScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = focusTranslationSource == "local",
-                            onClick = { focusTranslationSource = "local" },
+                            onClick = { vm.onFocusTranslationSourceSelected("local") },
                             label = { Text(stringResource(R.string.compose_walking_translation_local)) },
                         )
                         FilterChip(
                             selected = focusTranslationSource == "cloud",
-                            onClick = { focusTranslationSource = "cloud" },
+                            onClick = { vm.onFocusTranslationSourceSelected("cloud") },
                             label = { Text(stringResource(R.string.compose_walking_translation_cloud)) },
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
-                        enabled = !isTranslatingFocus,
-                        onClick = {
-                            val original = focusDescriptionText.trim().take(500)
-                            if (original.isBlank()) {
-                                WalkingAidPreferences.setFocusDescription(context, "")
-                                savedFocusOriginal = ""
-                                savedModelFocusText = ""
-                                savedFocusTranslationSource = focusTranslationSource
-                                return@Button
-                            }
-                            isTranslatingFocus = true
-                            focusTranslationError = null
-                            uiScope.launch {
-                                runCatching {
-                                    withContext(Dispatchers.IO) {
-                                        WalkingAidFocusTranslator.create(context)
-                                            .translateToEnglish(original, focusTranslationSource)
-                                    }
-                                }.onSuccess { translated ->
-                                    WalkingAidPreferences.setCachedFocusTranslation(
-                                        context = context,
-                                        original = original,
-                                        source = focusTranslationSource,
-                                        english = translated,
-                                    )
-                                    savedFocusOriginal = original
-                                    savedModelFocusText = translated
-                                    savedFocusTranslationSource = focusTranslationSource
-                                }.onFailure { error ->
-                                    focusTranslationError = error.message ?: "Translation failed"
-                                }
-                                isTranslatingFocus = false
-                            }
-                        },
+                        enabled = !vm.isTranslatingFocus,
+                        onClick = vm::onTranslateAndSaveFocus,
                     ) {
-                        if (isTranslatingFocus) {
+                        if (vm.isTranslatingFocus) {
                             CircularProgressIndicator(
                                 modifier = Modifier.width(18.dp).height(18.dp),
                                 strokeWidth = 2.dp,
@@ -913,7 +564,7 @@ fun WalkingAidSettingsScreen(
                         }
                         Text(stringResource(R.string.compose_walking_translate_save))
                     }
-                    focusTranslationError?.let { error ->
+                    vm.focusTranslationError?.let { error ->
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             stringResource(R.string.compose_walking_translation_failed, error),
@@ -928,7 +579,7 @@ fun WalkingAidSettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            stringResource(R.string.compose_walking_model_input, savedModelFocusText),
+                            stringResource(R.string.compose_walking_model_input, vm.savedModelFocusText),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                         )
@@ -950,15 +601,12 @@ fun WalkingAidSettingsScreen(
                     ) {
                         Text(stringResource(R.string.compose_walking_depth_enabled), modifier = Modifier.weight(1f))
                         Switch(
-                            checked = depthEnabled,
-                            onCheckedChange = { newValue ->
-                                depthEnabled = newValue
-                                WalkingAidPreferences.setDepthEnabled(context, newValue)
-                            },
+                            checked = vm.depthEnabled,
+                            onCheckedChange = vm::onDepthEnabledChange,
                         )
                     }
 
-                    if (depthEnabled) {
+                    if (vm.depthEnabled) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             stringResource(R.string.compose_walking_source),
@@ -968,68 +616,30 @@ fun WalkingAidSettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(
-                                selected = depthSource == "local",
-                                onClick = {
-                                    depthSource = "local"
-                                    WalkingAidPreferences.setDepthSource(context, "local")
-                                },
+                                selected = vm.depthSource == "local",
+                                onClick = { vm.onDepthSourceSelected("local") },
                                 label = { Text(stringResource(R.string.walking_aid_source_local)) },
                             )
                             FilterChip(
-                                selected = depthSource == "cloud",
-                                onClick = {
-                                    depthSource = "cloud"
-                                    WalkingAidPreferences.setDepthSource(context, "cloud")
-                                    showDepthModelPicker = true
-                                },
+                                selected = vm.depthSource == "cloud",
+                                onClick = { vm.onDepthSourceSelected("cloud") },
                                 label = { Text(stringResource(R.string.walking_aid_source_cloud)) },
                             )
                         }
 
-                        if (depthSource == "cloud") {
+                        if (vm.depthSource == "cloud") {
                             Spacer(modifier = Modifier.height(8.dp))
-                            TextButton(onClick = { showDepthModelPicker = true }) {
+                            TextButton(onClick = vm::openDepthModelPicker) {
                                 Text(
-                                    text = if (depthCloudModelId.isNotBlank())
-                                        "Model: $depthCloudModelId"
+                                    text = if (vm.depthCloudModelId.isNotBlank())
+                                        "Model: ${vm.depthCloudModelId}"
                                     else
                                         stringResource(R.string.compose_walking_select_model),
                                 )
                             }
                         } else {
                             Spacer(modifier = Modifier.height(12.dp))
-                            WalkingAidModelDownloadCard(
-                                entry = WalkingAidModelCatalog.depth,
-                                installed = WalkingAidModelInstaller.isInstalled(context, WalkingAidModelCatalog.depth),
-                                isDownloading = downloadingModelId == WalkingAidModelCatalog.depth.id,
-                                status = modelDownloadStatus,
-                                onDownload = { entry ->
-                                    downloadingModelId = entry.id
-                                    modelDownloadStatus = context.getString(R.string.compose_walking_model_starting, entry.displayName)
-                                    CoroutineScope(Dispatchers.IO).launch {
-                                        runCatching {
-                                            WalkingAidModelInstaller.install(context, entry) { progress ->
-                                                CoroutineScope(Dispatchers.Main).launch {
-                                                    modelDownloadStatus = context.getString(R.string.compose_walking_model_downloading, progress.percent)
-                                                }
-                                            }
-                                        }.onSuccess {
-                                            withContext(Dispatchers.Main) {
-                                        modelDownloadStatus = context.getString(R.string.compose_walking_model_ready, entry.displayName)
-                                                downloadingModelId = null
-                                            }
-                                        }.onFailure { error ->
-                                            withContext(Dispatchers.Main) {
-                                        modelDownloadStatus = context.getString(
-                                            R.string.compose_walking_model_download_failed,
-                                            error.message ?: "unknown error",
-                                        )
-                                                downloadingModelId = null
-                                            }
-                                        }
-                                    }
-                                },
-                            )
+                            WalkingAidModelDownloadCard(vm, WalkingAidModelCatalog.depth)
                         }
                     }
                 }
@@ -1049,18 +659,15 @@ fun WalkingAidSettingsScreen(
                     ) {
                         Text(stringResource(R.string.walking_aid_tts_enabled), modifier = Modifier.weight(1f))
                         Switch(
-                            checked = ttsEnabled,
-                            onCheckedChange = { newValue ->
-                                ttsEnabled = newValue
-                                WalkingAidPreferences.setTtsEnabled(context, newValue)
-                            },
+                            checked = vm.ttsEnabled,
+                            onCheckedChange = vm::onTtsEnabledChange,
                         )
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
                     val speechRateLabel = stringResource(R.string.walking_aid_speech_rate)
-                    val speechRateValue = stringResource(R.string.walking_aid_speech_rate_value, speechRate)
+                    val speechRateValue = stringResource(R.string.walking_aid_speech_rate_value, vm.speechRate)
                     Text(speechRateLabel)
                     Text(speechRateValue)
                     Slider(
@@ -1068,17 +675,14 @@ fun WalkingAidSettingsScreen(
                             contentDescription = speechRateLabel
                             stateDescription = speechRateValue
                         },
-                        value = speechRate,
-                        onValueChange = {
-                            speechRate = it
-                            WalkingAidPreferences.setSpeechRate(context, it)
-                        },
+                        value = vm.speechRate,
+                        onValueChange = vm::onSpeechRateChange,
                         valueRange = 0.5f..2f,
                         steps = 14,
                     )
                     if (aidMode == WalkingAidMode.EXPLORE) {
                         val pauseLabel = stringResource(R.string.walking_aid_announcement_pause)
-                        val pauseValue = stringResource(R.string.walking_aid_announcement_pause_value, announcementPause)
+                        val pauseValue = stringResource(R.string.walking_aid_announcement_pause_value, vm.announcementPause)
                         Text(pauseLabel)
                         Text(pauseValue)
                         Slider(
@@ -1086,11 +690,8 @@ fun WalkingAidSettingsScreen(
                                 contentDescription = pauseLabel
                                 stateDescription = pauseValue
                             },
-                            value = announcementPause,
-                            onValueChange = {
-                                announcementPause = it
-                                WalkingAidPreferences.setAnnouncementPauseMs(context, (it * 1000).toLong())
-                            },
+                            value = vm.announcementPause,
+                            onValueChange = vm::onAnnouncementPauseChange,
                             valueRange = 0f..5f,
                             steps = 9,
                         )
@@ -1103,11 +704,8 @@ fun WalkingAidSettingsScreen(
                     ) {
                         Text(stringResource(R.string.walking_aid_safety_disclaimer), modifier = Modifier.weight(1f))
                         Switch(
-                            checked = safetyDisclaimerEnabled,
-                            onCheckedChange = { newValue ->
-                                safetyDisclaimerEnabled = newValue
-                                WalkingAidPreferences.setSafetyDisclaimerEnabled(context, newValue)
-                            },
+                            checked = vm.safetyDisclaimerEnabled,
+                            onCheckedChange = vm::onSafetyDisclaimerChange,
                         )
                     }
                 }
@@ -1127,19 +725,14 @@ fun WalkingAidSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     TextField(
-                        value = customPrompt,
-                        onValueChange = { newValue ->
-                            if (newValue.length <= 1500) {
-                                customPrompt = newValue
-                                WalkingAidPreferences.setCustomPrompt(context, newValue)
-                            }
-                        },
+                        value = vm.customPrompt,
+                        onValueChange = vm::onCustomPromptChange,
                         modifier = Modifier.fillMaxWidth(),
                          label = { Text(stringResource(R.string.compose_walking_instructions)) },
                          placeholder = { Text(stringResource(R.string.compose_walking_instructions_hint)) },
                         minLines = 3,
                         maxLines = 6,
-                        supportingText = { Text("${customPrompt.length}/1500") },
+                        supportingText = { Text("${vm.customPrompt.length}/${WalkingAidSettingsViewModel.MAX_CUSTOM_PROMPT_LENGTH}") },
                     )
                 }
             }
@@ -1152,15 +745,12 @@ fun WalkingAidSettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        stringResource(R.string.compose_walking_max_descriptions, historyMaxCount),
+                        stringResource(R.string.compose_walking_max_descriptions, vm.historyMaxCount),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Slider(
-                        value = historyMaxCount.toFloat(),
-                        onValueChange = { newValue ->
-                            historyMaxCount = newValue.toInt()
-                            WalkingAidPreferences.setImageHistoryMaxCount(context, newValue.toInt())
-                        },
+                        value = vm.historyMaxCount.toFloat(),
+                        onValueChange = { vm.onHistoryMaxCountChange(it.toInt()) },
                         valueRange = 10f..100f,
                         steps = 8,
                         modifier = Modifier.fillMaxWidth(),
@@ -1169,10 +759,7 @@ fun WalkingAidSettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
-                        onClick = {
-                            WalkingAidImageStore.clear(context)
-                            Toast.makeText(context, R.string.walking_aid_clear_history, Toast.LENGTH_SHORT).show()
-                        },
+                        onClick = vm::onClearHistory,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(stringResource(R.string.walking_aid_clear_history))
@@ -1185,115 +772,67 @@ fun WalkingAidSettingsScreen(
     }
 
     // Model picker dialogs
-    if (showImageModelPicker) {
+    if (vm.showImageModelPicker) {
         ModelPickerDialog(
-            availableModels = availableModels,
-            isLoading = modelsLoading,
-            selectedModelId = imageDescriptionCloudModelId,
-            onSelect = { modelId ->
-                imageDescriptionCloudModelId = modelId
-                WalkingAidPreferences.setImageDescriptionCloudModelId(context, modelId)
-                showImageModelPicker = false
-            },
-            onDismiss = { showImageModelPicker = false },
-            onRefresh = {
-                modelsLoading = true
-                CoroutineScope(Dispatchers.IO).launch {
-                    val result = ProSubscriptionRelayClient.fetchAvailableModels(context)
-                    result.onSuccess { models ->
-                        availableModels = models
-                    }.onFailure {
-                        CoroutineScope(Dispatchers.Main).launch {
-                            Toast.makeText(
-                                context,
-                                context.getString(
-                                    R.string.compose_walking_models_load_failed,
-                                    it.message ?: context.getString(R.string.compose_unknown_error),
-                                ),
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                        }
-                    }
-                    modelsLoading = false
-                }
-            },
+            availableModels = vm.availableModels,
+            isLoading = vm.modelsLoading,
+            selectedModelId = vm.imageDescriptionCloudModelId,
+            onSelect = vm::onImageModelSelected,
+            onDismiss = vm::dismissImageModelPicker,
+            onRefresh = vm::refreshCloudModels,
         )
     }
 
-    if (showDepthModelPicker) {
+    if (vm.showDepthModelPicker) {
         ModelPickerDialog(
-            availableModels = availableModels,
-            isLoading = modelsLoading,
-            selectedModelId = depthCloudModelId,
-            onSelect = { modelId ->
-                depthCloudModelId = modelId
-                WalkingAidPreferences.setDepthCloudModelId(context, modelId)
-                showDepthModelPicker = false
-            },
-            onDismiss = { showDepthModelPicker = false },
-            onRefresh = {
-                modelsLoading = true
-                CoroutineScope(Dispatchers.IO).launch {
-                    val result = ProSubscriptionRelayClient.fetchAvailableModels(context)
-                    result.onSuccess { models ->
-                        availableModels = models
-                    }.onFailure {
-                        CoroutineScope(Dispatchers.Main).launch {
-                            Toast.makeText(
-                                context,
-                                context.getString(
-                                    R.string.compose_walking_models_load_failed,
-                                    it.message ?: context.getString(R.string.compose_unknown_error),
-                                ),
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                        }
-                    }
-                    modelsLoading = false
-                }
-            },
+            availableModels = vm.availableModels,
+            isLoading = vm.modelsLoading,
+            selectedModelId = vm.depthCloudModelId,
+            onSelect = vm::onDepthModelSelected,
+            onDismiss = vm::dismissDepthModelPicker,
+            onRefresh = vm::refreshCloudModels,
         )
     }
 
-    if (showLatencyReportDialog) {
+    vm.latencyReport?.let { report ->
         AlertDialog(
-            onDismissRequest = { showLatencyReportDialog = false },
+            onDismissRequest = vm::dismissLatencyReport,
             title = { Text(stringResource(R.string.compose_walking_latency_title)) },
             text = {
                 Text(
-                    text = latencyReportText,
+                    text = report,
                     style = MaterialTheme.typography.bodySmall,
                 )
             },
             confirmButton = {
-                TextButton(onClick = { showLatencyReportDialog = false }) {
+                TextButton(onClick = vm::dismissLatencyReport) {
                     Text(stringResource(R.string.compose_walking_cancel))
                 }
             }
         )
     }
 
-    if (showAcquisitionReportDialog) {
+    vm.acquisitionReport?.let { report ->
         AlertDialog(
-            onDismissRequest = { showAcquisitionReportDialog = false },
+            onDismissRequest = vm::dismissAcquisitionReport,
             title = { Text(stringResource(R.string.compose_walking_acquisition_title)) },
             text = {
                 Text(
-                    text = acquisitionReportText,
+                    text = report,
                     style = MaterialTheme.typography.bodySmall,
                 )
             },
             confirmButton = {
-                TextButton(onClick = { showAcquisitionReportDialog = false }) {
+                TextButton(onClick = vm::dismissAcquisitionReport) {
                     Text(stringResource(R.string.compose_walking_cancel))
                 }
             }
         )
     }
 
-    showReadinessResult?.let { readiness ->
+    vm.readiness?.let { readiness ->
         AlertDialog(
-            onDismissRequest = { showReadinessResult = null },
+            onDismissRequest = vm::dismissReadiness,
             title = { Text(stringResource(R.string.compose_walking_setup_required)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1311,11 +850,7 @@ fun WalkingAidSettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        showReadinessResult = null
-                    }
-                ) {
+                TextButton(onClick = vm::dismissReadiness) {
                     Text(stringResource(R.string.compose_walking_review_settings))
                 }
             },
@@ -1323,7 +858,7 @@ fun WalkingAidSettingsScreen(
                 if (readiness.requiresProForCloud) {
                     TextButton(
                         onClick = {
-                            showReadinessResult = null
+                            vm.dismissReadiness()
                             val intent = Intent(context, ProSubscriptionActivity::class.java)
                             context.startActivity(intent)
                         }
@@ -1331,7 +866,7 @@ fun WalkingAidSettingsScreen(
                         Text(stringResource(R.string.compose_walking_upgrade_pro))
                     }
                 } else {
-                    TextButton(onClick = { showReadinessResult = null }) {
+                    TextButton(onClick = vm::dismissReadiness) {
                         Text(stringResource(R.string.compose_walking_cancel))
                     }
                 }
@@ -1341,13 +876,10 @@ fun WalkingAidSettingsScreen(
 }
 
 @Composable
-private fun WalkingAidModelDownloadCard(
-    entry: WalkingAidModelCatalogEntry,
-    installed: Boolean,
-    isDownloading: Boolean,
-    status: String,
-    onDownload: (WalkingAidModelCatalogEntry) -> Unit,
-) {
+private fun WalkingAidModelDownloadCard(vm: WalkingAidSettingsViewModel, entry: WalkingAidModelCatalogEntry) {
+    val context = LocalContext.current
+    val installed = WalkingAidModelInstaller.isInstalled(context, entry)
+    val isDownloading = vm.downloadingModelId == entry.id
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -1361,10 +893,10 @@ private fun WalkingAidModelDownloadCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (isDownloading) {
-                Text(status, style = MaterialTheme.typography.bodySmall)
+                Text(modelDownloadStatus(vm.modelDownload), style = MaterialTheme.typography.bodySmall)
             }
             Button(
-                onClick = { onDownload(entry) },
+                onClick = { vm.onDownloadModel(entry.id, entry.displayName) },
                 enabled = !installed && !isDownloading,
             ) {
                 Text(
@@ -1380,6 +912,15 @@ private fun WalkingAidModelDownloadCard(
 }
 
 @Composable
+private fun modelDownloadStatus(download: WalkingAidModelDownload?): String = when (download) {
+    null -> ""
+    is WalkingAidModelDownload.Starting -> stringResource(R.string.compose_walking_model_starting, download.modelName)
+    is WalkingAidModelDownload.Downloading -> stringResource(R.string.compose_walking_model_downloading, download.percent)
+    is WalkingAidModelDownload.Ready -> stringResource(R.string.compose_walking_model_ready, download.modelName)
+    is WalkingAidModelDownload.Failed -> stringResource(R.string.compose_walking_model_download_failed, download.message)
+}
+
+@Composable
 private fun SectionTitle(title: String) {
     Text(
         text = title,
@@ -1392,7 +933,7 @@ private fun SectionTitle(title: String) {
 
 @Composable
 private fun ModelPickerDialog(
-    availableModels: List<ProSubscriptionRelayClient.ModelOption>,
+    availableModels: List<WalkingAidModelOption>,
     isLoading: Boolean,
     selectedModelId: String,
     onSelect: (String) -> Unit,
