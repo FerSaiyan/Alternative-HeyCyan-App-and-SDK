@@ -15,12 +15,12 @@ These came in with the collaborator's shared-UI commits, and Android inherits th
 - **Glasses dashboard:** icons on Scan and Reconnect; battery and storage icons in the status card; "Test image AI description" renamed "Test description" (`b49ff72`, `f5faee9`, `5d3fefc`).
 - **Bottom bar:** the Glasses tab uses a glasses icon. This accounts for the 0.07% difference on every screen with the bottom bar.
 - **Chat list:** the top-right Appearance button now shows a chat-bubble glyph, because `AppIcon.Appearance` was redrawn in `b49ff72`. **Confirm this is intended.**
-- **Settings** (`b49ff72`, `fe6f866`, `27d2c62`):
-  - The subtitle "Privacy-first defaults…" is gone.
-  - "Custom AI provider" is now "AI provider".
-  - The Tasker/Local switch row is gone.
-  - Vault and data rows are reordered.
-  - **Review these with the collaborator**; they change the Android settings screen.
+- **Settings** (`b49ff72`):
+  - The intro card "Privacy-first defaults, local controls, and automation settings." is removed.
+  - "Custom AI provider" is renamed "AI provider" in every language.
+  - FAQ is no longer its own card; it now sits inside the Support section, after "Send debug logs".
+  - Every other row (including the Tasker/Local/Pro switch and the vault and data rows) is unchanged. They only sit higher on the page because the intro card is gone.
+  - **Review these with the collaborator.** Side-by-side images are in `cyan-refactor-wt/friend-ui-changes/` (not in the repo).
 - **Welcome and onboarding:** small icon changes.
 
 ## Environment only
