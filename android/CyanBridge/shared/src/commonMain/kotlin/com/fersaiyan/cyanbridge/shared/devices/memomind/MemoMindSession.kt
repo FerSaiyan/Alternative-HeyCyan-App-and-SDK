@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.Volatile
 import kotlin.random.Random
@@ -368,13 +367,18 @@ class MemoMindSession(private val transport: MemoMindTransport) {
         val waiting = Pending(eventId, request.service, request.command)
         pending = waiting
         try {
-            withTimeout(timeoutMs) {
+            // A timeout is an ordinary failure for callers, not a cancellation of their coroutine.
+            withTimeoutOrNull(timeoutMs) {
                 frames.forEachIndexed { index, frame ->
                     transport.writeCommand(frame)
                     if (index < frames.lastIndex && transport.awaitsFragmentAcks) waiting.flowControl.receive()
                 }
                 waiting.response.await()
-            }
+            } ?: throw MemoMindCommandException(
+                request,
+                null,
+                "MemoMind 0x${request.service.toString(16)}/0x${request.command.toString(16)} timed out",
+            )
         } finally {
             pending = null
             waiting.flowControl.close()
