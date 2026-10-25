@@ -369,3 +369,8 @@ Smoke test:
   - AI-photo button.
   - 30 s idle stop.
 - **Tasker setup:** import, verify, test voice.
+
+## Found by the screen comparison
+
+- **Eyevue selected at startup:** the baseline started a connect, cancelled it, and showed "Eyevue error". The refactor makes a single attempt. With real Eyevue glasses, check that launching the app with Eyevue selected connects once, and that the status goes Connecting → connected with no transient "Eyevue error".
+- **Settings and icons changed by the iOS branch's shared UI:** see SCREEN_PARITY.md. These are product changes to confirm with the collaborator, not refactor regressions.
