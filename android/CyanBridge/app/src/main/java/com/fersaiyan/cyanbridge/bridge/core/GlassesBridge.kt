@@ -79,6 +79,21 @@ object GlassesBridge {
         return adapter.clearDisplay()
     }
 
+    /**
+     * Shows a phone notification: as a native notification card on adapters that have one
+     * ([GlassesNotificationDisplay]), otherwise as the text "app: title" plus the body.
+     */
+    suspend fun showNotification(appName: String, title: String, text: String, packageName: String): Result<Unit> {
+        val adapter = activeAdapter ?: return Result.failure(BridgeError.NotConnected())
+        val command = DisplayCommand.Text(text = "$appName: $title\n$text")
+        emit(BridgeEvent.DisplayRequested(adapter.adapterId, command))
+        return (adapter as? GlassesNotificationDisplay)?.showNotification(appName, title, text, packageName)
+            ?: adapter.showText(command)
+    }
+
+    /** True when [adapterId] is the adapter display commands go to. */
+    fun isActiveAdapter(adapterId: String): Boolean = activeAdapter?.adapterId == adapterId
+
     // --- Input forwarding ---
 
     /** Called by adapters to forward input events to the bridge. */

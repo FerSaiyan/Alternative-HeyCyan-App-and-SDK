@@ -6,7 +6,6 @@ import android.content.Context
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import com.fersaiyan.cyanbridge.bridge.core.DisplayCommand
 import com.fersaiyan.cyanbridge.bridge.core.GlassesBridge
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.localagent.LocalAgentNotificationSpeaker
@@ -18,10 +17,10 @@ import kotlinx.coroutines.launch
 
 /**
  * Listens for phone notifications and forwards them to the connected glasses
- * via [GlassesBridge].
+ * via [GlassesBridge.showNotification].
  *
- * Uses the notification wire route (group 0x05, opcode 0x01) — the same
- * channel the official MemoMind app uses for phone notifications.
+ * MemoMind shows them as native notification cards (service 0x05, command 0x01),
+ * the route the official MemoMind app uses for phone notifications.
  *
  * Enable/disable via [setEnabled]. The service itself is always bound when
  * the user grants Notification Listener access in system settings; the
@@ -40,6 +39,12 @@ class NotificationForwarderService : NotificationListenerService() {
         @Volatile
         var enabled: Boolean = false
             private set
+
+        /** Turns forwarding on or off; the glasses screen that enables it must also turn it off. */
+        fun setEnabled(value: Boolean) {
+            enabled = value
+            Log.i(TAG, "Notification forwarding enabled=$value")
+        }
 
         /** Packages to never forward (avoid loops). */
         private val BLOCKED_PACKAGES = setOf(
@@ -87,11 +92,9 @@ class NotificationForwarderService : NotificationListenerService() {
 
         scope.launch {
             try {
-                // Use the notification wire route (group 0x05)
-                // showText() routes through encodeNotification() internally
-                val result = GlassesBridge.showText(
-                    DisplayCommand.Text(text = "$appName: $title\n$text")
-                )
+                // Native notification cards where the glasses have them (MemoMind service 0x05),
+                // otherwise the same "app: title" text as before.
+                val result = GlassesBridge.showNotification(appName, title, text, packageName)
                 if (result.isFailure) {
                     Log.w(TAG, "Failed to forward notification: ${result.exceptionOrNull()?.message}")
                 }
