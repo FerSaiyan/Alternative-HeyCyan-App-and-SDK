@@ -404,6 +404,19 @@ Force-stop the official MemoMind app first: the glasses accept one app connectio
 7. **Reconnect.** Power the glasses off and on: the link-loss log, then reconnection within ~5–30 s (manager retries and the ACL-connected auto-pair). Disconnect in the panel stays disconnected (auto-reconnect suppressed) until Connect.
 8. **Other families unchanged:** the device type dialog shows one extra choice (MemoMind); HeyCyan, MYVU and the rest pair and connect as before, and MYVU notification forwarding (if enabled elsewhere) still shows "app: title" text.
 
+### MemoMind on iOS (Mac build: `-PenableAppleTargets=true :shared:compileKotlinIosSimulatorArm64`, then the host app on an iPhone)
+
+Filter the Xcode console with `IosMemoMind` (covers `IosMemoMind`, `IosMemoMindBle`, `IosMemoMindIap2`) and `MemoMindSession`. Close the official MemoMind app first (swipe it away): it may hold the glasses' only app connection.
+
+1. **Does the firmware expose BLE GM at all?** This decides whether iOS works without MFi. Select the glasses in Scan (they appear as "MemoMind One …", classified MemoMind; also when another app keeps them connected, since iOS lists connected MemoMind peripherals). Expected: `GM GATT ready service=… frame=N`, then `Ready over BLE model=H001Y fw=… webBridge=…`. Record the logged service UUID (`FB349B5F-…` or `2020`) and `frame` (MTU - 3) with the firmware version. If the panel instead shows "…expose no GM Bluetooth LE service (0x2021/0x2022)…", the release firmware is an MFi build without the GATT service: go to step 7.
+2. **Battery.** The dashboard and MemoMind panel show the battery from `01/06`; Battery refreshes it. Compare with the official app.
+3. **HUD.** Test notification (native card "CyanBridge"), Show text (teleprompter, two lines), Clear display, Comfort brightness (level 7), as on Android. Long text checks fragmenting: Show text with a plugin card (Live Caption Relay) longer than `frame` bytes must arrive whole (each fragment waits for the empty flow-control reply). Note any lost or garbled long *replies* (device info is the longest): the firmware sizes notifications to 512 bytes, not the MTU.
+4. **Button question.** With the Web Bridge plugin started from the official app (then that app closed): reconnect, `webBridge=true`; a primary long press logs `Voice question requested by the glasses button` and runs the voice question: the cue and answer play on the glasses (HFP) and the question is heard through their microphone.
+5. **Microphone.** Over BLE, Test microphone shows "Bluetooth LE has no recording stream…" and starts a voice question through HFP (no Opus stream: the firmware has no BLE recording channel).
+6. **Notifications / disconnect.** The Notifications button shows the iOS limitation message (no forwarding). Disconnect in the panel drops the BLE link; Connect reconnects to the saved glasses. Power-cycling the glasses shows Disconnected; Reconnect brings them back.
+7. **iAP2 (development build only).** Add `ql.iap2.protocol02` and `ql.iap2.protocol01` to `UISupportedExternalAccessoryProtocols` in `ios/CyanBridgeKMPHost/Info.plist`, pair the glasses in iOS Settings ▸ Bluetooth, close the official app, then Connect in the MemoMind panel: `iAP2 session open: … protocols=[…]`, `Ready over iAP2 …`. HUD and battery as above; Test microphone then reports "N Opus frames in 3 s (iAP2)" (about 150). If iOS refuses the session ("iOS did not open the MemoMind ql.iap2.protocol02 session"), record whether the official app was running. Without the Info.plist entries the app never tries iAP2.
+8. **Other iOS families unchanged:** HeyCyan, Eyevue and TuneBuds still connect and use their own write characteristics.
+
 ## Mentra Live through Device Bind (see MENTRA_AUDIT.md)
 
 Filter logcat with:

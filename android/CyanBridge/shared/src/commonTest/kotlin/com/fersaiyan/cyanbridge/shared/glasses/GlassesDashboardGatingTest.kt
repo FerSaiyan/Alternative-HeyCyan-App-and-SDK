@@ -136,6 +136,8 @@ class GlassesDashboardGatingTest {
                     Action.TUNEBUDS_CONTROLS in other, eyevue,
                 )
                 assertEquals(expected, flags, "iOS sections for $deviceClass, linked=$linked")
+                // MemoMind's panel holds its Connect button, so it shows without a link.
+                assertEquals(deviceClass == DeviceClass.MEMOMIND, state.showMemoMindControls, "MemoMind panel for $deviceClass")
                 assertEquals(sample.deviceInfoLabel, state.deviceInfoLabel)
                 assertEquals(false, state.wifiAdbDebug.isAvailable)
                 assertEquals(LivePreviewUiState(), state.livePreview)
