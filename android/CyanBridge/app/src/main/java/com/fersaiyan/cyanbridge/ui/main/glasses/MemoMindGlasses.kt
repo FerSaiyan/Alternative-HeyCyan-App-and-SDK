@@ -10,6 +10,7 @@ import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.memomind.MemoMindLinkState
 import com.fersaiyan.cyanbridge.devices.memomind.MemoMindManager
+import com.fersaiyan.cyanbridge.devices.memomind.webplugin.MemoMindWebPluginsActivity
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
@@ -75,6 +76,7 @@ internal class MemoMindGlasses(private val context: GlassesDeviceContext) : Andr
             MemoMindPanelCommand.COMFORT_BRIGHTNESS -> manager.setBrightness(COMFORT_BRIGHTNESS_PERCENT)
             MemoMindPanelCommand.TEST_MICROPHONE -> manager.testMicrophone()
             MemoMindPanelCommand.TOGGLE_NOTIFICATION_FORWARDING -> toggleNotificationForwarding()
+            MemoMindPanelCommand.OPEN_WEB_PLUGINS -> activity.startKtxActivity<MemoMindWebPluginsActivity>()
         }
         return true
     }
@@ -123,6 +125,7 @@ internal class MemoMindGlasses(private val context: GlassesDeviceContext) : Andr
             testMicrophone = activity.getString(R.string.memomind_test_microphone),
             forwardNotificationsOn = activity.getString(R.string.memomind_forward_notifications_on),
             forwardNotificationsOff = activity.getString(R.string.memomind_forward_notifications_off),
+            webPlugins = activity.getString(R.string.memomind_webplugins_entry),
         )
     }
 
