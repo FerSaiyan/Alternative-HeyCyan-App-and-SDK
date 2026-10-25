@@ -6,8 +6,6 @@ import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.LocalAgentNotificationSpeaker
-import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
-import com.fersaiyan.cyanbridge.localagent.LocalAgentTelegramService
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
@@ -29,12 +27,7 @@ object LocalAgentPlugin {
         CommunityPluginPrefs.setNativePluginEnabled(context, NativePluginIds.LOCAL_AGENT, enabled)
         if (!enabled) {
             LocalAgentController.stop(context)
-            LocalAgentTelegramService.stop(context)
             LocalAgentNotificationSpeaker.stop()
-        } else if (RuntimePrefs.isTelegramRemoteControlEnabled(context)) {
-            // Remote control was explicitly configured earlier; restoring phone control can
-            // resume only that already allowlisted Telegram listener.
-            LocalAgentTelegramService.start(context)
         }
     }
 

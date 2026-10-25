@@ -38,12 +38,4 @@ class LocalAgentPrefsTest {
         LocalAgentPrefs.setScreenshotPlanningEnabled(context, false)
         assertFalse(LocalAgentPrefs.isRemoteScreenshotUploadEnabled(context))
     }
-
-    @Test
-    fun `Telegram allowed chat id is normalized and validated`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        assertTrue(LocalAgentPrefs.setTelegramAllowedChatId(context, "-1001234567890"))
-        assertTrue(LocalAgentPrefs.getTelegramAllowedChatId(context) == "-1001234567890")
-        assertFalse(LocalAgentPrefs.setTelegramAllowedChatId(context, "any-chat"))
-    }
 }
