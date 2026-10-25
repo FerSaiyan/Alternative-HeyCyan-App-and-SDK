@@ -11,6 +11,7 @@ import com.fersaiyan.cyanbridge.shared.assistant.AssistantOutput
 import com.fersaiyan.cyanbridge.shared.assistant.GlassesAssistant
 import com.fersaiyan.cyanbridge.shared.ble.BleConnectionState
 import com.fersaiyan.cyanbridge.shared.ble.IosBleManager
+import com.fersaiyan.cyanbridge.shared.ble.IosMemoMindBleTransport
 import com.fersaiyan.cyanbridge.shared.ble.IosTuneBudsSession
 import com.fersaiyan.cyanbridge.shared.ble.VendorGlassesMode
 import com.fersaiyan.cyanbridge.shared.ble.awaitModeAccepted
@@ -19,6 +20,8 @@ import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice
 import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueProtocol
+import com.fersaiyan.cyanbridge.shared.devices.memomind.MemoMindDisplayAdapter
+import com.fersaiyan.cyanbridge.shared.devices.memomind.MemoMindSession
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
@@ -60,11 +63,11 @@ import platform.CoreBluetooth.CBUUID
 
 private const val IOS_BLE_CONNECT_TIMEOUT_MS = 20_000L
 private const val GLASSES_CHAT_ID = "glasses-assistant"
-/**
- * Classes the app does not reconnect at launch (audio-only devices; Meizu's relay is RFCOMM-only;
- * MemoMind has no iOS link yet).
- */
-private val NO_LINK_CLASSES = setOf(DeviceClass.GENERIC_AUDIO, DeviceClass.MEIZU_MYVU, DeviceClass.MEMOMIND)
+/** Classes the app does not reconnect at launch (audio-only devices; Meizu's relay is RFCOMM-only). */
+private val NO_LINK_CLASSES = setOf(DeviceClass.GENERIC_AUDIO, DeviceClass.MEIZU_MYVU)
+
+/** MemoMind GM GATT service in both representations (BLUETOOTH_DEVELOPER_GUIDE.md). */
+private val MEMOMIND_SERVICE_UUIDS = listOf(IosMemoMindBleTransport.SERVICE_UUID, IosMemoMindBleTransport.ALTERNATE_SERVICE_UUID)
 // Android ImageThumbnailQuality (sdkValue to label).
 private val THUMBNAIL_QUALITY_LABELS = mapOf(
     0 to "Instant", 1 to "Quick", 2 to "Smooth", 3 to "Fine", 4 to "Clearer", 5 to "Detailed",
@@ -186,8 +189,21 @@ internal class IosAppController {
     // Like Android, unclassified and audio-only glasses use the HeyCyan path.
     private val genericAudioGlasses = IosProfiledGlasses(GlassesFamilyProfiles.genericAudio, heyCyan)
 
-    /** MemoMind until its iOS link exists: the profile only (voice questions over Bluetooth audio). */
-    private val memoMindGlasses = IosProfiledGlasses(GlassesFamilyProfiles.memoMind, heyCyan)
+    /** MemoMind over BLE GATT or iAP2; voice questions use its Bluetooth (HFP) microphone. */
+    private val memoMindGlasses = IosMemoMindGlasses(
+        bleManager = bleManager,
+        scope = scope,
+        host = glassesHost,
+        bleConnection = bleConnection,
+        onVoiceQuestion = { if (!assistant.isBusy) assistant.askByVoice() },
+    )
+
+    /** The MemoMind session (HUD, plugin messages, input events) for a web plugin host to attach to. */
+    val memoMindSession: MemoMindSession get() = memoMindGlasses.session
+
+    /** MemoMind as a display adapter (text, cards, notifications, button events). */
+    val memoMindDisplay: MemoMindDisplayAdapter get() = memoMindGlasses.displayAdapter
+
     private val unknownGlasses = IosProfiledGlasses(GlassesFamilyProfiles.unknown, heyCyan)
 
     /** The selected family's implementation (Android: AndroidGlassesDevices). */
@@ -337,6 +353,10 @@ internal class IosAppController {
                 if (!wasBleConnected && isBleConnected && selectedDeviceClass == DeviceClass.TUNEBUDS) {
                     scope.launch { otherGlasses.onBleConnected() }
                 }
+                if (!wasBleConnected && isBleConnected && selectedDeviceClass == DeviceClass.MEMOMIND) {
+                    memoMindGlasses.onBleConnected()
+                }
+                if (wasBleConnected && !isBleConnected) memoMindGlasses.onBleDisconnected()
                 if (wasBleConnected && connectionState == BleConnectionState.DISCONNECTED) {
                     IosTransferModeConfiguration.clearHotspot()
                 }
@@ -391,6 +411,12 @@ internal class IosAppController {
         }
         scanJob = scope.launch {
             try {
+                // MemoMind glasses already connected to iOS (for example by their app) no longer advertise.
+                bleManager.connectedPeripherals(MEMOMIND_SERVICE_UUIDS).forEach { found ->
+                    _deviceBindState.value?.let { bind ->
+                        bind.onDevicesChanged(bind.devices.upsert(found.identifier, found.name, found.rssi, DeviceClass.MEMOMIND))
+                    }
+                }
                 bleManager.startScan(timeoutMs = 15_000L).collect { found ->
                     val detected = BleDeviceClassifier.guessDeviceClass(
                         advertisedName = found.name,
@@ -448,7 +474,6 @@ internal class IosAppController {
             DeviceClass.GENERIC_AUDIO -> saveProfileAndConnect(device, DeviceClass.GENERIC_AUDIO, connect = false)
             // The MYVU app relay is RFCOMM-only; keep the profile for the assistant over Bluetooth audio.
             DeviceClass.MEIZU_MYVU -> saveProfileAndConnect(device, DeviceClass.MEIZU_MYVU, connect = false)
-            DeviceClass.MEMOMIND -> saveProfileAndConnect(device, DeviceClass.MEMOMIND, connect = false)
             DeviceClass.UNKNOWN -> closeDeviceBind("Unknown device type.")
             else -> saveProfileAndConnect(device, connection.deviceClass)
         }
@@ -511,6 +536,8 @@ internal class IosAppController {
     }
 
     private suspend fun connectTo(identifier: String, name: String? = null) {
+        // MemoMind prefers iAP2 when this build may open it; otherwise it connects over BLE below.
+        if (selectedDeviceClass == DeviceClass.MEMOMIND && memoMindGlasses.connectAccessoryIfAvailable()) return
         if (otherGlasses.usesSdk) {
             otherGlasses.connectSdk(identifier.takeIf { it != selectedDeviceClass.name }.orEmpty(), name.orEmpty())
             return
@@ -582,9 +609,11 @@ internal class IosAppController {
         bleManager.preferredWriteCharacteristicUuid = when (deviceClass) {
             DeviceClass.EYEVUE -> EyevueProtocol.COMMAND_WRITE_UUID
             DeviceClass.TUNEBUDS -> IosTuneBudsSession.WRITE_UUID
+            DeviceClass.MEMOMIND -> IosMemoMindBleTransport.WRITE_UUID
             else -> null
         }
         otherGlasses.select(deviceClass)
+        memoMindGlasses.select(deviceClass == DeviceClass.MEMOMIND)
         updateState { it.copy(deviceClassLabel = deviceClass.displayName()) }
         updateConnectionCapabilities()
     }

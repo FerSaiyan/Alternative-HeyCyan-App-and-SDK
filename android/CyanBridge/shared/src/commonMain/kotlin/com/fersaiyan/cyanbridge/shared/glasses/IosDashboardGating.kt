@@ -8,12 +8,12 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
  * only the iOS host (IosAppController) applies it.
  */
 
-/** Vendor panels that are useful without a live link: Meta registration, the Meizu notice. */
-private val PANELS_WITHOUT_LINK = setOf(GlassesControlPanel.META_RAYBAN, GlassesControlPanel.MEIZU_MYVU)
+/** Vendor panels that are useful without a live link: Meta registration, the Meizu notice, MemoMind's Connect. */
+private val PANELS_WITHOUT_LINK = setOf(GlassesControlPanel.META_RAYBAN, GlassesControlPanel.MEIZU_MYVU, GlassesControlPanel.MEMOMIND)
 
 /**
  * The shared family gating ([withFamilyGating]) with the iOS differences:
- * - glasses sections need a live link ([linked]), except the Meta and Meizu cards;
+ * - glasses sections need a live link ([linked]), except the Meta, Meizu and MemoMind cards;
  * - capture settings, wake-word routing, volume, developer tools and firmware only show for
  *   HeyCyan: on iOS only its QCSDK path implements them;
  * - the Local Agent never shows: it runs through Tasker, which iOS does not have;
