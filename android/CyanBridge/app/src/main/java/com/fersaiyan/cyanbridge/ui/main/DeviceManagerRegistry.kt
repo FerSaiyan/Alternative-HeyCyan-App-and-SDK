@@ -9,6 +9,7 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueState
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
+import com.fersaiyan.cyanbridge.devices.memomind.MemoMindManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620State
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLiveForegroundService
@@ -60,6 +61,9 @@ internal class DeviceManagerRegistry(
         private set
     private var meizuMyvuUiJob: Job? = null
     private var meizuMyvuFailureJob: Job? = null
+    var memoMindManager: MemoMindManager? = null
+        private set
+    private var memoMindUiJob: Job? = null
     var eyevueManager: EyevueManager? = null
         private set
     private var eyevueUiJob: Job? = null
@@ -142,6 +146,18 @@ internal class DeviceManagerRegistry(
                     manager.failurePrompt.collect { failure ->
                         if (failure == null) return@collect
                         listener().onMeizuMyvuFailure(failure)
+                    }
+                }
+            }
+        }
+
+    fun getOrCreateMemoMindManager(): MemoMindManager =
+        memoMindManager ?: MemoMindManager.getInstance(activity).also { manager ->
+            memoMindManager = manager
+            if (memoMindUiJob == null) {
+                memoMindUiJob = activity.lifecycleScope.launch {
+                    manager.state.collect {
+                        if (isSelected(DeviceClass.MEMOMIND)) listener().onSelectedGlassesStateChanged()
                     }
                 }
             }
