@@ -297,7 +297,7 @@ internal class IosAppController {
                 aiWakeWordRoute = AssistantPrefs.WakeWord.route.get(),
                 assistantMode = GlassesAssistantMode.entries.firstOrNull {
                     it.name == AgentPrefs.LocalAgent.glassesAssistantMode.get()
-                } ?: GlassesAssistantMode.PHONE_ASSISTANT,
+                } ?: GlassesAssistantMode.CUSTOM_AI_PROVIDER,
                 imageThumbnailQualitySdkValue = thumbnailQuality,
                 imageThumbnailQualityLabel = THUMBNAIL_QUALITY_LABELS[thumbnailQuality] ?: "Clearer",
             )

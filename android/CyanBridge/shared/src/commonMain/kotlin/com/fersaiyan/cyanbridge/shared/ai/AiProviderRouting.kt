@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.ai
 
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
+import com.fersaiyan.cyanbridge.shared.platform.platformSupportsTasker
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 
 /** Backend behind the Tasker/automation provider. [wire] is the stored value. */
@@ -25,6 +26,16 @@ enum class CliRelayBackend(val wire: String, val label: String) {
         fun fromWire(value: String?): CliRelayBackend =
             entries.firstOrNull { it.wire == value } ?: GEMINI
     }
+}
+
+/** The custom providers a platform offers: iOS has no Tasker. */
+object AgentProviderAvailability {
+    fun available(supportsTasker: Boolean = platformSupportsTasker): List<AgentProviderType> =
+        AgentProviderType.entries.filter { supportsTasker || it != AgentProviderType.TASKER }
+
+    /** The provider in use; a saved choice the platform lacks (Tasker on iOS) runs as Local. */
+    fun effective(saved: AgentProviderType, available: List<AgentProviderType> = available()): AgentProviderType =
+        if (saved in available) saved else AgentProviderType.LOCAL_AGENT
 }
 
 /** Fixed replies of the providers that do not call a model. */

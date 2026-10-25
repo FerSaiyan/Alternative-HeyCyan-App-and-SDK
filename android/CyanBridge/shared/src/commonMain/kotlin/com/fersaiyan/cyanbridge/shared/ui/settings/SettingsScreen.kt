@@ -60,6 +60,7 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.navigation.icon
 import com.fersaiyan.cyanbridge.shared.icons.imageVector
+import com.fersaiyan.cyanbridge.shared.ai.AgentProviderAvailability
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
 import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
@@ -76,6 +77,7 @@ data class SettingsUiState(
     val appLanguageLabel: String = "System default",
     val providerType: AgentProviderType = AgentProviderType.PRO_SUBSCRIPTION,
     val taskerIntegrationsAvailable: Boolean = false,
+    val availableProviders: List<AgentProviderType> = AgentProviderAvailability.available(),
     val defaultImageQuestion: String = "Give me a concise description of the image",
     val memoryMode: MemoryPrivacyMode = MemoryPrivacyMode.PRIVATE_LOCAL,
     val memoryModeAvailability: String = "",
@@ -548,11 +550,18 @@ private fun SettingsSectionCard(
 @Composable
 private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenActions) {
     Text(
-        stringResource(Res.string.settings_provider_description),
+        stringResource(
+            if (AgentProviderType.TASKER in state.availableProviders) {
+                Res.string.settings_provider_description
+            } else {
+                Res.string.settings_provider_description_no_tasker
+            },
+        ),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    AgentProviderType.entries.forEach { type ->
+    val selectedProvider = AgentProviderAvailability.effective(state.providerType, state.availableProviders)
+    state.availableProviders.forEach { type ->
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -561,7 +570,7 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
             verticalAlignment = Alignment.CenterVertically,
         ) {
             RadioButton(
-                selected = state.providerType == type,
+                selected = selectedProvider == type,
                 onClick = { actions.setProviderType(type) },
             )
             val baseLabel = localizedProviderLabel(type)

@@ -29,7 +29,7 @@ object LocalAgentMemoryRoomIndex {
     /**
      * Fire-and-forget indexing for a screen capture.
      *
-     * Safe to call from non-suspending contexts (e.g., AccessibilityService callbacks).
+     * Safe to call from non-suspending contexts (e.g., Tasker AutoDiary broadcasts).
      */
     fun indexScreenCaptureAsync(
         context: Context,

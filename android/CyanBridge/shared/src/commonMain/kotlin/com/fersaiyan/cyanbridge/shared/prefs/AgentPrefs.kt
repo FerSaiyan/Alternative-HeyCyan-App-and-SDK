@@ -5,9 +5,10 @@ object AgentPrefs {
     /** Android facade: agent/LocalAgentPrefs. */
     object LocalAgent : PrefsFile("local_agent_prefs") {
         val providerType = optionalString("provider_type")
-        /** Same names on both apps; an unset value means CUSTOM_AI_PROVIDER on Android, PHONE_ASSISTANT on iOS. */
-        val glassesAssistantMode = optionalString(
+        /** GlassesAssistantMode name, same on both apps; unset means the custom AI provider (local or Pro models). */
+        val glassesAssistantMode = string(
             "glasses_assistant_mode",
+            "CUSTOM_AI_PROVIDER",
             iosFile = IOS_GLASSES_SUITE,
             iosKey = "assistant_mode",
         )

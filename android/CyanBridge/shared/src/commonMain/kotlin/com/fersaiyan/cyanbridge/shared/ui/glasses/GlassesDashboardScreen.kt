@@ -110,6 +110,7 @@ import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
 import com.fersaiyan.cyanbridge.shared.glasses.WifiAdbDebugUiState
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
+import com.fersaiyan.cyanbridge.shared.platform.platformSupportsTasker
 import com.fersaiyan.cyanbridge.shared.ui.localizedOtaSourceDescription
 import com.fersaiyan.cyanbridge.shared.ui.localizedOtaSourceLabel
 import com.fersaiyan.cyanbridge.shared.ui.localizedOtaTargetLabel
@@ -954,7 +955,10 @@ private fun GlassesAssistantControls(
                 modifier = Modifier.weight(1f),
             )
             AssistantModeChip(
-                label = stringResource(Res.string.dashboard_custom_provider),
+                label = stringResource(
+                    if (platformSupportsTasker) Res.string.dashboard_custom_provider
+                    else Res.string.dashboard_custom_provider_no_tasker,
+                ),
                 mode = GlassesAssistantMode.CUSTOM_AI_PROVIDER,
                 selectedMode = state.assistantMode,
                 onAction = onAction,
