@@ -51,10 +51,8 @@ object AssistantPrefs {
         val imageDelaySeconds = int("live_image_delay", 0)
     }
 
-    object TranscriptionEndpoint : PrefsFile("transcription_endpoint") {
-        val endpointUrl = optionalString("endpoint_url")
-        val apiKey = optionalString("api_key")
-    }
+    /** Custom transcription endpoint of old builds, with a plaintext API key; deleted at startup. */
+    object LegacyTranscriptionEndpoint : PrefsFile("transcription_endpoint")
 
     /**
      * OpenAI-compatible server behind the Local provider. The API key is in [RemoteOpenAiSecrets]
@@ -75,6 +73,6 @@ object AssistantPrefs {
 
     val files: List<PrefsFile> = listOf(
         Provider, WakeWord, ImageQuestions, LegacyVisionProfile, Language, GeminiLive,
-        TranscriptionEndpoint, RemoteOpenAi, RemoteOpenAiSecrets,
+        LegacyTranscriptionEndpoint, RemoteOpenAi, RemoteOpenAiSecrets,
     )
 }
