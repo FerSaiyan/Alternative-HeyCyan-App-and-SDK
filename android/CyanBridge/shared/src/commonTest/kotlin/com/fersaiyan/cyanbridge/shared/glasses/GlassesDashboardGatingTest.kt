@@ -61,6 +61,7 @@ class GlassesDashboardGatingTest {
                 aiWakeWordRoute = AiWakeWordRoute.IMAGE_QUESTION,
                 showMetaRaybanControls = deviceClass == DeviceClass.META_RAYBAN,
                 showMeizuMyvuControls = deviceClass == DeviceClass.MEIZU_MYVU,
+                showMemoMindControls = deviceClass == DeviceClass.MEMOMIND,
                 showBattery = Action.STATUS_BATTERY in visible,
                 showStorage = Action.STATUS_STORAGE in visible,
                 storageLabel = if (Action.STATUS_STORAGE in visible) sample.storageLabel else "--",

@@ -106,6 +106,8 @@ import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
 import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
 import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
+import com.fersaiyan.cyanbridge.shared.glasses.MemoMindPanelCommand
+import com.fersaiyan.cyanbridge.shared.glasses.MemoMindUiState
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
 import com.fersaiyan.cyanbridge.shared.glasses.WifiAdbDebugUiState
@@ -312,6 +314,10 @@ fun GlassesDashboardScreen(
             }
             if (state.showMeizuMyvuControls) {
                 item { MeizuMyvuControls(state.meizuMyvu, onAction) }
+                item { GlassesAssistantControls(state, onAction) }
+            }
+            if (state.showMemoMindControls) {
+                item { MemoMindControls(state.memoMind, onAction) }
                 item { GlassesAssistantControls(state, onAction) }
             }
             if (state.wifiAdbDebug.isAvailable) {
@@ -1295,6 +1301,87 @@ private fun MeizuMyvuControls(
             stringResource(Res.string.dashboard_meizu_unsupported),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun MemoMindControls(
+    state: MemoMindUiState,
+    onAction: (GlassesDashboardAction) -> Unit,
+) {
+    val panel: (MemoMindPanelCommand) -> Unit = { onAction(GlassesDashboardAction.MemoMindPanel(it)) }
+    Column(
+        modifier = Modifier.testTag("memomind_controls"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SectionTitle("MemoMind", accented = true)
+        Text(
+            text = localizedConnectionLabel(state.connectionLabel),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        listOfNotNull(
+            state.deviceName?.let { stringResource(Res.string.dashboard_device, it) },
+            state.detail,
+        ).takeIf { it.isNotEmpty() }?.let { lines ->
+            Text(
+                text = lines.joinToString("  "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        state.batteryPercent?.let { battery ->
+            Text(stringResource(Res.string.dashboard_battery, battery), style = MaterialTheme.typography.bodySmall)
+        }
+        state.microphoneLabel?.let { label ->
+            Text(label, style = MaterialTheme.typography.bodySmall)
+        }
+        state.lastError?.takeIf { it.isNotBlank() }?.let { error ->
+            Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+        Text(
+            state.labels.description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ActionRow(
+            primaryLabel = stringResource(Res.string.dashboard_connect),
+            onPrimary = { panel(MemoMindPanelCommand.CONNECT) },
+            primaryEnabled = state.canConnect,
+            primaryStyle = ActionButtonStyle.Primary,
+            secondaryLabel = stringResource(Res.string.dashboard_disconnect),
+            onSecondary = { panel(MemoMindPanelCommand.DISCONNECT) },
+            secondaryEnabled = state.canDisconnect,
+            secondaryStyle = ActionButtonStyle.Destructive,
+        )
+        ActionRow(
+            primaryLabel = stringResource(Res.string.dashboard_test_notification),
+            onPrimary = { panel(MemoMindPanelCommand.SEND_TEST_NOTIFICATION) },
+            primaryEnabled = state.canSend,
+            secondaryLabel = stringResource(Res.string.dashboard_show_text),
+            onSecondary = { panel(MemoMindPanelCommand.SHOW_TEST_TEXT) },
+            secondaryEnabled = state.canSend,
+        )
+        ActionRow(
+            primaryLabel = state.labels.clearDisplay,
+            onPrimary = { panel(MemoMindPanelCommand.CLEAR_DISPLAY) },
+            primaryEnabled = state.canSend,
+            secondaryLabel = stringResource(Res.string.dashboard_comfort_brightness),
+            onSecondary = { panel(MemoMindPanelCommand.COMFORT_BRIGHTNESS) },
+            secondaryEnabled = state.canSend,
+        )
+        ActionRow(
+            primaryLabel = state.labels.testMicrophone,
+            onPrimary = { panel(MemoMindPanelCommand.TEST_MICROPHONE) },
+            primaryEnabled = state.canSend,
+            secondaryLabel = if (state.forwardingNotifications) {
+                state.labels.forwardNotificationsOn
+            } else {
+                state.labels.forwardNotificationsOff
+            },
+            onSecondary = { panel(MemoMindPanelCommand.TOGGLE_NOTIFICATION_FORWARDING) },
+            secondaryEnabled = state.canSend,
+            secondaryStyle = if (state.forwardingNotifications) ActionButtonStyle.Primary else ActionButtonStyle.Neutral,
         )
     }
 }

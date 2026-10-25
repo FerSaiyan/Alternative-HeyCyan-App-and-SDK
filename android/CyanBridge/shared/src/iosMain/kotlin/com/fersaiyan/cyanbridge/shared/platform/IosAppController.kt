@@ -60,8 +60,11 @@ import platform.CoreBluetooth.CBUUID
 
 private const val IOS_BLE_CONNECT_TIMEOUT_MS = 20_000L
 private const val GLASSES_CHAT_ID = "glasses-assistant"
-/** Classes the app does not reconnect at launch (audio-only devices; Meizu's relay is RFCOMM-only). */
-private val NO_LINK_CLASSES = setOf(DeviceClass.GENERIC_AUDIO, DeviceClass.MEIZU_MYVU)
+/**
+ * Classes the app does not reconnect at launch (audio-only devices; Meizu's relay is RFCOMM-only;
+ * MemoMind has no iOS link yet).
+ */
+private val NO_LINK_CLASSES = setOf(DeviceClass.GENERIC_AUDIO, DeviceClass.MEIZU_MYVU, DeviceClass.MEMOMIND)
 // Android ImageThumbnailQuality (sdkValue to label).
 private val THUMBNAIL_QUALITY_LABELS = mapOf(
     0 to "Instant", 1 to "Quick", 2 to "Smooth", 3 to "Fine", 4 to "Clearer", 5 to "Detailed",
@@ -182,6 +185,9 @@ internal class IosAppController {
 
     // Like Android, unclassified and audio-only glasses use the HeyCyan path.
     private val genericAudioGlasses = IosProfiledGlasses(GlassesFamilyProfiles.genericAudio, heyCyan)
+
+    /** MemoMind until its iOS link exists: the profile only (voice questions over Bluetooth audio). */
+    private val memoMindGlasses = IosProfiledGlasses(GlassesFamilyProfiles.memoMind, heyCyan)
     private val unknownGlasses = IosProfiledGlasses(GlassesFamilyProfiles.unknown, heyCyan)
 
     /** The selected family's implementation (Android: AndroidGlassesDevices). */
@@ -195,6 +201,7 @@ internal class IosAppController {
             DeviceClass.MENTRA_LIVE,
             -> otherGlasses.sdkDevice(selectedDeviceClass)
             DeviceClass.MEIZU_MYVU -> otherGlasses.meizuDevice
+            DeviceClass.MEMOMIND -> memoMindGlasses
             DeviceClass.GENERIC_AUDIO -> genericAudioGlasses
             DeviceClass.UNKNOWN -> unknownGlasses
         }
@@ -441,6 +448,7 @@ internal class IosAppController {
             DeviceClass.GENERIC_AUDIO -> saveProfileAndConnect(device, DeviceClass.GENERIC_AUDIO, connect = false)
             // The MYVU app relay is RFCOMM-only; keep the profile for the assistant over Bluetooth audio.
             DeviceClass.MEIZU_MYVU -> saveProfileAndConnect(device, DeviceClass.MEIZU_MYVU, connect = false)
+            DeviceClass.MEMOMIND -> saveProfileAndConnect(device, DeviceClass.MEMOMIND, connect = false)
             DeviceClass.UNKNOWN -> closeDeviceBind("Unknown device type.")
             else -> saveProfileAndConnect(device, connection.deviceClass)
         }
