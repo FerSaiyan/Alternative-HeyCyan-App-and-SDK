@@ -23,6 +23,12 @@ These came in with the collaborator's shared-UI commits, and Android inherits th
   - **Review these with the collaborator.** Side-by-side images are in `cyan-refactor-wt/friend-ui-changes/` (not in the repo).
 - **Welcome and onboarding:** small icon changes.
 
+## Owner decision (2026-10-25)
+
+Keep the collaborator's UI changes except two, which were reverted:
+- The test button is back to "Test image AI description" in all 9 languages.
+- The Notes & Chats header button shows the palette (Appearance) icon again on the Chats tab. The Notes tab keeps its gear.
+
 ## Environment only
 - Dates in the daily facts, summary and screen-capture titles.
 - Device RAM and free space on the Local models screen.
