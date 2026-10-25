@@ -10,48 +10,45 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
-import com.fersaiyan.cyanbridge.shared.prefs.get
-import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.shared.prefs.store
+import com.fersaiyan.cyanbridge.shared.ui.battery.BatteryOptimizationGuideViewModel
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.BatteryOptimizationGuideScreen
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 
 class BatteryOptimizationGuideActivity : AppCompatActivity() {
-    private var optimizationIgnored by mutableStateOf(false)
+    private val viewModel by viewModels<BatteryOptimizationGuideViewModel> {
+        viewModelFactory {
+            initializer {
+                val context = applicationContext
+                BatteryOptimizationGuideViewModel(AppPrefs.Main.store(context)) { isBatteryOptimizationIgnored(context) }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        optimizationIgnored = isBatteryOptimizationIgnored(this)
+        viewModel.refresh()
         val appearancePreferences = AppearancePreferences(this)
         setContent {
             val appearance by rememberAppearanceSettings(appearancePreferences)
             CyanBridgeTheme(appearance) {
                 BatteryOptimizationGuideScreen(
-                    optimizationIgnored = optimizationIgnored,
+                    optimizationIgnored = viewModel.optimizationIgnored,
                     onDisableOptimization = ::openDisableBatteryOptimizationFlow,
                     onOpenAppInfo = ::openAppInfo,
                     onOpenOptimizationList = ::openBatteryOptimizationList,
-                    onContinue = {
-                        if (isBatteryOptimizationIgnored(this)) {
-                            markCompleted(this)
-                        }
-                        navigateToNext()
-                    },
-                    onRemindLater = {
-                        deferReminder(this)
-                        navigateToNext()
-                    },
-                    onDontShowAgain = {
-                        suppressPermanently(this)
-                        navigateToNext()
-                    },
+                    onContinue = { navigateToNext(viewModel.onContinue()) },
+                    onRemindLater = { navigateToNext(viewModel.onRemindLater()) },
+                    onDontShowAgain = { navigateToNext(viewModel.onDontShowAgain()) },
                 )
             }
         }
@@ -59,11 +56,11 @@ class BatteryOptimizationGuideActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        optimizationIgnored = isBatteryOptimizationIgnored(this)
+        viewModel.refresh()
     }
 
-    private fun navigateToNext() {
-        if (isOnboardingCompleted(this)) {
+    private fun navigateToNext(onboardingCompleted: Boolean) {
+        if (onboardingCompleted) {
             finish()
             return
         }
@@ -112,33 +109,12 @@ class BatteryOptimizationGuideActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val REMINDER_DELAY_MS = 7L * 24 * 60 * 60 * 1000
-
         fun launchIfNeeded(activity: AppCompatActivity) {
-            if (!shouldShow(activity)) return
+            val shouldShow = BatteryOptimizationGuideViewModel.shouldShow(AppPrefs.Main.store(activity)) {
+                isBatteryOptimizationIgnored(activity)
+            }
+            if (!shouldShow) return
             activity.startActivity(Intent(activity, BatteryOptimizationGuideActivity::class.java))
-        }
-
-        private fun shouldShow(context: Context): Boolean {
-            if (AppPrefs.Main.batteryGuideSuppressed[context]) return false
-            if (AppPrefs.Main.batteryGuideCompleted[context]) return false
-            if (System.currentTimeMillis() < AppPrefs.Main.batteryGuideRemindAfter[context]) return false
-            return !isBatteryOptimizationIgnored(context)
-        }
-
-        private fun deferReminder(context: Context) {
-            AppPrefs.Main.batteryGuideRemindAfter[context] = System.currentTimeMillis() + REMINDER_DELAY_MS
-        }
-
-        private fun isOnboardingCompleted(context: Context): Boolean =
-            AppPrefs.Main.onboardingCompleted[context]
-
-        private fun markCompleted(context: Context) {
-            AppPrefs.Main.batteryGuideCompleted[context] = true
-        }
-
-        private fun suppressPermanently(context: Context) {
-            AppPrefs.Main.batteryGuideSuppressed[context] = true
         }
 
         private fun isBatteryOptimizationIgnored(context: Context): Boolean {

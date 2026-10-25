@@ -4,14 +4,7 @@ import android.content.Context
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import java.io.File
 
-data class WalkingAidReadinessResult(
-    val isReady: Boolean,
-    val yoloReady: Boolean,
-    val depthReady: Boolean,
-    val llmReady: Boolean,
-    val requiresProForCloud: Boolean,
-    val missingDetails: List<String>,
-)
+typealias WalkingAidReadinessResult = com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidReadinessResult
 
 object WalkingAidReadinessChecker {
 

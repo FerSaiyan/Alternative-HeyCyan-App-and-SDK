@@ -39,6 +39,8 @@ import com.fersaiyan.cyanbridge.shared.persistence.LegacyImportingChatRepository
 import com.fersaiyan.cyanbridge.shared.persistence.RoomChatRepository
 import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
+import com.fersaiyan.cyanbridge.shared.ui.DeviceBindConnection
+import com.fersaiyan.cyanbridge.shared.ui.DeviceBindViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -243,8 +245,9 @@ internal class IosAppController {
         ),
     )
 
-    private val _deviceBindState = MutableStateFlow<IosDeviceBindUiState?>(null)
-    val deviceBindState: StateFlow<IosDeviceBindUiState?> = _deviceBindState.asStateFlow()
+    /** The shared DeviceBindScreen's state while it is shown over the dashboard. */
+    private val _deviceBindState = MutableStateFlow<DeviceBindViewModel?>(null)
+    val deviceBindState: StateFlow<DeviceBindViewModel?> = _deviceBindState.asStateFlow()
 
     private var scanJob: Job? = null
     private var lastDiscoveredIdentifier: String? = null
@@ -368,14 +371,17 @@ internal class IosAppController {
     fun handle(action: GlassesDashboardAction) = dashboardController.handle(action)
 
     private fun openDeviceBind() {
-        _deviceBindState.value = IosDeviceBindUiState()
+        _deviceBindState.value = DeviceBindViewModel()
         updateState { it.copy(agentLastError = "") }
         startDeviceScan()
     }
 
     fun startDeviceScan() {
         scanJob?.cancel()
-        updateBind { it.copy(devices = emptyList(), isScanning = true) }
+        _deviceBindState.value?.let { bind ->
+            bind.onScanStarted()
+            bind.isScanning = true
+        }
         scanJob = scope.launch {
             try {
                 bleManager.startScan(timeoutMs = 15_000L).collect { found ->
@@ -384,24 +390,18 @@ internal class IosAppController {
                         serviceUuids = advertisedServiceUuids(found.advertisementData),
                         heyCyanServiceUuids = heyCyan.serviceUuids,
                     )
-                    updateBind { bind ->
-                        bind.copy(devices = bind.devices.upsert(found.identifier, found.name, found.rssi, detected))
+                    _deviceBindState.value?.let { bind ->
+                        bind.onDevicesChanged(bind.devices.upsert(found.identifier, found.name, found.rssi, detected))
                     }
                 }
             } finally {
-                updateBind { it.copy(isScanning = false) }
+                _deviceBindState.value?.isScanning = false
             }
         }
     }
 
     fun selectDevice(device: ScannedDevice) {
-        val pairingChoice = when (device.effectiveSelectedClass()) {
-            DeviceClass.META_RAYBAN -> DeviceClass.META_RAYBAN
-            DeviceClass.MEIZU_MYVU -> DeviceClass.MEIZU_MYVU
-            DeviceClass.GENERIC_AUDIO -> DeviceClass.GENERIC_AUDIO
-            else -> DeviceClass.HEY_CYAN
-        }
-        updateBind { it.copy(connectingDevice = device, selectedClass = pairingChoice) }
+        _deviceBindState.value?.selectDevice(device)
     }
 
     private fun advertisedServiceUuids(advertisementData: Map<String, Any>): List<String> =
@@ -410,11 +410,11 @@ internal class IosAppController {
             .mapNotNull { (it as? CBUUID)?.UUIDString }
 
     fun selectDeviceClass(deviceClass: DeviceClass) {
-        updateBind { it.copy(selectedClass = deviceClass) }
+        _deviceBindState.value?.selectDeviceClass(deviceClass)
     }
 
     fun dismissConnection() {
-        updateBind { it.copy(connectingDevice = null) }
+        _deviceBindState.value?.dismissConnection()
     }
 
     fun closeDeviceBind(message: String = "") {
@@ -424,33 +424,26 @@ internal class IosAppController {
         if (message.isNotEmpty()) updateState { it.copy(agentLastError = message) }
     }
 
-    /** Mirrors DeviceBindActivity.confirmConnection for the classes the iOS host can drive. */
     fun confirmConnection() {
-        val bind = _deviceBindState.value ?: return
-        val device = bind.connectingDevice ?: return
-        when (bind.selectedClass) {
-            DeviceClass.META_RAYBAN -> pairMetaGlasses()
-            DeviceClass.GENERIC_AUDIO -> {
-                saveProfileAndConnect(device, DeviceClass.GENERIC_AUDIO, connect = false)
-            }
-            // The MYVU app relay is RFCOMM-only; keep the profile for the assistant over Bluetooth audio.
-            DeviceClass.MEIZU_MYVU -> saveProfileAndConnect(device, DeviceClass.MEIZU_MYVU, connect = false)
-            // HEY_CYAN is the sentinel for the manual consumer picker handled by the screen.
-            else -> confirmManualProtocol(DeviceClass.HEY_CYAN)
-        }
+        _deviceBindState.value?.confirmConnection(canConnect = { true })?.let(::connect)
     }
 
     fun confirmManualProtocol(deviceClass: DeviceClass) {
-        val device = _deviceBindState.value?.connectingDevice ?: return
-        val normalized = when (deviceClass) {
-            DeviceClass.HEY_CYAN,
-            DeviceClass.EYEVUE,
-            DeviceClass.TUNEBUDS,
-            DeviceClass.MOYOUNG_W620,
-            -> deviceClass
-            else -> DeviceClass.HEY_CYAN
+        _deviceBindState.value?.confirmManualProtocol(deviceClass, canConnect = { true })?.let(::connect)
+    }
+
+    /** Runs a pairing chosen in [DeviceBindViewModel] for the classes the iOS host can drive. */
+    private fun connect(connection: DeviceBindConnection) {
+        val device = connection.device
+        when (connection.deviceClass) {
+            DeviceClass.META_RAYBAN -> pairMetaGlasses()
+            DeviceClass.MENTRA_LIVE -> pairMentraGlasses()
+            DeviceClass.GENERIC_AUDIO -> saveProfileAndConnect(device, DeviceClass.GENERIC_AUDIO, connect = false)
+            // The MYVU app relay is RFCOMM-only; keep the profile for the assistant over Bluetooth audio.
+            DeviceClass.MEIZU_MYVU -> saveProfileAndConnect(device, DeviceClass.MEIZU_MYVU, connect = false)
+            DeviceClass.UNKNOWN -> closeDeviceBind("Unknown device type.")
+            else -> saveProfileAndConnect(device, connection.deviceClass)
         }
-        saveProfileAndConnect(device, normalized)
     }
 
     /** Meta glasses pair through the Meta AI app, not a BLE scan (Android: MetaPairingActivity). */
@@ -530,10 +523,6 @@ internal class IosAppController {
                 connectTo(identifier)
             }
         }
-    }
-
-    private fun updateBind(transform: (IosDeviceBindUiState) -> IosDeviceBindUiState) {
-        _deviceBindState.value = _deviceBindState.value?.let(transform)
     }
 
     /** Wake word / AI button: run the action chosen in "Wake word action" (Android: AiWakeWordRoute). */
