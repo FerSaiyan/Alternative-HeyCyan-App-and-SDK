@@ -54,7 +54,7 @@ class GlassesFamilyProfileTest {
             classesWith(GlassesCapability.LIVE_PREVIEW),
         )
         assertEquals(
-            setOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS),
+            setOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MENTRA_LIVE),
             classesWith(GlassesCapability.AI_PHOTO_CAPTURE),
         )
         assertEquals(setOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE), classesWith(GlassesCapability.WAKE_WORD))

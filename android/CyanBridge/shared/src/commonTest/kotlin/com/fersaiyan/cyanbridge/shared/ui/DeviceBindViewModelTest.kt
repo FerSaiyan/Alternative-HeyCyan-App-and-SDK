@@ -35,4 +35,19 @@ class DeviceBindViewModelTest {
         assertEquals(DeviceClass.HEY_CYAN, viewModel.confirmConnection { true }?.deviceClass)
         assertNull(viewModel.confirmConnection { true })
     }
+
+    @Test
+    fun mentraLiveIsOfferedAndConnectedOnlyForDevicesDetectedAsMentra() {
+        val viewModel = DeviceBindViewModel()
+        val mentra = device(DeviceClass.MENTRA_LIVE)
+        viewModel.selectDevice(mentra)
+        assertEquals(DeviceClass.MENTRA_LIVE, viewModel.selectedClass)
+        assertEquals(listOf(DeviceClass.MENTRA_LIVE), DeviceBindViewModel.detectedOnlyChoicesFor(mentra))
+        assertEquals(emptyList(), DeviceBindViewModel.detectedOnlyChoicesFor(device(DeviceClass.HEY_CYAN)))
+
+        val connection = viewModel.confirmConnection { true }
+        assertEquals(DeviceClass.MENTRA_LIVE, connection?.deviceClass)
+        assertEquals("AA:BB", connection?.device?.macAddress)
+        assertNull(viewModel.connectingDevice)
+    }
 }

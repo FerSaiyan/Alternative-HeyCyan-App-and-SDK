@@ -48,7 +48,9 @@ final class MentraGlassesBridge: NSObject, SdkGlassesBridge {
                 var started = false
                 try self.sdk.scan(model: .mentraLive, timeout: 10, onResults: { [weak self] devices in
                     guard let self, !started else { return }
+                    // The shared pairing list passes the CoreBluetooth identifier; the name is the fallback.
                     let match = devices.first { identifier.isEmpty || $0.id == identifier || $0.identifier == identifier }
+                        ?? devices.first { !name.isEmpty && $0.name == name }
                     guard let device = match else { return }
                     started = true
                     self.connectedId = device.id

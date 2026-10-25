@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mentra_status_connected">Connected - %1$s</string>
+    <string name="mentra_status_connecting">Connecting to Mentra Live…</string>
+    <string name="mentra_status_disconnected">Mentra Live disconnected</string>
+    <string name="mentra_connecting">Connecting to Mentra Live.</string>
+    <string name="mentra_connect_failed">Could not connect to Mentra Live: %1$s</string>
+    <string name="mentra_reconnect_busy">Mentra Live is already connected or connecting.</string>
+    <string name="mentra_not_ready">Connect Mentra Live first.</string>
+    <string name="mentra_photo_saved">Photo saved on the Mentra Live glasses.</string>
+    <string name="mentra_photo_failed">Mentra Live photo failed: %1$s</string>
+    <string name="mentra_video_started">Mentra Live is recording video.</string>
+    <string name="mentra_video_stopped">Mentra Live video saved on the glasses.</string>
+    <string name="mentra_video_failed">Mentra Live video failed: %1$s</string>
+    <string name="mentra_no_audio_recording">Mentra Live has no onboard audio recording. Use meeting capture instead.</string>
+    <string name="mentra_media_count">Mentra Live gallery: %1$d photos, %2$d videos</string>
+    <string name="mentra_media_sync_unavailable">Downloading the Mentra Live gallery is not supported yet.</string>
+    <string name="mentra_battery">Mentra Live battery: %1$d%%</string>
+    <string name="mentra_battery_charging">Mentra Live battery: %1$d%% (charging)</string>
+    <string name="mentra_battery_unknown">Mentra Live has not reported its battery yet.</string>
+    <string name="mentra_version">Mentra Live firmware %1$s</string>
+    <string name="mentra_time_synced">Mentra Live clock synced.</string>
+    <string name="mentra_volume">Mentra Live volume: %1$d of 15</string>
+    <string name="mentra_request_failed">Mentra Live did not answer: %1$s</string>
+</resources>

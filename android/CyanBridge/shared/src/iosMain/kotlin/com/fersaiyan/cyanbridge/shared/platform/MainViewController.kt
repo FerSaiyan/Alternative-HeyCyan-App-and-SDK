@@ -177,7 +177,6 @@ private fun IosCyanBridgeApp(
                     selectedClass = bind.selectedClass,
                     onScan = controller::startDeviceScan,
                     onPairMetaGlasses = controller::pairMetaGlasses,
-                    onPairMentraGlasses = controller::pairMentraGlasses,
                     onSelectDevice = controller::selectDevice,
                     onSelectedClassChange = controller::selectDeviceClass,
                     onConfirmConnection = controller::confirmConnection,
