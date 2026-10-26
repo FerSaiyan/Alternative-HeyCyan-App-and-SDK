@@ -35,11 +35,20 @@ object TaskerAgentBridge {
     private val registrationMutex = Mutex()
     @Volatile private var registered = false
 
-    suspend fun requestObservation(context: Context, timeoutMs: Long = 8_000L): Response =
+    /**
+     * [screenshotWanted] lets a planning step accept a screenshot. Tasker attaches one only when
+     * the user turned on `%CB_LocalAgentScreenshot` in the Local Agent profile (off by default);
+     * probes and tests pass false so they never trigger a capture.
+     */
+    suspend fun requestObservation(
+        context: Context,
+        timeoutMs: Long = 8_000L,
+        screenshotWanted: Boolean = false,
+    ): Response =
         request(
             context = context,
             action = TaskerAgentContract.ACTION_OBSERVE,
-            payload = "{\"contract_version\":${TaskerAgentContract.VERSION}}",
+            payload = "{\"contract_version\":${TaskerAgentContract.VERSION},\"screenshot\":$screenshotWanted}",
             timeoutMs = timeoutMs,
         )
 

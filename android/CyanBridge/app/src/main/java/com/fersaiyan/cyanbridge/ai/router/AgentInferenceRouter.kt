@@ -5,9 +5,9 @@ import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
+import com.fersaiyan.cyanbridge.localagent.tasker.TaskerScreenshotStore
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import kotlinx.coroutines.CancellationException
-import java.io.File
 
 enum class AgentInferencePurpose {
     CLASSIFICATION,
@@ -19,6 +19,8 @@ data class AgentInferenceResult(
     val usedImage: Boolean,
     val mediaStatus: String,
 )
+
+internal enum class UiPlanningImageDecision { TEXT_ONLY, REMOTE_NOT_ALLOWED, ATTACH }
 
 /** Resolves the two existing provider preference layers into one agent inference path. */
 object AgentInferenceRouter {
@@ -43,8 +45,9 @@ object AgentInferenceRouter {
     }
 
     /**
-     * Plans with an image only when the caller supplied one. Remote image transport is explicitly
-     * guarded here as a defense in depth measure even if the caller already checked its setting.
+     * Plans with an image only when the caller supplied a screenshot that passes
+     * [TaskerScreenshotStore.usablePath]. Remote image transport is guarded here as defense in
+     * depth: a remote planner gets the image only with [allowRemoteImageUpload].
      */
     suspend fun completeUiPlanning(
         context: Context,
@@ -56,8 +59,13 @@ object AgentInferenceRouter {
         providerType: AgentProviderType = AutomationPrefs.getProviderType(context),
         maxTokens: Int = UI_PLANNING_MAX_TOKENS,
     ): AgentInferenceResult {
-        val usableImagePath = imagePath?.trim()?.takeIf { File(it).isFile }
-        if (usableImagePath == null) {
+        val usableImagePath = TaskerScreenshotStore.usablePath(context, imagePath)
+        val decision = uiPlanningImageDecision(
+            hasUsableImage = usableImagePath != null,
+            remotePlanner = usableImagePath != null && isRemotePlanner(context, providerType),
+            allowRemoteImageUpload = allowRemoteImageUpload,
+        )
+        if (usableImagePath == null || decision == UiPlanningImageDecision.TEXT_ONLY) {
             return AgentInferenceResult(
                 content = completeText(
                     context,
@@ -72,7 +80,7 @@ object AgentInferenceRouter {
                 mediaStatus = "Text-only planning",
             )
         }
-        if (isRemotePlanner(context, providerType) && !allowRemoteImageUpload) {
+        if (decision == UiPlanningImageDecision.REMOTE_NOT_ALLOWED) {
             return AgentInferenceResult(
                 content = completeText(
                     context,
@@ -84,7 +92,7 @@ object AgentInferenceRouter {
                     maxTokens,
                 ),
                 usedImage = false,
-                mediaStatus = "Remote screenshot upload is off; used text-only planning.",
+                mediaStatus = "Screenshot not sent to the remote planner; used text-only planning.",
             )
         }
 
@@ -151,6 +159,20 @@ object AgentInferenceRouter {
             usedImage = false,
             mediaStatus = "Multimodal planning was unavailable; used text-only planning.",
         )
+    }
+
+    /**
+     * A screenshot goes to the planner when there is a valid one and the planner is on-device,
+     * or the caller has the user's consent to send it to a remote planner.
+     */
+    internal fun uiPlanningImageDecision(
+        hasUsableImage: Boolean,
+        remotePlanner: Boolean,
+        allowRemoteImageUpload: Boolean,
+    ): UiPlanningImageDecision = when {
+        !hasUsableImage -> UiPlanningImageDecision.TEXT_ONLY
+        remotePlanner && !allowRemoteImageUpload -> UiPlanningImageDecision.REMOTE_NOT_ALLOWED
+        else -> UiPlanningImageDecision.ATTACH
     }
 
     fun isRemotePlanner(

@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.localagent
 import android.content.Context
 import com.fersaiyan.cyanbridge.localagent.tasker.TaskerAgentBridge
 import com.fersaiyan.cyanbridge.localagent.tasker.TaskerAgentContract
+import com.fersaiyan.cyanbridge.localagent.tasker.TaskerScreenshotStore
 
 /**
  * Separates planning/policy from device observation/execution.
@@ -46,9 +47,15 @@ object TaskerExecutionBackend : LocalAgentExecutionBackend {
     }
 
     override suspend fun observe(context: Context): LocalAgentObservation? {
-        val response = TaskerAgentBridge.requestObservation(context)
+        val response = TaskerAgentBridge.requestObservation(context, screenshotWanted = true)
         if (!response.success || response.payload.isNullOrBlank()) return null
-        return runCatching { TaskerAgentContract.observationFromJson(response.payload) }.getOrNull()
+        val observation = runCatching { TaskerAgentContract.observationFromJson(response.payload) }
+            .getOrNull() ?: return null
+        // Present only when the user turned the screenshot step on in the Tasker profile.
+        val screenshot = TaskerAgentContract.screenshotFromJson(response.payload)
+            ?.let { TaskerScreenshotStore.save(context, it) }
+            ?: return observation
+        return observation.copy(screenshotPath = screenshot.path)
     }
 
     override suspend fun execute(
