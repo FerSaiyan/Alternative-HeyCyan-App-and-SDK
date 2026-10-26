@@ -447,4 +447,24 @@ The SDK's own lines appear under its `Bridge` log tags (`MAN:`, `LIVE:`).
 9. **Gemini Live mic.** Start Live with Mentra selected. Expect `"Microphone opened by GeminiLiveClient"`. Speech is heard, and the reply plays on the glasses with no SCO switch. Ask a voice question during Live: both listeners coexist, and Live resumes afterwards.
 10. **Video.** Video starts and stops a recording on the glasses ("Video recording started/stopped").
 11. **Advanced → Device info.** Battery, Version (firmware), Sync time, Volume (0-15).
-12. **Not wired (should say so, not fail silently).** Sync Wi-Fi shows "not supported yet". Audio recording points to meeting capture. There is no live preview card.
+12. **Not wired (should say so, not fail silently).** Audio recording points to meeting capture. There is no live preview card. (Sync Wi-Fi now downloads the gallery; see below.)
+
+## Mentra gallery download (see MENTRA_AUDIT.md, "Gallery download")
+
+Filter logcat with:
+`adb logcat -s MentraGallery MentraLive GlassesNetSession GlassesSession DataDownload`
+The SDK's own hotspot lines appear under its `Bridge` tags. `MentraGallery` lines are the sync itself.
+
+Setup: Android 10 or newer, phone Wi-Fi on, Mentra Live connected and ready. Take two photos and one short video with the dashboard Photo and Video actions. Count should then show them.
+
+1. **First sync.** Tap Sync Wi-Fi. Grant Nearby devices (Android 13+) or Location if asked. Expect `GlassesSession` `"Acquired media sync session"`, then `"Glasses hotspot <ssid> at <ip> (openedBySync=true)"` and `GlassesNetSession` `"Mentra Live gallery download owns the glasses link"`. Android shows its "connect to device" dialog for the glasses network; choose it. Expect `"Joined the glasses hotspot <ssid> (app-scoped, default network unchanged)"`, `"Gallery server reachable at http://<ip>:8089"` and `"Gallery V3_MANIFEST|V2_CAPTURES|LEGACY_FILES: N listed, …"`. **Record which protocol the firmware uses.** The transfer card counts photos and videos. Each file logs `"Saved <remote> as MentraLive_<capture>.jpg|mp4 (<bytes> bytes)"`.
+2. **Phone stays online.** During the sync, open a web page in a browser on cellular, or on the home Wi-Fi if the phone supports two Wi-Fi connections at once. The system default network must not switch to the glasses (`adb shell dumpsys connectivity | grep -i "default network"`). Note whether the phone dropped the home Wi-Fi while joined; single-radio phones may.
+3. **Delete prompt.** After the downloads, "Delete from glasses?" lists the verified count. Wait 2–3 minutes before answering: the sync keeps the hotspot alive. Then Delete. Expect `"Deleted N of N verified files from the glasses"`. Count afterwards drops by N. Repeat once with Keep: `"Kept N verified files on the glasses"`. The files stay, and Count is unchanged.
+4. **Gallery.** Open the media Gallery screen. The new photos and videos appear next to HeyCyan/Eyevue media, sorted by capture time (not sync time). The videos play, and the photos open at full size.
+5. **Re-sync is idempotent.** With files kept on the glasses, Sync again. Expect `"0 new … N already on the phone"`, no new gallery entries, and the delete prompt again (they are verified by name and size).
+6. **Cleanup.** At the end: `"Left the glasses hotspot and released the glasses link"`, then `"Glasses hotspot turned off (disabled)"` and `"Released media sync session"`. The phone returns to its usual Wi-Fi. If the hotspot was already on before Sync (`openedBySync=false`), it must stay on.
+7. **Stop mid-transfer.** Start a sync with a long video, then tap Stop on the transfer card. The card hides, no summary toast appears, and the cleanup lines from step 6 still appear. The partial file is not in the gallery.
+8. **Link loss.** During a download: (a) power the glasses off, and (b) in another run turn phone Wi-Fi off. Expect `"Mentra Live disconnected during the gallery sync"` or `"The glasses hotspot connection was lost"`, a "Mentra Live sync failed" toast, and the cleanup lines. Nothing partial is saved or deleted.
+9. **Approval refused.** Cancel Android's connect dialog. Expect "The glasses hotspot was not approved or could not be found", the hotspot turned off, and the session released.
+10. **No collisions.** With HeyCyan Wi-Fi ADB or live preview running on another profile, or with a Mentra video recording running, Sync refuses with a message instead of joining. Debug builds: start Wi-Fi ADB right after a Mentra sync; it gets the link only after `"released the glasses link"`.
+11. **Unsupported formats.** If the glasses hold AVIF/HEIC photos or HDR captures, check `"Left on the glasses (unsupported): …"` for the non-JPEG ones. HDR captures save their `base.jpg` only.
