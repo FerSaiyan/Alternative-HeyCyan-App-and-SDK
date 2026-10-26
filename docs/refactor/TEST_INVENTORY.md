@@ -84,3 +84,11 @@ These were left untouched, or tidied without dropping any assertion.
 `PrefsInventoryTest` (P) pins every preference file, key, type and default, and `TypedPrefsCompatibilityTest` (U) reads settings written the old way back through it, so plain default and set-then-get cases were removed:
 - Removed: MemoryModeManagerTest, AppearancePreferencesTest, PrivacyPrefsTest, 22 of WalkingAidPreferencesTest's 29 cases, CommunityPluginPrefsTest's default case, and GeminiLiveModePreferencesTest (earlier, with its wrapper).
 - Kept because they test logic: WalkingAidPreferencesTest's mode fallback, clamping and cloud model override cases; CommunityPluginPrefsTest's select-and-clear rule; LocalAgentTaskHistoryTest (newest-first order); LocalMtpSettingsRepositoryTest (benchmark record with nullable MTP fields); and the plugin settings tests' `firstFrameStateComesFromPreferences` cases, which check that each screen's first frame maps the saved settings into its state.
+
+## Merged from the retired protocol-fixes branch (2026-10-26)
+
+`c8fc4efb` (spoken-question decision model, web answers, follow-up sessions, memory, voice profile, vision assistance) brought:
+- **U:** SpokenDecisionParserTest, DecideOncePromptTest, ThresholdedDecisionEngineTest, SpokenMemoryContextTest, SpokenQuestionInstructionTest, CurrentContextInstructionTest, LocalModelLoadAnnouncerTest, ProSubscriptionAudioModelsTest, SpeakerMathTest, VoiceEnrollmentStoreTest, plus new cases in LocalModelsProviderTest and LiteRtLocalInferenceEngineStreamingTest.
+- **P:** VisionAssistancePreferencesTest (moved from commonTest to portabilityTest, because it needs the in-memory preference store);  the new keys (`question_routing/*`, `cyanbridge_accessibility/*`, `pro_subscription_ai_prefs/audio_capable_models*`) are pinned in PrefsInventoryTest.
+- **androidTest (M, debug build, needs a local Gemma 4 audio model):** GlassesQuestionFlowTest with the `assets/glasses_questions` WAV/JPEG fixtures, QuestionLatencyQuickTest, QuestionPathBenchmarkTest, QuestionPromptProbeTest. No CI job runs them.
+- Not taken: the commit's copy of the enum-membership cases in SettingsScreenTest, which the refactor had pruned; only its `visionAssistanceEnabled` default assertion was kept.

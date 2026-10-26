@@ -541,3 +541,20 @@ Look for `Captured isDevMode=…` (DAT), `registrationPath: Registered through D
 7. **Choice drives the access hint.** Release build, UNAVAILABLE, Meta AI installed, Bluetooth on: with "I use Developer Mode" chosen the primary button reads "Register CyanBridge in Meta AI" (not "Request Meta access").
 8. **Debug install.** `scripts/install_debug_keep_data.sh` still replaces the installed app and keeps data; an existing Developer-Mode registration still works (Meta AI ignores the app id on that path).
 9. **iOS (DAT 1.0, `MetaAppID` 0 in Info.plist).** The Meta panel shows the setup choice with Developer Mode only ("Access by email is not available in this version yet"); Pair no longer opens Meta AI by itself; Register does. After registering, "Meta AI connection: Developer Mode". Turning Developer Mode off speaks the notice through the assistant voice. iOS DAT 1.0 does not expose `isDevMode` publicly, so a registered iOS app id would record no path.
+
+## Spoken questions, web answers, voice profile and vision assistance (merged 2026-10-26)
+
+Merged from the retired protocol-fixes branch (`c8fc4efb`). Filter logcat with
+`adb logcat -s AIHijack ImageQuestionAudio AudioSession VoiceEnrollment SpeakerModelStore`.
+The emulator flow is covered by `GlassesQuestionFlowTest` (debug build, local Gemma 4 audio model); these checks need real glasses.
+
+1. **SMART voice question (local audio model).** Wake word on HeyCyan, then "What's the capital of France?". Expect `Spoken decision route=ANSWER`, the answer through the glasses, and `AudioSession … VOICE_COMMAND granted` / `released` around the recording. Repeat with Eyevue, Meta and Mentra.
+2. **Camera route.** "What colour are these socks?": "Okay. I'll check what you see.", then `Photo delivered to decide-once question usable=true` and an answer about the photo. Check each family's photo path (HeyCyan BLE thumbnail, Eyevue AI photo, Meta, Mentra). With the glasses unable to take a photo, the answer comes without it after at most 45 s.
+3. **Search route.** "What's the weather today?" and "When is the next holiday?": the "checking the web" cue, then `web_search engine=GOOGLE …`. Repeat in pt-BR. With phone data off, the fixed offline sentence is spoken in the app language; nothing else is read out.
+4. **Follow-ups.** Right after an answer, ask "And how many people live there?" within 5 s without the wake word. Expect `turn=2 continued=true`. Note whether the glasses' microphone route stays up between turns or reconnects, and that a follow-up does not cut a meeting recording.
+5. **Phone and Live routes.** "Open Chrome and search for cats" starts the Local Agent (Tasker); with Local Agent off it says to enable it. "Let's talk" opens Gemini Live; the Live session gets the microphone after the question's session is released.
+6. **Pro relay audio.** Pro account whose questions model the relay lists with `supports_audio`: the question goes as audio (no on-device transcript). With a non-audio model, on-device STT runs first, as before.
+7. **Cold load cue and errors.** After a reboot, the first question speaks "Initializing local model" once. A model failure speaks the short failure cue, never the error text.
+8. **Classic mode.** Settings → AI & automation → Question routing → Classic: questions are transcribed first and follow the AI button's route. The routing options are absent on iOS.
+9. **Voice profile.** Settings → Voice profile → Enroll my voice (and onboarding step 4 of 5): microphone prompt, three phrases on the phone microphone, `VoiceEnrollment VOICE_COMMAND granted`/`released` per phrase. With Gemini Live running, recording shows "Microphone is in use" instead of taking the microphone. Delete voice profile, and Settings → Clear local data, remove `no_backup/voiceprint`.
+10. **Vision assistance.** Fresh install with TalkBack on: the welcome flow asks "Do you need vision assistance?" first. Turn TalkBack on after onboarding: the question is offered once at the next launch. Settings → Accessibility: TalkBack reads the toggle as one switch with its description. The same toggle works on iOS.

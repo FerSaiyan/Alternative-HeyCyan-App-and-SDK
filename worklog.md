@@ -1,5 +1,19 @@
 # Worklog — CyanBridge local agent
 
+## 2026-10-26 — Protocol-fixes branch retired; spoken questions merged into cyan-refactor
+
+- `heycyan-eyevue-tunebuds-protocol-fixes` is retired; `cyan-refactor` is the only working branch.
+  Its last commit (`c8fc4efb`: SMART spoken-question routing, keyless web answers, LiteRT follow-up
+  sessions, spoken-question memory, Pro relay audio, voice profile, vision assistance onboarding)
+  is merged as `4a687fe0`.
+- MainActivity's frozen AI/voice, TTS and intent regions took the commit's version unchanged, so the
+  line budget went from 4,507 to 5,069. Everything else was moved to where the code lives now: relay
+  audio fields in the shared `RelayClient`, new settings in the typed preferences
+  (`AssistantPrefs.QuestionRouting`, `AppPrefs.Accessibility`, `ProPrefs.Ai.audioCapableModels*`),
+  voice enrollment through `AudioSessionCoordinator`.
+- Hardware checks: `docs/refactor/HARDWARE_TEST_CHECKLIST.md`, "Spoken questions, web answers, voice
+  profile and vision assistance". GlassesQuestionFlowTest compiles; it was not run (no emulator).
+
 ## 2026-10-26 — "Without Meta AI" pairing option investigated, then dropped
 
 Idea: a third Meta pairing choice next to Developer Mode and the email invite, modeled on
