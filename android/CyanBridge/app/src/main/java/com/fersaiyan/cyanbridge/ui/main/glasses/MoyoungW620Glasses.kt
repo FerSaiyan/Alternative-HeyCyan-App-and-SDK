@@ -8,8 +8,6 @@ import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
-import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
-import com.fersaiyan.cyanbridge.ui.startKtxActivity
 
 /**
  * MoYoung / W620 glasses over [MoyoungW620Manager]: connection, battery and Wi-Fi media sync.

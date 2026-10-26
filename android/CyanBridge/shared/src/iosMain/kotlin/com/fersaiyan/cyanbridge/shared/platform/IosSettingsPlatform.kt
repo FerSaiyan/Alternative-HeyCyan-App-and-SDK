@@ -36,7 +36,7 @@ import platform.UniformTypeIdentifiers.UTTypeJSON
 import platform.darwin.NSObject
 import kotlin.coroutines.resume
 
-/** Settings actions for the iOS host (Android: SettingsActivity and its helpers). */
+/** Settings actions for the iOS host (Android: SettingsDestination and its helpers). */
 @OptIn(ExperimentalForeignApi::class)
 class IosSettingsPlatform(
     private val chatRepository: ChatRepository,

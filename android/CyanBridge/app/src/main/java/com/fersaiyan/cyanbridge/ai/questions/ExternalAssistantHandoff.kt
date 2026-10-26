@@ -14,7 +14,6 @@ import androidx.core.content.FileProvider
 import com.fersaiyan.cyanbridge.ai.image.DefaultAssistantResolver
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationInspector
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationPolicy
-import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
 import com.fersaiyan.cyanbridge.ai.image.ExternalImageAutomationIntents
 import com.fersaiyan.cyanbridge.ai.image.ExternalImageAutomationStage
 import com.fersaiyan.cyanbridge.ai.image.ExternalImageAutomationStore

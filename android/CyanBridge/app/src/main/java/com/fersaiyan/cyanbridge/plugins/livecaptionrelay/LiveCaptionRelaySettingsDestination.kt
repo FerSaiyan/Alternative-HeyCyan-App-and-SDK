@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.plugins.livecaptionrelay
 
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer

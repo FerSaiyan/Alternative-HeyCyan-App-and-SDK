@@ -3,9 +3,7 @@ package com.fersaiyan.cyanbridge.plugins.autodiary
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
-import android.content.Intent
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,8 +52,6 @@ import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsDestination
-import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryDestination
-import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesDestination
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 

@@ -2,10 +2,8 @@ package com.fersaiyan.cyanbridge.plugins.walkingaid
 
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,7 +55,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionDestination
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaDatPermissions
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
@@ -67,7 +64,6 @@ import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidModelOption
 import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidSettingsViewModel
 import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.store
-import com.fersaiyan.cyanbridge.ui.MetaPairingDestination
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.ensureNotificationPermission
 import com.fersaiyan.cyanbridge.ui.hasBluetooth

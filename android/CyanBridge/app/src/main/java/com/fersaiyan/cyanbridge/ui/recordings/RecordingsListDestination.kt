@@ -14,7 +14,6 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.lifecycleScope

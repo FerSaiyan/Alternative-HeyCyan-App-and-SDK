@@ -15,7 +15,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -25,13 +24,9 @@ import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionDestination
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsDestination
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionVerifier
-import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
@@ -54,9 +49,7 @@ import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
 import com.fersaiyan.cyanbridge.audio.MeetingCapturePrefs
 import com.fersaiyan.cyanbridge.audio.MeetingCaptureService
-import com.fersaiyan.cyanbridge.ui.appearance.AppearanceDestination
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
-import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListDestination
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode

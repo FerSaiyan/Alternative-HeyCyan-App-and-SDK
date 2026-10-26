@@ -9,7 +9,6 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -64,7 +63,6 @@ import com.fersaiyan.cyanbridge.shared.automation.ExternalAssistantSetupUiState
 import com.fersaiyan.cyanbridge.shared.automation.ImportTaskerProfile
 import com.fersaiyan.cyanbridge.shared.automation.IntegrationHealth
 import com.fersaiyan.cyanbridge.shared.automation.IntegrationState
-import com.fersaiyan.cyanbridge.ui.CommunityPluginsDestination
 import com.fersaiyan.cyanbridge.ui.collectScreenEffects
 import java.io.File
 

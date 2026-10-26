@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.plugins.visualdiary
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row

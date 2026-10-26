@@ -7,7 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 
-/** Parses the relay `/plugins` response (port of CommunityPluginsActivity's parser). */
+/** Parses the relay `/plugins` response (port of the Android Plugins screen's parser). */
 object CommunityPluginCatalogParser {
     fun parse(body: String): List<CommunityPluginCardData> {
         val root = Json.parseToJsonElement(body.trim())

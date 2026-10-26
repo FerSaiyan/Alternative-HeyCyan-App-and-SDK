@@ -2,7 +2,7 @@ package com.fersaiyan.cyanbridge.shared.platform
 
 /**
  * Platform hooks behind the shared Settings screen. The iOS host installs them;
- * Android keeps SettingsActivity and leaves them unset.
+ * Android keeps its own Settings screen (SettingsDestination) and leaves them unset.
  */
 interface SharedSettingsPlatform {
     fun openAppLanguageSettings()

@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.shared.ui.knowledge.KnowledgeIntegrationsScreen

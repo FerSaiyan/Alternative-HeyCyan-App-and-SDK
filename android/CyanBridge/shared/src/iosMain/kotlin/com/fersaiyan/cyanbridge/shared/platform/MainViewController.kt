@@ -167,7 +167,7 @@ private fun IosCyanBridgeApp(
                 onProSubscriptionAction = ::iosProSubscriptionActionStatus,
                 hiddenDestinations = setOf(AppDestination.PLUGINS),
             )
-            // Android opens DeviceBindActivity for Scan; iOS shows the same shared screen on top.
+            // Android opens its device bind screen for Scan; iOS shows the same shared screen on top.
             deviceBindState?.let { bind ->
                 SystemBackHandler { controller.closeDeviceBind() }
                 DeviceBindScreen(

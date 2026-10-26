@@ -34,13 +34,9 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesMediaCounts
 import com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
-import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
-import com.fersaiyan.cyanbridge.ui.MentraBroadcastDestination
-import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateDestination
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import com.fersaiyan.cyanbridge.ui.requestWifiP2pPermission
 import com.hjq.permissions.OnPermissionCallback
-import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import com.mentra.bluetoothsdk.GlassesRuntimeState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine

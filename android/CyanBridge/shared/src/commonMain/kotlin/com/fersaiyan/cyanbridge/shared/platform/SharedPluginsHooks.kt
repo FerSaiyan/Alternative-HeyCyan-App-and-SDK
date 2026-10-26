@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Native plugin runtime and community catalog for the shared Plugins destination.
- * The iOS host installs it; Android keeps CommunityPluginsActivity.
+ * The iOS host installs it; Android keeps its own Plugins screen (CommunityPluginsDestination).
  */
 interface SharedPluginsPlatform {
     /** Native plugin ids this platform can run. */

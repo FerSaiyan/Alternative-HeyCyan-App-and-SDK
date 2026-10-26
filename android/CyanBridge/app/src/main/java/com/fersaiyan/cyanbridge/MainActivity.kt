@@ -831,7 +831,7 @@ class MainActivity : AppCompatActivity() {
                 startDataDownload(flow)
             },
             appearanceSettings = appearance,
-            onNavigateToActivity = ::navigateToDestination,
+            onOpenDestination = ::navigateToDestination,
             liveVideoSlot = {
                 GlassesLiveVideoSlot(
                     dashboardState = dashboardState,
@@ -1515,7 +1515,7 @@ class MainActivity : AppCompatActivity() {
 
     // --- end Chapter 5 meeting capture ---
 
-    // --- Transcription UI moved to RecordingsListActivity (per-item) ---
+    // --- Transcription UI moved to the Media screen (RecordingsListDestination, per item) ---
 
 
 

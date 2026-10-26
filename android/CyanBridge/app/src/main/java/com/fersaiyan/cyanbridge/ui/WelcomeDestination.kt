@@ -5,12 +5,10 @@ import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.MainActivity
-import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.accessibility.VisionAssistancePreferences
 import com.fersaiyan.cyanbridge.shared.platform.PlatformPreferences
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.OnboardingLanguageOption

@@ -2,11 +2,8 @@ package com.fersaiyan.cyanbridge.ui
 
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.addCallback
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.devices.mentra.MentraOtaAdapter

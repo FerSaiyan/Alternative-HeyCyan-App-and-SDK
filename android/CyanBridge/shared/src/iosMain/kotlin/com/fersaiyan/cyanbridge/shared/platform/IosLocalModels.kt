@@ -63,7 +63,7 @@ import platform.darwin.NSObject
 import kotlin.time.TimeSource
 
 /**
- * On-device models for the "Local" AI provider (Android: LocalModelsConfigureActivity +
+ * On-device models for the "Local" AI provider (Android: LocalModelsConfigureDestination +
  * LocalModelStorageRepository). Kotlin keeps the files, catalog and settings; the Swift
  * [LocalModelBridge] runs them with llama.cpp (.gguf) or LiteRT-LM (.litertlm).
  */

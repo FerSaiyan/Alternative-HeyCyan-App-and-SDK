@@ -20,7 +20,6 @@ import com.fersaiyan.cyanbridge.shared.glasses.MemoMindPanelCommand
 import com.fersaiyan.cyanbridge.shared.glasses.MemoMindPanelLabels
 import com.fersaiyan.cyanbridge.shared.glasses.MemoMindUiState
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
-import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch

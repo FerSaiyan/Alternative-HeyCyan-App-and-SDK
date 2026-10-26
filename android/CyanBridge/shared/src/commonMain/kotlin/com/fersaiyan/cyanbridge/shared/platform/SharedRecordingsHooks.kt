@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Meeting recordings provider for the shared Media destination. The iOS host
- * installs it; Android keeps RecordingsListActivity and leaves it unset.
+ * installs it; Android keeps its own Media screen (RecordingsListDestination) and leaves it unset.
  */
 interface SharedRecordingsProvider {
     val meetingState: StateFlow<MeetingRecordingUiState>

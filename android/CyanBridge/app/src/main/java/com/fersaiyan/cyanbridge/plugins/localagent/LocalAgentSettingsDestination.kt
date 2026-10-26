@@ -10,7 +10,6 @@ import android.provider.Settings
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -58,12 +57,10 @@ import com.fersaiyan.cyanbridge.localagent.LocalAgentShizukuFallback
 import com.fersaiyan.cyanbridge.localagent.LocalAgentTaskHistory
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
-import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsDestination
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
-import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsDestination
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat

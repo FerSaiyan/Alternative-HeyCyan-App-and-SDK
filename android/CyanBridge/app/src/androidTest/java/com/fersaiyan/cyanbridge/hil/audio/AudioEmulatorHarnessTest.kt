@@ -159,7 +159,7 @@ class AudioEmulatorHarnessTest {
             // Raw pcm was extracted via wave module from the same logical audio; sizes should match (allow 0 diff)
             assertTrue("pcmShorts ${pcmShorts.size} vs raw ${raw.size/2}", kotlin.math.abs(pcmShorts.size * 2 - raw.size) <= 2)
 
-            // offerGlassesPcm is the emulator-friendly seam: real GeminiLiveActivity would call it from
+            // offerGlassesPcm is the emulator-friendly seam: the real Gemini Live screen would call it from
             // a BT SCO glasses mic; tests inject deterministic file PCM instead of a live AudioRecord.
             // We don't assert network state here — the harness only needs to prove the PCM path doesn't throw
             // and that the fake token provider is wired.

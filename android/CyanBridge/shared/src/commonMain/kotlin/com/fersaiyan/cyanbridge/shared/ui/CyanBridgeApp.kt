@@ -1,22 +1,11 @@
 package com.fersaiyan.cyanbridge.shared.ui
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.appearance.AppearanceSettings
 import com.fersaiyan.cyanbridge.shared.billing.ProSubscriptionAction
 import com.fersaiyan.cyanbridge.shared.billing.ProSubscriptionUiState
@@ -24,8 +13,6 @@ import com.fersaiyan.cyanbridge.shared.billing.unavailableProSubscriptionStatus
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
-import com.fersaiyan.cyanbridge.shared.generated.resources.Res
-import com.fersaiyan.cyanbridge.shared.generated.resources.action_open
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.ui.appearance.AppearanceScreen
 import com.fersaiyan.cyanbridge.shared.ui.glasses.GlassesDashboardScreen
@@ -37,9 +24,10 @@ import com.fersaiyan.cyanbridge.shared.ui.glasses.GlassesSyncFlowPickerDialog
  * Renders the shared bottom navigation shell and routes to the appropriate
  * screen for each [AppDestination].
  *
- * Android can keep the legacy Activity presenters by leaving
- * [useSharedDestinations] disabled. The iOS KMP host enables it to render the
- * migrated shared destinations directly.
+ * The iOS KMP host enables [useSharedDestinations] to render the shared
+ * destinations here. Android's single Activity uses this for the Glasses tab
+ * only: its other tabs are screens of its back stack, opened through
+ * [onOpenDestination].
  */
 @Composable
 fun CyanBridgeApp(
@@ -52,7 +40,7 @@ fun CyanBridgeApp(
     appearanceSettings: AppearanceSettings = AppearanceSettings(),
     onAppearanceSettingsChange: (AppearanceSettings) -> Unit = {},
     onAppearanceReset: () -> Unit = {},
-    onNavigateToActivity: (AppDestination) -> Unit = {},
+    onOpenDestination: (AppDestination) -> Unit = {},
     useSharedDestinations: Boolean = false,
     proSubscriptionState: ProSubscriptionUiState = ProSubscriptionUiState(),
     onProSubscriptionAction: (ProSubscriptionAction) -> String = ::unavailableProSubscriptionStatus,
@@ -97,7 +85,7 @@ fun CyanBridgeApp(
                 } else if (destination == AppDestination.GLASSES) {
                     currentDestination = destination
                 } else {
-                    onNavigateToActivity(destination)
+                    onOpenDestination(destination)
                 }
             },
         ) { destination ->
@@ -134,44 +122,8 @@ fun CyanBridgeApp(
                         proSubscriptionState = proSubscriptionState,
                         onProSubscriptionAction = onProSubscriptionAction,
                     )
-                } else {
-                        ActivityLaunchPlaceholder(
-                            title = localizedDestinationLabel(destination),
-                            subtitle = localizedDestinationSubtitle(destination),
-                            onOpen = { onNavigateToActivity(destination) },
-                        )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ActivityLaunchPlaceholder(
-    title: String,
-    subtitle: String,
-    onOpen: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(modifier = Modifier.height(48.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onOpen) {
-            Text(org.jetbrains.compose.resources.stringResource(Res.string.action_open))
         }
     }
 }

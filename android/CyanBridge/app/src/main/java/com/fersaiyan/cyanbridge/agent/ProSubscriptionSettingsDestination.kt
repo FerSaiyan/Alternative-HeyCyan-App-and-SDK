@@ -2,11 +2,9 @@ package com.fersaiyan.cyanbridge.agent
 
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
-import android.content.Intent
 import android.os.Bundle
 import android.view.SoundEffectConstants
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.fersaiyan.cyanbridge.ai.live.GeminiLivePermissionGateActivity

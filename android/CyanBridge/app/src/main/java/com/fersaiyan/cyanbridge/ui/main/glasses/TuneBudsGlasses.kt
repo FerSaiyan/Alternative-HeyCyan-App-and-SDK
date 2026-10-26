@@ -18,8 +18,6 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
-import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
-import com.fersaiyan.cyanbridge.ui.startKtxActivity
 
 /** TuneBuds / AB Mate glasses over [TuneBudsManager] (RFCOMM commands, hotspot media, RTSP preview). */
 internal class TuneBudsGlasses(private val context: GlassesDeviceContext) : AndroidGlassesDevice {

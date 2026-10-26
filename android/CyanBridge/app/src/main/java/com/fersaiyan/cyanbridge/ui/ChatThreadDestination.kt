@@ -12,13 +12,11 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.chat.ChatStore
@@ -27,7 +25,6 @@ import com.fersaiyan.cyanbridge.localagent.dailysummary.DailySummaryRegenerateWo
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.shared.chat.ChatProviderKind
 import com.fersaiyan.cyanbridge.shared.chat.ChatRole
-import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.ui.chat.ChatAppearanceMenuDialog
 import com.fersaiyan.cyanbridge.shared.ui.chat.ChatThreadArgs
 import com.fersaiyan.cyanbridge.shared.ui.chat.ChatThreadEffect

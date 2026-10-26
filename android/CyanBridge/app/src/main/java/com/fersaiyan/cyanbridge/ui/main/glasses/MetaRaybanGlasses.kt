@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
-import android.content.Intent
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.ai.questions.MetaQuestionPhoto
@@ -11,9 +10,6 @@ import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
-import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
-import com.fersaiyan.cyanbridge.ui.MetaPairingDestination
-import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import kotlinx.coroutines.launch
 
 /**

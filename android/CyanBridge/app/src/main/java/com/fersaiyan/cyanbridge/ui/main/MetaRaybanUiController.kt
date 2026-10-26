@@ -12,7 +12,6 @@ import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaDatPermissions
 import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
-import com.fersaiyan.cyanbridge.ui.MetaPairingDestination
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.meta.wearable.dat.core.types.DatResult
 import com.meta.wearable.dat.core.types.Permission

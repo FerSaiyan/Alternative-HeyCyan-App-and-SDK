@@ -1,10 +1,8 @@
 package com.fersaiyan.cyanbridge.ui.main
 
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
-import android.content.Intent
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.BuildConfig
-import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
 import com.fersaiyan.cyanbridge.ai.image.ImageThumbnailQuality
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveVisionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences

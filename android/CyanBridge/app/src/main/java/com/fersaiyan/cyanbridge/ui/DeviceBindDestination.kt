@@ -20,7 +20,6 @@ import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.runtime.getValue
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.devices.DeviceClassifier

@@ -3,8 +3,6 @@ package com.fersaiyan.cyanbridge.ui
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.os.Bundle
-import android.view.WindowManager
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,7 +30,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.devices.mentra.MentraBroadcastController
 import com.fersaiyan.cyanbridge.devices.mentra.MentraBroadcastRefusal

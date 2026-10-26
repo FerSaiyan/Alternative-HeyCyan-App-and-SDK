@@ -12,7 +12,6 @@ import android.view.View
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.R

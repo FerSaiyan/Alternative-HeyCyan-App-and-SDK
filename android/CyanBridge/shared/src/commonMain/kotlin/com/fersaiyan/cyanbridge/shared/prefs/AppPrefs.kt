@@ -104,7 +104,7 @@ object AppPrefs {
         val recordedPath = string("recorded_path", "UNKNOWN")
     }
 
-    /** Expanded sections of Settings (reader: ui/SettingsActivity); `*` is the section key. */
+    /** Expanded sections of Settings (reader: ui/SettingsDestination); `*` is the section key. */
     object SettingsSections : PrefsFile("settings_sections") {
         val expanded = booleanFamily("*", true)
     }

@@ -19,11 +19,6 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.device_class_meta_ray
 import com.fersaiyan.cyanbridge.shared.generated.resources.device_class_moyoung_w620
 import com.fersaiyan.cyanbridge.shared.generated.resources.device_class_tunebuds
 import com.fersaiyan.cyanbridge.shared.generated.resources.device_class_unknown
-import com.fersaiyan.cyanbridge.shared.generated.resources.destination_chats_subtitle
-import com.fersaiyan.cyanbridge.shared.generated.resources.destination_glasses_subtitle
-import com.fersaiyan.cyanbridge.shared.generated.resources.destination_media_subtitle
-import com.fersaiyan.cyanbridge.shared.generated.resources.destination_plugins_subtitle
-import com.fersaiyan.cyanbridge.shared.generated.resources.destination_settings_subtitle
 import com.fersaiyan.cyanbridge.shared.generated.resources.nav_chats
 import com.fersaiyan.cyanbridge.shared.generated.resources.nav_glasses
 import com.fersaiyan.cyanbridge.shared.generated.resources.nav_media
@@ -71,18 +66,6 @@ fun localizedDestinationLabel(destination: AppDestination): String = stringResou
         AppDestination.MEDIA -> Res.string.nav_media
         AppDestination.PLUGINS -> Res.string.nav_plugins
         AppDestination.SETTINGS -> Res.string.nav_settings
-    },
-)
-
-@OptIn(ExperimentalResourceApi::class)
-@Composable
-fun localizedDestinationSubtitle(destination: AppDestination): String = stringResource(
-    when (destination) {
-        AppDestination.GLASSES -> Res.string.destination_glasses_subtitle
-        AppDestination.CHATS -> Res.string.destination_chats_subtitle
-        AppDestination.MEDIA -> Res.string.destination_media_subtitle
-        AppDestination.PLUGINS -> Res.string.destination_plugins_subtitle
-        AppDestination.SETTINGS -> Res.string.destination_settings_subtitle
     },
 )
 

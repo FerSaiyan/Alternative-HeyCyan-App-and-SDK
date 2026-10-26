@@ -7,8 +7,6 @@ import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
-import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
-import com.fersaiyan.cyanbridge.ui.startKtxActivity
 
 /** Meizu MYVU display glasses over [MeizuMyvuManager] (BLE pairing, RFCOMM relay). */
 internal class MeizuMyvuGlasses(context: GlassesDeviceContext) :

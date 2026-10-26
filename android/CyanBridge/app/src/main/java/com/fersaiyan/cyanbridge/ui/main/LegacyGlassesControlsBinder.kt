@@ -10,12 +10,10 @@ import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
-import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
 import com.fersaiyan.cyanbridge.ui.hasBluetooth
 import com.fersaiyan.cyanbridge.ui.main.glasses.AndroidGlassesDevices
 import com.fersaiyan.cyanbridge.ui.requestBluetoothPermission
 import com.fersaiyan.cyanbridge.ui.setOnClickListener
-import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.XXPermissions
 import com.oudmon.ble.base.bluetooth.BleOperateManager

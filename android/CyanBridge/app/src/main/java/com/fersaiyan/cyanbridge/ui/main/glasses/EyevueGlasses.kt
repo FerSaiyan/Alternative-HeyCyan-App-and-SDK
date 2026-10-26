@@ -24,8 +24,6 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState
-import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
-import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import kotlinx.coroutines.launch
 
 /** Eyevue glasses over [EyevueManager] (BLE commands, Wi-Fi media and live preview). */

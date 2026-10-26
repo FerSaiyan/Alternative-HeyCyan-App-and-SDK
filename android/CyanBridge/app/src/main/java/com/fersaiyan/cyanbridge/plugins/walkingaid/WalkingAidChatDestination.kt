@@ -4,7 +4,6 @@ import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.os.Bundle
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement

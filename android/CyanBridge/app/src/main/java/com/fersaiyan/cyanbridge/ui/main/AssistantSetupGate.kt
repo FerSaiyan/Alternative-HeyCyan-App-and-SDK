@@ -2,14 +2,10 @@ package com.fersaiyan.cyanbridge.ui.main
 
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
-import android.content.Intent
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionDestination
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationInspector
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationPolicy
-import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
 import com.fersaiyan.cyanbridge.ai.router.AssistantSetupDestination
 import com.fersaiyan.cyanbridge.ai.router.AssistantTestKind
 import com.fersaiyan.cyanbridge.ai.router.AssistantTestReadiness

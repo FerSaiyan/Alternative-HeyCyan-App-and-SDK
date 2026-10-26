@@ -10,9 +10,6 @@ import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsReviewThreadStor
 import com.fersaiyan.cyanbridge.shared.chat.ChatRole
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.ui.ChatThreadDestination
-import com.fersaiyan.cyanbridge.ui.CommunityPluginsDestination
-import com.fersaiyan.cyanbridge.ui.SettingsDestination
-import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListDestination
 
 /** Opens the top-level destinations of the shared navigation shell from the glasses screen. */
 internal class AppDestinationNavigator(private val activity: AppCompatActivity) {
@@ -58,7 +55,7 @@ internal fun Context.recentChatIntent(withDailyReview: Boolean = false): Intent 
     }
 }
 
-/** Points [ChatThreadActivity] at [chatId], in review mode when it is a daily review chat. */
+/** Points the chat screen ([ChatThreadDestination]) at [chatId], in review mode when it is a daily review chat. */
 internal fun Intent.putChatExtras(context: Context, chatId: String): Intent = apply {
     putExtra(ChatThreadDestination.EXTRA_CHAT_ID, chatId)
     DailyFactsReviewThreadStore.load(context, chatId)?.let { config ->

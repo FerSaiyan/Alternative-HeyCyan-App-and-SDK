@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.agent
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue

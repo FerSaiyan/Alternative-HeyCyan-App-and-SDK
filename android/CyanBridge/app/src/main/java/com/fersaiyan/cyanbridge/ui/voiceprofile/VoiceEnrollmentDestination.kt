@@ -12,11 +12,9 @@ import android.provider.Settings
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
-import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.VoiceEnrollmentScreen
 import com.fersaiyan.cyanbridge.ui.OnboardingFeatureDestination
 
