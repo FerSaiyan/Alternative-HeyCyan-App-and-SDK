@@ -154,6 +154,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import java.io.File
@@ -220,6 +221,16 @@ import com.fersaiyan.cyanbridge.ai.router.AssistantRequestSource
 import com.fersaiyan.cyanbridge.shared.ai.AssistantSpeechPolicy
 import com.fersaiyan.cyanbridge.shared.ai.GlassesAssistantRoute
 import com.fersaiyan.cyanbridge.shared.ai.GlassesAssistantRoutingPolicy
+import com.fersaiyan.cyanbridge.ai.router.SpokenDecision
+import com.fersaiyan.cyanbridge.ai.router.SpokenDecisionParser
+import com.fersaiyan.cyanbridge.ai.router.SpokenRoute
+import com.fersaiyan.cyanbridge.ai.router.SpokenConversation
+import com.fersaiyan.cyanbridge.localagent.context.SpokenMemoryContext
+import com.fersaiyan.cyanbridge.localmodels.engine.SessionTurn
+import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
+import com.fersaiyan.cyanbridge.localmodels.engine.SessionUnavailableException
+import com.fersaiyan.cyanbridge.ai.search.WebSearchAssist
+import com.fersaiyan.cyanbridge.ai.search.WebSearchEngine
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
 import com.fersaiyan.cyanbridge.ai.router.RelayErrorLocalizer
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveActivity
@@ -296,6 +307,14 @@ import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepositor
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.ai.decision.LocalDecisionEngine
 import com.fersaiyan.cyanbridge.ai.decision.SingleTokenDecisionEngine
+import com.fersaiyan.cyanbridge.ai.router.QuestionDecisionShadow
+import com.fersaiyan.cyanbridge.ai.image.GlassesQuestionTestHooks
+import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
+import com.fersaiyan.cyanbridge.ai.speaker.VoiceProfile
+import com.fersaiyan.cyanbridge.localmodels.session.LocalModelLoadAnnouncer
+import com.fersaiyan.cyanbridge.localmodels.session.DecideOnceUnsupportedException
+import com.fersaiyan.cyanbridge.localmodels.engine.DecideOnceRequest
+import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
 import com.fersaiyan.cyanbridge.ai.router.AgentInferenceRouter
 import com.fersaiyan.cyanbridge.memoryvault.MemoryPolicyService
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
@@ -319,8 +338,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
     private val ttsDoneCallbacks = ConcurrentHashMap<String, () -> Unit>()
     private val assistantDecisionEngines = ConcurrentHashMap<AgentProviderType, LocalDecisionEngine>()
+    /** Classic-only transcript router; SMART questions go to the decision model (decide-once). */
     private val assistantRequestRouter = AssistantRequestRouter { providerType ->
-        assistantDecisionEngines.computeIfAbsent(providerType) {
+        val singleToken = assistantDecisionEngines.computeIfAbsent(providerType) {
             SingleTokenDecisionEngine(
                 generate = { systemPrompt, userPrompt ->
                     AgentInferenceRouter.completeDecisionToken(
@@ -334,8 +354,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 },
             )
         }
+        singleToken
     }
     private var pendingVoiceImageQuestion: String? = null
+    /** Receives the next captured glasses photo for a decide-once question instead of the image flow. */
+    @Volatile private var pendingPhotoSink: kotlinx.coroutines.CompletableDeferred<String?>? = null
+    private val decideOnceInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
     private var pendingImageQuestionOfferSpokenQuestion = false
 
     // Optional Local Agent UI status
@@ -400,6 +424,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         utteranceId: String?,
         streamType: Int? = null,
         onDone: (() -> Unit)? = null,
+        queueMode: Int = TextToSpeech.QUEUE_FLUSH,
     ) {
         val engine = tts
         languageTag?.takeIf { it.isNotBlank() }?.let { tag ->
@@ -410,6 +435,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Log.i("ImageQuestionAudio", "TTS language tag=$tag result=$result")
         }
         val id = utteranceId ?: "utt_${System.currentTimeMillis()}"
+        GlassesQuestionTestHooks.emit("speak", text)
         val wrappedOnDone: () -> Unit = {
             try {
                 onDone?.invoke()
@@ -425,7 +451,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         AudioSessionCoordinator.markBusy()
-        val result = engine?.speak(text, TextToSpeech.QUEUE_FLUSH, bundle, id)
+        val result = engine?.speak(text, queueMode, bundle, id)
         Log.i(
             "ImageQuestionAudio",
             "TTS enqueue id=$id ready=$ttsReady stream=$streamType textLength=${text.length} result=$result",
@@ -440,6 +466,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     companion object {
         const val EXTRA_TASKER_COMMAND = "tasker_command"
         const val EXTRA_START_META_IMAGE_QUESTION = "start_meta_image_question"
+        const val EXTRA_DEBUG_GLASSES_EVENT = "debug_glasses_event"
+        const val DEBUG_EVENT_WAKE = "wake"
+        const val DEBUG_EVENT_PHOTO_BUTTON = "photo_button"
+        private const val TEST_PHOTO_TRANSFER_MS = 1_500L
+        private const val DECIDE_ONCE_PHOTO_TAG = "decide_once"
+        private const val DECIDE_ONCE_PHOTO_TIMEOUT_MS = 45_000L
+        private const val DECIDE_ONCE_SPEECH_TIMEOUT_MS = 180_000L
+        /** How long the glasses listen for a follow-up after a spoken answer (speech must start within it). */
+        private const val SPOKEN_FOLLOW_UP_WINDOW_MS = 5_000L
+        private val SPOKEN_FOLLOW_UP_ROUTES = setOf(SpokenRoute.ANSWER, SpokenRoute.CAMERA, SpokenRoute.SEARCH)
+        /** Text before the photo turn in the open conversation (the question is the earlier recording). */
+        private const val SPOKEN_PHOTO_NOTE = "Here is the photo from the glasses camera. Answer their question now, starting with [answer]."
         private const val TAG = "MainActivity"
         private var loggedLargeDataHandlerMethods = false
         private const val AI_MODE_PHONE_ASSISTANT = "PhoneAssistant"
@@ -1282,6 +1320,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         handleMetaRegistrationIntent(intent)
         handleTaskerCommand(intent)
         maybeStartMetaImageQuestion(intent)
+        maybeHandleDebugGlassesEvent(intent)
 
         BatteryOptimizationGuideActivity.launchIfNeeded(this)
     }
@@ -1524,12 +1563,36 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         handleTaskerCommand(intent)
         maybeStartMetaImageQuestion(intent)
+        maybeHandleDebugGlassesEvent(intent)
     }
 
     private fun handleMetaRegistrationIntent(callbackIntent: Intent): Boolean {
         if (!callbackIntent.data?.scheme.equals("cyanbridge", ignoreCase = true)) return false
         val manager = getOrCreateMetaRaybanManager()
         return manager.handleRegistrationCallback(callbackIntent)
+    }
+
+    /** Debug builds only: lets instrumentation fire the wake word or the AI photo button. */
+    private fun maybeHandleDebugGlassesEvent(sourceIntent: Intent) {
+        if (!BuildConfig.DEBUG) return
+        val event = sourceIntent.getStringExtra(EXTRA_DEBUG_GLASSES_EVENT) ?: return
+        sourceIntent.removeExtra(EXTRA_DEBUG_GLASSES_EVENT)
+        // The decor view is always attached; posting runs after onNewIntent/onResume settle.
+        window.decorView.post { debugGlassesEvent(event) }
+    }
+
+    /** Debug builds only: same entry points as the glasses' wake word and AI photo button. */
+    internal fun debugGlassesEvent(event: String) {
+        if (!BuildConfig.DEBUG) return
+        Log.i("AIHijack", "Debug glasses event=$event")
+        when (event) {
+            DEBUG_EVENT_WAKE -> handleAiWakeWordActivation("debug")
+            DEBUG_EVENT_PHOTO_BUTTON -> handleGlassesImageButtonPressed(
+                triggerCapture = false,
+                sourceTag = "debug_photo_button",
+                offerSpokenQuestion = true,
+            )
+        }
     }
 
     private fun maybeStartMetaImageQuestion(sourceIntent: Intent) {
@@ -2079,6 +2142,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         imagePaths: List<String> = emptyList(),
         audioPath: String? = null,
         onToken: ((String) -> Unit)? = null,
+        decideOnce: DecideOnceRequest? = null,
+        /** Spoken-question decision turn: the reply starts with a route tag (SpokenDecision.kt). */
+        decisionRoutes: Boolean = false,
+        /** Extra system text for this turn (e.g. no web access after a [search] decision). */
+        extraInstruction: String? = null,
+        /** Local LiteRT turn kept in an open conversation (SessionTurn); ignored by other providers. */
+        session: SessionTurn? = null,
+        /** False when the caller reports the outcome itself (spoken decision turns, see runSpokenTurn). */
+        reportReply: Boolean = true,
     ): String {
         val date = todayDateString()
         val languageTag = recognitionLanguageTag()
@@ -2092,7 +2164,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 append(memoryContext)
                 append("\n\n")
             }
-            append(ImageQuestionDefaults.responseLanguageInstruction(languageTag))
+            // A spoken question is the recording itself (callers pass no user text); the model is
+            // told what the recording is and answers in the language the user spoke.
+            if (audioPath.isNullOrBlank()) {
+                append(ImageQuestionDefaults.responseLanguageInstruction(languageTag))
+            } else {
+                append(ImageQuestionDefaults.spokenQuestionInstruction(languageTag, allowQuestionEcho = decideOnce != null))
+                if (decisionRoutes) append("\n\n").append(ImageQuestionDefaults.SPOKEN_DECISION_ROUTES)
+            }
+            extraInstruction?.takeIf { it.isNotBlank() }?.let { append("\n\n").append(it) }
+            // A spoken question has no text to search memory with: the compact, query-free core instead
+            // (nothing when the user has no memory).
+            if (!audioPath.isNullOrBlank()) {
+                SpokenMemoryContext.build(this@MainActivity, date).takeIf { it.isNotBlank() }?.let { append("\n\n").append(it) }
+            }
+            append("\n\n")
+            append(ImageQuestionDefaults.currentContextInstruction())
         }
 
         val messages = listOf(
@@ -2103,6 +2190,24 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return when (providerType) {
             AgentProviderType.PRO_SUBSCRIPTION -> {
                 val chosenQuestionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this).trim()
+                // A spoken question goes to an audio-capable relay model as the recording itself
+                // (photo first when there is one); systemPrompt carries the spoken-question instructions.
+                if (!audioPath.isNullOrBlank()) {
+                    val photo = imagePaths.firstOrNull()
+                    return (if (photo != null) {
+                        CliRelayClient.imageQuery(
+                            context = this, imagePath = photo, modelOverride = chosenQuestionsModel,
+                            audioPath = audioPath, spokenQuestion = true, systemContext = systemPrompt,
+                        )
+                    } else {
+                        CliRelayClient.audioQuery(
+                            context = this, audioPath = audioPath, modelOverride = chosenQuestionsModel,
+                            spokenQuestion = true, systemContext = systemPrompt,
+                        )
+                    }).getOrElse { RelayErrorLocalizer.localizedMessage(this, it) }.trim().also { reply ->
+                        if (!decisionRoutes && reportReply) GlassesQuestionTestHooks.emit("reply", "provider=$providerType images=${imagePaths.size} audio=true text=$reply")
+                    }
+                }
                 CliRelayClient.chat(
                     context = this,
                     chatId = "glasses_${System.currentTimeMillis()}",
@@ -2126,8 +2231,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         imagePaths = imagePaths,
                         audioPath = audioPath,
                         onToken = onToken,
+                        decideOnce = decideOnce,
+                        session = session,
                     )
                 }.getOrElse {
+                    if (it is DecideOnceUnsupportedException || it is SessionUnavailableException) throw it
                     "Local Models error: ${it.message ?: "unknown error"}"
                 }
 
@@ -2139,7 +2247,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     messages = messages,
                 ).getOrElse { RelayErrorLocalizer.localizedMessage(this, it) }
             }
-        }.trim()
+        }.trim().also { reply ->
+            // The decision turn reports its outcome itself (triggerSpokenDecisionQuestion).
+            if (!decisionRoutes && reportReply) {
+                GlassesQuestionTestHooks.emit(
+                    "reply",
+                    "provider=$providerType images=${imagePaths.size} audio=${!audioPath.isNullOrBlank()} text=$reply",
+                )
+            }
+        }
     }
 
     private fun validateSelectedLocalMediaModel(mediaRequested: Boolean): String? {
@@ -2306,11 +2422,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         // Continuous Gemini Live selections return before this one-shot query is
                         // created. Match main for an active Pro user's selected non-Live model.
                         val questionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this@MainActivity)
+                        // A spoken question recorded with the photo goes along as audio (photo + bare audio).
                         val visionResult = CliRelayClient.imageQuery(
                             context = this@MainActivity,
                             imagePath = imagePath,
-                            prompt = resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY),
+                            prompt = if (audioPath == null) resolvedPrompt.forRoute(ImageQuestionRoute.PRO_RELAY) else null,
                             modelOverride = questionsModel,
+                            audioPath = audioPath,
+                            spokenQuestion = audioPath != null,
+                            systemContext = audioPath?.let {
+                                ImageQuestionDefaults.spokenQuestionInstruction(recognitionLanguageTag()) + " " +
+                                    ImageQuestionDefaults.currentContextInstruction()
+                            },
                         )
                         if (visionResult.isFailure) {
                             val throwable = visionResult.exceptionOrNull() ?: Exception("unknown error")
@@ -2340,9 +2463,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     AgentProviderType.LOCAL_AGENT -> {
                         var receivedModelText = false
                         runChosenProviderQuery(
-                            userPrompt = if (audioPath == null) resolvedPrompt.forRoute(ImageQuestionRoute.LOCAL_GEMMA)
-                                else "Answer the question spoken in the attached audio about the attached image. Do not merely transcribe it.\n\n" +
-                                    ImageQuestionDefaults.responseLanguageInstruction(recognitionLanguageTag()),
+                            // A spoken question goes as photo + bare audio (spokenQuestionInstruction).
+                            userPrompt = if (audioPath == null) resolvedPrompt.forRoute(ImageQuestionRoute.LOCAL_GEMMA) else "",
                             providerType = AgentProviderType.LOCAL_AGENT,
                             ragProfile = RagProfile.NONE,
                             imagePaths = listOf(imagePath),
@@ -2429,10 +2551,37 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun beginAiQuestionForegroundWork(status: String) {
         AiQuestionForegroundService.start(this, status)
+        // Which Pro models hear audio (relay /models), refreshed daily without delaying this question.
+        if (currentAssistantRoute() == GlassesAssistantRoute.PRO && ProSubscriptionAiPrefs.audioCapableModelsStale(this)) {
+            CoroutineScope(Dispatchers.IO).launch {
+                runCatching { com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient.fetchModelCatalog(applicationContext) }
+            }
+        }
     }
 
     private fun finishAiQuestionForegroundWork() {
+        LocalModelLoadAnnouncer.shared.disarm()
         AiQuestionForegroundService.stop(this)
+    }
+
+    /**
+     * Once the question is recorded, say "Initializing local model" if this question has to wait
+     * for a cold load (already running, or started later by the decision or the answer). Warm
+     * models stay silent. Queued, so it never cuts off a cue that is still playing.
+     */
+    private fun armLocalModelLoadCue() {
+        LocalModelLoadAnnouncer.shared.arm { modelId ->
+            Log.i("AIHijack", "Cold load during question model=$modelId; speaking initializing cue")
+            val languageTag = recognitionLanguageTag()
+            runOnUiThread {
+                speak(
+                    text = ImageQuestionDefaults.initializingLocalModelCueForLanguage(languageTag),
+                    languageTag = languageTag,
+                    utteranceId = "initializing_local_model_${System.nanoTime()}",
+                    queueMode = TextToSpeech.QUEUE_ADD,
+                )
+            }
+        }
     }
 
     private fun recognitionLanguageTag(): String =
@@ -2501,6 +2650,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         pendingImageThumbnailQuality = thumbnailQuality
         pendingImageCaptureStartedAtMs = System.currentTimeMillis()
         pendingImageQuestionOfferSpokenQuestion = offerSpokenQuestion
+        if (GlassesQuestionTestHooks.photoActive) {
+            captureTestPhotoForQuestion(sourceTag, offerSpokenQuestion)
+            return
+        }
         if (isMetaRaybanSelected()) {
             captureMetaImageForQuestion(sourceTag)
             return
@@ -2656,6 +2809,26 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     }
                 }
                 metaPhotoCaptureInProgress.set(false)
+            }
+        }
+    }
+
+    /** Debug-build stand-in for a glasses photo: same Ask window and handoff as EyeVue's AI photo. */
+    private fun captureTestPhotoForQuestion(sourceTag: String, offerSpokenQuestion: Boolean) {
+        beginAiQuestionForegroundWork("Capturing test photo")
+        pendingImageQuestionOfferSpokenQuestion = false
+        startParallelAudioQuestionIfEligible(offerSpokenQuestion)
+        val startedAt = System.currentTimeMillis()
+        lifecycleScope.launch(Dispatchers.IO) {
+            delay(TEST_PHOTO_TRANSFER_MS)
+            val imageFile = GlassesQuestionTestHooks.takePhoto(cacheDir)
+            withContext(Dispatchers.Main) {
+                if (imageFile == null) {
+                    clearPendingVoiceImageQuestion(sourceTag)
+                    finishAiQuestionForegroundWork()
+                } else {
+                    onImageReadyForQuestion(imageFile.absolutePath, ImageQuestionSource.HIGH_QUALITY, System.currentTimeMillis() - startedAt)
+                }
             }
         }
     }
@@ -2953,6 +3126,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         source: ImageQuestionSource,
         transferDurationMs: Long,
     ) {
+        pendingPhotoSink?.let { sink ->
+            // A decide-once question asked for this photo; it answers in its own conversation.
+            pendingPhotoSink = null
+            val usable = readImageQuestionMetrics(File(imagePath)) != null
+            Log.i("AIHijack", "Photo delivered to decide-once question usable=$usable")
+            if (!sink.complete(if (usable) imagePath else null)) File(imagePath).delete()
+            return
+        }
         val imageFile = File(imagePath)
         val metrics = readImageQuestionMetrics(imageFile)
         if (metrics == null) {
@@ -3034,6 +3215,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (captured?.error != null) {
                 withContext(Dispatchers.Main) { speak(captured.error!!); finishAiQuestionForegroundWork() }
                 return@launch
+            }
+            if (!initialQuestion.isNullOrBlank() && QuestionRoutingPrefs.mode(this@MainActivity) == QuestionRoutingMode.SHADOW) {
+                val shadowText = initialQuestion
+                lifecycleScope.launch(Dispatchers.Default) {
+                    QuestionDecisionShadow.log(shadowText, flow = "image", classic = AssistantIntent.ANALYZE_IMAGE)
+                }
             }
             val externalAutomation = usesExternalImageAutomation()
             fun offerFollowUp() {
@@ -3169,6 +3356,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (sourceTag == "voice_request") {
             pendingVoiceImageQuestion = null
         }
+        if (sourceTag == DECIDE_ONCE_PHOTO_TAG) {
+            pendingPhotoSink?.complete(null)
+            pendingPhotoSink = null
+        }
         pendingImageQuestionOfferSpokenQuestion = false
         cancelParallelAudioQuestion()
     }
@@ -3227,7 +3418,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private suspend fun captureOptionalImageQuestionFromBluetoothMic(
         timeoutMs: Long,
         voiceOnly: Boolean = false,
+        /** null: on-device STT only when no local model can hear the recording (see processRecordedQuestion). */
+        transcribe: Boolean? = null,
     ): CapturedImageQuestion = questionMicrophoneMutex.withLock {
+        if (GlassesQuestionTestHooks.questionAudioActive) {
+            Log.i("ImageQuestionAudio", "Using test question audio instead of the microphone")
+            val fixture = GlassesQuestionTestHooks.takeQuestionAudio(cacheDir)
+                ?: return@withLock CapturedImageQuestion(null, false)
+            return@withLock processRecordedQuestion(fixture, voiceOnly, transcribe)
+        }
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
         val owner = VoiceAudioRouteOwner(Any(), audioManager)
         activeVoiceAudioRoute.set(owner)
@@ -3268,7 +3467,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
         val recorded = audioFile ?: return@withLock CapturedImageQuestion(null, false)
-        try {
+        processRecordedQuestion(recorded, voiceOnly, transcribe)
+    }
+
+    /** Everything after capture: load cue, speaker observation, on-device transcript or the raw audio. */
+    private suspend fun processRecordedQuestion(recorded: File, voiceOnly: Boolean, transcribe: Boolean? = null): CapturedImageQuestion {
+        armLocalModelLoadCue()
+        observeQuestionSpeaker(recorded, flow = if (voiceOnly) "voice" else "image")
+        // Audio is the default: the model hears the recording directly (faster, works in every
+        // language). On-device STT is the fallback for text-only models and non-local routes.
+        val useStt = transcribe ?: withContext(Dispatchers.IO) { !spokenQuestionAudioGoesToModel() }
+        if (!useStt) return CapturedImageQuestion(null, true, recorded.absolutePath)
+        return try {
             val text = OfflineQuestionTranscriber(applicationContext).transcribe(recorded, recognitionLanguageTag())
             if (text != null) {
                 recorded.delete()
@@ -3282,6 +3492,27 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             recorded.delete()
             throw cancelled
         }
+    }
+
+    /**
+     * Speaker-verification foundation: with an enrolled voice profile and a non-classic routing
+     * mode, score the question against the wearer's template and log the numbers. Never gates.
+     */
+    private suspend fun observeQuestionSpeaker(wav: File, flow: String) {
+        if (QuestionRoutingPrefs.mode(this) == QuestionRoutingMode.CLASSIC) return
+        val pcm = withContext(Dispatchers.IO) {
+            if (!VoiceProfile.isEnrolled(applicationContext)) return@withContext null
+            runCatching { readWavPcm16(wav) }.getOrNull()
+        } ?: return
+        lifecycleScope.launch(Dispatchers.Default) { VoiceProfile.observe(applicationContext, pcm, flow) }
+    }
+
+    /** Reads AudioQuestionRecorder's canonical 44-byte-header PCM16 WAV. */
+    private fun readWavPcm16(wav: File): ShortArray {
+        val bytes = wav.readBytes()
+        require(bytes.size >= 44) { "Truncated WAV" }
+        val buffer = java.nio.ByteBuffer.wrap(bytes, 44, bytes.size - 44).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+        return ShortArray(buffer.remaining()).also { buffer.get(it) }
     }
 
     private suspend fun playImageQuestionTone(toneType: Int) {
@@ -3580,6 +3811,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             ),
                             providerType = routingProvider,
                         )
+                        GlassesQuestionTestHooks.emit("route", routing.intent.name)
+                        if (QuestionRoutingPrefs.mode(this@MainActivity) == QuestionRoutingMode.SHADOW) {
+                            lifecycleScope.launch(Dispatchers.Default) {
+                                QuestionDecisionShadow.log(prompt, flow = "voice", classic = routing.intent)
+                            }
+                        }
 
                         when (routing.intent) {
                             AssistantIntent.ANSWER_QUESTION -> {
@@ -3637,30 +3874,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                             AssistantIntent.EXECUTE_UI_TASK -> runOnUiThread {
                                 stopSco()
-                                if (!AutomationPrefs.isLocalAgentAutomationEnabled(this@MainActivity)) {
-                                    finishVoiceQueryWork()
-                                    speak("Enable Local Agent phone control in CyanBridge settings first.")
-                                    return@runOnUiThread
-                                }
-                                if (isDeviceLockedForAutomation()) {
-                                    finishVoiceQueryWork()
-                                    speak("Unlock your phone before I control it.")
-                                    return@runOnUiThread
-                                }
-                                if (!TaskerIntegrationManager.inspect(this@MainActivity).automationEnvironmentReady) {
-                                    finishVoiceQueryWork()
-                                    speak("Complete Tasker and AutoInput setup in CyanBridge Plugins first.")
-                                    return@runOnUiThread
-                                }
-
-                                val goal = routing.normalizedGoal ?: prompt
-                                val result = LocalAgentController.start(this@MainActivity, goal)
-                                if (result.ok) {
-                                    speak("Okay. I'll do that.")
-                                } else {
-                                    speak("I couldn't start phone control.")
-                                }
                                 finishVoiceQueryWork()
+                                startLocalAgentFromVoice(routing.normalizedGoal ?: prompt)
                             }
 
                             AssistantIntent.CLARIFY -> runOnUiThread {
@@ -3709,8 +3924,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         // sent for cloud transcription or replaced with a generic question.
                         val reply = withContext(Dispatchers.IO) {
                             runChosenProviderQuery(
-                                userPrompt = "Answer the question spoken in the attached audio. Do not merely transcribe it.",
-                                providerType = AgentProviderType.LOCAL_AGENT,
+                                userPrompt = "",
+                                providerType = spokenQuestionProvider(),
                                 ragProfile = RagProfile.NONE,
                                 audioPath = captured.audioPath,
                             )
@@ -3767,6 +3982,337 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    /**
+     * Audio is the default question input: the recording goes to a model that can hear it (a local
+     * audio model, or the Pro questions model when the relay reports audio input). On-device STT is
+     * only the fallback for models that cannot.
+     */
+    private fun spokenQuestionAudioGoesToModel(): Boolean = when (currentAssistantRoute()) {
+        GlassesAssistantRoute.LOCAL -> LocalModelsProvider.hasLocalAudioModel(this)
+        GlassesAssistantRoute.PRO -> proQuestionsModelHearsAudio()
+        GlassesAssistantRoute.TASKER_EXTERNAL_UI, GlassesAssistantRoute.PHONE_ASSISTANT -> false
+    }
+
+    private fun proQuestionsModelHearsAudio(): Boolean =
+        !shouldUseGeminiLiveQuestions(AgentProviderType.PRO_SUBSCRIPTION) && ProSubscriptionAiPrefs.questionsModelHearsAudio(this)
+
+    /** Where a recorded question goes when there is no transcript (STT skipped or failed). */
+    private fun spokenQuestionProvider(): AgentProviderType =
+        if (currentAssistantRoute() == GlassesAssistantRoute.PRO && proQuestionsModelHearsAudio()) {
+            AgentProviderType.PRO_SUBSCRIPTION
+        } else {
+            AgentProviderType.LOCAL_AGENT
+        }
+
+    /**
+     * Hands a spoken phone task to the local agent (Tasker), after the same checks as before. The agent
+     * asks for spoken confirmation before high-risk actions (calls, messages, email, alarms).
+     */
+    private fun startLocalAgentFromVoice(goal: String) {
+        when {
+            goal.isBlank() -> speak("Sorry, what should I do on the phone?")
+            !AutomationPrefs.isLocalAgentAutomationEnabled(this) -> speak("Enable Local Agent phone control in CyanBridge settings first.")
+            isDeviceLockedForAutomation() -> speak("Unlock your phone before I control it.")
+            !TaskerIntegrationManager.inspect(this).automationEnvironmentReady ->
+                speak("Complete Tasker and AutoInput setup in CyanBridge Plugins first.")
+            LocalAgentController.start(this, goal).ok -> speak("Okay. I'll do that.")
+            else -> speak("I couldn't start phone control.")
+        }
+    }
+
+    /**
+     * Spoken question with the decision model (default whenever the answering model hears audio: a local
+     * Gemma 4 or an audio-capable Pro model). The recording is heard once; the reply starts with a route
+     * tag (SpokenDecision.kt) and the app acts as soon as it is written:
+     * answer → spoken; camera → photo, then answered; search → web lookup (ai/search/WebSearchAssist.kt);
+     * phone → local agent; live → Gemini Live; ignore → silence.
+     * With a local LiteRT model the conversation stays open in the engine (SpokenConversation, SessionTurn):
+     * the photo and the web results are added as turns, so the recording is not encoded again, and a
+     * follow-up heard right after the answer (or a new question within a few minutes) continues it.
+     * Models that cannot hear audio keep on-device STT and the transcript router (Classic).
+     */
+    private fun triggerSpokenDecisionQuestion() {
+        if (isGlassesCommandBlocked("voice-query command")) return
+        if (isImageQuestionWorkActive() || !decideOnceInProgress.compareAndSet(false, true)) {
+            Log.i("AIHijack", "Spoken decision question ignored: another question is active")
+            return
+        }
+        beginAiQuestionForegroundWork("Listening for question")
+        val provider = spokenQuestionProvider()
+        val sessions = provider == AgentProviderType.LOCAL_AGENT
+        lifecycleScope.launch {
+            var audioPath: String? = null
+            try {
+                val captured = captureOptionalImageQuestionFromBluetoothMic(
+                    VOICE_QUESTION_ONSET_TIMEOUT_MS, voiceOnly = true, transcribe = false,
+                )
+                audioPath = captured.audioPath
+                when {
+                    captured.error != null -> { speak(captured.error); return@launch }
+                    !captured.heardSpeech || audioPath == null -> {
+                        speak("I couldn't hear a voice question. Please try again.")
+                        return@launch
+                    }
+                }
+                var continueSession = sessions && SpokenConversation.canContinue()
+                if (!continueSession) SpokenConversation.reset()
+                var turn = 1
+                while (true) {
+                    val route = runSpokenTurn(provider, audioPath!!, continueSession.takeIf { sessions }, turn)
+                    File(audioPath).delete()
+                    audioPath = null
+                    if (route == SpokenRoute.IGNORE) SpokenConversation.reset() else SpokenConversation.turnEnded()
+                    // Follow-ups where the conversation is kept, after an answer.
+                    if (!sessions || route !in SPOKEN_FOLLOW_UP_ROUTES) break
+                    val followUp = captureOptionalImageQuestionFromBluetoothMic(
+                        SPOKEN_FOLLOW_UP_WINDOW_MS, voiceOnly = true, transcribe = false,
+                    )
+                    audioPath = followUp.audioPath
+                    if (followUp.error != null || !followUp.heardSpeech || audioPath == null) break
+                    continueSession = true
+                    turn++
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e("AIHijack", "Spoken decision question failed", error)
+                SpokenConversation.reset()
+                GlassesQuestionTestHooks.emit("reply", "provider=$provider images=0 audio=true text=Local Models error: ${error.message}")
+                speak(
+                    text = ImageQuestionDefaults.questionFailedCueForLanguage(recognitionLanguageTag()),
+                    languageTag = recognitionLanguageTag(),
+                    utteranceId = "spoken_decision_failed_${System.nanoTime()}",
+                )
+            } finally {
+                audioPath?.let { File(it).delete() }
+                if (decideOnceInProgress.compareAndSet(true, false)) finishAiQuestionForegroundWork()
+            }
+        }
+    }
+
+    /**
+     * One spoken turn: decision, the route's action and the spoken reply. [continueSession] is null without
+     * engine sessions (Pro relay), else whether to continue the open conversation.
+     */
+    private suspend fun runSpokenTurn(
+        provider: AgentProviderType,
+        audioPath: String,
+        continueSession: Boolean?,
+        turn: Int,
+    ): SpokenRoute {
+        var photoPath: String? = null
+        try {
+            val started = android.os.SystemClock.elapsedRealtime()
+            var continued = continueSession == true
+            // The app acts as soon as the route tag (and payload line) is written. Without an engine session the
+            // rest of the reply is cancelled; in a session it is left to finish (LiteRT-LM cannot continue a
+            // cancelled conversation) while the photo or web search runs, and is awaited before the next turn.
+            fun startDecision(cont: Boolean?): Pair<kotlinx.coroutines.Deferred<String>, kotlinx.coroutines.CompletableDeferred<SpokenDecision>> {
+                val streamed = StringBuilder()
+                val early = kotlinx.coroutines.CompletableDeferred<SpokenDecision>()
+                val job = lifecycleScope.async(Dispatchers.IO) {
+                    runChosenProviderQuery(
+                        userPrompt = "",
+                        providerType = provider,
+                        ragProfile = RagProfile.NONE,
+                        audioPath = audioPath,
+                        decisionRoutes = true,
+                        session = cont?.let {
+                            SessionTurn(SpokenConversation.SESSION_KEY, it, note = if (it) SpokenConversation.takeNote() else null)
+                        },
+                        onToken = { delta ->
+                            streamed.append(delta)
+                            if (!early.isCompleted && SpokenDecisionParser.isComplete(streamed.toString())) {
+                                early.complete(SpokenDecisionParser.parse(streamed.toString()))
+                                if (cont == null) lifecycleScope.launch(Dispatchers.IO) { LocalModelsProvider().cancelGeneration() }
+                            }
+                        },
+                    )
+                }
+                return job to early
+            }
+            suspend fun awaitDecision(job: kotlinx.coroutines.Deferred<String>, early: kotlinx.coroutines.CompletableDeferred<SpokenDecision>): SpokenDecision =
+                kotlinx.coroutines.selects.select {
+                    early.onAwait { it }
+                    job.onAwait { reply ->
+                        if (early.isCompleted) {
+                            early.await()
+                        } else {
+                            // A failed model call must not be read out as an answer.
+                            if (reply.startsWith("Local Models error")) throw IllegalStateException(reply)
+                            SpokenDecisionParser.parse(reply)
+                        }
+                    }
+                }
+            var (replyJob, early) = startDecision(continueSession)
+            val decision = try {
+                awaitDecision(replyJob, early)
+            } catch (gone: SessionUnavailableException) {
+                // Another request used the engine, or the conversation is full: start a new one.
+                Log.i("AIHijack", "Spoken conversation not continued: ${gone.message}")
+                continued = false
+                SpokenConversation.pendingNote = null
+                startDecision(false).also { replyJob = it.first; early = it.second }.let { awaitDecision(it.first, it.second) }
+            }
+            // The full reply (answers stream to the end; other routes finish in the background).
+            suspend fun fullReply(): String = runCatching { replyJob.await() }.getOrDefault("")
+            val decisionMs = android.os.SystemClock.elapsedRealtime() - started
+            Log.i("AIHijack", "Spoken decision route=${decision.route} tagged=${decision.tagged} provider=$provider turn=$turn continued=$continued ms=$decisionMs")
+            GlassesQuestionTestHooks.emit("spoken_decision", "route=${decision.route} tagged=${decision.tagged} ms=$decisionMs payload=${decision.payload.take(120)}")
+
+            fun checkedAnswer(answer: String): String {
+                // Same as the decision turn: a local model failure is reported, never read out.
+                if (answer.startsWith("Local Models error")) throw IllegalStateException(answer)
+                return answer
+            }
+            // Self-contained answer: the recording again, with the photo or web text.
+            suspend fun answerRecording(images: List<String>, extra: String? = null): String = withContext(Dispatchers.IO) {
+                checkedAnswer(
+                    runChosenProviderQuery(
+                        userPrompt = "",
+                        providerType = provider,
+                        ragProfile = RagProfile.NONE,
+                        imagePaths = images,
+                        audioPath = audioPath,
+                        extraInstruction = extra,
+                        reportReply = false,
+                    ),
+                )
+            }
+            // Answer in the open conversation, which already holds the recording; null when it is gone or
+            // the model asks for the camera again.
+            suspend fun answerInSession(text: String, images: List<String> = emptyList(), note: String? = null): String? {
+                if (continueSession == null) return null
+                fullReply()
+                val answer = try {
+                    withContext(Dispatchers.IO) {
+                        checkedAnswer(
+                            runChosenProviderQuery(
+                                userPrompt = text,
+                                providerType = provider,
+                                ragProfile = RagProfile.NONE,
+                                imagePaths = images,
+                                session = SessionTurn(SpokenConversation.SESSION_KEY, true, note),
+                                reportReply = false,
+                            ),
+                        )
+                    }
+                } catch (gone: SessionUnavailableException) {
+                    Log.i("AIHijack", "Spoken answer outside the conversation: ${gone.message}")
+                    return null
+                }
+                // The system turn asks every reply to start with a route tag, so the answer may come as
+                // "[camera] Those are yellow socks."; only a bare tag (asking for the camera again) is unusable.
+                return SpokenDecisionParser.clean(answer).takeIf { it.isNotBlank() }
+                    ?: null.also { Log.i("AIHijack", "Answer in the conversation not usable: ${answer.take(80)}") }
+            }
+
+            val spokenReply: String? = when (decision.route) {
+                SpokenRoute.ANSWER -> decision.payload.ifBlank { SpokenDecisionParser.clean(fullReply()) }
+                SpokenRoute.CAMERA -> {
+                    speak(
+                        text = "Okay. I'll check what you see.",
+                        languageTag = recognitionLanguageTag(),
+                        utteranceId = "spoken_decision_look_${System.nanoTime()}",
+                        queueMode = TextToSpeech.QUEUE_ADD,
+                    )
+                    photoPath = withTimeoutOrNull(DECIDE_ONCE_PHOTO_TIMEOUT_MS) { requestDecideOncePhoto().await() }
+                    if (photoPath == null) Log.w("AIHijack", "Spoken decision: no photo from the glasses; answering without it")
+                    photoPath?.let { answerInSession("", listOf(it), note = SPOKEN_PHOTO_NOTE) }
+                        ?: answerRecording(listOfNotNull(photoPath)).also { SpokenConversation.pendingNote = "You told them: $it" }
+                }
+                SpokenRoute.SEARCH -> {
+                    speak(
+                        text = ImageQuestionDefaults.checkingWebCueForLanguage(recognitionLanguageTag()),
+                        languageTag = recognitionLanguageTag(),
+                        utteranceId = "spoken_decision_web_${System.nanoTime()}",
+                        queueMode = TextToSpeech.QUEUE_ADD,
+                    )
+                    val engine = QuestionRoutingPrefs.webSearchEngine(this@MainActivity)
+                    val web = decision.payload.takeIf { it.isNotBlank() }?.let { query ->
+                        runCatching { WebSearchAssist.search(this@MainActivity, query, engine, recognitionLanguageTag()) }
+                            .onFailure { Log.w("AIHijack", "$engine web search failed", it) }
+                            .getOrNull()
+                            ?.let { if (GlassesQuestionTestHooks.webResultsOnly) it.copy(answer = null, infoBox = null) else it }
+                    }
+                    GlassesQuestionTestHooks.emit(
+                        "web_search",
+                        "engine=$engine assist=${web?.answer != null} infoBox=${web?.infoBox != null} " +
+                            "snippets=${web?.snippets?.size ?: 0} failure=${web?.failure} blocked=${web?.blocked} ms=${web?.elapsedMs}",
+                    )
+                    val englishSpeaker = recognitionLanguageTag().startsWith("en", ignoreCase = true)
+                    suspend fun answerFrom(webText: String): String =
+                        answerInSession(webText) ?: answerRecording(emptyList(), webText).also {
+                            SpokenConversation.pendingNote = "You told them: $it"
+                        }
+                    when {
+                        // Weather and similar queries get the engine's info box, located by the phone's IP;
+                        // AI answers guess a place for those, so the box wins when both are there.
+                        web?.infoBox != null ->
+                            answerFrom(ImageQuestionDefaults.webResultsInstruction(null, web.snippets.take(2), web.infoBox))
+                        // The engine already summarised the results in their language (Google writes in `hl`,
+                        // DuckDuckGo mostly in English): read it out, no model turn.
+                        web?.answer != null && (web.engine == WebSearchEngine.GOOGLE || englishSpeaker) ->
+                            web.answer.also { SpokenConversation.pendingNote = "You answered from a web search: $it" }
+                        // Other languages: the model says the short summary in the language they spoke.
+                        web?.answer != null -> answerFrom(ImageQuestionDefaults.webResultsInstruction(web.answer, emptyList()))
+                        // No AI answer: the model answers from the top results (title and description, no ads).
+                        web != null && web.snippets.isNotEmpty() ->
+                            answerFrom(ImageQuestionDefaults.webResultsInstruction(null, web.snippets))
+                        // Nothing found, or the search could not run (offline, bot challenge, no WebView,
+                        // timeout): a fixed sentence in the app language; the small model doesn't reliably say it.
+                        else -> {
+                            val language = recognitionLanguageTag()
+                            if (web != null && web.failure == null) {
+                                ImageQuestionDefaults.webSearchEmptyCueForLanguage(language)
+                            } else {
+                                ImageQuestionDefaults.webSearchFailedCueForLanguage(
+                                    language, offline = web?.failure == WebSearchAssist.Failure.NETWORK,
+                                )
+                            }.also { SpokenConversation.pendingNote = "You told them: $it" }
+                        }
+                    }
+                }
+                SpokenRoute.PHONE -> { startLocalAgentFromVoice(decision.payload); null }
+                SpokenRoute.LIVE -> {
+                    launchGeminiLiveQuestion(prompt = "The user asked to start a live conversation. Greet them briefly and listen.")
+                    null
+                }
+                SpokenRoute.IGNORE -> null
+            }
+            // The next turn uses the conversation only after this reply has finished.
+            fullReply()
+            val sessionTokens = if (continueSession != null) LocalChatSessionManager.lastSessionTokens else null
+            GlassesQuestionTestHooks.emit("spoken_turn", "n=$turn continued=$continued sessionTokens=$sessionTokens route=${decision.route}")
+            GlassesQuestionTestHooks.emit(
+                "reply",
+                "provider=$provider images=${if (photoPath != null) 1 else 0} audio=true " +
+                    "text=${spokenReply?.let(SpokenDecisionParser::clean) ?: "[${decision.route.tag}]"}",
+            )
+            if (!spokenReply.isNullOrBlank()) {
+                val spoken = kotlinx.coroutines.CompletableDeferred<Unit>()
+                speakVision(SpokenDecisionParser.clean(spokenReply)) { spoken.complete(Unit) }
+                withTimeoutOrNull(DECIDE_ONCE_SPEECH_TIMEOUT_MS) { spoken.await() }
+            }
+            return decision.route
+        } finally {
+            photoPath?.let { File(it).delete() }
+        }
+    }
+
+    /** Starts a glasses photo whose file goes to the returned deferred (null if capture fails). */
+    private fun requestDecideOncePhoto(): kotlinx.coroutines.CompletableDeferred<String?> {
+        val sink = kotlinx.coroutines.CompletableDeferred<String?>()
+        pendingPhotoSink?.complete(null)
+        pendingPhotoSink = sink
+        handleGlassesImageButtonPressed(
+            triggerCapture = true,
+            sourceTag = DECIDE_ONCE_PHOTO_TAG,
+            offerSpokenQuestion = false,
+        )
+        return sink
+    }
+
     private fun handleAiWakeWordActivation(source: String) {
         if (!isAiHijackEnabled) return
         val route = AiWakeWordPreferences.route(this)
@@ -3776,6 +4322,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 getOrCreateEyevueManager().stopVoiceRecognition()
             } else {
                 stopGlassesAiAudio("$source wake-word route")
+            }
+            // A voice question goes to the decision model whenever the answering model hears audio
+            // (local Gemma 4, or an audio-capable Pro model); Settings > Question routing = Classic forces
+            // the transcript router. A photo-mapped wake keeps the photo flow: photo + recording, no decision.
+            if (route == AiWakeWordRoute.VOICE_QUESTION &&
+                QuestionRoutingPrefs.mode(this) != QuestionRoutingMode.CLASSIC &&
+                spokenQuestionAudioGoesToModel()
+            ) {
+                Log.i("AIHijack", "Spoken decision question (route=$route provider=${spokenQuestionProvider()})")
+                triggerSpokenDecisionQuestion()
+                return@runOnUiThread
             }
             when (route) {
                 AiWakeWordRoute.VOICE_QUESTION -> triggerAssistantVoiceQuery()
@@ -4021,8 +4578,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
         beginAiQuestionForegroundWork("Analyzing glasses image")
+        armLocalModelLoadCue()
         
         lastImageQueryAtMs = now
+        GlassesQuestionTestHooks.emit(
+            "image_query",
+            "question=${!userQuestion.isNullOrBlank()} audio=${audioPath != null} source=${source.wireName}",
+        )
         val resolvedPrompt = resolveImageQuestionPrompt(userQuestion)
 
         val externalReason = if (audioPath == null) externalImageAutomationUnsupportedReason() else null
@@ -4037,7 +4599,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
         
-        val internalProvider = if (audioPath != null) AgentProviderType.LOCAL_AGENT else when (currentAssistantRoute()) {
+        val internalProvider = if (audioPath != null) spokenQuestionProvider() else when (currentAssistantRoute()) {
             GlassesAssistantRoute.LOCAL -> AgentProviderType.LOCAL_AGENT
             GlassesAssistantRoute.PRO,
             GlassesAssistantRoute.TASKER_EXTERNAL_UI -> MediaInferenceRoutingPolicy.resolve(this)

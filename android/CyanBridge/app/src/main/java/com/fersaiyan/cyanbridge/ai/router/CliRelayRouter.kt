@@ -77,14 +77,31 @@ object CliRelayClient {
         prompt: String? = null,
         backendOverride: CliRelayBackend? = null,
         modelOverride: String? = null,
-    ): Result<String> = relay(context).imageQuery(imageMedia(imagePath), prompt, backendOverride, modelOverride)
+        /** A spoken question recorded with the photo: sent as audio in the same request (spokenQuestion). */
+        audioPath: String? = null,
+        spokenQuestion: Boolean = false,
+        /** Appended by the relay to the user's system prompt (glasses spoken-question instructions). */
+        systemContext: String? = null,
+    ): Result<String> = relay(context).imageQuery(
+        image = imageMedia(imagePath),
+        prompt = prompt,
+        backendOverride = backendOverride,
+        modelOverride = modelOverride,
+        audio = audioPath?.let(::audioMedia),
+        spokenQuestion = spokenQuestion,
+        systemContext = systemContext,
+    )
 
     suspend fun audioQuery(
         context: Context,
         audioPath: String,
         prompt: String? = null,
         modelOverride: String? = null,
-    ): Result<String> = relay(context).audioQuery(audioMedia(audioPath), prompt, modelOverride)
+        /** The recording is the whole question: the relay sends it without a text part. */
+        spokenQuestion: Boolean = false,
+        /** Appended by the relay to the user's system prompt (glasses spoken-question instructions). */
+        systemContext: String? = null,
+    ): Result<String> = relay(context).audioQuery(audioMedia(audioPath), prompt, modelOverride, spokenQuestion, systemContext)
 
     internal suspend fun chatWithMedia(
         context: Context,

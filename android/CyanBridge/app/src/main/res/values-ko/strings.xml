@@ -148,4 +148,11 @@
     <string name="meta_registration_lost_dev_mode_text">CyanBridge가 더 이상 Meta AI에 연결되어 있지 않습니다. 개발자 모드가 꺼진 것 같습니다. Meta AI에서 다시 켠 다음 CyanBridge에서 다시 등록하세요.</string>
     <string name="meta_registration_lost_invite_text">CyanBridge가 더 이상 Meta AI에 연결되어 있지 않습니다. 개발자 모드를 끈 상태로 두고 CyanBridge에서 다시 등록하세요.</string>
     <string name="meta_registration_register_again">다시 등록</string>
+    <string name="voice_profile_status_none">등록되지 않음. 짧은 문장 세 개로 CyanBridge가 내 목소리를 익힙니다. 아직 답변을 걸러내지 않습니다.</string>
+    <string name="voice_profile_status_enrolled">%1$s에 등록됨. 아직 답변을 걸러내지 않습니다.</string>
+    <string name="voice_profile_status_model_ready">음성 모델: %1$s (설치됨)</string>
+    <string name="voice_profile_status_model_missing">음성 모델: %1$s (아직 설치되지 않음, 설치될 때까지 녹음한 문장을 보관합니다)</string>
+    <string name="voice_profile_delete_title">음성 프로필을 삭제할까요?</string>
+    <string name="voice_profile_delete_body">이 휴대폰에서 녹음한 문장과 음성 템플릿이 삭제됩니다.</string>
+    <string name="voice_profile_delete_confirm">삭제</string>
 </resources>

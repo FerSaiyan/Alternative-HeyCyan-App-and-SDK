@@ -19,4 +19,18 @@ class LocalModelsProviderTest {
         assertEquals("Always answer in Russian.\n\nKeep answers brief.", prompt.systemInstruction)
         assertEquals("Describe this image.", prompt.userRequest)
     }
+
+    @Test
+    fun spokenQuestionUserTurnIsTheAttachmentAlone() {
+        val prompt = buildMultimodalPrompt(
+            configuredSystemPrompt = "Be brief.",
+            messages = listOf(
+                PromptMessage("System", "You are the voice assistant in the user's smart glasses."),
+                PromptMessage("User", ""),
+            ),
+        )
+
+        assertEquals("Be brief.\n\nYou are the voice assistant in the user's smart glasses.", prompt.systemInstruction)
+        assertEquals("", prompt.userRequest)
+    }
 }

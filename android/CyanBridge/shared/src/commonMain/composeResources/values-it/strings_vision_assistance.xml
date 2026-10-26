@@ -1,0 +1,13 @@
+<resources>
+    <string name="onboarding_vision_setup_label">Configurazione</string>
+    <string name="onboarding_vision_title">Hai bisogno di assistenza visiva?</string>
+    <string name="onboarding_vision_body">CyanBridge può adattarsi alle persone cieche e ipovedenti con risposte vocali, controllo tramite i pulsanti degli occhiali e schermate più semplici. Puoi cambiarlo in qualsiasi momento nelle Impostazioni.</string>
+    <string name="onboarding_vision_option_yes">Sì, sono cieco o ipovedente</string>
+    <string name="onboarding_vision_option_yes_body">Attiva l'assistenza visiva</string>
+    <string name="onboarding_vision_option_no">No, usa l'app standard</string>
+    <string name="onboarding_vision_option_no_body">Puoi attivarla più tardi nelle Impostazioni</string>
+    <string name="onboarding_vision_screen_reader_note">È attivo uno screen reader, quindi abbiamo selezionato l'assistenza visiva per te.</string>
+    <string name="settings_accessibility">Accessibilità</string>
+    <string name="settings_vision_assistance">Assistenza visiva</string>
+    <string name="settings_vision_assistance_description">Per persone cieche e ipovedenti: risposte vocali, controllo tramite i pulsanti degli occhiali e schermate più semplici.</string>
+</resources>

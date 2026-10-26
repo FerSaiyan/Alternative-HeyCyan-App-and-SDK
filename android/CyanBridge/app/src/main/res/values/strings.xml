@@ -166,4 +166,11 @@
     <string name="meta_registration_lost_dev_mode_text">CyanBridge is no longer connected in Meta AI. Developer Mode was probably turned off. Turn it back on in Meta AI, then register again in CyanBridge.</string>
     <string name="meta_registration_lost_invite_text">CyanBridge is no longer connected in Meta AI. Keep Developer Mode off, then register again in CyanBridge.</string>
     <string name="meta_registration_register_again">Register again</string>
+    <string name="voice_profile_status_none">Not enrolled. Three short phrases let CyanBridge learn your voice. Answers are not filtered yet.</string>
+    <string name="voice_profile_status_enrolled">Enrolled on %1$s. Answers are not filtered yet.</string>
+    <string name="voice_profile_status_model_ready">Voice model: %1$s (installed)</string>
+    <string name="voice_profile_status_model_missing">Voice model: %1$s (not installed yet; your phrases are kept until it is)</string>
+    <string name="voice_profile_delete_title">Delete voice profile?</string>
+    <string name="voice_profile_delete_body">This removes your recorded phrases and voice templates from this phone.</string>
+    <string name="voice_profile_delete_confirm">Delete</string>
 </resources>

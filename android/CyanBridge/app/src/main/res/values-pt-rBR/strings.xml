@@ -150,4 +150,11 @@
     <string name="meta_registration_lost_dev_mode_text">O CyanBridge não está mais conectado no Meta AI. Provavelmente o Modo de desenvolvedor foi desativado. Ative-o de novo no Meta AI e registre o CyanBridge de novo.</string>
     <string name="meta_registration_lost_invite_text">O CyanBridge não está mais conectado no Meta AI. Mantenha o Modo de desenvolvedor desativado e registre o CyanBridge de novo.</string>
     <string name="meta_registration_register_again">Registrar de novo</string>
+    <string name="voice_profile_status_none">Não cadastrado. Três frases curtas permitem que o CyanBridge aprenda sua voz. As respostas ainda não são filtradas.</string>
+    <string name="voice_profile_status_enrolled">Cadastrado em %1$s. As respostas ainda não são filtradas.</string>
+    <string name="voice_profile_status_model_ready">Modelo de voz: %1$s (instalado)</string>
+    <string name="voice_profile_status_model_missing">Modelo de voz: %1$s (ainda não instalado; suas frases ficam guardadas até lá)</string>
+    <string name="voice_profile_delete_title">Excluir perfil de voz?</string>
+    <string name="voice_profile_delete_body">Isso remove deste celular suas frases gravadas e os modelos da sua voz.</string>
+    <string name="voice_profile_delete_confirm">Excluir</string>
 </resources>

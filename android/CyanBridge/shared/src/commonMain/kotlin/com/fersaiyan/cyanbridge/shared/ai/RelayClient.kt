@@ -250,10 +250,16 @@ class RelayClient(
         prompt: String? = null,
         backendOverride: CliRelayBackend? = null,
         modelOverride: String? = null,
+        /** A spoken question recorded with the photo: sent as audio in the same request ([spokenQuestion]). */
+        audio: RelayMedia? = null,
+        spokenQuestion: Boolean = false,
+        /** Appended by the relay to the user's system prompt (glasses spoken-question instructions). */
+        systemContext: String? = null,
     ): Result<String> = runCatching {
         requireCapability("image_query") { it.imageQuery }
 
         val imageBase64 = Base64.encode(image.read())
+        val audioBase64 = audio?.let { Base64.encode(it.read()) }
         val response = postJson(
             endpoint("/image-query"),
             buildJsonObject {
@@ -263,6 +269,12 @@ class RelayClient(
                 settings.systemPrompt?.let { put("system_prompt", it) }
                 prompt?.trim().orEmpty().takeIf { it.isNotBlank() }?.let { put("prompt", it) }
                 putModel(modelOverride)
+                if (audio != null && audioBase64 != null) {
+                    put("audioBase64", audioBase64)
+                    put("audioFilename", audio.filename)
+                }
+                if (spokenQuestion) put("spoken_question", true)
+                systemContext?.takeIf { it.isNotBlank() }?.let { put("system_context", it) }
             },
         )
         response.optString("reply").ifBlank {
@@ -275,6 +287,10 @@ class RelayClient(
         audio: RelayMedia,
         prompt: String? = null,
         modelOverride: String? = null,
+        /** The recording is the whole question: the relay sends it without a text part. */
+        spokenQuestion: Boolean = false,
+        /** Appended by the relay to the user's system prompt (glasses spoken-question instructions). */
+        systemContext: String? = null,
     ): Result<String> = runCatching {
         val bytes = audio.read()
         val response = postJson(
@@ -285,6 +301,8 @@ class RelayClient(
                 settings.systemPrompt?.let { put("system_prompt", it) }
                 prompt?.trim().orEmpty().takeIf { it.isNotBlank() }?.let { put("prompt", it) }
                 putModel(modelOverride)
+                if (spokenQuestion) put("spoken_question", true)
+                systemContext?.takeIf { it.isNotBlank() }?.let { put("system_context", it) }
             },
         )
         response.optString("reply").ifBlank {

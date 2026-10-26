@@ -141,4 +141,11 @@
     <string name="meta_registration_lost_dev_mode_text">CyanBridge больше не подключён в Meta AI. Вероятно, режим разработчика был выключен. Включите его снова в Meta AI, затем зарегистрируйте CyanBridge снова.</string>
     <string name="meta_registration_lost_invite_text">CyanBridge больше не подключён в Meta AI. Оставьте режим разработчика выключенным и зарегистрируйте CyanBridge снова.</string>
     <string name="meta_registration_register_again">Зарегистрировать снова</string>
+    <string name="voice_profile_status_none">Не записан. Три короткие фразы помогут CyanBridge запомнить ваш голос. Ответы пока не фильтруются.</string>
+    <string name="voice_profile_status_enrolled">Записан %1$s. Ответы пока не фильтруются.</string>
+    <string name="voice_profile_status_model_ready">Голосовая модель: %1$s (установлена)</string>
+    <string name="voice_profile_status_model_missing">Голосовая модель: %1$s (ещё не установлена; ваши фразы сохраняются до установки)</string>
+    <string name="voice_profile_delete_title">Удалить голосовой профиль?</string>
+    <string name="voice_profile_delete_body">С этого телефона будут удалены записанные фразы и шаблоны вашего голоса.</string>
+    <string name="voice_profile_delete_confirm">Удалить</string>
 </resources>

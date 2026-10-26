@@ -1,0 +1,13 @@
+<resources>
+    <string name="onboarding_vision_setup_label">Einrichtung</string>
+    <string name="onboarding_vision_title">Brauchen Sie Sehunterstützung?</string>
+    <string name="onboarding_vision_body">CyanBridge kann sich an blinde und sehbehinderte Menschen anpassen: gesprochenes Feedback, Steuerung über die Brillentasten und einfachere Bildschirme. Sie können das jederzeit in den Einstellungen ändern.</string>
+    <string name="onboarding_vision_option_yes">Ja, ich bin blind oder sehbehindert</string>
+    <string name="onboarding_vision_option_yes_body">Sehunterstützung einschalten</string>
+    <string name="onboarding_vision_option_no">Nein, die Standard-App verwenden</string>
+    <string name="onboarding_vision_option_no_body">Sie können sie später in den Einstellungen einschalten</string>
+    <string name="onboarding_vision_screen_reader_note">Ein Screenreader ist aktiv, daher haben wir die Sehunterstützung für Sie ausgewählt.</string>
+    <string name="settings_accessibility">Bedienungshilfen</string>
+    <string name="settings_vision_assistance">Sehunterstützung</string>
+    <string name="settings_vision_assistance_description">Für blinde und sehbehinderte Menschen: gesprochenes Feedback, Steuerung über die Brillentasten und einfachere Bildschirme.</string>
+</resources>

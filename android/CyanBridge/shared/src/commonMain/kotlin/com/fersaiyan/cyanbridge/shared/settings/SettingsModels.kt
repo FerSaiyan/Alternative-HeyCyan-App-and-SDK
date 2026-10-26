@@ -13,6 +13,25 @@ enum class AgentProviderType {
         }
 }
 
+/**
+ * How a glasses voice question is handled. SMART (default): the question is recorded and a model that
+ * hears audio decides from it whether to answer, look with the camera, act on the phone (local agent),
+ * start Live or ignore it. CLASSIC: on-device transcription first, then the configured button route and
+ * the transcript router. SHADOW: classic, logging the old decision-model shadow. Models that cannot hear
+ * audio always use the classic path.
+ */
+enum class QuestionRoutingMode {
+    CLASSIC,
+    SHADOW,
+    SMART;
+
+    companion object {
+        fun fromRaw(raw: String?): QuestionRoutingMode =
+            // The decision model is the default; Classic (STT + transcript router) must be chosen.
+            entries.firstOrNull { it.name == raw?.trim()?.uppercase() } ?: SMART
+    }
+}
+
 enum class CaptureSource {
     BLUETOOTH_MIC,
     PHONE_MIC;
@@ -61,6 +80,7 @@ enum class SettingsSection {
     MEMORY_PRIVACY,
     TRANSCRIPTS,
     DATA,
+    ACCESSIBILITY,
     SUPPORT,
     FAQ,
 }

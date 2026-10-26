@@ -113,10 +113,19 @@ object AppPrefs {
         val expanded = booleanFamily("section_*", false)
     }
 
+    /**
+     * The answer to "Do you need vision assistance?" (reader: shared/accessibility/VisionAssistancePreferences).
+     * It reveals a disability, so it stays on the device: never synced or sent to analytics.
+     */
+    object Accessibility : PrefsFile("cyanbridge_accessibility") {
+        /** A VisionAssistanceChoice name. */
+        val visionAssistanceChoice = string("vision_assistance_choice", "UNSET")
+    }
+
     val files: List<PrefsFile> = listOf(
         Main, IosOnboarding, Appearance, ChatAppearance, SharedChatAppearance, NoteTags, SharedSettings,
         Analytics, DeviceProfile, VersionCheck, RelayServer, MetaPermissionRequests, SettingsSections,
-        LocalModelsSections, MetaRegistration,
+        LocalModelsSections, MetaRegistration, Accessibility,
     )
 }
 

@@ -13,5 +13,6 @@ class SettingsScreenTest {
         assertEquals(MemoryPrivacyMode.PRIVATE_LOCAL, state.memoryMode)
         assertEquals(true, state.redactNamesEnabled)
         assertEquals(true, state.transcriptStorageEnabled)
+        assertEquals(false, state.visionAssistanceEnabled)
     }
 }

@@ -16,6 +16,9 @@ object ProPrefs {
         val questionsModel = optionalString("questions_model")
         val tasksModel = string("tasks_model", "auto")
         val systemPrompt = optionalString("system_prompt")
+        /** Relay models that accept audio input (lowercased ids), cached from /models. */
+        val audioCapableModels = optionalStringSet("audio_capable_models")
+        val audioCapableModelsAtMs = long("audio_capable_models_at_ms", 0L)
     }
 
     /** Settings screen toggles of the Pro plan. */

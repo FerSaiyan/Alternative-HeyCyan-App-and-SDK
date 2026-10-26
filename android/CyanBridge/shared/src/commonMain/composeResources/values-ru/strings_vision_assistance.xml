@@ -1,0 +1,13 @@
+<resources>
+    <string name="onboarding_vision_setup_label">Настройка</string>
+    <string name="onboarding_vision_title">Вам нужна помощь со зрением?</string>
+    <string name="onboarding_vision_body">CyanBridge может адаптироваться для незрячих и слабовидящих людей: голосовые ответы, управление кнопками очков и более простые экраны. Это можно изменить в любой момент в Настройках.</string>
+    <string name="onboarding_vision_option_yes">Да, я незрячий или слабовидящий</string>
+    <string name="onboarding_vision_option_yes_body">Включить помощь со зрением</string>
+    <string name="onboarding_vision_option_no">Нет, использовать обычное приложение</string>
+    <string name="onboarding_vision_option_no_body">Её можно включить позже в Настройках</string>
+    <string name="onboarding_vision_screen_reader_note">Включена программа чтения с экрана, поэтому мы выбрали помощь со зрением.</string>
+    <string name="settings_accessibility">Специальные возможности</string>
+    <string name="settings_vision_assistance">Помощь со зрением</string>
+    <string name="settings_vision_assistance_description">Для незрячих и слабовидящих: голосовые ответы, управление кнопками очков и более простые экраны.</string>
+</resources>

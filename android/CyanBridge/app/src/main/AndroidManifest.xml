@@ -88,6 +88,7 @@
         </activity>
         <activity android:name=".ui.BatteryOptimizationGuideActivity" android:exported="false" android:label="@string/battery_opt_title" />
         <activity android:name=".ui.OnboardingFeatureActivity" android:exported="false" android:label="Setup" />
+        <activity android:name=".ui.voiceprofile.VoiceEnrollmentActivity" android:exported="false" android:label="Voice profile" />
         <activity android:name=".ui.DeviceBindActivity" />
         <service android:name=".devices.meizumyvu.MeizuMyvuConnectionService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <activity android:name=".ui.ChatListActivity" android:exported="false" android:label="Chats" />

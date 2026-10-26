@@ -2,6 +2,10 @@ package com.fersaiyan.cyanbridge.localmodels.provider
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
+import com.fersaiyan.cyanbridge.localmodels.engine.DecideOnceRequest
+import com.fersaiyan.cyanbridge.localmodels.engine.SessionTurn
+import com.fersaiyan.cyanbridge.localmodels.engine.SessionUnavailableException
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtModelProbe
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
 import com.fersaiyan.cyanbridge.localmodels.session.LocalModelLoadDetails
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
@@ -24,7 +28,8 @@ enum class LocalModelRequestPriority {
 /**
  * LiteRT-LM media requests: one user turn with the attachments, plus every system instruction
  * as the conversation's system turn. Inlining the instructions after the attachments made
- * Gemma 4 answer as if no recording/image had been attached.
+ * Gemma 4 answer as if no recording/image had been attached. An empty user message means the
+ * attachments are the whole user turn.
  */
 internal data class MultimodalPrompt(val systemInstruction: String, val userRequest: String)
 
@@ -50,6 +55,27 @@ internal fun buildMultimodalPrompt(
 class LocalModelsProvider {
     companion object {
         const val STATUS_MAX_TOKENS_REACHED = "__MAX_TOKENS_REACHED__"
+
+        /**
+         * True when a spoken question can go to a local model as audio instead of through on-device
+         * STT, matching streamChat's choice of audio model: a LiteRT package with an audio encoder
+         * (0.16 cannot report modalities, so its packages count), or a Gemma 3n/4 GGUF with a
+         * projector. Text-only models (e.g. Qwen GGUFs) and remote servers keep STT.
+         */
+        fun hasLocalAudioModel(context: Context): Boolean {
+            if (RemoteOpenAiPrefs.isActive(context)) return false
+            return LocalModelStorageRepository.listInstalled(context).any { model ->
+                when (LocalModelSettingsRepository.getForModel(context, model.id).modelRuntime) {
+                    LocalModelRuntime.LITERT ->
+                        runCatching { LiteRtModelProbe.mediaSupport(model.absolutePath) }.getOrNull()?.audio != false
+                    LocalModelRuntime.LLAMA_CPP -> LocalModelProjectorStore.get(context, model) != null &&
+                        GEMMA_AUDIO_FAMILY.containsMatchIn("${model.catalogId.orEmpty()} ${model.fileName}")
+                    else -> false
+                }
+            }
+        }
+
+        private val GEMMA_AUDIO_FAMILY = Regex("gemma[-_]?(4|3n)", RegexOption.IGNORE_CASE)
     }
 
     /**
@@ -94,10 +120,15 @@ class LocalModelsProvider {
         audioPath: String? = null,
         requestPriority: LocalModelRequestPriority = LocalModelRequestPriority.HIGH,
         maxTokens: Int? = null,
+        /** Prototype decide-once turn; honoured only by LiteRT-LM (see DecideOnceRequest). */
+        decideOnce: DecideOnceRequest? = null,
+        /** Multi-turn conversation kept open in LiteRT-LM (see SessionTurn); other runtimes have none. */
+        session: SessionTurn? = null,
     ): String {
         return withContext(Dispatchers.IO) {
             // Check if remote OpenAI server is enabled.
             if (RemoteOpenAiPrefs.isActive(context)) {
+                if (session?.continueExisting == true) throw SessionUnavailableException("Remote servers keep no session")
                 return@withContext streamChatRemote(
                     context = context,
                     messages = messages,
@@ -149,7 +180,9 @@ class LocalModelsProvider {
                 .mapNotNull { m ->
                     val role = m["role"]?.trim().orEmpty()
                     val content = m["content"]?.trim().orEmpty()
-                    if (role.isBlank() || content.isBlank()) null else PromptMessage(role = role, content = content)
+                    // A media request's user turn may be the attachment alone (a spoken question as bare audio).
+                    val keepEmpty = hasMediaAttachments && role.equals("user", ignoreCase = true)
+                    if (role.isBlank() || (content.isBlank() && !keepEmpty)) null else PromptMessage(role = role, content = content)
                 }
 
             // LiteRT takes one user prompt alongside image/audio attachments; system instructions
@@ -157,7 +190,10 @@ class LocalModelsProvider {
             val litertMedia = if (hasMediaAttachments && settings.modelRuntime == LocalModelRuntime.LITERT) {
                 buildMultimodalPrompt(systemPrompt, chatMessages)
             } else null
-            val effectivePrompt = if (litertMedia != null) {
+            val effectivePrompt = if (session?.continueExisting == true) {
+                // The open conversation already has the system turn and earlier turns: send only this one.
+                chatMessages.lastOrNull { it.role.equals("user", ignoreCase = true) }?.content.orEmpty()
+            } else if (litertMedia != null) {
                 litertMedia.userRequest
             } else if (hasMediaAttachments) {
                 val lastUser = chatMessages.indexOfLast { it.role.equals("user", true) }
@@ -200,6 +236,8 @@ class LocalModelsProvider {
                 requestPriority = requestPriority,
                 maxTokensOverride = maxTokens,
                 systemInstruction = litertMedia?.systemInstruction,
+                decideOnce = decideOnce,
+                session = session,
             )
 
             val firstCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()
@@ -207,7 +245,8 @@ class LocalModelsProvider {
                 onStatus?.invoke(STATUS_MAX_TOKENS_REACHED)
             }
 
-            if (firstReply.isNotBlank()) {
+            // Reloading would drop the session; its caller handles an empty reply.
+            if (firstReply.isNotBlank() || session != null) {
                 return@withContext firstReply
             }
 
@@ -239,6 +278,7 @@ class LocalModelsProvider {
                 requestPriority = requestPriority,
                 maxTokensOverride = maxTokens,
                 systemInstruction = litertMedia?.systemInstruction,
+                decideOnce = decideOnce,
             )
 
             val retryCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()

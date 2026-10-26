@@ -13,7 +13,10 @@ import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.engine.EngineLoadConfig
 import com.fersaiyan.cyanbridge.localmodels.engine.GenerationConfig
 import com.fersaiyan.cyanbridge.localmodels.engine.GenerationResult
+import com.fersaiyan.cyanbridge.localmodels.engine.DecideOnceRequest
 import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtLocalInferenceEngine
+import com.fersaiyan.cyanbridge.localmodels.engine.SessionTurn
+import com.fersaiyan.cyanbridge.localmodels.engine.SessionUnavailableException
 import com.fersaiyan.cyanbridge.localmodels.engine.LlamaCppLocalInferenceEngine
 import com.fersaiyan.cyanbridge.localmodels.engine.LocalInferenceEngine
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
@@ -182,13 +185,18 @@ object LocalChatSessionManager {
             }
 
             state = LocalSessionState.Loading(model.id)
+            LocalModelLoadAnnouncer.shared.onColdLoadStarted(model.id)
             val llm = engine ?: createEngine(settings.modelRuntime, context).also { engine = it }
 
             runCatching {
-                llm.loadModel(
-                    modelPath = model.absolutePath,
-                    config = loadConfig,
-                )
+                try {
+                    llm.loadModel(
+                        modelPath = model.absolutePath,
+                        config = loadConfig,
+                    )
+                } finally {
+                    LocalModelLoadAnnouncer.shared.onColdLoadFinished()
+                }
             }.onFailure {
                 Log.e(TAG, "Failed to load local model ${model.displayName}", it)
                 state = LocalSessionState.Error(it.message ?: "Failed to load local model")
@@ -240,6 +248,8 @@ object LocalChatSessionManager {
         requestPriority: LocalModelRequestPriority = LocalModelRequestPriority.HIGH,
         maxTokensOverride: Int? = null,
         systemInstruction: String? = null,
+        decideOnce: DecideOnceRequest? = null,
+        session: SessionTurn? = null,
     ): String {
         return generateInternal(
             settings = settings,
@@ -250,8 +260,17 @@ object LocalChatSessionManager {
             requestPriority = requestPriority,
             maxTokensOverride = maxTokensOverride,
             systemInstruction = systemInstruction,
-        ).text
+            decideOnce = decideOnce,
+            session = session,
+        ).also { lastSessionTokens = it.sessionTokens }.text
     }
+
+    /** Estimated tokens held by the open engine session after the last [streamGenerate] (null without one). */
+    @Volatile var lastSessionTokens: Int? = null
+        private set
+
+    /** True when the loaded engine can run a [DecideOnceRequest] (keeps a conversation across turns). */
+    suspend fun supportsDecideOnce(): Boolean = mutex.withLock { engine is LiteRtLocalInferenceEngine }
 
     suspend fun consumeLastGenerationCappedFlag(): Boolean = mutex.withLock {
         val capped = lastGenerationCappedByMaxTokens
@@ -268,6 +287,8 @@ object LocalChatSessionManager {
         requestPriority: LocalModelRequestPriority,
         maxTokensOverride: Int? = null,
         systemInstruction: String? = null,
+        decideOnce: DecideOnceRequest? = null,
+        session: SessionTurn? = null,
     ): GenerationResult {
         val reqId = UUID.randomUUID().toString()
         val llm: LocalInferenceEngine
@@ -287,6 +308,20 @@ object LocalChatSessionManager {
         mutex.withLock {
             llm = engine ?: throw IllegalStateException("Local engine not initialized")
             modelId = loadedModelId ?: throw IllegalStateException("No local model loaded")
+        }
+        // Other engines would silently answer without the photo; callers fall back instead.
+        if (decideOnce != null && llm !is LiteRtLocalInferenceEngine) {
+            if (requestPriority == LocalModelRequestPriority.HIGH) {
+                mutex.withLock { pendingHighPriorityRequests = (pendingHighPriorityRequests - 1).coerceAtLeast(0) }
+            }
+            throw DecideOnceUnsupportedException()
+        }
+        // Only LiteRT-LM keeps a conversation open between requests.
+        if (session?.continueExisting == true && llm !is LiteRtLocalInferenceEngine) {
+            if (requestPriority == LocalModelRequestPriority.HIGH) {
+                mutex.withLock { pendingHighPriorityRequests = (pendingHighPriorityRequests - 1).coerceAtLeast(0) }
+            }
+            throw SessionUnavailableException("This model runtime does not keep sessions")
         }
 
         if (requestPriority == LocalModelRequestPriority.LOW) {
@@ -330,9 +365,12 @@ object LocalChatSessionManager {
                                     imagePaths = imagePaths,
                                     audioPath = audioPath,
                                     systemInstruction = systemInstruction,
+                                    decideOnce = decideOnce,
+                                    session = session,
                                 ),
                                 onToken = { chunk ->
-                                    if (chunk.isBlank() || guardTriggered) return@generate
+                                    // Newline-only chunks matter: they end a spoken-decision payload line.
+                                    if (chunk.isEmpty() || guardTriggered) return@generate
 
                                     streamedText.append(chunk)
                                     onToken(chunk)
@@ -369,6 +407,7 @@ object LocalChatSessionManager {
                             text = guardedText,
                             tokenCount = guardedTokenCount,
                             cappedByMaxTokens = capped,
+                            sessionTokens = raw?.sessionTokens,
                         )
                     }
                 }
@@ -554,3 +593,6 @@ object LocalChatSessionManager {
 
     private const val TAG = "LocalChatSession"
 }
+
+/** The loaded engine cannot keep a conversation across turns, so it cannot run a decide-once turn. */
+class DecideOnceUnsupportedException : IllegalStateException("Decide-once questions need a LiteRT-LM model")

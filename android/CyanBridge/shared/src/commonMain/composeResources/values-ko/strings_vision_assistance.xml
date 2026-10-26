@@ -1,0 +1,13 @@
+<resources>
+    <string name="onboarding_vision_setup_label">설정</string>
+    <string name="onboarding_vision_title">시각 보조가 필요하신가요?</string>
+    <string name="onboarding_vision_body">CyanBridge는 음성 안내, 안경 버튼 조작, 더 단순한 화면으로 시각장애인과 저시력 사용자에게 맞출 수 있습니다. 설정에서 언제든지 변경할 수 있습니다.</string>
+    <string name="onboarding_vision_option_yes">예, 시각장애가 있거나 저시력입니다</string>
+    <string name="onboarding_vision_option_yes_body">시각 보조 켜기</string>
+    <string name="onboarding_vision_option_no">아니요, 기본 앱 사용</string>
+    <string name="onboarding_vision_option_no_body">나중에 설정에서 켤 수 있습니다</string>
+    <string name="onboarding_vision_screen_reader_note">화면 낭독기가 켜져 있어 시각 보조를 선택해 두었습니다.</string>
+    <string name="settings_accessibility">접근성</string>
+    <string name="settings_vision_assistance">시각 보조</string>
+    <string name="settings_vision_assistance_description">시각장애인과 저시력 사용자용: 음성 안내, 안경 버튼 조작, 더 단순한 화면.</string>
+</resources>

@@ -1,0 +1,25 @@
+{"id": "en_start_live", "lang": "en", "text": "Start live mode.", "class": "live", "family": "start_live", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_start_live", "lang": "pt-BR", "text": "Inicia o modo ao vivo.", "class": "live", "family": "start_live", "image": null, "expect": [], "split": "test"}
+{"id": "es_start_live", "lang": "es", "text": "Inicia el modo en vivo.", "class": "live", "family": "start_live", "image": null, "expect": [], "split": "test"}
+{"id": "de_start_live", "lang": "de", "text": "Starte den Live-Modus.", "class": "live", "family": "start_live", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_start_live", "lang": "zh-CN", "text": "开启实时模式。", "class": "live", "family": "start_live", "image": null, "expect": [], "split": "test"}
+{"id": "en_lets_talk", "lang": "en", "text": "Let's have a conversation.", "class": "live", "family": "lets_talk", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_lets_talk", "lang": "pt-BR", "text": "Vamos conversar um pouco.", "class": "live", "family": "lets_talk", "image": null, "expect": [], "split": "test"}
+{"id": "es_lets_talk", "lang": "es", "text": "Vamos a conversar un rato.", "class": "live", "family": "lets_talk", "image": null, "expect": [], "split": "test"}
+{"id": "de_lets_talk", "lang": "de", "text": "Lass uns ein bisschen unterhalten.", "class": "live", "family": "lets_talk", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_lets_talk", "lang": "zh-CN", "text": "我们聊聊天吧。", "class": "live", "family": "lets_talk", "image": null, "expect": [], "split": "test"}
+{"id": "en_open_gemini_live", "lang": "en", "text": "Open Gemini Live.", "class": "live", "family": "open_gemini_live", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_open_gemini_live", "lang": "pt-BR", "text": "Abre o Gemini Live.", "class": "live", "family": "open_gemini_live", "image": null, "expect": [], "split": "test"}
+{"id": "es_open_gemini_live", "lang": "es", "text": "Abre Gemini Live.", "class": "live", "family": "open_gemini_live", "image": null, "expect": [], "split": "test"}
+{"id": "de_open_gemini_live", "lang": "de", "text": "Öffne Gemini Live.", "class": "live", "family": "open_gemini_live", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_open_gemini_live", "lang": "zh-CN", "text": "打开Gemini Live。", "class": "live", "family": "open_gemini_live", "image": null, "expect": [], "split": "test"}
+{"id": "en_describe_while_walking", "lang": "en", "text": "Stay with me and tell me what you see while I walk.", "class": "live", "family": "describe_while_walking", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_describe_while_walking", "lang": "pt-BR", "text": "Fica comigo e me diz o que você vê enquanto eu ando.", "class": "live", "family": "describe_while_walking", "image": null, "expect": [], "split": "test"}
+{"id": "es_describe_while_walking", "lang": "es", "text": "Quédate conmigo y dime lo que ves mientras camino.", "class": "live", "family": "describe_while_walking", "image": null, "expect": [], "split": "test"}
+{"id": "de_describe_while_walking", "lang": "de", "text": "Bleib bei mir und sag mir, was du siehst, während ich gehe.", "class": "live", "family": "describe_while_walking", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_describe_while_walking", "lang": "zh-CN", "text": "陪着我，在我走路的时候告诉我你看到了什么。", "class": "live", "family": "describe_while_walking", "image": null, "expect": [], "split": "test"}
+{"id": "en_talk_continuously", "lang": "en", "text": "I want to keep talking with you without pressing anything.", "class": "live", "family": "talk_continuously", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_talk_continuously", "lang": "pt-BR", "text": "Quero continuar falando com você sem apertar nada.", "class": "live", "family": "talk_continuously", "image": null, "expect": [], "split": "test"}
+{"id": "es_talk_continuously", "lang": "es", "text": "Quiero seguir hablando contigo sin pulsar nada.", "class": "live", "family": "talk_continuously", "image": null, "expect": [], "split": "test"}
+{"id": "de_talk_continuously", "lang": "de", "text": "Ich möchte weiter mit dir reden, ohne etwas zu drücken.", "class": "live", "family": "talk_continuously", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_talk_continuously", "lang": "zh-CN", "text": "我想一直和你说话，不用按任何东西。", "class": "live", "family": "talk_continuously", "image": null, "expect": [], "split": "test"}

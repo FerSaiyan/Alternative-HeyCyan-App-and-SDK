@@ -86,6 +86,7 @@ class PrefsInventoryTest {
         local_models_sections/section_* BOOLEAN false
         meta_registration/setup_choice STRING "NONE"
         meta_registration/recorded_path STRING "UNKNOWN"
+        cyanbridge_accessibility/vision_assistance_choice STRING "UNSET"
         ai_provider_prefs/provider STRING "cli_relay"
         ai_provider_prefs/relay_base_url STRING "https://cyanbridge.vercel.app"
         ai_provider_prefs/relay_backend STRING "gemini"
@@ -103,6 +104,8 @@ class PrefsInventoryTest {
         remote_openai_prefs/enabled BOOLEAN false ios=cyanbridge_remote_openai/enabled
         remote_openai_prefs/studio_bridge_enabled BOOLEAN false
         remote_openai_secrets (secure)/api_key STRING ""
+        question_routing/mode STRING null
+        question_routing/web_search_engine STRING null
         local_agent_prefs/provider_type STRING null
         local_agent_prefs/glasses_assistant_mode STRING "CUSTOM_AI_PROVIDER" ios=cyanbridge_ios_glasses/assistant_mode
         local_agent_prefs/require_confirmation BOOLEAN true
@@ -164,6 +167,8 @@ class PrefsInventoryTest {
         pro_subscription_ai_prefs/questions_model STRING null
         pro_subscription_ai_prefs/tasks_model STRING "auto"
         pro_subscription_ai_prefs/system_prompt STRING null
+        pro_subscription_ai_prefs/audio_capable_models STRING_SET null
+        pro_subscription_ai_prefs/audio_capable_models_at_ms LONG 0
         pro_subscription_settings/cloud_sync BOOLEAN true
         pro_subscription_settings/priority_support BOOLEAN true
         pro_subscription_settings/plugin_rewards BOOLEAN true

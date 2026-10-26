@@ -25,4 +25,5 @@ enum class AppIcon {
     Language,
     ExpandMore,
     Warning,
+    Check,
 }

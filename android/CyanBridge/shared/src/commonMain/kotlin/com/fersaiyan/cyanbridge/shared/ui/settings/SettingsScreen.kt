@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ExpandLess
@@ -54,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
@@ -65,6 +67,7 @@ import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
 import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
 import com.fersaiyan.cyanbridge.shared.settings.MemorySourceType
+import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
@@ -94,6 +97,16 @@ data class SettingsUiState(
     val includeFullTranscriptionInExports: Boolean = false,
     val meetingRecording: Boolean = false,
     val meetingCaptureSource: CaptureSource? = null,
+    /** Glasses voice-question routing is Android-only for now; hosts without it leave this false. */
+    val questionRoutingAvailable: Boolean = false,
+    val questionRoutingMode: QuestionRoutingMode = QuestionRoutingMode.SMART,
+    /** SHADOW is a diagnostics mode, offered only in debug builds. */
+    val shadowRoutingAvailable: Boolean = false,
+    /** Voice enrollment is Android-only for now; hosts without it leave this false. */
+    val voiceProfileAvailable: Boolean = false,
+    val voiceProfileEnrolled: Boolean = false,
+    val voiceProfileStatus: String = "",
+    val visionAssistanceEnabled: Boolean = false,
 )
 
 /** Platform-owned effects stay in the platform layer; this composable only renders state and dispatches intent. */
@@ -125,6 +138,10 @@ interface SettingsScreenActions {
     fun clearLocalData()
     fun sendDebugLogs()
     fun stopMeetingCapture()
+    fun setQuestionRoutingMode(mode: QuestionRoutingMode) = Unit
+    fun openVoiceEnrollment() = Unit
+    fun deleteVoiceProfile() = Unit
+    fun setVisionAssistanceEnabled(enabled: Boolean) = Unit
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalResourceApi::class)
@@ -261,6 +278,15 @@ fun SettingsScreen(
                     onToggle = { onToggleSection(SettingsSection.DATA) },
                 ) {
                     DataContent(actions)
+                }
+            }
+            item {
+                SettingsSectionCard(
+                    title = stringResource(Res.string.settings_accessibility),
+                    expanded = SettingsSection.ACCESSIBILITY in expandedSections,
+                    onToggle = { onToggleSection(SettingsSection.ACCESSIBILITY) },
+                ) {
+                    AccessibilityContent(state, actions)
                 }
             }
             item {
@@ -610,6 +636,7 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
             Text(stringResource(Res.string.settings_configure_local_models))
         }
     }
+    QuestionRoutingContent(state, actions)
     Text(
         text = stringResource(Res.string.image_questions_title),
         style = MaterialTheme.typography.titleSmall,
@@ -633,6 +660,84 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
     ) {
         TextButton(onClick = actions::resetDefaultImageQuestion) {
             Text(stringResource(Res.string.reset_default_image_question))
+        }
+    }
+}
+
+@OptIn(ExperimentalResourceApi::class)
+@Composable
+private fun QuestionRoutingContent(state: SettingsUiState, actions: SettingsScreenActions) {
+    if (state.questionRoutingAvailable) {
+        Text(
+            text = stringResource(Res.string.settings_question_routing_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        val modes = QuestionRoutingMode.entries.filter {
+            it != QuestionRoutingMode.SHADOW || state.shadowRoutingAvailable || state.questionRoutingMode == it
+        }
+        modes.forEach { mode ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable { actions.setQuestionRoutingMode(mode) }
+                    .testTag("question_routing_${mode.name.lowercase()}"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(
+                    selected = state.questionRoutingMode == mode,
+                    onClick = { actions.setQuestionRoutingMode(mode) },
+                )
+                Text(
+                    stringResource(
+                        when (mode) {
+                            QuestionRoutingMode.CLASSIC -> Res.string.settings_question_routing_classic
+                            QuestionRoutingMode.SHADOW -> Res.string.settings_question_routing_shadow
+                            QuestionRoutingMode.SMART -> Res.string.settings_question_routing_smart
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+    if (!state.voiceProfileAvailable) return
+    Text(
+        text = stringResource(Res.string.settings_voice_profile_title),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+    )
+    if (state.voiceProfileStatus.isNotBlank()) {
+        Text(
+            state.voiceProfileStatus,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedButton(
+            onClick = actions::openVoiceEnrollment,
+            modifier = Modifier.weight(1f).testTag("settings_voice_enroll"),
+        ) {
+            Text(
+                stringResource(
+                    if (state.voiceProfileEnrolled) Res.string.settings_voice_profile_reenroll
+                    else Res.string.settings_voice_profile_enroll,
+                ),
+            )
+        }
+        if (state.voiceProfileEnrolled) {
+            OutlinedButton(
+                onClick = actions::deleteVoiceProfile,
+                modifier = Modifier.weight(1f).testTag("settings_voice_delete"),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) {
+                Text(stringResource(Res.string.settings_voice_profile_delete))
+            }
         }
     }
 }
@@ -702,6 +807,33 @@ private fun DataContent(actions: SettingsScreenActions) {
     ActionButton("Import ChatGPT data", actions::importChatGptData)
     ActionButton("Import Claude data", actions::importClaudeData)
     ActionButton(stringResource(Res.string.settings_clear_local_data), actions::clearLocalData, destructive = true)
+}
+
+@Composable
+private fun AccessibilityContent(state: SettingsUiState, actions: SettingsScreenActions) {
+    // One toggleable row, so screen readers read the label, description and switch state together.
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .testTag("settings_vision_assistance")
+            .toggleable(
+                value = state.visionAssistanceEnabled,
+                role = Role.Switch,
+                onValueChange = actions::setVisionAssistanceEnabled,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(stringResource(Res.string.settings_vision_assistance), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                stringResource(Res.string.settings_vision_assistance_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = state.visionAssistanceEnabled, onCheckedChange = null)
+    }
 }
 
 @Composable

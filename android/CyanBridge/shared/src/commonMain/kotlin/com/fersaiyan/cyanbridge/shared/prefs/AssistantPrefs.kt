@@ -68,8 +68,16 @@ object AssistantPrefs {
         val apiKey = string("api_key", "")
     }
 
+    /** Glasses voice-question routing (Android reader: ai/router/QuestionRoutingPrefs). */
+    object QuestionRouting : PrefsFile("question_routing") {
+        /** A QuestionRoutingMode name; unset means SMART. */
+        val mode = optionalString("mode")
+        /** A WebSearchEngine name for the `[search]` route; unset means Google. */
+        val webSearchEngine = optionalString("web_search_engine")
+    }
+
     val files: List<PrefsFile> = listOf(
         Provider, WakeWord, ImageQuestions, LegacyVisionProfile, Language, GeminiLive,
-        RemoteOpenAi, RemoteOpenAiSecrets,
+        RemoteOpenAi, RemoteOpenAiSecrets, QuestionRouting,
     )
 }
