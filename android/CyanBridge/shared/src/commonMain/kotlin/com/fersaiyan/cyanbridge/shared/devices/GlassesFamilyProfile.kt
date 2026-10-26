@@ -83,6 +83,11 @@ data class GlassesFamilyProfile(
     val cameraUnavailableReason: String? = null,
     /** Native plugins this family cannot run, with the message shown when one is started. */
     val unsupportedNativePlugins: Map<String, String> = emptyMap(),
+    /**
+     * Assistant answers also appear on the glasses display (through the display bridge) while they
+     * are spoken. Needs [GlassesCapability.TEXT_DISPLAY].
+     */
+    val showsAssistantAnswers: Boolean = false,
 ) {
     fun supports(capability: GlassesCapability): Boolean = capability in capabilities
 
@@ -296,6 +301,7 @@ object GlassesFamilyProfiles {
         controlPanel = GlassesControlPanel.MEMOMIND,
         // Voice questions use the HFP route like other headsets; the Opus stream is opt-in.
         audio = bluetoothHeadsetAudio,
+        showsAssistantAnswers = true,
         cameraUnavailableReason = "Selected device profile (MemoMind) has no camera.",
         unsupportedNativePlugins = mapOf(
             NativePluginIds.AUTO_AUDIO to MEMOMIND_PLUGIN_MESSAGE,

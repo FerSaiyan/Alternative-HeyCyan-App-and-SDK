@@ -4,6 +4,7 @@ import com.fersaiyan.cyanbridge.bridge.core.BatteryReporting
 import com.fersaiyan.cyanbridge.bridge.core.DeviceInfo
 import com.fersaiyan.cyanbridge.bridge.core.GlassesBridgeState
 import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
+import com.fersaiyan.cyanbridge.bridge.core.GlassesDeviceAdapter
 import com.fersaiyan.cyanbridge.shared.ble.IosBleManager
 import com.fersaiyan.cyanbridge.shared.ble.IosMemoMindAccessoryTransport
 import com.fersaiyan.cyanbridge.shared.ble.IosMemoMindBleTransport
@@ -90,6 +91,8 @@ internal class IosMemoMindGlasses(
     private val accessoryRoute: MemoMindTransport get() = accessory
 
     /** MemoMind as a display adapter (HUD text, cards, notifications, input events). */
+    override val answerDisplay: GlassesDeviceAdapter get() = displayAdapter
+
     val displayAdapter = MemoMindDisplayAdapter(
         session = session,
         hud = hud,

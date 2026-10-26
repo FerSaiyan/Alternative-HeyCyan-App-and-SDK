@@ -9,13 +9,15 @@ import com.fersaiyan.cyanbridge.ai.image.GlassesQuestionTestHooks
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.localagent.AudioSessionCoordinator
 import com.fersaiyan.cyanbridge.localmodels.tts.StreamingSpeechSessionManager
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The text-to-speech engine of the glasses questions: cues, fixed sentences and answers. The
  * engine also plays the local model's streamed answers ([streaming]). It is created with the
- * main screen and shut down with it.
+ * main screen and shut down with it; a question started without the screen creates it first.
  */
 class AssistantSpeaker(context: Context) : TextToSpeech.OnInitListener {
     private val appContext = context.applicationContext
@@ -25,6 +27,7 @@ class AssistantSpeaker(context: Context) : TextToSpeech.OnInitListener {
     @Volatile var ready = false
         private set
 
+    @Volatile private var initialized: CompletableDeferred<Boolean>? = null
     private val doneCallbacks = ConcurrentHashMap<String, () -> Unit>()
 
     val streaming: StreamingSpeechSessionManager by lazy { StreamingSpeechSessionManager.getInstance(appContext) }
@@ -32,12 +35,23 @@ class AssistantSpeaker(context: Context) : TextToSpeech.OnInitListener {
     /** Called around every answer (Mentra Live must be told when the app plays audio). */
     @Volatile var answerPlayback: (playing: Boolean) -> Unit = {}
 
+    /** Called with every answer as it starts playing (glasses with a display show it). */
+    @Volatile var answerShown: (text: String) -> Unit = {}
+
     val isStarted: Boolean get() = tts != null
 
     /** Creates the engine on [engineContext] (the main screen passes itself, as it always did). */
     fun start(engineContext: Context) {
         if (tts != null) return
+        initialized = CompletableDeferred()
         tts = TextToSpeech(engineContext, this).apply { setOnUtteranceProgressListener(progressListener) }
+    }
+
+    /** For a question started without the screen: creates the engine if needed and waits for it. */
+    suspend fun awaitStarted(timeoutMs: Long = START_TIMEOUT_MS): Boolean {
+        start(appContext)
+        if (ready) return true
+        return withTimeoutOrNull(timeoutMs) { initialized?.await() } == true
     }
 
     fun shutdown() {
@@ -54,6 +68,7 @@ class AssistantSpeaker(context: Context) : TextToSpeech.OnInitListener {
             tts?.language = Locale.getDefault()
         }
         streaming.attachTtsEngine(tts, ready)
+        initialized?.complete(ready)
     }
 
     private val progressListener = object : UtteranceProgressListener() {
@@ -89,8 +104,9 @@ class AssistantSpeaker(context: Context) : TextToSpeech.OnInitListener {
         speak(text, languageTag = null, utteranceId = null, onDone = null, streamType = null)
     }
 
-    /** An answer, in the app language; [answerPlayback] brackets it. */
+    /** An answer, in the app language; [answerPlayback] brackets it and [answerShown] gets its text. */
     fun speakVision(text: String, onDone: (() -> Unit)? = null) {
+        answerShown(text)
         answerPlayback(true)
         speak(
             text = text,
@@ -167,5 +183,6 @@ class AssistantSpeaker(context: Context) : TextToSpeech.OnInitListener {
 
     private companion object {
         const val TAG = "MainActivity"
+        const val START_TIMEOUT_MS = 5_000L
     }
 }

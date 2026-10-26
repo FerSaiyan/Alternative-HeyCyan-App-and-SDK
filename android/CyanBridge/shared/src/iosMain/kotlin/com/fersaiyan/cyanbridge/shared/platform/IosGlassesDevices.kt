@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.platform
 
+import com.fersaiyan.cyanbridge.bridge.core.GlassesDeviceAdapter
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDevice
 
@@ -19,6 +20,9 @@ internal interface IosGlassesDevice : GlassesDevice {
 
     /** Shown for an image question when [canTakeAiPhoto] is false. */
     val aiPhotoUnavailableMessage: String get() = IMAGE_QUESTION_NEEDS_GLASSES
+
+    /** The display that shows assistant answers, for profiles with [GlassesFamilyProfile.showsAssistantAnswers]. */
+    val answerDisplay: GlassesDeviceAdapter? get() = null
 }
 
 /**

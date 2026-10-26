@@ -146,7 +146,8 @@ internal class MemoMindGlasses(private val context: GlassesDeviceContext) : Andr
 
     /**
      * The glasses button asks for a voice question; it runs the dashboard's existing voice
-     * question path (assistant setup, routing and answer) while this activity exists.
+     * question path (assistant setup, routing and answer) while this activity exists. Without the
+     * activity, MemoMindManager starts the same question in the background (GlassesButtonQuestions).
      */
     private fun observeVoiceQuestions() {
         if (voiceQuestionJob != null) return

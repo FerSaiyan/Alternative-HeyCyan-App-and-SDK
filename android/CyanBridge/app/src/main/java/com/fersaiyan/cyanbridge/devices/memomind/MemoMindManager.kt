@@ -36,6 +36,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.TimeZone
 import kotlin.math.abs
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.ai.questions.GlassesButtonQuestions
 
 data class MemoMindState(
     val link: MemoMindLinkState = MemoMindLinkState.DISCONNECTED,
@@ -268,6 +270,8 @@ class MemoMindManager private constructor(context: Context) {
             MemoMindAssistantTrigger.isVoiceQuestion(event) -> {
                 Log.i(TAG, "Voice question requested by the glasses button")
                 _voiceQuestionRequests.tryEmit(Unit)
+                // Without the main screen (which collects the requests above) the question starts here.
+                GlassesButtonQuestions.onVoiceButton(appContext, DeviceClass.MEMOMIND, "memomind")
             }
             event is MemoMindEvent.Button || event is MemoMindEvent.HeadGesture -> Log.i(TAG, "Input $event")
         }

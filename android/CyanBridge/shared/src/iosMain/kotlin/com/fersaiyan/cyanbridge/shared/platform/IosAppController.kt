@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.platform
 
+import com.fersaiyan.cyanbridge.bridge.core.DisplayCommand
 import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.data.local.iosAppDatabase
 import com.fersaiyan.cyanbridge.shared.ai.DEFAULT_RELAY_URL
@@ -160,11 +161,24 @@ internal class IosAppController {
         output = object : AssistantOutput {
             override fun status(text: String) = updateState { it.copy(agentLastError = text) }
 
-            override suspend fun saveAnswer(question: String, answer: String, photo: ByteArray?) =
+            override suspend fun saveAnswer(question: String, answer: String, photo: ByteArray?) {
+                showAnswerOnGlasses(answer)
                 saveGlassesAnswer(question, answer, photo)
+            }
         },
         glassesHooks = { selectedDevice.assistantHooks },
     )
+
+    /** Glasses with a display (MemoMind) also show the answer, as on Android. */
+    private fun showAnswerOnGlasses(answer: String) {
+        val device = selectedDevice
+        if (!device.profile.showsAssistantAnswers) return
+        val display = device.answerDisplay ?: return
+        scope.launch {
+            display.showText(DisplayCommand.Text(answer))
+                .onFailure { PlatformLogger.w(ASSISTANT_TAG, "Answer not shown on the glasses display: ${it.message}") }
+        }
+    }
 
     /** HeyCyan glasses: QCSDK on device builds, raw BLE commands otherwise. */
     private val heyCyan: IosHeyCyanGlasses = IosHeyCyanGlasses(

@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
@@ -19,6 +20,8 @@ import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.audio.VendorPlaybackSignal
+import com.fersaiyan.cyanbridge.bridge.core.DisplayCommand
+import com.fersaiyan.cyanbridge.bridge.core.GlassesBridge
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
@@ -33,6 +36,7 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.ui.main.GlassesSessionGuard
+import com.fersaiyan.cyanbridge.ui.main.assistantSetupBlockingMessage
 import com.oudmon.ble.base.communication.LargeDataHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,7 +65,8 @@ internal interface QuestionForegroundWork {
  * The glasses questions on Android: image questions (glasses AI-photo button, dashboard test,
  * wake words), spoken questions (Classic transcript route or the shared decision-model flow) and
  * the external routes (phone assistant, Tasker, Gemini Live). Process-wide: the main screen
- * attaches as [GlassesQuestionHost] for permissions, dialogs and its devices.
+ * attaches as [GlassesQuestionHost] for permissions, dialogs and its devices, and glasses buttons
+ * can start questions without it ([askByVoiceInBackground], [askAboutPhotoInBackground]).
  */
 internal class GlassesQuestions private constructor(context: Context) : QuestionEnvironment, QuestionForegroundWork {
     override val appContext: Context = context.applicationContext
@@ -75,7 +80,7 @@ internal class GlassesQuestions private constructor(context: Context) : Question
     @Volatile private var hostScope = newScope()
     override val scope: CoroutineScope get() = hostScope
 
-    /** Outlives the main screen: command-timeout warnings. */
+    /** Outlives the main screen: background starts, display updates and command-timeout warnings. */
     private val processScope = newScope()
 
     val speaker: AssistantSpeaker = AssistantSpeaker(appContext)
@@ -139,6 +144,7 @@ internal class GlassesQuestions private constructor(context: Context) : Question
 
     init {
         speaker.answerPlayback = { playing -> VendorPlaybackSignal.forSelectedGlasses(appContext)?.setAppAudioPlaying(playing) }
+        speaker.answerShown = ::showAnswerOnDisplay
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -227,6 +233,41 @@ internal class GlassesQuestions private constructor(context: Context) : Question
             sourceTag = "test_button",
             thumbnailQuality = imageCapture.pendingThumbnailQuality,
         )
+    }
+
+    /**
+     * A glasses button asked a spoken question without the main screen (MemoMind, Mentra Live):
+     * the same voice question as Test voice, with setup problems shown as a toast.
+     */
+    fun askByVoiceInBackground(source: String) {
+        processScope.launch {
+            Log.i("AIHijack", "Background voice question source=$source screen=${host != null}")
+            if (!blockedInBackground(AssistantTestKind.VOICE)) voice.triggerAssistantVoiceQuery()
+        }
+    }
+
+    /** A glasses button asked about what the glasses see, without the main screen ([photo] takes it). */
+    fun askAboutPhotoInBackground(source: String, photo: QuestionPhotoSource) {
+        processScope.launch {
+            Log.i("AIHijack", "Background image question source=$source screen=${host != null}")
+            if (blockedInBackground(AssistantTestKind.IMAGE) || external.showImageRequirementsWarningIfNeeded()) return@launch
+            imageCapture.handleGlassesImageButtonPressed(
+                triggerCapture = true,
+                sourceTag = "${source}_button",
+                thumbnailQuality = imageCapture.pendingThumbnailQuality,
+                photo = photo,
+            )
+        }
+    }
+
+    /** The speech engine is ready, and the route needs no setup the user must do on the screen. */
+    private suspend fun blockedInBackground(kind: AssistantTestKind): Boolean {
+        if (!speaker.awaitStarted()) Log.w("AIHijack", "Speech engine not ready for the background question")
+        val screen = host
+        if (screen != null) return screen.showAssistantSetupIfNeeded(kind)
+        val message = assistantSetupBlockingMessage(appContext, currentRoute(), kind) ?: return false
+        Toast.makeText(appContext, message, Toast.LENGTH_LONG).show()
+        return true
     }
 
     /** Wake word or AI button: a decision-model question, the voice route or a photo question. */
@@ -387,6 +428,15 @@ internal class GlassesQuestions private constructor(context: Context) : Question
                     queueMode = android.speech.tts.TextToSpeech.QUEUE_ADD,
                 )
             }
+        }
+    }
+
+    /** Glasses with a display show the spoken answer too (MemoMind: the teleprompter or Web Bridge text). */
+    private fun showAnswerOnDisplay(text: String) {
+        if (text.isBlank() || !selectedProfile().showsAssistantAnswers) return
+        processScope.launch(Dispatchers.IO) {
+            GlassesBridge.showText(DisplayCommand.Text(text))
+                .onFailure { Log.w("AIHijack", "Answer not shown on the glasses display", it) }
         }
     }
 

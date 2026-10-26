@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main
 
+import android.content.Context
 import android.content.Intent
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -36,11 +37,7 @@ internal class AssistantSetupGate(
             return true
         }
         if (currentAssistantRoute() == GlassesAssistantRoute.TASKER_EXTERNAL_UI) {
-            val capability = ExternalAssistantAutomationInspector.inspect(activity)
-            val reason = when (kind) {
-                AssistantTestKind.VOICE -> ExternalAssistantAutomationPolicy.voiceBlockingReason(capability)
-                AssistantTestKind.IMAGE -> ExternalAssistantAutomationPolicy.imageBlockingReason(capability)
-            }
+            val reason = taskerBlockingReason(activity, kind)
             if (reason != null) {
                 AlertDialog.Builder(activity)
                     .setTitle("Tasker setup required")
@@ -55,4 +52,21 @@ internal class AssistantSetupGate(
         }
         return false
     }
+}
+
+private fun taskerBlockingReason(context: Context, kind: AssistantTestKind): String? {
+    val capability = ExternalAssistantAutomationInspector.inspect(context)
+    return when (kind) {
+        AssistantTestKind.VOICE -> ExternalAssistantAutomationPolicy.voiceBlockingReason(capability)
+        AssistantTestKind.IMAGE -> ExternalAssistantAutomationPolicy.imageBlockingReason(capability)
+    }
+}
+
+/**
+ * What [AssistantSetupGate] would show, as one message, for a question started without the main
+ * screen (a glasses button in the background); null when nothing blocks it.
+ */
+internal fun assistantSetupBlockingMessage(context: Context, route: GlassesAssistantRoute, kind: AssistantTestKind): String? {
+    AssistantTestReadiness.blockingIssue(context, route, kind)?.let { return it.message }
+    return if (route == GlassesAssistantRoute.TASKER_EXTERNAL_UI) taskerBlockingReason(context, kind) else null
 }

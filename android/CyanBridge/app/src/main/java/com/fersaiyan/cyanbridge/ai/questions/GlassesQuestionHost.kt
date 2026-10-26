@@ -10,7 +10,8 @@ import kotlinx.coroutines.CoroutineScope
 
 /**
  * What the glasses questions use from the main screen: permission prompts, dialogs, the lock
- * screen and the selected family's devices. Absent while the screen does not exist.
+ * screen and the selected family's devices. Absent when a question starts in the background
+ * ([GlassesQuestions.askByVoiceInBackground]).
  */
 internal interface GlassesQuestionHost {
     val activity: AppCompatActivity

@@ -490,6 +490,7 @@ internal class ImageQuestionFlow(
                 )
                 env.runOnUiThread {
                     if (providerType == AgentProviderType.LOCAL_AGENT) {
+                        speaker.answerShown(replyToSpeak)
                         localSpeechSessionId?.let(streaming::onModelGenerationCompleted)
                     } else {
                         speaker.speakVision(replyToSpeak, onDone = onSpeechCompleted)

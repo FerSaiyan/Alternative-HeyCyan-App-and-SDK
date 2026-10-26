@@ -45,6 +45,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.ai.questions.MentraQuestionPhoto
+import com.fersaiyan.cyanbridge.ai.questions.GlassesButtonQuestions
 
 /**
  * The single owner of the Mentra Bluetooth SDK and its Mentra Live connection. It follows the
@@ -57,7 +60,11 @@ import kotlinx.coroutines.withContext
  * other code uses [instanceOrNull].
  */
 class MentraLiveManager private constructor(context: Context) : MentraBluetoothSdkCallback() {
+    private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** The photo of a button question asked while the main screen does not exist. */
+    private val buttonQuestionPhoto by lazy { MentraQuestionPhoto(appContext) }
     private val sdk = MentraBluetoothSdk.create(
         context.applicationContext,
         MentraBluetoothSdkConfig(
@@ -137,6 +144,13 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
         val input = InputEvent.Button(event.buttonId, gesture)
         _inputEvents.tryEmit(input)
         GlassesBridge.onInputEvent(ADAPTER_ID, input)
+        // Without the main screen the button still asks the assistant (press: photo, long press: voice).
+        when (gesture) {
+            GestureType.SINGLE_TAP ->
+                GlassesButtonQuestions.onPhotoButton(appContext, DeviceClass.MENTRA_LIVE, "mentra") { buttonQuestionPhoto }
+            GestureType.LONG_PRESS -> GlassesButtonQuestions.onVoiceButton(appContext, DeviceClass.MENTRA_LIVE, "mentra")
+            else -> Unit
+        }
     }
 
     override fun onMicPcm(event: MicPcmEvent) {
