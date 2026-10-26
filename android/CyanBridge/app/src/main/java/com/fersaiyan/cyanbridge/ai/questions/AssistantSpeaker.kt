@@ -29,6 +29,8 @@ class AssistantSpeaker(context: Context) : TextToSpeech.OnInitListener {
 
     val streaming: StreamingSpeechSessionManager by lazy { StreamingSpeechSessionManager.getInstance(appContext) }
 
+    /** Called around every answer (Mentra Live must be told when the app plays audio). */
+    @Volatile var answerPlayback: (playing: Boolean) -> Unit = {}
 
     val isStarted: Boolean get() = tts != null
 
@@ -87,13 +89,17 @@ class AssistantSpeaker(context: Context) : TextToSpeech.OnInitListener {
         speak(text, languageTag = null, utteranceId = null, onDone = null, streamType = null)
     }
 
-    /** An answer, in the app language. */
+    /** An answer, in the app language; [answerPlayback] brackets it. */
     fun speakVision(text: String, onDone: (() -> Unit)? = null) {
+        answerPlayback(true)
         speak(
             text = text,
             languageTag = ImageQuestionPreferences.get(appContext).appLanguageTag,
             utteranceId = null,
-            onDone = onDone,
+            onDone = {
+                answerPlayback(false)
+                onDone?.invoke()
+            },
             streamType = null,
         )
     }

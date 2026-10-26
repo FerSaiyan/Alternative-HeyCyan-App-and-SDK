@@ -407,9 +407,13 @@ internal class ImageQuestionFlow(
             Unit
         }
         val localSpeechSessionId = if (providerType == AgentProviderType.LOCAL_AGENT) {
+            speaker.answerPlayback(true)
             streaming.startNewSession(
                 languageTag = ImageQuestionPreferences.get(env.context).appLanguageTag,
-                onSpeechCompleted = onSpeechCompleted,
+                onSpeechCompleted = {
+                    speaker.answerPlayback(false)
+                    onSpeechCompleted()
+                },
             )
         } else {
             null

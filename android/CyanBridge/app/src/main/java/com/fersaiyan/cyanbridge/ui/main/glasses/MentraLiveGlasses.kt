@@ -44,6 +44,8 @@ import com.mentra.bluetoothsdk.GlassesRuntimeState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import com.fersaiyan.cyanbridge.ai.questions.QuestionPhotoSource
+import com.fersaiyan.cyanbridge.ai.questions.MentraQuestionPhoto
 
 /**
  * Mentra Live over the Mentra Bluetooth SDK ([MentraLiveManager]). Pairing runs through Device
@@ -58,6 +60,9 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
 
     private val activity get() = context.activity
     private val manager: MentraLiveManager get() = MentraLiveManager.getInstance(activity)
+
+    /** Image questions take the SDK's BLE photo (the button press asks about what the glasses see). */
+    override val questionPhoto: QuestionPhotoSource = MentraQuestionPhoto(context.activity)
     private var observers: Job? = null
     private val gallerySync by lazy {
         MentraMediaSyncController(

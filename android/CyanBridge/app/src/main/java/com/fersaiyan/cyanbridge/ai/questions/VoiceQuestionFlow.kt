@@ -146,7 +146,8 @@ internal class VoiceQuestionFlow(
 
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
         val audioRouteOwner = QuestionMicrophone.RouteOwner(voiceQueryToken, audioManager)
-        microphone.activeRoute.set(audioRouteOwner)
+        // Glasses with an SDK microphone get no Bluetooth call route, so there is none to clear.
+        if (!microphone.usesDeviceSdkRoute()) microphone.activeRoute.set(audioRouteOwner)
 
         fun stopSco() {
             // A delayed callback from an older query must not clear the route selected by a

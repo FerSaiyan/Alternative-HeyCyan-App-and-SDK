@@ -18,6 +18,9 @@ import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.shared.assistant.CapturedQuestion
 import com.fersaiyan.cyanbridge.shared.assistant.SpokenQuestionMicrophone
+import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePolicy
+import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePreference
+import com.fersaiyan.cyanbridge.shared.devices.GlassesAudioProfile
 import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
 import com.oudmon.ble.base.bluetooth.DeviceManager
 import kotlinx.coroutines.CancellationException
@@ -41,12 +44,16 @@ import kotlin.coroutines.resume
  * The glasses microphone for questions: brings up the Bluetooth headset route, plays the beep and
  * the spoken cue, records until the question ends, then (unless a model hears the recording)
  * transcribes it on the phone. One question records at a time.
+ *
+ * Glasses whose SDK streams microphone PCM (Mentra Live, [AudioRoutePreference.DEVICE_SDK]) are
+ * recorded from that stream, so no Bluetooth call route is opened next to it.
  */
 internal class QuestionMicrophone(
     context: Context,
     private val speaker: AssistantSpeaker,
     private val scope: () -> CoroutineScope,
     private val languageTag: () -> String,
+    private val deviceAudio: () -> GlassesAudioProfile?,
     /** The question was recorded: announce a cold local-model load if one follows. */
     private val onQuestionRecorded: () -> Unit,
     /** A model hears the recording, so no on-device transcript is needed. */
@@ -59,6 +66,11 @@ internal class QuestionMicrophone(
 
     val activeRoute = AtomicReference<RouteOwner?>(null)
     private val mutex = Mutex()
+
+    /** The selected glasses deliver the microphone through their SDK: no Bluetooth call route. */
+    fun usesDeviceSdkRoute(): Boolean =
+        AudioRoutePolicy.forDevice(AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED, deviceAudio()) ==
+            AudioRoutePreference.DEVICE_SDK
 
     override suspend fun recordQuestion(onsetTimeoutMs: Long): CapturedQuestion =
         capture(onsetTimeoutMs, voiceOnly = true, transcribe = false)
@@ -80,24 +92,33 @@ internal class QuestionMicrophone(
             return@withLock processRecordedQuestion(fixture, voiceOnly, transcribe)
         }
         val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val deviceSdk = usesDeviceSdkRoute()
         val owner = RouteOwner(Any(), audioManager)
-        activeRoute.set(owner)
+        if (!deviceSdk) activeRoute.set(owner)
         var audioFile: File? = null
         try {
             withContext(Dispatchers.Main) {
-                val ready = startBluetoothMicRouteAndAwait(audioManager)
-                Log.i("ImageQuestionAudio", "Question route ready=$ready ${audioRouteSummary(audioManager)}")
-                if (Build.VERSION.SDK_INT >= 31 && audioManager.availableCommunicationDevices.any {
-                        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-                    }) check(ready) { "Could not connect the glasses microphone" }
+                if (deviceSdk) {
+                    Log.i("ImageQuestionAudio", "Question route: glasses SDK microphone, no Bluetooth call route")
+                } else {
+                    val ready = startBluetoothMicRouteAndAwait(audioManager)
+                    Log.i("ImageQuestionAudio", "Question route ready=$ready ${audioRouteSummary(audioManager)}")
+                    if (Build.VERSION.SDK_INT >= 31 && audioManager.availableCommunicationDevices.any {
+                            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                        }) check(ready) { "Could not connect the glasses microphone" }
+                }
                 playTone(android.media.ToneGenerator.TONE_PROP_BEEP)
                 speakCue(voiceOnly)
             }
             val communicationName = if (Build.VERSION.SDK_INT >= 31) audioManager.communicationDevice?.productName?.toString() else null
-            val input = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull {
-                (it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                    (Build.VERSION.SDK_INT >= 31 && it.type == AudioDeviceInfo.TYPE_BLE_HEADSET)) &&
-                    (communicationName == null || it.productName.toString() == communicationName)
+            val input = if (deviceSdk) {
+                null
+            } else {
+                audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull {
+                    (it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        (Build.VERSION.SDK_INT >= 31 && it.type == AudioDeviceInfo.TYPE_BLE_HEADSET)) &&
+                        (communicationName == null || it.productName.toString() == communicationName)
+                }
             }
             audioFile = AudioQuestionRecorder(appContext).record(timeoutMs, input)
             withContext(Dispatchers.Main) { playTone(android.media.ToneGenerator.TONE_PROP_BEEP2) }

@@ -18,6 +18,7 @@ import com.fersaiyan.cyanbridge.ai.router.AssistantTestKind
 import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
+import com.fersaiyan.cyanbridge.audio.VendorPlaybackSignal
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
@@ -88,6 +89,7 @@ internal class GlassesQuestions private constructor(context: Context) : Question
         speaker = speaker,
         scope = { scope },
         languageTag = ::languageTag,
+        deviceAudio = { selectedProfile().audio },
         onQuestionRecorded = ::armLocalModelLoadCue,
         audioGoesToModel = { voice.questionAudioGoesToModel() },
     )
@@ -134,6 +136,10 @@ internal class GlassesQuestions private constructor(context: Context) : Question
         cancelLocalStreamingSpeech = ::cancelLocalStreamingSpeech,
         languageTag = ::languageTag,
     )
+
+    init {
+        speaker.answerPlayback = { playing -> VendorPlaybackSignal.forSelectedGlasses(appContext)?.setAppAudioPlaying(playing) }
+    }
 
     // ---------------------------------------------------------------------------------------------
     // The main screen

@@ -1,10 +1,14 @@
 package com.fersaiyan.cyanbridge.ai.questions
 
+import android.content.Context
 import android.util.Log
 import android.widget.Toast
+import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.ai.image.ImageQuestionSource
 import com.fersaiyan.cyanbridge.ai.image.ImageThumbnailQuality
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
+import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
+import com.fersaiyan.cyanbridge.devices.mentra.MentraPhotoCapture
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLocalHotspot
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
@@ -276,5 +280,34 @@ internal class TuneBudsQuestionPhoto(
                 busy.set(false)
             }
         }
+    }
+}
+
+/**
+ * Mentra Live: the SDK's phone-delivery photo over BLE ([MentraPhotoCapture], under the shared
+ * camera lease), answered as a fast preview. Works without the main screen, so the glasses
+ * button can ask about a photo in the background.
+ */
+internal class MentraQuestionPhoto(context: Context) : QuestionPhotoSource {
+    private val appContext = context.applicationContext
+    private val busy = AtomicBoolean(false)
+    override val inProgress: Boolean get() = busy.get()
+
+    override fun capture(requests: QuestionPhotoRequests, sourceTag: String, offerSpokenQuestion: Boolean) {
+        val context = requests.context
+        if (MentraLiveManager.instanceOrNull()?.ready != true) {
+            requests.clearPendingQuestion(sourceTag)
+            Toast.makeText(context, R.string.mentra_not_ready, Toast.LENGTH_SHORT).show()
+            return
+        }
+        captureNative(
+            busy, requests, sourceTag, offerSpokenQuestion,
+            family = "Mentra Live",
+            foregroundStatus = "Capturing image from Mentra Live glasses",
+            filePrefix = "Mentra_AI",
+            imageSource = ImageQuestionSource.FAST_PREVIEW,
+            failureMessage = { context.getString(R.string.mentra_photo_failed, it.message.orEmpty()) },
+            takePhoto = { MentraPhotoCapture(appContext).capture() },
+        )
     }
 }
