@@ -92,3 +92,11 @@ These were left untouched, or tidied without dropping any assertion.
 - **P:** VisionAssistancePreferencesTest (moved from commonTest to portabilityTest, because it needs the in-memory preference store);  the new keys (`question_routing/*`, `cyanbridge_accessibility/*`, `pro_subscription_ai_prefs/audio_capable_models*`) are pinned in PrefsInventoryTest.
 - **androidTest (M, debug build, needs a local Gemma 4 audio model):** GlassesQuestionFlowTest with the `assets/glasses_questions` WAV/JPEG fixtures, QuestionLatencyQuickTest, QuestionPathBenchmarkTest, QuestionPromptProbeTest. No CI job runs them.
 - Not taken: the commit's copy of the enum-membership cases in SettingsScreenTest, which the refactor had pruned; only its `visionAssistanceEnabled` default assertion was kept.
+
+## A3: glasses questions out of MainActivity (2026-10-26)
+
+- **Moved U → P:** SpokenDecisionParserTest (72, now `shared/.../assistant`, kotlin.test), with the parser.
+- **New P (shared commonTest):** SpokenQuestionFlowTest (188; the decision flow with fake ports: answer and follow-up continuing the conversation, camera without a conversation, search answered in the conversation or the offline sentence, failures and silence spoken, a conversation that cannot continue) and AssistantQuestionPolicyTest (114, table-driven: wake/provider routing, relay photo replies, web answer plans, memory selection and prompt order, follow-up window).
+- **Unchanged and still compiling:** GlassesQuestionFlowTest (only the `SpokenConversation` import moved), QuestionLatencyQuickTest, QuestionPathBenchmarkTest (a comment names `AssistantProviderQueries.query`), QuestionPromptProbeTest; they still drive MainActivity's `debugGlassesEvent` and `GlassesQuestionTestHooks`.
+- `ArchitectureGuardrailSourceTest`: MainActivity budget 5,069 → 1,860.
+

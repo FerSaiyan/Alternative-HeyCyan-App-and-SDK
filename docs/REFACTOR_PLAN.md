@@ -11,7 +11,7 @@ Objetivo: levar ao iOS os óculos que só funcionavam no Android e tirar o códi
 | Óculos no iOS | HeyCyan, Eyevue | + TuneBuds, MoYoung, Meta Ray-Ban, Mentra Live; Meizu com aviso (seção 2) |
 | `MainViewController.kt` (iOS) | 2.197 linhas, tudo junto | 223 linhas (só a entrada Compose) |
 | Controlador do app iOS | dentro do arquivo acima | `IosAppController.kt`: 705 linhas, só ações do app |
-| Fluxos do assistente | uma cópia no Android e outra no iOS | iOS usa `GlassesAssistant` (comum); o Android ainda usa a cópia dele (tarefa A3) |
+| Fluxos do assistente | uma cópia no Android e outra no iOS | iOS usa `GlassesAssistant` (comum); o Android usa `SpokenQuestionFlow` e as políticas comuns, com o resto em `ai/questions` (A3) |
 | Clientes do relay | JSON à mão no iOS | `RelayAiServices.kt` (comum, `kotlinx.serialization`) |
 | Protocolo TuneBuds | só no app Android | `shared/devices/tunebuds` (Android e iOS usam) |
 | Testes do `shared` (`:shared:portabilityTest`) | 96 | 117, todos passando |
@@ -85,15 +85,16 @@ E dentro do app: juntar os dois `LocalAgentPrefs` (`agent/` e `localagent/`) e o
 
 ### A3. Assistente comum no Android (grande, maior ganho)
 
-Hoje o fluxo de perguntas está no `MainActivity` (≈4.350–5.800): `startParallelAudioQuestionIfEligible`, `onImageReadyForQuestion`, `offerFollowUp`, `captureOptionalImageQuestionFromBluetoothMic`, `speakImageQuestionCue`, `waitForTtsToFinish`, `startVoiceQuestionFromUi` e as capturas por óculos (`capture*ImageForQuestion`).
+Antes, o fluxo de perguntas estava no `MainActivity` (≈4.350–5.800): `startParallelAudioQuestionIfEligible`, `onImageReadyForQuestion`, `offerFollowUp`, `captureOptionalImageQuestionFromBluetoothMic`, `speakImageQuestionCue`, `startVoiceQuestionFromUi` e as capturas por óculos (`capture*ImageForQuestion`).
 
-- [ ] `AndroidAssistantVoice`: microfone Bluetooth (SCO) com o reconhecedor atual, TTS em fala contínua (`StreamingSpeechChunker` já é comum) e as deixas.
-- [ ] `AndroidAssistantBrain`: `AssistantRequestRouter` / `CliRelayRouter` / modelos locais, como hoje.
-- [ ] `AssistantOutput`: o repositório de conversas que o app já usa.
-- [ ] Ganchos por óculos. O Android não envia modos AI-speak, então para HeyCyan só `onNoQuestion`/`afterAnswer` com `stopGlassesAiAudio`. Os outros óculos não precisam de gancho.
-- [ ] Ficam fora do `GlassesAssistant`, como desvio antes de chamá-lo: Gemini Live (`shouldUseGeminiLiveQuestions`), automação externa (Tasker / app Gemini), métricas de imagem, tons e o serviço em primeiro plano.
-- [ ] Remover do `MainActivity` o fluxo antigo. Meta: menos 1.000 linhas.
-- Risco: o Android tem ajustes que o iOS não tem (repetir a captura do microfone, `looksLikeVisionFailed`, cópia da foto para a galeria). Levantar cada um antes e decidir se entra no comum ou no adaptador.
+Feito (branch `cyan-refactor-assistant-extract`):
+- [x] Comum (`shared/assistant`): o parser das tags de rota (`SpokenDecision.kt`) e a janela de conversa (`SpokenConversation`) saíram do app. `SpokenQuestionFlow` é o fluxo SMART inteiro (decisão, câmera, busca na web, telefone, Live, ignorar, continuação na mesma conversa e pergunta de seguimento) atrás de portas: `SpokenQuestionMicrophone`, `SpokenQuestionBrain`, `SpokenQuestionActions`, `SpokenQuestionSpeech`. As decisões puras ficam em `AssistantQuestionPolicy.kt`: que fluxo e que provedor respondem (`AssistantQuestionRouting`), o que dizer quando a foto falha (`VisionReplyPolicy`), como responder a partir da busca (`WebAnswerPolicy`), a seleção da memória (`AssistantMemorySelection`) e a ordem do prompt de sistema (`AssistantSystemPrompt`). O `GlassesAssistant` aceita um `SpokenQuestionFlow` para o `askByVoice`.
+- [x] Android (`app/.../ai/questions`): `GlassesQuestions` (por processo; o `MainActivity` se liga como `GlassesQuestionHost` para permissões, diálogos e tela bloqueada), `AssistantSpeaker` (o TTS que era do `MainActivity`), `QuestionMicrophone`, `AssistantProviderQueries`, `ImageQuestionCapture`, `ImageQuestionFlow`, `VoiceQuestionFlow` e `AndroidSpokenQuestionPorts` (as portas do fluxo SMART: sessões LiteRT, relay Pro, WebView, Local Agent, Live). Os desvios continuam antes do fluxo: `GeminiLiveQuestions` e `ExternalAssistantHandoff` (Tasker, app do assistente). A foto de cada família é `AndroidGlassesDevice.questionPhoto` (Meta, Eyevue, TuneBuds, Mentra), sem cadeia de `isXSelected()`.
+- [x] `MainActivity`: de 5.069 para 1.860 linhas (o `ArchitectureGuardrailSourceTest` segue).
+- [x] Ganchos que esperavam esta região: pergunta com foto no Mentra Live, sem SCO quando o perfil usa o microfone do SDK (`DEVICE_SDK`), sinal de áudio do app em volta das respostas (`VendorPlaybackSignal`), respostas no HUD do MemoMind (`showsAssistantAnswers` no perfil) e perguntas pelo botão dos óculos sem a tela (`GlassesButtonQuestions`).
+- Igual ao antes, de propósito: os fluxos de foto e de voz Classic continuam com callbacks (TTS `onDone`), sem passar pelo modelo de uma pergunta por vez do `GlassesAssistant`, porque isso mudaria a ordem de cancelamento e de seguimento. O microfone das perguntas ainda faz a própria rota Bluetooth, fora do `AudioSessionCoordinator` (o `AndroidAssistantVoice` já tem essa versão).
+- iOS: o `GlassesAssistant` não liga o fluxo SMART ainda. Faltam as portas: gravar a pergunta em arquivo (hoje o iOS só tem a transcrição do `SFSpeechRecognizer`), um modelo que decida pela gravação (ou uma variante por texto), a busca na web (no Android é um WebView; no iOS não há implementação) e sessões de conversa (só LiteRT no Android). O iOS já ganha: as respostas no HUD do MemoMind e a `VisionReplyPolicy` nas respostas do relay com foto.
+- [ ] Testar com os óculos: `docs/refactor/HARDWARE_TEST_CHECKLIST.md`, seção "A3".
 
 ### A4. Contrato comum de óculos (média/grande)
 

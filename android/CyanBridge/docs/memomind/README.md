@@ -74,6 +74,20 @@ Android (`app/.../devices/memomind/`, `ui/main/glasses/MemoMindGlasses.kt`): SPP
 manager (bring-up, reconnect, battery polling, notifications forwarding, button → voice question),
 MediaCodec Opus decoder to 16 kHz PCM, and the microphone as an `AudioSessionCoordinator` session.
 
+### Questions (Android)
+
+- **Button.** A primary long press from the Web Bridge plugin asks a voice question. While the main
+  screen exists, `MemoMindGlasses` presses its Test voice button (assistant setup dialog, routing,
+  answer). Without it (the app was closed while the SPP link stayed up), `MemoMindManager` calls
+  `GlassesButtonQuestions.onVoiceButton`, which starts the same question in the background
+  (`GlassesQuestions.askByVoiceInBackground`): the speech engine starts on demand, and a missing setup
+  or microphone permission is a toast instead of a dialog.
+- **Answers on the HUD.** `GlassesFamilyProfiles.memoMind` sets `showsAssistantAnswers`. Every spoken
+  answer (`AssistantSpeaker.speakVision`, and the local model's streamed photo answer) is also sent to
+  the display bridge (`GlassesBridge.showText`), which the MemoMind adapter draws as Web Bridge text
+  or the native teleprompter. The text stays until the next display command. iOS shows it through
+  `IosGlassesDevice.answerDisplay` once the answer was spoken.
+
 iOS (`shared/src/iosMain/`): see [iOS](#ios) below.
 
 Not implemented: GMP install/list/remove (withheld), screenshot download, navigation, HOGP.
@@ -103,7 +117,8 @@ What works on iOS:
   comfort brightness, the panel's test notification.
 - Button questions: a primary long press from the Web Bridge plugin starts the assistant's voice
   question (`GlassesAssistant.askByVoice`), which listens and answers through the glasses' HFP
-  microphone and speaker (the existing iOS voice path).
+  microphone and speaker (the existing iOS voice path). The answer is then shown on the HUD
+  (`showsAssistantAnswers`).
 - `IosAppController.memoMindSession` / `memoMindDisplay` expose the session and the display adapter
   for a web plugin host.
 - Over iAP2 only: the Opus recording stream (the panel's microphone test counts frames).

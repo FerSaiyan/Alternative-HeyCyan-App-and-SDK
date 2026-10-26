@@ -1,5 +1,22 @@
 # Worklog — CyanBridge local agent
 
+## 2026-10-26 — A3: glasses questions out of MainActivity; Mentra and MemoMind question hooks
+
+- Branch `cyan-refactor-assistant-extract` (from `f92a54d4`). The image, voice and spoken-decision flows
+  left MainActivity for `app/.../ai/questions` (`GlassesQuestions` and its parts); MainActivity went
+  from 5,069 to 1,860 lines.
+- Shared (`shared/assistant`): the route-tag parser and conversation window moved from the app;
+  `SpokenQuestionFlow` runs the SMART turns behind ports (Android implements them in
+  `AndroidSpokenQuestionPorts`); routing, relay photo failures, web answers, memory selection and the
+  system prompt order are pure policies with tests. iOS gets the MemoMind HUD answers and the photo
+  reply policy; its SMART flow needs ports it lacks (recording to a file, web search, sessions).
+- Hooks: Mentra image questions (`questionPhoto` on the device contract), no SCO for the SDK microphone,
+  the playback signal around answers, MemoMind answers on the HUD (`showsAssistantAnswers`), and
+  glasses-button questions without the main screen (`GlassesButtonQuestions`).
+- Hardware checks: `docs/refactor/HARDWARE_TEST_CHECKLIST.md`, section "A3". Not run on glasses.
+- Verify: app 693, shared Android 345 and portability 363 tests pass; debug, release and androidTest
+  compile; `:shared:iosCompileCheck` passes. The question androidTests compile; not run (no emulator).
+
 ## 2026-10-26 — Protocol-fixes branch retired; spoken questions merged into cyan-refactor
 
 - `heycyan-eyevue-tunebuds-protocol-fixes` is retired; `cyan-refactor` is the only working branch.

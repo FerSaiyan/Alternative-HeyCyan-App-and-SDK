@@ -126,7 +126,7 @@ Dashboard dispatch was ported one-to-one. Families without their own transport s
 Filter logcat with:
 `adb logcat -s AudioSession GeminiLiveClient PluginVoiceRecognizer MeetingCaptureService AmbientSpeech AudioQuestionRecorder LocalAgentApprovalVoice StudioApprovalHandler HandsFreeTranslator WalkingAidService SpeechQueueController ImageQuestionAudio`
 
-Every session logs `"<owner> <KIND> granted state=…"`, `"<owner> route plan=… users=N mode=…, sco=…, communication=…"`, `"<owner> <KIND> -> SUSPENDED|ACTIVE|ENDED"` and `"<owner> <KIND> released restoredRoute=…"`. MainActivity's voice and image questions still do their own routing (not migrated yet).
+Every session logs `"<owner> <KIND> granted state=…"`, `"<owner> route plan=… users=N mode=…, sco=…, communication=…"`, `"<owner> <KIND> -> SUSPENDED|ACTIVE|ENDED"` and `"<owner> <KIND> released restoredRoute=…"`. The glasses voice and image questions (now `ai/questions/QuestionMicrophone`) still do their own routing (not migrated yet).
 
 **Shared route (applies everywhere)**
 - The Bluetooth route is restored only when the last session using it ends (`restoredRoute=true` once). Before, ending any feature reset the mode and dropped SCO under the others.
@@ -398,7 +398,7 @@ Force-stop the official MemoMind app first: the glasses accept one app connectio
    - Comfort brightness: the display dims to level 7 (`01/0E`).
    - With the Web Bridge plugin started from the official app (then the official app closed): reconnect, log shows `webBridge=true`; Show text is drawn as a text box instead of the teleprompter, Clear wipes it.
    - Plugins: Live Caption Relay / Errand Brain cards appear on the HUD (teleprompter for text, notification cards for cards).
-4. **Buttons and head gestures.** Only with the Web Bridge plugin running: presses log `Input Button(...)`; a primary long press logs `Voice question requested by the glasses button` and starts the dashboard voice question (CyanBridge open). Without the plugin, record any `Unsolicited service=… command=…` lines the native buttons produce; they map future native triggers.
+4. **Buttons and head gestures.** Only with the Web Bridge plugin running: presses log `Input Button(...)`; a primary long press logs `Voice question requested by the glasses button` and starts the dashboard voice question (CyanBridge open), or the same question in the background with the app closed (A3 section below). Without the plugin, record any `Unsolicited service=… command=…` lines the native buttons produce; they map future native triggers.
 5. **Mic question.** "Test voice" in the assistant card listens through the glasses' HFP microphone and speaks the answer on the glasses speaker. "Test microphone" in the MemoMind panel: `Microphone streaming compact=…`, then "N Opus frames, peak level X%" (expect about 150 frames in 3 s and a level that follows your voice); log `Opus decoder output 48000 Hz` or 16000. During the test start a voice question: the MemoMind capture is suspended and resumes (`AudioSession` log).
 6. **Notifications.** Forward notifications (grant notification access when asked): phone notifications appear as native cards with the app name; WhatsApp read-aloud is unaffected. Disconnect turns forwarding off.
 7. **Reconnect.** Power the glasses off and on: the link-loss log, then reconnection within ~5–30 s (manager retries and the ACL-connected auto-pair). Disconnect in the panel stays disconnected (auto-reconnect suppressed) until Connect.
@@ -442,8 +442,8 @@ The SDK's own lines appear under its `Bridge` log tags (`MAN:`, `LIVE:`).
 4. **Switching away.** Pair HeyCyan from Scan. Expect `"Released (selected HEY_CYAN)"`. Mentra no longer reconnects.
 5. **Photo.** Dashboard Photo saves on the glasses ("Photo saved on the Mentra Live glasses."). The count action shows the photo and video counts.
 6. **AI photo.** Gemini Live auto image and Walking Aid with Mentra selected: expect `"AI photo received bytes=…"`.
-7. **AI photo question (button press and dashboard Image test).** Needs the frozen-region capture branch (MENTRA_AUDIT.md, item 1). Before that, expect the HeyCyan "not connected" toast. Expect `"Button press -> image question"`.
-8. **Button voice question.** Long press. Expect `"Button long press -> voice question"`, `AudioQuestionRecorder` `"Capture started input=glasses SDK PCM"` and `MentraLive` `"Microphone opened by AudioQuestionRecorder"`. The answer plays on the glasses (media output).
+7. **AI photo question (button press and dashboard Image test).** Expect `"Button press -> image question"`, then "Ask about the image now…", `"AI photo received bytes=…"`, the toast "Fast BLE preview: <w>x<h>, …" and the answer. There is no "Glasses are not connected" toast any more. With the glasses off: "Connect Mentra Live first." (see the A3 section below for the rest).
+8. **Button voice question.** Long press. Expect `"Button long press -> voice question"`, `ImageQuestionAudio` `"Question route: glasses SDK microphone, no Bluetooth call route"` (no `Selecting Bluetooth microphone route` line, no SCO state lines), `AudioQuestionRecorder` `"Capture started input=glasses SDK PCM"` and `MentraLive` `"Microphone opened by AudioQuestionRecorder"`. Note whether the beep and "Ask."/"Listening" cue are heard on the glasses or on the phone. The answer plays on the glasses (media output).
 9. **Gemini Live mic.** Start Live with Mentra selected. Expect `"Microphone opened by GeminiLiveClient"`. Speech is heard, and the reply plays on the glasses with no SCO switch. Ask a voice question during Live: both listeners coexist, and Live resumes afterwards.
 10. **Video.** Video starts and stops a recording on the glasses ("Video recording started/stopped").
 11. **Advanced → Device info.** Battery, Version (firmware), Sync time, Volume (0-15).
@@ -558,3 +558,30 @@ The emulator flow is covered by `GlassesQuestionFlowTest` (debug build, local Ge
 8. **Classic mode.** Settings → AI & automation → Question routing → Classic: questions are transcribed first and follow the AI button's route. The routing options are absent on iOS.
 9. **Voice profile.** Settings → Voice profile → Enroll my voice (and onboarding step 4 of 5): microphone prompt, three phrases on the phone microphone, `VoiceEnrollment VOICE_COMMAND granted`/`released` per phrase. With Gemini Live running, recording shows "Microphone is in use" instead of taking the microphone. Delete voice profile, and Settings → Clear local data, remove `no_backup/voiceprint`.
 10. **Vision assistance.** Fresh install with TalkBack on: the welcome flow asks "Do you need vision assistance?" first. Turn TalkBack on after onboarding: the question is offered once at the next launch. Settings → Accessibility: TalkBack reads the toggle as one switch with its description. The same toggle works on iOS.
+
+## A3: glasses questions moved out of MainActivity (`ai/questions`), Mentra and MemoMind hooks
+
+The image, voice and spoken-decision question flows moved from MainActivity to `app/.../ai/questions` (`GlassesQuestions` and its parts); the decision-model turns now run the shared `SpokenQuestionFlow`. Nothing should look, sound or time differently. Filter logcat with
+`adb logcat -s AIHijack ImageQuestionAudio ImageQuestionTransfer ImageQuestion GeminiLive AudioSession MentraLive MemoMindManager MemoMindHud`.
+
+**Regression (every family that has these flows; repeat the families from "Spoken questions…" above):**
+1. **Test voice (dashboard), Classic and SMART.** Same cue, beep, "Listening for voice query…" toast, answer and foreground notification as before. With the microphone permission revoked: the permission prompt, then the question. Ask a second question while one runs: "A voice question is already active".
+2. **Wake word / AI button (HeyCyan 0x03, Eyevue wake word).** SMART question (`Spoken decision route=…`), camera, search, phone, live and ignore routes; follow-up within 5 s continues (`turn=2 continued=true`). Same as "Spoken questions…" checks 1–7.
+3. **Image questions per family.** HeyCyan hardware AI-photo button (0x02) and Test image (thumbnail, and Detailed/Wi-Fi), Eyevue AI photo, TuneBuds fast and Detailed (hotspot), Meta DAT photo: same toasts ("Triggering glasses camera…", "<source>: <w>x<h>, …"), ask window ("Ask about the image now…"), answer, then the follow-up window (ask again within ~3 s after the answer). A second press while one transfers logs `… AI photo capture already in progress`. During an Eyevue, Meta or Mentra photo a voice question is refused ("An image question is already active"); during a TuneBuds photo it is not (unchanged).
+4. **Detours.** Pro with a Live questions model: "Initializing Live." then Gemini Live (with the Stop Live snackbar on the dashboard). Phone assistant route: the photo goes to Gemini/ChatGPT by share or Tasker AutoInput, and the Tasker voice broadcast still fires. Tasker route: relay answer.
+5. **Activity teardown.** Start a voice question and leave the app with Back (activity destroyed) while it listens: the question stops, the foreground notification goes away and the audio mode returns to normal, as before.
+6. **Lock screen.** With the phone locked, a wake-word voice question shows over the lock screen and asks to dismiss the keyguard, as before.
+
+**Mentra Live (MENTRA_AUDIT.md, "Question flow hooks"):**
+7. **Image question.** Button press and Test image: see the Mentra section, check 7. The photo is answered as a fast preview; during the transfer a long press is refused.
+8. **SDK microphone route.** See the Mentra section, check 8: no Bluetooth call route around the question, and Gemini Live (if running) keeps its microphone.
+9. **Playback signal.** During a spoken answer (relay, local streamed photo answer, decision flow) the glasses treat the app's audio as playing (note any change in the glasses' own sounds or microphone echo compared with before); after the answer it is cleared.
+
+**MemoMind (README, "Questions (Android)"):**
+10. **Answer on the HUD.** Ask by voice (button or Test voice): the answer appears on the glasses (Web Bridge text box with the plugin running, else the teleprompter) when it starts being spoken. Other display glasses (MYVU) do not show answers.
+11. **Background button question.** Open CyanBridge, connect MemoMind, then remove CyanBridge from recents (the SPP link stays up) or open another app and let Android destroy the activity. Long-press: `AIHijack Background voice question source=memomind screen=false`, the cue on the glasses, the answer spoken and shown on the HUD. Same with Mentra Live: press asks about a photo (`source=mentra`), long press asks a voice question. With the microphone permission revoked: a toast, no prompt. With Local selected but no local model: a toast with the setup message.
+12. **Foreground unchanged.** With CyanBridge open (or only in the background, not destroyed), the buttons still press the dashboard's Test voice / Test image buttons (setup dialog when needed); no `Background … question` log line.
+
+**iOS (Mac build):**
+13. MemoMind voice question: after the spoken answer, the text appears on the HUD. A relay photo answer that says the image could not be seen is spoken as "I couldn't analyze the image. Please try again."
+
