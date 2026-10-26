@@ -44,6 +44,8 @@ object DashboardSessionPolicy {
                 GlassesDashboardAction.StopSync -> activeSession == GlassesSession.MEDIA_SYNC
                 GlassesDashboardAction.StopLivePreview -> activeSession == GlassesSession.LIVE_PREVIEW
                 GlassesDashboardAction.CancelOta -> activeSession == GlassesSession.OTA
+                // Returns to the running SDK firmware update screen.
+                GlassesDashboardAction.OpenSdkFirmwareUpdate -> activeSession == GlassesSession.OTA
                 else -> false
             }
         }

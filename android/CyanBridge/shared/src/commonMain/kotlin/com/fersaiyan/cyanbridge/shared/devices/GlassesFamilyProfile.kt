@@ -214,8 +214,9 @@ object GlassesFamilyProfiles {
 
     /**
      * Mentra Live over the Mentra Bluetooth SDK. Media sync downloads the glasses gallery over
-     * their Wi-Fi hotspot. Not declared because the SDK path is not wired here: live preview
-     * (the glasses push RTMP/SRT/WHIP to a server) and firmware updates (the SDK's own OTA flow).
+     * their Wi-Fi hotspot. Firmware updates run the SDK's own OTA flow on a dedicated screen
+     * ([GlassesCapability.SDK_FIRMWARE_UPDATE]), never the HeyCyan OTA section. Not declared
+     * because the SDK path is not wired here: live preview (the glasses push RTMP/SRT/WHIP to a server).
      */
     val mentraLive = GlassesFamilyProfile(
         deviceClass = DeviceClass.MENTRA_LIVE,
@@ -232,6 +233,7 @@ object GlassesFamilyProfiles {
             GlassesCapability.DEVICE_INFO,
             GlassesCapability.TIME_SYNC,
             GlassesCapability.VOLUME_STATUS,
+            GlassesCapability.SDK_FIRMWARE_UPDATE,
         ),
         audio = GlassesAudioProfile(
             input = GlassesAudioInput.VENDOR_PCM_STREAM,

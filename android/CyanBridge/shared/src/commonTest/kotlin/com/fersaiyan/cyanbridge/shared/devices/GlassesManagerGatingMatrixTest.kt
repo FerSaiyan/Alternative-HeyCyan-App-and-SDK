@@ -63,6 +63,7 @@ class GlassesManagerGatingMatrixTest {
             Action.ADVANCED_CONTROLS,
             Action.ADVANCED_DEVICE_INFO,
             Action.ADVANCED_DEVICE_VOLUME,
+            Action.ADVANCED_SDK_FIRMWARE_UPDATE,
         ),
         DeviceClass.MEIZU_MYVU to setOf(
             Action.MEETING_CAPTURE,
