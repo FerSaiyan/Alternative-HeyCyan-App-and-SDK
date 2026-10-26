@@ -72,7 +72,8 @@ class GlassesDashboardGatingTest {
                 livePreview = if (
                     deviceClass == DeviceClass.HEY_CYAN ||
                     deviceClass == DeviceClass.EYEVUE ||
-                    deviceClass == DeviceClass.TUNEBUDS
+                    deviceClass == DeviceClass.TUNEBUDS ||
+                    deviceClass == DeviceClass.MENTRA_LIVE
                 ) {
                     live
                 } else {
@@ -86,6 +87,21 @@ class GlassesDashboardGatingTest {
     @Test
     fun wifiAdbDebugIsHiddenInReleaseBuilds() {
         DeviceClass.entries.forEach { assertEquals(false, gate(it, debug = false).wifiAdbDebug.isAvailable) }
+    }
+
+    @Test
+    fun theBroadcastButtonShowsOnlyForFamiliesThatBroadcast() {
+        val withBroadcast = live.copy(title = "Camera", broadcastLabel = "Broadcast")
+        DeviceClass.entries.forEach { deviceClass ->
+            val state = sample.withFamilyGating(
+                family = GlassesFamilyProfiles.forClass(deviceClass),
+                aiWakeWordRoute = AiWakeWordRoute.VOICE_QUESTION,
+                isDebugBuild = false,
+                livePreview = withBroadcast,
+            )
+            val expected = if (deviceClass == DeviceClass.MENTRA_LIVE) "Broadcast" else null
+            assertEquals(expected, state.livePreview.broadcastLabel, "broadcast button for $deviceClass")
+        }
     }
 
     @Test

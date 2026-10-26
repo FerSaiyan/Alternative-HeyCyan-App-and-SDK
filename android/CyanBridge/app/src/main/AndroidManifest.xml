@@ -112,6 +112,7 @@
         <activity android:name=".ui.recordings.RecordingsListActivity" android:exported="false" android:label="@string/nav_transcriptions_recordings" />
         <activity android:name=".ui.recordings.SyncedMediaGalleryActivity" android:exported="false" android:label="Synced photos and videos" />
         <activity android:name=".ui.MentraFirmwareUpdateActivity" android:exported="false" android:label="Mentra Live firmware update" />
+        <activity android:name=".ui.MentraBroadcastActivity" android:exported="false" android:label="Mentra Live broadcast" />
         <activity android:name=".agent.ProSubscriptionActivity" android:exported="true" android:label="Pro Subscription">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

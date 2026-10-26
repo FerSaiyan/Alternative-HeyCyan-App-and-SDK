@@ -50,9 +50,10 @@ class GlassesFamilyProfileTest {
     @Test
     fun capabilityOwnersMatchTheShippedHandlers() {
         assertEquals(
-            setOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS),
+            setOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MENTRA_LIVE),
             classesWith(GlassesCapability.LIVE_PREVIEW),
         )
+        assertEquals(setOf(DeviceClass.MENTRA_LIVE), classesWith(GlassesCapability.LIVE_BROADCAST))
         assertEquals(
             setOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MENTRA_LIVE),
             classesWith(GlassesCapability.AI_PHOTO_CAPTURE),
