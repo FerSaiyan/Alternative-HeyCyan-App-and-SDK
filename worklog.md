@@ -1,5 +1,60 @@
 # Worklog — CyanBridge local agent
 
+## 2026-10-26 — "Without Meta AI" pairing option investigated, then dropped
+
+Idea: a third Meta pairing choice next to Developer Mode and the email invite, modeled on
+[Visor](https://github.com/macedonga/visor) (AGPL-3.0, Android only, read at `68e45e7`). Visor replaces
+the Meta AI app by making itself the glasses' owner. **Decision: dropped for now.** No code was
+written and nothing from Visor was copied. The hybrid Developer Mode / invite registration was built
+and merged instead.
+
+- **How ownership works:**
+  1. The app logs in to Meta through the Meta AI app's login flow. Passwords and email codes
+     work; passkeys don't.
+  2. The app generates its own EC P-256 owner key.
+  3. The glasses send their certificate, serial number and a one-time code over Bluetooth.
+  4. The app posts these to `graph.facebook-hardware.com` (`pair_request`, then `pair`) and gets a
+     Meta-signed ownership receipt naming its key.
+  5. The glasses verify Meta's signature and switch owner; Meta AI loses ownership.
+  6. After that, every connection is local. The app proves it holds the owner key (ECDSA trust
+     handshake), then opens an encrypted, multiplexed link. Meta is contacted again only for
+     language packs and frame style.
+- **Blocker:** Meta's hardware server issues receipts only to requests that carry Meta's own
+  first-party app token (`HW|…`) and a Meta AI-style login (`AR|…`, `FRL|…` tokens). Visor's README
+  says to extract them from the Meta AI app. Shipping that means impersonating Meta's app with its
+  credentials, which is against Meta's terms. It risks users' Meta accounts and app-store removal,
+  and Meta can break it at any time. The implementing agent declined to build it for this reason.
+- **What it would take:**
+  - Meta login; owner-key storage (Keystore/Keychain); the receipt exchange; the trust handshake.
+  - The link: framing, ciphers, channel mux and reconnect.
+  - Per-feature services: status, capture list and file import (Wi-Fi Direct), live view (the
+    glasses host a soft AP), settings, and an assistant-server stand-in so "Hey Meta" can reach
+    CyanBridge's AI.
+  - AGPL rules out copying, so it needs a clean-room rewrite, several weeks for a useful subset.
+    The alternatives are a separate license from Visor's author, or putting CyanBridge under AGPL.
+- **Side effects:** Meta AI and every DAT app stop working with the glasses until they are paired
+  again in Meta AI, which moves ownership back. Glasses firmware updates normally come through
+  Meta AI, and Visor has no firmware-update path.
+- **Android:**
+  - Technically proven: Visor runs on real glasses over LE L2CAP / RFCOMM and Wi-Fi Direct.
+  - Distribution would be a sideloaded APK only.
+- **iOS:**
+  - **Control link:** LE L2CAP is available (CoreBluetooth), so it looks possible. Classic
+    Bluetooth / iAP2 (`com.meta.ar.wearable`) is limited to Meta's own MFi-approved apps.
+  - **Media:** iOS has no Wi-Fi Direct. Joining the glasses' soft AP may work for live view; for
+    media import it's unknown.
+  - **Distribution:** no realistic path. App Review would reject Meta tokens and a login that
+    poses as Meta's app. Personal development builds at most. Nobody has done it on iOS.
+- **If it comes back:**
+  - Preferred: the sanctioned route, a Meta partner/accessibility integration (like Aira) for
+    "no Developer Mode, no invite".
+  - Otherwise: a separate Android-only experimental APK outside the Play Store, where users supply
+    their own tokens. This needs the owner's explicit decision on the token issue.
+- Sources: Visor `README.md`, `CLAUDE.md`, `core/identity/provision/Provision.kt`,
+  `core/transport/*`, `core/media/LiveStream.kt`, `core/protocol/Constants.kt`. Earlier research is
+  in `~/research/a11y-apps/reports/` (`meta-dat-dual-registration-design.md`,
+  `meta-dat-apps-survey.md`).
+
 ## 2026-10-10 — Merge with protocol fixes; NPU downloads, multimodal NPU packages, image/audio on the emulator
 
 - **Commits and merge:**
