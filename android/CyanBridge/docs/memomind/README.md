@@ -123,23 +123,20 @@ Not available on iOS, and why:
   not the negotiated MTU. Short replies (heartbeat, status) are unaffected; record device-info
   behavior per firmware.
 
-### iAP2 requirements (not enabled in this repository)
+### iAP2 requirements
 
-The shipped `ios/CyanBridgeKMPHost/Info.plist` does not declare the MemoMind protocols, so the
-iAP2 transport stays inactive. To use it:
+`ios/CyanBridgeKMPHost/Info.plist` declares both MemoMind protocols in
+`UISupportedExternalAccessoryProtocols` (next to Meta's `com.meta.ar.wearable`), and the
+`external-accessory` background mode is present, so iAP2 is tried whenever a paired accessory
+offers them. To use it:
 
-1. Add both strings to the existing `UISupportedExternalAccessoryProtocols` array (the
-   `external-accessory` background mode is already present):
-   ```xml
-   <string>ql.iap2.protocol02</string>
-   <string>ql.iap2.protocol01</string>
-   ```
-   No entitlement or code change is needed; builds without them compile and simply use BLE.
-2. Pair the glasses in iOS Settings ▸ Bluetooth (iAP2 runs over Classic Bluetooth) and close the
+1. Pair the glasses in iOS Settings ▸ Bluetooth (iAP2 runs over Classic Bluetooth) and close the
    official MemoMind app: iOS gives each protocol to one app session at a time.
-3. For App Store or TestFlight distribution, the accessory maker (MFi licensee) must add the app's
+2. For App Store or TestFlight distribution, the accessory maker (MFi licensee) must add the app's
    bundle ID to the accessory's MFi product plan and supply the PPID for App Review; Apple rejects
-   apps that declare accessory protocols without it. Development builds do not need it.
+   apps that declare accessory protocols without it. Development builds do not need it. Remove
+   the two `ql.iap2.*` strings from a store build if that approval is not in place; the app then
+   falls back to BLE.
    The vendor's guide notes that publishing a protocol name does not grant an accessory session.
 
 ## Web plugins

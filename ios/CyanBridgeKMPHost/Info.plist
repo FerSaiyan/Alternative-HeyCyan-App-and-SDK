@@ -78,6 +78,8 @@
 	<key>UISupportedExternalAccessoryProtocols</key>
 	<array>
 		<string>com.meta.ar.wearable</string>
+		<string>ql.iap2.protocol02</string>
+		<string>ql.iap2.protocol01</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
