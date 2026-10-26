@@ -5,6 +5,8 @@ data class LocalAgentObservation(
     val packageName: String?,
     val screenText: String?,
     val screenSnapshot: LocalAgentScreenSnapshot?,
+    /** Validated screenshot copy for this step, present only when the Tasker profile opts in. */
+    val screenshotPath: String? = null,
 )
 
 data class LocalAgentScreenSnapshot(

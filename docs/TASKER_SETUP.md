@@ -33,6 +33,16 @@ Current projects include:
 
 After importing a project, accept Tasker's replace/import prompt and ensure its profiles are enabled.
 
+## Local Agent screenshots (optional, off by default)
+
+The Local Agent normally plans from the screen text and structure that AutoInput reports. You can also let it see a screenshot of each step:
+
+1. In Tasker, open **Vars** and add the global variable `%CB_LocalAgentScreenshot` with the value `1`. Set it to `0`, or delete it, to turn screenshots off again.
+2. Run a Local Agent task. On the first capture, Android may ask you to allow Tasker to capture the screen. Some Android versions ask every time. Allow it, or the step stays text-only.
+3. Open **Local Agent settings** and check **Screenshot status**. It reads "Screenshot attached to the planner for this step." when a screenshot was used, and "Text-only planning" when none was.
+
+**Privacy:** turning this on means each planning screenshot goes to the planner you selected. With the Pro relay or another cloud planner, the screenshot is sent to that provider. With an on-device model, it stays on the phone. Apps listed in `%CB_LocalAgentBlocked` are never captured. Tasker deletes its temporary files in `/sdcard/Tasker/cyanbridge/` right after each capture, and CyanBridge deletes its copy after the planning step. Screenshots are not saved in Local Agent history or memory.
+
 ## Gemini / ChatGPT version verification
 
 The assistant projects expose a version handshake:

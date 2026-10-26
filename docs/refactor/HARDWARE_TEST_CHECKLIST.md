@@ -448,3 +448,18 @@ The SDK's own lines appear under its `Bridge` log tags (`MAN:`, `LIVE:`).
 10. **Video.** Video starts and stops a recording on the glasses ("Video recording started/stopped").
 11. **Advanced → Device info.** Battery, Version (firmware), Sync time, Volume (0-15).
 12. **Not wired (should say so, not fail silently).** Sync Wi-Fi shows "not supported yet". Audio recording points to meeting capture. There is no live preview card.
+
+## Local Agent screenshots through Tasker (Android)
+
+Needs a phone with Tasker, AutoInput (Accessibility on) and the current `CyanBridge_LocalAgent_Tasker.prj.xml` imported from Plugins. Filter logcat with `adb logcat -s TaskerLocalAgent LocalAgentBrain`. Tasker's run log (Tasker → Monitoring → Run Log) shows the "CyanBridge LocalAgent Observe Handler" actions.
+
+1. **Settings screen.** Local Agent settings no longer has the "Use screenshots…" and "Allow screenshots to be sent to remote planners" switches. The Screenshot planning section shows the new description and "Screenshot status". The rest of the screen looks as before.
+2. **Onboarding text.** The accessibility disclosure in onboarding, and the dialog behind the Local Agent "Accessibility service" row, say that CyanBridge has no Accessibility service of its own and that screenshots are an off-by-default Tasker setting.
+3. **Off by default.** With `%CB_LocalAgentScreenshot` unset, run a Local Agent task (for example "Open Chrome and search for weather"). The run log shows Take Screenshot skipped (its condition is false). There is no capture prompt and no files in `/sdcard/Tasker/cyanbridge/`. Screenshot status reads "Text-only planning". The task behaves as before.
+4. **Turn it on.** In Tasker → Vars, add `%CB_LocalAgentScreenshot` = `1`. Run the same task with an on-device model that has a vision projector. Allow Tasker's screen-capture prompt if Android shows it. Screenshot status reads "Screenshot attached to the planner for this step." `/sdcard/Tasker/cyanbridge/` is empty after each step, and `adb shell run-as com.fersaiyan.cyanbridge ls cache/localagent-screenshots` is empty after the task (debug build).
+5. **Text-only model.** With a local model without vision, the task still runs. The status reads "Multimodal planning was unavailable; used text-only planning."
+6. **Pro relay.** Select the Pro planner and run a task with the step on. The status reads "Screenshot attached…". This is the case where the screenshot leaves the phone.
+7. **Blocked app.** Put the foreground app's package in `%CB_LocalAgentBlocked`. The observation returns `blocked_package:…` and no screenshot is taken.
+8. **Capture refused.** Deny Tasker's capture prompt (or revoke it). The observation still arrives within the timeout, with text only. The run log shows Take Screenshot failing and the task continuing. Note how often Android shows the prompt on this Android version, and whether the step still fits the 8 s observation timeout.
+9. **Turn it off.** Set `%CB_LocalAgentScreenshot` to `0`. The next task is text-only again.
+10. **CI HIL tests** (`LocalAiTasker*HilTest`, `LocalAgentEmailApprovalHilTest`) still pass with the variable unset on the HIL phone.

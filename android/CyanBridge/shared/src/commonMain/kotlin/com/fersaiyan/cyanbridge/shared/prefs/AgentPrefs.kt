@@ -38,9 +38,7 @@ object AgentPrefs {
         val autoExecuteLowRisk = boolean("auto_execute_low_risk", true)
         val whatsAppNotificationReadAloud = boolean("whatsapp_notification_read_aloud", false)
 
-        /** Capture and remote upload are separate opt-ins. */
-        val screenshotPlanningEnabled = boolean("screenshot_planning_enabled", false)
-        val remoteScreenshotUploadEnabled = boolean("remote_screenshot_upload_enabled", false)
+        /** Last planner media status; screenshots are opted in from the Tasker profile. */
         val screenshotStatus = string("screenshot_status", "Text-only planning")
         val shizukuFallbackEnabled = boolean("shizuku_fallback_enabled", false)
         val shizukuStatus = string("shizuku_status", "Disabled")

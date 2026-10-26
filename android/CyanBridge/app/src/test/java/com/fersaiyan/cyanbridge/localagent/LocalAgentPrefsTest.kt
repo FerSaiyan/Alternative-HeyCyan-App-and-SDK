@@ -22,20 +22,4 @@ class LocalAgentPrefsTest {
 
         LocalAgentPrefs.setWhatsAppNotificationReadAloudEnabled(context, false)
     }
-
-    @Test
-    fun `remote screenshot upload requires a separate capture opt in`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        LocalAgentPrefs.setScreenshotPlanningEnabled(context, false)
-        LocalAgentPrefs.setRemoteScreenshotUploadEnabled(context, true)
-        assertFalse(LocalAgentPrefs.isRemoteScreenshotUploadEnabled(context))
-
-        LocalAgentPrefs.setScreenshotPlanningEnabled(context, true)
-        LocalAgentPrefs.setRemoteScreenshotUploadEnabled(context, true)
-        assertTrue(LocalAgentPrefs.isScreenshotPlanningEnabled(context))
-        assertTrue(LocalAgentPrefs.isRemoteScreenshotUploadEnabled(context))
-
-        LocalAgentPrefs.setScreenshotPlanningEnabled(context, false)
-        assertFalse(LocalAgentPrefs.isRemoteScreenshotUploadEnabled(context))
-    }
 }

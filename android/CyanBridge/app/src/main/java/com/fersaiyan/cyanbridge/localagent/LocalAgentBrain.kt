@@ -97,14 +97,17 @@ class RemoteUiControlLocalAgentBrain(
             )
         )
 
-        // Planning is text-only: CyanBridge has no screen capture of its own.
+        // CyanBridge has no screen capture of its own. A screenshot is present only when the user
+        // turned on the Tasker profile's screenshot step, which is also their consent to send it
+        // to the selected planner, remote ones included.
+        val screenshotPath = observation.screenshotPath
         val inference = AgentInferenceRouter.completeUiPlanning(
             context = context,
             sessionId = "local-agent-ui-${taskState.startedAtMs}",
             systemPrompt = prompt.system + USER_ANSWER_GROUNDING_PROMPT,
             userPrompt = prompt.user,
-            imagePath = null,
-            allowRemoteImageUpload = false,
+            imagePath = screenshotPath,
+            allowRemoteImageUpload = screenshotPath != null,
         )
         LocalAgentPrefs.setScreenshotStatus(context, inference.mediaStatus)
         val raw = inference.content

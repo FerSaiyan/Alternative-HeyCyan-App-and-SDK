@@ -12,8 +12,8 @@ import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 
 /**
  * Local agent settings in `local_agent_prefs`: automation and routing (provider, glasses mode,
- * capture), runtime status and approvals, screenshot/Shizuku controls, and the on-device
- * runtime toggle.
+ * capture), runtime status and approvals, planner media status, Shizuku controls, and the
+ * on-device runtime toggle.
  * Keys, types and defaults are declared in [LocalAgent].
  */
 object LocalAgentPrefs {
@@ -197,23 +197,7 @@ object LocalAgentPrefs {
 
     fun getLastContextInjectionAtMs(context: Context): Long = LocalAgent.lastContextInjectionAtMs[context]
 
-    fun isScreenshotPlanningEnabled(context: Context): Boolean = LocalAgent.screenshotPlanningEnabled[context]
-
-    fun setScreenshotPlanningEnabled(context: Context, enabled: Boolean) {
-        // Requiring a fresh upload opt-in after capture is disabled is the safest default.
-        val upload = enabled && isRemoteScreenshotUploadEnabled(context)
-        LocalAgent.edit(context) {
-            this[LocalAgent.screenshotPlanningEnabled] = enabled
-            this[LocalAgent.remoteScreenshotUploadEnabled] = upload
-        }
-    }
-
-    fun isRemoteScreenshotUploadEnabled(context: Context): Boolean = LocalAgent.remoteScreenshotUploadEnabled[context]
-
-    fun setRemoteScreenshotUploadEnabled(context: Context, enabled: Boolean) {
-        LocalAgent.remoteScreenshotUploadEnabled[context] = enabled && isScreenshotPlanningEnabled(context)
-    }
-
+    /** Last planner media status: text-only, or whether a Tasker screenshot was attached. */
     fun getScreenshotStatus(context: Context): String = LocalAgent.screenshotStatus[context]
 
     fun setScreenshotStatus(context: Context, status: String) {

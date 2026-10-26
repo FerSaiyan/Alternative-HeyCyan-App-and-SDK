@@ -59,8 +59,6 @@ class LocalAiTaskerYouTubeHilTest {
         val previousAutomationEnabled = AutomationPrefs.isLocalAgentAutomationEnabled(context)
         val previousMaxSteps = AutomationPrefs.getMaxSteps(context)
         val previousRequireConfirmation = RuntimePrefs.isRequireActionConfirmationEnabled(context)
-        val previousScreenshotPlanning = RuntimePrefs.isScreenshotPlanningEnabled(context)
-        val previousRemoteScreenshotUpload = RuntimePrefs.isRemoteScreenshotUploadEnabled(context)
 
         ActivityScenario.launch(HilFixtureActivity::class.java).use {
             try {
@@ -68,8 +66,6 @@ class LocalAiTaskerYouTubeHilTest {
                 AutomationPrefs.setLocalAgentAutomationEnabled(context, true)
                 AutomationPrefs.setMaxSteps(context, 20)
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, false)
-                RuntimePrefs.setScreenshotPlanningEnabled(context, false)
-                RuntimePrefs.setRemoteScreenshotUploadEnabled(context, false)
                 RuntimePrefs.setStatus(context, "HIL YouTube local AI starting")
                 RuntimePrefs.clearLastError(context)
 
@@ -103,8 +99,6 @@ class LocalAiTaskerYouTubeHilTest {
                 AutomationPrefs.setLocalAgentAutomationEnabled(context, previousAutomationEnabled)
                 AutomationPrefs.setMaxSteps(context, previousMaxSteps)
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, previousRequireConfirmation)
-                RuntimePrefs.setScreenshotPlanningEnabled(context, previousScreenshotPlanning)
-                RuntimePrefs.setRemoteScreenshotUploadEnabled(context, previousRemoteScreenshotUpload)
             }
         }
     }

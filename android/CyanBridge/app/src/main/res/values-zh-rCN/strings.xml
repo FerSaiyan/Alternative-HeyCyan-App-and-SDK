@@ -84,7 +84,6 @@
     <string name="app_lock_guide_button">完成设置</string>
 
     <string name="local_agent_accessibility_service_label">本地智能体自动化</string>
-    <string name="local_agent_accessibility_service_description">为本地智能体启用设备端自动化功能，包括在本地智能体设置中明确启用后才能使用的可选屏幕截图功能。</string>
     <string name="local_agent_accessibility_description">本地智能体屏幕观察器（MVP）</string>
 
     <string name="onboarding_local_model_title">选择设备端 AI</string>
@@ -97,7 +96,7 @@
     <string name="onboarding_screen_capture_desc">在“插件”中启用后，AutoDiary 可以读取屏幕文字，用于本地记忆。</string>
     <string name="onboarding_screen_capture_details">屏幕文字会在本地存储，用于 AutoDiary。本地智能体的手机控制功能只会为您明确请求的操作读取当前界面。黑名单中的应用会被跳过。在 Android 设置中启用此可选功能前，请先阅读下方的无障碍说明。</string>
     <string name="onboarding_accessibility_disclosure_title">无障碍访问说明</string>
-    <string name="onboarding_accessibility_disclosure_body">CyanBridge 仅在您启用后才会使用 Android 无障碍功能。无障碍功能允许 CyanBridge 读取屏幕上应用的文字和界面结构，用于保存可选的屏幕记忆，并让本地智能体代您点按、输入、滚动和导航。屏幕内容会在本地存储，用于屏幕记忆。当您请求本地智能体执行操作时，您当前的屏幕内容可能会由您选择的 AI 提供商处理；如果您选择了云端提供商，也可能由云端处理。本地智能体的可选屏幕截图需要单独设置，除非您另行允许远程上传，否则绝不会发送给远程规划器。黑名单中的应用会被跳过。CyanBridge 不会自动启用无障碍功能，您可以随时关闭无障碍功能、屏幕记忆或本地智能体。</string>
+    <string name="onboarding_accessibility_disclosure_body">CyanBridge 没有自己的无障碍服务。屏幕记忆和本地智能体通过 Tasker 和 AutoInput 工作：AutoInput 的无障碍服务读取屏幕上应用的文字和界面结构，并让本地智能体代您点按、输入、滚动和导航。AutoInput 的无障碍功能由您自行开启，CyanBridge 绝不会自动开启。屏幕内容会在本地存储，用于屏幕记忆。当您请本地智能体执行操作时，当前屏幕内容可能会由您选择的 AI 提供商处理；如果您选择了云端提供商，也可能由云端处理。屏幕截图是可选的，默认关闭。您可以在 CyanBridge Local Agent 的 Tasker 配置文件中开启；开启后，每张用于规划的截图都会发送给您选择的规划器，包括云端或 Pro 规划器。您在 Tasker 中屏蔽的应用会被跳过。您可以随时关闭 AutoInput 的无障碍功能、屏幕记忆或本地智能体。</string>
     <string name="onboarding_local_agent_toggle">启用本地智能体手机控制</string>
     <string name="onboarding_open_accessibility_settings">查看并启用无障碍功能</string>
     <string name="meta_pairing_title">配对 Meta 眼镜</string>

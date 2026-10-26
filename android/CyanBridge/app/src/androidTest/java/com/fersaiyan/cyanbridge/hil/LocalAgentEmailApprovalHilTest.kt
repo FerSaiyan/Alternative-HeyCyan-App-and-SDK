@@ -80,8 +80,6 @@ class LocalAgentEmailApprovalHilTest {
         val previousAutomationEnabled = AutomationPrefs.isLocalAgentAutomationEnabled(context)
         val previousMaxSteps = AutomationPrefs.getMaxSteps(context)
         val previousRequireConfirmation = RuntimePrefs.isRequireActionConfirmationEnabled(context)
-        val previousScreenshotPlanning = RuntimePrefs.isScreenshotPlanningEnabled(context)
-        val previousRemoteScreenshotUpload = RuntimePrefs.isRemoteScreenshotUploadEnabled(context)
         val previousEmbeddingEnabled = AutomationPrefs.isEmbeddingDecisionEnabled(context)
 
         val providerForTest = if (HilTestSupport.proPlannerRequired ||
@@ -129,8 +127,6 @@ class LocalAgentEmailApprovalHilTest {
                 // embedding gate out so this test isolates that path.
                 AutomationPrefs.setEmbeddingDecisionEnabled(context, false)
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, true)
-                RuntimePrefs.setScreenshotPlanningEnabled(context, false)
-                RuntimePrefs.setRemoteScreenshotUploadEnabled(context, false)
                 RuntimePrefs.clearLastApprovalVoicePrompt(context)
                 RuntimePrefs.clearLastApprovalVoiceReply(context)
                 RuntimePrefs.setStatus(context, "HIL email task starting")
@@ -264,8 +260,6 @@ class LocalAgentEmailApprovalHilTest {
                 AutomationPrefs.setMaxSteps(context, previousMaxSteps)
                 AutomationPrefs.setEmbeddingDecisionEnabled(context, previousEmbeddingEnabled)
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, previousRequireConfirmation)
-                RuntimePrefs.setScreenshotPlanningEnabled(context, previousScreenshotPlanning)
-                RuntimePrefs.setRemoteScreenshotUploadEnabled(context, previousRemoteScreenshotUpload)
             }
         }
         }

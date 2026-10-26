@@ -125,8 +125,6 @@ class PrefsInventoryTest {
         local_agent_prefs/require_action_confirmation BOOLEAN true
         local_agent_prefs/auto_execute_low_risk BOOLEAN true
         local_agent_prefs/whatsapp_notification_read_aloud BOOLEAN false
-        local_agent_prefs/screenshot_planning_enabled BOOLEAN false
-        local_agent_prefs/remote_screenshot_upload_enabled BOOLEAN false
         local_agent_prefs/screenshot_status STRING "Text-only planning"
         local_agent_prefs/shizuku_fallback_enabled BOOLEAN false
         local_agent_prefs/shizuku_status STRING "Disabled"

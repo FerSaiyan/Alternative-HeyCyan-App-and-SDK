@@ -36,11 +36,7 @@
     <string name="compose_local_agent_provider_description">AI 제공자와 로컬 모델 설정은 설정에서 관리합니다.</string>
     <string name="compose_open_settings">설정 열기</string>
     <string name="compose_local_agent_screenshot_planning">스크린샷 계획</string>
-    <string name="compose_local_agent_screenshot_description">스크린샷은 선택적인 임시 계획 첨부 파일입니다. 스크린샷 캡처나 비전 기능을 사용할 수 없어도 접근성 텍스트와 구조화된 UI는 계속 사용할 수 있습니다.</string>
-    <string name="compose_local_agent_use_screenshots">Local Agent 계획에 스크린샷 사용</string>
-    <string name="compose_local_agent_remote_screenshots">원격 계획자에게 스크린샷 전송 허용</string>
-    <string name="compose_local_agent_screenshot_requirements">Android 11 이상 및 접근성 스크린샷 지원이 필요합니다. 각 계획 단계 후 스크린샷을 삭제하며 Local Agent 기록이나 메모리에 추가하지 않습니다.</string>
-    <string name="compose_local_agent_remote_screenshot_consent">기본적으로 꺼져 있습니다. 선택한 클라우드, 릴레이 또는 원격 OpenAI 호환 계획자에게 현재 스크린샷을 보내는 데 동의하는 경우에만 켜세요. 그렇지 않으면 원격 계획은 텍스트만 사용합니다.</string>
+    <string name="compose_local_agent_screenshot_description">스크린샷은 기본적으로 꺼져 있습니다. 플래너가 화면을 보게 하려면 CyanBridge Local Agent Tasker 프로필에서 Tasker 변수 CB_LocalAgentScreenshot을 1로 설정하세요. 그러면 Tasker가 관찰할 때마다 스크린샷을 보내고, CyanBridge는 계획 단계가 끝나면 이를 삭제합니다. 클라우드 또는 Pro 플래너를 사용하면 스크린샷이 해당 제공업체로 전송됩니다.</string>
     <string name="compose_local_agent_screenshot_status">스크린샷 상태: %1$s</string>
     <string name="compose_local_agent_runtime_safety">런타임 및 안전</string>
     <string name="compose_local_agent_runtime_description">에이전트는 접근 가능한 앱 UI를 확인하고 탭, 입력, 양식 제출, 스크롤 및 앱 열기를 수행할 수 있습니다. 통화, SMS 및 이메일은 기본 다이얼러나 작성기를 열며 기본 승인 정책에서 고위험 작업으로 처리됩니다. 휴대전화가 잠겨 있거나 비활성 상태이면 휴대전화 제어와 스크린샷 계획이 중지됩니다.</string>

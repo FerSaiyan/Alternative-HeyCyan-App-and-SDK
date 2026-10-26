@@ -132,8 +132,6 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
             autoExecuteLowRisk = RuntimePrefs.isAutoExecuteLowRiskEnabled(this),
             notificationListenerEnabled = NotificationForwarderService.isListenerBound(this),
             whatsappNotificationReadAloud = RuntimePrefs.isWhatsAppNotificationReadAloudEnabled(this),
-            screenshotPlanningEnabled = RuntimePrefs.isScreenshotPlanningEnabled(this),
-            remoteScreenshotUploadEnabled = RuntimePrefs.isRemoteScreenshotUploadEnabled(this),
             screenshotStatus = RuntimePrefs.getScreenshotStatus(this),
             shizukuFallbackEnabled = RuntimePrefs.isShizukuFallbackEnabled(this),
             shizukuAvailability = LocalAgentShizukuFallback.availability().statusText,
@@ -162,16 +160,6 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
 
     override fun onOpenSettings() {
         startActivity(Intent(this, com.fersaiyan.cyanbridge.ui.SettingsActivity::class.java))
-    }
-
-    override fun onScreenshotPlanningChange(enabled: Boolean) {
-        RuntimePrefs.setScreenshotPlanningEnabled(this, enabled)
-        refreshUi()
-    }
-
-    override fun onRemoteScreenshotUploadChange(enabled: Boolean) {
-        RuntimePrefs.setRemoteScreenshotUploadEnabled(this, enabled)
-        refreshUi()
     }
 
     override fun onMaxStepsChange(maxSteps: Int) {
@@ -373,8 +361,6 @@ data class LocalAgentSettingsUiState(
     val autoExecuteLowRisk: Boolean = true,
     val notificationListenerEnabled: Boolean = false,
     val whatsappNotificationReadAloud: Boolean = false,
-    val screenshotPlanningEnabled: Boolean = false,
-    val remoteScreenshotUploadEnabled: Boolean = false,
     val screenshotStatus: String = "Text-only planning",
     val shizukuFallbackEnabled: Boolean = false,
     val shizukuAvailability: String = "Shizuku is unavailable",
@@ -388,8 +374,6 @@ interface LocalAgentSettingsActions {
     fun onBack()
     fun onEnabledChange(enabled: Boolean)
     fun onOpenSettings()
-    fun onScreenshotPlanningChange(enabled: Boolean)
-    fun onRemoteScreenshotUploadChange(enabled: Boolean)
     fun onOpenAccessibilitySettings()
     fun onMaxStepsChange(maxSteps: Int)
     fun onRequireActionConfirmationChange(enabled: Boolean)
@@ -465,27 +449,6 @@ fun LocalAgentSettingsScreen(
             SectionTitle(stringResource(R.string.compose_local_agent_screenshot_planning))
             Text(
                 stringResource(R.string.compose_local_agent_screenshot_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SwitchSetting(
-                label = stringResource(R.string.compose_local_agent_use_screenshots),
-                checked = state.screenshotPlanningEnabled,
-                onCheckedChange = actions::onScreenshotPlanningChange,
-            )
-            Text(
-                stringResource(R.string.compose_local_agent_screenshot_requirements),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SwitchSetting(
-                label = stringResource(R.string.compose_local_agent_remote_screenshots),
-                checked = state.remoteScreenshotUploadEnabled,
-                enabled = state.screenshotPlanningEnabled,
-                onCheckedChange = actions::onRemoteScreenshotUploadChange,
-            )
-            Text(
-                stringResource(R.string.compose_local_agent_remote_screenshot_consent),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -36,11 +36,7 @@ Ultima versione: %2$s</string>
     <string name="compose_local_agent_provider_description">Il provider AI e la configurazione dei modelli locali sono gestiti nelle Impostazioni.</string>
     <string name="compose_open_settings">Apri Impostazioni</string>
     <string name="compose_local_agent_screenshot_planning">Pianificazione con schermate</string>
-    <string name="compose_local_agent_screenshot_description">Le schermate sono allegati di pianificazione facoltativi e temporanei. Il testo di accessibilita e l interfaccia strutturata restano disponibili quando l acquisizione o la visione non sono disponibili.</string>
-    <string name="compose_local_agent_use_screenshots">Usa schermate per la pianificazione di Local Agent</string>
-    <string name="compose_local_agent_remote_screenshots">Consenti l invio delle schermate ai pianificatori remoti</string>
-    <string name="compose_local_agent_screenshot_requirements">Sono richiesti Android 11 o versioni successive e il supporto alle schermate dell accessibilita. Le schermate vengono eliminate dopo ogni passaggio e non vengono aggiunte alla cronologia o alla memoria di Local Agent.</string>
-    <string name="compose_local_agent_remote_screenshot_consent">Disattivato per impostazione predefinita. Attivalo solo se autorizzi il pianificatore cloud, relay o remoto compatibile con OpenAI selezionato a ricevere la schermata corrente. Altrimenti la pianificazione remota resta solo testuale.</string>
+    <string name="compose_local_agent_screenshot_description">Gli screenshot sono disattivati per impostazione predefinita. Per far vedere lo schermo al pianificatore, imposta a 1 la variabile Tasker CB_LocalAgentScreenshot nel profilo CyanBridge Local Agent. Tasker invierà uno screenshot con ogni osservazione e CyanBridge lo eliminerà dopo il passaggio di pianificazione. Con un pianificatore cloud o Pro, lo screenshot viene inviato a quel provider.</string>
     <string name="compose_local_agent_screenshot_status">Stato schermata: %1$s</string>
     <string name="compose_local_agent_runtime_safety">Runtime e sicurezza</string>
     <string name="compose_local_agent_runtime_description">L agente puo ispezionare l interfaccia accessibile, toccare, digitare, inviare moduli, scorrere e aprire app. Chiamate, SMS ed email aprono il dialer o il compositore nativo e sono considerate ad alto rischio dalla politica di approvazione predefinita. Il controllo del telefono e la pianificazione con schermate si interrompono quando il telefono e bloccato o inattivo.</string>

@@ -55,7 +55,6 @@
 
     <!-- Local agent automation (AccessibilityService) -->
     <string name="local_agent_accessibility_service_label">Local Agent Automation</string>
-    <string name="local_agent_accessibility_service_description">Enables on-device automation primitives for the Local Agent, including optional screenshot capture when explicitly enabled in Local Agent settings.</string>
 
     <!-- Legacy/compat: kept for code added by local-agent-service worktree -->
     <string name="local_agent_accessibility_description">Local agent screen observer (MVP)</string>
@@ -94,7 +93,7 @@
     <string name="onboarding_screen_capture_desc">AutoDiary can read screen text for local memory when you enable it from Plugins.</string>
     <string name="onboarding_screen_capture_details">Screen text is stored locally for AutoDiary. Local Agent phone control reads the current interface only for actions you explicitly request. Apps in your blacklist are skipped. Review the Accessibility disclosure below before enabling this optional feature in Android settings.</string>
     <string name="onboarding_accessibility_disclosure_title">Accessibility access disclosure</string>
-    <string name="onboarding_accessibility_disclosure_body">CyanBridge uses Android Accessibility only if you enable it. Accessibility lets CyanBridge read text and interface structure from apps on your screen. It is used to save optional Screen Memory and to let the Local Agent tap, type, scroll, and navigate on your behalf. Screen content is stored locally for Screen Memory. When you request a Local Agent action, current screen content may be processed by the AI provider you selected, including a cloud provider if you chose one. Optional Local Agent screenshots require a separate setting and are never sent to a remote planner unless you separately allow remote screenshot upload. Apps in your blacklist are skipped. CyanBridge does not enable Accessibility automatically, and you can turn off Accessibility, Screen Memory, or Local Agent at any time.</string>
+    <string name="onboarding_accessibility_disclosure_body">CyanBridge has no Accessibility service of its own. Screen Memory and the Local Agent work through Tasker and AutoInput: AutoInput\'s Accessibility service reads the text and interface structure of the app on your screen and lets the Local Agent tap, type, scroll, and navigate on your behalf. You enable AutoInput\'s Accessibility yourself; CyanBridge never turns it on. Screen content for Screen Memory is stored locally. When you ask the Local Agent to do something, the current screen content may be processed by the AI provider you selected, including a cloud provider if you chose one. Screenshots are optional and off by default. You turn them on in the CyanBridge Local Agent Tasker profile; after that, each planning screenshot goes to the planner you selected, including a cloud or Pro planner. Apps you block in Tasker are skipped. You can turn off AutoInput\'s Accessibility, Screen Memory, or the Local Agent at any time.</string>
     <string name="onboarding_local_agent_toggle">Enable Local Agent phone control</string>
     <string name="onboarding_open_accessibility_settings">Review and enable Accessibility</string>
     <string name="onboarding_skip_all">Skip all</string>

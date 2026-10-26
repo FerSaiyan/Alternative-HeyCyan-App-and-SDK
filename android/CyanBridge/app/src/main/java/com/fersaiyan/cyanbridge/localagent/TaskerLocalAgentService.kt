@@ -32,6 +32,7 @@ import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentActionManager
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalClarifier
 import com.fersaiyan.cyanbridge.localagent.actions.LocalAgentApprovalCoordinator
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
+import com.fersaiyan.cyanbridge.localagent.tasker.TaskerScreenshotStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -271,19 +272,24 @@ class TaskerLocalAgentService : Service() {
                 }
 
                 val replayingSavedSkill = pendingSavedSkill != null
-                val output = pendingSavedSkill?.let { skill ->
-                    pendingSavedSkill = null
-                    LocalAgentBrainOutput(
-                        actions = skill.actions,
-                        note = "Replaying saved navigation skill through Tasker.",
+                val output = try {
+                    pendingSavedSkill?.let { skill ->
+                        pendingSavedSkill = null
+                        LocalAgentBrainOutput(
+                            actions = skill.actions,
+                            note = "Replaying saved navigation skill through Tasker.",
+                        )
+                    } ?: withTimeoutOrNull(BRAIN_TIMEOUT_MS) {
+                        brain.next(applicationContext, taskState, observation)
+                    } ?: LocalAgentBrainOutput(
+                        actions = listOf(LocalAgentAction.Finish("Brain call timed out.")),
+                        note = "brain_timeout",
+                        isComplete = true,
                     )
-                } ?: withTimeoutOrNull(BRAIN_TIMEOUT_MS) {
-                    brain.next(applicationContext, taskState, observation)
-                } ?: LocalAgentBrainOutput(
-                    actions = listOf(LocalAgentAction.Finish("Brain call timed out.")),
-                    note = "brain_timeout",
-                    isComplete = true,
-                )
+                } finally {
+                    // The optional Tasker screenshot is only for this planning step.
+                    TaskerScreenshotStore.delete(applicationContext, observation.screenshotPath)
+                }
 
                 if (output.actions.isEmpty()) {
                     taskState = taskState.nextStep(output.note ?: "no_action", failed = true)

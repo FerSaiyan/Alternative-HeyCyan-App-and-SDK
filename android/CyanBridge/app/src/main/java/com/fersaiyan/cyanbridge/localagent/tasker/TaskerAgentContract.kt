@@ -29,6 +29,45 @@ object TaskerAgentContract {
     const val EXTRA_ERROR = "error"
     const val EXTRA_RESPONSE = "response"
 
+    /** Observation field carrying the optional Tasker screenshot (base64 JPEG/PNG/WebP). */
+    const val FIELD_SCREENSHOT_BASE64 = "screenshot_base64"
+
+    /** Larger images cannot cross the broadcast transport reliably; Tasker caps lower. */
+    const val MAX_SCREENSHOT_BYTES = 1_000_000
+
+    /**
+     * Decoded screenshot bytes from an observation payload, or null when the Tasker profile
+     * did not attach one (the default) or the attachment is not a plausible image.
+     */
+    fun screenshotFromJson(raw: String): ByteArray? {
+        val encoded = runCatching { JSONObject(raw).optString(FIELD_SCREENSHOT_BASE64) }
+            .getOrNull()
+            ?.filterNot(Char::isWhitespace)
+            ?.takeIf { it.isNotEmpty() && it.length <= (MAX_SCREENSHOT_BYTES / 3 + 1) * 4 }
+            ?: return null
+        val bytes = runCatching { java.util.Base64.getDecoder().decode(encoded) }.getOrNull()
+            ?: return null
+        return bytes.takeIf { isSupportedImage(it) }
+    }
+
+    /** Size bound plus JPEG, PNG or WebP magic bytes. */
+    fun isSupportedImage(bytes: ByteArray): Boolean = imageExtension(bytes) != null
+
+    /** File extension matching the image magic bytes, or null when [bytes] is not a usable image. */
+    fun imageExtension(bytes: ByteArray): String? {
+        if (bytes.size !in MIN_IMAGE_BYTES..MAX_SCREENSHOT_BYTES) return null
+        fun at(index: Int, vararg expected: Int) =
+            expected.withIndex().all { (offset, value) -> bytes[index + offset] == value.toByte() }
+        return when {
+            at(0, 0xFF, 0xD8, 0xFF) -> "jpg"
+            at(0, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) -> "png"
+            at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50) -> "webp"
+            else -> null
+        }
+    }
+
+    private const val MIN_IMAGE_BYTES = 16
+
     fun observationFromJson(raw: String): LocalAgentObservation {
         val json = JSONObject(raw)
         val packageName = json.optString("package_name").takeIf { it.isNotBlank() }
