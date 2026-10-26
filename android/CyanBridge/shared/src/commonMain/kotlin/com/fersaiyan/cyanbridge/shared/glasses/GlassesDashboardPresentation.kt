@@ -140,6 +140,15 @@ data class MetaRaybanUiState(
     val canStopStream: Boolean = false,
     val canCapturePhoto: Boolean = false,
     val hasCapturedPhoto: Boolean = false,
+    /** The path Meta AI took on the last registration, shown with the device info. */
+    val registrationPath: MetaRegistrationPath = MetaRegistrationPath.UNKNOWN,
+    /**
+     * iOS: show the Developer Mode / email setup choice in this panel (Android shows it on
+     * MetaPairingActivity), with [registrationPhase] and [appIdConfigured] feeding it.
+     */
+    val showSetupChoice: Boolean = false,
+    val registrationPhase: MetaRegistrationPhase = MetaRegistrationPhase.NOT_REGISTERED,
+    val appIdConfigured: Boolean = true,
 )
 
 data class MeizuMyvuUiState(
