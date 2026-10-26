@@ -71,6 +71,20 @@ class MentraOtaMachineTest {
     }
 
     @Test
+    fun aNewGlassesAppBuildEndsTheAppStepAndAContinuationIsOffered() {
+        var s = M.startRequested(available(), nowMs = 0, buildNumber = "41")
+        s = M.status(s, status("in_progress", "apk", "install", percent = 50), 1_000)
+        assertEquals(s, M.buildChanged(s, "41", 2_000))
+        s = M.buildChanged(s, "45", 2_000)
+        assertEquals(MentraOtaStage.FINISHING, s.stage)
+        s = M.tick(s, 2_000 + M.SETTLE_MS)
+        s = M.checkSucceeded(s, s.checkToken, manifest, MentraOtaRules.offer(manifest, versions.copy(buildNumber = "45")))
+        assertEquals(MentraOtaStage.UPDATE_AVAILABLE, s.stage)
+        assertTrue(s.installedDuringSession)
+        assertEquals(setOf(MentraOtaComponent.BES), s.offer?.components)
+    }
+
+    @Test
     fun aBesInstallFailureRequiresAGlassesRestartBeforeAnything() {
         var s = M.startRequested(available(), nowMs = 0)
         s = M.status(s, status("in_progress", "bes", "install", percent = 30), 1_000)

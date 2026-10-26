@@ -90,6 +90,7 @@ class MentraFirmwareUpdateSession(
     private var handledCheckToken = 0
     private var startJob: Job? = null
     private var lastStage: MentraOtaStage? = null
+    private var screenOpened = false
     private var updateActive = false
 
     init {
@@ -102,6 +103,13 @@ class MentraFirmwareUpdateSession(
         scope.launch {
             port.glasses.map { it.ready }.distinctUntilChanged().collect { ready ->
                 reduce { MentraOtaMachine.connectionChanged(it, ready, clock()) }
+                // The screen opened before the glasses connected: check now.
+                if (ready && screenOpened && state.value.stage == MentraOtaStage.IDLE) check()
+            }
+        }
+        scope.launch {
+            port.glasses.map { it.versions.buildNumber }.distinctUntilChanged().collect { build ->
+                reduce { MentraOtaMachine.buildChanged(it, build, clock()) }
             }
         }
         scope.launch { state.collect(::onState) }
@@ -122,6 +130,7 @@ class MentraFirmwareUpdateSession(
 
     /** Called when the screen opens: reads the versions and checks, unless an update runs. */
     fun onScreenOpened() {
+        screenOpened = true
         val current = state.value
         if (current.isActive) return
         scope.launch { runCatching { port.refreshVersions() } }
@@ -153,7 +162,8 @@ class MentraFirmwareUpdateSession(
         }
         lease = acquired
         signalUpdateActive(true)
-        reduce { MentraOtaMachine.startRequested(it, clock()) }
+        val build = port.glasses.value.versions.buildNumber
+        reduce { MentraOtaMachine.startRequested(it, clock(), build) }
         PlatformLogger.i(TAG, "Update pass ${state.value.passes} starting: ${current.offer?.components} -> ${current.offer?.manifest?.releaseVersion}")
         startJob = scope.launch {
             try {
@@ -240,18 +250,30 @@ class MentraFirmwareUpdateSession(
 
     private fun runCheck(token: Int) {
         scope.launch {
-            try {
-                val result = port.checkForUpdate()
-                runCatching { port.refreshVersions() }
-                val offer = if (result.updateAvailable) MentraOtaRules.offer(result.manifest, port.glasses.value.versions) else null
-                PlatformLogger.i(TAG, "Check: updateAvailable=${result.updateAvailable} release=${result.manifest.releaseVersion} components=${offer?.components}")
-                reduce { MentraOtaMachine.checkSucceeded(it, token, result.manifest, offer) }
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (error: Throwable) {
-                val unofficial = (error as? MentraOtaCheckException)?.unofficialClient == true
-                PlatformLogger.w(TAG, "Check failed: ${error.message}", error)
-                reduce { MentraOtaMachine.checkFailed(it, token, unofficial) }
+            var attempt = 1
+            while (true) {
+                try {
+                    val result = port.checkForUpdate()
+                    runCatching { port.refreshVersions() }
+                    val offer = if (result.updateAvailable) MentraOtaRules.offer(result.manifest, port.glasses.value.versions) else null
+                    PlatformLogger.i(TAG, "Check: updateAvailable=${result.updateAvailable} release=${result.manifest.releaseVersion} components=${offer?.components}")
+                    reduce { MentraOtaMachine.checkSucceeded(it, token, result.manifest, offer) }
+                    return@launch
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (error: Throwable) {
+                    val unofficial = (error as? MentraOtaCheckException)?.unofficialClient == true
+                    PlatformLogger.w(TAG, "Check attempt $attempt failed: ${error.message}", error)
+                    // After an install the glasses app may still be restarting: retry the re-check.
+                    val verifying = state.value.stage == MentraOtaStage.VERIFYING && state.value.checkToken == token
+                    if (verifying && !unofficial && attempt < VERIFY_ATTEMPTS) {
+                        attempt++
+                        delay(VERIFY_RETRY_MS)
+                        continue
+                    }
+                    reduce { MentraOtaMachine.checkFailed(it, token, unofficial) }
+                    return@launch
+                }
             }
         }
     }
@@ -272,5 +294,7 @@ class MentraFirmwareUpdateSession(
     private companion object {
         const val TAG = "MentraOta"
         const val TICK_MS = 1_000L
+        const val VERIFY_ATTEMPTS = 4
+        const val VERIFY_RETRY_MS = 10_000L
     }
 }

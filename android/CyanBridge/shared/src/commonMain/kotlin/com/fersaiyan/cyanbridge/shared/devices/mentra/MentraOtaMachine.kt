@@ -84,6 +84,8 @@ data class MentraOtaState(
     val lastEventAtMs: Long = 0,
     val disconnectedAtMs: Long? = null,
     val settleUntilMs: Long = 0,
+    /** The glasses app build when this pass started; a new build means the app install finished. */
+    val passStartBuild: String? = null,
     /** The glasses reported a BES install, which ends with a power cycle. */
     val besInstallStarted: Boolean = false,
     val awaitingBesReboot: Boolean = false,
@@ -180,7 +182,7 @@ object MentraOtaMachine {
     }
 
     /** The user confirmed; the caller checked the blockers and then sends `ota_start`. */
-    fun startRequested(state: MentraOtaState, nowMs: Long): MentraOtaState {
+    fun startRequested(state: MentraOtaState, nowMs: Long, buildNumber: String? = null): MentraOtaState {
         if (state.stage != MentraOtaStage.UPDATE_AVAILABLE || state.offer == null) return state
         return state.copy(
             stage = MentraOtaStage.STARTING,
@@ -191,6 +193,7 @@ object MentraOtaMachine {
             passStartedAtMs = nowMs,
             lastEventAtMs = nowMs,
             disconnectedAtMs = null,
+            passStartBuild = buildNumber,
             besInstallStarted = false,
             awaitingBesReboot = false,
         ).withProgressKey(null)
@@ -258,6 +261,8 @@ object MentraOtaMachine {
                 MentraOtaStage.FINISHING,
                 MentraOtaStage.VERIFYING -> state.copy(stage = MentraOtaStage.RESTARTING, disconnectedAtMs = nowMs)
                 MentraOtaStage.RESTARTING -> state.copy(disconnectedAtMs = state.disconnectedAtMs ?: nowMs)
+                // An offer belongs to the link it was checked on; check again after reconnecting.
+                MentraOtaStage.UPDATE_AVAILABLE -> state.copy(stage = MentraOtaStage.IDLE, offer = null)
                 // The glasses went down: that is the restart a BES failure asks for.
                 else -> if (state.restartRequired) state.copy(restartRequired = false) else state
             }
@@ -270,6 +275,26 @@ object MentraOtaMachine {
                 state.copy(restartRequired = false)
             else -> state
         }
+    }
+
+    /**
+     * The glasses report their app build. Installing the glasses app restarts it, often while
+     * the Bluetooth link stays up, and the restarted app may not report the old session's end:
+     * a new build during the update means that step finished (as the official example app does).
+     */
+    fun buildChanged(state: MentraOtaState, buildNumber: String?, nowMs: Long): MentraOtaState {
+        val started = state.passStartBuild
+        if (buildNumber.isNullOrBlank() || started == null || buildNumber == started) return state
+        if (state.stage != MentraOtaStage.STARTING && state.stage != MentraOtaStage.UPDATING) {
+            return if (state.isActive) state.copy(passStartBuild = buildNumber) else state
+        }
+        return state.copy(
+            stage = MentraOtaStage.FINISHING,
+            passStartBuild = buildNumber,
+            progress = state.progress?.copy(percent = 100),
+            settleUntilMs = nowMs + SETTLE_MS,
+            lastEventAtMs = nowMs,
+        )
     }
 
     /** Watchdogs; call about once a second while [MentraOtaState.isActive]. */
