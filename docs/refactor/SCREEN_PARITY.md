@@ -44,3 +44,22 @@ Keep the collaborator's UI changes except two, which were reverted:
 - Meizu MYVU crashes on the emulator in both builds, which is an existing issue.
 - iOS screens: no Mac is available here.
 - Flows beyond the first screen of each Activity (dialogs, long flows) are covered by HARDWARE_TEST_CHECKLIST.md.
+
+## Single Activity (`cyan-refactor-single-activity`): re-run the capture
+
+The capture above launched each of the 41 Activities by name. Those screens are now routes of MainActivity, so **re-run the parity capture before merging** (tools in `cyan-refactor-wt/parity-tools/`; they need the emulator, so this branch was not captured).
+
+The capture script has to change:
+- Open a screen with `adb shell am start -n <package>/.MainActivity -a com.fersaiyan.cyanbridge.nav.OPEN_<ROUTE> --es com.fersaiyan.cyanbridge.nav.ROUTE <ROUTE>`. Route names are in `ui/nav/AppRoute.kt`, for example `SETTINGS`, `COMMUNITY_PLUGINS`, `CHAT_THREAD`, `RECORDINGS` or `META_PAIRING`. Add extras as the old Activity took them.
+- MainActivity is single-task: run `am force-stop` between screens, or each start pushes onto the running back stack.
+- The old Activity names are gone, except the entry points that are still kept: `.ui.MetaPairingActivity`, `.agent.ProSubscriptionActivity`, `.agent.WebSubscriptionCallbackActivity`, the Gemini Live permission gate, MemoMind Web plugins, and the launcher alias `.ui.WelcomeActivity`.
+
+Expected result: pixel-identical screens. Each tab still draws its own bottom bar, and only the glasses screen uses `CyanBridgeNavShell`'s bar, exactly as before.
+
+Expected UI-tree differences:
+- Every screen except the glasses screen sits in one extra full-screen node with a pane title (the old Activity label), so screen readers announce screen changes as the window change did.
+- Window animations between screens, including the onboarding fade, are gone. A static capture does not see this.
+
+Any other difference is a regression.
+
+Not unified (owner decision): the per-tab bars use the secondary container for the selected item, while the glasses screen's shell bar uses the primary container with a semibold label. Letting the shell draw the bar for every tab would match iOS: MainActivity would draw `CyanBridgeNavShell` around the tab routes, and those screens would pass `showNavigationBar = false`. It changes those bars' colors, so it was left out.

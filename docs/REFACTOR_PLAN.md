@@ -119,7 +119,8 @@ Depois de A3 e A4, as 66 `GlassesDashboardAction` são tratadas por um controlad
 ### A7. Preferências e telas (contínua)
 
 - [x] 73 arquivos chamam `getSharedPreferences` direto: trocar por preferências tipadas sobre `PlatformPreferences`, começando pelas que o iOS também usa (assistente, palavra de ativação, qualidade de imagem). Feito: cada arquivo, chave, tipo e padrão está declarado uma vez em `shared/prefs` (`PrefsInventoryTest` fixa todos). Faltam `ImageQuestionPreferences`, `SettingsActivity`, `OnboardingFeatureActivity` e `WelcomeActivity`, que leem as mesmas chaves direto, e os repositórios JSON do iOS.
-- [ ] Seguir o `COMPOSE_MIGRATION_PLAN.md` para as 42 Activities e 54 layouts XML, começando pelas telas que o iOS também precisa.
+- [x] Uma Activity só (branch `cyan-refactor-single-activity`): as telas viraram destinos da pilha do `MainActivity` (`ui/nav`: `AppRoute`, `AppNavigator`, `NavScreen`), com o mesmo ciclo de vida, resultados e Back de antes. De 43 Activities ficaram 6: o `MainActivity` (o ícone é um alias chamado `.ui.WelcomeActivity`), os trampolins dos links `cyanbridge://` (Meta) e `fersaiyan://pro-sub`, o retorno do checkout web, o portão de permissões do Gemini Live (aberto por serviços) e os plugins Web do MemoMind (WebView que sobrevive à rotação). O `ArchitectureGuardrailSourceTest` fixa essa lista. As abas, menos Óculos, ainda desenham a própria barra (cores iguais às de antes). Testar com `docs/refactor/HARDWARE_TEST_CHECKLIST.md`, seção "Single Activity", e refazer a captura de paridade (`SCREEN_PARITY.md`).
+- [ ] Os layouts XML que sobraram (ver `COMPOSE_MIGRATION_PLAN.md`).
 
 ## 5. Um repositório ou dois?
 

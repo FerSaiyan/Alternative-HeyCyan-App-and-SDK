@@ -601,3 +601,48 @@ The image, voice and spoken-decision question flows moved from MainActivity to `
 **iOS (Mac build):**
 13. MemoMind voice question: after the spoken answer, the text appears on the HUD. A relay photo answer that says the image could not be seen is spoken as "I couldn't analyze the image. Please try again."
 
+
+## Single Activity: every screen is a destination of MainActivity (`ui/nav`)
+
+Branch `cyan-refactor-single-activity`. The manifest went from 43 Activities to 6. Every other screen is a route of MainActivity's back stack (`AppRoute`, `AppNavigator`, `NavScreen`), with its old lifecycle, results and back handling. The six that remain: MainActivity; the `.ui.MetaPairingActivity` and `.agent.ProSubscriptionActivity` link trampolines; `WebSubscriptionCallbackActivity`; the Gemini Live permission gate; and MemoMind Web plugins. The launcher icon is an alias of MainActivity named `.ui.WelcomeActivity`, and MainActivity is `singleTask`. Screens should look as before; what changed is how they open and close.
+
+Check the Activity stack with `adb shell dumpsys activity activities | grep -E "Hist|mResumed"`: in normal use only `MainActivity` is listed. Screen readers announce each screen's old title as its pane title.
+
+1. **Navigation.**
+   - From the glasses screen, open each tab: Chats (the last chat if you wrote in it in the last 30 minutes, else a new one), Media, Plugins, Settings. Then switch between tabs from each tab's own bar.
+   - Tapping a tab that is already open below returns to it and drops the screens above, as before. Glasses always returns to the glasses screen.
+   - Open the nested screens: Settings → Appearance, Language, Pro, Local models, Voice profile, Assistant automation setup; Plugins → each plugin's settings, Publish, Walking Aid chat, AutoDiary → captures, summary and daily facts, Local Agent → pending actions; Chats → note editor, Notes & Chats list; Media → synced photos and videos.
+   - Also open: device bind (Scan, Reconnect), Meta setup, the Mentra firmware update and broadcast screens, and Gemini Live (Pro settings → Start Live, with notifications declined so the visible preview opens).
+   - No screen should open twice or flash a blank window. Screens now switch without the old window animations, including the onboarding fade.
+2. **Back.**
+   - Back walks the same path as before, then leaves the app from the glasses screen.
+   - Screens that handle Back themselves still do: the Mentra firmware update refuses Back during an update, Local models backs out of its sub-pages, the EvenHub web app goes back in its own history, and the voice profile steps back.
+   - Onboarding (fresh install, or clear data): Welcome → battery guide → feature steps (voice profile is step 4) → glasses screen. Back on an onboarding step leaves the app, as before, and nothing glasses-related runs until onboarding ends: no Bluetooth or permission prompts over Welcome.
+   - Glasses connected: while a tab or settings screen covers the glasses screen, battery polling and the glasses event listener pause, as when those were separate Activities. Back to the glasses screen resumes them, refreshes the plugin shortcuts and asks for any permissions newly enabled plugins need.
+3. **Rotation.** Rotate on each screen above. The screen stays, with its state (the chat being typed, plugin settings, the Pro plan picker, the Local models page, the device-bind scan resets and rescans as before), and Back afterwards still walks the same stack.
+   - Local models used to handle rotation itself; it is now recreated like the others, so check that a running download keeps reporting progress after a rotation.
+   - Mentra firmware update and broadcast keep the screen on only while they are in front.
+4. **Results and permissions.** These ActivityResult flows now return to the screen inside MainActivity. Check each one, including after a rotation while the picker or prompt is open:
+   - Settings export, import, ChatGPT and Claude import;
+   - the chat image picker and the chat wallpaper;
+   - the Local models file import;
+   - Obsidian vault picker; Tasker profile save (Plugins, Assistant automation setup);
+   - the device-bind "turn on Bluetooth" request;
+   - the Meta setup permissions and the glasses camera permission;
+   - the microphone prompts (chat, voice profile, Gemini Live);
+   - the Walking Aid and Auto Audio permission prompts (they start from the plugin screen as before).
+5. **Notifications.**
+   - Tap each "open" notification: AI question, Gemini Live, meeting capture, the live previews, MYVU, Local Agent, Auto Audio, the plugins, Studio bridge, model download (opens Local models), the daily facts reminder (opens the review chat). The right screen should open in the running app, without a second copy of the app in recents.
+   - Meta "Register again": see 7.
+6. **Deep links and entry points.**
+   - The launcher icon, and a home-screen shortcut pinned before this build (it points at `.ui.WelcomeActivity`), open the app.
+   - `adb shell am start -a android.intent.action.VIEW -d "fersaiyan://pro-sub/restore"` opens the Pro screen on top of the running app; Back returns to where you were.
+   - A web checkout return (`https://cyanbridge.vercel.app/web-subscribe/callback`) opens Pro settings on success, else the Pro screen.
+   - Tasker: the HIL profiles (`tools/hil/sync_tasker_profiles.sh`, which opens `.hil.HilTaskerProfileImportActivity`) and the AutoDiary, Visual Diary, Local Agent and AI image broadcasts are unchanged and run without opening a screen. A Tasker command intent sent to MainActivity (`<package>.ACTION_TASKER_COMMAND`) still runs and shows the glasses screen.
+   - CI HIL tests (`HilFixtureActivity`) and `GlassesQuestionFlowTest` (MainActivity) still pass.
+7. **Meta registration (see "Meta hybrid registration" above; repeat checks 1, 2 and 4).**
+   - Registration now starts from MainActivity, which receives Meta AI's activity result. Expect `Captured isDevMode=…` and the `registrationPath` line as before.
+   - Meta AI's `cyanbridge://` return lands on the open Meta setup screen (through the `.ui.MetaPairingActivity` trampoline), which refreshes; no second Meta setup screen opens.
+   - "Register again" from the notification opens or reuses the Meta setup screen, and registration starts once it is in front. Also check this with the app killed first: the Meta setup screen opens alone, and Back shows the glasses screen.
+   - The "Test AI image question" button returns to the glasses screen and starts the question.
+8. **Lock screen.** A wake-word question while the phone is locked shows the glasses screen over the lock screen, as before. Locked, with a settings screen on top: that screen does not show over the lock screen, and unlocking shows it.

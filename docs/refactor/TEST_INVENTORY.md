@@ -36,11 +36,11 @@ Line counts are per file; "before" is cyan-refactor at f908faf. CI legend:
 | Audio sessions / TTS | AudioSessionArbiterTest (204), AudioRoutePolicyTest (141), SpeechEnergyTest (51), AudioSessionCoordinatorTest (143), TtsSpeakerTest (127), MultilingualSpeechChunkerTest (219), StreamingSpeechChunkerTest (45), QuestionEndpointTest (46) | P, U | |
 | Transcription | ChunkPlannerTest (55), RetryPolicyTest (46), OfflineQuestionTranscriberTest (18); TranscriptionIntegrationTest (82, androidTest) | U | `ai.transcription.*` filter in run_audio_emulator_ci.sh |
 | Local models | DeviceCapabilityServiceTest (65), LocalModelFileUtilsTest (76), engine/* (164), provider/* (89), settings/* (152), PromptTemplateRegistryTest (61), LocalMtpBenchmarkPolicyTest (43), shared LocalModelCatalogTest (72), NpuVariantResolverTest (46) | U, P | Device runtimes: M (hil/LiteRt*, NPU set) |
-| Plugins | Walking Aid: 10 JVM classes (1,037) + WalkingAidVideoSourceButtonsTest, WalkingAidVideoCaptureLifecycleTest, WalkingAidVisionStackIntegrationTest (E); Meeting notes: MeetingSparkNotesServiceTest, MeetingNoteMarkdownTest, settings test; per-plugin *SettingsActivityTest (8 files, ~855); AutoDiary / VisualDiary / AiTaskerProfile HILs (E) | U, E | |
+| Plugins | Walking Aid: 10 JVM classes (1,037) + WalkingAidVideoSourceButtonsTest, WalkingAidVideoCaptureLifecycleTest, WalkingAidVisionStackIntegrationTest (E); Meeting notes: MeetingSparkNotesServiceTest, MeetingNoteMarkdownTest, settings test; per-plugin *SettingsDestinationTest (8 files, ~855; were *SettingsActivityTest); AutoDiary / VisualDiary / AiTaskerProfile HILs (E) | U, E | |
 | DB / persistence | AppDatabaseSchemaTest (227), SharedAppDatabaseTest (416), RoomChatRepositoryTest (107), RoomNotesRepositoryTest (94), ChatStoreTest (47), PersistenceEntityTest (17), VaultCryptoTest (30) | U, P | Protected (schema and upgrade) |
 | Settings / UI | Compose UI tests in androidTest/ui/* (~2,050), shared ChatRichTextTest, CyanBridgeThemeTest, CyanBridgeThemeContrastTest, AppearanceModelsTest, NavigationModelsTest, BillingModelsTest; prefs tests (see below) | —, P, U | Compose UI tests run only in the manual `connectedDebugAndroidTest` gate |
 | Safety (source scans) | EyevueReleaseSafetyTest, WifiAdbSourceSafetyTest, LivePreviewSourceSafetyTest, GlassesNetworkOwnershipSourceTest | U | Protected |
-| Architecture guardrails | ArchitectureGuardrailSourceTest (MainActivity line budget, no vendor SDK imports in ui/ outside the ui/main/glasses adapters, no android/java imports in commonMain, getSharedPreferences only in the listed files) | U | Ratchets: lower the budget or drop exceptions as code moves |
+| Architecture guardrails | ArchitectureGuardrailSourceTest (MainActivity line budget, the manifest's six allowed Activities, no vendor SDK imports in ui/ outside the ui/main/glasses adapters, no android/java imports in commonMain, getSharedPreferences only in the listed files) | U | Ratchets: lower the budget or drop exceptions as code moves |
 
 ## Protected (derived from CI and the owner's list)
 
@@ -105,3 +105,21 @@ These were left untouched, or tidied without dropping any assertion.
 - **Removed U:** TtsSpeechStreamTest (73), with `TtsSpeechStream` (unused; streamed answers go through `StreamingSpeechSessionManager`).
 - **New U:** QuestionMicrophoneTest (1 test: another spoken prompt refuses the question with the busy sentence, before any cue, and the question leaves no session behind).
 - **Unchanged and still compiling:** GlassesQuestionFlowTest, QuestionLatencyQuickTest, QuestionPathBenchmarkTest, QuestionPromptProbeTest (fixture audio skips the microphone session, as it skipped the route before).
+
+## Single Activity (`cyan-refactor-single-activity`)
+
+- **New U:** AppNavigatorTest (Robolectric, 9 tests on MainActivity). It covers:
+  - a start stops the screen below, and Back destroys the top one;
+  - finish from anywhere in the stack, including from onCreate;
+  - CLEAR_TOP with and without SINGLE_TOP, and SINGLE_TOP alone;
+  - rotation keeping the stack and the ViewModel stores (screens below the top are recreated lazily);
+  - process-death restore;
+  - the launcher alias opening onboarding with no glasses screen under it, and the end of onboarding showing it.
+- **Moved U, same assertions:**
+  - the eight `*SettingsActivityTest` are now `*SettingsDestinationTest` (`createSettingsScreen(route)` opens the route in MainActivity);
+  - ProSubscriptionActivityPlanStateTest is now ProSubscriptionPlanStateTest. The restored screen keeps its own intent, so the old "free_trial before restore" check became "the Pro route is restored"; the plan still comes back from the screen's saved state;
+  - ProSubscriptionSettingsActivityTest is now ProSubscriptionSettingsDestinationTest (the screen leaves the back stack with the same toast).
+- **androidTest:** NpuCatalogSettingsTest (M) opens the Local models route in MainActivity through an `AndroidComposeTestRule` over `ActivityScenarioRule<MainActivity>`. The other androidTests launch MainActivity or the debug HIL Activities, which are unchanged; the Meta DAT tests drive the manager and the screens directly.
+- `ArchitectureGuardrailSourceTest`:
+  - MainActivity budget 1,860 → 1,852 (the inline live video moved to `ui/main/GlassesLiveVideoSlot.kt`);
+  - new `screensAreDestinationsOfTheSingleActivity`, which pins the manifest to the six remaining Activities, each with its reason.
