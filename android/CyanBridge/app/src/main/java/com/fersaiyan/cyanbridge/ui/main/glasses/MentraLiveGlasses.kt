@@ -16,6 +16,9 @@ import com.fersaiyan.cyanbridge.bridge.core.OnboardRecording
 import com.fersaiyan.cyanbridge.bridge.core.VolumeReporting
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
+import com.fersaiyan.cyanbridge.media.sync.GlassesMediaLibrary
+import com.fersaiyan.cyanbridge.media.sync.MentraMediaSyncController
+import com.fersaiyan.cyanbridge.media.sync.TransferProgressPresenter
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
@@ -31,7 +34,8 @@ import kotlinx.coroutines.launch
  * Mentra Live over the Mentra Bluetooth SDK ([MentraLiveManager]). Pairing runs through Device
  * Bind like the other families. The action button asks the assistant: a press asks about what
  * the glasses see, a long press asks a spoken question. Photos and videos taken from the
- * dashboard stay in the glasses gallery; AI photos reach the phone through
+ * dashboard stay in the glasses gallery until Sync downloads them over the glasses hotspot
+ * ([MentraMediaSyncController]); AI photos reach the phone through
  * [com.fersaiyan.cyanbridge.glasses.GlassesAiPhotoCapture].
  */
 internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : AndroidGlassesDevice {
@@ -40,6 +44,14 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
     private val activity get() = context.activity
     private val manager: MentraLiveManager get() = MentraLiveManager.getInstance(activity)
     private var observers: Job? = null
+    private val gallerySync by lazy {
+        MentraMediaSyncController(
+            activity = activity,
+            transferUi = TransferProgressPresenter({ context.binding }, context.screen::updateDashboardState),
+            mediaLibrary = GlassesMediaLibrary(activity),
+            onSynced = ::refreshMediaCounts,
+        )
+    }
 
     private val isSelected: Boolean
         get() = DeviceProfileStore.selectedClass(activity) == DeviceClass.MENTRA_LIVE
@@ -98,10 +110,19 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
                 .onFailure { toast(R.string.mentra_request_failed, it.message.orEmpty()) }
         }
 
-        // The SDK serves the gallery over the glasses' Wi-Fi hotspot; that download is not wired.
-        override fun startSync() = toast(R.string.mentra_media_sync_unavailable)
+        override fun startSync() = gallerySync.start(manager)
 
-        override fun stopSync() = Unit
+        override fun stopSync() = gallerySync.stop()
+    }
+
+    /** Updates the dashboard media counts after a sync, without the count toast. */
+    private fun refreshMediaCounts() {
+        if (MentraLiveManager.instanceOrNull()?.ready != true) return
+        activity.lifecycleScope.launch {
+            runCatching { manager.galleryCounts() }.onSuccess { (photos, videos) ->
+                context.screen.updateDashboardState { it.copy(mediaCounts = GlassesMediaCounts(photos, videos, 0)) }
+            }
+        }
     }
 
     override val battery = object : BatteryReporting {
@@ -190,7 +211,7 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
         }
     }
 
-    override fun stopMediaSyncForActivityDestroy() = Unit
+    override fun stopMediaSyncForActivityDestroy() = gallerySync.cancelForDestroy()
 
     private fun whenReady(block: suspend () -> Unit) {
         if (MentraLiveManager.instanceOrNull()?.ready != true) return toast(R.string.mentra_not_ready)

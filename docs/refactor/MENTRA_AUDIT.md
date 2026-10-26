@@ -19,7 +19,7 @@ Streaming: `startStream`/`stopStream` (RTMP, SRT, WHIP, keep-alive and status ru
 Audio: `setMicState` gives continuous 16 kHz PCM (`onMicPcm`), LC3 (`onMicLc3`) and local transcription. The SDK also offers VAD, the loudness gate, `setOwnAppAudioPlaying`, and reading or setting the media volume (0-15). The speaker is the phone's Bluetooth media output.
 Input: `onButtonPress` (short/long/double), touch, swipe, head-up (`setHeadUpAngle`).
 Status: battery and charging, firmware/build/serial (`requestVersionInfo`, the connected-state device info), Wi-Fi and hotspot status, signal.
-Network: Wi-Fi scan and credentials, saved networks, hotspot on/off. The gallery HTTP server is reachable only over the glasses hotspot.
+Network: Wi-Fi scan and credentials, saved networks, hotspot on/off. The gallery HTTP server is reachable only over the glasses hotspot (see "Gallery download").
 Maintenance: OTA (`checkForOtaUpdate`, `startOtaUpdate`, status events). The glasses firmware must match the SDK version.
 Other: RGB LED control, system time (the SDK also syncs it on every connect), display APIs for display models (no-ops on Live).
 
@@ -57,10 +57,36 @@ Other: RGB LED control, system time (the SDK also syncs it on every connect), di
 | Video recording | wired | `startVideoRecording`/`stopVideoRecording`, saved on the glasses |
 | Media count | wired | `queryGalleryStatus` (photos and videos) |
 | Firmware version, time sync, volume | wired | `requestVersionInfo`, `setSystemTime`, `getGlassesMediaVolume` (Advanced → Device info) |
-| Gallery download | not wired | The SDK serves files only over the glasses Wi-Fi hotspot (`setHotspotState` plus HTTP `/api/gallery`). Joining that hotspot needs a phone-side Wi-Fi client session that does not fit the current P2P-based network session without new work. |
+| Gallery download | wired | Dashboard Sync: `setHotspotState(true)`, an app-scoped join of the glasses hotspot, HTTP download from the glasses camera server into the synced gallery, optional delete, hotspot off. See "Gallery download" below. |
 | Live preview and streaming | not wired | The glasses push RTMP/SRT/WHIP to a URL they can reach over Wi-Fi. CyanBridge's live preview pulls RTSP over Wi-Fi Direct, so this needs an on-phone ingest server (the SDK example uses GStreamer/MediaMTX). |
 | OTA | not wired | The SDK has its own OTA flow and the firmware must match the SDK. Mixing it into the HeyCyan OTA UI risks bricking. It needs its own screen and an owner decision. |
-| Wi-Fi provisioning, hotspot, LED, head-up, touch/swipe, LC3, local transcription, camera FOV and warm-up | not wired | Nothing in CyanBridge consumes them yet. |
+| Wi-Fi provisioning, LED, head-up, touch/swipe, LC3, local transcription, camera FOV and warm-up | not wired | Nothing in CyanBridge consumes them yet (the hotspot is used only by the gallery download). |
+
+## Gallery download
+
+Sources checked: the 3.2.0-dev.227 AAR (`javap`: `setHotspotState(Boolean): HotspotStatusEvent`, `HotspotStatus.Enabled(ssid, password, localIp)`, `GlassesRuntimeState.Connected.hotspot`) and, in MentraOS, the official app's gallery client (`mobile/modules/engine/src/services/asg/asgCameraApi.ts`, `gallerySyncService.ts`, `mediaProcessingQueue.ts`, `galleryTransferLedger.ts`), its scoped hotspot join (`mobile/modules/glasses-media/.../ScopedSoftApNetwork.kt`) and the Android SDK example (`GlassesHotspotConnector.kt`, `MentraExampleController.kt`). The glasses-side server (`asg_client`, "AsgCameraServer") is not in that checkout, so the endpoints below are what the phone code calls, not what the firmware source says.
+
+**What the glasses serve.** `setHotspotState(true)` starts a WPA2 access point on the glasses and returns its SSID, password and the glasses' IP (the official app also reads them from the `hotspot_status_change` event). The camera server listens on `http://<localIp>:8089` with no authentication; the hotspot password is the only gate. The glasses stop the hotspot after about 120 s without HTTP traffic.
+
+| Firmware | List | Download | Delete |
+|---|---|---|---|
+| v3 (`GET /api/v3/capabilities` answers `api_version >= 3`) | `GET /api/v3/manifest?limit=&cursor=` (capture groups, paged) | `GET /api/download?file=<name>` (Range supported) | `POST /api/v3/ack {capture_id, ack_id}`: recoverable trash on the glasses |
+| v2 | `GET /api/sync?client_id=&include_thumbnails=false` (`api_version: 2`, `captures`) | same | `POST /api/delete-files {files: [capture_id]}` |
+| older | `/api/sync` `changed_files`, or `GET /api/gallery` (`photos`) | same | `POST /api/delete-files {files: [name]}` |
+
+A capture group (`IMG_<date>_<time>_<ms>_<id>`) holds a `primary` file (`base.jpg` or the MP4) plus optional HDR `bracket` exposures and `sidecar` files. The official app always deletes (v3: acknowledges) a capture after it has verified and indexed the download.
+
+**What CyanBridge does** (`MentraMediaSyncController` → `MentraGallerySync`):
+
+1. Takes the exclusive `MEDIA_SYNC` glasses session and shows the shared transfer card. Needs Android 10+, the Nearby devices (13+) or Location permission, a ready link and no running video recording.
+2. Reuses an already enabled hotspot, or calls `setHotspotState(true)` (30 s timeout) and waits 3 s for the AP to broadcast, as the official app does.
+3. `MentraHotspotNetwork` claims the glasses link from `GlassesNetworkSessionCoordinator` as `GlassesLinkClient.MENTRA_GALLERY`, so it can never overlap a HeyCyan Wi-Fi Direct group, the Eyevue/TuneBuds transports or Wi-Fi ADB. It then requests the network with a `WifiNetworkSpecifier` (SSID and WPA2 passphrase) without `NET_CAPABILITY_INTERNET`. Android never makes it the default network, and the process is not bound to it. Only the OkHttp client built with `networkBoundHttpClient` (socket factory and DNS of that `Network`) uses it.
+4. Waits for `GET /api/status`, then lists the gallery (v3 manifest, else `/api/sync`, else `/api/gallery`). The shared parser and planner (`shared/devices/mentra/MentraGallery.kt`) keep the primary JPEG/MP4 of each capture. HDR brackets, sidecars and other formats (AVIF, HEIC, MOV) are left on the glasses. Each file is named `MentraLive_<capture>.jpg|mp4`, and files already in the synced gallery under that name are skipped.
+5. Downloads each file to the cache. It is kept only if the byte count equals the size the glasses listed. It is then saved through `GlassesMediaLibrary` into `DCIM/CyanBridge` (the same Gallery screen as HeyCyan and Eyevue media) with the capture time as `DATE_TAKEN`.
+6. If any file is verified on the phone (downloaded now, or already there with the same size), it asks "Delete from glasses?", the same question the iOS HeyCyan sync asks. While the dialog is open it pings `/api/status` every 30 s to keep the hotspot alive. Delete uses the v3 ack or `/api/delete-files`. Deleting a capture removes its bracket files too.
+7. Always: evicts the HTTP pool, unregisters the network request and releases the link claim, then calls `setHotspotState(false)`, but only if this sync turned the hotspot on. Then it refreshes the media counts.
+
+**iOS.** The Swift Mentra bridge (`ios/CyanBridgeKMPHost/MentraGlassesBridge.swift`) has no hotspot or gallery calls, and the iOS Sync button still reports that it is not implemented. The shared parser, URLs and planner are ready for it. iOS still needs: a bridge action that calls `setHotspotState` and returns SSID/password/IP; a `NEHotspotConfiguration(ssid:passphrase:isWEP:false)` join with `joinOnce = true` (the user approves the system prompt; the app needs the Hotspot Configuration entitlement, and Local Network usage text for iOS 14+); downloads with `URLSession`; saving through `IosMediaPlatform.saveToPhotoLibrary`; and `NEHotspotConfigurationManager.removeConfiguration` plus `setHotspotState(false)` afterwards. Unlike Android, iOS joins the hotspot for the whole device, so other traffic loses internet until it leaves.
 
 ## Calls the frozen MainActivity region must add later
 

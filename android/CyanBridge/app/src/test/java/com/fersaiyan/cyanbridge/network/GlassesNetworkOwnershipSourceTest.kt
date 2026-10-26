@@ -65,6 +65,8 @@ class GlassesNetworkOwnershipSourceTest {
                 "GlassesLinkClient.EYEVUE_WIFI",
             "src/main/java/com/fersaiyan/cyanbridge/devices/tunebuds/TuneBudsP2pTransport.kt" to
                 "GlassesLinkClient.TUNEBUDS_WIFI_DIRECT",
+            "src/main/java/com/fersaiyan/cyanbridge/devices/mentra/MentraHotspotNetwork.kt" to
+                "GlassesLinkClient.MENTRA_GALLERY",
             "src/debug/java/com/fersaiyan/cyanbridge/wifiadb/DefaultWifiAdbDebugControllerFactory.kt" to
                 "GlassesLinkClient.HEYCYAN_WIFI_ADB",
         )

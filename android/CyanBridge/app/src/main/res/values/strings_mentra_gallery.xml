@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mentra_sync_starting">Starting Mentra Live gallery download…</string>
+    <string name="mentra_sync_needs_android_10">Downloading the Mentra Live gallery needs Android 10 or newer.</string>
+    <string name="mentra_sync_stop_recording">Stop the Mentra Live video recording before syncing.</string>
+    <string name="mentra_sync_session_busy">Stop %1$s before syncing the Mentra Live gallery.</string>
+    <string name="mentra_sync_permission_required">Nearby devices or Location permission is required to join the Mentra Live hotspot.</string>
+    <string name="mentra_sync_complete">Mentra Live sync complete: %1$d new, %2$d already on this phone.</string>
+    <string name="mentra_sync_complete_with_failures">Mentra Live sync: %1$d new, %2$d already on this phone, %3$d failed.</string>
+    <string name="mentra_sync_deleted">Deleted %1$d of %2$d files from the glasses.</string>
+    <string name="mentra_sync_failed">Mentra Live sync failed: %1$s</string>
+    <string name="mentra_sync_delete_title">Delete from glasses?</string>
+    <string name="mentra_sync_delete_message">%1$d files are now on this phone. Delete them from the glasses to free space?</string>
+    <string name="mentra_sync_delete_confirm">Delete</string>
+    <string name="mentra_sync_delete_keep">Keep</string>
+</resources>

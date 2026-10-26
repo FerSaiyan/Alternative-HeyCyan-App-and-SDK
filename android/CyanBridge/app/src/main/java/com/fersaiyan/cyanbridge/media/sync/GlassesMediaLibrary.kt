@@ -24,6 +24,8 @@ internal enum class VendorMediaType(val progressLabel: String) {
 internal data class VendorMediaItem(
     val fileName: String,
     val type: VendorMediaType,
+    /** Capture time reported by the glasses; when null it is read from the file name. */
+    val takenTimeMs: Long? = null,
 )
 
 internal data class GallerySaveResult(
@@ -36,7 +38,9 @@ internal data class GallerySaveResult(
 internal class GlassesMediaLibrary(private val context: Context) {
 
     suspend fun importVendorMediaFile(file: File, item: VendorMediaItem): Boolean {
-        val takenMs = parseTakenTimeMillisFromFilename(item.fileName) ?: System.currentTimeMillis()
+        val takenMs = item.takenTimeMs
+            ?: parseTakenTimeMillisFromFilename(item.fileName)
+            ?: System.currentTimeMillis()
         return when (item.type) {
             VendorMediaType.PHOTO -> file.inputStream().use { input ->
                 saveJpegToGallery(input, item.fileName, takenMs).success
@@ -102,6 +106,31 @@ internal class GlassesMediaLibrary(private val context: Context) {
                 saved.success
             }
         }
+    }
+
+    /**
+     * Photos and videos this app saved whose display name starts with [namePrefix], keyed by
+     * lower-case display name, with their size (null when MediaStore does not know it).
+     */
+    fun syncedMediaSizes(namePrefix: String): Map<String, Long?> {
+        val sizes = mutableMapOf<String, Long?>()
+        val projection = arrayOf(MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE)
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
+        val args = arrayOf("$namePrefix%")
+        listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, MediaStore.Video.Media.EXTERNAL_CONTENT_URI).forEach { uri ->
+            runCatching {
+                context.contentResolver.query(uri, projection, selection, args, null)?.use { cursor ->
+                    val nameIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                    val sizeIdx = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE)
+                    while (cursor.moveToNext()) {
+                        if (nameIdx < 0 || cursor.isNull(nameIdx)) continue
+                        val size = if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) cursor.getLong(sizeIdx) else null
+                        sizes[cursor.getString(nameIdx).lowercase(Locale.ROOT)] = size
+                    }
+                }
+            }.onFailure { Log.w("DataDownload", "Could not list synced media named $namePrefix*: ${it.message}") }
+        }
+        return sizes
     }
 
     fun saveJpegToGallery(

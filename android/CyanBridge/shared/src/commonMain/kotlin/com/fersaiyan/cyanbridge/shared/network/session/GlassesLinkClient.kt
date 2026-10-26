@@ -31,6 +31,9 @@ enum class GlassesLinkClient(
     HEYCYAN_WIFI_ADB("HeyCyan Wi-Fi ADB debug", DeviceClass.HEY_CYAN),
     EYEVUE_WIFI("Eyevue Wi-Fi transport", DeviceClass.EYEVUE),
     TUNEBUDS_WIFI_DIRECT("TuneBuds Wi-Fi Direct transport", DeviceClass.TUNEBUDS),
+
+    /** The phone joins the glasses' own hotspot (access point, no group) to download the gallery. */
+    MENTRA_GALLERY("Mentra Live gallery download", DeviceClass.MENTRA_LIVE),
     ;
 
     fun onBleLoss(lostDevice: DeviceClass): BleLossLinkAction = when {
