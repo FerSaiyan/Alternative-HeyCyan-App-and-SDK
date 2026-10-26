@@ -36,6 +36,6 @@ object LocalAgentRuntimePolicy {
     }
 
     fun repeatLimitMessage(action: LocalAgentAction): String {
-        return "Blocked repeated ${action.javaClass.simpleName} action. Choose a different visible action."
+        return "Blocked repeated ${action::class.simpleName} action. Choose a different visible action."
     }
 }
