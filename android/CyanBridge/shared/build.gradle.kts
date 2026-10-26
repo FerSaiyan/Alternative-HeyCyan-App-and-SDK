@@ -54,6 +54,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
+            // Locks for common code: JVM monitors on Android, re-entrant native locks on iOS.
+            implementation(libs.kotlinx.atomicfu)
             // api: the shared AI clients expose JsonObject (relay capabilities, model replies).
             api(libs.kotlinx.serialization.json)
             implementation(compose.runtime)

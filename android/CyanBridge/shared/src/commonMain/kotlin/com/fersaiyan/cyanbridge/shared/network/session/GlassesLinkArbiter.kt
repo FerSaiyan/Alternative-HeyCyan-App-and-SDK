@@ -1,7 +1,8 @@
 package com.fersaiyan.cyanbridge.shared.network.session
 
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
-import kotlin.jvm.Synchronized
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -115,6 +116,7 @@ sealed interface BleLossOutcome {
  *   removes first.
  */
 class GlassesLinkArbiter(val policy: P2pTeardownPolicy = P2pTeardownPolicy()) {
+    private val lock = SynchronizedObject()
     private val state = MutableStateFlow(GlassesLinkSnapshot())
     val snapshot: StateFlow<GlassesLinkSnapshot> = state.asStateFlow()
 
@@ -122,173 +124,180 @@ class GlassesLinkArbiter(val policy: P2pTeardownPolicy = P2pTeardownPolicy()) {
     private var teardown: GlassesLinkTeardown? = null
     private var nextGeneration = 0L
 
-    @Synchronized
     fun requestClaim(client: GlassesLinkClient): GlassesLinkClaimResult {
-        val current = state.value
-        val owner = current.owner
-        if (current.phase.isTearingDown && owner != null) {
-            return GlassesLinkClaimResult.AwaitingTeardown(owner, current.phase == GlassesLinkPhase.QUARANTINED)
-        }
-        if (current.phase.holdsClaim && owner != null) {
-            return GlassesLinkClaimResult.Busy(owner)
-        }
-        val generation = ++nextGeneration
-        val claim = GlassesLinkClaim(client, generation)
-        activeClaim = claim
-        return if (current.staleGroupSuspected) {
-            val preflight = GlassesLinkTeardown(client, generation)
-            teardown = preflight
-            state.value = GlassesLinkSnapshot(
-                phase = GlassesLinkPhase.PREFLIGHT_TEARDOWN,
-                owner = client,
-                generation = generation,
-                teardownKind = TeardownKind.PREFLIGHT,
-                teardownAttempt = 0,
-                staleGroupSuspected = true,
-            )
-            GlassesLinkClaimResult.Granted(claim, preflight)
-        } else {
-            teardown = null
-            state.value = GlassesLinkSnapshot(
-                phase = GlassesLinkPhase.DISCOVERING,
-                owner = client,
-                generation = generation,
-            )
-            GlassesLinkClaimResult.Granted(claim, null)
+        return synchronized(lock) {
+            val current = state.value
+            val owner = current.owner
+            if (current.phase.isTearingDown && owner != null) {
+                return GlassesLinkClaimResult.AwaitingTeardown(owner, current.phase == GlassesLinkPhase.QUARANTINED)
+            }
+            if (current.phase.holdsClaim && owner != null) {
+                return GlassesLinkClaimResult.Busy(owner)
+            }
+            val generation = ++nextGeneration
+            val claim = GlassesLinkClaim(client, generation)
+            activeClaim = claim
+            if (current.staleGroupSuspected) {
+                val preflight = GlassesLinkTeardown(client, generation)
+                teardown = preflight
+                state.value = GlassesLinkSnapshot(
+                    phase = GlassesLinkPhase.PREFLIGHT_TEARDOWN,
+                    owner = client,
+                    generation = generation,
+                    teardownKind = TeardownKind.PREFLIGHT,
+                    teardownAttempt = 0,
+                    staleGroupSuspected = true,
+                )
+                GlassesLinkClaimResult.Granted(claim, preflight)
+            } else {
+                teardown = null
+                state.value = GlassesLinkSnapshot(
+                    phase = GlassesLinkPhase.DISCOVERING,
+                    owner = client,
+                    generation = generation,
+                )
+                GlassesLinkClaimResult.Granted(claim, null)
+            }
         }
     }
 
     /** The claim still owns the link (including while its preflight runs). */
-    @Synchronized
-    fun isActive(claim: GlassesLinkClaim?): Boolean =
+    fun isActive(claim: GlassesLinkClaim?): Boolean = synchronized(lock) {
         claim != null && activeClaim === claim && state.value.phase.holdsClaim
+    }
 
     /** The claim owns a link that is ready for use (no preflight pending). */
-    @Synchronized
-    fun isReady(claim: GlassesLinkClaim?): Boolean =
+    fun isReady(claim: GlassesLinkClaim?): Boolean = synchronized(lock) {
         isActive(claim) && state.value.phase != GlassesLinkPhase.PREFLIGHT_TEARDOWN
+    }
 
-    @Synchronized
-    fun isCurrent(ticket: GlassesLinkTeardown?): Boolean =
+    fun isCurrent(ticket: GlassesLinkTeardown?): Boolean = synchronized(lock) {
         ticket != null && teardown === ticket &&
             (state.value.phase.isTearingDown || state.value.phase == GlassesLinkPhase.PREFLIGHT_TEARDOWN)
+    }
 
-    @Synchronized
-    fun onConnectRequested(claim: GlassesLinkClaim): Boolean =
+    fun onConnectRequested(claim: GlassesLinkClaim): Boolean = synchronized(lock) {
         updateReady(claim) { it.copy(phase = GlassesLinkPhase.CONNECTING) }
+    }
 
-    @Synchronized
-    fun onGroupFormed(claim: GlassesLinkClaim): Boolean =
+    fun onGroupFormed(claim: GlassesLinkClaim): Boolean = synchronized(lock) {
         updateReady(claim) { it.copy(phase = GlassesLinkPhase.CONNECTED) }
+    }
 
     /** The group dropped while still claimed; any process binding no longer routes anywhere. */
-    @Synchronized
-    fun onGroupLost(claim: GlassesLinkClaim): Boolean =
+    fun onGroupLost(claim: GlassesLinkClaim): Boolean = synchronized(lock) {
         updateReady(claim) { it.copy(phase = GlassesLinkPhase.DISCOVERING) }
+    }
 
-    @Synchronized
-    fun onRouteBound(claim: GlassesLinkClaim, bound: Boolean): Boolean =
+    fun onRouteBound(claim: GlassesLinkClaim, bound: Boolean): Boolean = synchronized(lock) {
         updateReady(claim) { it.copy(routeBound = bound) }
+    }
 
-    @Synchronized
     fun release(claim: GlassesLinkClaim, mode: GlassesLinkReleaseMode): GlassesLinkRelease? {
-        if (!isActive(claim)) return null
-        val current = state.value
-        val routeWasBound = current.routeBound
-        activeClaim = null
-        return when (mode) {
-            GlassesLinkReleaseMode.CONFIRM_TEARDOWN -> {
-                // A claim released during its own preflight keeps that teardown running.
-                val ticket = teardown?.takeIf { current.phase == GlassesLinkPhase.PREFLIGHT_TEARDOWN }
-                    ?: GlassesLinkTeardown(claim.client, claim.generation)
-                teardown = ticket
-                state.value = current.copy(
-                    phase = GlassesLinkPhase.TEARING_DOWN,
-                    routeBound = false,
-                    teardownKind = TeardownKind.RELEASE,
-                    teardownAttempt = 0,
-                )
-                GlassesLinkRelease(ticket, routeWasBound)
-            }
-            GlassesLinkReleaseMode.ABANDON -> {
-                teardown = null
-                state.value = GlassesLinkSnapshot(
-                    generation = current.generation,
-                    staleGroupSuspected = true,
-                )
-                GlassesLinkRelease(null, routeWasBound)
-            }
-            GlassesLinkReleaseMode.NO_GROUP -> {
-                teardown = null
-                state.value = GlassesLinkSnapshot(
-                    generation = current.generation,
-                    staleGroupSuspected = current.staleGroupSuspected &&
-                        current.phase == GlassesLinkPhase.PREFLIGHT_TEARDOWN,
-                )
-                GlassesLinkRelease(null, routeWasBound)
+        return synchronized(lock) {
+            if (!isActive(claim)) return null
+            val current = state.value
+            val routeWasBound = current.routeBound
+            activeClaim = null
+            when (mode) {
+                GlassesLinkReleaseMode.CONFIRM_TEARDOWN -> {
+                    // A claim released during its own preflight keeps that teardown running.
+                    val ticket = teardown?.takeIf { current.phase == GlassesLinkPhase.PREFLIGHT_TEARDOWN }
+                        ?: GlassesLinkTeardown(claim.client, claim.generation)
+                    teardown = ticket
+                    state.value = current.copy(
+                        phase = GlassesLinkPhase.TEARING_DOWN,
+                        routeBound = false,
+                        teardownKind = TeardownKind.RELEASE,
+                        teardownAttempt = 0,
+                    )
+                    GlassesLinkRelease(ticket, routeWasBound)
+                }
+                GlassesLinkReleaseMode.ABANDON -> {
+                    teardown = null
+                    state.value = GlassesLinkSnapshot(
+                        generation = current.generation,
+                        staleGroupSuspected = true,
+                    )
+                    GlassesLinkRelease(null, routeWasBound)
+                }
+                GlassesLinkReleaseMode.NO_GROUP -> {
+                    teardown = null
+                    state.value = GlassesLinkSnapshot(
+                        generation = current.generation,
+                        staleGroupSuspected = current.staleGroupSuspected &&
+                            current.phase == GlassesLinkPhase.PREFLIGHT_TEARDOWN,
+                    )
+                    GlassesLinkRelease(null, routeWasBound)
+                }
             }
         }
     }
 
-    @Synchronized
-    fun teardownKind(ticket: GlassesLinkTeardown): TeardownKind? =
+    fun teardownKind(ticket: GlassesLinkTeardown): TeardownKind? = synchronized(lock) {
         if (isCurrent(ticket)) state.value.teardownKind else null
+    }
 
-    @Synchronized
     fun onTeardownAttemptStarted(ticket: GlassesLinkTeardown, attempt: Int): Boolean {
-        if (!isCurrent(ticket)) return false
-        state.value = state.value.copy(teardownAttempt = attempt)
-        return true
+        return synchronized(lock) {
+            if (!isCurrent(ticket)) return false
+            state.value = state.value.copy(teardownAttempt = attempt)
+            true
+        }
     }
 
     /** Null when [ticket] is stale. */
-    @Synchronized
     fun onTeardownAttemptFailed(ticket: GlassesLinkTeardown, attempt: Int, canUseP2p: Boolean): TeardownStep? {
-        if (!isCurrent(ticket)) return null
-        val current = state.value
-        val kind = current.teardownKind ?: TeardownKind.RELEASE
-        val step = policy.afterUnconfirmedAttempt(attempt, canUseP2p, kind)
-        when (step) {
-            is TeardownStep.Retry -> Unit
-            is TeardownStep.Quarantine -> state.value = current.copy(phase = GlassesLinkPhase.QUARANTINED)
-            TeardownStep.GiveUp -> finishTeardown(confirmed = false)
+        return synchronized(lock) {
+            if (!isCurrent(ticket)) return null
+            val current = state.value
+            val kind = current.teardownKind ?: TeardownKind.RELEASE
+            val step = policy.afterUnconfirmedAttempt(attempt, canUseP2p, kind)
+            when (step) {
+                is TeardownStep.Retry -> Unit
+                is TeardownStep.Quarantine -> state.value = current.copy(phase = GlassesLinkPhase.QUARANTINED)
+                TeardownStep.GiveUp -> finishTeardown(confirmed = false)
+            }
+            step
         }
-        return step
     }
 
     /** Group removal confirmed. Returns false when [ticket] is stale. */
-    @Synchronized
     fun onTeardownConfirmed(ticket: GlassesLinkTeardown): Boolean {
-        if (!isCurrent(ticket)) return false
-        finishTeardown(confirmed = true)
-        return true
+        return synchronized(lock) {
+            if (!isCurrent(ticket)) return false
+            finishTeardown(confirmed = true)
+            true
+        }
     }
 
     /** Moves a quarantined teardown back to an active attempt. */
-    @Synchronized
     fun retryQuarantined(ticket: GlassesLinkTeardown): Boolean {
-        if (!isCurrent(ticket) || state.value.phase != GlassesLinkPhase.QUARANTINED) return false
-        state.value = state.value.copy(phase = GlassesLinkPhase.TEARING_DOWN, teardownAttempt = 0)
-        return true
+        return synchronized(lock) {
+            if (!isCurrent(ticket) || state.value.phase != GlassesLinkPhase.QUARANTINED) return false
+            state.value = state.value.copy(phase = GlassesLinkPhase.TEARING_DOWN, teardownAttempt = 0)
+            true
+        }
     }
 
-    @Synchronized
     fun onBleLost(device: DeviceClass): BleLossOutcome {
-        val current = state.value
-        val owner = current.owner ?: return BleLossOutcome.NotAffected
-        if (current.phase == GlassesLinkPhase.IDLE) return BleLossOutcome.NotAffected
-        return when (owner.onBleLoss(device)) {
-            BleLossLinkAction.NOT_AFFECTED -> BleLossOutcome.NotAffected
-            BleLossLinkAction.KEEP_CONFIRMED_TEARDOWN -> BleLossOutcome.KeptForTeardown(owner)
-            BleLossLinkAction.ABANDON -> {
-                val droppedTeardown = teardown
-                activeClaim = null
-                teardown = null
-                state.value = GlassesLinkSnapshot(
-                    generation = current.generation,
-                    staleGroupSuspected = true,
-                )
-                BleLossOutcome.Abandoned(owner, current.routeBound, droppedTeardown)
+        return synchronized(lock) {
+            val current = state.value
+            val owner = current.owner ?: return BleLossOutcome.NotAffected
+            if (current.phase == GlassesLinkPhase.IDLE) return BleLossOutcome.NotAffected
+            when (owner.onBleLoss(device)) {
+                BleLossLinkAction.NOT_AFFECTED -> BleLossOutcome.NotAffected
+                BleLossLinkAction.KEEP_CONFIRMED_TEARDOWN -> BleLossOutcome.KeptForTeardown(owner)
+                BleLossLinkAction.ABANDON -> {
+                    val droppedTeardown = teardown
+                    activeClaim = null
+                    teardown = null
+                    state.value = GlassesLinkSnapshot(
+                        generation = current.generation,
+                        staleGroupSuspected = true,
+                    )
+                    BleLossOutcome.Abandoned(owner, current.routeBound, droppedTeardown)
+                }
             }
         }
     }
@@ -297,19 +306,20 @@ class GlassesLinkArbiter(val policy: P2pTeardownPolicy = P2pTeardownPolicy()) {
      * Abandons [claim]'s link whether it is still claimed or already tearing down (the owner's
      * own Bluetooth-loss handling). Null when the link has moved on to another owner.
      */
-    @Synchronized
     fun abandon(claim: GlassesLinkClaim): BleLossOutcome.Abandoned? {
-        val current = state.value
-        val ownsTeardown = teardown?.generation == claim.generation && current.phase.isTearingDown
-        if (!isActive(claim) && !ownsTeardown) return null
-        val droppedTeardown = teardown
-        activeClaim = null
-        teardown = null
-        state.value = GlassesLinkSnapshot(
-            generation = current.generation,
-            staleGroupSuspected = true,
-        )
-        return BleLossOutcome.Abandoned(claim.client, current.routeBound, droppedTeardown)
+        return synchronized(lock) {
+            val current = state.value
+            val ownsTeardown = teardown?.generation == claim.generation && current.phase.isTearingDown
+            if (!isActive(claim) && !ownsTeardown) return null
+            val droppedTeardown = teardown
+            activeClaim = null
+            teardown = null
+            state.value = GlassesLinkSnapshot(
+                generation = current.generation,
+                staleGroupSuspected = true,
+            )
+            BleLossOutcome.Abandoned(claim.client, current.routeBound, droppedTeardown)
+        }
     }
 
     private fun finishTeardown(confirmed: Boolean) {
