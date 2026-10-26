@@ -226,6 +226,11 @@ object CliRelayClient {
         prompt: String? = null,
         backendOverride: CliRelayBackend? = null,
         modelOverride: String? = null,
+        /** A spoken question recorded with the photo: sent as audio in the same request (spokenQuestion). */
+        audioPath: String? = null,
+        spokenQuestion: Boolean = false,
+        /** Appended by the relay to the user's system prompt (glasses spoken-question instructions). */
+        systemContext: String? = null,
     ): Result<String> = runCatching {
         RelayServerCapabilitiesClient.get(context).getOrNull()?.let { caps ->
             if (!caps.imageQuery) {
@@ -252,6 +257,14 @@ object CliRelayClient {
                     if (requestPrompt.isNotBlank()) put("prompt", requestPrompt)
                     val model = modelOverride?.trim().orEmpty()
                     if (model.isNotBlank()) put("model", model)
+                    audioPath?.let { path ->
+                        val audio = File(path)
+                        require(audio.length() > 44L) { "Audio file is empty or corrupted" }
+                        put("audioBase64", Base64.encodeToString(audio.readBytes(), Base64.NO_WRAP))
+                        put("audioFilename", audio.name)
+                    }
+                    if (spokenQuestion) put("spoken_question", true)
+                    systemContext?.takeIf { it.isNotBlank() }?.let { put("system_context", it) }
                 }
         )
         response.optString("reply").ifBlank {
@@ -264,6 +277,10 @@ object CliRelayClient {
         audioPath: String,
         prompt: String? = null,
         modelOverride: String? = null,
+        /** The recording is the whole question: the relay sends it without a text part. */
+        spokenQuestion: Boolean = false,
+        /** Appended by the relay to the user's system prompt (glasses spoken-question instructions). */
+        systemContext: String? = null,
     ): Result<String> = runCatching {
         val file = File(audioPath)
         require(file.exists()) { "Audio file not found: $audioPath" }
@@ -281,6 +298,8 @@ object CliRelayClient {
                     if (requestPrompt.isNotBlank()) put("prompt", requestPrompt)
                     val model = modelOverride?.trim().orEmpty()
                     if (model.isNotBlank()) put("model", model)
+                    if (spokenQuestion) put("spoken_question", true)
+                    systemContext?.takeIf { it.isNotBlank() }?.let { put("system_context", it) }
                 },
         )
         response.optString("reply").ifBlank {

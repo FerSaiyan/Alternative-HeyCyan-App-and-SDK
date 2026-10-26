@@ -1,0 +1,351 @@
+{"id": "en_color_of_object", "lang": "en", "text": "What color are these socks?", "class": "visual", "family": "color_of_object", "image": "socks_yellow", "expect": ["yellow"], "split": "test"}
+{"id": "en_read_sign", "lang": "en", "text": "Read this sign for me.", "class": "visual", "family": "read_sign", "image": "sign_no_parking", "expect": ["no parking"], "split": "test"}
+{"id": "en_banana_ripe", "lang": "en", "text": "Are these bananas ripe yet?", "class": "visual", "family": "banana_ripe", "image": "banana_ripe", "expect": ["ripe"], "split": "dev"}
+{"id": "en_which_bus", "lang": "en", "text": "Which bus is this?", "class": "visual", "family": "which_bus", "image": "bus_london_2", "expect": ["2", "norwood"], "split": "dev"}
+{"id": "en_identify_plant", "lang": "en", "text": "What plant is this?", "class": "visual", "family": "identify_plant", "image": "plant_aloe", "expect": ["aloe"], "split": "dev"}
+{"id": "en_price_check", "lang": "en", "text": "How much is this?", "class": "visual", "family": "price_check", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "en_label_text", "lang": "en", "text": "What does this label say?", "class": "visual", "family": "label_text", "image": "cereal_box_krave", "expect": ["krave", "chocolate"], "split": "train"}
+{"id": "en_brand_of_product", "lang": "en", "text": "What brand is this?", "class": "visual", "family": "brand_of_product", "image": "cereal_box_krave", "expect": ["kellogg", "krave"], "split": "train"}
+{"id": "en_whats_written_here", "lang": "en", "text": "What's written here?", "class": "visual", "family": "whats_written_here", "image": "price_tag_399", "expect": ["wow", "3.99", "3,99"], "split": "train"}
+{"id": "en_read_box_text", "lang": "en", "text": "Can you read this box for me? I'm looking for the ibuprofen.", "class": "visual", "family": "read_box_text", "image": null, "expect": null, "split": "train"}
+{"id": "en_translate_menu", "lang": "en", "text": "Translate this menu for me.", "class": "visual", "family": "translate_menu", "image": "menu_fr_chalkboard", "expect": ["burger", "sea bream", "prawn", "shrimp", "skewer"], "split": "train"}
+{"id": "en_count_people", "lang": "en", "text": "How many people are in front of me?", "class": "visual", "family": "count_people", "image": "people_three", "expect": ["3", "three"], "split": "train"}
+{"id": "en_capital_city", "lang": "en", "text": "What's the capital of Australia?", "class": "plain", "family": "capital_city", "image": null, "expect": null, "split": "test"}
+{"id": "en_tell_joke", "lang": "en", "text": "Tell me a joke.", "class": "plain", "family": "tell_joke", "image": null, "expect": null, "split": "test"}
+{"id": "en_unit_conversion", "lang": "en", "text": "How many kilometers is ten miles?", "class": "plain", "family": "unit_conversion", "image": null, "expect": null, "split": "test"}
+{"id": "en_arithmetic", "lang": "en", "text": "What's fifteen percent of eighty?", "class": "plain", "family": "arithmetic", "image": null, "expect": null, "split": "dev"}
+{"id": "en_translate_phrase", "lang": "en", "text": "How do you say thank you in Japanese?", "class": "plain", "family": "translate_phrase", "image": null, "expect": null, "split": "dev"}
+{"id": "en_definition_word", "lang": "en", "text": "What does serendipity mean?", "class": "plain", "family": "definition_word", "image": null, "expect": null, "split": "train"}
+{"id": "en_time_zone", "lang": "en", "text": "What time is it in Tokyo right now?", "class": "time", "family": "time_zone", "image": null, "expect": null, "split": "train"}
+{"id": "en_weather_tomorrow", "lang": "en", "text": "Is it going to rain tomorrow?", "class": "web", "family": "weather_tomorrow", "image": null, "expect": null, "split": "test"}
+{"id": "en_how_to_boil_egg", "lang": "en", "text": "How long should I boil an egg for a runny yolk?", "class": "plain", "family": "how_to_boil_egg", "image": null, "expect": null, "split": "train"}
+{"id": "en_small_talk", "lang": "en", "text": "Hey, how's your day going?", "class": "plain", "family": "small_talk", "image": null, "expect": null, "split": "train"}
+{"id": "en_history_fact", "lang": "en", "text": "Who painted the Mona Lisa?", "class": "plain", "family": "history_fact", "image": null, "expect": null, "split": "train"}
+{"id": "en_science_sky_blue", "lang": "en", "text": "Why is the sky blue?", "class": "plain", "family": "science_sky_blue", "image": null, "expect": null, "split": "train"}
+{"id": "en_tell_me_more", "lang": "en", "text": "Tell me more about this.", "class": "ambiguous", "family": "tell_me_more", "image": "plant_aloe", "expect": ["aloe"], "split": "test"}
+{"id": "en_is_it_good", "lang": "en", "text": "Is it any good?", "class": "ambiguous", "family": "is_it_good", "image": "cereal_box_krave", "expect": ["krave", "kellogg"], "split": "dev"}
+{"id": "en_good_deal", "lang": "en", "text": "Is this a good deal?", "class": "ambiguous", "family": "good_deal", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "en_what_do_you_think", "lang": "en", "text": "What do you think?", "class": "ambiguous", "family": "what_do_you_think", "image": null, "expect": null, "split": "train"}
+{"id": "en_weather_today", "lang": "en", "text": "What's the weather like today?", "class": "web", "family": "weather_today", "image": null, "expect": null, "split": "test"}
+{"id": "en_next_holiday", "lang": "en", "text": "When's the next public holiday?", "class": "web", "family": "next_holiday", "image": null, "expect": null, "split": "test"}
+{"id": "en_news_headline", "lang": "en", "text": "What's the latest news?", "class": "web", "family": "news_headline", "image": null, "expect": null, "split": "dev"}
+{"id": "en_exchange_rate", "lang": "en", "text": "How many euros is a dollar right now?", "class": "web", "family": "exchange_rate", "image": null, "expect": null, "split": "train"}
+{"id": "en_team_next_game", "lang": "en", "text": "When do the Lakers play next?", "class": "web", "family": "team_next_game", "image": null, "expect": null, "split": "train"}
+{"id": "en_pharmacy_open", "lang": "en", "text": "Is there a pharmacy open near me right now?", "class": "web", "family": "pharmacy_open", "image": null, "expect": null, "split": "train"}
+{"id": "en_traffic_to_work", "lang": "en", "text": "How's the traffic on my way to work?", "class": "web", "family": "traffic_to_work", "image": null, "expect": null, "split": "train"}
+{"id": "en_online_price", "lang": "en", "text": "How much is a PlayStation 5 going for right now?", "class": "web", "family": "online_price", "image": null, "expect": null, "split": "train"}
+{"id": "en_date_today", "lang": "en", "text": "What's the date today?", "class": "time", "family": "date_today", "image": null, "expect": null, "split": "train"}
+{"id": "en_days_until_christmas", "lang": "en", "text": "How many days until Christmas?", "class": "time", "family": "days_until_christmas", "image": null, "expect": null, "split": "dev"}
+{"id": "en_day_of_week", "lang": "en", "text": "What day of the week is it?", "class": "time", "family": "day_of_week", "image": null, "expect": null, "split": "test"}
+{"id": "ptbr_color_of_object", "lang": "pt-BR", "text": "De que cor são essas meias?", "class": "visual", "family": "color_of_object", "image": "socks_yellow", "expect": ["amarel"], "split": "test"}
+{"id": "ptbr_read_sign", "lang": "pt-BR", "text": "Lê essa placa pra mim.", "class": "visual", "family": "read_sign", "image": "sign_no_parking", "expect": ["no parking", "estacionar"], "split": "test"}
+{"id": "ptbr_banana_ripe", "lang": "pt-BR", "text": "Essas bananas já estão maduras?", "class": "visual", "family": "banana_ripe", "image": "banana_ripe", "expect": ["madur"], "split": "dev"}
+{"id": "ptbr_which_bus", "lang": "pt-BR", "text": "Que ônibus é esse?", "class": "visual", "family": "which_bus", "image": "bus_london_2", "expect": ["2", "norwood"], "split": "dev"}
+{"id": "ptbr_identify_plant", "lang": "pt-BR", "text": "Que planta é essa?", "class": "visual", "family": "identify_plant", "image": "plant_aloe", "expect": ["aloe", "babosa"], "split": "dev"}
+{"id": "ptbr_price_check", "lang": "pt-BR", "text": "Quanto custa isso?", "class": "visual", "family": "price_check", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "ptbr_label_text", "lang": "pt-BR", "text": "O que tá escrito nesse rótulo?", "class": "visual", "family": "label_text", "image": "cereal_box_krave", "expect": ["krave", "chocolate"], "split": "train"}
+{"id": "ptbr_brand_of_product", "lang": "pt-BR", "text": "Que marca é essa?", "class": "visual", "family": "brand_of_product", "image": "cereal_box_krave", "expect": ["kellogg", "krave"], "split": "train"}
+{"id": "ptbr_whats_written_here", "lang": "pt-BR", "text": "O que está escrito aqui?", "class": "visual", "family": "whats_written_here", "image": "price_tag_399", "expect": ["wow", "3.99", "3,99"], "split": "train"}
+{"id": "ptbr_read_box_text", "lang": "pt-BR", "text": "Lê o que diz nessa caixa pra mim? Tô procurando o ibuprofeno.", "class": "visual", "family": "read_box_text", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_translate_menu", "lang": "pt-BR", "text": "Traduz esse cardápio pra mim.", "class": "visual", "family": "translate_menu", "image": "menu_fr_chalkboard", "expect": ["hambúrguer", "burger", "dourada", "camarão", "camarões", "espetinho"], "split": "train"}
+{"id": "ptbr_count_people", "lang": "pt-BR", "text": "Quantas pessoas tem na minha frente?", "class": "visual", "family": "count_people", "image": "people_three", "expect": ["3", "três"], "split": "train"}
+{"id": "ptbr_capital_city", "lang": "pt-BR", "text": "Qual é a capital da Austrália?", "class": "plain", "family": "capital_city", "image": null, "expect": null, "split": "test"}
+{"id": "ptbr_tell_joke", "lang": "pt-BR", "text": "Me conta uma piada.", "class": "plain", "family": "tell_joke", "image": null, "expect": null, "split": "test"}
+{"id": "ptbr_unit_conversion", "lang": "pt-BR", "text": "Dez milhas dá quantos quilômetros?", "class": "plain", "family": "unit_conversion", "image": null, "expect": null, "split": "test"}
+{"id": "ptbr_arithmetic", "lang": "pt-BR", "text": "Quanto é quinze por cento de oitenta?", "class": "plain", "family": "arithmetic", "image": null, "expect": null, "split": "dev"}
+{"id": "ptbr_translate_phrase", "lang": "pt-BR", "text": "Como se diz obrigado em japonês?", "class": "plain", "family": "translate_phrase", "image": null, "expect": null, "split": "dev"}
+{"id": "ptbr_definition_word", "lang": "pt-BR", "text": "O que significa saudade?", "class": "plain", "family": "definition_word", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_time_zone", "lang": "pt-BR", "text": "Que horas são em Tóquio agora?", "class": "time", "family": "time_zone", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_weather_tomorrow", "lang": "pt-BR", "text": "Vai chover amanhã?", "class": "web", "family": "weather_tomorrow", "image": null, "expect": null, "split": "test"}
+{"id": "ptbr_how_to_boil_egg", "lang": "pt-BR", "text": "Quanto tempo eu cozinho o ovo pra gema ficar mole?", "class": "plain", "family": "how_to_boil_egg", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_small_talk", "lang": "pt-BR", "text": "E aí, como tá sendo seu dia?", "class": "plain", "family": "small_talk", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_history_fact", "lang": "pt-BR", "text": "Quem pintou a Mona Lisa?", "class": "plain", "family": "history_fact", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_science_sky_blue", "lang": "pt-BR", "text": "Por que o céu é azul?", "class": "plain", "family": "science_sky_blue", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_tell_me_more", "lang": "pt-BR", "text": "Me fala mais sobre isso.", "class": "ambiguous", "family": "tell_me_more", "image": "plant_aloe", "expect": ["aloe", "babosa"], "split": "test"}
+{"id": "ptbr_is_it_good", "lang": "pt-BR", "text": "Isso é bom?", "class": "ambiguous", "family": "is_it_good", "image": "cereal_box_krave", "expect": ["krave", "kellogg"], "split": "dev"}
+{"id": "ptbr_good_deal", "lang": "pt-BR", "text": "Será que vale a pena?", "class": "ambiguous", "family": "good_deal", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "ptbr_what_do_you_think", "lang": "pt-BR", "text": "O que você acha?", "class": "ambiguous", "family": "what_do_you_think", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_weather_today", "lang": "pt-BR", "text": "Como tá o tempo hoje?", "class": "web", "family": "weather_today", "image": null, "expect": null, "split": "test"}
+{"id": "ptbr_next_holiday", "lang": "pt-BR", "text": "Quando é o próximo feriado?", "class": "web", "family": "next_holiday", "image": null, "expect": null, "split": "test"}
+{"id": "ptbr_news_headline", "lang": "pt-BR", "text": "Quais são as últimas notícias?", "class": "web", "family": "news_headline", "image": null, "expect": null, "split": "dev"}
+{"id": "ptbr_exchange_rate", "lang": "pt-BR", "text": "Quanto tá o dólar hoje?", "class": "web", "family": "exchange_rate", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_team_next_game", "lang": "pt-BR", "text": "Quando é o próximo jogo do Flamengo?", "class": "web", "family": "team_next_game", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_pharmacy_open", "lang": "pt-BR", "text": "Tem alguma farmácia aberta aqui perto agora?", "class": "web", "family": "pharmacy_open", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_traffic_to_work", "lang": "pt-BR", "text": "Como tá o trânsito pro trabalho?", "class": "web", "family": "traffic_to_work", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_online_price", "lang": "pt-BR", "text": "Quanto tá custando um PlayStation 5 agora?", "class": "web", "family": "online_price", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_date_today", "lang": "pt-BR", "text": "Que dia é hoje?", "class": "time", "family": "date_today", "image": null, "expect": null, "split": "train"}
+{"id": "ptbr_days_until_christmas", "lang": "pt-BR", "text": "Quantos dias faltam pro Natal?", "class": "time", "family": "days_until_christmas", "image": null, "expect": null, "split": "dev"}
+{"id": "ptbr_day_of_week", "lang": "pt-BR", "text": "Hoje é que dia da semana?", "class": "time", "family": "day_of_week", "image": null, "expect": null, "split": "test"}
+{"id": "es_color_of_object", "lang": "es", "text": "¿De qué color son estos calcetines?", "class": "visual", "family": "color_of_object", "image": "socks_yellow", "expect": ["amarill"], "split": "test"}
+{"id": "es_read_sign", "lang": "es", "text": "Léeme este cartel.", "class": "visual", "family": "read_sign", "image": "sign_no_parking", "expect": ["no parking", "aparcar", "estacionar"], "split": "test"}
+{"id": "es_banana_ripe", "lang": "es", "text": "¿Estos plátanos ya están maduros?", "class": "visual", "family": "banana_ripe", "image": "banana_ripe", "expect": ["madur"], "split": "dev"}
+{"id": "es_which_bus", "lang": "es", "text": "¿Qué autobús es este?", "class": "visual", "family": "which_bus", "image": "bus_london_2", "expect": ["2", "norwood"], "split": "dev"}
+{"id": "es_identify_plant", "lang": "es", "text": "¿Qué planta es esta?", "class": "visual", "family": "identify_plant", "image": "plant_aloe", "expect": ["aloe", "sábila"], "split": "dev"}
+{"id": "es_price_check", "lang": "es", "text": "¿Cuánto cuesta esto?", "class": "visual", "family": "price_check", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "es_label_text", "lang": "es", "text": "¿Qué pone en esta etiqueta?", "class": "visual", "family": "label_text", "image": "cereal_box_krave", "expect": ["krave", "chocolate"], "split": "train"}
+{"id": "es_brand_of_product", "lang": "es", "text": "¿De qué marca es esto?", "class": "visual", "family": "brand_of_product", "image": "cereal_box_krave", "expect": ["kellogg", "krave"], "split": "train"}
+{"id": "es_whats_written_here", "lang": "es", "text": "¿Qué pone aquí?", "class": "visual", "family": "whats_written_here", "image": "price_tag_399", "expect": ["wow", "3.99", "3,99"], "split": "train"}
+{"id": "es_read_box_text", "lang": "es", "text": "¿Me lees lo que pone en esta caja? Busco el ibuprofeno.", "class": "visual", "family": "read_box_text", "image": null, "expect": null, "split": "train"}
+{"id": "es_translate_menu", "lang": "es", "text": "Tradúceme esta carta.", "class": "visual", "family": "translate_menu", "image": "menu_fr_chalkboard", "expect": ["hamburguesa", "burger", "dorada", "gambas", "brocheta"], "split": "train"}
+{"id": "es_count_people", "lang": "es", "text": "¿Cuántas personas hay delante de mí?", "class": "visual", "family": "count_people", "image": "people_three", "expect": ["3", "tres"], "split": "train"}
+{"id": "es_capital_city", "lang": "es", "text": "¿Cuál es la capital de Australia?", "class": "plain", "family": "capital_city", "image": null, "expect": null, "split": "test"}
+{"id": "es_tell_joke", "lang": "es", "text": "Cuéntame un chiste.", "class": "plain", "family": "tell_joke", "image": null, "expect": null, "split": "test"}
+{"id": "es_unit_conversion", "lang": "es", "text": "¿Cuántos kilómetros son diez millas?", "class": "plain", "family": "unit_conversion", "image": null, "expect": null, "split": "test"}
+{"id": "es_arithmetic", "lang": "es", "text": "¿Cuánto es el quince por ciento de ochenta?", "class": "plain", "family": "arithmetic", "image": null, "expect": null, "split": "dev"}
+{"id": "es_translate_phrase", "lang": "es", "text": "¿Cómo se dice gracias en japonés?", "class": "plain", "family": "translate_phrase", "image": null, "expect": null, "split": "dev"}
+{"id": "es_definition_word", "lang": "es", "text": "¿Qué significa serendipia?", "class": "plain", "family": "definition_word", "image": null, "expect": null, "split": "train"}
+{"id": "es_time_zone", "lang": "es", "text": "¿Qué hora es ahora mismo en Tokio?", "class": "time", "family": "time_zone", "image": null, "expect": null, "split": "train"}
+{"id": "es_weather_tomorrow", "lang": "es", "text": "¿Va a llover mañana?", "class": "web", "family": "weather_tomorrow", "image": null, "expect": null, "split": "test"}
+{"id": "es_how_to_boil_egg", "lang": "es", "text": "¿Cuánto tiempo cuezo un huevo para que la yema quede líquida?", "class": "plain", "family": "how_to_boil_egg", "image": null, "expect": null, "split": "train"}
+{"id": "es_small_talk", "lang": "es", "text": "Oye, ¿qué tal tu día?", "class": "plain", "family": "small_talk", "image": null, "expect": null, "split": "train"}
+{"id": "es_history_fact", "lang": "es", "text": "¿Quién pintó la Mona Lisa?", "class": "plain", "family": "history_fact", "image": null, "expect": null, "split": "train"}
+{"id": "es_science_sky_blue", "lang": "es", "text": "¿Por qué el cielo es azul?", "class": "plain", "family": "science_sky_blue", "image": null, "expect": null, "split": "train"}
+{"id": "es_tell_me_more", "lang": "es", "text": "Cuéntame más sobre esto.", "class": "ambiguous", "family": "tell_me_more", "image": "plant_aloe", "expect": ["aloe", "sábila"], "split": "test"}
+{"id": "es_is_it_good", "lang": "es", "text": "¿Esto es bueno?", "class": "ambiguous", "family": "is_it_good", "image": "cereal_box_krave", "expect": ["krave", "kellogg"], "split": "dev"}
+{"id": "es_good_deal", "lang": "es", "text": "¿Es buena oferta?", "class": "ambiguous", "family": "good_deal", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "es_what_do_you_think", "lang": "es", "text": "¿Tú qué opinas?", "class": "ambiguous", "family": "what_do_you_think", "image": null, "expect": null, "split": "train"}
+{"id": "es_weather_today", "lang": "es", "text": "¿Qué tiempo hace hoy?", "class": "web", "family": "weather_today", "image": null, "expect": null, "split": "test"}
+{"id": "es_next_holiday", "lang": "es", "text": "¿Cuándo es el próximo festivo?", "class": "web", "family": "next_holiday", "image": null, "expect": null, "split": "test"}
+{"id": "es_news_headline", "lang": "es", "text": "¿Cuáles son las últimas noticias?", "class": "web", "family": "news_headline", "image": null, "expect": null, "split": "dev"}
+{"id": "es_exchange_rate", "lang": "es", "text": "¿A cuánto está el dólar hoy?", "class": "web", "family": "exchange_rate", "image": null, "expect": null, "split": "train"}
+{"id": "es_team_next_game", "lang": "es", "text": "¿Cuándo juega el Real Madrid?", "class": "web", "family": "team_next_game", "image": null, "expect": null, "split": "train"}
+{"id": "es_pharmacy_open", "lang": "es", "text": "¿Hay alguna farmacia abierta cerca ahora mismo?", "class": "web", "family": "pharmacy_open", "image": null, "expect": null, "split": "train"}
+{"id": "es_traffic_to_work", "lang": "es", "text": "¿Cómo está el tráfico para ir al trabajo?", "class": "web", "family": "traffic_to_work", "image": null, "expect": null, "split": "train"}
+{"id": "es_online_price", "lang": "es", "text": "¿Cuánto cuesta ahora mismo una PlayStation 5?", "class": "web", "family": "online_price", "image": null, "expect": null, "split": "train"}
+{"id": "es_date_today", "lang": "es", "text": "¿Qué fecha es hoy?", "class": "time", "family": "date_today", "image": null, "expect": null, "split": "train"}
+{"id": "es_days_until_christmas", "lang": "es", "text": "¿Cuántos días faltan para Navidad?", "class": "time", "family": "days_until_christmas", "image": null, "expect": null, "split": "dev"}
+{"id": "es_day_of_week", "lang": "es", "text": "¿Qué día de la semana es hoy?", "class": "time", "family": "day_of_week", "image": null, "expect": null, "split": "test"}
+{"id": "de_color_of_object", "lang": "de", "text": "Welche Farbe haben diese Socken?", "class": "visual", "family": "color_of_object", "image": "socks_yellow", "expect": ["gelb"], "split": "test"}
+{"id": "de_read_sign", "lang": "de", "text": "Lies mir mal das Schild vor.", "class": "visual", "family": "read_sign", "image": "sign_no_parking", "expect": ["no parking", "parken"], "split": "test"}
+{"id": "de_banana_ripe", "lang": "de", "text": "Sind die Bananen schon reif?", "class": "visual", "family": "banana_ripe", "image": "banana_ripe", "expect": ["reif"], "split": "dev"}
+{"id": "de_which_bus", "lang": "de", "text": "Welcher Bus ist das?", "class": "visual", "family": "which_bus", "image": "bus_london_2", "expect": ["2", "norwood"], "split": "dev"}
+{"id": "de_identify_plant", "lang": "de", "text": "Was ist das für eine Pflanze?", "class": "visual", "family": "identify_plant", "image": "plant_aloe", "expect": ["aloe"], "split": "dev"}
+{"id": "de_price_check", "lang": "de", "text": "Was kostet das?", "class": "visual", "family": "price_check", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "de_label_text", "lang": "de", "text": "Was steht auf dem Etikett?", "class": "visual", "family": "label_text", "image": "cereal_box_krave", "expect": ["krave", "schoko"], "split": "train"}
+{"id": "de_brand_of_product", "lang": "de", "text": "Was ist das für eine Marke?", "class": "visual", "family": "brand_of_product", "image": "cereal_box_krave", "expect": ["kellogg", "krave"], "split": "train"}
+{"id": "de_whats_written_here", "lang": "de", "text": "Was steht hier?", "class": "visual", "family": "whats_written_here", "image": "price_tag_399", "expect": ["wow", "3.99", "3,99"], "split": "train"}
+{"id": "de_read_box_text", "lang": "de", "text": "Kannst du mir vorlesen, was auf der Packung steht? Ich suche das Ibuprofen.", "class": "visual", "family": "read_box_text", "image": null, "expect": null, "split": "train"}
+{"id": "de_translate_menu", "lang": "de", "text": "Übersetz mir mal die Speisekarte.", "class": "visual", "family": "translate_menu", "image": "menu_fr_chalkboard", "expect": ["burger", "dorade", "garnelen", "spieß"], "split": "train"}
+{"id": "de_count_people", "lang": "de", "text": "Wie viele Leute sind vor mir?", "class": "visual", "family": "count_people", "image": "people_three", "expect": ["3", "drei"], "split": "train"}
+{"id": "de_capital_city", "lang": "de", "text": "Was ist die Hauptstadt von Australien?", "class": "plain", "family": "capital_city", "image": null, "expect": null, "split": "test"}
+{"id": "de_tell_joke", "lang": "de", "text": "Erzähl mir einen Witz.", "class": "plain", "family": "tell_joke", "image": null, "expect": null, "split": "test"}
+{"id": "de_unit_conversion", "lang": "de", "text": "Wie viele Kilometer sind zehn Meilen?", "class": "plain", "family": "unit_conversion", "image": null, "expect": null, "split": "test"}
+{"id": "de_arithmetic", "lang": "de", "text": "Was sind fünfzehn Prozent von achtzig?", "class": "plain", "family": "arithmetic", "image": null, "expect": null, "split": "dev"}
+{"id": "de_translate_phrase", "lang": "de", "text": "Was heißt danke auf Japanisch?", "class": "plain", "family": "translate_phrase", "image": null, "expect": null, "split": "dev"}
+{"id": "de_definition_word", "lang": "de", "text": "Was bedeutet Fernweh?", "class": "plain", "family": "definition_word", "image": null, "expect": null, "split": "train"}
+{"id": "de_time_zone", "lang": "de", "text": "Wie spät ist es gerade in Tokio?", "class": "time", "family": "time_zone", "image": null, "expect": null, "split": "train"}
+{"id": "de_weather_tomorrow", "lang": "de", "text": "Regnet es morgen?", "class": "web", "family": "weather_tomorrow", "image": null, "expect": null, "split": "test"}
+{"id": "de_how_to_boil_egg", "lang": "de", "text": "Wie lange muss ich ein Ei kochen, damit es wachsweich ist?", "class": "plain", "family": "how_to_boil_egg", "image": null, "expect": null, "split": "train"}
+{"id": "de_small_talk", "lang": "de", "text": "Na, wie läuft dein Tag so?", "class": "plain", "family": "small_talk", "image": null, "expect": null, "split": "train"}
+{"id": "de_history_fact", "lang": "de", "text": "Wer hat die Mona Lisa gemalt?", "class": "plain", "family": "history_fact", "image": null, "expect": null, "split": "train"}
+{"id": "de_science_sky_blue", "lang": "de", "text": "Warum ist der Himmel blau?", "class": "plain", "family": "science_sky_blue", "image": null, "expect": null, "split": "train"}
+{"id": "de_tell_me_more", "lang": "de", "text": "Erzähl mir mehr darüber.", "class": "ambiguous", "family": "tell_me_more", "image": "plant_aloe", "expect": ["aloe"], "split": "test"}
+{"id": "de_is_it_good", "lang": "de", "text": "Taugt das was?", "class": "ambiguous", "family": "is_it_good", "image": "cereal_box_krave", "expect": ["krave", "kellogg"], "split": "dev"}
+{"id": "de_good_deal", "lang": "de", "text": "Ist das ein gutes Angebot?", "class": "ambiguous", "family": "good_deal", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "de_what_do_you_think", "lang": "de", "text": "Was meinst du?", "class": "ambiguous", "family": "what_do_you_think", "image": null, "expect": null, "split": "train"}
+{"id": "de_weather_today", "lang": "de", "text": "Wie wird das Wetter heute?", "class": "web", "family": "weather_today", "image": null, "expect": null, "split": "test"}
+{"id": "de_next_holiday", "lang": "de", "text": "Wann ist der nächste Feiertag?", "class": "web", "family": "next_holiday", "image": null, "expect": null, "split": "test"}
+{"id": "de_news_headline", "lang": "de", "text": "Was gibt's Neues in den Nachrichten?", "class": "web", "family": "news_headline", "image": null, "expect": null, "split": "dev"}
+{"id": "de_exchange_rate", "lang": "de", "text": "Wie steht der Dollar gerade zum Euro?", "class": "web", "family": "exchange_rate", "image": null, "expect": null, "split": "train"}
+{"id": "de_team_next_game", "lang": "de", "text": "Wann spielt der FC Bayern als Nächstes?", "class": "web", "family": "team_next_game", "image": null, "expect": null, "split": "train"}
+{"id": "de_pharmacy_open", "lang": "de", "text": "Hat hier in der Nähe gerade eine Apotheke offen?", "class": "web", "family": "pharmacy_open", "image": null, "expect": null, "split": "train"}
+{"id": "de_traffic_to_work", "lang": "de", "text": "Wie ist der Verkehr auf dem Weg zur Arbeit?", "class": "web", "family": "traffic_to_work", "image": null, "expect": null, "split": "train"}
+{"id": "de_online_price", "lang": "de", "text": "Was kostet eine PlayStation 5 gerade?", "class": "web", "family": "online_price", "image": null, "expect": null, "split": "train"}
+{"id": "de_date_today", "lang": "de", "text": "Welches Datum haben wir heute?", "class": "time", "family": "date_today", "image": null, "expect": null, "split": "train"}
+{"id": "de_days_until_christmas", "lang": "de", "text": "Wie viele Tage sind es noch bis Weihnachten?", "class": "time", "family": "days_until_christmas", "image": null, "expect": null, "split": "dev"}
+{"id": "de_day_of_week", "lang": "de", "text": "Welcher Wochentag ist heute?", "class": "time", "family": "day_of_week", "image": null, "expect": null, "split": "test"}
+{"id": "fr_color_of_object", "lang": "fr", "text": "C'est quelle couleur, ces chaussettes ?", "class": "visual", "family": "color_of_object", "image": "socks_yellow", "expect": ["jaune"], "split": "test"}
+{"id": "fr_read_sign", "lang": "fr", "text": "Tu peux me lire ce panneau ?", "class": "visual", "family": "read_sign", "image": "sign_no_parking", "expect": ["no parking", "stationn"], "split": "test"}
+{"id": "fr_banana_ripe", "lang": "fr", "text": "Elles sont mûres, ces bananes ?", "class": "visual", "family": "banana_ripe", "image": "banana_ripe", "expect": ["mûr"], "split": "dev"}
+{"id": "fr_which_bus", "lang": "fr", "text": "C'est quel bus, celui-là ?", "class": "visual", "family": "which_bus", "image": "bus_london_2", "expect": ["2", "norwood"], "split": "dev"}
+{"id": "fr_identify_plant", "lang": "fr", "text": "C'est quoi, cette plante ?", "class": "visual", "family": "identify_plant", "image": "plant_aloe", "expect": ["aloe", "aloès"], "split": "dev"}
+{"id": "fr_price_check", "lang": "fr", "text": "Ça coûte combien ?", "class": "visual", "family": "price_check", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "fr_label_text", "lang": "fr", "text": "Qu'est-ce qui est marqué sur l'étiquette ?", "class": "visual", "family": "label_text", "image": "cereal_box_krave", "expect": ["krave", "chocolat"], "split": "train"}
+{"id": "fr_brand_of_product", "lang": "fr", "text": "C'est quoi, la marque ?", "class": "visual", "family": "brand_of_product", "image": "cereal_box_krave", "expect": ["kellogg", "krave"], "split": "train"}
+{"id": "fr_whats_written_here", "lang": "fr", "text": "Qu'est-ce qui est écrit là ?", "class": "visual", "family": "whats_written_here", "image": "price_tag_399", "expect": ["wow", "3.99", "3,99"], "split": "train"}
+{"id": "fr_read_box_text", "lang": "fr", "text": "Tu peux me lire ce qu'il y a sur cette boîte ? Je cherche l'ibuprofène.", "class": "visual", "family": "read_box_text", "image": null, "expect": null, "split": "train"}
+{"id": "fr_translate_menu", "lang": "fr", "text": "Qu'est-ce qu'il y a au menu ?", "class": "visual", "family": "translate_menu", "image": "menu_fr_chalkboard", "expect": ["burger", "dorade", "gambas", "brochette"], "split": "train"}
+{"id": "fr_count_people", "lang": "fr", "text": "Il y a combien de personnes devant moi ?", "class": "visual", "family": "count_people", "image": "people_three", "expect": ["3", "trois"], "split": "train"}
+{"id": "fr_capital_city", "lang": "fr", "text": "C'est quoi la capitale de l'Australie ?", "class": "plain", "family": "capital_city", "image": null, "expect": null, "split": "test"}
+{"id": "fr_tell_joke", "lang": "fr", "text": "Raconte-moi une blague.", "class": "plain", "family": "tell_joke", "image": null, "expect": null, "split": "test"}
+{"id": "fr_unit_conversion", "lang": "fr", "text": "Dix miles, ça fait combien de kilomètres ?", "class": "plain", "family": "unit_conversion", "image": null, "expect": null, "split": "test"}
+{"id": "fr_arithmetic", "lang": "fr", "text": "Ça fait combien, quinze pour cent de quatre-vingts ?", "class": "plain", "family": "arithmetic", "image": null, "expect": null, "split": "dev"}
+{"id": "fr_translate_phrase", "lang": "fr", "text": "Comment on dit merci en japonais ?", "class": "plain", "family": "translate_phrase", "image": null, "expect": null, "split": "dev"}
+{"id": "fr_definition_word", "lang": "fr", "text": "Ça veut dire quoi, sérendipité ?", "class": "plain", "family": "definition_word", "image": null, "expect": null, "split": "train"}
+{"id": "fr_time_zone", "lang": "fr", "text": "Il est quelle heure à Tokyo, là ?", "class": "time", "family": "time_zone", "image": null, "expect": null, "split": "train"}
+{"id": "fr_weather_tomorrow", "lang": "fr", "text": "Il va pleuvoir demain ?", "class": "web", "family": "weather_tomorrow", "image": null, "expect": null, "split": "test"}
+{"id": "fr_how_to_boil_egg", "lang": "fr", "text": "Combien de temps je fais cuire un œuf à la coque ?", "class": "plain", "family": "how_to_boil_egg", "image": null, "expect": null, "split": "train"}
+{"id": "fr_small_talk", "lang": "fr", "text": "Salut, ça se passe bien ta journée ?", "class": "plain", "family": "small_talk", "image": null, "expect": null, "split": "train"}
+{"id": "fr_history_fact", "lang": "fr", "text": "Qui a peint la Joconde ?", "class": "plain", "family": "history_fact", "image": null, "expect": null, "split": "train"}
+{"id": "fr_science_sky_blue", "lang": "fr", "text": "Pourquoi le ciel est bleu ?", "class": "plain", "family": "science_sky_blue", "image": null, "expect": null, "split": "train"}
+{"id": "fr_tell_me_more", "lang": "fr", "text": "Dis-m'en plus là-dessus.", "class": "ambiguous", "family": "tell_me_more", "image": "plant_aloe", "expect": ["aloe", "aloès"], "split": "test"}
+{"id": "fr_is_it_good", "lang": "fr", "text": "C'est bien, ça ?", "class": "ambiguous", "family": "is_it_good", "image": "cereal_box_krave", "expect": ["krave", "kellogg"], "split": "dev"}
+{"id": "fr_good_deal", "lang": "fr", "text": "C'est une bonne affaire ?", "class": "ambiguous", "family": "good_deal", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "fr_what_do_you_think", "lang": "fr", "text": "T'en penses quoi ?", "class": "ambiguous", "family": "what_do_you_think", "image": null, "expect": null, "split": "train"}
+{"id": "fr_weather_today", "lang": "fr", "text": "Il fait quel temps aujourd'hui ?", "class": "web", "family": "weather_today", "image": null, "expect": null, "split": "test"}
+{"id": "fr_next_holiday", "lang": "fr", "text": "C'est quand le prochain jour férié ?", "class": "web", "family": "next_holiday", "image": null, "expect": null, "split": "test"}
+{"id": "fr_news_headline", "lang": "fr", "text": "Quelles sont les dernières infos ?", "class": "web", "family": "news_headline", "image": null, "expect": null, "split": "dev"}
+{"id": "fr_exchange_rate", "lang": "fr", "text": "Le dollar est à combien en euros aujourd'hui ?", "class": "web", "family": "exchange_rate", "image": null, "expect": null, "split": "train"}
+{"id": "fr_team_next_game", "lang": "fr", "text": "Le PSG joue quand, la prochaine fois ?", "class": "web", "family": "team_next_game", "image": null, "expect": null, "split": "train"}
+{"id": "fr_pharmacy_open", "lang": "fr", "text": "Il y a une pharmacie ouverte près d'ici, là ?", "class": "web", "family": "pharmacy_open", "image": null, "expect": null, "split": "train"}
+{"id": "fr_traffic_to_work", "lang": "fr", "text": "Ça roule comment pour aller au boulot ?", "class": "web", "family": "traffic_to_work", "image": null, "expect": null, "split": "train"}
+{"id": "fr_online_price", "lang": "fr", "text": "Elle coûte combien en ce moment, la PlayStation 5 ?", "class": "web", "family": "online_price", "image": null, "expect": null, "split": "train"}
+{"id": "fr_date_today", "lang": "fr", "text": "On est le combien aujourd'hui ?", "class": "time", "family": "date_today", "image": null, "expect": null, "split": "train"}
+{"id": "fr_days_until_christmas", "lang": "fr", "text": "Il reste combien de jours avant Noël ?", "class": "time", "family": "days_until_christmas", "image": null, "expect": null, "split": "dev"}
+{"id": "fr_day_of_week", "lang": "fr", "text": "On est quel jour de la semaine ?", "class": "time", "family": "day_of_week", "image": null, "expect": null, "split": "test"}
+{"id": "it_color_of_object", "lang": "it", "text": "Di che colore sono questi calzini?", "class": "visual", "family": "color_of_object", "image": "socks_yellow", "expect": ["giall"], "split": "test"}
+{"id": "it_read_sign", "lang": "it", "text": "Mi leggi questo cartello?", "class": "visual", "family": "read_sign", "image": "sign_no_parking", "expect": ["no parking", "sosta", "parcheggi"], "split": "test"}
+{"id": "it_banana_ripe", "lang": "it", "text": "Queste banane sono mature?", "class": "visual", "family": "banana_ripe", "image": "banana_ripe", "expect": ["matur"], "split": "dev"}
+{"id": "it_which_bus", "lang": "it", "text": "Che autobus è questo?", "class": "visual", "family": "which_bus", "image": "bus_london_2", "expect": ["2", "norwood"], "split": "dev"}
+{"id": "it_identify_plant", "lang": "it", "text": "Che pianta è questa?", "class": "visual", "family": "identify_plant", "image": "plant_aloe", "expect": ["aloe"], "split": "dev"}
+{"id": "it_price_check", "lang": "it", "text": "Quanto costa?", "class": "visual", "family": "price_check", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "it_label_text", "lang": "it", "text": "Cosa c'è scritto su questa etichetta?", "class": "visual", "family": "label_text", "image": "cereal_box_krave", "expect": ["krave", "cioccolat"], "split": "train"}
+{"id": "it_brand_of_product", "lang": "it", "text": "Di che marca è?", "class": "visual", "family": "brand_of_product", "image": "cereal_box_krave", "expect": ["kellogg", "krave"], "split": "train"}
+{"id": "it_whats_written_here", "lang": "it", "text": "Cosa c'è scritto qui?", "class": "visual", "family": "whats_written_here", "image": "price_tag_399", "expect": ["wow", "3.99", "3,99"], "split": "train"}
+{"id": "it_read_box_text", "lang": "it", "text": "Mi leggi cosa c'è scritto su questa scatola? Sto cercando l'ibuprofene.", "class": "visual", "family": "read_box_text", "image": null, "expect": null, "split": "train"}
+{"id": "it_translate_menu", "lang": "it", "text": "Mi traduci questo menù?", "class": "visual", "family": "translate_menu", "image": "menu_fr_chalkboard", "expect": ["hamburger", "burger", "orata", "gamberi", "spiedini"], "split": "train"}
+{"id": "it_count_people", "lang": "it", "text": "Quante persone ci sono davanti a me?", "class": "visual", "family": "count_people", "image": "people_three", "expect": ["3", "tre"], "split": "train"}
+{"id": "it_capital_city", "lang": "it", "text": "Qual è la capitale dell'Australia?", "class": "plain", "family": "capital_city", "image": null, "expect": null, "split": "test"}
+{"id": "it_tell_joke", "lang": "it", "text": "Raccontami una barzelletta.", "class": "plain", "family": "tell_joke", "image": null, "expect": null, "split": "test"}
+{"id": "it_unit_conversion", "lang": "it", "text": "Quanti chilometri sono dieci miglia?", "class": "plain", "family": "unit_conversion", "image": null, "expect": null, "split": "test"}
+{"id": "it_arithmetic", "lang": "it", "text": "Quanto fa il quindici per cento di ottanta?", "class": "plain", "family": "arithmetic", "image": null, "expect": null, "split": "dev"}
+{"id": "it_translate_phrase", "lang": "it", "text": "Come si dice grazie in giapponese?", "class": "plain", "family": "translate_phrase", "image": null, "expect": null, "split": "dev"}
+{"id": "it_definition_word", "lang": "it", "text": "Cosa vuol dire serendipità?", "class": "plain", "family": "definition_word", "image": null, "expect": null, "split": "train"}
+{"id": "it_time_zone", "lang": "it", "text": "Che ore sono adesso a Tokyo?", "class": "time", "family": "time_zone", "image": null, "expect": null, "split": "train"}
+{"id": "it_weather_tomorrow", "lang": "it", "text": "Domani piove?", "class": "web", "family": "weather_tomorrow", "image": null, "expect": null, "split": "test"}
+{"id": "it_how_to_boil_egg", "lang": "it", "text": "Quanto devo far bollire un uovo alla coque?", "class": "plain", "family": "how_to_boil_egg", "image": null, "expect": null, "split": "train"}
+{"id": "it_small_talk", "lang": "it", "text": "Ehi, come sta andando la giornata?", "class": "plain", "family": "small_talk", "image": null, "expect": null, "split": "train"}
+{"id": "it_history_fact", "lang": "it", "text": "Chi ha dipinto la Gioconda?", "class": "plain", "family": "history_fact", "image": null, "expect": null, "split": "train"}
+{"id": "it_science_sky_blue", "lang": "it", "text": "Perché il cielo è blu?", "class": "plain", "family": "science_sky_blue", "image": null, "expect": null, "split": "train"}
+{"id": "it_tell_me_more", "lang": "it", "text": "Dimmi di più su questo.", "class": "ambiguous", "family": "tell_me_more", "image": "plant_aloe", "expect": ["aloe"], "split": "test"}
+{"id": "it_is_it_good", "lang": "it", "text": "È buono?", "class": "ambiguous", "family": "is_it_good", "image": "cereal_box_krave", "expect": ["krave", "kellogg"], "split": "dev"}
+{"id": "it_good_deal", "lang": "it", "text": "È un buon affare?", "class": "ambiguous", "family": "good_deal", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "it_what_do_you_think", "lang": "it", "text": "Tu che ne pensi?", "class": "ambiguous", "family": "what_do_you_think", "image": null, "expect": null, "split": "train"}
+{"id": "it_weather_today", "lang": "it", "text": "Che tempo fa oggi?", "class": "web", "family": "weather_today", "image": null, "expect": null, "split": "test"}
+{"id": "it_next_holiday", "lang": "it", "text": "Quand'è il prossimo giorno festivo?", "class": "web", "family": "next_holiday", "image": null, "expect": null, "split": "test"}
+{"id": "it_news_headline", "lang": "it", "text": "Quali sono le ultime notizie?", "class": "web", "family": "news_headline", "image": null, "expect": null, "split": "dev"}
+{"id": "it_exchange_rate", "lang": "it", "text": "Quanto vale il dollaro in euro oggi?", "class": "web", "family": "exchange_rate", "image": null, "expect": null, "split": "train"}
+{"id": "it_team_next_game", "lang": "it", "text": "Quando gioca la Juve?", "class": "web", "family": "team_next_game", "image": null, "expect": null, "split": "train"}
+{"id": "it_pharmacy_open", "lang": "it", "text": "C'è una farmacia aperta qui vicino adesso?", "class": "web", "family": "pharmacy_open", "image": null, "expect": null, "split": "train"}
+{"id": "it_traffic_to_work", "lang": "it", "text": "Com'è il traffico per andare al lavoro?", "class": "web", "family": "traffic_to_work", "image": null, "expect": null, "split": "train"}
+{"id": "it_online_price", "lang": "it", "text": "Quanto costa adesso una PlayStation 5?", "class": "web", "family": "online_price", "image": null, "expect": null, "split": "train"}
+{"id": "it_date_today", "lang": "it", "text": "Quanti ne abbiamo oggi?", "class": "time", "family": "date_today", "image": null, "expect": null, "split": "train"}
+{"id": "it_days_until_christmas", "lang": "it", "text": "Quanti giorni mancano a Natale?", "class": "time", "family": "days_until_christmas", "image": null, "expect": null, "split": "dev"}
+{"id": "it_day_of_week", "lang": "it", "text": "Che giorno della settimana è oggi?", "class": "time", "family": "day_of_week", "image": null, "expect": null, "split": "test"}
+{"id": "zhcn_color_of_object", "lang": "zh-CN", "text": "这双袜子是什么颜色的？", "class": "visual", "family": "color_of_object", "image": "socks_yellow", "expect": ["黄"], "split": "test"}
+{"id": "zhcn_read_sign", "lang": "zh-CN", "text": "帮我读一下这个牌子。", "class": "visual", "family": "read_sign", "image": "sign_no_parking", "expect": ["no parking", "停车"], "split": "test"}
+{"id": "zhcn_banana_ripe", "lang": "zh-CN", "text": "这些香蕉熟了吗？", "class": "visual", "family": "banana_ripe", "image": "banana_ripe", "expect": ["熟"], "split": "dev"}
+{"id": "zhcn_which_bus", "lang": "zh-CN", "text": "这是几路车？", "class": "visual", "family": "which_bus", "image": "bus_london_2", "expect": ["2", "norwood"], "split": "dev"}
+{"id": "zhcn_identify_plant", "lang": "zh-CN", "text": "这是什么植物？", "class": "visual", "family": "identify_plant", "image": "plant_aloe", "expect": ["芦荟"], "split": "dev"}
+{"id": "zhcn_price_check", "lang": "zh-CN", "text": "这个多少钱？", "class": "visual", "family": "price_check", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "zhcn_label_text", "lang": "zh-CN", "text": "这个标签上写的什么？", "class": "visual", "family": "label_text", "image": "cereal_box_krave", "expect": ["krave", "巧克力"], "split": "train"}
+{"id": "zhcn_brand_of_product", "lang": "zh-CN", "text": "这是什么牌子的？", "class": "visual", "family": "brand_of_product", "image": "cereal_box_krave", "expect": ["kellogg", "krave", "家乐氏"], "split": "train"}
+{"id": "zhcn_whats_written_here", "lang": "zh-CN", "text": "这上面写的什么？", "class": "visual", "family": "whats_written_here", "image": "price_tag_399", "expect": ["wow", "3.99", "3,99"], "split": "train"}
+{"id": "zhcn_read_box_text", "lang": "zh-CN", "text": "帮我看看这个盒子上写的什么？我在找布洛芬。", "class": "visual", "family": "read_box_text", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_translate_menu", "lang": "zh-CN", "text": "帮我翻译一下这个菜单。", "class": "visual", "family": "translate_menu", "image": "menu_fr_chalkboard", "expect": ["汉堡", "鲷鱼", "虾", "串"], "split": "train"}
+{"id": "zhcn_count_people", "lang": "zh-CN", "text": "我前面有几个人？", "class": "visual", "family": "count_people", "image": "people_three", "expect": ["3", "三"], "split": "train"}
+{"id": "zhcn_capital_city", "lang": "zh-CN", "text": "澳大利亚的首都是哪里？", "class": "plain", "family": "capital_city", "image": null, "expect": null, "split": "test"}
+{"id": "zhcn_tell_joke", "lang": "zh-CN", "text": "给我讲个笑话。", "class": "plain", "family": "tell_joke", "image": null, "expect": null, "split": "test"}
+{"id": "zhcn_unit_conversion", "lang": "zh-CN", "text": "十英里是多少公里？", "class": "plain", "family": "unit_conversion", "image": null, "expect": null, "split": "test"}
+{"id": "zhcn_arithmetic", "lang": "zh-CN", "text": "八十的百分之十五是多少？", "class": "plain", "family": "arithmetic", "image": null, "expect": null, "split": "dev"}
+{"id": "zhcn_translate_phrase", "lang": "zh-CN", "text": "谢谢用日语怎么说？", "class": "plain", "family": "translate_phrase", "image": null, "expect": null, "split": "dev"}
+{"id": "zhcn_definition_word", "lang": "zh-CN", "text": "内卷是什么意思？", "class": "plain", "family": "definition_word", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_time_zone", "lang": "zh-CN", "text": "东京现在几点了？", "class": "time", "family": "time_zone", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_weather_tomorrow", "lang": "zh-CN", "text": "明天会下雨吗？", "class": "web", "family": "weather_tomorrow", "image": null, "expect": null, "split": "test"}
+{"id": "zhcn_how_to_boil_egg", "lang": "zh-CN", "text": "溏心蛋要煮几分钟？", "class": "plain", "family": "how_to_boil_egg", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_small_talk", "lang": "zh-CN", "text": "你今天过得怎么样？", "class": "plain", "family": "small_talk", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_history_fact", "lang": "zh-CN", "text": "蒙娜丽莎是谁画的？", "class": "plain", "family": "history_fact", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_science_sky_blue", "lang": "zh-CN", "text": "天空为什么是蓝色的？", "class": "plain", "family": "science_sky_blue", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_tell_me_more", "lang": "zh-CN", "text": "给我详细讲讲这个。", "class": "ambiguous", "family": "tell_me_more", "image": "plant_aloe", "expect": ["芦荟"], "split": "test"}
+{"id": "zhcn_is_it_good", "lang": "zh-CN", "text": "这个好不好？", "class": "ambiguous", "family": "is_it_good", "image": "cereal_box_krave", "expect": ["krave", "kellogg"], "split": "dev"}
+{"id": "zhcn_good_deal", "lang": "zh-CN", "text": "这个划算吗？", "class": "ambiguous", "family": "good_deal", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "zhcn_what_do_you_think", "lang": "zh-CN", "text": "你觉得呢？", "class": "ambiguous", "family": "what_do_you_think", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_weather_today", "lang": "zh-CN", "text": "今天天气怎么样？", "class": "web", "family": "weather_today", "image": null, "expect": null, "split": "test"}
+{"id": "zhcn_next_holiday", "lang": "zh-CN", "text": "下一个节假日是什么时候？", "class": "web", "family": "next_holiday", "image": null, "expect": null, "split": "test"}
+{"id": "zhcn_news_headline", "lang": "zh-CN", "text": "最近有什么新闻？", "class": "web", "family": "news_headline", "image": null, "expect": null, "split": "dev"}
+{"id": "zhcn_exchange_rate", "lang": "zh-CN", "text": "今天美元兑人民币汇率是多少？", "class": "web", "family": "exchange_rate", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_team_next_game", "lang": "zh-CN", "text": "国足下一场比赛是什么时候？", "class": "web", "family": "team_next_game", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_pharmacy_open", "lang": "zh-CN", "text": "附近现在有开着的药店吗？", "class": "web", "family": "pharmacy_open", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_traffic_to_work", "lang": "zh-CN", "text": "去公司的路上堵不堵？", "class": "web", "family": "traffic_to_work", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_online_price", "lang": "zh-CN", "text": "现在买一台PS5要多少钱？", "class": "web", "family": "online_price", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_date_today", "lang": "zh-CN", "text": "今天几号？", "class": "time", "family": "date_today", "image": null, "expect": null, "split": "train"}
+{"id": "zhcn_days_until_christmas", "lang": "zh-CN", "text": "离圣诞节还有几天？", "class": "time", "family": "days_until_christmas", "image": null, "expect": null, "split": "dev"}
+{"id": "zhcn_day_of_week", "lang": "zh-CN", "text": "今天星期几？", "class": "time", "family": "day_of_week", "image": null, "expect": null, "split": "test"}
+{"id": "ko_color_of_object", "lang": "ko", "text": "이 양말 무슨 색이야?", "class": "visual", "family": "color_of_object", "image": "socks_yellow", "expect": ["노란", "노랑"], "split": "test"}
+{"id": "ko_read_sign", "lang": "ko", "text": "이 표지판 좀 읽어줘.", "class": "visual", "family": "read_sign", "image": "sign_no_parking", "expect": ["no parking", "주차"], "split": "test"}
+{"id": "ko_banana_ripe", "lang": "ko", "text": "이 바나나 다 익었어?", "class": "visual", "family": "banana_ripe", "image": "banana_ripe", "expect": ["익"], "split": "dev"}
+{"id": "ko_which_bus", "lang": "ko", "text": "이거 몇 번 버스야?", "class": "visual", "family": "which_bus", "image": "bus_london_2", "expect": ["2", "norwood"], "split": "dev"}
+{"id": "ko_identify_plant", "lang": "ko", "text": "이거 무슨 식물이야?", "class": "visual", "family": "identify_plant", "image": "plant_aloe", "expect": ["알로에"], "split": "dev"}
+{"id": "ko_price_check", "lang": "ko", "text": "이거 얼마야?", "class": "visual", "family": "price_check", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "ko_label_text", "lang": "ko", "text": "이 라벨에 뭐라고 써 있어?", "class": "visual", "family": "label_text", "image": "cereal_box_krave", "expect": ["krave", "크레이브", "초콜릿"], "split": "train"}
+{"id": "ko_brand_of_product", "lang": "ko", "text": "이거 어디 브랜드야?", "class": "visual", "family": "brand_of_product", "image": "cereal_box_krave", "expect": ["kellogg", "krave", "켈로그"], "split": "train"}
+{"id": "ko_whats_written_here", "lang": "ko", "text": "여기 뭐라고 써 있어?", "class": "visual", "family": "whats_written_here", "image": "price_tag_399", "expect": ["wow", "3.99", "3,99"], "split": "train"}
+{"id": "ko_read_box_text", "lang": "ko", "text": "이 상자에 뭐라고 써 있는지 읽어줄래? 이부프로펜 찾고 있거든.", "class": "visual", "family": "read_box_text", "image": null, "expect": null, "split": "train"}
+{"id": "ko_translate_menu", "lang": "ko", "text": "이 메뉴판 좀 번역해줘.", "class": "visual", "family": "translate_menu", "image": "menu_fr_chalkboard", "expect": ["버거", "도미", "새우", "꼬치"], "split": "train"}
+{"id": "ko_count_people", "lang": "ko", "text": "내 앞에 사람이 몇 명 있어?", "class": "visual", "family": "count_people", "image": "people_three", "expect": ["3", "세 명", "셋"], "split": "train"}
+{"id": "ko_capital_city", "lang": "ko", "text": "호주 수도가 어디야?", "class": "plain", "family": "capital_city", "image": null, "expect": null, "split": "test"}
+{"id": "ko_tell_joke", "lang": "ko", "text": "웃긴 얘기 하나 해줘.", "class": "plain", "family": "tell_joke", "image": null, "expect": null, "split": "test"}
+{"id": "ko_unit_conversion", "lang": "ko", "text": "십 마일이면 몇 킬로미터야?", "class": "plain", "family": "unit_conversion", "image": null, "expect": null, "split": "test"}
+{"id": "ko_arithmetic", "lang": "ko", "text": "팔십의 십오 퍼센트는 얼마야?", "class": "plain", "family": "arithmetic", "image": null, "expect": null, "split": "dev"}
+{"id": "ko_translate_phrase", "lang": "ko", "text": "일본어로 고맙다는 말은 어떻게 해?", "class": "plain", "family": "translate_phrase", "image": null, "expect": null, "split": "dev"}
+{"id": "ko_definition_word", "lang": "ko", "text": "눈치가 무슨 뜻이야?", "class": "plain", "family": "definition_word", "image": null, "expect": null, "split": "train"}
+{"id": "ko_time_zone", "lang": "ko", "text": "지금 도쿄는 몇 시야?", "class": "time", "family": "time_zone", "image": null, "expect": null, "split": "train"}
+{"id": "ko_weather_tomorrow", "lang": "ko", "text": "내일 비 와?", "class": "web", "family": "weather_tomorrow", "image": null, "expect": null, "split": "test"}
+{"id": "ko_how_to_boil_egg", "lang": "ko", "text": "반숙 계란은 몇 분 삶아야 돼?", "class": "plain", "family": "how_to_boil_egg", "image": null, "expect": null, "split": "train"}
+{"id": "ko_small_talk", "lang": "ko", "text": "오늘 하루 어때?", "class": "plain", "family": "small_talk", "image": null, "expect": null, "split": "train"}
+{"id": "ko_history_fact", "lang": "ko", "text": "모나리자는 누가 그렸어?", "class": "plain", "family": "history_fact", "image": null, "expect": null, "split": "train"}
+{"id": "ko_science_sky_blue", "lang": "ko", "text": "하늘은 왜 파래?", "class": "plain", "family": "science_sky_blue", "image": null, "expect": null, "split": "train"}
+{"id": "ko_tell_me_more", "lang": "ko", "text": "이거에 대해 좀 더 알려줘.", "class": "ambiguous", "family": "tell_me_more", "image": "plant_aloe", "expect": ["알로에"], "split": "test"}
+{"id": "ko_is_it_good", "lang": "ko", "text": "이거 괜찮아?", "class": "ambiguous", "family": "is_it_good", "image": "cereal_box_krave", "expect": ["krave", "kellogg"], "split": "dev"}
+{"id": "ko_good_deal", "lang": "ko", "text": "이거 가격 괜찮은 거야?", "class": "ambiguous", "family": "good_deal", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "ko_what_do_you_think", "lang": "ko", "text": "어떻게 생각해?", "class": "ambiguous", "family": "what_do_you_think", "image": null, "expect": null, "split": "train"}
+{"id": "ko_weather_today", "lang": "ko", "text": "오늘 날씨 어때?", "class": "web", "family": "weather_today", "image": null, "expect": null, "split": "test"}
+{"id": "ko_next_holiday", "lang": "ko", "text": "다음 공휴일이 언제야?", "class": "web", "family": "next_holiday", "image": null, "expect": null, "split": "test"}
+{"id": "ko_news_headline", "lang": "ko", "text": "요즘 주요 뉴스 뭐 있어?", "class": "web", "family": "news_headline", "image": null, "expect": null, "split": "dev"}
+{"id": "ko_exchange_rate", "lang": "ko", "text": "오늘 달러 환율 얼마야?", "class": "web", "family": "exchange_rate", "image": null, "expect": null, "split": "train"}
+{"id": "ko_team_next_game", "lang": "ko", "text": "엘지 트윈스 다음 경기 언제야?", "class": "web", "family": "team_next_game", "image": null, "expect": null, "split": "train"}
+{"id": "ko_pharmacy_open", "lang": "ko", "text": "지금 근처에 문 연 약국 있어?", "class": "web", "family": "pharmacy_open", "image": null, "expect": null, "split": "train"}
+{"id": "ko_traffic_to_work", "lang": "ko", "text": "출근길 차 많이 막혀?", "class": "web", "family": "traffic_to_work", "image": null, "expect": null, "split": "train"}
+{"id": "ko_online_price", "lang": "ko", "text": "플레이스테이션 파이브 지금 얼마야?", "class": "web", "family": "online_price", "image": null, "expect": null, "split": "train"}
+{"id": "ko_date_today", "lang": "ko", "text": "오늘 며칠이야?", "class": "time", "family": "date_today", "image": null, "expect": null, "split": "train"}
+{"id": "ko_days_until_christmas", "lang": "ko", "text": "크리스마스까지 며칠 남았어?", "class": "time", "family": "days_until_christmas", "image": null, "expect": null, "split": "dev"}
+{"id": "ko_day_of_week", "lang": "ko", "text": "오늘 무슨 요일이야?", "class": "time", "family": "day_of_week", "image": null, "expect": null, "split": "test"}
+{"id": "ru_color_of_object", "lang": "ru", "text": "Какого цвета эти носки?", "class": "visual", "family": "color_of_object", "image": "socks_yellow", "expect": ["жёлт", "желт"], "split": "test"}
+{"id": "ru_read_sign", "lang": "ru", "text": "Прочитай, что написано на этом знаке.", "class": "visual", "family": "read_sign", "image": "sign_no_parking", "expect": ["no parking", "парков", "стоянк"], "split": "test"}
+{"id": "ru_banana_ripe", "lang": "ru", "text": "Эти бананы уже спелые?", "class": "visual", "family": "banana_ripe", "image": "banana_ripe", "expect": ["спел"], "split": "dev"}
+{"id": "ru_which_bus", "lang": "ru", "text": "Какой это автобус?", "class": "visual", "family": "which_bus", "image": "bus_london_2", "expect": ["2", "norwood"], "split": "dev"}
+{"id": "ru_identify_plant", "lang": "ru", "text": "Что это за растение?", "class": "visual", "family": "identify_plant", "image": "plant_aloe", "expect": ["алоэ", "столетник"], "split": "dev"}
+{"id": "ru_price_check", "lang": "ru", "text": "Сколько это стоит?", "class": "visual", "family": "price_check", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "ru_label_text", "lang": "ru", "text": "Что написано на этикетке?", "class": "visual", "family": "label_text", "image": "cereal_box_krave", "expect": ["krave", "шоколад"], "split": "train"}
+{"id": "ru_brand_of_product", "lang": "ru", "text": "Это какая марка?", "class": "visual", "family": "brand_of_product", "image": "cereal_box_krave", "expect": ["kellogg", "krave", "келлогг"], "split": "train"}
+{"id": "ru_whats_written_here", "lang": "ru", "text": "Что тут написано?", "class": "visual", "family": "whats_written_here", "image": "price_tag_399", "expect": ["wow", "3.99", "3,99"], "split": "train"}
+{"id": "ru_read_box_text", "lang": "ru", "text": "Прочитай, что написано на этой коробке? Я ищу ибупрофен.", "class": "visual", "family": "read_box_text", "image": null, "expect": null, "split": "train"}
+{"id": "ru_translate_menu", "lang": "ru", "text": "Переведи мне это меню.", "class": "visual", "family": "translate_menu", "image": "menu_fr_chalkboard", "expect": ["бургер", "дорад", "креветк", "шашлык"], "split": "train"}
+{"id": "ru_count_people", "lang": "ru", "text": "Сколько людей передо мной?", "class": "visual", "family": "count_people", "image": "people_three", "expect": ["3", "трое", "три"], "split": "train"}
+{"id": "ru_capital_city", "lang": "ru", "text": "Какая столица у Австралии?", "class": "plain", "family": "capital_city", "image": null, "expect": null, "split": "test"}
+{"id": "ru_tell_joke", "lang": "ru", "text": "Расскажи анекдот.", "class": "plain", "family": "tell_joke", "image": null, "expect": null, "split": "test"}
+{"id": "ru_unit_conversion", "lang": "ru", "text": "Сколько километров в десяти милях?", "class": "plain", "family": "unit_conversion", "image": null, "expect": null, "split": "test"}
+{"id": "ru_arithmetic", "lang": "ru", "text": "Сколько будет пятнадцать процентов от восьмидесяти?", "class": "plain", "family": "arithmetic", "image": null, "expect": null, "split": "dev"}
+{"id": "ru_translate_phrase", "lang": "ru", "text": "Как по-японски будет спасибо?", "class": "plain", "family": "translate_phrase", "image": null, "expect": null, "split": "dev"}
+{"id": "ru_definition_word", "lang": "ru", "text": "Что значит слово прокрастинация?", "class": "plain", "family": "definition_word", "image": null, "expect": null, "split": "train"}
+{"id": "ru_time_zone", "lang": "ru", "text": "Сколько сейчас времени в Токио?", "class": "time", "family": "time_zone", "image": null, "expect": null, "split": "train"}
+{"id": "ru_weather_tomorrow", "lang": "ru", "text": "Завтра будет дождь?", "class": "web", "family": "weather_tomorrow", "image": null, "expect": null, "split": "test"}
+{"id": "ru_how_to_boil_egg", "lang": "ru", "text": "Сколько варить яйцо всмятку?", "class": "plain", "family": "how_to_boil_egg", "image": null, "expect": null, "split": "train"}
+{"id": "ru_small_talk", "lang": "ru", "text": "Привет, как проходит твой день?", "class": "plain", "family": "small_talk", "image": null, "expect": null, "split": "train"}
+{"id": "ru_history_fact", "lang": "ru", "text": "Кто написал Мону Лизу?", "class": "plain", "family": "history_fact", "image": null, "expect": null, "split": "train"}
+{"id": "ru_science_sky_blue", "lang": "ru", "text": "Почему небо голубое?", "class": "plain", "family": "science_sky_blue", "image": null, "expect": null, "split": "train"}
+{"id": "ru_tell_me_more", "lang": "ru", "text": "Расскажи об этом подробнее.", "class": "ambiguous", "family": "tell_me_more", "image": "plant_aloe", "expect": ["алоэ", "столетник"], "split": "test"}
+{"id": "ru_is_it_good", "lang": "ru", "text": "Это стоящая вещь?", "class": "ambiguous", "family": "is_it_good", "image": "cereal_box_krave", "expect": ["krave", "kellogg"], "split": "dev"}
+{"id": "ru_good_deal", "lang": "ru", "text": "Это выгодная цена?", "class": "ambiguous", "family": "good_deal", "image": "price_tag_399", "expect": ["3.99", "3,99"], "split": "train"}
+{"id": "ru_what_do_you_think", "lang": "ru", "text": "Как думаешь?", "class": "ambiguous", "family": "what_do_you_think", "image": null, "expect": null, "split": "train"}
+{"id": "ru_weather_today", "lang": "ru", "text": "Какая сегодня погода?", "class": "web", "family": "weather_today", "image": null, "expect": null, "split": "test"}
+{"id": "ru_next_holiday", "lang": "ru", "text": "Когда следующий праздник?", "class": "web", "family": "next_holiday", "image": null, "expect": null, "split": "test"}
+{"id": "ru_news_headline", "lang": "ru", "text": "Какие последние новости?", "class": "web", "family": "news_headline", "image": null, "expect": null, "split": "dev"}
+{"id": "ru_exchange_rate", "lang": "ru", "text": "Какой сегодня курс доллара?", "class": "web", "family": "exchange_rate", "image": null, "expect": null, "split": "train"}
+{"id": "ru_team_next_game", "lang": "ru", "text": "Когда следующий матч «Спартака»?", "class": "web", "family": "team_next_game", "image": null, "expect": null, "split": "train"}
+{"id": "ru_pharmacy_open", "lang": "ru", "text": "Есть рядом аптека, которая сейчас работает?", "class": "web", "family": "pharmacy_open", "image": null, "expect": null, "split": "train"}
+{"id": "ru_traffic_to_work", "lang": "ru", "text": "Какие пробки по дороге на работу?", "class": "web", "family": "traffic_to_work", "image": null, "expect": null, "split": "train"}
+{"id": "ru_online_price", "lang": "ru", "text": "Сколько сейчас стоит Плейстейшн пять?", "class": "web", "family": "online_price", "image": null, "expect": null, "split": "train"}
+{"id": "ru_date_today", "lang": "ru", "text": "Какое сегодня число?", "class": "time", "family": "date_today", "image": null, "expect": null, "split": "train"}
+{"id": "ru_days_until_christmas", "lang": "ru", "text": "Сколько дней осталось до Рождества?", "class": "time", "family": "days_until_christmas", "image": null, "expect": null, "split": "dev"}
+{"id": "ru_day_of_week", "lang": "ru", "text": "Какой сегодня день недели?", "class": "time", "family": "day_of_week", "image": null, "expect": null, "split": "test"}

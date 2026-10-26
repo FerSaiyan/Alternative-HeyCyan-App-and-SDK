@@ -137,4 +137,11 @@
     <string name="donation_intro_dialog_title">CyanBridge Asaas 支持说明</string>
     <string name="donation_intro_dialog_message">您好，感谢您考虑向 CyanBridge 捐赠！我在攻读博士的同时维护这个项目，您的支持对我意义重大。由于巴西企业有特殊要求，我还没能配置 Stripe，因此目前使用名为 Asaas 的支付处理商。结账页面是葡萄牙语，如有需要请使用 Google 翻译。我正在积极寻找更好的替代方案。再次感谢您的支持！</string>
     <string name="donation_intro_open_button">打开 Asaas 银行卡表单</string>
+    <string name="voice_profile_status_none">尚未录入。说三句简短的话，CyanBridge 就能学会你的声音。目前不会过滤回答。</string>
+    <string name="voice_profile_status_enrolled">录入于 %1$s。目前不会过滤回答。</string>
+    <string name="voice_profile_status_model_ready">声音模型：%1$s（已安装）</string>
+    <string name="voice_profile_status_model_missing">声音模型：%1$s（尚未安装；在此之前会保留你的录音）</string>
+    <string name="voice_profile_delete_title">删除声纹档案？</string>
+    <string name="voice_profile_delete_body">这会从这部手机上删除你录制的句子和声纹模板。</string>
+    <string name="voice_profile_delete_confirm">删除</string>
 </resources>

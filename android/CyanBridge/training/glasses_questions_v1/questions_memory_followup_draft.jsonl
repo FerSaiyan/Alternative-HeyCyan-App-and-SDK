@@ -1,0 +1,12 @@
+{"id": "en_memory_wife", "lang": "en", "text": "What's my wife's name?", "class": "memory", "family": "memory_wife", "image": null, "expect": ["Ana"], "split": "test"}
+{"id": "ptbr_memory_wife", "lang": "pt-BR", "text": "Qual é o nome da minha esposa?", "class": "memory", "family": "memory_wife", "image": null, "expect": ["Ana"], "split": "test"}
+{"id": "en_memory_allergy", "lang": "en", "text": "Am I allergic to anything?", "class": "memory", "family": "memory_allergy", "image": null, "expect": ["peanut"], "split": "test"}
+{"id": "ptbr_memory_allergy", "lang": "pt-BR", "text": "Eu tenho alergia a alguma coisa?", "class": "memory", "family": "memory_allergy", "image": null, "expect": ["amendoim"], "split": "test"}
+{"id": "en_memory_dog", "lang": "en", "text": "What's my dog called?", "class": "memory", "family": "memory_dog", "image": null, "expect": ["Biscuit"], "split": "test"}
+{"id": "ptbr_memory_dog", "lang": "pt-BR", "text": "Como se chama o meu cachorro?", "class": "memory", "family": "memory_dog", "image": null, "expect": ["Biscuit"], "split": "test"}
+{"id": "en_memory_dentist", "lang": "en", "text": "When is my dentist appointment?", "class": "memory", "family": "memory_dentist", "image": null, "expect": ["Thursday"], "split": "test"}
+{"id": "ptbr_memory_dentist", "lang": "pt-BR", "text": "Quando é a minha consulta no dentista?", "class": "memory", "family": "memory_dentist", "image": null, "expect": ["quinta"], "split": "test"}
+{"id": "en_followup_population", "lang": "en", "text": "And how many people live there?", "class": "followup", "family": "followup_population", "image": null, "expect": ["thousand", "000"], "split": "test"}
+{"id": "ptbr_followup_population", "lang": "pt-BR", "text": "E quantas pessoas moram lá?", "class": "followup", "family": "followup_population", "image": null, "expect": ["mil", "000"], "split": "test"}
+{"id": "en_followup_building", "lang": "en", "text": "What's a famous building there?", "class": "followup", "family": "followup_building", "image": null, "expect": ["Parliament"], "split": "test"}
+{"id": "ptbr_followup_building", "lang": "pt-BR", "text": "Qual é um prédio famoso de lá?", "class": "followup", "family": "followup_building", "image": null, "expect": ["Parlamento"], "split": "test"}

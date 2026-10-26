@@ -113,6 +113,10 @@ tools/benchmarks/*
 !tools/benchmarks/make_phone_ui_training.py
 !tools/benchmarks/test_make_phone_ui_training.py
 !tools/benchmarks/train_laya_phone_ui.py
+!tools/benchmarks/make_glasses_question_fixtures.py
+!tools/benchmarks/eval_glasses_question_routing.py
+!tools/benchmarks/eval_spoken_route_tags.py
+!tools/benchmarks/grade_question_prompts.py
 !tools/benchmarks/eval_phone_ui_needle.py
 !tools/benchmarks/eval_phone_ui_real_laya.py
 !tools/benchmarks/eval_phone_ui_real_needle.py

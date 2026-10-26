@@ -1200,3 +1200,628 @@ model, never transcribes). 99% of users are offline local-model users.
   `android/CyanBridge/docs/WalkingAid_mvp.md`, `tools/hil/README.md`, and video asset
   provenance under `app/src/androidTest/assets/walkingaid/README.md`.
 - No physical EyeVue or Meta glasses are attached. Changes remain uncommitted.
+
+## 2026-10-22 — Decision-model question routing flag + voice-profile foundations (uncommitted)
+
+- Merged the local `jev-like-local-agent` (`989b69d`: NPU runtime, speaker models, shared-Gemma
+  decisions) into this branch as `448df1e`. The merge was clean and compiles. Local `jev-like-local-agent` is 66 commits ahead of
+  `origin/jev-like-local-agent` (not pushed).
+- Question routing flag (`QuestionRoutingPrefs`, Settings → Question routing): CLASSIC (default,
+  unchanged), SHADOW (debug, logs `QUESTION_DECISION_SHADOW`), SMART (beta: hear the question first,
+  router decides voice/camera; LOCAL engine = Fallback(Thresholded(loaded-model logits), SingleToken)).
+  Tasker, phone-assistant and Gemini Live routes stay classic. No transcript on the image wake route
+  → photo + recorded audio handed to the image flow.
+- Voice profile: shared `VoiceEnrollmentScreen` (commonMain, stable Compose only), onboarding step 4/5
+  and Settings → Voice profile. Three localized phrases (9 languages), consent, quality + leave-one-out
+  checks, pending/commit storage in `noBackupFilesDir/voiceprint`, ECAPA default (WeSpeaker int8
+  cataloged), model installed by staging + SHA-256. Non-CLASSIC modes log `SPEAKER_OBSERVE` scores
+  only — no gating. Clear local data deletes the profile.
+- Design/next steps: `android/CyanBridge/docs/QUESTION_ROUTING_AND_VOICE_PROFILE.md`.
+- Verification: 700/700 app unit tests (14 new), 84/84 shared portability tests, x86_64 debug APK.
+  Pixel 9a AVD: onboarding shows 5 steps; Settings sections render; enrollment screen, listening
+  state and no-speech retry verified (AVD mic is silent). Not yet run: a real three-phrase enrollment,
+  template build with the ECAPA model on a phone, SMART routing on glasses.
+
+## 2026-10-22 — Plan: decide-once question flow, "Initializing local model" cue, glasses-question data
+
+Findings (read-only investigation, this session):
+- Decision LoRA cannot share the answer model's cache: every decision-LoRA artifact is its own
+  2.4–2.8 GB bundle (CPU/GPU merged; NPU LoRA compiled into the graph). LiteRT-LM rejects a main-LLM
+  LoRA at runtime ("Lora is not supported"), and the LoRA adapts k/v projections, so a prefix
+  prefilled without it is not what it was trained on (and vice versa). Every decision and answer
+  today also starts a fresh session (no KV reuse; image follow-ups re-prefill the image).
+  Native LiteRT-LM has SessionAdvanced::Clone, rewind and a media-aware CachedSession, not exposed in
+  Kotlin/JNI; the patched Engine.scoreDecision always creates a fresh text-only session.
+- Decision data has no ordinary glasses questions: bounded-v3 has 9 English image phrasings (all name
+  image/photo/picture/camera) and 9 English science voice questions, wakeRoute is always "voice", no
+  photo-already-taken state, no implicit visual ("these socks", "this sign", price, ripeness) or
+  plain factual questions, no other languages. App 4-way menu != trained v3 menu. Router regex sends
+  "what color…" to ANSWER_QUESTION.
+- No end-to-end glasses question-flow test exists; AudioQuestionRecorder is created inline (no seam).
+  No glasses-question audio fixtures exist. Real-model tests are manual (LocalMultimodalProviderTest).
+- Local model cold load: LocalChatSessionManager.ensureModelLoaded (~:184); snapshot() blocks during
+  load; media requests may pick a different model than the selected one; speak() uses QUEUE_FLUSH.
+
+Target behaviour (owner, 2026-10-22):
+- One flow for both wake mappings: record the question once (image-mapped: photo in parallel, as now)
+  → decide → answer, never re-asking.
+  - image-mapped + "what color are these socks?" → use the photo already taken + same question.
+  - image-mapped + plain question → voice answer (skip image prefill).
+  - voice-mapped + visual question → take the photo now, reuse the same audio.
+  - voice-mapped + plain question → voice answer.
+- Bench transcribe-first vs audio-straight before choosing (Fold6, available 2026-10-23).
+- Speak "Initializing local model" only when a question/decision triggers a cold load; never when warm.
+
+Decision options to bench (no LoRA, so the prefix can be shared):
+1. Shared-prefix label scoring: prefill [system, image?, audio, question] once, clone the session,
+   append a short menu, score labels, answer on the original session (needs JNI patch: session clone +
+   scoring on an existing session with media).
+2. Tool call: one conversation; the model answers or calls look_with_camera; photo returned as the tool
+   result in the same conversation (verify LiteRT-LM tool support).
+Later: decision-only (aLoRA-style) adapter, or decision training merged into the answer model.
+
+Work order:
+1. Test seam (injectable question audio + photo source) and fixtures: local Piper/Kokoro stock voices
+   (never voice-clone outputs), 9 app languages, visual vs plain vs ambiguous questions; public images.
+2. Emulator flow tests (wake → record → decide → photo → answer) with stock gemma-4-E2B-it.litertlm.
+3. "Initializing local model" cold-load cue (localized, once, after recording, sequenced with TTS).
+4. Extend decision data/eval: implicit visual vs plain vs ambiguous, wakeRoute + photoAvailable state,
+   9 languages, audio versions.
+5. Fold6 benchmark (latency to decision / first spoken word, accuracy, STT availability per language),
+   then rebuild SMART on the winning path.
+
+### 2026-10-22 (later) — LiteRT-LM findings that change the decision plan
+- A LiteRT-LM `Conversation` keeps its KV across `sendMessage` turns and prefills only the new turn
+  (conversation.cc renders history and prefills the diff; only the new message's media are processed).
+  The app closes the Conversation after every call (LiteRtLocalInferenceEngine.kt:342-363), so it never
+  benefits. `ConversationConfig(initialMessages=[user(audio+question)], prefillPrefaceOnInit=true)`
+  prefills media without decoding.
+- No-patch decide-once candidate: one Conversation, prefill [system, audio(+image if already taken),
+  question]; the reply is constrained (`enableResponseFormat` + `ResponseFormat.regex`, llguidance in the
+  stock .so) to start with ⊲A⊳ (answer, continue) or ⊲B⊳ (needs camera, stop). On B, send
+  user(image + short text) in the same Conversation — audio is not re-prefilled and nobody is re-asked.
+  With the app's greedy sampling (temperature 0, topK 1) the token is the argmax choice (no calibrated
+  probability). Untested on device.
+- Tool calling works in both AARs (Gemma 4 template has native tool tokens), but a tool response is
+  JSON/text only — an image in a tool message does not render with the stock template.
+- Exact label scores on the shared prefix need a runtime + JNI patch (~250–350 lines): Conversation-level
+  clone + candidate scoring. Clone is not implemented in the NPU executor (0.16 source).
+- Local 0.16 LiteRT-LM tree has a stale partial patch applied; reset before `build_aar.sh`.
+
+### 2026-10-22 (later) — Emulator flow harness
+- New debug-only seam `GlassesQuestionTestHooks` (fixture question WAV in place of the mic, fixture JPEG in
+  place of the glasses photo, flow events) + `MainActivity.debugGlassesEvent("wake"|"photo_button")`.
+- New `GlassesQuestionFlowTest` (hil): photo button, classic wake on image/voice routes, cold-load cue,
+  and opt-in decide-once target tests (`-e gq_target true`).
+- "Initializing local model" cue: `LocalModelLoadAnnouncer` (cold loads only, once per question, queued).
+- Pixel 9a AVD, Gemma 4 E2B Q4_0 GGUF + mmproj (llama.cpp; the AVD lacks space for the 2.6 GB .litertlm):
+  photo button → image + transcript reached the model (95 s on CPU); cold load spoke the cue once, warm
+  questions stayed silent; the router's single-token decision alone took ~23 s on the AVD CPU.
+  On-device STT worked on this AVD for the English fixture.
+- Found: `binding.root` is never attached (MainActivity uses Compose setContent), so the existing
+  `EXTRA_START_META_IMAGE_QUESTION` handler's `binding.root.post` likely never runs (not fixed yet).
+
+### Fold6 runbook (2026-10-23) — question-path benchmark
+Build arm64 (default ABI) and install keeping data:
+```bash
+JAVA_HOME=/opt/android-studio/jbr bash tools/hil/build_debug_fast.sh :app:assembleDebug :app:assembleDebugAndroidTest
+B=~/.cache/cyanbridge/build-*/CyanBridgeManagerApp/app/outputs/apk
+cd android/CyanBridge && scripts/install_debug_keep_data.sh --serial RQCX700KSDF --apk $B/debug/app-debug.apk
+scripts/install_debug_keep_data.sh --serial RQCX700KSDF --apk $B/androidTest/debug/app-debug-androidTest.apk
+```
+Fixtures (synthetic stock-voice questions only) + stock model:
+```bash
+S="adb -s RQCX700KSDF"; $S shell mkdir -p /data/local/tmp/gq /data/local/tmp/mm
+D=/mnt/seagate/ML/cyanbridge-glasses-questions-20261022
+$S push $D/audio $D/images $D/manifest.json android/CyanBridge/training/glasses_questions_v1/questions.jsonl /data/local/tmp/gq/
+$S push /mnt/seagate/ML/gemma4-sm8650-port/downloads/gemma4/gemma-4-E2B-it.litertlm /data/local/tmp/mm/
+```
+Benchmark (repeat with -e qb_backend GPU; NPU needs the opt-in NPU build + catalog id):
+```bash
+$S shell am instrument -w -r -e class com.fersaiyan.cyanbridge.hil.QuestionPathBenchmarkTest \
+  -e qb_model /data/local/tmp/mm/gemma-4-E2B-it.litertlm -e qb_fixtures /data/local/tmp/gq \
+  -e qb_questions /data/local/tmp/gq/questions.jsonl -e qb_splits dev,test -e qb_backend CPU \
+  com.fersaiyan.cyanbridge.test/androidx.test.runner.AndroidJUnitRunner
+$S pull /sdcard/Android/data/com.fersaiyan.cyanbridge/files/question-bench.jsonl
+```
+End-to-end flow on the phone (fixture hooks, no glasses needed):
+```bash
+$S shell am instrument -w -r -e class com.fersaiyan.cyanbridge.hil.GlassesQuestionFlowTest \
+  -e gq_model /data/local/tmp/mm/gemma-4-E2B-it.litertlm -e gq_strict true -e gq_target true \
+  com.fersaiyan.cyanbridge.test/androidx.test.runner.AndroidJUnitRunner
+```
+Both tests snapshot/restore the model registry and settings prefs; the flow test also restores routing,
+wake-word, provider and onboarding prefs. They do not delete model files.
+
+## 2026-10-23 — Question-path benchmark: Fold6 GPU + AVD CPU, host routing evals
+
+Code since the 10-22 plan (uncommitted): `LocalModelLoadAnnouncer` cold-load cue; `GlassesQuestionTestHooks`
++ `MainActivity.debugGlassesEvent`; `GlassesQuestionFlowTest`; `QuestionPathBenchmarkTest`; decide-once
+(`DecideOnceRequest`/`DecideOncePrompt`, LiteRT two-turn conversation, SMART + LiteRT only, photo sink for
+prefetch/on-demand capture); LiteRT first-audio-after-install retry; current date/time/zone/region line in the
+question system prompt; host eval `tools/benchmarks/eval_glasses_question_routing.py`. Fixtures v1.0 (252) and
+v1.1 (+web/time, 351) under /mnt/seagate/ML/cyanbridge-glasses-questions-2026102{2,3}.
+
+Fold6 was benchmarked with the existing app install signed by the default debug key: copies of the test APKs were
+re-signed with ~/.android/debug.keystore and installed with `install -r -d` (data kept). The one-time
+`--rotate-from-debug-key` migration on the Fold6 is still the owner's call.
+
+Fold6 GPU, stock gemma-4-E2B-it.litertlm, 108 dev+test questions × 9 languages
+(eval/fold6-GPU-bench-v2.jsonl):
+| Path | Availability | Decision | Median total | Routing visual / plain |
+|---|---|---|---|---|
+| Android on-device STT → router → text answer | en, pt-BR only (7/9 languages no pack) | STT 2.5–3.0 s + router 0.45 s | answer 0.58 s | 3/10, 9/10 (CLARIFY often) |
+| Raw audio → answer | all | none | 1.03 s | none (visual answered blind) |
+| Decide-once (audio) | all | 1.56 s | 6.4 s answer / 13.1 s camera | 35/45, 45/45 |
+Decide-once per language 8–10/10. AVD CPU decide-once (same 108): visual 33/45, plain 45/45, decision 9.3 s.
+
+Findings:
+- Transcribe-first is not viable as the only path: on-device packs are missing for most app languages on the
+  Fold6, and the single-token router misroutes visual questions (CLARIFY/answer).
+- Decide-once routes well across languages (plain never goes to the camera), but visual recall is 75–78%.
+- The decide-once answer turn costs ~4–5 s before its first token on GPU even though turn 1 already prefilled the
+  audio (raw audio answers in 1.0 s total). The model also already writes the answer after ⊲A⊳ in turn 1, so the
+  next step is to stream the answer from turn 1 and only open turn 2 for the camera; profile with getTokenCount.
+- ResponseFormat.regex is not enforced on the stock 0.16 AAR (CPU AVD and Fold6 GPU); route is parsed leniently.
+- One Fold6 decision produced a malformed label ("⊲��⊳"); now falls back to answering.
+- Host zero-shot (Gemma 4 E2B QAT bf16): deciding on words works (transcript 92/108 visual, 107/108 plain),
+  raw audio does not (13/108 visual); writing the question first then deciding is close to a transcript.
+  A separate decision turn with label scores + threshold 0.98 would give 96/108 visual, 106/108 plain, but needs
+  the JNI scoring patch (Conversation clone + candidate scoring).
+- Web/time research (agent): add ⊲C⊳ "needs current info" to decide-once; app fetches (holiday table offline,
+  weather via paid/relay source — Open-Meteo free tier is non-commercial; generic search via a new Pro relay
+  /search, opt-in); always inject date/time (done). Default-off "Live info lookups" settings + spoken disclosure.
+
+### 2026-10-23 — Why decide-once decisions are slower than the earlier LiteRT decision research
+Sources: /mnt/seagate/ML/gemma4-sm8650-port/WORKLOG.md (2026-10-08 "Weight-Sharing Results on Fold6",
+"CyanBridge Decision LoRA 2x Slower Investigation", 2026-10-22 speed fix), android/CyanBridge/docs/
+LITERT_SHARED_DECISIONS.md, NPU_ON_DEVICE.md.
+- Earlier fast path: patched LiteRT-LM `Engine.scoreDecision` (opt-in `-PliteRtDecisionPrototype`
+  + local AAR), QAT decision-LoRA package on the Fold6 NPU (QAIRT 2.50, weight sharing): 118/120 bounded
+  dev, p50 1.34 s / p95 1.50 s. Reads label logits — no decoding — but runs two ~520-token text prefills
+  (normal + reversed menu) in a fresh session. Older INT4 PTQ LoRA exports: 109–110/120 at 15.2 s CPU /
+  4.6 s GPU (2x slower than stock: generic dynamic_wi4_blockwise32 PTQ + fixed 4096-slot FP32 KV).
+- Fold6 backends for E2B: NPU prefill 2,250–2,900 tok/s, decode 32–35 tok/s, TTFT 0.24–0.46 s at
+  512–1024 tokens (srq-a16-4k: prefill ~2.4k, decode ~30, init 8.7–11.5 s, PSS 1.61 GB); stock GPU
+  prefill 540–1,050 / decode 14–16; stock CPU prefill 110–205 / decode 11–19.
+- Today's decide-once (default build): stock 0.16 AAR, stock GPU bundle, audio input, and the label is
+  produced by *decoding* ~20 tokens ("Q: …" + label) → 1.56 s on Fold6 GPU, 9.3 s on AVD CPU. The extra
+  ~5 s on the answer route is the separate answer turn, not the decision (streaming variant being tested).
+- Implication: on the NPU stack decide-once's decode would be ~0.6 s; label-logit scoring on the shared
+  conversation (JNI patch: Conversation clone + candidate scoring, which the NPU executor does not yet
+  support for Clone) would make the decision almost free because the audio prefill is needed for the
+  answer anyway. The decision LoRA cannot share the answer conversation (merged weights; LoRA alters
+  k/v), so shared-conversation scoring needs zero-shot calibration (host: threshold 0.98 → 96/108
+  visual, 106/108 plain) or a routing ability trained into the answer model.
+
+### 2026-10-23 — Web/time research details (agent report, verified items marked in its report)
+- Mechanism: ⊲C⊳ route in decide-once turn 1 (optionally "K: weather|holiday|rates|search" and
+  "S: <query>"); app fetches; results go back as a *user* text turn in the same Conversation. Tool calling
+  (`@Tool`/OpenApiTool) works for text results in 0.16/0.18 but decides from raw audio, gives no
+  consent hook (automatic calling runs inside the native callback), and drops ResponseFormat.
+- Budget: 4096 context; decide-once system prompt is tiny (RAG off). Keep blocks short (weather ~80
+  tokens, holidays ~50, search ≤600–800) because GPU prefill is 540–1,050 tok/s and CPU 110–205.
+- Sources: relay has no search endpoint today (Gemini Live setup has no tools; chat via
+  lib/cloud-model-router.ts). Open-Meteo free tier is non-commercial (subscriptions count as
+  commercial), 10k calls/day, CC-BY 4.0, keeps IPs/logs ≤90 days. Nager.Date keyless, 204 countries
+  (BR next: 2026-11-02 Dia de Finados), regional `counties` → bundle a 2–3 year snapshot for offline
+  holidays. Brave Search $5/1k with $5/month credit, card required, storage rights extra. DDG has no
+  official API; SearXNG scrapes (terms gray).
+- Location: none used today (permissions only for Wi-Fi P2P/BLE; play-services-location unused).
+  Proposed "home city" setting (rounded ~0.1°) + locale region for holidays (es is ambiguous ES/MX/AR).
+- Disclosure: "Live info lookups" default OFF, per-category switches (weather, holidays, web search
+  Pro-only), one-time spoken disclosure, recent-lookups list, cite the source, send only minimal data,
+  never audio. Offline/timeout → model says it can't check that, in the user's language.
+- Gaps fixed/remaining: decide-once had no date → now `ImageQuestionDefaults.currentContextInstruction`
+  (weekday, date, time, zone, region) is in every question system prompt. `AssistantDecisionOptions`
+  still lists "what is the weather today" as a plain answer example — change when the web class lands.
+- Fixtures v1.1 (/mnt/seagate/ML/cyanbridge-glasses-questions-20261023, 351 rows, 429 clips, 35 MB):
+  +81 web (weather today/tomorrow, next holiday in each language's own word, news, local teams, rates,
+  pharmacy hours, traffic, online price) and +36 time (day of week, days until Christmas, date today);
+  `weather_tomorrow` moved plain→web and `time_zone` plain→time (agent's call; revert if unwanted).
+  Parakeet WER on new clips 0.052 (zh-CN/ko unchecked). Ambiguous deictic questions ("tell me more about
+  this") are now provisionally camera-worthy without a photo — owner to confirm.
+
+### 2026-10-23 — Owner decisions
+- Deprecate the transcript router ("automatic table/decision") for SMART: SMART now runs only the
+  decision model (decide-once, local LiteRT). Any other SMART setup (Pro, Tasker, phone assistant,
+  llama.cpp) behaves as Classic; the router (STT → regex tables → single-token → JSON classifier) stays
+  for Classic only. Removed the SMART-only router wiring (thresholded logit engine in the router
+  provider) and the "no transcript → image flow" hand-off. If the serving model cannot decide, the
+  recording is answered directly with the prefetched photo if any (no re-ask).
+- Direction: replace slow on-device STT with raw audio to the model.
+- Deictic ambiguous questions ("tell me more about this"): decision deferred until the decision model
+  works well (needs per-language mapping).
+- Streaming decide-once v1 (prompt "write ⊲A⊳ and then answer") biased toward answering (AVD visual→camera
+  2/15); v2 keeps the decision prompt and streams whatever the model writes after ⊲A⊳ (turn 2 only if
+  nothing follows). Measuring on AVD and Fold6.
+
+### 2026-10-23 — Fold6 CPU benchmark (same 108 questions; eval/fold6-CPU-bench-v2.jsonl)
+| Path (CPU) | Decision | Median total | Routing visual / plain |
+|---|---|---|---|
+| STT (en/pt-BR only) → router → text answer | STT 2.5–3.0 s + router 2.5 s | answer 2.7 s | 5/10, 10/10 |
+| Raw audio → answer | none | 3.0 s (TTFT 2.1 s) | none |
+| Decide-once (two-turn) | 4.7 s | 11.3 s answer / 19.3 s camera | 36/45, 45/45 |
+Per language 8–10/10 (en, ko, zh-CN 10/10). CPU is 2–3× GPU; routing is backend-independent.
+- AVD CPU, streaming decide-once v2 (eval/avd-decide-once-stream-v2.jsonl): routing identical to two-turn
+  (visual 33/45, plain 45/45); decision 7.1 s (was 9.3), answer route 12.8 s (was 17.8), camera 28.0 s (was 30.9).
+
+### 2026-10-23 — Fold6 GPU: two-turn vs streaming decide-once (eval/fold6-GPU-decide-once-stream-v1.jsonl)
+- Same 108 questions, same routing (visual 35/45, plain 45/45). Streaming: decision 1.6 s (two-turn 2.3 s),
+  answer route 6.6 s (7.8 s), camera route 15.2 s (15.3 s). Streaming helps a little; the large costs are
+  elsewhere (next section).
+
+### 2026-10-23 — Where decide-once time actually goes (Fold6 GPU probes, QuestionLatencyQuickTest)
+New androidTest `hil/QuestionLatencyQuickTest`: `#secondTurnProbe` drives the LiteRT Engine directly (A/B
+of vision backend, MTP, ConversationConfig, prompt wording); `#answerLatencyAfterQuestionWindow` times the
+app path (LocalModelsProvider) from the moment the question window closes. Each run takes 1–7 min.
+Results in /mnt/seagate/ML/cyanbridge-glasses-questions-20261022/eval/fold6-GPU-*-20261023.jsonl.
+- **`ConversationConfig(enableResponseFormat = true)` costs 2.3–2.8 s per createConversation** (163 ms
+  without it on the first conversation, then 3–20 ms). Decide-once sets it for the regex that the stock
+  0.16 AAR does not enforce anyway; passing `ResponseFormat.regex` on the raw engine crashes natively
+  (SIGTRAP in liblitertlm_jni). This is most of the unexplained ~4.5 s on the answer route.
+- **Vision encoder on CPU costs 5.4–8.7 s per photo; on GPU 2.2–2.4 s.** The app's GPU config uses
+  `visionBackend = CPU` (LiteRtLocalInferenceEngine.initializeGpuWithFallback). Camera-route turn 2: 5.4–6.2 s
+  (vision CPU) vs 2.3–2.4 s (vision GPU). Audio after an image still worked with vision GPU on 0.16 in the probe.
+- MTP on: with vision CPU, decode is ~2x faster (decision label 0.7–1.2 s vs 1.9–2.1 s without MTP).
+- **The engine itself is fast:** streaming decide-once turn 1 (exact app prompt) reaches the label at 0.7–1.4 s
+  and finishes the streamed answer at 1.3–1.9 s; a separate answer turn has first token at 0.16–0.4 s.
+- **The app's audio prompt is broken.** "Answer the question spoken in the attached audio. Do not merely
+  transcribe it." makes Gemma 4 E2B say no audio was attached: 67/108 of the earlier Fold6 GPU "audio"
+  rows (54/108 CPU), so the earlier "raw audio 1.0 s" figure was mostly fast refusals. The app's default system
+  prompt makes it worse. Wordings over 16 clips (en, pt-BR, de, zh-CN; app system prompt): text-after-audio
+  (current) 8/16 refusals; text-before-audio / audio-only / "asked you out loud" no refusals, but language
+  drift and mishearing (pt-BR capital → "Sydney", zh joke → flowers). **"First write the user's spoken question on one
+  line starting with "Q: ", then answer it on the next line."** heard 14/16 correctly (misheard: de "read
+  this sign", zh "these socks" → glasses), answered in the user's language except zh capital, +0.3–0.6 s. Raw audio needs the Q: line; it is also the transcript for history/logs/web queries.
+- Label-first logits without the Q: line are not good enough (host, E2B QAT, label scored right after the
+  audio): AUC 0.90 without photo / 0.93 with photo; after the Q: line AUC 0.986; transcript text 0.996.
+
+### 2026-10-23 — STT→answer vs audio→answer, model cold/warm, voice and photo windows (Fold6 GPU)
+Times from window close (lead 0.5 s + speech + 1.8 s endpoint silence = 4.5–5.0 s). Cold = model unloaded,
+the app's input-phase preload starts at the wake and overlaps the window (GPU load 5.6–7.8 s). Photo = 3 s
+simulated transfer in parallel with the window; answer includes the photo (vision CPU, as in the app).
+Medians of 4 questions (en, pt-BR × visual, plain); audio uses the Q: wording.
+
+| Flow | Model | STT → answer: first token / done | Audio → answer: first token / done |
+|---|---|---|---|
+| voice | warm | 5.9 / 6.0 s | **0.8 / 1.2 s** |
+| voice | cold (preload at wake) | 6.6 / 6.8 s | 4.0 / 4.6 s |
+| photo | warm | 11.2 / 11.5 s | 6.2 / 7.0 s |
+| photo | cold | 12.6 / 12.7 s | 7.9 / 8.6 s |
+
+- STT costs 5.4 s after the window: OfflineQuestionTranscriber replays the whole recording in real time,
+  including the lead and the 1.8 s trailing silence. STT also mistranslated (pt-BR answer in Spanish; "Sydney").
+- Cold: ~2.4 s of load remains after a 4.5–5 s window, plus ~1.5 s first-request warm-up.
+- Photo: the CPU vision encoder (~5.4 s) dominates; it starts only after the window, although the photo
+  arrives (~3 s) before the window closes.
+
+### 2026-10-23 — Proposed next changes (not implemented; owner to confirm)
+1. Drop `enableResponseFormat` from decide-once (−2.5 s per question; the regex was never enforced).
+2. Vision encoder on GPU for the GPU backend (−3 to −6 s per photo), after re-running the audio-after-image flow tests.
+3. Audio questions use the Q:-line wording; one turn: "Q: …" then ⊲A⊳ + streamed answer, or ⊲B⊳ (camera).
+   Expected Fold6 GPU, warm: label ~1 s, answer done ~1.5–2 s after the window closes.
+4. Image-mapped wake: no decision needed; always send photo + audio in one turn (the probe answered plain
+   questions correctly with an unrelated photo attached).
+5. Photo flow: prefill the photo as soon as it arrives, during the rest of the window, then add the audio.
+6. Endpoint: 1.8 s of silence is the largest fixed cost on every path. Start the turn speculatively after
+   ~0.6–0.8 s of silence and cancel if speech resumes, or shorten the silence.
+7. Cold start: start the preload earlier (glasses connected / screen on) or keep the model loaded with an idle timeout.
+8. Label logits (patched AAR): no clone needed. Decode "Q: …\n⊲", read log p(A), log p(B) at the label
+   position (single-pass candidate scoring already in the 0.16 patch), apply a calibrated threshold, commit
+   the chosen label (one-position rollback if needed), continue. Saves only ~0.1–0.3 s (the label is ~4 tokens);
+   the gain is calibration: host after-Q: threshold 102/108 visual, 103/108 plain vs greedy 35/45 visual on Fold6.
+
+### 2026-10-23 — Load times, CPU cold/warm, step-4/5 estimates (eval/fold6-CPU-latency-audio-20261023.jsonl)
+- Engine load on the Fold6 (stock E2B .litertlm, file in page cache): **CPU 0.6–1.1 s**, but weights page
+  in on first use (first answer +1.3 s); **GPU 4.6–9.8 s** (typ. 6–7 s; 11–12 s on the first load after an
+  install, when GPU kernels are compiled and cached); **NPU ~9 s** (8.7–11.5 s, gemma4-sm8650-port notes;
+  not re-measured today).
+- CPU, audio path with Q: wording, from window close: voice cold 3.7 / 4.4 s, warm 2.4 / 3.1 s; photo
+  ~10.5 / 11.2 s. Cold CPU and cold GPU first tokens are similar in the voice flow (3.7 vs 4.0 s); warm GPU is 3x faster.
+- Backend defaults already match the owner's policy: `LocalGenerationSettings.defaultsFor` → GPU, NPU for
+  `npuOnly` packages, per-model user choice persisted. The vision encoder on CPU inside the GPU backend
+  dates from ec63380 (2026-08-25) with no recorded reason.
+- Step 4 (image-mapped wake: always photo + audio in one turn, no decision): saves ~0.5–1.0 s with GPU vision
+  (decide 1.3–1.9 s + photo turn 2.4–2.7 s vs one turn ~2.9 s + 0.3–0.6 s Q: line), ~0.3–1.1 s with CPU vision;
+  the bigger gain is that 10/45 visual questions and half the ambiguous ones no longer ignore the photo.
+- Step 5 is possible on the stock 0.16 AAR: `Engine.createSession` → `Session.runPrefill(List<InputData>)` /
+  `generateContentStream(...)` with `InputData.Image(bytes)` / `Audio(bytes)` / `Text`. The Session API needs the
+  Gemma 4 chat template rendered by us (`Conversation.renderMessageIntoString` shows it). It hides up to the whole
+  photo encode (2.3 s GPU vision; part of 5.4 s CPU vision) when the photo arrives before the window closes;
+  no gain on a cold GPU load (the load outlasts the window).
+- Owner decisions (2026-10-23): respect the per-model backend; GPU default; NPU when an NPU model is loaded.
+  Audio is the default question input; on-device STT only for models without audio (e.g. Qwen text models).
+  No earlier preload (low-RAM devices); preload stays at the wake, with the "Initializing local model" cue.
+
+### 2026-10-23 — Label before or after the transcript; Gemma 4 audio research; processing while the user speaks
+- Gemma 4 audio facts (Google audio guide, deprecated page → gemma.ai): 25 audio tokens per second, **max
+  30 s per clip** (the app's recorder allows up to 120 s), mono 16 kHz. Documented tasks are ASR ("Transcribe
+  the following speech segment in {LANG} into {LANG} text") and AST ("Transcribe …, then translate it into …;
+  first output the transcription, then one newline, then …"). There is no documented spoken-question-answering
+  prompt. Our Q:-line wording mirrors the AST template (transcribe, newline, then the task), which is why it works.
+- "Please provide the audio" refusals are what Gemma 4 produces when it effectively has no audio (ESCUCHA
+  benchmark: text-only Gemma 4 refuses 32–53% of audio items that way). Public reports of Gemma 4 ignoring
+  audio are runtime bugs (processor drops audio, missing feature extractor, chat-level audio flag). Our LiteRT
+  runtime delivers the audio (the Q: line transcribes it), so ours is a prompt problem: an instruction about
+  "the attached audio", placed after the audio, without a transcription step.
+- Audio encoder (gemma4_audio config): conformer, chunked attention chunk 12, left context 13, **right context
+  0** → causal, streamable by design. LiteRT-LM exposes whole clips only; the stock `Session.runPrefill` lets
+  us prefill audio in pieces (cut at pauses) and the photo whenever it arrives, before the window closes.
+- The decision needs 4 routes, not 2: A answer, B camera, C live info/web, D phone action (the old router's
+  EXECUTE_UI_TASK → local agent). Only A can be answered in one go; B, C and D must stop after the label
+  (and the transcript for C/D, which need text: the search query, the agent goal).
+- Label-first is what lets the app act early (photo, fetch, agent) but is less accurate zero-shot on raw audio
+  (host, 2 routes: AUC 0.90–0.93 vs 0.986 after the Q: line). Proposed: label first → transcript → answer, act
+  immediately only on cheap, reversible routes (B: start the photo; discard it if the post-transcript check says
+  A), and confirm C/D after the transcript. Long questions: the Q: line costs ~25–30 tok/s on Fold6 GPU+MTP
+  (a 20 s question ≈ 2.5 s); for A it can be skipped once a direct-answer wording is reliable.
+- The dataset has no phone-action class yet (351 rows: visual 108, plain 90, web 81, time 36, ambiguous 36).
+
+### 2026-10-23 — Prompt layouts without rewriting the question, GPU vs NPU (QuestionPromptProbeTest)
+New androidTest `hil/QuestionPromptProbeTest` (Engine direct, fresh conversation per question, greedy, 64 tokens)
+and grader `tools/benchmarks/grade_question_prompts.py`. Build: LiteRT-LM 0.18 + NPU AAR (one build for both
+backends). GPU = stock gemma-4-E2B-it.litertlm (vision CPU + MTP, as the app); NPU = our multimodal SM8650 package
+(work_e2b_general_mm, vision GPU, audio CPU), **first on-phone run of its audio/image path**. Results:
+eval/fold6-qp-*-20261023.jsonl. New fixtures: 55 phone-action/not-addressed rows × stock voices, en/pt-BR/es/de/zh-CN
+(training/glasses_questions_v1/questions_action_ignore_draft.jsonl; audio /mnt/seagate/ML/cyanbridge-glasses-actions-ignore-20261023).
+The decision LoRA's data (Laya/Needle: phone_ui_synthetic_v1, artemis_real_v1, tasker_real_v1) was phone automation
+as written menus (next UI/control step among 10–12 options), no audio and no "question vs phone task" routing.
+
+Variants: base (app today), qline (Q: rewrite), g (system prompt describes the glasses: the user speaks, a photo may
+come along, reply in their language, never repeat their words; user turn = audio only), gtag ("Voice message:" + audio),
+route (g + ⊲A–E⊳ labels first), route2 (g + [answer]/[camera]/[search]/[phone]/[ignore] + one example each).
+16 clips (4 langs × visual/plain/action/ignore), photo runs on visual/plain; route2 on 44 clips incl. web/time.
+
+| | GPU refusals | GPU reply language | GPU done | NPU refusals | NPU reply language | NPU done |
+|---|---|---|---|---|---|---|
+| base | 3/16 | 2/8 | 1.0 s | 11/16 | 2/8 | 1.3 s |
+| qline | 0 (always rewrites) | 5/8 | 1.36 s | 0 (rewrites) | 5/8 | 1.5 s |
+| **g** | **0** | **6/8** | **0.79 s** | **0** | **7/8** | 1.25 s |
+| photo + audio, g | facts 3/4 | | 9.4 s (CPU vision) | facts 1/4 | | **3.2 s** (GPU vision) |
+
+- The glasses system prompt + bare audio removes both the rewrite and the "no audio" refusals, and saves
+  ~0.5 s vs the Q: line. zh replies tend to English; the Q: line still hears zh best.
+- Without a decision, g is unsafe: voice-only visual questions get an invented colour ("blue and white
+  striped"), phone actions are faked ("Okay, I'm opening Spotify…"), and speech to other people is answered.
+- Zero-shot label-first routing: ⊲A–E⊳ letters are mangled (GPU 3/16, NPU 1/16; NPU stops after "⊲C").
+  Bracket words are better: GPU 29/44 (web 8/8, action 7/8, plain 8/8, time 3/4, visual→camera 3/8,
+  ignore 0/8), NPU 20/44. The model often appends a second tag after its answer ("[answer] … [camera]").
+- The NPU package hears and knows less than Google's GPU bundle (pt-BR song → "Aquarela", "capital is the
+  Australian Capital Territory", zh hallucinations). Needs a quality pass before it serves audio questions.
+- Speed: NPU load 7.5–8.3 s; GPU load 12–16 s on 0.18 right after install. Photo questions: NPU 2.9 s first
+  token (vision on GPU) vs GPU backend 9.2 s (vision on CPU; 5.4 s on 0.16).
+
+### 2026-10-23 — Implemented: spoken questions as bare audio, audio-first input, GPU photos on GPU (uncommitted)
+Owner request: "glasses system prompt with bare audio (or photo plus audio) for every audio question" and "GPU
+runtime fully on GPU, no CPU handling photos when GPU is selected"; earlier decision: audio default, STT only
+for models that cannot hear.
+- `ImageQuestionDefaults.spokenQuestionInstruction(lang, allowQuestionEcho)`: glasses voice-assistant system text
+  (recording of their voice, maybe a photo; reply in the language they spoke, else the app language; never repeat
+  their words, except in the decide-once routing turn; use the photo only when they refer to what they see).
+- `MainActivity.runChosenProviderQuery`: with audio, that instruction replaces "Answer only in <app language>";
+  every audio call site (classic voice, photo + audio, decide-once, its fallback) now sends userPrompt "".
+- `LocalModelsProvider`: keeps an empty user message for media requests, so the attachments are the whole user
+  turn; `LiteRtLocalInferenceEngine` adds no text part for an empty prompt and joins the decide-once routing text
+  without a leading blank prompt.
+- Audio first: `processRecordedQuestion(transcribe = null)` uses on-device STT only when
+  `spokenQuestionAudioGoesToModel()` is false (assistant route not LOCAL, remote OpenAI server active, or no installed
+  model that hears audio: `LocalModelsProvider.hasLocalAudioModel` = LiteRT package with an audio encoder (0.16
+  cannot report modalities, so LiteRT packages count) or a Gemma 3n/4 GGUF with a projector).
+- GPU backend: `initializeGpuWithFallback` now uses `visionBackend = Backend.GPU()` (audio stays on CPU threads).
+  If GPU media init fails, the existing fallback is GPU text-only (no CPU photo path).
+- Tests: new `SpokenQuestionInstructionTest`, `LocalModelsProviderTest.spokenQuestionUserTurnIsTheAttachmentAlone`;
+  QuestionPathBenchmarkTest/QuestionLatencyQuickTest audio paths now send the app's layout. 718/718 unit tests.
+- Build gotcha: after switching `-PliteRtLmVersion`/NPU builds in the fast build root, KSP regenerated Room's
+  `AppDatabase_Impl.kt` but incremental Kotlin compile left `AppDatabase_Impl.class` out (2 Robolectric failures;
+  the NPU test APK installed on the Fold6 lacked it). Fix: `:app:compileDebugKotlin --rerun`; check the APK with
+  `unzip -p app-debug.apk 'classes*.dex' | grep -c -a AppDatabase_Impl` (> 0).
+- Known gap (2026-10-24): audio-first skips STT, so Classic phone tasks ("open Spotify and play …") no longer
+  reach the agent (only the transcript router sends EXECUTE_UI_TASK) and the model fakes the action. A
+  keep-STT-while-automation-is-on patch was reverted at the owner's request: the decision model must call the
+  local agent (and Live) from the audio instead; STT stays a fallback only.
+- Why LiteRT-LM 0.18 exists in the build (opt-in): the NPU (`Backend.NPU`, QAIRT 2.50 via LiteRT 2.3.0 dispatch;
+  0.18 pins LiteRT 26895c9f = QAIRT 2.50), plus `EmbeddingEngine`/`ModelInfo` (modality probe). The default stays
+  0.16 because the NPU AAR is opt-in (Qualcomm binaries not committed) and 0.18 needs the audio-before-image priming
+  and Google's chat template.
+- Audio encoder on GPU: Google's E2B bundle tags `tf_lite_audio_encoder_hw` CPU-only (port worklog: audioBackend
+  CPU "required by the section tag"). Probe switch added: QuestionPromptProbeTest `-e qp_audio GPU`.
+- NPU quality: the multimodal package (78e120e4) wraps the pre-SRQ base; the NPU session is repacking it on the
+  srq-a16-4k base (2f2e0e64) → ~/nvme_tmp/gemma4-sm8650-work/work_srq_a16_4k_mm/, and checking media-embedding
+  calibration and GPU audio.
+- Pro relay: `/audio-query` already sends real audio (OpenRouter `input_audio`, capability "audio" candidates) and
+  `CliRelayClient.audioQuery` exists, but the glasses flows never use it for Pro (STT → text); the app parses only
+  `supports_vision` from /models; `/image-query` takes no audio, so photo + audio would need a server change.
+
+### 2026-10-24 — Pro relay hears spoken questions; website main synced (website repo)
+- Website (`~/Documents/CyanBridgeLabs/Cyanbridge_website`): production had been CLI-deployed (2026-10-04) from an
+  uncommitted working tree; origin/main lagged 150 files. Verified prod's file list (545/547 identical to the working
+  tree, 2 newer docs), committed it as d2addd1 "Sync main with the production deployment", then 1a1c3d6 "Accept
+  glasses spoken questions as bare audio in the relay", pushed to origin/main, deployed with `vercel deploy --prod`
+  (cyanbridge-pkamfbq7r, aliases cyanbridge.vercel.app / cyanbridgelabs.com). No CI run or git-triggered deploy fired.
+  - `/audio-query`, `/image-query`: `spoken_question` (media is the whole user turn), `system_context` (appended to the
+    system prompt); `/image-query` takes optional `audioBase64` (audio-capable candidates). `/models`: `supports_audio`,
+    `cheap_router_supports_audio`. lib/spoken-question.ts + 4 tests; cloud-model tests 20/20.
+- App: `ProSubscriptionRelayClient` parses `supports_audio` and caches audio-capable ids
+  (`ProSubscriptionAiPrefs.questionsModelHearsAudio`, refreshed daily at question start). With the PRO route and an
+  audio-capable (non-Live) questions model, `spokenQuestionAudioGoesToModel()` skips STT and the recording goes to
+  `/audio-query` (or photo + audio to `/image-query`) with the spoken-question system context. Unknown catalog → STT.
+  720/720 unit tests.
+- NPU session (2026-10-24): rebuilt E2B image+audio on srq-a16-4k: work_srq_a16_4k_mm (sha256 dfe5d286…) and
+  work_srq_a16_4k_mmfix (a9cb6605…, main embeddings input range ±8.59 → ±20; text-only calibration clipped ~40% of
+  audio soft tokens, but host answers were unchanged). The SRQ base is the expected fix. Audio on GPU: LiteRT-LM
+  has a GPU audio path, but Google tags the audio encoder/adapter sections "cpu" ("Audio backend constraint
+  mismatch" with audioBackend=GPU, also on the stock bundle); a retagged "cpu,gpu" test bundle was requested.
+  Phone plan: NPU session runs the NPU A/B + audio-GPU probe when the Fold6 reconnects, then reinstalls the 0.16 build.
+- Audio-on-GPU test bundle: /mnt/seagate/ML/cyanbridge-litert-npu-20261008/audiogpu-20261024/gemma-4-E2B-it_audiogpu.litertlm
+  (sha256 18fdcf20…, stock sections byte-identical, audio encoder/adapter retagged "cpu,gpu";
+  recipe/retag_backend_constraint.py). The NPU session's Fold6 queue (NPU A/B on both SRQ packages, route2 on each,
+  GPU audio CPU vs GPU) starts when the phone reconnects; results → eval/fold6-qp-<tag>-20261024.jsonl. Afterwards this
+  session reinstalls the regular 0.16 build (current arm64 app-debug.apk, signed with the debug keystore).
+
+### 2026-10-24 — Implemented: spoken decision model (tags) as the default for voice questions (uncommitted)
+Owner approved the design: the decision model (not STT + transcript router) routes voice questions,
+including to the local agent and Live; STT is fallback only. Implementation:
+- `ai/router/SpokenDecision.kt`: `SpokenRoute` (ANSWER, CAMERA, SEARCH, PHONE, LIVE, IGNORE) and
+  `SpokenDecisionParser` (leading `[tag]`, one-line payload for phone/search, stray-tag cleaning,
+  `isComplete` for early stop). Tests: SpokenDecisionParserTest.
+- `ImageQuestionDefaults.SPOKEN_DECISION_ROUTES` (= host v2 prompt) and `NO_WEB_ACCESS_INSTRUCTION`.
+- `MainActivity.triggerSpokenDecisionQuestion()`: records once, `runChosenProviderQuery(decisionRoutes =
+  true)` on the local model or Pro relay, cancels generation once a non-answer route is written, then:
+  answer → speak; camera → photo + the same recording answered again with it; phone →
+  `startLocalAgentFromVoice(task)` (shared with the Classic EXECUTE_UI_TASK branch); live →
+  `launchGeminiLiveQuestion`; search → answered with the no-web note; ignore → silence. Test hook event
+  `spoken_decision`.
+- `handleAiWakeWordActivation`: voice route + mode ≠ CLASSIC + `spokenQuestionAudioGoesToModel()` → the
+  spoken decision; the photo-mapped wake keeps the photo flow. `QuestionRoutingMode.fromRaw` defaults to
+  SMART; the old `triggerDecideOnceQuestion` / `selectedLocalModelSupportsDecideOnce` were removed.
+  Settings labels updated in 9 languages.
+- Fixtures: `questions_live_draft.jsonl` (25 "start Live" rows, 5 langs; audio
+  /mnt/seagate/ML/cyanbridge-glasses-live-20261024). androidTest assets + manifest gained
+  en_play_song / en_talk_to_other (piper). GlassesQuestionFlowTest SMART cases: camera, answer, phone
+  (automation forced off → "Enable Local Agent…"), ignore (strict only).
+- Host evaluator `tools/benchmarks/eval_spoken_route_tags.py` (greedy tag + tag probabilities).
+- Tests: app 726/726, shared 88/88.
+- Host tag eval (E2B QAT bf16, transformers, audio only, 3 rows per lang×class; eval/host-e2b-qat-spoken-tags-v1v2-20261024.jsonl):
+
+  | prompt | visual→camera | plain | time | web→search | action→phone | live | ignore | total |
+  |---|---|---|---|---|---|---|---|---|
+  | v1 (route2 + live) | 12/27 | 25/27 | 11/18 | 26/27 | 10/15 | 5/15 | 0/15 | 89/144 |
+  | v2 (= app SPOKEN_DECISION_ROUTES) | 25/27 | 24/27 | 14/18 | 24/27 | 11/15 | 6/15 | 5/15 | 109/144 |
+
+  v2 misses: "Open Gemini Live" → [phone] in all 5 langs; phone-call talk / "never mind" answered; zh 9/20.
+  Greedy and tag-probability argmax agree within 2 rows, so a threshold would not change much.
+- Emulator (CyanBridge_LiteRT_CI, CPU), GlassesQuestionFlowTest SMART cases: camera (photo, "yellow"), answer
+  ("Canberra"), phone (reached the agent gate), ignore (kokoro clip) pass. The piper en_talk_to_other clip
+  intermittently fails the AVD audio encoder (status 13, audio_litert_compiled_model_executor.cc:817, retry fails
+  too) — recheck on the Fold6. Decision turns that fail now throw instead of being spoken.
+- v3 prompt (explicit "Gemini Live is [live], never [phone]", ignore = talk to another person or on a call, examples
+  phrased unlike the fixtures): host **118/144** (visual 24/27, plain 24/27, time 14/18, web 24/27, phone 12/15, live
+  10/15, ignore 10/15; zh-CN 8/20, other langs 9/11–19/20). Now the app's SPOKEN_DECISION_ROUTES. Parser also maps
+  `[phone] … Gemini Live / live mode` → LIVE and accepts a payload-less tag after a stray prefix ("] [camera]",
+  quoted line + "[ignore]"). eval/host-e2b-qat-spoken-tags-v3-20261024.jsonl. Unit tests 728/728.
+- Emulator (CyanBridge_LiteRT_CI, 16 KB pages, CPU), GlassesQuestionFlowTest with the v3 prompt, one test per process:
+  all four SMART routes pass (camera: photo + "yellow"; answer: "Canberra"; phone: agent gate; ignore: silent),
+  and the classic tests pass when the process's audio encoder works.
+- AVD audio-encoder failure root cause: in about half of the processes LiteRT rebuilds the main XNNPack weight cache
+  (the cache key flips between …_1785036911_… and …_1785036912_…); that build logs `mmap_handle.cc:173 remap
+  failed: Bad address` and the audio encoder then fails every request in the process (status 13,
+  audio_litert_compiled_model_executor.cc:817), even in a reloaded engine. Reloading without the weight cache works
+  but lmkd killed the app at 4.9 GB RSS, so the app keeps one delayed retry and then fails cleanly ("I couldn't
+  process that question"; decision turns never speak model errors). Not seen on the Fold6 (4 KB pages); recheck there.
+- Signed arm64 APKs for the Fold6 (debug keystore, AppDatabase_Impl present):
+  scratchpad/fold6/app-debug-v5-debugkey.apk + app-debug-androidTest-v5-debugkey.apk. App 728/728, shared 88/88.
+
+## 2026-10-24 — Keyless web answers for `[search]`: DuckDuckGo in an off-screen WebView
+
+- Goal: answer spoken `[search]` questions without an API key (open-source app) and, when DuckDuckGo's own AI
+  (Search Assist) already wrote the answer, read it out without a second model turn.
+- Access: from the workstation IP `html.duckduckgo.com` returns the duck CAPTCHA (HTTP 202) and headless Chromium
+  gets the 418 error page; duck.ai chat needs an obfuscated JS challenge (`x-vqd-hash-1`). A real browser engine works:
+  Chrome and the app's own WebView on the AVD were never blocked across ~60 searches.
+- `ai/search/DuckDuckGoSearchAssist.kt`: loads `duckduckgo.com/?q=…&ia=web&assist=true` in an off-screen WebView
+  (phone-size layout, "; wv" removed from the UA) and polls the DOM every 250 ms:
+  `[data-testid="duckassist-answer-content"]` paragraphs (AI answer, done when unchanged 750 ms),
+  the first non-ad module above the organic results (`li[data-layout]`, e.g. `forecast`, `maps_places`; never
+  `related_searches`) as an info box, and `[data-result="snippet"]` snippets. `a[data-assist-icon-trigger]` (Search
+  Assist tab) means an AI answer may still come; without it and with snippets it stops after 1 s. Timeout 12 s.
+- `[search]` route in `triggerSpokenDecisionQuestion`: says "Let me check." (9 languages), searches with the decision
+  payload, then: AI answer + English app language → spoken as is; AI answer otherwise → short model turn to say it
+  in the spoken language; info box → model answers from it; snippets → model; nothing → NO_WEB_ACCESS_INSTRUCTION.
+- AVD WebView results (ms from load): AI answers for "how tall is the eiffel tower in feet" (2.9–4.7 s), F1 winner,
+  "usd to brl exchange rate", "time in tokyo", "next public holiday brazil" (All Souls' Day), "latest news",
+  "what is the strongest pokemon card in the TCG right now" (5–8 s). Bare keywords ("bitcoin price") often get no
+  AI answer. Weather queries get the `forecast` info box located by IP (correct city, ~2 s); when Search Assist
+  answers weather it guesses a random US city (Halawa HI, Fort Worth TX, Kansas City…), so the box is preferred.
+  Answers can be US-centric ("next public holiday" → Veterans Day) or stale (Lakers "next game" in the past).
+  `kl=br-pt` localises boxes (Brazilian news) but drops most AI answers, so no region is set.
+- Spoken flow on the AVD (GlassesQuestionFlowTest#smartWebQuestionReadsTheDuckDuckGoAnswer, CPU, cold model):
+  "What's the weather like today?" → `[search] weather today` → info box (4.3 s) → "It is cloudy with a high of 26°C
+  and a low of 23°C for Ribeirão Preto, Brazil today." "When's the next public holiday?" → `[search] next public
+  holiday` → AI answer (6.5 s) read directly. Both pass; the model's decision turn is ~17 s on the AVD CPU.
+- Prompt v4 (search payload as a complete English question) hurt routing: 109/144 vs v3 118/144 (plain 15/27 —
+  "[search] What is the capital of Australia?"). Rejected. v5a (v3 + "short web search query in English") 119/142
+  vs v3 118/142 on the same rows (ignore 8/15 vs 10/15, others equal or +1); now the app prompt. v5b not finished
+  (stopped). eval/host-e2b-qat-spoken-tags-v4-20261024.jsonl, -v5ab-20261024.jsonl (v5a rows complete).
+- Bugs found by the web flow: LiteRtLocalInferenceEngine dropped newline-only stream chunks (`isBlank`), so
+  "[search] weather today\nThe weather…" streamed as "weather todayThe weather…" and the decision never stopped;
+  SpokenDecisionParser now also cuts a search/phone payload at a following tag ("… in Brazil [answer] The next…").
+- ToS: DuckDuckGo's Acceptable Use Policy forbids reselling and "frame, inline link, or similarly display any portion of
+  the services within another service"; reading Search Assist answers aloud in the app is arguably that. Ask
+  DuckDuckGo before shipping, or keep it an opt-in, user-initiated feature.
+
+- Google instead of DuckDuckGo (same off-screen WebView, `ai/search/WebSearchAssist.kt`, engine in
+  QuestionRoutingPrefs.webSearchEngine, default DUCKDUCKGO): `google.com/search?q=…&hl=<app language>`. Read: lead
+  paragraph of the AI Overview (`[data-subtree="aimc"] [data-container-id="main-col"]`, `data-complete="true"` when
+  done; trailing source chips stripped), `#rso` blocks above the first organic result as the info box (weather card,
+  currency converter, sports), `.VwiC3b` snippets; `/sorry` or "unusual traffic" = blocked. Never blocked on the AVD.
+- Same 9 queries in the app WebView: Google 9/9 with an AI answer or box, 1.5–5.3 s (mostly ~1.6–2 s); DuckDuckGo 6/9,
+  1.8–8 s. Portuguese questions get Portuguese AI Overviews ("O próximo feriado nacional será em 2 de novembro de 2026
+  (segunda-feira), Dia de Finados."; dollar, rain box, TCG); an English query with hl=pt-BR is answered in Portuguese,
+  so Google answers are read directly in any app language. DuckDuckGo had nothing for 3/4 Portuguese questions.
+- Spoken flows with Google (AVD, CPU): en weather (box → "It is currently 25° and cloudy, with a chance of moderate to
+  heavy rain starting at 00:45."; the first run said "26°F" until the answer note kept units as written), en holiday
+  (AI Overview read directly: "…All Souls' Day (Finados) on Monday, November 2, 2026."), pt weather and pt holiday
+  (app language pt-BR: "Vou pesquisar." → "O próximo feriado nacional é o Dia de Finados, em 2 de novembro de 2026…").
+  Search step 2.6–4.1 s after the decision.
+- ToS: Google's terms forbid "using automated means to access content from any of our services in violation of the
+  machine-readable instructions on our web pages", and google.com/robots.txt has `Disallow: /search`; stricter than
+  DuckDuckGo's policy. Shipping the Google engine is the owner's call.
+- 2026-10-25: Google is now the default engine (QuestionRoutingPrefs.webSearchEngine). Fallbacks and errors:
+  AI Overview lead paragraph (read directly) → info box (model answers from it) → top 3 organic results as
+  "title: description" (ads are in #tads, outside #rso; model answers, told to use the current local time) → fixed
+  localized sentences: found nothing ("I searched the web but couldn't find an answer to that."), offline ("I couldn't
+  search the web: there's no internet connection."), other failures ("I couldn't search the web right now. Please try
+  again later."); 9 languages each. The model is no longer asked to report failures: offline it said "I need your
+  location to tell you the weather." A failed model turn (decision or answer) speaks a localized "I couldn't process
+  that question." and never the raw "Local Models error…".
+- WebSearchAssist.Failure: WEBVIEW_UNAVAILABLE (WebView constructor throws; 3 ms), NETWORK (main-frame
+  onReceivedError/HTTP error; offline detected in 0.3–0.5 s instead of the 12 s timeout), BLOCKED (/sorry or "unusual
+  traffic"), TIMEOUT. "Loaded" requires the results container (#rso / DuckDuckGo mainline): one Google page reported
+  readyState complete with an empty body.
+- Google "People also ask" answers use the same `[data-subtree="aimc"]` block ("AI Mode replied:…", under
+  `[data-initq]`); "bitcoin price" read a 2030 price prediction from one until those are skipped. The real overview
+  sits under `[data-aim="1"]`.
+- AVD spoken flows (Google): offline en/pt and WebView disabled (`pm disable-user com.google.android.webview`, then
+  re-enabled) speak the fixed sentences above; results-only (debug hook GlassesQuestionTestHooks.webResultsOnly) →
+  "The next public holiday in Brazil is on October 28, which is Civil Servants' Day." (the AI Overview says Finados,
+  2 Nov; a 2B model answering from list-like snippets is weaker). Not tested: BLOCKED (no way to force the challenge),
+  TIMEOUT. Many runs hit the AVD audio-encoder bug (status 13) before the decision; retried.
+
+## 2026-10-25 — Context budget, LiteRT sessions for follow-ups, memory for spoken questions
+
+- Token budget (Gemma 4 E2B processor, app strings): spoken instruction 87, decision routes 531, clock 33, LIGHT
+  memory at caps 470, audio 25/s (30 s = 752), glasses photo ~268, web note 118–728 (weather box ≈ 470 alone).
+  Whole decision turn 795 (5 s) to 1,891 (30 s + memory); fits 4k, not the 1024 minimum.
+- Memory regression found: spoken questions (audio) ran with RagProfile.NONE and no query text, so no memory at all;
+  LIGHT for a user without memory is ~100 tokens of seeded templates plus a "normal chat" preamble.
+  `localagent/context/SpokenMemoryContext.kt`: query-free core (USER_FACTS.md entries, today's confirmed facts,
+  today's summary) without headings/placeholders, ≤1,000 chars (~250 tokens), empty when there is no memory; read
+  through LocalAgentMemoryStore (Memory Vault — plain file writes are ignored). Added after routes, before the clock
+  (also sent to the Pro relay with audio, like the old STT path's LIGHT memory).
+- Engine sessions: `SessionTurn(key, continueExisting, note)` on GenerationConfig → LocalChatSessionManager →
+  LocalModelsProvider.streamChat → runChosenProviderQuery. LiteRtLocalInferenceEngine keeps the conversation open
+  under the key; a continuing turn sends only its own content (audio / photo / text; `note` goes before the
+  attachments) and fails with SessionUnavailableException when there is no open session or Conversation.getTokenCount()
+  + turn estimate + 512 reserve > context size. Any other request closes it. llama.cpp and remote servers have none.
+- LiteRT-LM fails every later message of a cancelled conversation ("Task cancelled", retry too), so in a session the
+  decision turn is not cancelled: the app acts on the tag at once (photo/search/agent/Live) while the reply finishes,
+  and waits for it before the next turn. Replies are capped by LiteRT (sendMessageAsync maxOutputToken = maxTokens)
+  instead of the manager's cancel guard. LocalChatSessionManager also dropped newline-only chunks (`isBlank`).
+- Spoken flow (`triggerSpokenDecisionQuestion` / `runSpokenTurn`, `ai/router/SpokenConversation.kt`): local model →
+  session; camera photo and web results are turns in it (no audio re-encode; bare-tag replies fall back to the
+  self-contained call); Google answers read out / fixed sentences become the next turn's note; 5 s follow-up window
+  after answer/camera/search; a hotword question within 3 min continues; ignore resets.
+- AVD (CPU) follow-up chain capital → "And how many people live there?" → "What's a famous building there?" →
+  "Tell me more": all continued; population via search ("Canberra … 489,668"), tokens 856 → 949 → 1,359 (photo) →
+  1,435; decisions 18.3 s (cold) then 3.0–5.2 s. 20-turn chain: all continued, 3,450 tokens at turn 20 (≈21 turns fit
+  4k with this mix; ~75 tokens per short voice turn, ~400 per photo turn); follow-up decision time flat at 3–4 s.
+  Seen: "building there" routed to [camera]; in-session photo answer came as "[camera] That is a pair of … socks"
+  (accepted after clean); context bleed ("next public holiday" searched for Australia after the Canberra turns).
+- Memory accuracy. Host (questions_memory_followup_draft.jsonl, 8 clips en/pt-BR): no memory 0/8 ("I do not have
+  access to your personal information"), memory 6/8 (7/8 counting "alergia a peanuts"). Routing on the 224 other rows:
+  v5a 186 → memory at the end 177 → memory first 168 (ignore 13 → 9 → 7, live 19 → 16 → 17); memory stays at the end.
+  AVD end-to-end (Memory Vault facts): 6/6 with facts (4 memory + 2 controls) vs 2/6 without.
+- Unit tests 731/731 (+ SpokenMemoryContextTest). Fixtures: /mnt/seagate/ML/cyanbridge-glasses-memory-followup-20261025
+  (12 Piper clips), added to androidTest assets. Evals: eval/host-e2b-qat-spoken-memory-questions-20261025.jsonl,
+  -tags-v5a-memory-20261025.jsonl, -tags-v5a-memfirst-20261025.jsonl.

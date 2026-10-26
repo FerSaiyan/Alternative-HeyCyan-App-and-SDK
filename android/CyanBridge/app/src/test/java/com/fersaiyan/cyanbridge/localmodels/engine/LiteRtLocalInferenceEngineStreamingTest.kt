@@ -21,6 +21,8 @@ class LiteRtLocalInferenceEngineStreamingTest {
         assertEquals("There", engine.incrementalDelta("", "There"))
         assertEquals(" is", engine.incrementalDelta("There", "There is"))
         assertEquals(" a door", engine.incrementalDelta("There is", "There is a door"))
+        // A newline-only chunk is kept (it ends a spoken-decision payload line).
+        assertEquals("\n", engine.incrementalDelta("[search] weather today", "\n"))
     }
 
     @Test

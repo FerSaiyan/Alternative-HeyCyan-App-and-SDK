@@ -1,0 +1,13 @@
+<resources>
+    <string name="onboarding_vision_setup_label">Setup</string>
+    <string name="onboarding_vision_title">Do you need vision assistance?</string>
+    <string name="onboarding_vision_body">CyanBridge can adapt for blind and low-vision people with spoken feedback, glasses-button control and simpler screens. You can change this anytime in Settings.</string>
+    <string name="onboarding_vision_option_yes">Yes, I'm blind or have low vision</string>
+    <string name="onboarding_vision_option_yes_body">Turn on vision assistance</string>
+    <string name="onboarding_vision_option_no">No, use the standard app</string>
+    <string name="onboarding_vision_option_no_body">You can turn it on later in Settings</string>
+    <string name="onboarding_vision_screen_reader_note">A screen reader is on, so we selected vision assistance for you.</string>
+    <string name="settings_accessibility">Accessibility</string>
+    <string name="settings_vision_assistance">Vision assistance</string>
+    <string name="settings_vision_assistance_description">For blind and low-vision users: spoken feedback, glasses-button control and simpler screens.</string>
+</resources>

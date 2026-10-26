@@ -33,6 +33,13 @@ data class AssistantRoutingDecision(
     val clarification: String? = null,
 )
 
+/**
+ * Transcript router (on-device STT text → regex tables → single-token pick → JSON classifier).
+ * Deprecated for glasses questions (2026-10-23): SMART routing uses the decision model on the raw
+ * audio (DecideOnceRequest); this router remains only for Classic mode until the decision model
+ * also covers phone tasks and clarification. On the Fold6 it sent most visual questions to a plain
+ * answer or CLARIFY, and on-device STT packs covered only 2 of the 9 app languages.
+ */
 class AssistantRequestRouter(
     /**
      * Jev-like fast path. When set, route() tries deterministic checks (blank /

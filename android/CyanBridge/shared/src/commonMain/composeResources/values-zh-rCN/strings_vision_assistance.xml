@@ -1,0 +1,13 @@
+<resources>
+    <string name="onboarding_vision_setup_label">设置</string>
+    <string name="onboarding_vision_title">你需要视觉辅助吗？</string>
+    <string name="onboarding_vision_body">CyanBridge 可以为盲人和低视力用户调整：语音反馈、眼镜按键控制和更简洁的界面。你可以随时在设置中更改。</string>
+    <string name="onboarding_vision_option_yes">是，我是盲人或低视力</string>
+    <string name="onboarding_vision_option_yes_body">开启视觉辅助</string>
+    <string name="onboarding_vision_option_no">否，使用标准应用</string>
+    <string name="onboarding_vision_option_no_body">之后可以在设置中开启</string>
+    <string name="onboarding_vision_screen_reader_note">检测到读屏软件已开启，因此已为你选择视觉辅助。</string>
+    <string name="settings_accessibility">无障碍</string>
+    <string name="settings_vision_assistance">视觉辅助</string>
+    <string name="settings_vision_assistance_description">适用于盲人和低视力用户：语音反馈、眼镜按键控制和更简洁的界面。</string>
+</resources>

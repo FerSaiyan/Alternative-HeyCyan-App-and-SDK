@@ -65,6 +65,9 @@ object LocalDataClearer {
             if (memoryRoot.exists()) memoryRoot.deleteRecursively()
         }.onFailure { errors.add("delete_memory_files_failed: ${it.message}") }
 
+        runCatching { com.fersaiyan.cyanbridge.ai.speaker.VoiceProfile.delete(appCtx) }
+            .onFailure { errors.add("delete_voice_profile_failed: ${it.message}") }
+
         runCatching {
             MemoryVaultService.resetAllVaultTablesBlocking()
             VaultLockStateManager.clearAll(appCtx)

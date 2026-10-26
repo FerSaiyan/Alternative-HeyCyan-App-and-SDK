@@ -24,6 +24,7 @@ import com.fersaiyan.cyanbridge.shared.ui.onboarding.OnboardingChoice
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
+import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentActivity
 import com.hjq.permissions.OnPermissionCallback
 import java.util.Locale
 
@@ -67,7 +68,11 @@ class OnboardingFeatureActivity : AppCompatActivity() {
     }
 
     private fun setupFeatureScreen() {
-        val feature = FEATURES.getOrNull(featureIndex) ?: run {
+        if (featureIndex == VOICE_ENROLLMENT_STEP_INDEX) {
+            goToFeature(featureIndex)
+            return
+        }
+        val feature = featureForStep(featureIndex) ?: run {
             finishOnboarding()
             return
         }
@@ -90,7 +95,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                     choices = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) modelChoices else emptyList(),
                     selectedChoiceId = selectedModelId,
                     stepIndex = featureIndex,
-                    stepCount = FEATURES.size,
+                    stepCount = STEP_COUNT,
                     deviceCapabilitySummary = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) {
                         getString(R.string.onboarding_device_ram, deviceRamGb)
                     } else null,
@@ -114,7 +119,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                         if (featureIndex == 0) R.string.onboarding_skip_all else R.string.onboarding_back,
                     ),
                     nextLabel = getString(
-                        if (featureIndex == FEATURES.lastIndex) R.string.onboarding_get_started else R.string.onboarding_next,
+                        if (featureIndex == LAST_STEP_INDEX) R.string.onboarding_get_started else R.string.onboarding_next,
                     ),
                     onRequestGlassesConnectionPermission = {
                         requestBluetoothPermission(this, OnPermissionCallback { _, allGranted ->
@@ -149,7 +154,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                             showBluetoothSkipWarning = true
                         } else {
                             if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) startSelectedModelDownload()
-                            if (featureIndex == FEATURES.lastIndex) finishOnboarding()
+                            if (featureIndex == LAST_STEP_INDEX) finishOnboarding()
                             else goToFeature(featureIndex + 1)
                         }
                     },
@@ -159,9 +164,13 @@ class OnboardingFeatureActivity : AppCompatActivity() {
     }
 
     private fun goToFeature(index: Int) {
-        startActivity(Intent(this, OnboardingFeatureActivity::class.java).apply {
-            putExtra(EXTRA_FEATURE_INDEX, index)
-        })
+        startActivity(
+            if (index == VOICE_ENROLLMENT_STEP_INDEX) {
+                VoiceEnrollmentActivity.onboardingIntent(this, index, STEP_COUNT)
+            } else {
+                stepIntent(this, index)
+            },
+        )
         overridePendingTransition(R.anim.onboarding_fade_in, R.anim.onboarding_fade_out)
         finish()
     }
@@ -241,7 +250,9 @@ class OnboardingFeatureActivity : AppCompatActivity() {
         private const val KEY_ONBOARDING_MODEL_ID = "onboarding_model_id"
         private const val GLASSES_CONNECTION_FEATURE_INDEX = 0
         private const val LOCAL_MODEL_FEATURE_INDEX = 1
-        private const val OPEN_SOURCE_FEATURE_INDEX = 3
+        // Steps are FEATURES plus the voice-enrollment step, hosted by VoiceEnrollmentActivity.
+        private const val VOICE_ENROLLMENT_STEP_INDEX = 3
+        private const val OPEN_SOURCE_FEATURE_INDEX = 4
         private const val GITHUB_REPOSITORY_URL = "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK"
 
         private val FEATURES = listOf(
@@ -288,6 +299,18 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                 "A compact, quick text model for lower-memory devices.",
             ),
         )
+
+        private val STEP_COUNT get() = FEATURES.size + 1
+        private val LAST_STEP_INDEX get() = STEP_COUNT - 1
+
+        private fun featureForStep(step: Int): OnboardingFeature? = when {
+            step < VOICE_ENROLLMENT_STEP_INDEX -> FEATURES.getOrNull(step)
+            step == VOICE_ENROLLMENT_STEP_INDEX -> null
+            else -> FEATURES.getOrNull(step - 1)
+        }
+
+        fun stepIntent(context: Context, index: Int): Intent =
+            Intent(context, OnboardingFeatureActivity::class.java).putExtra(EXTRA_FEATURE_INDEX, index)
 
         fun launchIfNeeded(activity: AppCompatActivity) {
             val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

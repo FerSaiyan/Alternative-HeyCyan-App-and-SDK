@@ -1,0 +1,13 @@
+<resources>
+    <string name="onboarding_vision_setup_label">Configuration</string>
+    <string name="onboarding_vision_title">Avez-vous besoin d'une assistance visuelle ?</string>
+    <string name="onboarding_vision_body">CyanBridge peut s'adapter aux personnes aveugles et malvoyantes : retours vocaux, contrôle par les boutons des lunettes et écrans simplifiés. Vous pouvez changer cela à tout moment dans les Paramètres.</string>
+    <string name="onboarding_vision_option_yes">Oui, je suis aveugle ou malvoyant</string>
+    <string name="onboarding_vision_option_yes_body">Activer l'assistance visuelle</string>
+    <string name="onboarding_vision_option_no">Non, utiliser l'application standard</string>
+    <string name="onboarding_vision_option_no_body">Vous pourrez l'activer plus tard dans les Paramètres</string>
+    <string name="onboarding_vision_screen_reader_note">Un lecteur d'écran est actif, nous avons donc sélectionné l'assistance visuelle pour vous.</string>
+    <string name="settings_accessibility">Accessibilité</string>
+    <string name="settings_vision_assistance">Assistance visuelle</string>
+    <string name="settings_vision_assistance_description">Pour les personnes aveugles et malvoyantes : retours vocaux, contrôle par les boutons des lunettes et écrans simplifiés.</string>
+</resources>

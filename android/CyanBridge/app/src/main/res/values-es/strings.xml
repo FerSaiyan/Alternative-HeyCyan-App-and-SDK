@@ -137,4 +137,11 @@
     <string name="donation_intro_dialog_title">Nota de apoyo de CyanBridge mediante Asaas</string>
     <string name="donation_intro_dialog_message">¡Hola! Gracias por considerar una donación a CyanBridge. Trabajo en este proyecto además de mis estudios de doctorado, y tu apoyo significa mucho para mí. Todavía no he podido configurar Stripe debido a sus requisitos especiales para empresas brasileñas, así que por ahora utilizo un procesador de pagos llamado Asaas. La página de pago está en portugués; usa Google Translate si lo necesitas. Estoy buscando activamente una alternativa mejor. ¡Gracias de nuevo por tu apoyo!</string>
     <string name="donation_intro_open_button">Abrir formulario de tarjeta de Asaas</string>
+    <string name="voice_profile_status_none">Sin registrar. Tres frases cortas permiten que CyanBridge aprenda tu voz. Las respuestas aún no se filtran.</string>
+    <string name="voice_profile_status_enrolled">Registrado el %1$s. Las respuestas aún no se filtran.</string>
+    <string name="voice_profile_status_model_ready">Modelo de voz: %1$s (instalado)</string>
+    <string name="voice_profile_status_model_missing">Modelo de voz: %1$s (aún no instalado; tus frases se guardan hasta entonces)</string>
+    <string name="voice_profile_delete_title">¿Eliminar perfil de voz?</string>
+    <string name="voice_profile_delete_body">Esto elimina de este teléfono tus frases grabadas y las plantillas de tu voz.</string>
+    <string name="voice_profile_delete_confirm">Eliminar</string>
 </resources>

@@ -9,6 +9,9 @@ object ProSubscriptionAiPrefs {
     private const val KEY_QUESTIONS_MODEL = "questions_model"
     private const val KEY_TASKS_MODEL = "tasks_model"
     private const val KEY_SYSTEM_PROMPT = "system_prompt"
+    private const val KEY_AUDIO_MODELS = "audio_capable_models"
+    private const val KEY_AUDIO_MODELS_AT = "audio_capable_models_at_ms"
+    private const val AUDIO_MODELS_MAX_AGE_MS = 24 * 60 * 60 * 1000L
 
     private const val DEFAULT_MODEL = "auto"
     private const val LEGACY_FREE_GEMMA_MODEL = "google/gemma-4-26b-a4b-it:free"
@@ -82,5 +85,25 @@ object ProSubscriptionAiPrefs {
 
     fun resetSystemPrompt(context: Context) {
         prefs(context).edit().remove(KEY_SYSTEM_PROMPT).apply()
+    }
+
+    /** Relay models that accept audio input (`supports_audio` in /models), cached by fetchModelCatalog. */
+    fun saveAudioCapableModels(context: Context, modelIds: Collection<String>, nowMs: Long = System.currentTimeMillis()) {
+        prefs(context).edit()
+            .putStringSet(KEY_AUDIO_MODELS, modelIds.map { normalizeModel(it).lowercase() }.toSet())
+            .putLong(KEY_AUDIO_MODELS_AT, nowMs)
+            .apply()
+    }
+
+    fun audioCapableModelsStale(context: Context, nowMs: Long = System.currentTimeMillis()): Boolean =
+        nowMs - prefs(context).getLong(KEY_AUDIO_MODELS_AT, 0L) > AUDIO_MODELS_MAX_AGE_MS
+
+    /**
+     * True when the questions model can hear a recording, so glasses questions go to the relay as
+     * audio. Unknown (never fetched) means false: on-device STT first, as before.
+     */
+    fun questionsModelHearsAudio(context: Context): Boolean {
+        val ids = prefs(context).getStringSet(KEY_AUDIO_MODELS, null) ?: return false
+        return normalizeModel(getQuestionsModel(context)).lowercase() in ids
     }
 }

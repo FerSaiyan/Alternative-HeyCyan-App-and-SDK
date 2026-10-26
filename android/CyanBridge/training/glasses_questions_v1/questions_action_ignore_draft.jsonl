@@ -1,0 +1,55 @@
+{"id": "en_play_song", "lang": "en", "text": "Open Spotify and play We Are the Champions.", "class": "action", "family": "play_song", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_play_song", "lang": "pt-BR", "text": "Abre o Spotify e toca We Are the Champions.", "class": "action", "family": "play_song", "image": null, "expect": [], "split": "test"}
+{"id": "es_play_song", "lang": "es", "text": "Abre Spotify y pon We Are the Champions.", "class": "action", "family": "play_song", "image": null, "expect": [], "split": "test"}
+{"id": "de_play_song", "lang": "de", "text": "Öffne Spotify und spiel We Are the Champions.", "class": "action", "family": "play_song", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_play_song", "lang": "zh-CN", "text": "打开Spotify，播放《We Are the Champions》。", "class": "action", "family": "play_song", "image": null, "expect": [], "split": "test"}
+{"id": "en_set_timer", "lang": "en", "text": "Set a timer for ten minutes.", "class": "action", "family": "set_timer", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_set_timer", "lang": "pt-BR", "text": "Coloca um timer de dez minutos.", "class": "action", "family": "set_timer", "image": null, "expect": [], "split": "test"}
+{"id": "es_set_timer", "lang": "es", "text": "Pon un temporizador de diez minutos.", "class": "action", "family": "set_timer", "image": null, "expect": [], "split": "test"}
+{"id": "de_set_timer", "lang": "de", "text": "Stell einen Timer auf zehn Minuten.", "class": "action", "family": "set_timer", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_set_timer", "lang": "zh-CN", "text": "设一个十分钟的计时器。", "class": "action", "family": "set_timer", "image": null, "expect": [], "split": "test"}
+{"id": "en_message_mom", "lang": "en", "text": "Send a message to Mom saying I'm on my way.", "class": "action", "family": "message_mom", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_message_mom", "lang": "pt-BR", "text": "Manda uma mensagem pra minha mãe dizendo que estou a caminho.", "class": "action", "family": "message_mom", "image": null, "expect": [], "split": "test"}
+{"id": "es_message_mom", "lang": "es", "text": "Mándale un mensaje a mamá diciendo que voy en camino.", "class": "action", "family": "message_mom", "image": null, "expect": [], "split": "test"}
+{"id": "de_message_mom", "lang": "de", "text": "Schick Mama eine Nachricht, dass ich unterwegs bin.", "class": "action", "family": "message_mom", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_message_mom", "lang": "zh-CN", "text": "给妈妈发消息，说我在路上了。", "class": "action", "family": "message_mom", "image": null, "expect": [], "split": "test"}
+{"id": "en_call_contact", "lang": "en", "text": "Call Ana.", "class": "action", "family": "call_contact", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_call_contact", "lang": "pt-BR", "text": "Liga pra Ana.", "class": "action", "family": "call_contact", "image": null, "expect": [], "split": "test"}
+{"id": "es_call_contact", "lang": "es", "text": "Llama a Ana.", "class": "action", "family": "call_contact", "image": null, "expect": [], "split": "test"}
+{"id": "de_call_contact", "lang": "de", "text": "Ruf Anna an.", "class": "action", "family": "call_contact", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_call_contact", "lang": "zh-CN", "text": "给安娜打电话。", "class": "action", "family": "call_contact", "image": null, "expect": [], "split": "test"}
+{"id": "en_flashlight", "lang": "en", "text": "Turn on the flashlight.", "class": "action", "family": "flashlight", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_flashlight", "lang": "pt-BR", "text": "Liga a lanterna.", "class": "action", "family": "flashlight", "image": null, "expect": [], "split": "test"}
+{"id": "es_flashlight", "lang": "es", "text": "Enciende la linterna.", "class": "action", "family": "flashlight", "image": null, "expect": [], "split": "test"}
+{"id": "de_flashlight", "lang": "de", "text": "Schalte die Taschenlampe ein.", "class": "action", "family": "flashlight", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_flashlight", "lang": "zh-CN", "text": "打开手电筒。", "class": "action", "family": "flashlight", "image": null, "expect": [], "split": "test"}
+{"id": "en_navigate", "lang": "en", "text": "Take me to the nearest gas station.", "class": "action", "family": "navigate", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_navigate", "lang": "pt-BR", "text": "Me leva até o posto de gasolina mais próximo.", "class": "action", "family": "navigate", "image": null, "expect": [], "split": "test"}
+{"id": "es_navigate", "lang": "es", "text": "Llévame a la gasolinera más cercana.", "class": "action", "family": "navigate", "image": null, "expect": [], "split": "test"}
+{"id": "de_navigate", "lang": "de", "text": "Bring mich zur nächsten Tankstelle.", "class": "action", "family": "navigate", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_navigate", "lang": "zh-CN", "text": "带我去最近的加油站。", "class": "action", "family": "navigate", "image": null, "expect": [], "split": "test"}
+{"id": "en_talk_to_other", "lang": "en", "text": "Honey, can you grab my keys from the table?", "class": "ignore", "family": "talk_to_other", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_talk_to_other", "lang": "pt-BR", "text": "Amor, pega minhas chaves em cima da mesa?", "class": "ignore", "family": "talk_to_other", "image": null, "expect": [], "split": "test"}
+{"id": "es_talk_to_other", "lang": "es", "text": "Cariño, ¿me traes las llaves de la mesa?", "class": "ignore", "family": "talk_to_other", "image": null, "expect": [], "split": "test"}
+{"id": "de_talk_to_other", "lang": "de", "text": "Schatz, kannst du mir die Schlüssel vom Tisch holen?", "class": "ignore", "family": "talk_to_other", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_talk_to_other", "lang": "zh-CN", "text": "亲爱的，帮我把桌上的钥匙拿过来好吗？", "class": "ignore", "family": "talk_to_other", "image": null, "expect": [], "split": "test"}
+{"id": "en_phone_call", "lang": "en", "text": "Yeah, I'll be there in five minutes, okay, bye.", "class": "ignore", "family": "phone_call", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_phone_call", "lang": "pt-BR", "text": "Tá, chego aí em cinco minutos, beleza, tchau.", "class": "ignore", "family": "phone_call", "image": null, "expect": [], "split": "test"}
+{"id": "es_phone_call", "lang": "es", "text": "Sí, llego en cinco minutos, vale, adiós.", "class": "ignore", "family": "phone_call", "image": null, "expect": [], "split": "test"}
+{"id": "de_phone_call", "lang": "de", "text": "Ja, ich bin in fünf Minuten da, okay, tschüss.", "class": "ignore", "family": "phone_call", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_phone_call", "lang": "zh-CN", "text": "好的，我五分钟后到，嗯，拜拜。", "class": "ignore", "family": "phone_call", "image": null, "expect": [], "split": "test"}
+{"id": "en_dismiss", "lang": "en", "text": "Never mind, forget it.", "class": "ignore", "family": "dismiss", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_dismiss", "lang": "pt-BR", "text": "Deixa pra lá, esquece.", "class": "ignore", "family": "dismiss", "image": null, "expect": [], "split": "test"}
+{"id": "es_dismiss", "lang": "es", "text": "Déjalo, olvídalo.", "class": "ignore", "family": "dismiss", "image": null, "expect": [], "split": "test"}
+{"id": "de_dismiss", "lang": "de", "text": "Ach, egal, vergiss es.", "class": "ignore", "family": "dismiss", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_dismiss", "lang": "zh-CN", "text": "算了，没事了。", "class": "ignore", "family": "dismiss", "image": null, "expect": [], "split": "test"}
+{"id": "en_thanks_done", "lang": "en", "text": "Okay, thanks, that's all.", "class": "ignore", "family": "thanks_done", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_thanks_done", "lang": "pt-BR", "text": "Beleza, valeu, era só isso.", "class": "ignore", "family": "thanks_done", "image": null, "expect": [], "split": "test"}
+{"id": "es_thanks_done", "lang": "es", "text": "Vale, gracias, eso es todo.", "class": "ignore", "family": "thanks_done", "image": null, "expect": [], "split": "test"}
+{"id": "de_thanks_done", "lang": "de", "text": "Okay, danke, das war's.", "class": "ignore", "family": "thanks_done", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_thanks_done", "lang": "zh-CN", "text": "好的，谢谢，就这些。", "class": "ignore", "family": "thanks_done", "image": null, "expect": [], "split": "test"}
+{"id": "en_chatter", "lang": "en", "text": "Did you watch the game last night? It was crazy.", "class": "ignore", "family": "chatter", "image": null, "expect": [], "split": "test"}
+{"id": "ptbr_chatter", "lang": "pt-BR", "text": "Você viu o jogo ontem à noite? Foi uma loucura.", "class": "ignore", "family": "chatter", "image": null, "expect": [], "split": "test"}
+{"id": "es_chatter", "lang": "es", "text": "¿Viste el partido anoche? Fue una locura.", "class": "ignore", "family": "chatter", "image": null, "expect": [], "split": "test"}
+{"id": "de_chatter", "lang": "de", "text": "Hast du gestern das Spiel gesehen? Das war verrückt.", "class": "ignore", "family": "chatter", "image": null, "expect": [], "split": "test"}
+{"id": "zhcn_chatter", "lang": "zh-CN", "text": "你昨晚看比赛了吗？太疯狂了。", "class": "ignore", "family": "chatter", "image": null, "expect": [], "split": "test"}

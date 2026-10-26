@@ -1,0 +1,13 @@
+<resources>
+    <string name="onboarding_vision_setup_label">Configuración</string>
+    <string name="onboarding_vision_title">¿Necesitas asistencia visual?</string>
+    <string name="onboarding_vision_body">CyanBridge puede adaptarse a personas ciegas y con baja visión, con respuestas habladas, control con los botones de las gafas y pantallas más simples. Puedes cambiarlo en cualquier momento en Ajustes.</string>
+    <string name="onboarding_vision_option_yes">Sí, soy ciego o tengo baja visión</string>
+    <string name="onboarding_vision_option_yes_body">Activar la asistencia visual</string>
+    <string name="onboarding_vision_option_no">No, usar la app estándar</string>
+    <string name="onboarding_vision_option_no_body">Puedes activarla más tarde en Ajustes</string>
+    <string name="onboarding_vision_screen_reader_note">Hay un lector de pantalla activo, así que seleccionamos la asistencia visual por ti.</string>
+    <string name="settings_accessibility">Accesibilidad</string>
+    <string name="settings_vision_assistance">Asistencia visual</string>
+    <string name="settings_vision_assistance_description">Para personas ciegas y con baja visión: respuestas habladas, control con los botones de las gafas y pantallas más simples.</string>
+</resources>

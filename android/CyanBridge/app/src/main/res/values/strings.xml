@@ -162,4 +162,11 @@
     <string name="walking_aid_source_cloud">Cloud (Pro)</string>
     <string name="walking_aid_not_connected">Walking Aid: Glasses not connected. Please connect your glasses first.</string>
     <string name="walking_aid_meeting_active">Walking Aid: Meeting recording is active. Stop the meeting before enabling Walking Aid.</string>
+    <string name="voice_profile_status_none">Not enrolled. Three short phrases let CyanBridge learn your voice. Answers are not filtered yet.</string>
+    <string name="voice_profile_status_enrolled">Enrolled on %1$s. Answers are not filtered yet.</string>
+    <string name="voice_profile_status_model_ready">Voice model: %1$s (installed)</string>
+    <string name="voice_profile_status_model_missing">Voice model: %1$s (not installed yet; your phrases are kept until it is)</string>
+    <string name="voice_profile_delete_title">Delete voice profile?</string>
+    <string name="voice_profile_delete_body">This removes your recorded phrases and voice templates from this phone.</string>
+    <string name="voice_profile_delete_confirm">Delete</string>
 </resources>

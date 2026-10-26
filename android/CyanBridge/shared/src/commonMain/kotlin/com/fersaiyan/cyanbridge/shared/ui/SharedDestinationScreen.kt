@@ -30,6 +30,7 @@ import com.fersaiyan.cyanbridge.shared.plugins.PluginTimeWindow
 import com.fersaiyan.cyanbridge.shared.recordings.MeetingRecordingUiState
 import com.fersaiyan.cyanbridge.shared.recordings.RecordingItem
 import com.fersaiyan.cyanbridge.shared.recordings.SyncedMediaItem
+import com.fersaiyan.cyanbridge.shared.accessibility.VisionAssistancePreferences
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
@@ -536,6 +537,11 @@ private class SharedSettingsScreenActions(
     override fun setProviderType(type: AgentProviderType) = update { it.copy(providerType = type) }
     override fun openTaskerIntegrations() = Unit
     override fun openLocalModels() = Unit
+    override fun setVisionAssistanceEnabled(enabled: Boolean) {
+        // Stored apart from the other shared settings so an unrelated save never turns UNSET into DISABLED.
+        VisionAssistancePreferences.setEnabled(createPlatformPreferences(VisionAssistancePreferences.PREFS_NAME), enabled)
+        update { it.copy(visionAssistanceEnabled = enabled) }
+    }
 }
 
 private const val SHARED_SETTINGS_PREFS = "cyanbridge_shared_settings"
@@ -551,6 +557,9 @@ private fun loadSharedSettings(preferences: PlatformPreferences): SettingsUiStat
     transcriptStorageEnabled = preferences.getBoolean("transcript_storage", true),
     redactNamesEnabled = preferences.getBoolean("redact_names", true),
     includeFullTranscriptionInExports = preferences.getBoolean("full_transcript_exports", false),
+    visionAssistanceEnabled = VisionAssistancePreferences.isEnabled(
+        createPlatformPreferences(VisionAssistancePreferences.PREFS_NAME),
+    ),
 )
 
 private fun saveSharedSettings(preferences: PlatformPreferences, state: SettingsUiState) {

@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
@@ -59,6 +60,14 @@ import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListActivity
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
+import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
+import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
+import com.fersaiyan.cyanbridge.ai.speaker.SpeakerModelStore
+import com.fersaiyan.cyanbridge.ai.speaker.SpeakerModels
+import com.fersaiyan.cyanbridge.ai.speaker.VoiceProfile
+import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentActivity
+import com.fersaiyan.cyanbridge.shared.accessibility.VisionAssistancePreferences
+import com.fersaiyan.cyanbridge.ui.accessibility.visionAssistancePreferences
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsScreen
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsScreenActions
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsUiState
@@ -121,7 +130,8 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         expandedSections = SettingsSection.entries.filterTo(mutableSetOf()) { section ->
-            sectionPrefs.getBoolean(sectionPreferenceKey(section), true)
+            // Accessibility starts collapsed: most users never need it, unlike the older sections.
+            sectionPrefs.getBoolean(sectionPreferenceKey(section), section != SettingsSection.ACCESSIBILITY)
         }
         refreshSettingsUi()
 
@@ -237,7 +247,51 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             includeFullTranscriptionInExports = PrivacyPrefs.isIncludeFullTranscriptionInExportsEnabled(this),
             meetingRecording = meeting.isRecording,
             meetingCaptureSource = meeting.source,
+            questionRoutingMode = QuestionRoutingPrefs.mode(this),
+            shadowRoutingAvailable = BuildConfig.DEBUG,
+            voiceProfileAvailable = true,
+            voiceProfileEnrolled = VoiceProfile.isEnrolled(this),
+            voiceProfileStatus = voiceProfileStatus(),
+            visionAssistanceEnabled = VisionAssistancePreferences.isEnabled(visionAssistancePreferences()),
         )
+    }
+
+    override fun setVisionAssistanceEnabled(enabled: Boolean) {
+        VisionAssistancePreferences.setEnabled(visionAssistancePreferences(), enabled)
+        settingsUiState = settingsUiState.copy(visionAssistanceEnabled = enabled)
+    }
+
+    private fun voiceProfileStatus(): String {
+        val info = VoiceProfile.store(this).info() ?: return getString(R.string.voice_profile_status_none)
+        val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(info.completedAtMs))
+        val model = SpeakerModels.DEFAULT
+        val modelLine = if (SpeakerModelStore.isInstalled(this, model) || SpeakerModelStore.stagedFile(this, model)?.isFile == true) {
+            getString(R.string.voice_profile_status_model_ready, model.displayName)
+        } else {
+            getString(R.string.voice_profile_status_model_missing, model.displayName)
+        }
+        return getString(R.string.voice_profile_status_enrolled, date) + "\n" + modelLine
+    }
+
+    override fun setQuestionRoutingMode(mode: QuestionRoutingMode) {
+        QuestionRoutingPrefs.setMode(this, mode)
+        refreshSettingsUi()
+    }
+
+    override fun openVoiceEnrollment() {
+        startActivity(VoiceEnrollmentActivity.intent(this))
+    }
+
+    override fun deleteVoiceProfile() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.voice_profile_delete_title)
+            .setMessage(R.string.voice_profile_delete_body)
+            .setPositiveButton(R.string.voice_profile_delete_confirm) { _, _ ->
+                VoiceProfile.delete(this)
+                refreshSettingsUi()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     override fun onDestinationSelected(destination: AppDestination) {
@@ -672,6 +726,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             SettingsSection.MEMORY_PRIVACY -> "card_memory_privacy"
             SettingsSection.TRANSCRIPTS -> "card_transcripts"
             SettingsSection.DATA -> "card_data"
+            SettingsSection.ACCESSIBILITY -> "card_accessibility"
             SettingsSection.FAQ -> "card_faq"
             SettingsSection.SUPPORT -> "support"
         }

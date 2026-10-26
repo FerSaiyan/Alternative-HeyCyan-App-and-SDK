@@ -7,6 +7,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.BatteryStd
 import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
@@ -52,4 +53,5 @@ fun AppIcon.imageVector(): ImageVector = when (this) {
     AppIcon.Language -> Icons.Outlined.Language
     AppIcon.ExpandMore -> Icons.Outlined.ArrowDropDown
     AppIcon.Warning -> Icons.Outlined.Warning
+    AppIcon.Check -> Icons.Outlined.Check
 }

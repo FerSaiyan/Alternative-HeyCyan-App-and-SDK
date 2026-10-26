@@ -25,6 +25,7 @@ object ProSubscriptionRelayClient {
         val label: String,
         val quotaMultiplier: Int,
         val supportsVision: Boolean = false,
+        val supportsAudio: Boolean = false,
     )
 
     data class LiveModeOption(
@@ -123,6 +124,7 @@ object ProSubscriptionRelayClient {
         if (seen.isEmpty()) {
             throw IllegalStateException("No models returned by relay")
         }
+        ProSubscriptionAiPrefs.saveAudioCapableModels(context, seen.values.filter { it.supportsAudio }.map { it.id })
         ModelCatalog(
             models = seen.values.toList(),
             liveModes = resolveLiveModes(seenLiveModes.values.toList()),
@@ -382,7 +384,7 @@ object ProSubscriptionRelayClient {
     private fun parseModels(payload: JSONObject): List<ModelOption> {
         val out = linkedMapOf<String, ModelOption>()
 
-        fun putOption(id: String, label: String, quotaMultiplier: Int, supportsVision: Boolean = false) {
+        fun putOption(id: String, label: String, quotaMultiplier: Int, supportsVision: Boolean = false, supportsAudio: Boolean = false) {
             val cleanId = id.trim()
             if (cleanId.isBlank()) return
             val key = cleanId.lowercase()
@@ -394,6 +396,7 @@ object ProSubscriptionRelayClient {
                 label = cleanLabel,
                 quotaMultiplier = quotaMultiplier.coerceAtLeast(1),
                 supportsVision = supportsVision,
+                supportsAudio = supportsAudio,
             )
         }
 
@@ -433,8 +436,12 @@ object ProSubscriptionRelayClient {
                             name.isNotBlank() -> name
                             else -> pick
                         }
+                        val supportsAudio = booleanOrNull(item, "supports_audio")
+                            ?: jsonArrayContains(item.optJSONArray("input_modalities"), "audio")
+                            ?: jsonArrayContains(item.optJSONArray("inputModalities"), "audio")
+                            ?: false
                         if (pick.isNotBlank()) {
-                            putOption(pick, pickLabel, multiplier, supportsVision)
+                            putOption(pick, pickLabel, multiplier, supportsVision, supportsAudio)
                         }
                     }
                 }
