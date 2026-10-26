@@ -39,6 +39,11 @@ interface LivePreviewTransport {
     fun stopPreview()
 }
 
+/** Opens the family's broadcast screen (the glasses stream to the user's own server). */
+fun interface LiveBroadcastControl {
+    fun openBroadcast()
+}
+
 /** Reads the glasses battery level. */
 interface BatteryReporting {
     /** True when the host should poll the battery on a timer while this family is selected. */

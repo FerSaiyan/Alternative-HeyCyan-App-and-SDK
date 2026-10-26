@@ -6,6 +6,7 @@ import com.fersaiyan.cyanbridge.bridge.core.CameraCapture
 import com.fersaiyan.cyanbridge.bridge.core.DeviceInfoReporting
 import com.fersaiyan.cyanbridge.bridge.core.FeatureReportDiagnostics
 import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
+import com.fersaiyan.cyanbridge.bridge.core.LiveBroadcastControl
 import com.fersaiyan.cyanbridge.bridge.core.LivePreviewTransport
 import com.fersaiyan.cyanbridge.bridge.core.MediaSyncTransport
 import com.fersaiyan.cyanbridge.bridge.core.OnboardRecording
@@ -31,6 +32,7 @@ interface GlassesDevice {
     val recording: OnboardRecording? get() = null
     val mediaSync: MediaSyncTransport? get() = null
     val livePreview: LivePreviewTransport? get() = null
+    val liveBroadcast: LiveBroadcastControl? get() = null
     val battery: BatteryReporting? get() = null
     val deviceInfo: DeviceInfoReporting? get() = null
     val volume: VolumeReporting? get() = null
@@ -81,6 +83,7 @@ object GlassesDeviceActions {
             GlassesDashboardAction.StopSync -> device.mediaSync?.let { it::stopSync }
             GlassesDashboardAction.StartLivePreview -> device.livePreview?.let { it::startPreview }
             GlassesDashboardAction.StopLivePreview -> device.livePreview?.let { it::stopPreview }
+            GlassesDashboardAction.OpenLiveBroadcast -> device.liveBroadcast?.let { it::openBroadcast }
             GlassesDashboardAction.RequestBattery -> device.battery?.let { it::requestBattery }
             GlassesDashboardAction.RequestVersion -> device.deviceInfo?.let { it::requestVersion }
             GlassesDashboardAction.SyncTime -> device.deviceInfo?.let { it::syncTime }
