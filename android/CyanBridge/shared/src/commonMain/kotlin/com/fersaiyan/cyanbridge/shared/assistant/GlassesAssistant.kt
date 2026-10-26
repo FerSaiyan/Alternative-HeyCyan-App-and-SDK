@@ -119,6 +119,12 @@ class GlassesAssistant(
     /** Hooks of the glasses connected right now. */
     private val glassesHooks: () -> AssistantGlassesHooks,
     private val settings: GlassesAssistantSettings = GlassesAssistantSettings(),
+    /**
+     * The decision-model flow for spoken questions ([SpokenQuestionFlow]: route tags, camera, web
+     * search, follow-ups), when this platform has its ports and the current model hears the
+     * recording; null keeps [askByVoice] on the transcript flow below.
+     */
+    private val spokenQuestions: () -> SpokenQuestionFlow? = { null },
 ) {
     private var questionJob: Job? = null
 
@@ -153,7 +159,15 @@ class GlassesAssistant(
         startQuestion { answerImageQuestion(image) }
     }
 
-    fun askByVoice() = startQuestion { answerVoiceQuestion() }
+    fun askByVoice() = startQuestion {
+        val flow = spokenQuestions()
+        if (flow != null) {
+            dropPendingImageQuestion()
+            flow.run()
+        } else {
+            answerVoiceQuestion()
+        }
+    }
 
     private fun startQuestion(block: suspend () -> Unit) {
         val previous = questionJob

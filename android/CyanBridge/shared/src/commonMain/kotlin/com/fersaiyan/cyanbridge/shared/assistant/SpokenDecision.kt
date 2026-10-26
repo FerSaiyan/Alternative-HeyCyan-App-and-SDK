@@ -1,4 +1,4 @@
-package com.fersaiyan.cyanbridge.ai.router
+package com.fersaiyan.cyanbridge.shared.assistant
 
 /**
  * Decision layer for glasses spoken questions. The model hears the recording (bare audio, system

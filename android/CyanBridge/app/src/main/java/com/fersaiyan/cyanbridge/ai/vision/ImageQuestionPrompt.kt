@@ -133,7 +133,7 @@ object ImageQuestionDefaults {
     }
 
     /**
-     * Route tags the spoken-question decision turn starts with (ai/router/SpokenDecision.kt). Kept in
+     * Route tags the spoken-question decision turn starts with (shared/assistant/SpokenDecision.kt). Kept in
      * sync with tools/benchmarks/eval_spoken_route_tags.py (ROUTES_V5A), where it is scored on the host
      * (2026-10-24: 119/142 greedy over 9 languages and 7 classes, v3 118). The search query is asked in
      * English for DuckDuckGo Search Assist (ai/search/WebSearchAssist.kt).

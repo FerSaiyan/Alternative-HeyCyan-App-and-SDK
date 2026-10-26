@@ -32,7 +32,7 @@ in one request (system instruction, bare audio), no decision.
 
 ```text
 record once → model hears the recording; system = glasses instruction + route tags + clock
-reply starts with a tag (ai/router/SpokenDecision.kt), the app acts as soon as it is written:
+reply starts with a tag (shared/assistant/SpokenDecision.kt), the app acts as soon as it is written:
   [answer] <answer>   → spoken
   [camera]            → "Okay. I'll check what you see." + photo; the same recording is answered with it
   [phone] <task>      → local agent (Tasker); it confirms calls/messages/email/alarms by voice first

@@ -13,7 +13,7 @@ import com.fersaiyan.cyanbridge.ai.image.GlassesQuestionTestHooks
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
-import com.fersaiyan.cyanbridge.ai.router.SpokenConversation
+import com.fersaiyan.cyanbridge.shared.assistant.SpokenConversation
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.ai.search.WebSearchAssist
 import com.fersaiyan.cyanbridge.ai.search.WebSearchEngine

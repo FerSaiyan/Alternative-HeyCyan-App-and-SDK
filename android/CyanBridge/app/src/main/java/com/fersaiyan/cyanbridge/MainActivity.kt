@@ -221,10 +221,10 @@ import com.fersaiyan.cyanbridge.ai.router.AssistantRequestSource
 import com.fersaiyan.cyanbridge.shared.ai.AssistantSpeechPolicy
 import com.fersaiyan.cyanbridge.shared.ai.GlassesAssistantRoute
 import com.fersaiyan.cyanbridge.shared.ai.GlassesAssistantRoutingPolicy
-import com.fersaiyan.cyanbridge.ai.router.SpokenDecision
-import com.fersaiyan.cyanbridge.ai.router.SpokenDecisionParser
-import com.fersaiyan.cyanbridge.ai.router.SpokenRoute
-import com.fersaiyan.cyanbridge.ai.router.SpokenConversation
+import com.fersaiyan.cyanbridge.shared.assistant.SpokenDecision
+import com.fersaiyan.cyanbridge.shared.assistant.SpokenDecisionParser
+import com.fersaiyan.cyanbridge.shared.assistant.SpokenRoute
+import com.fersaiyan.cyanbridge.shared.assistant.SpokenConversation
 import com.fersaiyan.cyanbridge.localagent.context.SpokenMemoryContext
 import com.fersaiyan.cyanbridge.localmodels.engine.SessionTurn
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
