@@ -34,7 +34,7 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesMediaCounts
 import com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
-import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
+import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
 import com.fersaiyan.cyanbridge.ui.MentraBroadcastDestination
 import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateDestination
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
@@ -79,13 +79,13 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
 
     override val connection: GlassesConnectionControl = object : GlassesConnectionControl {
         override fun scan() {
-            activity.startKtxActivity<DeviceBindActivity>()
+            activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
         }
 
         override fun reconnect() {
             val saved = DeviceProfileStore.loadLastSelected(activity)
                 ?.takeIf { it.selectedClass == DeviceClass.MENTRA_LIVE }
-                ?: return activity.startKtxActivity<DeviceBindActivity>()
+                ?: return activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
             AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_reconnect")
             if (!manager.reconnectSaved(saved.advertisedName, saved.macAddress, reason = "user")) {
                 toast(R.string.mentra_reconnect_busy)

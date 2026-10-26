@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Intent
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
@@ -10,8 +11,8 @@ import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
-import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
-import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
+import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
+import com.fersaiyan.cyanbridge.ui.MetaPairingDestination
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import kotlinx.coroutines.launch
 
@@ -25,11 +26,11 @@ internal class MetaRaybanGlasses(context: GlassesDeviceContext) :
 
     override val connection: GlassesConnectionControl = object : GlassesConnectionControl {
         override fun scan() {
-            activity.startKtxActivity<DeviceBindActivity>()
+            activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
         }
 
         override fun reconnect() {
-            activity.startActivity(Intent(activity, MetaPairingActivity::class.java))
+            activity.startActivity(AppRoute.META_PAIRING.intent(activity))
         }
 
         override fun disconnect() {
@@ -69,7 +70,7 @@ internal class MetaRaybanGlasses(context: GlassesDeviceContext) :
         when (action) {
             GlassesDashboardAction.MetaRegister -> binding.btnMetaRegister.performClick()
             GlassesDashboardAction.MetaOpenPairing ->
-                activity.startActivity(Intent(activity, MetaPairingActivity::class.java))
+                activity.startActivity(AppRoute.META_PAIRING.intent(activity))
             GlassesDashboardAction.MetaOpenMetaAi -> context.metaRaybanUi.openMetaAiAppOrStore()
             GlassesDashboardAction.MetaUnregister -> binding.btnMetaUnregister.performClick()
             GlassesDashboardAction.MetaStartSession -> binding.btnMetaSessionStart.performClick()

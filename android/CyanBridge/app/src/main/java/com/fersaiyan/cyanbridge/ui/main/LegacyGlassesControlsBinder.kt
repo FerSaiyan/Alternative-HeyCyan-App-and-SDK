@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.util.Log
 import android.view.View
 import android.widget.Toast
@@ -9,7 +10,7 @@ import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
-import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
+import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
 import com.fersaiyan.cyanbridge.ui.hasBluetooth
 import com.fersaiyan.cyanbridge.ui.main.glasses.AndroidGlassesDevices
 import com.fersaiyan.cyanbridge.ui.requestBluetoothPermission
@@ -489,7 +490,7 @@ internal class LegacyGlassesControlsBinder(
             if (!all) {
                 // Permissions not fully granted; do nothing for now
             } else {
-                activity.startKtxActivity<DeviceBindActivity>()
+                activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
             }
         }
 

@@ -238,6 +238,6 @@ private class AndroidGeminiLiveSession(
     }
 
     private companion object {
-        const val TAG = "GeminiLiveDestination"
+        const val TAG = "GeminiLiveActivity"
     }
 }

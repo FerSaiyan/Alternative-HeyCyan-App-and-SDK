@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -24,7 +25,7 @@ import com.fersaiyan.cyanbridge.shared.ui.onboarding.OnboardingChoice
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
-import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentActivity
+import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentDestination
 import com.hjq.permissions.OnPermissionCallback
 import java.util.Locale
 
@@ -166,7 +167,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
     private fun goToFeature(index: Int) {
         startActivity(
             if (index == VOICE_ENROLLMENT_STEP_INDEX) {
-                VoiceEnrollmentActivity.onboardingIntent(this, index, STEP_COUNT)
+                VoiceEnrollmentDestination.onboardingIntent(this, index, STEP_COUNT)
             } else {
                 stepIntent(this, index)
             },
@@ -176,7 +177,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
     }
 
     private fun openRealGlassesScanner() {
-        startActivity(Intent(this, DeviceBindActivity::class.java))
+        startActivity(AppRoute.DEVICE_BIND.intent(this))
         overridePendingTransition(R.anim.onboarding_fade_in, R.anim.onboarding_fade_out)
     }
 
@@ -250,7 +251,7 @@ class OnboardingFeatureActivity : AppCompatActivity() {
         private const val KEY_ONBOARDING_MODEL_ID = "onboarding_model_id"
         private const val GLASSES_CONNECTION_FEATURE_INDEX = 0
         private const val LOCAL_MODEL_FEATURE_INDEX = 1
-        // Steps are FEATURES plus the voice-enrollment step, hosted by VoiceEnrollmentActivity.
+        // Steps are FEATURES plus the voice-enrollment step, hosted by VoiceEnrollmentDestination.
         private const val VOICE_ENROLLMENT_STEP_INDEX = 3
         private const val OPEN_SOURCE_FEATURE_INDEX = 4
         private const val GITHUB_REPOSITORY_URL = "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK"

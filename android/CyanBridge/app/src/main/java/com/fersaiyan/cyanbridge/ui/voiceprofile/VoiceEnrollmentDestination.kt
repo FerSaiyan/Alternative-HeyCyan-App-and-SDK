@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.voiceprofile
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -8,9 +9,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -18,15 +18,12 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.VoiceEnrollmentScreen
 import com.fersaiyan.cyanbridge.ui.OnboardingFeatureActivity
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 
 /**
  * Voice enrollment: an onboarding step (with [EXTRA_STEP_INDEX]) or a standalone screen opened
  * from Settings. UI is the shared VoiceEnrollmentScreen; recording and storage are Android-only.
  */
-class VoiceEnrollmentActivity : AppCompatActivity() {
+class VoiceEnrollmentDestination : NavScreen() {
     private val viewModel: VoiceEnrollmentViewModel by viewModels()
     private var stepIndex = -1
     private var stepCount = 0
@@ -47,26 +44,22 @@ class VoiceEnrollmentActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = goBack()
         })
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
             val state by viewModel.state.collectAsState()
             val level by viewModel.level.collectAsState()
-            CyanBridgeTheme(appearance) {
-                VoiceEnrollmentScreen(
-                    state = state,
-                    level = level,
-                    stepIndex = stepIndex.takeIf { onboarding },
-                    stepCount = stepCount.takeIf { onboarding },
-                    onConsentChange = viewModel::setConsent,
-                    onRequestMicrophone = ::requestMicrophone,
-                    onRecord = viewModel::recordCurrentPhrase,
-                    onCancelRecording = viewModel::cancelRecording,
-                    onSelectPhrase = viewModel::selectPhrase,
-                    onBack = ::goBack,
-                    onNext = ::goNext,
-                )
-            }
+            VoiceEnrollmentScreen(
+                state = state,
+                level = level,
+                stepIndex = stepIndex.takeIf { onboarding },
+                stepCount = stepCount.takeIf { onboarding },
+                onConsentChange = viewModel::setConsent,
+                onRequestMicrophone = ::requestMicrophone,
+                onRecord = viewModel::recordCurrentPhrase,
+                onCancelRecording = viewModel::cancelRecording,
+                onSelectPhrase = viewModel::selectPhrase,
+                onBack = ::goBack,
+                onNext = ::goNext,
+            )
         }
     }
 
@@ -103,8 +96,6 @@ class VoiceEnrollmentActivity : AppCompatActivity() {
 
     private fun navigateToStep(index: Int) {
         startActivity(OnboardingFeatureActivity.stepIntent(this, index))
-        @Suppress("DEPRECATION")
-        overridePendingTransition(R.anim.onboarding_fade_in, R.anim.onboarding_fade_out)
         finish()
     }
 
@@ -112,7 +103,7 @@ class VoiceEnrollmentActivity : AppCompatActivity() {
         private const val EXTRA_STEP_INDEX = "step_index"
         private const val EXTRA_STEP_COUNT = "step_count"
 
-        fun intent(context: Context) = Intent(context, VoiceEnrollmentActivity::class.java)
+        fun intent(context: Context) = Intent(context, VoiceEnrollmentDestination::class.java)
 
         fun onboardingIntent(context: Context, stepIndex: Int, stepCount: Int) =
             intent(context).putExtra(EXTRA_STEP_INDEX, stepIndex).putExtra(EXTRA_STEP_COUNT, stepCount)

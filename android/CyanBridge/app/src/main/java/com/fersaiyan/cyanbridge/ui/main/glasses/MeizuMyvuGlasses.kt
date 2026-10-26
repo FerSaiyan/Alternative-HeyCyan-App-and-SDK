@@ -1,12 +1,13 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
-import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
+import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
 
 /** Meizu MYVU display glasses over [MeizuMyvuManager] (BLE pairing, RFCOMM relay). */
@@ -17,13 +18,13 @@ internal class MeizuMyvuGlasses(context: GlassesDeviceContext) :
 
     override val connection: GlassesConnectionControl = object : GlassesConnectionControl {
         override fun scan() {
-            activity.startKtxActivity<DeviceBindActivity>()
+            activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
         }
 
         override fun reconnect() {
             DeviceProfileStore.loadLastSelected(activity)?.macAddress?.let {
                 manager.connect(it, activity, userInitiated = true)
-            } ?: activity.startKtxActivity<DeviceBindActivity>()
+            } ?: activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
         }
 
         override fun disconnect() {

@@ -67,7 +67,7 @@ import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidModelOption
 import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidSettingsViewModel
 import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.store
-import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
+import com.fersaiyan.cyanbridge.ui.MetaPairingDestination
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.ensureNotificationPermission
 import com.fersaiyan.cyanbridge.ui.hasBluetooth
@@ -117,7 +117,7 @@ class WalkingAidSettingsDestination : NavScreen() {
                 androidx.appcompat.app.AlertDialog.Builder(this)
                     .setTitle(R.string.walking_aid_meta_setup_title)
                     .setMessage(R.string.walking_aid_meta_setup_message)
-                    .setPositiveButton(R.string.walking_aid_open_meta_setup) { _, _ -> startActivity(Intent(this, MetaPairingActivity::class.java)) }
+                    .setPositiveButton(R.string.walking_aid_open_meta_setup) { _, _ -> startActivity(AppRoute.META_PAIRING.intent(this)) }
                     .setNegativeButton(android.R.string.cancel, null).show()
                 return
             }

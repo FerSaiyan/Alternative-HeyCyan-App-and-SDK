@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.devices.metarayban
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -15,7 +16,7 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.audio.TtsSpeaker
 import com.fersaiyan.cyanbridge.shared.glasses.MetaSetupChoice
-import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
+import com.fersaiyan.cyanbridge.ui.MetaPairingDestination
 
 /**
  * Tells the user that a Developer-Mode registration ended (Developer Mode turned off in Meta AI,
@@ -69,8 +70,8 @@ internal object MetaRegistrationNotices {
         val registerAgain = PendingIntent.getActivity(
             context,
             NOTIFICATION_ID,
-            Intent(context, MetaPairingActivity::class.java)
-                .putExtra(MetaPairingActivity.EXTRA_REGISTER_AGAIN, true)
+            AppRoute.META_PAIRING.intent(context)
+                .putExtra(MetaPairingDestination.EXTRA_REGISTER_AGAIN, true)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

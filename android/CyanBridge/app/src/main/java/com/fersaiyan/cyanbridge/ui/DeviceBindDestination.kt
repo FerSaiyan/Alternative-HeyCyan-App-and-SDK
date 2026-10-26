@@ -1,5 +1,8 @@
 package com.fersaiyan.cyanbridge.ui
 
+import androidx.activity.result.contract.ActivityResultContracts
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
 import com.fersaiyan.cyanbridge.shared.devices.BleDeviceClassifier
 import com.fersaiyan.cyanbridge.shared.devices.DeviceProfile
@@ -17,7 +20,6 @@ import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
-import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
@@ -30,12 +32,9 @@ import com.fersaiyan.cyanbridge.devices.memomind.MemoMindManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.ScannedDevice
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindConnection
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindScreen
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindViewModel
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.XXPermissions
 import com.oudmon.ble.base.bluetooth.BleOperateManager
@@ -51,7 +50,11 @@ import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 
-class DeviceBindActivity : BaseActivity() {
+class DeviceBindDestination : NavScreen() {
+    /** The system "turn on Bluetooth" request (was onActivityResult with REQUEST_ENABLE_BLUETOOTH). */
+    private val enableBluetooth = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (BluetoothUtils.isEnabledBluetooth(this)) startScan()
+    }
     private var scanSize = 0
     private val scanTimeout = ScanTimeout()
     private val handler = Handler(Looper.getMainLooper())
@@ -70,25 +73,21 @@ class DeviceBindActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         EventBus.getDefault().register(this)
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                DeviceBindScreen(
-                    devices = viewModel.devices,
-                    isScanning = viewModel.isScanning,
-                    connectingDevice = viewModel.connectingDevice,
-                    selectedClass = viewModel.selectedClass,
-                    onScan = ::startScan,
-                    onPairMetaGlasses = ::openMetaPairing,
-                    onSelectDevice = { sharedDevice -> scannedDevice(sharedDevice)?.let { viewModel.selectDevice(it.toShared()) } },
-                    onSelectedClassChange = viewModel::selectDeviceClass,
-                    onConfirmConnection = { viewModel.confirmConnection(::canConnect)?.let(::connect) },
-                    onConfirmManualProtocol = { viewModel.confirmManualProtocol(it, ::canConnect)?.let(::connect) },
-                    onDismissConnection = viewModel::dismissConnection,
-                    onBack = ::finish,
-                )
-            }
+            DeviceBindScreen(
+                devices = viewModel.devices,
+                isScanning = viewModel.isScanning,
+                connectingDevice = viewModel.connectingDevice,
+                selectedClass = viewModel.selectedClass,
+                onScan = ::startScan,
+                onPairMetaGlasses = ::openMetaPairing,
+                onSelectDevice = { sharedDevice -> scannedDevice(sharedDevice)?.let { viewModel.selectDevice(it.toShared()) } },
+                onSelectedClassChange = viewModel::selectDeviceClass,
+                onConfirmConnection = { viewModel.confirmConnection(::canConnect)?.let(::connect) },
+                onConfirmManualProtocol = { viewModel.confirmManualProtocol(it, ::canConnect)?.let(::connect) },
+                onDismissConnection = viewModel::dismissConnection,
+                onBack = ::finish,
+            )
         }
     }
 
@@ -113,7 +112,7 @@ class DeviceBindActivity : BaseActivity() {
                 userOverridden = false,
             ),
         )
-        startActivity(Intent(this, MetaPairingActivity::class.java))
+        startActivity(AppRoute.META_PAIRING.intent(this))
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -130,12 +129,12 @@ class DeviceBindActivity : BaseActivity() {
         lastDeviceListPublishAtMs = 0L
         if (!hasBluetooth(this)) {
             viewModel.isScanning = false
-            requestBluetoothPermission(this, PermissionCallback())
+            requestBluetoothPermission(activity, PermissionCallback())
             return
         }
         BleScannerHelper.getInstance().reSetCallback()
         if (!BluetoothUtils.isEnabledBluetooth(this)) {
-            startActivityForResult(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), REQUEST_ENABLE_BLUETOOTH)
+            enableBluetooth.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
             return
         }
         scanSize = 0
@@ -184,7 +183,7 @@ class DeviceBindActivity : BaseActivity() {
     private fun canConnect(): Boolean {
         if (hasBluetooth(this)) return true
         Toast.makeText(this, "Bluetooth permission is required to connect", Toast.LENGTH_SHORT).show()
-        requestBluetoothPermission(this, PermissionCallback())
+        requestBluetoothPermission(activity, PermissionCallback())
         return false
     }
 
@@ -208,7 +207,7 @@ class DeviceBindActivity : BaseActivity() {
         when (deviceClass) {
             DeviceClass.HEY_CYAN -> {
                 BleOperateManager.getInstance().connectDirectly(device.macAddress)
-                Toast.makeText(this@DeviceBindActivity, "Connecting as HeyCyan.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@DeviceBindDestination, "Connecting as HeyCyan.", Toast.LENGTH_SHORT).show()
                 // HeyCyan connection completion is observed via BluetoothEvent;
                 // finish now to return to dashboard where AutoPair/status will follow.
                 finish()
@@ -216,19 +215,19 @@ class DeviceBindActivity : BaseActivity() {
 
             DeviceClass.EYEVUE -> {
                 EyevueManager.getInstance(this).connect(device.macAddress, device.advertisedName)
-                Toast.makeText(this@DeviceBindActivity, "Connecting to EyeVue.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@DeviceBindDestination, "Connecting to EyeVue.", Toast.LENGTH_SHORT).show()
                 finish()
             }
 
             DeviceClass.TUNEBUDS -> {
                 TuneBudsManager.getInstance(this).connect(device.connectionAddress, device.advertisedName)
-                Toast.makeText(this@DeviceBindActivity, "Connecting to TuneBuds.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@DeviceBindDestination, "Connecting to TuneBuds.", Toast.LENGTH_SHORT).show()
                 finish()
             }
 
             DeviceClass.MOYOUNG_W620 -> {
                 MoyoungW620Manager.getInstance(this).connect(device.macAddress, device.advertisedName)
-                Toast.makeText(this@DeviceBindActivity, "Connecting as MoYoung / W620.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@DeviceBindDestination, "Connecting as MoYoung / W620.", Toast.LENGTH_SHORT).show()
                 finish()
             }
 
@@ -483,17 +482,11 @@ class DeviceBindActivity : BaseActivity() {
         super.onDestroy()
     }
 
-    @Deprecated("Deprecated in AndroidX Activity; retained for the vendor scanner flow.")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_ENABLE_BLUETOOTH && BluetoothUtils.isEnabledBluetooth(this)) {
-            startScan()
-        }
-    }
+
 
     private inner class ScanTimeout : Runnable {
         override fun run() {
-            BleScannerHelper.getInstance().stopScan(this@DeviceBindActivity)
+            BleScannerHelper.getInstance().stopScan(this@DeviceBindDestination)
             viewModel.isScanning = false
         }
     }
@@ -506,11 +499,11 @@ class DeviceBindActivity : BaseActivity() {
         override fun onDenied(permissions: MutableList<String>, never: Boolean) {
             super.onDenied(permissions, never)
             Toast.makeText(
-                this@DeviceBindActivity,
+                this@DeviceBindDestination,
                 "Bluetooth permission is required to find and connect to glasses",
                 Toast.LENGTH_LONG,
             ).show()
-            if (never) XXPermissions.startPermissionActivity(this@DeviceBindActivity, permissions)
+            if (never) XXPermissions.startPermissionActivity(this@DeviceBindDestination, permissions)
         }
     }
 
@@ -525,7 +518,7 @@ class DeviceBindActivity : BaseActivity() {
 
         @SuppressLint("MissingPermission")
         override fun onLeScan(device: BluetoothDevice?, rssi: Int, scanRecord: ByteArray?) {
-            if (!hasBluetooth(this@DeviceBindActivity)) return
+            if (!hasBluetooth(this@DeviceBindDestination)) return
             val bluetoothDevice = device ?: return
             val address = bluetoothDevice.address
             val name = runCatching { bluetoothDevice.name }.getOrNull()
@@ -539,7 +532,7 @@ class DeviceBindActivity : BaseActivity() {
 
         @SuppressLint("MissingPermission")
         override fun onParsedData(device: BluetoothDevice?, scanRecord: ScanRecord?) {
-            if (!hasBluetooth(this@DeviceBindActivity)) return
+            if (!hasBluetooth(this@DeviceBindDestination)) return
             val bluetoothDevice = device ?: return
             val address = bluetoothDevice.address
             val name = runCatching { scanRecord?.deviceName ?: bluetoothDevice.name }.getOrNull()
@@ -581,7 +574,6 @@ class DeviceBindActivity : BaseActivity() {
 
     private companion object {
         const val TAG = "DeviceBindActivity"
-        const val REQUEST_ENABLE_BLUETOOTH = 300
         const val META_DAT_PROFILE_ID = "META_DAT"
         const val DEVICE_LIST_PUBLISH_INTERVAL_MS = 1_000L
         const val HEY_CYAN_MAX_VIDEO_SECONDS = 720

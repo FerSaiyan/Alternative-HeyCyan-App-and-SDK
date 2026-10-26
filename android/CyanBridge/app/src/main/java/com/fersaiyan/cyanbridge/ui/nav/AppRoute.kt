@@ -30,6 +30,9 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionDestination
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsDestination
 import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveDestination
+import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
+import com.fersaiyan.cyanbridge.ui.MetaPairingDestination
+import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentDestination
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.ui.MentraBroadcastDestination
 import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateDestination
@@ -87,6 +90,9 @@ enum class AppRoute(
     PRO_SUBSCRIPTION_SETTINGS(labelText = "Pro Subscription Settings"),
     LOCAL_MODELS(labelText = "Configure Local Models"),
     GEMINI_LIVE(labelText = "Gemini Live Preview"),
+    DEVICE_BIND,
+    META_PAIRING(labelRes = R.string.meta_pairing_title, singleTask = true),
+    VOICE_ENROLLMENT(labelText = "Voice profile"),
     ;
 
     fun label(context: Context): String = labelText ?: context.getString(labelRes)
@@ -131,6 +137,9 @@ enum class AppRoute(
         PRO_SUBSCRIPTION_SETTINGS -> ProSubscriptionSettingsDestination()
         LOCAL_MODELS -> LocalModelsConfigureDestination()
         GEMINI_LIVE -> GeminiLiveDestination()
+        DEVICE_BIND -> DeviceBindDestination()
+        META_PAIRING -> MetaPairingDestination()
+        VOICE_ENROLLMENT -> VoiceEnrollmentDestination()
     }
 
     companion object {

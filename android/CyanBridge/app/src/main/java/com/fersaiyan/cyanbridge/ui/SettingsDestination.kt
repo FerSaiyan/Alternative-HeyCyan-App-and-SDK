@@ -64,7 +64,7 @@ import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
 import com.fersaiyan.cyanbridge.ai.speaker.SpeakerModelStore
 import com.fersaiyan.cyanbridge.ai.speaker.SpeakerModels
 import com.fersaiyan.cyanbridge.ai.speaker.VoiceProfile
-import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentActivity
+import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentDestination
 import com.fersaiyan.cyanbridge.shared.accessibility.VisionAssistancePreferences
 import com.fersaiyan.cyanbridge.ui.accessibility.visionAssistancePreferences
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsScreen
@@ -273,7 +273,7 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     }
 
     override fun openVoiceEnrollment() {
-        startActivity(VoiceEnrollmentActivity.intent(this))
+        startActivity(VoiceEnrollmentDestination.intent(this))
     }
 
     override fun deleteVoiceProfile() {

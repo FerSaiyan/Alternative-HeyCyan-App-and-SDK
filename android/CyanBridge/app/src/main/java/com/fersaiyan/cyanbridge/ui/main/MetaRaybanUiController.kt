@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
@@ -11,7 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaDatPermissions
 import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
-import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
+import com.fersaiyan.cyanbridge.ui.MetaPairingDestination
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.meta.wearable.dat.core.types.DatResult
 import com.meta.wearable.dat.core.types.Permission
@@ -341,7 +342,7 @@ internal class MetaRaybanUiController(
             AlertDialog.Builder(activity)
                 .setTitle("Complete Meta glasses setup")
                 .setMessage("$operation: $detail\n\nOpen Meta setup for the next step: Android permissions, Meta AI connection, or glasses camera authorization.")
-                .setPositiveButton("Open Meta setup") { _, _ -> activity.startActivity(Intent(activity, MetaPairingActivity::class.java)) }
+                .setPositiveButton("Open Meta setup") { _, _ -> activity.startActivity(AppRoute.META_PAIRING.intent(activity)) }
                 .setNegativeButton("Close", null)
                 .show()
         }

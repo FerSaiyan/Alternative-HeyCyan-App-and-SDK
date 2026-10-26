@@ -259,7 +259,7 @@ class CommunityPluginsDestination : NavScreen() {
                     val detail = manager.lastError.value
                         ?: "Register and connect a Meta camera before enabling $pluginId"
                     android.util.Log.e(
-                        "CommunityPluginsDestination",
+                        "CommunityPluginsActivity",
                         "Unable to enable Meta plugin=$pluginId: $detail\n${manager.diagnosticsSnapshot()}",
                     )
                     Toast.makeText(
@@ -277,7 +277,7 @@ class CommunityPluginsDestination : NavScreen() {
                     },
                     onError = { error ->
                         android.util.Log.e(
-                            "CommunityPluginsDestination",
+                            "CommunityPluginsActivity",
                             "Meta camera permission error for plugin=$pluginId: $error\n${manager.diagnosticsSnapshot()}",
                         )
                         Toast.makeText(

@@ -287,7 +287,7 @@ private class AndroidRecordings(private val context: Context) : RecordingsBacken
     }
 
     private companion object {
-        const val TAG = "RecordingsListDestination"
+        const val TAG = "RecordingsListActivity"
     }
 }
 

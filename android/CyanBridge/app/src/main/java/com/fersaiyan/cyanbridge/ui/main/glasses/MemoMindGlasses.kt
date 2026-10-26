@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
@@ -19,7 +20,7 @@ import com.fersaiyan.cyanbridge.shared.glasses.MemoMindPanelCommand
 import com.fersaiyan.cyanbridge.shared.glasses.MemoMindPanelLabels
 import com.fersaiyan.cyanbridge.shared.glasses.MemoMindUiState
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
-import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
+import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -34,14 +35,14 @@ internal class MemoMindGlasses(private val context: GlassesDeviceContext) : Andr
 
     override val connection: GlassesConnectionControl = object : GlassesConnectionControl {
         override fun scan() {
-            activity.startKtxActivity<DeviceBindActivity>()
+            activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
         }
 
         override fun reconnect() {
             DeviceProfileStore.loadLastSelected(activity)?.let { profile ->
                 AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_reconnect_button")
                 manager.connect(profile.macAddress, profile.advertisedName)
-            } ?: activity.startKtxActivity<DeviceBindActivity>()
+            } ?: activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
         }
 
         override fun disconnect() {

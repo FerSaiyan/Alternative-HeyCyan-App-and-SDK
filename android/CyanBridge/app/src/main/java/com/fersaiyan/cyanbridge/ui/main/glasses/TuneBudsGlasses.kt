@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.os.Build
 import com.fersaiyan.cyanbridge.ai.questions.QuestionPhotoSource
 import com.fersaiyan.cyanbridge.ai.questions.TuneBudsQuestionPhoto
@@ -17,7 +18,7 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
-import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
+import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
 
 /** TuneBuds / AB Mate glasses over [TuneBudsManager] (RFCOMM commands, hotspot media, RTSP preview). */
@@ -33,13 +34,13 @@ internal class TuneBudsGlasses(private val context: GlassesDeviceContext) : Andr
 
     override val connection: GlassesConnectionControl = object : GlassesConnectionControl {
         override fun scan() {
-            activity.startKtxActivity<DeviceBindActivity>()
+            activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
         }
 
         override fun reconnect() {
             DeviceProfileStore.loadLastSelected(activity)?.let { profile ->
                 manager.connect(profile.macAddress, profile.advertisedName)
-            } ?: activity.startKtxActivity<DeviceBindActivity>()
+            } ?: activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
         }
 
         override fun disconnect() {
