@@ -45,21 +45,56 @@ Keep the collaborator's UI changes except two, which were reverted:
 - iOS screens: no Mac is available here.
 - Flows beyond the first screen of each Activity (dialogs, long flows) are covered by HARDWARE_TEST_CHECKLIST.md.
 
-## Single Activity (`cyan-refactor-single-activity`): re-run the capture
+## Single Activity: re-capture (2026-10-26)
 
-The capture above launched each of the 41 Activities by name. Those screens are now routes of MainActivity, so **re-run the parity capture before merging** (tools in `cyan-refactor-wt/parity-tools/`; they need the emulator, so this branch was not captured).
+Captured on 2026-10-26 from `cyan-refactor` 0e40f92a, then from `cyan-refactor-parity-fixes` with the fixes below. Same read-only `CyanBridge_Walking_Aid_CI` emulator. The baseline captures from 2026-10-23 were reused, since the baseline commit and AVD are unchanged. Port 5600 was taken by another emulator, so this run used 5610 (`SERIAL=emulator-5610`).
 
-The capture script has to change:
-- Open a screen with `adb shell am start -n <package>/.MainActivity -a com.fersaiyan.cyanbridge.nav.OPEN_<ROUTE> --es com.fersaiyan.cyanbridge.nav.ROUTE <ROUTE>`. Route names are in `ui/nav/AppRoute.kt`, for example `SETTINGS`, `COMMUNITY_PLUGINS`, `CHAT_THREAD`, `RECORDINGS` or `META_PAIRING`. Add extras as the old Activity took them.
-- MainActivity is single-task: run `am force-stop` between screens, or each start pushes onto the running back stack.
-- The old Activity names are gone, except the entry points that are still kept: `.ui.MetaPairingActivity`, `.agent.ProSubscriptionActivity`, `.agent.WebSubscriptionCallbackActivity`, the Gemini Live permission gate, MemoMind Web plugins, and the launcher alias `.ui.WelcomeActivity`.
+How the capture opens screens now:
+- `ROUTES=1 capture.sh <variant>` opens each former Activity as its MainActivity route. `parity-tools/routes.txt` maps each old target to its route, and the capture test passes it as `-e route <ROUTE>`. The test starts MainActivity with `OPEN_<ROUTE>` plus the route extra, using `NEW_TASK | CLEAR_TASK`.
+- The capture runs `force-stop` and `pm clear` between targets.
+- MainActivity, the launcher alias `.ui.WelcomeActivity` and the kept Activities (web subscription callback, Gemini Live permission gate) still launch by component.
+- Captures are filed under the old target names, so `compare.py baseline <variant>` lines up with the baseline.
+- `capture.sh` and `devices.sh` also save the crash log buffer for each target.
 
-Expected result: pixel-identical screens. Each tab still draws its own bottom bar, and only the glasses screen uses `CyanBridgeNavShell`'s bar, exactly as before.
+The screens and states are the same as before: the 39 former Activities still present, the glasses screen with the Chats, Media, Plugins and Settings tabs, and 7 device families. That is 45 targets and 107 screenshots, plus UI trees. Mentra pairing and transcription debug are no longer captured: other branches removed those screens (ca06bc3a, 6b6e26cb).
 
-Expected UI-tree differences:
-- Every screen except the glasses screen sits in one extra full-screen node with a pane title (the old Activity label), so screen readers announce screen changes as the window change did.
-- Window animations between screens, including the onboarding fade, are gone. A static capture does not see this.
+### Regressions found and fixed (`cyan-refactor-parity-fixes`)
+- **a1c7fc25: install-reason question over every screen.** The "What brought you to CyanBridge?" dialog was tied to MainActivity starting, so it opened over Welcome, onboarding and every route opened by an intent. It now follows the glasses screen's start, as before.
+- **e1135d62: voice profile screen crashed on open.** `NavScreen.viewModels` defaulted to `NewInstanceFactory`, which cannot build an `AndroidViewModel`. It now defaults to `AndroidViewModelFactory`, as the Activity's default did. `AppNavigatorTest` covers this. The adb smoke test found it.
+- **a21ecb04: app crashed at launch with Mentra Live selected.** This is not a single-Activity regression. A refresh loop through refreshAfterSelection → renderConnectionStatus → updateDeviceClassText → gating overflowed the stack. It came from 860fb791 (Mentra Live as its own glasses device), after the 2026-10-25 capture.
 
-Any other difference is a regression.
+### Result after the fixes
+The final run is compared with the pre-single-Activity capture of `cyan-refactor` (2026-10-25). Every route screen is pixel-identical except for changes from other merges and the environment. Insets and edge-to-edge, status and navigation bar colors, top bars and back arrows, titles, the theme, fonts and soft-input layouts are unchanged. The bottom bars are pixel-identical to before.
 
-Not unified (owner decision): the per-tab bars use the secondary container for the selected item, while the glasses screen's shell bar uses the primary container with a semibold label. Letting the shell draw the bar for every tab would match iOS: MainActivity would draw `CyanBridgeNavShell` around the tab routes, and those screens would pass `showNavigationBar = false`. It changes those bars' colors, so it was left out.
+Targets compared: 45 (107 screenshots). Against the baseline, 21 targets are pixel-identical on every page and 24 differ. Against the 2026-10-25 capture, 26 are identical and 19 differ. Every UI tree differs at least by the pane-title node. Each difference is one of these:
+- **Expected from the single Activity:**
+  - The UI tree has one extra full-screen node per route (the pane title).
+  - Pro subscription settings closes at once without an account. Opened alone, it now shows the glasses screen under it instead of the launcher. In the app it still returns to the screen that opened it.
+  - The capture's tap on "Settings" from the Plugins tab now reaches the bottom-bar Settings tab. In the baseline it hit a stale tree node and did nothing. This is a harness timing effect.
+- **Collaborator UI changes and owner reverts:** already listed above (icons, Settings intro/FAQ, "AI provider", Test image AI description, palette icon).
+- **Other merges since 2026-10-25:**
+  - Device bind has no "Pair Mentra Live" button (ca06bc3a).
+  - Mentra Live reconnects on launch and gains advanced controls (Mentra merges).
+  - Onboarding has 5 steps (voice profile step), and Settings gains "Question routing", "Voice profile" and "Accessibility" (c8fc4efb).
+  - The Meta setup screen offers the setup choice (4c9894c7).
+  - Local Agent: Telegram is removed and the screenshot switches became a Tasker-variable note.
+- **Environment:**
+  - Dates and the launcher behind screens that close at once.
+  - Emulator RAM and free space on Local models.
+  - Local Agent shows "Accessibility service: Enabled" because AutoInput's accessibility service is now enabled in the AVD image.
+  - Eyevue's status timing, as described above.
+
+### Navigation smoke test (adb only)
+- **Back:** from each of the 40 routes, opened over the glasses screen, one Back returns to the glasses screen with no crash. Two exceptions:
+  - Pro settings closes at once without an account.
+  - Meta setup takes 3 Backs (two dialogs first), as the baseline Activity does.
+- **Rotation:** Settings, Note editor, Chat thread and Local models keep their screen and back stack through portrait → landscape → portrait. Text typed in the note editor is kept.
+- **Launcher (`.ui.WelcomeActivity` alias):** the same path as the baseline:
+  - Welcome → battery guide → onboarding steps.
+  - Back on a step leaves the app, as before.
+  - "Skip all" opens the glasses screen with the install-reason question.
+  - After onboarding, the launcher opens the glasses screen directly.
+
+### Still open
+- **Bottom-bar colors (owner decision, not unified).** The per-tab bars use the secondary container for the selected item. The glasses screen's shell bar uses the primary container with a semibold label. Letting the shell draw the bar for every tab would match iOS: MainActivity would draw `CyanBridgeNavShell` around the tab routes, and those screens would pass `showNavigationBar = false`. That changes those bars' colors, so it was left out. The capture confirms both bars are unchanged from the baseline.
+- **Not seen by a static capture:** window animations between screens are gone, including the onboarding fade.
