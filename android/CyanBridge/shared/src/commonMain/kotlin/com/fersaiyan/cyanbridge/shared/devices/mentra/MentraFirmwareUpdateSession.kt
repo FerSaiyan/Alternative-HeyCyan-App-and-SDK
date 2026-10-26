@@ -46,6 +46,9 @@ interface MentraOtaPort {
     val glasses: StateFlow<MentraOtaGlasses>
     val statusEvents: Flow<MentraOtaStatusEvent>
 
+    /** An app feature streams the glasses microphone right now (read on demand, not a flow). */
+    val microphoneInUse: Boolean get() = false
+
     /** Asks the glasses for their versions (system and BES are only in the version info). */
     suspend fun refreshVersions()
 
@@ -113,7 +116,8 @@ class MentraFirmwareUpdateSession(
 
     fun blockers(nowMs: Long = clock()): Set<MentraOtaBlocker> {
         val current = state.value
-        return MentraOtaRules.blockers(port.glasses.value, current.offer, otherSessionActive(), current.cooldownUntilMs, nowMs)
+        val glasses = port.glasses.value.let { if (port.microphoneInUse) it.copy(microphoneInUse = true) else it }
+        return MentraOtaRules.blockers(glasses, current.offer, otherSessionActive(), current.cooldownUntilMs, nowMs)
     }
 
     /** Called when the screen opens: reads the versions and checks, unless an update runs. */

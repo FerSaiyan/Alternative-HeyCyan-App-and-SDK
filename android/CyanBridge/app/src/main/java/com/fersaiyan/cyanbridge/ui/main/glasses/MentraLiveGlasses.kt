@@ -13,6 +13,7 @@ import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.bridge.core.InputEvent
 import com.fersaiyan.cyanbridge.bridge.core.MediaSyncTransport
 import com.fersaiyan.cyanbridge.bridge.core.OnboardRecording
+import com.fersaiyan.cyanbridge.bridge.core.SdkFirmwareUpdate
 import com.fersaiyan.cyanbridge.bridge.core.VolumeReporting
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
@@ -22,6 +23,7 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesMediaCounts
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
+import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateActivity
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import com.mentra.bluetoothsdk.GlassesRuntimeState
 import kotlinx.coroutines.Job
@@ -131,6 +133,11 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
                 .onSuccess { toast(R.string.mentra_time_synced) }
                 .onFailure { toast(R.string.mentra_request_failed, it.message.orEmpty()) }
         }
+    }
+
+    /** The SDK's own update on its own screen; never the HeyCyan OTA section. */
+    override val firmwareUpdate = SdkFirmwareUpdate {
+        activity.startKtxActivity<MentraFirmwareUpdateActivity>()
     }
 
     override val volume = VolumeReporting {

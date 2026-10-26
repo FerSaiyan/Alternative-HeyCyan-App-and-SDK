@@ -15,6 +15,8 @@ import com.mentra.bluetoothsdk.GlassesRuntimeState
 import com.mentra.bluetoothsdk.MentraBluetoothSdk
 import com.mentra.bluetoothsdk.MentraBluetoothSdkCallback
 import com.mentra.bluetoothsdk.MentraBluetoothSdkConfig
+import com.mentra.bluetoothsdk.MentraBluetoothSdkListener
+import com.mentra.bluetoothsdk.OtaStartAckEvent
 import com.mentra.bluetoothsdk.BluetoothSdkAnalyticsConfig
 import com.mentra.bluetoothsdk.MicPcmEvent
 import com.mentra.bluetoothsdk.PhotoCompression
@@ -25,6 +27,8 @@ import com.mentra.bluetoothsdk.PhotoSize
 import com.mentra.bluetoothsdk.ScanSession
 import com.mentra.bluetoothsdk.VersionInfoResult
 import com.mentra.bluetoothsdk.VideoRecordingRequest
+import com.mentra.bluetoothsdk.WifiScanResult
+import com.mentra.bluetoothsdk.WifiStatusEvent
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -111,6 +115,10 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     }
 
     override fun onButtonPress(event: ButtonPressEvent) {
+        if (firmwareUpdateActive) {
+            Log.i(TAG, "Button ${event.pressType} ignored during the firmware update")
+            return
+        }
         val gesture = when (event.pressType.lowercase()) {
             "long", "long_press", "hold" -> GestureType.LONG_PRESS
             "double", "double_tap", "double_press" -> GestureType.DOUBLE_TAP
@@ -229,6 +237,10 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     }
 
     fun disconnect() {
+        if (firmwareUpdateActive) {
+            Log.w(TAG, "Disconnect refused during the firmware update")
+            return
+        }
         pcmListeners.clear()
         runCatching { sdk.setMicState(enabled = false) }
         runCatching { sdk.setMicSourcePin(null) }
@@ -275,11 +287,15 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
 
     // --- Camera -----------------------------------------------------------------------------
 
-    suspend fun requestPhoto(request: PhotoRequest): PhotoResponseEvent = sdk.requestPhoto(request)
+    suspend fun requestPhoto(request: PhotoRequest): PhotoResponseEvent {
+        checkNoFirmwareUpdate()
+        return sdk.requestPhoto(request)
+    }
 
     /** Takes a full-size photo that stays in the glasses gallery. */
     suspend fun capturePhotoToGlasses() {
         check(ready) { "Mentra Live is not ready" }
+        checkNoFirmwareUpdate()
         val response = sdk.requestPhoto(
             PhotoRequest(
                 requestId = "cyanbridge-photo-" + UUID.randomUUID(),
@@ -295,6 +311,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     /** Starts a recording saved in the glasses gallery, or stops the running one; true = now recording. */
     suspend fun toggleVideoRecording(): Boolean {
         check(ready) { "Mentra Live is not ready" }
+        checkNoFirmwareUpdate()
         val running = activeVideoRequestId
         if (running != null) {
             activeVideoRequestId = null
@@ -320,6 +337,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
      */
     fun openMicrophone(owner: String, listener: (ByteArray) -> Unit) {
         check(ready) { "Mentra Live is not ready" }
+        checkNoFirmwareUpdate()
         val first = pcmListeners.isEmpty()
         pcmListeners[owner] = listener
         if (first) {
@@ -340,6 +358,33 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
 
     /** Tells the glasses the app is playing audio to them, so their microphone gate can react. */
     fun setOwnAudioPlaying(playing: Boolean) = sdk.setOwnAppAudioPlaying(playing)
+
+    // --- Firmware update (see MentraOtaAdapter) -------------------------------------------------
+
+    /**
+     * True while the firmware update screen runs an update. The SDK guidance is to send no
+     * unrelated commands until it ends, so photos, video, the microphone, the action button and
+     * the user's disconnect are refused meanwhile.
+     */
+    @Volatile var firmwareUpdateActive: Boolean = false
+
+    val microphoneInUse: Boolean get() = pcmListeners.isNotEmpty()
+
+    val otaVersionUrl: String get() = sdk.getOtaVersionUrl()
+
+    private fun checkNoFirmwareUpdate() = check(!firmwareUpdateActive) { "Mentra Live is updating its firmware" }
+
+    fun addSdkListener(listener: MentraBluetoothSdkListener) = sdk.addListener(listener)
+
+    fun removeSdkListener(listener: MentraBluetoothSdkListener) = sdk.removeListener(listener)
+
+    suspend fun checkForOtaUpdate(): Boolean = sdk.checkForOtaUpdate()
+
+    suspend fun startOtaUpdate(): OtaStartAckEvent = sdk.startOtaUpdate()
+
+    suspend fun requestWifiScan(): List<WifiScanResult> = sdk.requestWifiScan()
+
+    suspend fun sendWifiCredentials(ssid: String, password: String): WifiStatusEvent = sdk.sendWifiCredentials(ssid, password)
 
     companion object {
         const val TAG = "MentraLive"
