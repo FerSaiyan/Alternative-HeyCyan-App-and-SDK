@@ -18,6 +18,7 @@ import com.fersaiyan.cyanbridge.ui.VersionUpdateChecker
 import com.fersaiyan.cyanbridge.ui.OfficialHeyCyanWarningDialog
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
+import com.fersaiyan.cyanbridge.analytics.ProductAnalyticsLifecycle
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.media.OfficialHeyCyanApp
 import com.fersaiyan.cyanbridge.ota.LivePreviewCoordinator
@@ -925,6 +926,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Was onStart: the glasses screen became visible (app in front, no screen over it). */
     private fun onGlassesStart() {
+        ProductAnalyticsLifecycle.onGlassesScreenStarted(this)
         if (!EventBus.getDefault().isRegistered(this)) {
             EventBus.getDefault().register(this)
         }
