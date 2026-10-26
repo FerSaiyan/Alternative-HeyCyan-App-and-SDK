@@ -81,7 +81,8 @@ MediaCodec Opus decoder to 16 kHz PCM, and the microphone as an `AudioSessionCoo
   answer). Without it (the app was closed while the SPP link stayed up), `MemoMindManager` calls
   `GlassesButtonQuestions.onVoiceButton`, which starts the same question in the background
   (`GlassesQuestions.askByVoiceInBackground`): the speech engine starts on demand, and a missing setup
-  or microphone permission is a toast instead of a dialog.
+  or microphone permission is a toast instead of a dialog. Android may refuse the question's microphone
+  foreground service from the background; the HFP recording is then silent (a hardware check).
 - **Answers on the HUD.** `GlassesFamilyProfiles.memoMind` sets `showsAssistantAnswers`. Every spoken
   answer (`AssistantSpeaker.speakVision`, and the local model's streamed photo answer) is also sent to
   the display bridge (`GlassesBridge.showText`), which the MemoMind adapter draws as Web Bridge text
