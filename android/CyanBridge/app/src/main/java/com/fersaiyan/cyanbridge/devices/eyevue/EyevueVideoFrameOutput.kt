@@ -13,11 +13,13 @@ internal class EyevueVideoFrameOutput(
     private val onFrame: (Bitmap) -> Unit,
     private val onError: (Throwable) -> Unit,
     private val rotationDegrees: Float = -90f,
+    private val width: Int = 640,
+    private val height: Int = 480,
 ) {
     private val thread = HandlerThread("EyevueVisionFrames").apply { start() }
     // VLC's RV32 Android surface uses opaque RGBX, not RGBA. ImageReader requires
     // an exact producer-format match even though both have four bytes per pixel.
-    private val reader = ImageReader.newInstance(640, 480, PixelFormat.RGBX_8888, 3)
+    private val reader = ImageReader.newInstance(width, height, PixelFormat.RGBX_8888, 3)
 
     init {
         reader.setOnImageAvailableListener({ source ->
@@ -47,7 +49,7 @@ internal class EyevueVideoFrameOutput(
     fun attach(player: MediaPlayer) {
         player.vlcVout.apply {
             setVideoSurface(reader.surface, null)
-            setWindowSize(640, 480)
+            setWindowSize(width, height)
             attachViews()
         }
     }

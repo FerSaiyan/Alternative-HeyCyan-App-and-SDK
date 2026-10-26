@@ -67,6 +67,8 @@ class GlassesNetworkOwnershipSourceTest {
                 "GlassesLinkClient.TUNEBUDS_WIFI_DIRECT",
             "src/main/java/com/fersaiyan/cyanbridge/devices/mentra/MentraHotspotNetwork.kt" to
                 "GlassesLinkClient.MENTRA_GALLERY",
+            "src/main/java/com/fersaiyan/cyanbridge/devices/mentra/MentraLiveStreamConnection.kt" to
+                "GlassesLinkClient.MENTRA_LIVE_STREAM",
             "src/debug/java/com/fersaiyan/cyanbridge/wifiadb/DefaultWifiAdbDebugControllerFactory.kt" to
                 "GlassesLinkClient.HEYCYAN_WIFI_ADB",
         )

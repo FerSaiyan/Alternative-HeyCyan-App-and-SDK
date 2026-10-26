@@ -26,9 +26,12 @@ import com.mentra.bluetoothsdk.PhotoResponse
 import com.mentra.bluetoothsdk.PhotoResponseEvent
 import com.mentra.bluetoothsdk.PhotoSize
 import com.mentra.bluetoothsdk.ScanSession
+import com.mentra.bluetoothsdk.StreamRequest
+import com.mentra.bluetoothsdk.StreamStatusEvent
 import com.mentra.bluetoothsdk.VersionInfoResult
 import com.mentra.bluetoothsdk.VideoRecordingRequest
 import com.mentra.bluetoothsdk.WifiScanResult
+import com.mentra.bluetoothsdk.WifiStatus
 import com.mentra.bluetoothsdk.WifiStatusEvent
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -38,6 +41,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -70,6 +74,10 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
 
     /** Button presses of the connected glasses. */
     val inputEvents: Flow<InputEvent> = _inputEvents
+    private val _streamStatus = MutableSharedFlow<StreamStatusEvent>(extraBufferCapacity = 32)
+
+    /** The glasses' `stream_status` events, for the live preview and the broadcast. */
+    val streamStatus: SharedFlow<StreamStatusEvent> = _streamStatus
     private val discovered = ConcurrentHashMap<String, Device>()
     private val pcmListeners = ConcurrentHashMap<String, (ByteArray) -> Unit>()
 
@@ -141,6 +149,15 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
         if (listeners.isEmpty()) return
         val pcm = event.pcm
         listeners.forEach { it(pcm.copyOf()) }
+    }
+
+    override fun onStreamStatus(event: StreamStatusEvent) {
+        Log.i(
+            TAG,
+            "Stream status ${event.state?.value} id=${event.streamId} willRetry=${event.willRetry} " +
+                event.errorDetails.orEmpty(),
+        )
+        _streamStatus.tryEmit(event)
     }
 
     override fun onError(error: BluetoothError) {
@@ -340,6 +357,23 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
         Log.i(TAG, "Video recording started")
         return true
     }
+
+    // --- Streaming --------------------------------------------------------------------------
+
+    /** The glasses' Wi-Fi network as last reported; null while they are not on one. */
+    fun wifi(): WifiStatus.Connected? = connectedState?.wifi as? WifiStatus.Connected
+
+    /**
+     * Starts the glasses' camera stream to [StreamRequest.streamUrl]; resolves once the glasses
+     * report `streaming`. The SDK sends the keep-alives until [stopStream].
+     */
+    suspend fun startStream(request: StreamRequest): StreamStatusEvent {
+        check(ready) { "Mentra Live is not ready" }
+        checkNoFirmwareUpdate()
+        return sdk.startStream(request)
+    }
+
+    suspend fun stopStream(): StreamStatusEvent = sdk.stopStream()
 
     // --- Audio ------------------------------------------------------------------------------
 
