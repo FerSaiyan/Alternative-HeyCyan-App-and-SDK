@@ -58,10 +58,11 @@ Other: RGB LED control, system time (the SDK also syncs it on every connect), di
 | Media count | wired | `queryGalleryStatus` (photos and videos) |
 | Firmware version, time sync, volume | wired | `requestVersionInfo`, `setSystemTime`, `getGlassesMediaVolume` (Advanced → Device info) |
 | Gallery download | wired | Dashboard Sync: `setHotspotState(true)`, an app-scoped join of the glasses hotspot, HTTP download from the glasses camera server into the synced gallery, optional delete, hotspot off. See "Gallery download" below. |
-| Live preview and streaming | not wired | The glasses push RTMP/SRT/WHIP to a URL they can reach over Wi-Fi. CyanBridge's live preview pulls RTSP over Wi-Fi Direct, so this needs an on-phone ingest server (the SDK example uses GStreamer/MediaMTX). |
+| Live preview | wired (Android 10+) | Dashboard live preview card: the glasses publish RTMP (`startStream`) to a pure-Kotlin ingest on the phone, over their hotspot (app-scoped join, link client `MENTRA_LIVE_STREAM`) or a shared Wi-Fi. LibVLC plays the remuxed MPEG-TS inline. Walking Aid can use it as "Mentra Live continuous video". See "Live preview and broadcast" below. |
+| Broadcast | wired | "Broadcast to my server" under the live preview card opens `MentraBroadcastActivity`: the glasses publish to the user's RTMP/RTMPS/SRT URL over their own Wi-Fi with internet. Status events, stop, URL in secure typed prefs. |
 | Firmware update (OTA) | wired | Advanced → Device info → Firmware update opens its own screen (`MentraFirmwareUpdateActivity`), never the HeyCyan OTA section. See "Firmware update (OTA)" below. |
-| Glasses Wi-Fi setup | partly | `requestWifiScan` and `sendWifiCredentials`, only inside the firmware update screen, because the glasses download the update over their own Wi-Fi. Saved networks and forget are not wired. |
-| LED, head-up, touch/swipe, LC3, local transcription, camera FOV and warm-up | not wired | Nothing in CyanBridge consumes them yet (the hotspot is used only by the gallery download). |
+| Glasses Wi-Fi setup | partly | `requestWifiScan` and `sendWifiCredentials`, only inside the firmware update screen, because the glasses download the update over their own Wi-Fi. The broadcast screen links to it when the glasses have no Wi-Fi. Saved networks and forget are not wired. |
+| LED, head-up, touch/swipe, LC3, local transcription, camera FOV and warm-up, WHIP | not wired | Nothing in CyanBridge consumes them yet (the hotspot is used by the gallery download and the live preview). |
 
 ## Gallery download
 
@@ -111,6 +112,41 @@ Sources: the decompiled `MentraBluetoothSdk` OTA paths of 3.2.0-dev.227 (`checkF
 **Not confirmed from the sources.** How the 3.2 glasses app answers an `ota_start` while it already runs an update. Whether it keeps or drops the BLE link during the app install. Whether it ends its session itself after a mid-pass app restart. The exact manifest field for MTK applicability (the SDK's check is internal, so the screen names the system patch only when the app and BES already match). The native SDK's OTA status query is internal, so the screen cannot ask the glasses for their session state after a reconnect; it waits for progress instead.
 
 **iOS.** Not wired. The shared screen and session are ready, but the Swift `MentraGlassesBridge` would need an `MentraOtaPort` implementation: `checkForOtaUpdate`, `startOtaUpdate`, `.otaStatus` delegate events, `requestVersionInfo`, the Wi-Fi scan and credentials, and a Kotlin bridge in `SdkGlassesBridge`. The iOS host also needs navigation to the screen and the `bluetooth-central` background mode the SDK docs ask for. The iOS dashboard keeps the button hidden.
+
+## Live preview and broadcast
+
+Sources: the 3.2.0-dev.227 AAR (`javap`: `startStream(StreamRequest)`, `stopStream()`, `onStreamStatus(StreamStatusEvent)`, `StreamState`, `StreamVideoConfig`, `GlassesRuntimeState.Connected.wifi`), and in MentraOS the SDK sources (`MentraBluetoothSdk.kt`, `streaming/StreamModels.kt`), the docs (`camera-streaming.mdx`), the Android example (`MentraExampleController.kt`, `GStreamerWhipReceiver.kt`), the official app's SoftAP stream (`engine/src/services/SoftapCallTransport.ts`, `PhoneStreamCoordinator.ts`, `glasses-media/.../ScopedSoftApNetwork.kt`), `scripts/local-stream/README.md` (MediaMTX) and `agents/rtmp_*.md`. The glasses-side `asg_client` is not in the checkout.
+
+**What the SDK offers.** `startStream` sends `start_stream` over BLE; the glasses pick RTMP (`rtmp://`, `rtmps://`), SRT (`srt://`) or WHIP (`http(s)://`) from the URL and publish over their own Wi-Fi. It resolves on `streaming` (30 s timeout); `stopStream` resolves on `stopped`. The SDK sends the keep-alives itself (`stream_keep_alive`, 3 missed acks fail the stream) and reports `stream_status` (`initializing`, `streaming`, `reconnecting`, `reconnected`, `reconnect_failed`, `stopping`, `stopped`, `error` with `willRetry`), `resolvedConfig` (encoded size, fps, bitrate) and live stats. There is no SDK-provided local preview: the Mentra app shows "No preview available for unmanaged streams", and its own phone preview (SoftAP calls) is a WHIP listener on the phone, inside a WebRTC stack. The glasses publish RTMP with StreamPack, which needs a `/app/streamKey` path.
+
+**Protocol choice: RTMP to the phone.**
+
+| | Phone-side cost | Latency | Decode |
+|---|---|---|---|
+| RTMP (chosen) | ~1,100 lines of pure Kotlin (handshake, chunks, AMF0, FLV/AVC, MPEG-TS), no native code | TCP on a one-hop link; the glasses encoder plus ~300 ms player caching | H.264 through the existing LibVLC (avcodec) |
+| SRT | UDP with ACK/NAK retransmission and timestamp-based delivery to implement, or libsrt (MPL-2.0, native) | similar on a clean hop | MPEG-TS, same decode |
+| WHIP | a WebRTC stack (libwebrtc, ~10 MB per ABI) or GStreamer (LGPL, the example's 100+ MB SDK) plus ICE/DTLS | lowest | WebRTC |
+
+RTMP over TCP needs no loss recovery on our side, adds no native library or licence, and its demuxing is small enough to unit-test in `:shared`. LibVLC (already shipped, LGPL) plays the result, so the preview reuses the card, the player lifecycle and the headless frame output of the Eyevue/TuneBuds previews.
+
+**Preview pipeline.** `MentraLivePreviewManager` (a `LibVlcLivePreviewManager`) runs `MentraLiveStreamConnection`:
+
+1. Route: when the glasses report Wi-Fi (`wifi.localIp`) in the subnet of the phone's Wi-Fi, the ingest listens on the phone's Wi-Fi address. Otherwise the glasses turn their hotspot on (reused if already on), the phone joins it with `MentraHotspotNetwork` as `GlassesLinkClient.MENTRA_LIVE_STREAM` (no `NET_CAPABILITY_INTERNET`, default network unchanged), and the ingest listens on the phone's hotspot IPv4 from `LinkProperties`.
+2. `MentraRtmpIngest` binds port 1935 (or a free port) on that address. A random per-session stream key is the publish path: `rtmp://<phone-ip>:<port>/live/<key>`; other keys get `NetStream.Publish.BadName`. Connections that close before publishing (the glasses' reachability probe) are ignored; a new publisher with the key replaces the old one.
+3. `startStream` with 1280x720, 15 fps, 2 Mbit/s, `captureAudio = false` (video only: the glasses microphone stays free for the assistant).
+4. The shared `RtmpPublishSession` answers `connect`/`releaseStream`/`FCPublish`/`createStream`/`publish`, acknowledges bytes, answers pings. `RtmpToTsRemuxer` turns FLV H.264 (legacy and Enhanced RTMP `avc1`) into Annex B with an access unit delimiter and SPS/PPS before keyframes, waits for the first keyframe and keeps timestamps monotonic across publisher reconnects. `MpegTsMuxer` writes PAT/PMT before keyframes and the PCR on the video PID.
+5. `LoopbackTsServer` serves `http://127.0.0.1:<port>/<token>.ts`; a new player gets the frames since the last keyframe. LibVLC plays it with 300 ms caching. Frames for vision come from the same decoder (640x360, no rotation).
+6. Failure: Mentra disconnects, `stopped`/`reconnect_failed`/non-retried `error` for this stream, the hotspot drops, or no video for 10 s. Close: `stopStream`, stop the servers, leave the hotspot, turn it off if the preview turned it on.
+
+It holds the shared camera lease (`GlassesSession.LIVE_PREVIEW`), so AI photos and the gallery sync wait. HEVC (`hvc1`) is reported, not decoded.
+
+**Walking Aid.** `WalkingAidVideoMode.MENTRA_VIDEO` ("Mentra Live continuous video", Android 10+) uses its own `MentraLivePreviewManager` through `startFrames`, under the same lease. The Walking Aid connection check now knows Mentra (it used to check the HeyCyan BLE link only). Gemini Live keeps its opportunistic stills for Mentra (`GeminiLiveVisionPolicy`), as it does for HeyCyan.
+
+**Broadcast.** `MentraBroadcastController` (process-wide) checks the URL (`MentraStreamUrls.checkBroadcastUrl`: rtmp/rtmps with app and key, srt with a port, no loopback hosts), requires the glasses on Wi-Fi (`wifi()`), takes the `LIVE_PREVIEW` lease, and opens an `AudioSessionRequest.Recording` session with the `DEVICE_SDK` route for the glasses microphone. If the arbiter refuses (another recording), the broadcast runs without audio. `stream_status` drives the screen (phase, resolved video, bitrate/fps/dropped frames, error text); the stream key is masked in logs and on screen. The URL is stored in the secure typed preference `MediaPrefs.MentraBroadcast.streamUrl`. The dashboard card shows "Broadcasting to …" and its Stop ends the broadcast. Glasses Wi-Fi is set up on the firmware update screen's Wi-Fi step, which the broadcast screen opens.
+
+**iOS.** Not implemented; the shared protocol code is ready for it. iOS would need: bridge actions for `startStream`/`stopStream` and `stream_status` in `MentraGlassesBridge.swift`; for the preview, the hotspot join from "Gallery download" (`NEHotspotConfiguration`, which takes over the device's Wi-Fi), a listener on the hotspot address (`NWListener` on port 1935, `requiredInterfaceType = .wifi`) feeding `RtmpPublishSession`/`RtmpToTsRemuxer`, and a player: `AVPlayer` cannot play a raw TS over HTTP without HLS, so either wrap the TS in a rolling HLS playlist on loopback (adds 1–2 s) or feed Annex B to `VTDecompressionSession` (lowest latency, ~150 lines of Swift). The Local Network usage text (iOS 14+) is required for the listener. The broadcast needs only the bridge actions and a screen.
+
+**Not confirmed from the sources.** Whether the glasses' "no Wi-Fi" preflight accepts RTMP while they are in hotspot mode (the MentraOS local-stream README says a laptop on the Mentra hotspot works, and the Mentra app's SoftAP path streams WHIP to the phone this way, but neither proves RTMP from the 3.2 firmware). Which RTMP client the 3.2 glasses app uses (StreamPack per the docs; its handshake and command order are assumed to match librtmp/FFmpeg). Whether `captureAudio = false` is honoured (audio is ignored if sent). Whether the glasses' RTMP watchdog (network validation) reconnects in a loop on a hotspot without internet. The unit of `stats.duration` (not shown). Whether streaming and the SDK microphone PCM can run together.
 
 ## Calls the frozen MainActivity region must add later
 
