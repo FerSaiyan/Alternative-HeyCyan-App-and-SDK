@@ -5,7 +5,7 @@
         <nme>CyanBridge LocalAgent Observe</nme>
         <Share sr="Share">
             <b>false</b>
-            <d>Receives CyanBridge Local Agent observation requests, queries the current UI with AutoInput, blocks packages listed in %CB_LocalAgentBlocked before returning screen content, and returns a compact JSON response envelope.</d>
+            <d>Receives CyanBridge Local Agent observation requests, queries the current UI with AutoInput, blocks packages listed in %CB_LocalAgentBlocked before returning screen content, and returns a compact JSON response envelope. Optional: set %CB_LocalAgentScreenshot to 1 to attach a screenshot of allowed apps for planning (off by default).</d>
             <g>CyanBridge,Local Agent,AutoInput,Privacy</g>
             <p>true</p>
             <t></t>
@@ -103,6 +103,9 @@ function parsePackages(raw) {
 var pkg = (typeof aipackage !== "undefined") ? String(aipackage || "").trim().toLowerCase() : "";
 var blockedPackages = parsePackages(global("CB_LocalAgentBlocked"));
 var response = "";
+var want_screenshot = "false";
+var screenshot_dir = "/sdcard/Tasker/cyanbridge";
+var screenshot_file = screenshot_dir + "/localagent_screen.png";
 if (pkg &amp;&amp; blockedPackages[pkg]) {
     var blockedEnvelope = {
         contract_version: 1,
@@ -166,12 +169,69 @@ var envelope = {
     error: null
 };
 response = JSON.stringify(envelope);
+// Optional screenshot step, off by default. Only for allowed apps, only when CyanBridge
+// asks for it (planning steps, not probes) and the user set %CB_LocalAgentScreenshot to 1.
+var screenshotRequested = false;
+try { screenshotRequested = JSON.parse(String(payload || "{}")).screenshot === true; } catch (e) {}
+if (screenshotRequested &amp;&amp; String(global("CB_LocalAgentScreenshot") || "").trim() === "1") {
+    want_screenshot = "true";
+    createDir(screenshot_dir, true, false);
+}
 }</Str>
             <Str sr="arg1" ve="3"/>
             <Int sr="arg2" val="1"/>
             <Int sr="arg3" val="45"/>
         </Action>
         <Action sr="act2" ve="7">
+            <code>176</code>
+            <se>false</se>
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%want_screenshot</lhs><op>2</op><rhs>true</rhs></Condition></ConditionList>
+            <Str sr="arg0" ve="3">%screenshot_file</Str>
+            <Int sr="arg1" val="0"/>
+        </Action>
+        <Action sr="act3" ve="7">
+            <code>129</code>
+            <ConditionList sr="if"><Condition sr="c0" ve="3"><lhs>%want_screenshot</lhs><op>2</op><rhs>true</rhs></Condition></ConditionList>
+            <Str sr="arg0" ve="3">// Re-encode the screenshot as a small JPEG and attach it as base64. The broadcast
+// envelope must stay well below Android's binder limit, so oversized images are dropped
+// and CyanBridge plans from text, as it does with the step turned off.
+var shotJpeg = String(screenshot_dir) + "/localagent_screen.jpg";
+var shotBase64 = "";
+var shotError = "";
+var qualities = [60, 35];
+try {
+    for (var q = 0; q &lt; qualities.length &amp;&amp; !shotBase64; q++) {
+        if (!loadImage("file://" + String(screenshot_file))) {
+            shotError = "tasker_screenshot_unavailable";
+            break;
+        }
+        saveImage(shotJpeg, qualities[q], true);
+        var encoded = String(shell("base64 -w 0 '" + shotJpeg + "'", false, 15) || "").replace(/\s+/g, "");
+        if (!encoded) {
+            shotError = "tasker_screenshot_encode_failed";
+            break;
+        }
+        if (encoded.length &lt;= 450000) shotBase64 = encoded;
+        else shotError = "tasker_screenshot_too_large";
+    }
+} catch (e) {
+    shotError = "tasker_screenshot_error:" + String(e);
+}
+deleteFile(String(screenshot_file), 0, false);
+deleteFile(shotJpeg, 0, false);
+try {
+    var shotEnvelope = JSON.parse(String(response));
+    var shotObservation = JSON.parse(String(shotEnvelope.payload));
+    if (shotBase64) shotObservation.screenshot_base64 = shotBase64;
+    else shotObservation.screenshot_error = shotError || "tasker_screenshot_failed";
+    shotEnvelope.payload = JSON.stringify(shotObservation);
+    response = JSON.stringify(shotEnvelope);
+} catch (e) {}</Str>
+            <Str sr="arg1" ve="3"/>
+            <Int sr="arg2" val="1"/>
+            <Int sr="arg3" val="45"/>
+        </Action>
+        <Action sr="act4" ve="7">
             <code>877</code>
             <Str sr="arg0" ve="3">com.fersaiyan.cyanbridge.TASKER_AGENT_RESPONSE</Str>
             <Int sr="arg1" val="0"/>

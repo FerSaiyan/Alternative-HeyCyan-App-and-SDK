@@ -68,8 +68,22 @@ for needle in (
     "CB_LocalAgentBlocked",
     "com.joaomgcd.autoinput",
     "read_screen_aloud",
+    # Optional screenshot step: off unless the user sets %CB_LocalAgentScreenshot to 1.
+    "CB_LocalAgentScreenshot",
+    "screenshot_base64",
 ):
     require(local_agent, needle, "CyanBridge_LocalAgent_Tasker.prj.xml")
+try:
+    for action in ET.fromstring(local_agent).iter("Action"):
+        if action.findtext("code") != "176":
+            continue
+        # The capture must be gated, and a failed capture must still return the text observation.
+        if action.findtext("ConditionList/Condition/lhs") != "%want_screenshot":
+            fail("CyanBridge_LocalAgent_Tasker.prj.xml: Take Screenshot is not gated by %want_screenshot")
+        if action.findtext("se") != "false":
+            fail("CyanBridge_LocalAgent_Tasker.prj.xml: Take Screenshot must continue the task after an error")
+except ET.ParseError:
+    pass
 
 auto_diary = load_xml("CyanBridge_AutoDiary_Tasker.prj.xml")
 for needle in (

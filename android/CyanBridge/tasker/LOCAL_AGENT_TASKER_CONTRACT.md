@@ -64,6 +64,30 @@ For an allowed app the observation payload is:
 
 AutoInput fields can be reduced when unavailable; the CyanBridge parser tolerates partial nodes.
 
+### Optional screenshot (off by default)
+
+CyanBridge has no screen capture of its own. The observation handler can attach a screenshot when the user turns it on in Tasker:
+
+- Tasker global variable: `%CB_LocalAgentScreenshot`. `1` turns the step on; anything else, including unset, leaves it off.
+- The observe request payload carries `"screenshot": true` for planning steps. Readiness probes and HIL checks send `false`, so they never capture.
+- Blocked packages (`%CB_LocalAgentBlocked`) are never captured.
+
+When all three allow it, the handler runs Tasker's **Take Screenshot** action into `/sdcard/Tasker/cyanbridge/localagent_screen.png`, re-encodes it as JPEG (quality 60, then 35 if still too big), and adds it to the observation payload:
+
+```json
+{
+  "created_at_ms": 1770000000000,
+  "package_name": "com.example.app",
+  "text_summary": "...",
+  "nodes": [],
+  "screenshot_base64": "<base64 JPEG>"
+}
+```
+
+Tasker deletes both files right after encoding. A base64 string over 450,000 characters is dropped to keep the broadcast below Android's binder limit. If capture or encoding fails, the text observation is still returned, with `screenshot_error` (for example `tasker_screenshot_unavailable` or `tasker_screenshot_too_large`) in place of `screenshot_base64`.
+
+CyanBridge accepts at most 1,000,000 decoded bytes, and only JPEG, PNG or WebP. It writes its own copy to its cache (`cache/localagent-screenshots/`) and passes that path to the planner. It deletes the copy when the planning step ends. Turning the Tasker step on is the user's consent to send the screenshot to the selected planner. With a cloud or Pro relay planner, the screenshot leaves the phone. With an on-device model it stays local. A planner that can't take images falls back to text-only planning. The Local Agent settings screen shows the last result as "Screenshot status".
+
 ### Execute request
 
 Action:
@@ -132,7 +156,7 @@ This keeps the failure boundary clear:
 
 ## Current profile status
 
-`CyanBridge_LocalAgent_Tasker.prj.xml` implements the current observation/execution contract and `%CB_LocalAgentBlocked` source-privacy filtering.
+`CyanBridge_LocalAgent_Tasker.prj.xml` implements the current observation/execution contract, `%CB_LocalAgentBlocked` source-privacy filtering and the optional `%CB_LocalAgentScreenshot` screenshot step.
 
 Package installation, generic arbitrary intents and generic shell execution are not currently first-class members of `LocalAgentAction` / `LocalAgentUiControlProtocol`; adding them remains a separate protocol-extension pass. When added, CyanBridge should parse/classify/approve them and Tasker should execute them.
 
