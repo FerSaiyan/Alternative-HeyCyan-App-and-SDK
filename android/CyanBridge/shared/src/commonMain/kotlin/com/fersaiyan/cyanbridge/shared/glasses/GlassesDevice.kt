@@ -10,6 +10,7 @@ import com.fersaiyan.cyanbridge.bridge.core.LivePreviewTransport
 import com.fersaiyan.cyanbridge.bridge.core.MediaSyncTransport
 import com.fersaiyan.cyanbridge.bridge.core.OnboardRecording
 import com.fersaiyan.cyanbridge.bridge.core.RecordingSettingsControl
+import com.fersaiyan.cyanbridge.bridge.core.SdkFirmwareUpdate
 import com.fersaiyan.cyanbridge.bridge.core.VolumeReporting
 import com.fersaiyan.cyanbridge.bridge.core.WearingDetectionControl
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantGlassesHooks
@@ -37,6 +38,7 @@ interface GlassesDevice {
     val recordingSettings: RecordingSettingsControl? get() = null
     val wearingDetection: WearingDetectionControl? get() = null
     val aiPhoto: AiPhotoCapture? get() = null
+    val firmwareUpdate: SdkFirmwareUpdate? get() = null
 
     /** What the glasses need around an assistant answer (for example HeyCyan AI-speak modes). */
     val assistantHooks: AssistantGlassesHooks get() = AssistantGlassesHooks.None
@@ -83,6 +85,7 @@ object GlassesDeviceActions {
             GlassesDashboardAction.RequestVersion -> device.deviceInfo?.let { it::requestVersion }
             GlassesDashboardAction.SyncTime -> device.deviceInfo?.let { it::syncTime }
             GlassesDashboardAction.RequestVolume -> device.volume?.let { it::requestVolume }
+            GlassesDashboardAction.OpenSdkFirmwareUpdate -> device.firmwareUpdate?.let { it::openFirmwareUpdate }
             GlassesDashboardAction.AddDeviceListener -> device.diagnostics?.let { it::requestFeatureReport }
             GlassesDashboardAction.RefreshRecordingSettings ->
                 device.recordingSettings?.let { it::refreshRecordingSettings }

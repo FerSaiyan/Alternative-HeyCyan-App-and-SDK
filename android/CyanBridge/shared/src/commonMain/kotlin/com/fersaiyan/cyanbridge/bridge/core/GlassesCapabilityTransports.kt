@@ -57,6 +57,11 @@ interface DeviceInfoReporting {
     fun syncTime()
 }
 
+/** Opens the family's own firmware update screen (an SDK-run update, not the HeyCyan OTA). */
+fun interface SdkFirmwareUpdate {
+    fun openFirmwareUpdate()
+}
+
 /** Reads the glasses speaker volume. */
 fun interface VolumeReporting {
     fun requestVolume()

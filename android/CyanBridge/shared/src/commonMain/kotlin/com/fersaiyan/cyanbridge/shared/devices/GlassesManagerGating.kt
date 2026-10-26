@@ -25,6 +25,7 @@ object GlassesManagerGating {
         ADVANCED_IMAGE_QUALITY,
         ADVANCED_DEVELOPER_TOOLS,
         ADVANCED_OTA,
+        ADVANCED_SDK_FIRMWARE_UPDATE,
         WIFI_ADB_DEBUG,
     }
 
@@ -74,6 +75,7 @@ object GlassesManagerGating {
         GlassesCapability.IMAGE_QUALITY_SELECTION to Action.ADVANCED_IMAGE_QUALITY,
         GlassesCapability.DEVELOPER_TOOLS to Action.ADVANCED_DEVELOPER_TOOLS,
         GlassesCapability.FIRMWARE_UPDATE to Action.ADVANCED_OTA,
+        GlassesCapability.SDK_FIRMWARE_UPDATE to Action.ADVANCED_SDK_FIRMWARE_UPDATE,
         GlassesCapability.RECORDING_SETTINGS to Action.CAPTURE_SETTINGS,
         GlassesCapability.WAKE_WORD to Action.AI_WAKE_WORD_ROUTING,
         GlassesCapability.WIFI_ADB_DEBUG to Action.WIFI_ADB_DEBUG,
@@ -87,6 +89,7 @@ object GlassesManagerGating {
         Action.ADVANCED_IMAGE_QUALITY,
         Action.ADVANCED_DEVELOPER_TOOLS,
         Action.ADVANCED_OTA,
+        Action.ADVANCED_SDK_FIRMWARE_UPDATE,
     )
 
     /**
@@ -116,6 +119,7 @@ object GlassesManagerGating {
         GlassesDashboardAction.RequestVersion -> GlassesCapability.DEVICE_INFO
         GlassesDashboardAction.SyncTime -> GlassesCapability.TIME_SYNC
         GlassesDashboardAction.RequestVolume -> GlassesCapability.VOLUME_STATUS
+        GlassesDashboardAction.OpenSdkFirmwareUpdate -> GlassesCapability.SDK_FIRMWARE_UPDATE
         is GlassesDashboardAction.SelectImageThumbnailQuality -> GlassesCapability.IMAGE_QUALITY_SELECTION
         is GlassesDashboardAction.SetAiWakeWordRoute -> GlassesCapability.WAKE_WORD
         GlassesDashboardAction.RefreshRecordingSettings,

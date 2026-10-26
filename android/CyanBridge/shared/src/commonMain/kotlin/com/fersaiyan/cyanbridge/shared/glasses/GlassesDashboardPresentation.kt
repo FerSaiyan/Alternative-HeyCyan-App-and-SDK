@@ -55,6 +55,8 @@ data class GlassesDashboardUiState(
     val showAdvancedImageQuality: Boolean = false,
     val showAdvancedDeveloperTools: Boolean = false,
     val showAdvancedOta: Boolean = false,
+    /** The device-info button that opens the family's own firmware update screen (Mentra Live). */
+    val showSdkFirmwareUpdate: Boolean = false,
     val showMetaRaybanControls: Boolean = false,
     val showMeizuMyvuControls: Boolean = false,
     val showMemoMindControls: Boolean = false,
@@ -295,6 +297,7 @@ fun GlassesDashboardUiState.withFamilyGating(
         showAdvancedImageQuality = model.isVisible(Action.ADVANCED_IMAGE_QUALITY),
         showAdvancedDeveloperTools = model.isVisible(Action.ADVANCED_DEVELOPER_TOOLS),
         showAdvancedOta = model.isVisible(Action.ADVANCED_OTA),
+        showSdkFirmwareUpdate = model.isVisible(Action.ADVANCED_SDK_FIRMWARE_UPDATE),
         deviceInfoLabel = deviceInfoLabel.takeIf {
             model.isVisible(Action.TUNEBUDS_CONTROLS)
         },
@@ -353,6 +356,7 @@ sealed interface GlassesDashboardAction {
     data object RequestVersion : GlassesDashboardAction
     data object SyncTime : GlassesDashboardAction
     data object RequestVolume : GlassesDashboardAction
+    data object OpenSdkFirmwareUpdate : GlassesDashboardAction
     data object AddDeviceListener : GlassesDashboardAction
     data object StartClassicBluetoothScan : GlassesDashboardAction
     data object DumpOtaInfo : GlassesDashboardAction

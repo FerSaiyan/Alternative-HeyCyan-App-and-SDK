@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_connecting
+import com.fersaiyan.cyanbridge.shared.generated.resources.mentra_ota_open_button
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_bluetooth_unavailable
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_disconnecting
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_disconnected
@@ -1437,6 +1438,13 @@ private fun AdvancedControls(
                         label = stringResource(Res.string.dashboard_sync_time),
                         onClick = { onAction(GlassesDashboardAction.SyncTime) },
                         modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (state.showSdkFirmwareUpdate) {
+                    ActionButton(
+                        label = stringResource(Res.string.mentra_ota_open_button),
+                        onClick = { onAction(GlassesDashboardAction.OpenSdkFirmwareUpdate) },
+                        modifier = Modifier.fillMaxWidth().testTag("advanced_sdk_firmware_update"),
                     )
                 }
             }

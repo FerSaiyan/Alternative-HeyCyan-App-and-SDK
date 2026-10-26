@@ -57,6 +57,7 @@ class GlassesDashboardGatingTest {
                 showAdvancedImageQuality = Action.ADVANCED_IMAGE_QUALITY in visible,
                 showAdvancedDeveloperTools = Action.ADVANCED_DEVELOPER_TOOLS in visible,
                 showAdvancedOta = Action.ADVANCED_OTA in visible,
+                showSdkFirmwareUpdate = Action.ADVANCED_SDK_FIRMWARE_UPDATE in visible,
                 deviceInfoLabel = sample.deviceInfoLabel.takeIf { deviceClass == DeviceClass.TUNEBUDS },
                 firmwarePatchRequest = sample.firmwarePatchRequest
                     .takeIf { deviceClass == DeviceClass.HEY_CYAN || deviceClass == DeviceClass.EYEVUE },
@@ -136,6 +137,7 @@ class GlassesDashboardGatingTest {
                     Action.TUNEBUDS_CONTROLS in other, eyevue,
                 )
                 assertEquals(expected, flags, "iOS sections for $deviceClass, linked=$linked")
+                assertEquals(false, state.showSdkFirmwareUpdate, "iOS has no SDK firmware update screen")
                 // MemoMind's panel holds its Connect button, so it shows without a link.
                 assertEquals(deviceClass == DeviceClass.MEMOMIND, state.showMemoMindControls, "MemoMind panel for $deviceClass")
                 assertEquals(sample.deviceInfoLabel, state.deviceInfoLabel)
