@@ -7,7 +7,6 @@
     <string name="compose_language">Язык</string>
     <string name="compose_output">Вывод</string>
     <string name="compose_custom_instructions">Пользовательские инструкции</string>
-    <string name="compose_history">История: %1$s</string>
     <string name="compose_clear_history">Очистить историю</string>
     <string name="compose_history_cleared">История очищена</string>
     <string name="compose_source_language">Исходный язык</string>
@@ -20,21 +19,13 @@
     <string name="compose_status">Состояние: %1$s</string>
     <string name="compose_ready">Готово</string>
     <string name="compose_auto_audio_stop_loop">Остановить цикл</string>
-    <string name="compose_autodiary_description">Создавайте приватную ежедневную память из контекста экрана и разговоров. Для снимков экрана требуется служба специальных возможностей CyanBridge; управление телефоном через Local Agent можно оставить выключенным.</string>
     <string name="compose_screen_capture">Снимок экрана</string>
-    <string name="compose_autodiary_accessibility_enabled">Служба специальных возможностей включена. AutoDiary может собирать контекст экрана.</string>
-    <string name="compose_autodiary_paused">AutoDiary приостановлен. Включите службу специальных возможностей, чтобы продолжить съемку.</string>
-    <string name="compose_autodiary_accessibility_required">Требуется служба специальных возможностей. AutoDiary не собирает контекст до ее включения.</string>
-    <string name="compose_capture_interval_minutes">Интервал съемки (минуты)</string>
-    <string name="compose_accessibility_settings">Настройки специальных возможностей</string>
-    <string name="compose_blacklist_apps">Заблокированные приложения</string>
     <string name="compose_view_screen_captures">Показать снимки экрана</string>
     <string name="compose_daily_processing">Ежедневная обработка</string>
     <string name="compose_nightly_enrichment_description" formatted="false">Пункты OCR, теги заметок и ежедневные сводки подготавливаются ночью во время зарядки. Обработка начинается при заряде 80% и приостанавливается ниже 75%. Напоминания о проверке появляются только после подготовки непустого пакета.</string>
     <string name="compose_daily_facts_reminder">Напоминание о ежедневных фактах</string>
     <string name="compose_auto_save_daily_facts">Автоматически сохранять ежедневные факты</string>
     <string name="compose_extract_user_fact_candidates">Извлекать кандидатов в факты пользователя</string>
-    <string name="compose_daily_summary_refresh_hours">Обновление ежедневной сводки (часы)</string>
     <string name="compose_open_daily_summary">Открыть ежедневную сводку</string>
     <string name="compose_edit_daily_facts">Изменить ежедневные факты</string>
     <string name="compose_view_confirmed_facts">Показать подтвержденные факты</string>
@@ -89,7 +80,6 @@
     <string name="compose_camera_warning">Предупреждение</string>
     <string name="compose_camera_hardware_required">Требуется камера</string>
     <string name="compose_visual_camera_description">Visual Diary периодически делает фото для создания заметок ежедневной памяти. %1$s</string>
-    <string name="compose_visual_description">Снимайте сцены с очков по расписанию, описывайте их выбранной моделью зрения Gemma и добавляйте краткие заметки в ежедневную память.</string>
     <string name="compose_visual_enabled">Visual Diary включен</string>
     <string name="compose_last_stop_reason">Последняя причина остановки: %1$s</string>
     <string name="compose_capture">Съемка</string>

@@ -4,60 +4,20 @@
     <string name="language_selection_title">Choose app language</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_save">Save</string>
-    <string name="vision_profile_selection_title">Choose vision profile</string>
-    <string name="vision_profile_walking">Walking</string>
-    <string name="vision_profile_detailed">Detailed</string>
-    <string name="vision_custom_instructions_title">Additional vision instructions</string>
-    <string name="vision_custom_instructions_hint">Optional instructions used for every image description</string>
     <string name="nav_transcriptions_recordings">Media</string>
-    <string name="text_1">Scan</string>
-    <string name="text_2">Reconnect</string>
-    <string name="text_3">Disconnect</string>
-    <string name="text_4">Set Time</string>
-    <string name="text_22">Connecting...</string>
-    <string name="text_5">Get Version</string>
-    <string name="text_6">Take Picture</string>
-    <string name="text_7">Record Video</string>
-    <string name="text_8">Record Audio</string>
-    <string name="text_9">Smart Picture Recognition</string>
     <string name="text_10">BT Pair</string>
     <string name="text_11">Register Report Listener</string>
-    <string name="text_12">Battery</string>
-    <string name="text_13">Read Volume</string>
-    <string name="text_14">Read number of media on glasses</string>
-    <string name="text_15">BLE+WiFi P2P Data Download</string>
     <string name="text_16">Dump OTA server info</string>
     <string name="text_17">Test pull-mode OTA (writeIpToSoc)</string>
-    <string name="scan_device">Scan Device</string>
 
     <string name="battery_opt_title">Keep CyanBridge Running</string>
-    <string name="battery_opt_status_on">Status: Battery optimization is ON for CyanBridge</string>
-    <string name="battery_opt_status_off">Status: Battery optimization is OFF for CyanBridge</string>
-    <string name="battery_opt_body">Some midrange/low-end phones may disconnect Bluetooth devices when CyanBridge is in the background or when you close the app. To keep your glasses connected, disable battery optimization for CyanBridge.</string>
-    <string name="battery_opt_disable_button">Disable Battery Optimization</string>
-    <string name="battery_opt_open_list_button">Open Battery Optimization Settings</string>
-    <string name="battery_opt_open_app_info_button">Open App Info</string>
-    <string name="battery_opt_lock_app_title">Also lock CyanBridge in Recents</string>
-    <string name="battery_opt_lock_app_body">Open Recents, find CyanBridge, then use the app menu (often a long-press or tap the app icon) and choose Lock/Pin/Keep open. This prevents the system from clearing the app.</string>
-    <string name="battery_opt_done_button">I Locked It</string>
-    <string name="battery_opt_skip_button">Don\'t show again</string>
-    <string name="battery_opt_still_on_toast">Battery optimization still appears to be ON. Please disable it, then tap "I Locked It" again.</string>
     <string name="battery_opt_not_supported">Battery optimization settings are not available on this Android version.</string>
     <string name="battery_opt_cant_open_settings">Could not open settings on this device.</string>
 
-    <string name="welcome_title">Welcome to CyanBridge</string>
-    <string name="welcome_body">Let\'s get you set up with your smart glasses. We need to configure a few things to ensure a stable connection.</string>
-    <string name="welcome_button">Start Setup</string>
-    <string name="app_lock_guide_title">Prevent RAM Cleanup</string>
-    <string name="app_lock_guide_body">Android often closes apps running in the background to save RAM. To avoid disconnections, please \"Lock\" CyanBridge in your Recents menu.</string>
-    <string name="app_lock_guide_instructions">1. Swipe up from the bottom (or tap the Square button) to see recent apps.\n2. Find CyanBridge.\n3. Tap the icon at the top or long-press the preview.\n4. Select \"Lock this app\" or the Lock icon.</string>
-    <string name="app_lock_guide_button">Finish Setup</string>
 
     <!-- Local agent automation (AccessibilityService) -->
-    <string name="local_agent_accessibility_service_label">Local Agent Automation</string>
 
     <!-- Legacy/compat: kept for code added by local-agent-service worktree -->
-    <string name="local_agent_accessibility_description">Local agent screen observer (MVP)</string>
 
     <!-- Onboarding: Daily Facts -->
     <string name="onboarding_glasses_connection_title">Connect Your Glasses</string>
@@ -84,18 +44,10 @@
     <string name="onboarding_bluetooth_skip_cancel">Go back</string>
     <string name="onboarding_find_glasses">Find available glasses</string>
 
-    <string name="onboarding_daily_facts_title">Daily Facts &amp; Diary</string>
-    <string name="onboarding_daily_facts_desc">AutoDiary can turn selected screen context into private daily facts and summaries.</string>
-    <string name="onboarding_daily_facts_details">Enable and configure AutoDiary later from Plugins. It can remind you to review daily facts, create summaries, and keep your settings in one place. CyanBridge asks for notification access only when you turn on a reminder.</string>
 
     <!-- Onboarding: Screen Capture -->
-    <string name="onboarding_screen_capture_title">Screen Memory</string>
-    <string name="onboarding_screen_capture_desc">AutoDiary can read screen text for local memory when you enable it from Plugins.</string>
-    <string name="onboarding_screen_capture_details">Screen text is stored locally for AutoDiary. Local Agent phone control reads the current interface only for actions you explicitly request. Apps in your blacklist are skipped. Review the Accessibility disclosure below before enabling this optional feature in Android settings.</string>
     <string name="onboarding_accessibility_disclosure_title">Accessibility access disclosure</string>
     <string name="onboarding_accessibility_disclosure_body">CyanBridge has no Accessibility service of its own. Screen Memory and the Local Agent work through Tasker and AutoInput: AutoInput\'s Accessibility service reads the text and interface structure of the app on your screen and lets the Local Agent tap, type, scroll, and navigate on your behalf. You enable AutoInput\'s Accessibility yourself; CyanBridge never turns it on. Screen content for Screen Memory is stored locally. When you ask the Local Agent to do something, the current screen content may be processed by the AI provider you selected, including a cloud provider if you chose one. Screenshots are optional and off by default. You turn them on in the CyanBridge Local Agent Tasker profile; after that, each planning screenshot goes to the planner you selected, including a cloud or Pro planner. Apps you block in Tasker are skipped. You can turn off AutoInput\'s Accessibility, Screen Memory, or the Local Agent at any time.</string>
-    <string name="onboarding_local_agent_toggle">Enable Local Agent phone control</string>
-    <string name="onboarding_open_accessibility_settings">Review and enable Accessibility</string>
     <string name="onboarding_skip_all">Skip all</string>
     <string name="onboarding_back">Back</string>
     <string name="onboarding_next">Next</string>
@@ -105,44 +57,17 @@
     <string name="meta_pairing_title">Pair Meta glasses</string>
 
     <!-- Onboarding: Audio Capture -->
-    <string name="onboarding_audio_capture_title">Continuous Audio Recording</string>
-    <string name="onboarding_audio_capture_desc">Auto Audio can record glasses audio for transcription and daily summaries when enabled from Plugins.</string>
-    <string name="onboarding_audio_capture_details">Auto Audio records in 15-minute chunks, then transcribes them for optional summaries. You can review and delete recordings at any time. CyanBridge explains and requests notification or microphone access only if the options you choose need them.</string>
 
     <!-- Onboarding: Agent Personality -->
-    <string name="onboarding_agent_personality_title">Personalize Your AI</string>
-    <string name="onboarding_agent_personality_desc">Customize how the AI assistant behaves and what it knows about you.</string>
-    <string name="onboarding_agent_personality_details">You can customize the agent\'s personality (how it talks, its tone) and provide facts about yourself (your job, hobbies, family, preferences). This makes the AI more personal and helpful. You can edit these anytime in Settings.</string>
 
     <!-- Onboarding: Local Storage -->
-    <string name="onboarding_local_storage_title">Your Data Stays on Your Device</string>
-    <string name="onboarding_local_storage_desc">All your data is encrypted and stored locally on your phone.</string>
-    <string name="onboarding_local_storage_details">Your chats, screen captures, recordings, and AI memories are encrypted using industry-standard encryption and stored only on your device. Future cloud sync options will be available with a Pro Subscription, allowing you to securely sync across devices. Cloud options are currently greyed out until you activate Pro.</string>
 
     <!-- Onboarding: Pro Subscription -->
-    <string name="onboarding_pro_sub_title">Unlock Premium Features</string>
-    <string name="onboarding_pro_sub_desc">Optional cloud features for power users.</string>
-    <string name="onboarding_pro_sub_details">You can use the ENTIRE app completely FREE with local models running on your phone (Qwen 2.5 1.7B, Whisper for transcription, etc.). No internet required!\n\nPro Subscription is ONLY needed for:\n• Cloud AI models (API costs money)\n• Cloud memory sync across devices\n\n🔒 STEALTH MODE FIRMWARE (coming soon)\nThe upcoming Stealth Mode enables silent capture of audio, photos, and videos from your glasses. This requires a one-time payment of the Standard or Max Pro plan for the modded firmware flash. You can cancel your subscription afterward and keep Stealth Mode indefinitely!\n\n🎁 FREE TRIAL\nNew users get a free 1-month Pro trial (rate-limited among all free trial users). Cancel anytime.</string>
 
     <!-- Chat deletion -->
-    <string name="delete_chat_title">Delete Chat</string>
-    <string name="delete_chat_message">Delete \"%s\"? This cannot be undone.</string>
     <string name="chat_deleted">Chat deleted</string>
-    <string name="open_synced_media">View synced photos and videos</string>
-    <string name="recent_synced_photos">Recent synced photos</string>
-    <string name="synced_media_title">Synced photos and videos</string>
     <string name="synced_media_folder_hint">Showing files from: %1$s</string>
-    <string name="synced_media_empty">No synced photos or videos found yet.</string>
     <string name="synced_media_open_failed">Unable to open this media item.</string>
-    <string name="synced_media_video_badge">VIDEO</string>
-    <string name="auto_audio_speech_extend">Extend loop when speech detected (avoid cutting conversations)</string>
-    <string name="legacy_checkout_dialog_title">CyanBridge Pro Support Note</string>
-    <string name="legacy_checkout_dialog_message">Hi, thanks for your interest in the Pro Sub. I work on this project besides my PhD studies and your comments and support motivate me. I havent been able to setup Stripe yet because of their special requirements for Brazilian businesses, so for now i am using a payment processor called Asaas and the checkout page is sadly in portuguese, so please use Google Translate. I know this is a bummer and i am actively looking for a better alternative. Thanks again for your support!</string>
-    <string name="legacy_checkout_open_button">Open Asaas Card Form</string>
-    <string name="legacy_checkout_return_title">Did you finish the Asaas form?</string>
-    <string name="legacy_checkout_return_message">If you completed the secure Asaas card form in the browser, tap I Completed Payment and CyanBridge will verify your subscription now.</string>
-    <string name="legacy_checkout_confirm_button">I Completed Payment</string>
-    <string name="legacy_checkout_reopen_button">Open Card Form Again</string>
     <string name="donation_intro_dialog_title">CyanBridge Asaas Support Note</string>
     <string name="donation_intro_dialog_message">Hi, thanks for considering a donation to CyanBridge! I work on this project besides my PhD studies, and your support means a lot. I haven\'t been able to set up Stripe yet because of their special requirements for Brazilian businesses, so for now I\'m using a payment processor called Asaas. The checkout page is in Portuguese, so please use Google Translate if needed. I\'m actively looking for a better alternative. Thanks again for your support!</string>
     <string name="donation_intro_open_button">Open Asaas Card Form</string>

@@ -7,7 +7,6 @@
     <string name="compose_language">Language</string>
     <string name="compose_output">Output</string>
     <string name="compose_custom_instructions">Custom Instructions</string>
-    <string name="compose_history">%1$s History</string>
     <string name="compose_clear_history">Clear History</string>
     <string name="compose_history_cleared">History cleared</string>
     <string name="compose_source_language">Source language</string>
@@ -20,21 +19,13 @@
     <string name="compose_status">Status: %1$s</string>
     <string name="compose_ready">Ready</string>
     <string name="compose_auto_audio_stop_loop">Stop loop</string>
-    <string name="compose_autodiary_description">Build a private daily memory from screen context and conversations. Screen capture requires the CyanBridge accessibility service; Local Agent phone control can remain off.</string>
     <string name="compose_screen_capture">Screen capture</string>
-    <string name="compose_autodiary_accessibility_enabled">Accessibility service enabled. AutoDiary can collect screen context.</string>
-    <string name="compose_autodiary_paused">AutoDiary is paused. Enable the accessibility service to resume screen capture.</string>
-    <string name="compose_autodiary_accessibility_required">Accessibility service required. AutoDiary cannot collect screen context until it is enabled.</string>
-    <string name="compose_capture_interval_minutes">Capture interval (minutes)</string>
-    <string name="compose_accessibility_settings">Accessibility settings</string>
-    <string name="compose_blacklist_apps">Blacklist apps</string>
     <string name="compose_view_screen_captures">View screen captures</string>
     <string name="compose_daily_processing">Daily processing</string>
     <string name="compose_nightly_enrichment_description" formatted="false">OCR bullets, note tags, and daily summaries are prepared overnight while charging. Processing starts at 80% battery and pauses below 75%. Review reminders appear only after a non-empty batch is ready.</string>
     <string name="compose_daily_facts_reminder">Daily facts reminder</string>
     <string name="compose_auto_save_daily_facts">Auto-save daily facts</string>
     <string name="compose_extract_user_fact_candidates">Extract user fact candidates</string>
-    <string name="compose_daily_summary_refresh_hours">Daily summary refresh (hours)</string>
     <string name="compose_open_daily_summary">Open daily summary</string>
     <string name="compose_edit_daily_facts">Edit daily facts</string>
     <string name="compose_view_confirmed_facts">View confirmed facts</string>
@@ -89,7 +80,6 @@
     <string name="compose_camera_warning">Warning</string>
     <string name="compose_camera_hardware_required">Camera Hardware Required</string>
     <string name="compose_visual_camera_description">Visual Diary captures periodic photos to build daily memory notes. %1$s</string>
-    <string name="compose_visual_description">Capture glasses scenes on a schedule, describe scenes with the selected Gemma vision model, and append concise notes to daily memory.</string>
     <string name="compose_visual_enabled">Visual Diary enabled</string>
     <string name="compose_last_stop_reason">Last stop reason: %1$s</string>
     <string name="compose_capture">Capture</string>

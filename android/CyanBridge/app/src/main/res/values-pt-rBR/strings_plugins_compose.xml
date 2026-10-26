@@ -7,7 +7,6 @@
     <string name="compose_language">Idioma</string>
     <string name="compose_output">Saida</string>
     <string name="compose_custom_instructions">Instrucoes personalizadas</string>
-    <string name="compose_history">Historico de %1$s</string>
     <string name="compose_clear_history">Limpar historico</string>
     <string name="compose_history_cleared">Historico limpo</string>
     <string name="compose_source_language">Idioma de origem</string>
@@ -20,21 +19,13 @@
     <string name="compose_status">Status: %1$s</string>
     <string name="compose_ready">Pronto</string>
     <string name="compose_auto_audio_stop_loop">Parar loop</string>
-    <string name="compose_autodiary_description">Crie uma memoria diaria privada a partir do contexto da tela e das conversas. A captura de tela requer o servico de acessibilidade do CyanBridge; o controle do telefone pelo Local Agent pode permanecer desligado.</string>
     <string name="compose_screen_capture">Captura de tela</string>
-    <string name="compose_autodiary_accessibility_enabled">Servico de acessibilidade ativado. O AutoDiary pode coletar o contexto da tela.</string>
-    <string name="compose_autodiary_paused">O AutoDiary esta pausado. Ative o servico de acessibilidade para retomar a captura.</string>
-    <string name="compose_autodiary_accessibility_required">Servico de acessibilidade necessario. O AutoDiary nao pode coletar contexto ate ser ativado.</string>
-    <string name="compose_capture_interval_minutes">Intervalo de captura (minutos)</string>
-    <string name="compose_accessibility_settings">Configuracoes de acessibilidade</string>
-    <string name="compose_blacklist_apps">Apps bloqueados</string>
     <string name="compose_view_screen_captures">Ver capturas de tela</string>
     <string name="compose_daily_processing">Processamento diario</string>
     <string name="compose_nightly_enrichment_description" formatted="false">Tópicos de OCR, etiquetas de notas e resumos diários são preparados durante a noite enquanto o dispositivo carrega. O processamento começa com 80% de bateria e pausa abaixo de 75%. Os lembretes de revisão aparecem somente quando um lote não vazio está pronto.</string>
     <string name="compose_daily_facts_reminder">Lembrete de fatos diarios</string>
     <string name="compose_auto_save_daily_facts">Salvar fatos diarios automaticamente</string>
     <string name="compose_extract_user_fact_candidates">Extrair candidatos a fatos do usuario</string>
-    <string name="compose_daily_summary_refresh_hours">Atualizacao do resumo diario (horas)</string>
     <string name="compose_open_daily_summary">Abrir resumo diario</string>
     <string name="compose_edit_daily_facts">Editar fatos diarios</string>
     <string name="compose_view_confirmed_facts">Ver fatos confirmados</string>
@@ -89,7 +80,6 @@
     <string name="compose_camera_warning">Aviso</string>
     <string name="compose_camera_hardware_required">Hardware de camera necessario</string>
     <string name="compose_visual_camera_description">O Visual Diary captura fotos periodicas para criar notas de memoria diaria. %1$s</string>
-    <string name="compose_visual_description">Capture cenas dos oculos em uma programacao, descreva-as com o modelo de visao Gemma selecionado e acrescente notas concisas a memoria diaria.</string>
     <string name="compose_visual_enabled">Visual Diary ativado</string>
     <string name="compose_last_stop_reason">Ultimo motivo da parada: %1$s</string>
     <string name="compose_capture">Captura</string>

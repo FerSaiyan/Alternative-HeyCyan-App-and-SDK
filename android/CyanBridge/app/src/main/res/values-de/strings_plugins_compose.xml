@@ -7,7 +7,6 @@
     <string name="compose_language">Sprache</string>
     <string name="compose_output">Ausgabe</string>
     <string name="compose_custom_instructions">Benutzerdefinierte Anweisungen</string>
-    <string name="compose_history">%1$s-Verlauf</string>
     <string name="compose_clear_history">Verlauf löschen</string>
     <string name="compose_history_cleared">Verlauf gelöscht</string>
     <string name="compose_source_language">Ausgangssprache</string>
@@ -20,21 +19,13 @@
     <string name="compose_status">Status: %1$s</string>
     <string name="compose_ready">Bereit</string>
     <string name="compose_auto_audio_stop_loop">Schleife stoppen</string>
-    <string name="compose_autodiary_description">Erstellen Sie aus Bildschirmkontext und Gesprächen eine private tägliche Erinnerung. Bildschirmaufnahme benötigt die CyanBridge-Bedienungshilfe; die Telefonsteuerung von Local Agent kann deaktiviert bleiben.</string>
     <string name="compose_screen_capture">Bildschirmaufnahme</string>
-    <string name="compose_autodiary_accessibility_enabled">Bedienungshilfe aktiviert. AutoDiary kann Bildschirmkontext erfassen.</string>
-    <string name="compose_autodiary_paused">AutoDiary ist pausiert. Aktivieren Sie die Bedienungshilfe, um die Bildschirmaufnahme fortzusetzen.</string>
-    <string name="compose_autodiary_accessibility_required">Bedienungshilfe erforderlich. AutoDiary kann erst nach der Aktivierung Bildschirmkontext erfassen.</string>
-    <string name="compose_capture_interval_minutes">Aufnahmeintervall (Minuten)</string>
-    <string name="compose_accessibility_settings">Bedienungshilfe-Einstellungen</string>
-    <string name="compose_blacklist_apps">Apps auf Sperrliste</string>
     <string name="compose_view_screen_captures">Bildschirmaufnahmen anzeigen</string>
     <string name="compose_daily_processing">Tägliche Verarbeitung</string>
     <string name="compose_nightly_enrichment_description" formatted="false">OCR-Stichpunkte, Notiz-Tags und tägliche Zusammenfassungen werden über Nacht während des Ladens vorbereitet. Die Verarbeitung beginnt bei 80 % Akkustand und pausiert unter 75 %. Erinnerungen zur Überprüfung erscheinen erst, wenn ein nicht leerer Stapel bereit ist.</string>
     <string name="compose_daily_facts_reminder">Erinnerung an tägliche Fakten</string>
     <string name="compose_auto_save_daily_facts">Tägliche Fakten automatisch speichern</string>
     <string name="compose_extract_user_fact_candidates">Kandidaten für Nutzerfakten extrahieren</string>
-    <string name="compose_daily_summary_refresh_hours">Aktualisierung der Tageszusammenfassung (Stunden)</string>
     <string name="compose_open_daily_summary">Tageszusammenfassung öffnen</string>
     <string name="compose_edit_daily_facts">Tägliche Fakten bearbeiten</string>
     <string name="compose_view_confirmed_facts">Bestätigte Fakten anzeigen</string>
@@ -89,7 +80,6 @@
     <string name="compose_camera_warning">Warnung</string>
     <string name="compose_camera_hardware_required">Kamerahardware erforderlich</string>
     <string name="compose_visual_camera_description">Visual Diary nimmt regelmäßig Fotos auf, um tägliche Speichernotizen zu erstellen. %1$s</string>
-    <string name="compose_visual_description">Brillenszenen nach Zeitplan aufnehmen, mit dem ausgewählten Gemma-Vision-Modell beschreiben und kurze Notizen zur täglichen Erinnerung hinzufügen.</string>
     <string name="compose_visual_enabled">Visual Diary aktiviert</string>
     <string name="compose_last_stop_reason">Letzter Stoppgrund: %1$s</string>
     <string name="compose_capture">Aufnahme</string>

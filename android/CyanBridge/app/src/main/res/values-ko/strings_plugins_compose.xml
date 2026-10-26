@@ -7,7 +7,6 @@
     <string name="compose_language">언어</string>
     <string name="compose_output">출력</string>
     <string name="compose_custom_instructions">맞춤 지침</string>
-    <string name="compose_history">%1$s 기록</string>
     <string name="compose_clear_history">기록 삭제</string>
     <string name="compose_history_cleared">기록이 삭제됨</string>
     <string name="compose_source_language">소스 언어</string>
@@ -20,21 +19,13 @@
     <string name="compose_status">상태: %1$s</string>
     <string name="compose_ready">준비됨</string>
     <string name="compose_auto_audio_stop_loop">루프 중지</string>
-    <string name="compose_autodiary_description">화면 맥락과 대화에서 비공개 일일 메모리를 만듭니다. 화면 캡처에는 CyanBridge 접근성 서비스가 필요하며 Local Agent 전화 제어는 꺼둘 수 있습니다.</string>
     <string name="compose_screen_capture">화면 캡처</string>
-    <string name="compose_autodiary_accessibility_enabled">접근성 서비스가 사용 설정됨. AutoDiary가 화면 맥락을 수집할 수 있습니다.</string>
-    <string name="compose_autodiary_paused">AutoDiary가 일시중지되었습니다. 화면 캡처를 재개하려면 접근성 서비스를 사용 설정하세요.</string>
-    <string name="compose_autodiary_accessibility_required">접근성 서비스가 필요합니다. 사용 설정하기 전에는 AutoDiary가 화면 맥락을 수집할 수 없습니다.</string>
-    <string name="compose_capture_interval_minutes">캡처 간격(분)</string>
-    <string name="compose_accessibility_settings">접근성 설정</string>
-    <string name="compose_blacklist_apps">앱 차단 목록</string>
     <string name="compose_view_screen_captures">화면 캡처 보기</string>
     <string name="compose_daily_processing">일일 처리</string>
     <string name="compose_nightly_enrichment_description" formatted="false">OCR 글머리 기호, 메모 태그 및 일일 요약은 충전 중 야간에 준비됩니다. 배터리가 80%일 때 처리를 시작하고 75% 미만이면 일시 중지합니다. 비어 있지 않은 배치가 준비된 후에만 검토 알림이 표시됩니다.</string>
     <string name="compose_daily_facts_reminder">일일 사실 알림</string>
     <string name="compose_auto_save_daily_facts">일일 사실 자동 저장</string>
     <string name="compose_extract_user_fact_candidates">사용자 사실 후보 추출</string>
-    <string name="compose_daily_summary_refresh_hours">일일 요약 새로고침(시간)</string>
     <string name="compose_open_daily_summary">일일 요약 열기</string>
     <string name="compose_edit_daily_facts">일일 사실 편집</string>
     <string name="compose_view_confirmed_facts">확인된 사실 보기</string>
@@ -89,7 +80,6 @@
     <string name="compose_camera_warning">경고</string>
     <string name="compose_camera_hardware_required">카메라 하드웨어 필요</string>
     <string name="compose_visual_camera_description">Visual Diary는 일일 메모리 노트를 만들기 위해 주기적으로 사진을 캡처합니다. %1$s</string>
-    <string name="compose_visual_description">일정에 따라 안경 장면을 캡처하고 선택한 Gemma 비전 모델로 장면을 설명한 다음 일일 메모리에 간결한 메모를 추가합니다.</string>
     <string name="compose_visual_enabled">Visual Diary 사용 설정됨</string>
     <string name="compose_last_stop_reason">최근 중지 이유: %1$s</string>
     <string name="compose_capture">캡처</string>

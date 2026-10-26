@@ -7,7 +7,6 @@
     <string name="compose_language">语言</string>
     <string name="compose_output">输出</string>
     <string name="compose_custom_instructions">自定义说明</string>
-    <string name="compose_history">%1$s 历史记录</string>
     <string name="compose_clear_history">清除历史记录</string>
     <string name="compose_history_cleared">历史记录已清除</string>
     <string name="compose_source_language">源语言</string>
@@ -20,21 +19,13 @@
     <string name="compose_status">状态：%1$s</string>
     <string name="compose_ready">就绪</string>
     <string name="compose_auto_audio_stop_loop">停止循环</string>
-    <string name="compose_autodiary_description">根据屏幕上下文和对话构建私密的每日记忆。屏幕捕获需要 CyanBridge 无障碍服务；Local Agent 手机控制可以保持关闭。</string>
     <string name="compose_screen_capture">屏幕捕获</string>
-    <string name="compose_autodiary_accessibility_enabled">无障碍服务已启用。AutoDiary 可以收集屏幕上下文。</string>
-    <string name="compose_autodiary_paused">AutoDiary 已暂停。启用无障碍服务以恢复屏幕捕获。</string>
-    <string name="compose_autodiary_accessibility_required">需要无障碍服务。启用前 AutoDiary 无法收集屏幕上下文。</string>
-    <string name="compose_capture_interval_minutes">捕获间隔（分钟）</string>
-    <string name="compose_accessibility_settings">无障碍设置</string>
-    <string name="compose_blacklist_apps">应用黑名单</string>
     <string name="compose_view_screen_captures">查看屏幕捕获</string>
     <string name="compose_daily_processing">每日处理</string>
     <string name="compose_nightly_enrichment_description" formatted="false">设备充电时会在夜间准备 OCR 项目符号、笔记标签和每日摘要。电量达到 80% 时开始处理，低于 75% 时暂停。仅当非空批次准备就绪后才会显示审核提醒。</string>
     <string name="compose_daily_facts_reminder">每日事实提醒</string>
     <string name="compose_auto_save_daily_facts">自动保存每日事实</string>
     <string name="compose_extract_user_fact_candidates">提取用户事实候选</string>
-    <string name="compose_daily_summary_refresh_hours">每日摘要刷新（小时）</string>
     <string name="compose_open_daily_summary">打开每日摘要</string>
     <string name="compose_edit_daily_facts">编辑每日事实</string>
     <string name="compose_view_confirmed_facts">查看已确认事实</string>
@@ -89,7 +80,6 @@
     <string name="compose_camera_warning">警告</string>
     <string name="compose_camera_hardware_required">需要相机硬件</string>
     <string name="compose_visual_camera_description">Visual Diary 会定期捕获照片以创建每日记忆笔记。%1$s</string>
-    <string name="compose_visual_description">按计划捕获眼镜场景，使用所选 Gemma 视觉模型描述场景，并将简洁笔记添加到每日记忆。</string>
     <string name="compose_visual_enabled">Visual Diary 已启用</string>
     <string name="compose_last_stop_reason">上次停止原因：%1$s</string>
     <string name="compose_capture">捕获</string>

@@ -7,7 +7,6 @@
     <string name="compose_language">Langue</string>
     <string name="compose_output">Sortie</string>
     <string name="compose_custom_instructions">Instructions personnalisees</string>
-    <string name="compose_history">Historique de %1$s</string>
     <string name="compose_clear_history">Effacer l\'historique</string>
     <string name="compose_history_cleared">Historique efface</string>
     <string name="compose_source_language">Langue source</string>
@@ -20,21 +19,13 @@
     <string name="compose_status">Statut : %1$s</string>
     <string name="compose_ready">Pret</string>
     <string name="compose_auto_audio_stop_loop">Arreter la boucle</string>
-    <string name="compose_autodiary_description">Construisez une memoire quotidienne privee a partir du contexte de l\'ecran et des conversations. La capture d\'ecran necessite le service d\'accessibilite CyanBridge ; le controle du telephone par Local Agent peut rester desactive.</string>
     <string name="compose_screen_capture">Capture d\'ecran</string>
-    <string name="compose_autodiary_accessibility_enabled">Service d\'accessibilite active. AutoDiary peut recueillir le contexte de l\'ecran.</string>
-    <string name="compose_autodiary_paused">AutoDiary est en pause. Activez le service d\'accessibilite pour reprendre la capture.</string>
-    <string name="compose_autodiary_accessibility_required">Service d\'accessibilite requis. AutoDiary ne peut pas recueillir le contexte avant son activation.</string>
-    <string name="compose_capture_interval_minutes">Intervalle de capture (minutes)</string>
-    <string name="compose_accessibility_settings">Parametres d\'accessibilite</string>
-    <string name="compose_blacklist_apps">Applications bloquees</string>
     <string name="compose_view_screen_captures">Voir les captures d\'ecran</string>
     <string name="compose_daily_processing">Traitement quotidien</string>
     <string name="compose_nightly_enrichment_description" formatted="false">Les listes à puces OCR, les étiquettes de notes et les résumés quotidiens sont préparés pendant la nuit lors de la recharge. Le traitement commence à 80 % de batterie et s’interrompt sous 75 %. Les rappels de vérification n’apparaissent que lorsqu’un lot non vide est prêt.</string>
     <string name="compose_daily_facts_reminder">Rappel des faits quotidiens</string>
     <string name="compose_auto_save_daily_facts">Enregistrer automatiquement les faits quotidiens</string>
     <string name="compose_extract_user_fact_candidates">Extraire les candidats aux faits utilisateur</string>
-    <string name="compose_daily_summary_refresh_hours">Actualisation du resume quotidien (heures)</string>
     <string name="compose_open_daily_summary">Ouvrir le resume quotidien</string>
     <string name="compose_edit_daily_facts">Modifier les faits quotidiens</string>
     <string name="compose_view_confirmed_facts">Voir les faits confirmes</string>
@@ -89,7 +80,6 @@
     <string name="compose_camera_warning">Avertissement</string>
     <string name="compose_camera_hardware_required">Materiel camera requis</string>
     <string name="compose_visual_camera_description">Visual Diary capture regulierement des photos pour creer des notes de memoire quotidiennes. %1$s</string>
-    <string name="compose_visual_description">Capturez les scenes des lunettes selon un calendrier, decrivez-les avec le modele de vision Gemma choisi et ajoutez des notes concises a la memoire quotidienne.</string>
     <string name="compose_visual_enabled">Visual Diary actif</string>
     <string name="compose_last_stop_reason">Derniere raison de l\'arret : %1$s</string>
     <string name="compose_capture">Capture</string>
