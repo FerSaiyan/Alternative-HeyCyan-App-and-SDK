@@ -167,6 +167,7 @@ class SpokenQuestionFlow(
     private val speech: SpokenQuestionSpeech,
     private val events: AssistantEvents = AssistantEvents.NONE,
     private val settings: SpokenQuestionSettings = SpokenQuestionSettings(),
+    /** Decision timing and the conversation window ([SpokenConversation.CONTINUE_WITHIN_MS]). */
     private val clock: () -> Long = ::platformElapsedRealtimeMillis,
 ) {
     /** Records the question and runs its turns; failures are spoken, never thrown (except cancellation). */
@@ -186,14 +187,14 @@ class SpokenQuestionFlow(
                 }
             }
             val sessions = brain.keepsConversation
-            var continueSession = sessions && SpokenConversation.canContinue()
+            var continueSession = sessions && SpokenConversation.canContinue(clock())
             if (!continueSession) SpokenConversation.reset()
             var turn = 1
             while (true) {
                 val route = runTurn(audioPath!!, continueSession.takeIf { sessions }, turn)
                 microphone.deleteRecording(audioPath)
                 audioPath = null
-                if (route == SpokenRoute.IGNORE) SpokenConversation.reset() else SpokenConversation.turnEnded()
+                if (route == SpokenRoute.IGNORE) SpokenConversation.reset() else SpokenConversation.turnEnded(clock())
                 if (!SpokenFollowUpPolicy.listensForFollowUp(sessions, route)) break
                 val followUp = microphone.recordQuestion(settings.followUpWindowMs)
                 audioPath = followUp.audioPath

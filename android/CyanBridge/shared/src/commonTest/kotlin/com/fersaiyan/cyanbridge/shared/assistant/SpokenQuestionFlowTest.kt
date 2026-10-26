@@ -75,7 +75,7 @@ class SpokenQuestionFlowTest {
             actions = actions,
             speech = speech,
             events = { event, detail -> events += event to detail },
-            clock = { testScheduler.currentTime },
+            clock = { CLOCK_BASE + testScheduler.currentTime },
         )
 
         fun question(name: String) = CapturedQuestion(null, heardSpeech = true, audioPath = name)
@@ -101,7 +101,7 @@ class SpokenQuestionFlowTest {
             log,
         )
         assertTrue(fakes.events.any { it == "spoken_turn" to "n=2 continued=true sessionTokens=42 route=ANSWER" })
-        assertTrue(SpokenConversation.canContinue())
+        assertTrue(SpokenConversation.canContinue(now = CLOCK_BASE + testScheduler.currentTime))
     }
 
     @Test
@@ -169,7 +169,7 @@ class SpokenQuestionFlowTest {
 
     @Test
     fun aConversationThatCannotContinueStartsANewOne() = runTest {
-        SpokenConversation.turnEnded()
+        SpokenConversation.turnEnded(now = CLOCK_BASE)
         SpokenConversation.pendingNote = "You told them: earlier"
         val fakes = Fakes(keepsConversation = true).apply {
             heard += question("q1.wav")
@@ -183,6 +183,11 @@ class SpokenQuestionFlowTest {
             fakes.log,
         )
         // An ignored question ends the conversation.
-        assertTrue(!SpokenConversation.canContinue())
+        assertTrue(!SpokenConversation.canContinue(now = CLOCK_BASE))
+    }
+
+    private companion object {
+        /** Elapsed time is never 0 after boot; the flow's clock starts here. */
+        const val CLOCK_BASE = 1_000_000L
     }
 }
