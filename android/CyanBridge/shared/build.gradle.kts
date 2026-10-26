@@ -102,6 +102,25 @@ dependencies {
     }
 }
 
+// Compiles the iOS targets without linking. Kotlin/Native cross-compiles Apple klibs on Linux,
+// so this catches JVM-only APIs in commonMain before macOS CI does (see docs/refactor/IOS_BUILD.md).
+tasks.register("iosCompileCheck") {
+    group = "verification"
+    description = "Compiles the shared module's iOS main and test sources (needs -PenableAppleTargets=true)."
+    if (enableAppleTargets) {
+        dependsOn(
+            "compileKotlinIosSimulatorArm64",
+            "compileKotlinIosArm64",
+            "compileKotlinIosX64",
+            "compileTestKotlinIosSimulatorArm64",
+        )
+    } else {
+        doFirst {
+            throw GradleException("iosCompileCheck needs -PenableAppleTargets=true")
+        }
+    }
+}
+
 compose.resources {
     packageOfResClass = "com.fersaiyan.cyanbridge.shared.generated.resources"
     publicResClass = true
