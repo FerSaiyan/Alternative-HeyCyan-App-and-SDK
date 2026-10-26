@@ -1,5 +1,24 @@
 # Worklog — CyanBridge local agent
 
+## 2026-10-26 — Question microphone, route and speech on the shared audio session
+
+- Branch `cyan-refactor-question-audio` (from `6d29a02e`). `QuestionMicrophone` opens an
+  `AudioSessionCoordinator` `VoiceCapture` session before the beep, joins the shared Bluetooth route
+  through it (`DEVICE_SDK` for Mentra) and records into it; the hand-written SCO code in
+  `QuestionMicrophone` and `VoiceQuestionFlow` is gone. A question no longer drops the route under a
+  meeting or Live; another spoken prompt refuses it before the beep.
+- Speech: `AssistantSpeaker` runs on one `TtsSpeaker`, which also plays streamed local answers;
+  answers hold a `PLAYBACK` session next to the Mentra playback signal. Removed as redundant:
+  `AndroidAssistantVoice`, `TtsSpeechStream` (and its test), the `localagent.AudioSessionCoordinator` alias.
+- Background MemoMind questions: Android's while-in-use rule refuses the question service's
+  `microphone` type without a visible screen, and no exemption covers a button read from the app's SPP
+  socket. The service now runs without that type instead of crashing, and a silenced recording is
+  reported in speech. The MemoMind Opus microphone over SPP would avoid the limit (not used yet).
+- Hardware checks: `docs/refactor/HARDWARE_TEST_CHECKLIST.md`, "process audio sessions" and "A3".
+  Not run on glasses.
+- Verify: app 692, shared Android 345 and portability 363 tests pass; debug, release and androidTest
+  compile; `:shared:iosCompileCheck` passes. The question androidTests compile; not run (no emulator).
+
 ## 2026-10-26 — A3: glasses questions out of MainActivity; Mentra and MemoMind question hooks
 
 - Branch `cyan-refactor-assistant-extract` (from `f92a54d4`). The image, voice and spoken-decision flows

@@ -81,8 +81,22 @@ MediaCodec Opus decoder to 16 kHz PCM, and the microphone as an `AudioSessionCoo
   answer). Without it (the app was closed while the SPP link stayed up), `MemoMindManager` calls
   `GlassesButtonQuestions.onVoiceButton`, which starts the same question in the background
   (`GlassesQuestions.askByVoiceInBackground`): the speech engine starts on demand, and a missing setup
-  or microphone permission is a toast instead of a dialog. Android may refuse the question's microphone
-  foreground service from the background; the HFP recording is then silent (a hardware check).
+  or microphone permission is a toast instead of a dialog.
+- **Background microphone limit.** The question records MemoMind through the phone's HFP input. Android
+  lets an app record only while it has a visible screen or a `microphone` foreground service that was
+  started while it had one. A button read from the app's own SPP socket is none of Android's
+  exemptions for that (system component, notification or widget tap, a visible app's PendingIntent,
+  device owner, voice interaction service). The exemptions that let a background app *start* a
+  foreground service (a system Bluetooth broadcast, a companion-device association, battery
+  optimization off) do not give it the microphone, and a button press over SPP is not a system
+  broadcast anyway. So `AiQuestionForegroundService` is refused the `microphone` type (Android 14+:
+  it then runs with its other types; 12+: it may not start at all), Android silences the recording,
+  and the question says "Android blocked the microphone while CyanBridge was in the background. Open
+  CyanBridge and ask again." It works when a microphone service started from the screen is still
+  running (meeting recording, Gemini Live, a voice plugin), or when CyanBridge was only in the
+  background. Recording the glasses' own Opus microphone over SPP (`MemoMindMicrophone`, a
+  `DEVICE_SDK` session like Mentra's PCM) would not need the phone microphone; it is not used for
+  questions yet (owner decision, hardware check).
 - **Answers on the HUD.** `GlassesFamilyProfiles.memoMind` sets `showsAssistantAnswers`. Every spoken
   answer (`AssistantSpeaker.speakVision`, and the local model's streamed photo answer) is also sent to
   the display bridge (`GlassesBridge.showText`), which the MemoMind adapter draws as Web Bridge text
