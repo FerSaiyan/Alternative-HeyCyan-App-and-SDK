@@ -97,6 +97,11 @@ if (!(liteRtLmVersion in ["0.16.0", "0.18.0"])) throw new GradleException("Unsup
 // Qualcomm NPU runtime AAR from tools/litert-npu/package_npu_aar.py (LiteRT CompiledModel,
 // dispatch library and one QAIRT runtime). Opt-in: Qualcomm binaries are not committed.
 def localLiteRtNpuAarPath = providers.gradleProperty("localLiteRtNpuAarPath").orNull
+// Hybrid Meta DAT registration: every build type carries the registered Meta app id. Meta AI
+// ignores the id on its Developer Mode path and checks it for users invited to the release
+// channel, so one build serves both (Wearables.isDevMode tells which path was taken).
+// -PmetaDatZeroAppId builds the old developer-only setup (app id and client token "0").
+def metaDatZeroAppId = providers.gradleProperty("metaDatZeroAppId").map { it != "false" }.getOrElse(false)
 
 android {
     namespace = "com.fersaiyan.cyanbridge"
@@ -113,11 +118,15 @@ android {
             ndk.abiFilters.add(testAbi.trim())
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        manifestPlaceholders = [
+        manifestPlaceholders = metaDatZeroAppId ? [
+                mwdat_application_id: "0",
+                mwdat_client_token: "0",
+        ] : [
                 mwdat_application_id: "1057183300587462",
                 mwdat_client_token: "AR|1057183300587462|77e92a3d9f02778279c80f220a2d81a2",
         ]
-        buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "false"
+        // True only for -PmetaDatZeroAppId: registration can then only use Developer Mode.
+        buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", metaDatZeroAppId.toString()
         buildConfigField "boolean", "SHARED_GEMMA_PROTOTYPE", (providers.gradleProperty("sharedGemmaPrototype").orNull == "true").toString()
         buildConfigField "boolean", "LITERT_DECISION_PROTOTYPE", (providers.gradleProperty("liteRtDecisionPrototype").orNull == "true").toString()
         buildConfigField "boolean", "LITERT_NPU_RUNTIME", (localLiteRtNpuAarPath != null).toString()
@@ -185,11 +194,6 @@ android {
             if (keystorePropertiesFile.exists() && !project.hasProperty("cyanbridgeDefaultDebugKey")) {
                 signingConfig = signingConfigs.release
             }
-            manifestPlaceholders = [
-                    mwdat_application_id: "0",
-                    mwdat_client_token: "0",
-            ]
-            buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "true"
         }
         release {
             if (keystorePropertiesFile.exists()) {
