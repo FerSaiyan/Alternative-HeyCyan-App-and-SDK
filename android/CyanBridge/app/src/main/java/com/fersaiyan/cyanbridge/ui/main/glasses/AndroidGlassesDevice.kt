@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
+import com.fersaiyan.cyanbridge.ai.questions.QuestionPhotoSource
 import com.fersaiyan.cyanbridge.bridge.core.CameraCapture
 import com.fersaiyan.cyanbridge.bridge.core.MediaSyncTransport
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
@@ -13,6 +14,7 @@ import com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState
 import com.fersaiyan.cyanbridge.ui.main.DashboardActionHost
 import com.fersaiyan.cyanbridge.ui.main.DeviceConnectionCoordinator
 import com.fersaiyan.cyanbridge.ui.main.DeviceManagerRegistry
+import com.fersaiyan.cyanbridge.ui.main.GlassesTransportPermissions
 import com.fersaiyan.cyanbridge.ui.main.HeyCyanSettingsController
 import com.fersaiyan.cyanbridge.ui.main.MainScreenHost
 import com.fersaiyan.cyanbridge.ui.main.MetaRaybanUiController
@@ -55,6 +57,12 @@ internal interface AndroidGlassesDevice : GlassesDevice {
      * when camera plugins start directly.
      */
     val cameraPluginGate: CameraPluginGate? get() = null
+
+    /**
+     * The family's own photo transport for image questions; null for families on the HeyCyan SDK
+     * path (vision mode and shutter, then the photo-ready notification).
+     */
+    val questionPhoto: QuestionPhotoSource? get() = null
 }
 
 internal fun interface CameraPluginGate {
@@ -83,6 +91,7 @@ internal class GlassesDeviceContext(
     private val metaRaybanUiProvider: () -> MetaRaybanUiController,
     private val meizuMyvuUiProvider: () -> MeizuMyvuUiController,
     private val hostProvider: () -> GlassesDeviceHost,
+    private val transportPermissionsProvider: () -> GlassesTransportPermissions,
 ) {
     val activity get() = screen.activity
     val binding get() = screen.binding
@@ -92,6 +101,7 @@ internal class GlassesDeviceContext(
     val metaRaybanUi: MetaRaybanUiController get() = metaRaybanUiProvider()
     val meizuMyvuUi: MeizuMyvuUiController get() = meizuMyvuUiProvider()
     val host: GlassesDeviceHost get() = hostProvider()
+    val transportPermissions: GlassesTransportPermissions get() = transportPermissionsProvider()
 
     fun livePreviewUiState(state: LivePreviewState?, isAvailable: Boolean): LivePreviewUiState {
         val live = state ?: LivePreviewState()
@@ -132,4 +142,13 @@ internal class AndroidGlassesDevices(context: GlassesDeviceContext) {
     fun selected(): AndroidGlassesDevice = devices.getValue(DeviceProfileStore.selectedClass(activity)).value
 
     fun selectedProfile(): GlassesFamilyProfile = managers.selectedProfile()
+
+    /** A family photo for a question that also refuses voice questions is being taken (any family). */
+    fun questionPhotoBlocksVoice(): Boolean = devices.values.any { device ->
+        device.isInitialized() && device.value.questionPhoto?.let { it.blocksVoiceQuestions && it.inProgress } == true
+    }
+
+    /** [deviceClass]'s question photo is being taken. */
+    fun questionPhotoInProgress(deviceClass: DeviceClass): Boolean =
+        devices.getValue(deviceClass).let { it.isInitialized() && it.value.questionPhoto?.inProgress == true }
 }

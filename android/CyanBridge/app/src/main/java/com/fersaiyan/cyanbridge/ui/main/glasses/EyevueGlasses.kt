@@ -3,6 +3,8 @@ package com.fersaiyan.cyanbridge.ui.main.glasses
 import android.os.Build
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
+import com.fersaiyan.cyanbridge.ai.questions.EyevueQuestionPhoto
+import com.fersaiyan.cyanbridge.ai.questions.QuestionPhotoSource
 import com.fersaiyan.cyanbridge.bridge.core.BatteryReporting
 import com.fersaiyan.cyanbridge.bridge.core.CameraCapture
 import com.fersaiyan.cyanbridge.bridge.core.DeviceInfoReporting
@@ -31,6 +33,8 @@ internal class EyevueGlasses(private val context: GlassesDeviceContext) : Androi
 
     private val activity get() = context.activity
     private val manager: EyevueManager get() = context.managers.getOrCreateEyevueManager()
+
+    override val questionPhoto: QuestionPhotoSource = EyevueQuestionPhoto { manager }
 
     override val connection: GlassesConnectionControl = object : GlassesConnectionControl {
         override fun scan() {

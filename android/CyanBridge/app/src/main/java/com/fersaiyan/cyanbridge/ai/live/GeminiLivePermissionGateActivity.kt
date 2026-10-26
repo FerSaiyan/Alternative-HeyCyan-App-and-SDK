@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.ai.live
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -74,15 +75,17 @@ class GeminiLivePermissionGateActivity : AppCompatActivity() {
         private const val EXTRA_INITIAL_PROMPT = "live_initial_prompt"
         private const val EXTRA_USE_RELAY = "live_use_relay"
 
+        /** [context] is the calling screen, or the application when a glasses question started without one. */
         fun launch(
-            activity: Activity,
+            context: Context,
             language: String,
             imagePrompt: String,
             initialImagePath: String? = null,
             initialPrompt: String? = null,
             useRelay: Boolean = false,
         ) {
-            activity.startActivity(Intent(activity, GeminiLivePermissionGateActivity::class.java).apply {
+            context.startActivity(Intent(context, GeminiLivePermissionGateActivity::class.java).apply {
+                if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 putExtra(EXTRA_LANGUAGE, language)
                 putExtra(EXTRA_IMAGE_PROMPT, imagePrompt)
                 initialImagePath?.let { putExtra(EXTRA_INITIAL_IMAGE, it) }

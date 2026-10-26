@@ -182,7 +182,7 @@ class QuestionPathBenchmarkTest {
         }
     }
 
-    /** What MainActivity.runChosenProviderQuery sends for a spoken question: system text, bare audio. */
+    /** What AssistantProviderQueries.query sends for a spoken question: system text, bare audio. */
     private fun spokenMessages(lang: String, decideOnce: Boolean = false) = listOf(
         mapOf("role" to "system", "content" to ImageQuestionDefaults.spokenQuestionInstruction(lang, allowQuestionEcho = decideOnce) +
             " " + ImageQuestionDefaults.currentContextInstruction()),

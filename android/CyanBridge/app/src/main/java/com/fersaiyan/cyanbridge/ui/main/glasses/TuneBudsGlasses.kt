@@ -1,6 +1,8 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
 import android.os.Build
+import com.fersaiyan.cyanbridge.ai.questions.QuestionPhotoSource
+import com.fersaiyan.cyanbridge.ai.questions.TuneBudsQuestionPhoto
 import com.fersaiyan.cyanbridge.bridge.core.BatteryReporting
 import com.fersaiyan.cyanbridge.bridge.core.CameraCapture
 import com.fersaiyan.cyanbridge.bridge.core.DeviceInfoReporting
@@ -24,6 +26,10 @@ internal class TuneBudsGlasses(private val context: GlassesDeviceContext) : Andr
 
     private val activity get() = context.activity
     private val manager: TuneBudsManager get() = context.managers.getOrCreateTuneBudsManager()
+
+    override val questionPhoto: QuestionPhotoSource = TuneBudsQuestionPhoto({ manager }) { feature, onGranted ->
+        context.transportPermissions.ensureGlassesTransportPermissions(feature, onGranted)
+    }
 
     override val connection: GlassesConnectionControl = object : GlassesConnectionControl {
         override fun scan() {

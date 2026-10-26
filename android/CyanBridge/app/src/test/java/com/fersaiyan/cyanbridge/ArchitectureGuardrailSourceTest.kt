@@ -48,11 +48,8 @@ class ArchitectureGuardrailSourceTest {
     }
 
     private companion object {
-        /**
-         * Raised from 4,507 when the spoken-question decision flow was merged: it landed in the
-         * AI/voice region kept identical to the old branch, so that merge applied as is.
-         */
-        const val MAIN_ACTIVITY_LINE_BUDGET = 5069
+        /** Lowered from 5,069 when the glasses questions moved to ai/questions (A3). */
+        const val MAIN_ACTIVITY_LINE_BUDGET = 1860
 
         /** Files that imported a vendor SDK when this test was added; shrink, never grow. */
         val UI_VENDOR_IMPORT_EXCEPTIONS = setOf(

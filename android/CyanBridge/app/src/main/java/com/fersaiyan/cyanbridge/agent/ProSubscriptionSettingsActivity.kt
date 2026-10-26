@@ -113,7 +113,7 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
             // Notification-driven Live survives lock/screen-off; this screen only starts it. The base
             // question (no strict "Answer only in X") lets Live switch languages permissively.
             is StartGeminiLive -> GeminiLivePermissionGateActivity.launch(
-                activity = this,
+                context = this,
                 language = AppLanguagePreferences.selected(this).languageTag.ifBlank { Locale.getDefault().toLanguageTag() },
                 imagePrompt = ImageQuestionPromptResolver.baseQuestion(settings = ImageQuestionPreferences.get(this), userQuestion = null),
                 initialImagePath = null,

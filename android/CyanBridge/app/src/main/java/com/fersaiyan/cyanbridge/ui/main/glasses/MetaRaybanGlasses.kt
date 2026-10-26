@@ -3,6 +3,8 @@ package com.fersaiyan.cyanbridge.ui.main.glasses
 import android.content.Intent
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
+import com.fersaiyan.cyanbridge.ai.questions.MetaQuestionPhoto
+import com.fersaiyan.cyanbridge.ai.questions.QuestionPhotoSource
 import com.fersaiyan.cyanbridge.bridge.core.CameraCapture
 import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
@@ -38,6 +40,13 @@ internal class MetaRaybanGlasses(context: GlassesDeviceContext) :
 
     /** The legacy camera control captures a DAT photo into the gallery. */
     override val legacyCameraButton = CameraCapture { context.metaRaybanUi.captureMetaPhotoForGallery() }
+
+    /** Image questions take a DAT photo once the camera session is ready. */
+    override val questionPhoto: QuestionPhotoSource = MetaQuestionPhoto(
+        manager = { context.managers.getOrCreateMetaRaybanManager() },
+        ensureCameraReady = { action -> context.metaRaybanUi.ensureMetaCameraReady(action) },
+        showError = { operation, message -> context.metaRaybanUi.showMetaError(operation, message) },
+    )
 
     override val cameraPluginGate = CameraPluginGate { start ->
         val manager = context.managers.getOrCreateMetaRaybanManager()

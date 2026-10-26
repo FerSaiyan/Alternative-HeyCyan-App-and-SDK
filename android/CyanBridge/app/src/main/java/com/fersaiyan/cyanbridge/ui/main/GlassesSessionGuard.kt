@@ -2,7 +2,8 @@ package com.fersaiyan.cyanbridge.ui.main
 
 import android.util.Log
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import android.content.Context
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.glasses.BackgroundGlassesCommandPermit
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
@@ -16,8 +17,9 @@ import kotlinx.coroutines.launch
  * that share the vendor SDK's BLE/P2P slots, with the user-facing messages for conflicts.
  */
 internal class GlassesSessionGuard(
-    private val activity: AppCompatActivity,
-    private val devices: DeviceManagerRegistry,
+    /** For the conflict toasts. */
+    private val context: Context,
+    private val selectedProfile: () -> GlassesFamilyProfile,
     /** Must outlive the activity so timeout warnings still fire during teardown. */
     private val glassesTeardownScope: CoroutineScope,
 ) {
@@ -32,7 +34,7 @@ internal class GlassesSessionGuard(
         if (activeSession == null) {
             Log.w("GlassesSession", "Could not acquire ${session.label} session; a one-shot glasses command is still active")
             Toast.makeText(
-                activity,
+                context,
                 "Waiting for the current glasses command to finish.",
                 Toast.LENGTH_SHORT,
             ).show()
@@ -44,7 +46,7 @@ internal class GlassesSessionGuard(
             "Cannot start ${session.label}; ${activeSession.label} still owns BLE/P2P",
         )
         Toast.makeText(
-            activity,
+            context,
             "Stop ${activeSession.label} before starting ${session.label}.",
             Toast.LENGTH_LONG,
         ).show()
@@ -54,7 +56,7 @@ internal class GlassesSessionGuard(
     fun isGlassesCommandBlocked(source: String): Boolean {
         val activeSession = GlassesSessionCoordinator.currentSession() ?: return false
         if (activeSession == GlassesSession.META_CAMERA &&
-            devices.selectedProfile().voiceQueriesBypassCameraSession &&
+            selectedProfile().voiceQueriesBypassCameraSession &&
             source == "voice-query command"
         ) {
             // Meta voice queries use Android's audio route and do not contend for the
