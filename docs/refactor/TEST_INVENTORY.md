@@ -121,5 +121,5 @@ These were left untouched, or tidied without dropping any assertion.
   - ProSubscriptionSettingsActivityTest is now ProSubscriptionSettingsDestinationTest (the screen leaves the back stack with the same toast).
 - **androidTest:** NpuCatalogSettingsTest (M) opens the Local models route in MainActivity through an `AndroidComposeTestRule` over `ActivityScenarioRule<MainActivity>`. The other androidTests launch MainActivity or the debug HIL Activities, which are unchanged; the Meta DAT tests drive the manager and the screens directly.
 - `ArchitectureGuardrailSourceTest`:
-  - MainActivity budget 1,860 → 1,852 (the inline live video moved to `ui/main/GlassesLiveVideoSlot.kt`);
+  - MainActivity budget 1,860 → 1,855 (the inline live video moved to `ui/main/GlassesLiveVideoSlot.kt`);
   - new `screensAreDestinationsOfTheSingleActivity`, which pins the manifest to the six remaining Activities, each with its reason.

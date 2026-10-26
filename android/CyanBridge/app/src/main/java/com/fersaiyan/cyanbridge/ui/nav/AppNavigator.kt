@@ -209,7 +209,8 @@ class AppNavigator(
             else if (oldTop in entries) oldTop.screen?.moveTo(minOf(hostState, Lifecycle.State.CREATED))
         }
         removed.forEach(::discard)
-        if (oldTop !== newTop || removed.isNotEmpty()) onTopChanged(newTop)
+        // `top`, not `newTop`: a screen may have opened another from its onCreate meanwhile.
+        if (oldTop !== newTop || removed.isNotEmpty()) onTopChanged(top)
     }
 
     private fun push(route: AppRoute, intent: Intent) {

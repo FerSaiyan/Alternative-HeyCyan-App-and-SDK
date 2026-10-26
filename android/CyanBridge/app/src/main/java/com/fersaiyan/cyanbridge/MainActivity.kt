@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge
 
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import com.fersaiyan.cyanbridge.ui.main.GlassesLiveVideoSlot
 import com.fersaiyan.cyanbridge.ui.WelcomeDestination
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
@@ -807,11 +808,13 @@ class MainActivity : AppCompatActivity() {
         val appearancePreferences = AppearancePreferences(this)
         setContent {
             val appearance by rememberAppearanceSettings(appearancePreferences)
+            // Keeps the glasses screen's saved UI state (scroll, open panels) while a screen covers it.
+            val glassesState = rememberSaveableStateHolder()
             CyanBridgeTheme(appearance) {
                 if (!navigator.isRootVisible) {
                     NavScreenHost(navigator)
                 } else if (glassesHostCreated) {
-                    GlassesRoot(appearance)
+                    glassesState.SaveableStateProvider("glasses") { GlassesRoot(appearance) }
                 }
             }
         }
