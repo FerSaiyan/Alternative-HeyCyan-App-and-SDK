@@ -5,12 +5,9 @@ import android.media.AudioDeviceInfo
 import android.media.MediaRecorder
 import android.os.SystemClock
 import android.util.Log
-import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
-import com.fersaiyan.cyanbridge.audio.AudioSessionGrant
 import com.fersaiyan.cyanbridge.audio.AudioSessionHandle
 import com.fersaiyan.cyanbridge.audio.PcmRecorder
 import com.fersaiyan.cyanbridge.audio.VendorPcmMicrophone
-import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePreference
 import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import com.fersaiyan.cyanbridge.shared.audio.PcmEnergy
 import com.fersaiyan.cyanbridge.shared.audio.QuestionEndpoint
@@ -25,28 +22,13 @@ import java.util.concurrent.LinkedBlockingQueue
 import kotlin.coroutines.coroutineContext
 
 /**
- * Owns only PCM capture. The caller owns Bluetooth selection and cue playback.
- *
- * Capture runs as a [AudioSessionRequest.VoiceCapture] session, so Gemini Live and voice plugins
- * pause their microphones while the question is recorded and an ambient probe stops.
+ * Owns only PCM capture. The caller owns the [AudioSessionRequest.VoiceCapture] session (so Gemini
+ * Live and voice plugins pause their microphones while the question is recorded and an ambient
+ * probe stops), the Bluetooth route and cue playback.
  */
 class AudioQuestionRecorder(private val context: Context) {
-    suspend fun record(onsetTimeoutMs: Long, preferredInput: AudioDeviceInfo? = null): File? {
-        check(PcmRecorder.minBufferSize(SAMPLE_RATE) > 0) { "Microphone input is unavailable" }
-        val session = when (
-            val grant = AudioSessionCoordinator.open(
-                context,
-                AudioSessionRequest.VoiceCapture(TAG, route = AudioRoutePreference.SYSTEM_DEFAULT),
-            )
-        ) {
-            is AudioSessionGrant.Granted -> grant.handle
-            is AudioSessionGrant.Denied -> error("The microphone is busy; please ask again")
-        }
-        return session.use { record(it, onsetTimeoutMs, preferredInput) }
-    }
-
     /**
-     * Records into a session the caller already owns (and closes); its route is left as is.
+     * Records into a session the caller owns (and closes); its route is left as is.
      * Glasses whose SDK streams the microphone as PCM (Mentra Live) are recorded from that
      * stream instead of an Android input, so no Bluetooth headset route is needed.
      */

@@ -3,7 +3,6 @@ package com.fersaiyan.cyanbridge.ai.questions
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -144,26 +143,6 @@ internal class VoiceQuestionFlow(
         // Tell glasses to stop proprietary AI audio stream
         stopGlassesAiAudio("voice-query command")
 
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-        val audioRouteOwner = QuestionMicrophone.RouteOwner(voiceQueryToken, audioManager)
-        // Glasses with an SDK microphone get no Bluetooth call route, so there is none to clear.
-        if (!microphone.usesDeviceSdkRoute()) microphone.activeRoute.set(audioRouteOwner)
-
-        fun stopSco() {
-            // A delayed callback from an older query must not clear the route selected by a
-            // newer query. AudioManager is a process singleton, so the per-query owner object
-            // is what makes this check race-safe.
-            if (!microphone.activeRoute.compareAndSet(audioRouteOwner, null)) return
-            runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    audioManager.clearCommunicationDevice()
-                }
-                audioManager.isBluetoothScoOn = false
-                audioManager.stopBluetoothSco()
-                audioManager.mode = android.media.AudioManager.MODE_NORMAL
-            }
-        }
-
         fun finishVoiceQueryWork() {
             if (voiceQueryInProgress.compareAndSet(voiceQueryToken, null)) {
                 foreground.finish()
@@ -174,7 +153,6 @@ internal class VoiceQuestionFlow(
 
         fun processVoicePrompt(prompt: String) {
             if (prompt.isBlank()) {
-                stopSco()
                 finishVoiceQueryWork()
                 return
             }
@@ -214,7 +192,6 @@ internal class VoiceQuestionFlow(
                                 live.shouldUseForQuestions(selectedProvider)
                             ) {
                                 withContext(Dispatchers.Main) {
-                                    stopSco()
                                     finishVoiceQueryWork()
                                     live.launch(prompt = prompt)
                                 }
@@ -242,14 +219,12 @@ internal class VoiceQuestionFlow(
 
                             env.runOnUiThread {
                                 speaker.speakVision(reply) {
-                                    stopSco()
                                     finishVoiceQueryWork()
                                 }
                             }
                         }
 
                         AssistantIntent.ANALYZE_IMAGE -> env.runOnUiThread {
-                            stopSco()
                             // The image flow now owns the shared foreground service. Release
                             // only this voice-query guard without stopping that service.
                             voiceQueryInProgress.compareAndSet(voiceQueryToken, null)
@@ -262,13 +237,11 @@ internal class VoiceQuestionFlow(
                         }
 
                         AssistantIntent.EXECUTE_UI_TASK -> env.runOnUiThread {
-                            stopSco()
                             finishVoiceQueryWork()
                             startLocalAgentFromVoice(routing.normalizedGoal ?: prompt)
                         }
 
                         AssistantIntent.CLARIFY -> env.runOnUiThread {
-                            stopSco()
                             finishVoiceQueryWork()
                             speaker.speak(
                                 AssistantSpeechPolicy.clarification(routing.clarification),
@@ -276,13 +249,11 @@ internal class VoiceQuestionFlow(
                         }
                     }
                 } catch (cancelled: CancellationException) {
-                    stopSco()
                     finishVoiceQueryWork()
                     throw cancelled
                 } catch (error: Exception) {
                     Log.e("AIHijack", "Voice query processing failed", error)
                     env.runOnUiThread {
-                        stopSco()
                         finishVoiceQueryWork()
                         speaker.speak("I couldn't process that voice question. Please try again.")
                     }
@@ -292,7 +263,6 @@ internal class VoiceQuestionFlow(
 
         val provider = chosenProviderType ?: AutomationPrefs.getProviderType(context)
         if (memoryAwareChosenProvider && live.shouldUseForQuestions(provider)) {
-            stopSco()
             finishVoiceQueryWork()
             live.launch(prompt = "Listen to the user's spoken question and answer it.")
             return
@@ -302,7 +272,6 @@ internal class VoiceQuestionFlow(
             try {
                 val captured = microphone.capture(SpokenQuestionSettings().questionOnsetMs, voiceOnly = true)
                 originalAudio = captured.audioPath
-                stopSco()
                 val error = captured.error
                 val transcript = captured.text
                 when {
@@ -332,7 +301,6 @@ internal class VoiceQuestionFlow(
                 speaker.speak("I couldn't process that voice question. Please try again.")
             } finally {
                 originalAudio?.let { File(it).delete() }
-                stopSco()
             }
         }
     }

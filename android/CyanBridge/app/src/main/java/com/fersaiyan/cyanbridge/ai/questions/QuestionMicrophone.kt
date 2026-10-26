@@ -1,14 +1,8 @@
 package com.fersaiyan.cyanbridge.ai.questions
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.os.Build
 import android.util.Log
-import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.ai.image.AudioQuestionRecorder
 import com.fersaiyan.cyanbridge.ai.image.GlassesQuestionTestHooks
 import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
@@ -16,37 +10,43 @@ import com.fersaiyan.cyanbridge.ai.speaker.VoiceProfile
 import com.fersaiyan.cyanbridge.ai.transcription.OfflineQuestionTranscriber
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
+import com.fersaiyan.cyanbridge.audio.AudioRouteResult
+import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
+import com.fersaiyan.cyanbridge.audio.AudioSessionGrant
+import com.fersaiyan.cyanbridge.audio.AudioSessionHandle
 import com.fersaiyan.cyanbridge.shared.assistant.CapturedQuestion
 import com.fersaiyan.cyanbridge.shared.assistant.SpokenQuestionMicrophone
 import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePolicy
 import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePreference
+import com.fersaiyan.cyanbridge.shared.audio.AudioRouteWait
+import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import com.fersaiyan.cyanbridge.shared.devices.GlassesAudioProfile
 import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
 import com.oudmon.ble.base.bluetooth.DeviceManager
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 
 /**
- * The glasses microphone for questions: brings up the Bluetooth headset route, plays the beep and
+ * The glasses microphone for questions: takes a [AudioSessionRequest.VoiceCapture] session from
+ * [AudioSessionCoordinator], joins the shared Bluetooth headset route through it, plays the beep and
  * the spoken cue, records until the question ends, then (unless a model hears the recording)
  * transcribes it on the phone. One question records at a time.
  *
- * Glasses whose SDK streams microphone PCM (Mentra Live, [AudioRoutePreference.DEVICE_SDK]) are
- * recorded from that stream, so no Bluetooth call route is opened next to it.
+ * The session decides who else may use the microphone: Gemini Live and voice plugins pause while
+ * the question records, a meeting recording keeps going (and keeps its route), and another spoken
+ * prompt (voice enrollment, a spoken approval) refuses the question before any beep. Glasses whose
+ * SDK streams microphone PCM (Mentra Live, [AudioRoutePreference.DEVICE_SDK]) are recorded from
+ * that stream, so no Bluetooth call route is opened next to it.
  */
 internal class QuestionMicrophone(
     context: Context,
@@ -60,17 +60,11 @@ internal class QuestionMicrophone(
     private val audioGoesToModel: () -> Boolean,
 ) : SpokenQuestionMicrophone {
     private val appContext = context.applicationContext
-
-    /** The Bluetooth call route a question or voice query selected; cleared by its owner only. */
-    class RouteOwner(val queryToken: Any, val audioManager: AudioManager)
-
-    val activeRoute = AtomicReference<RouteOwner?>(null)
     private val mutex = Mutex()
 
-    /** The selected glasses deliver the microphone through their SDK: no Bluetooth call route. */
-    fun usesDeviceSdkRoute(): Boolean =
-        AudioRoutePolicy.forDevice(AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED, deviceAudio()) ==
-            AudioRoutePreference.DEVICE_SDK
+    /** The route a question asks for, after the selected glasses' audio profile. */
+    private fun routePreference(): AudioRoutePreference =
+        AudioRoutePolicy.forDevice(AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED, deviceAudio())
 
     override suspend fun recordQuestion(onsetTimeoutMs: Long): CapturedQuestion =
         capture(onsetTimeoutMs, voiceOnly = true, transcribe = false)
@@ -91,37 +85,21 @@ internal class QuestionMicrophone(
                 ?: return@withLock CapturedQuestion(null, false)
             return@withLock processRecordedQuestion(fixture, voiceOnly, transcribe)
         }
-        val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val deviceSdk = usesDeviceSdkRoute()
-        val owner = RouteOwner(Any(), audioManager)
-        if (!deviceSdk) activeRoute.set(owner)
+        val session = openSession() ?: return@withLock CapturedQuestion(null, false, error = MICROPHONE_BUSY)
         var audioFile: File? = null
         try {
-            withContext(Dispatchers.Main) {
-                if (deviceSdk) {
-                    Log.i("ImageQuestionAudio", "Question route: glasses SDK microphone, no Bluetooth call route")
-                } else {
-                    val ready = startBluetoothMicRouteAndAwait(audioManager)
-                    Log.i("ImageQuestionAudio", "Question route ready=$ready ${audioRouteSummary(audioManager)}")
-                    if (Build.VERSION.SDK_INT >= 31 && audioManager.availableCommunicationDevices.any {
-                            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-                        }) check(ready) { "Could not connect the glasses microphone" }
+            // Closing the session (also on cancellation) closes the recorder and leaves the shared
+            // route; the route is restored only if no other session (a meeting, Live) still uses it.
+            session.use {
+                val route = withContext(Dispatchers.Main) {
+                    val route = connectRoute(session)
+                    playTone(android.media.ToneGenerator.TONE_PROP_BEEP)
+                    speakCue(voiceOnly)
+                    route
                 }
-                playTone(android.media.ToneGenerator.TONE_PROP_BEEP)
-                speakCue(voiceOnly)
+                audioFile = AudioQuestionRecorder(appContext).record(session, timeoutMs, route.inputDevice)
+                withContext(Dispatchers.Main) { playTone(android.media.ToneGenerator.TONE_PROP_BEEP2) }
             }
-            val communicationName = if (Build.VERSION.SDK_INT >= 31) audioManager.communicationDevice?.productName?.toString() else null
-            val input = if (deviceSdk) {
-                null
-            } else {
-                audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull {
-                    (it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                        (Build.VERSION.SDK_INT >= 31 && it.type == AudioDeviceInfo.TYPE_BLE_HEADSET)) &&
-                        (communicationName == null || it.productName.toString() == communicationName)
-                }
-            }
-            audioFile = AudioQuestionRecorder(appContext).record(timeoutMs, input)
-            withContext(Dispatchers.Main) { playTone(android.media.ToneGenerator.TONE_PROP_BEEP2) }
         } catch (cancelled: CancellationException) {
             audioFile?.delete()
             throw cancelled
@@ -129,18 +107,47 @@ internal class QuestionMicrophone(
             audioFile?.delete()
             Log.w("ImageQuestionAudio", "Question capture failed", error)
             return@withLock CapturedQuestion(null, false, error = error.message ?: "Microphone capture failed")
-        } finally {
-            withContext(NonCancellable + Dispatchers.Main) {
-                if (activeRoute.compareAndSet(owner, null)) {
-                    if (Build.VERSION.SDK_INT >= 31) audioManager.clearCommunicationDevice()
-                    audioManager.isBluetoothScoOn = false
-                    audioManager.stopBluetoothSco()
-                    audioManager.mode = AudioManager.MODE_NORMAL
-                }
-            }
         }
         val recorded = audioFile ?: return@withLock CapturedQuestion(null, false)
         processRecordedQuestion(recorded, voiceOnly, transcribe)
+    }
+
+    /** The question's microphone session, or null when another spoken prompt holds the microphone. */
+    private fun openSession(): AudioSessionHandle? {
+        val request = AudioSessionRequest.VoiceCapture(SESSION_OWNER, route = routePreference())
+        return when (val grant = AudioSessionCoordinator.open(appContext, request)) {
+            is AudioSessionGrant.Granted -> grant.handle.takeIf { it.isActive } ?: run {
+                grant.handle.close()
+                null
+            }
+            is AudioSessionGrant.Denied -> {
+                Log.i("ImageQuestionAudio", "Question refused: ${grant.reason}")
+                null
+            }
+        }
+    }
+
+    /**
+     * Joins the shared route: the glasses' Bluetooth microphone (by the glasses' name when several
+     * headsets are offered), or nothing for glasses with an SDK microphone. Throws when a headset is
+     * offered but the glasses' microphone could not be selected.
+     */
+    private suspend fun connectRoute(session: AudioSessionHandle): AudioRouteResult {
+        if (session.request.route == AudioRoutePreference.DEVICE_SDK) {
+            Log.i("ImageQuestionAudio", "Question route: glasses SDK microphone, no Bluetooth call route")
+            return AudioRouteResult.PHONE
+        }
+        val glassesName = runCatching { DeviceManager.getInstance().deviceName }.getOrNull()
+        val route = session.connectRoute(ROUTE_WAIT, preferredDeviceName = glassesName, requireUnambiguous = true)
+        Log.i(
+            "ImageQuestionAudio",
+            "Question route ready=${route.bluetoothActive} ambiguous=${route.ambiguous} " +
+                "candidates=${route.bluetoothCandidatesPresent} input=${route.inputDevice?.productName}",
+        )
+        check(!route.ambiguous && !(route.bluetoothCandidatesPresent && !route.bluetoothActive)) {
+            "Could not connect the glasses microphone"
+        }
+        return route
     }
 
     /** Everything after capture: load cue, speaker observation, on-device transcript or the raw audio. */
@@ -189,14 +196,10 @@ internal class QuestionMicrophone(
     }
 
     private suspend fun playTone(toneType: Int) {
-        val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val tone = android.media.ToneGenerator(AudioManager.STREAM_VOICE_CALL, 90)
         try {
             val played = tone.startTone(toneType, 240)
-            Log.i(
-                "ImageQuestionAudio",
-                "Image-question tone type=$toneType played=$played route=${audioRouteSummary(audioManager)}",
-            )
+            Log.i("ImageQuestionAudio", "Image-question tone type=$toneType played=$played")
             delay(300L)
         } finally {
             tone.release()
@@ -225,13 +228,11 @@ internal class QuestionMicrophone(
             val questionSettings = ImageQuestionPreferences.get(appContext)
             val cue = if (voiceOnly) ImageQuestionDefaults.listeningCueForLanguage(questionSettings.appLanguageTag)
                 else ImageQuestionDefaults.questionCueForLanguage(questionSettings.appLanguageTag)
-            val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             speaker.configureForVoiceCommunication("image-question cue")
             Log.i(
                 "ImageQuestionAudio",
                 "Queueing image-question cue='$cue' language=${questionSettings.appLanguageTag} " +
-                    "attributes=voice_communication/speech " +
-                    "ttsReady=${speaker.ready} route=${audioRouteSummary(audioManager)}",
+                    "attributes=voice_communication/speech ttsReady=${speaker.ready}",
             )
             speaker.speak(
                 text = cue,
@@ -251,130 +252,15 @@ internal class QuestionMicrophone(
         }
     }
 
-    private fun startBluetoothMicRoute(audioManager: AudioManager) {
-        runCatching {
-            Log.i("ImageQuestionAudio", "Selecting Bluetooth microphone route: ${audioRouteSummary(audioManager)}")
-            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val devices = audioManager.availableCommunicationDevices.filter {
-                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                        it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-                }
-                val glassesName = runCatching { DeviceManager.getInstance().deviceName }.getOrNull()
-                val device = devices.firstOrNull { it.productName.toString().equals(glassesName, ignoreCase = true) }
-                    ?: devices.singleOrNull()
-                check(devices.size <= 1 || device != null) { "Multiple Bluetooth microphones are connected; could not identify the glasses" }
-                if (device != null) {
-                    val selected = audioManager.setCommunicationDevice(device)
-                    Log.i(
-                        "ImageQuestionAudio",
-                        "Communication device candidate type=${device.type} name=${device.productName} " +
-                            "selected=$selected route=${audioRouteSummary(audioManager)}",
-                    )
-                    if (selected) return
-                }
-            }
-            @Suppress("DEPRECATION")
-            audioManager.startBluetoothSco()
-            @Suppress("DEPRECATION")
-            audioManager.isBluetoothScoOn = true
-            Log.i("ImageQuestionAudio", "Requested legacy Bluetooth SCO route: ${audioRouteSummary(audioManager)}")
-        }.onFailure {
-            Log.w("AIHijack", "Bluetooth microphone route unavailable; using phone microphone", it)
-        }
-    }
-
-    private suspend fun startBluetoothMicRouteAndAwait(
-        audioManager: AudioManager,
-        timeoutMs: Long = BLUETOOTH_ROUTE_TIMEOUT_MS,
-    ): Boolean {
-        val connected = CompletableDeferred<Boolean>()
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action != AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED) return
-                val state = intent.getIntExtra(AudioManager.EXTRA_SCO_AUDIO_STATE, -1)
-                Log.i("ImageQuestionAudio", "Bluetooth SCO state=$state route=${audioRouteSummary(audioManager)}")
-                when (state) {
-                    AudioManager.SCO_AUDIO_STATE_CONNECTED -> connected.complete(true)
-                    AudioManager.SCO_AUDIO_STATE_ERROR -> connected.complete(false)
-                }
-            }
-        }
-        var receiverRegistered = false
-
-        return try {
-            ContextCompat.registerReceiver(
-                appContext,
-                receiver,
-                IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED),
-                ContextCompat.RECEIVER_NOT_EXPORTED,
-            )
-            receiverRegistered = true
-            startBluetoothMicRoute(audioManager)
-
-            val ready: Boolean = if (isBluetoothCommunicationDeviceSelected(audioManager)) {
-                true
-            } else {
-                withTimeoutOrNull<Boolean>(timeoutMs) {
-                    while (!isBluetoothCommunicationDeviceSelected(audioManager) && !connected.isCompleted) {
-                        delay(100L)
-                    }
-                    isBluetoothCommunicationDeviceSelected(audioManager) || connected.await()
-                } ?: false
-            }
-            if (ready) delay(CUE_ROUTE_SETTLE_MS)
-            ready
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Exception) {
-            Log.w("ImageQuestionAudio", "Could not confirm Bluetooth communication route", error)
-            false
-        } finally {
-            if (receiverRegistered) runCatching { appContext.unregisterReceiver(receiver) }
-        }
-    }
-
-    private fun isBluetoothCommunicationDeviceSelected(audioManager: AudioManager): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
-        return when (audioManager.communicationDevice?.type) {
-            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-            AudioDeviceInfo.TYPE_BLE_HEADSET -> true
-            else -> false
-        }
-    }
-
-    private fun audioRouteSummary(audioManager: AudioManager): String {
-        val communicationDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            audioManager.communicationDevice?.let { "${it.type}:${it.productName}" } ?: "none"
-        } else {
-            "unsupported"
-        }
-        val devices = audioManager.getDevices(
-            AudioManager.GET_DEVICES_INPUTS or
-                AudioManager.GET_DEVICES_OUTPUTS,
-        )
-            .joinToString { "${it.type}:${it.productName}" }
-        return "mode=${audioManager.mode}, sco=${audioManager.isBluetoothScoOn}, " +
-            "communication=$communicationDevice, devices=[$devices]"
-    }
-
-    /** Ends a voice query's call route at teardown (the activity used to do this in onDestroy). */
-    fun clearRouteForTeardown() {
-        activeRoute.getAndSet(null)?.audioManager?.let { audioManager ->
-            runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    audioManager.clearCommunicationDevice()
-                }
-                audioManager.isBluetoothScoOn = false
-                audioManager.stopBluetoothSco()
-                audioManager.mode = AudioManager.MODE_NORMAL
-            }
-        }
-    }
-
     private companion object {
-        const val CUE_ROUTE_SETTLE_MS = 500L
-        const val BLUETOOTH_ROUTE_TIMEOUT_MS = 3_000L
+        const val SESSION_OWNER = "AudioQuestionRecorder"
+        const val MICROPHONE_BUSY = "The microphone is busy; please ask again"
+
+        /**
+         * The question's own timing: up to 3 s for the glasses' communication device (or a legacy SCO
+         * link), then 500 ms so the beep and cue are not clipped.
+         */
+        val ROUTE_WAIT = AudioRouteWait(communicationDeviceTimeoutMs = 3_000, legacyScoTimeoutMs = 3_000, settleMs = 500)
         const val CUE_BLUETOOTH_TAIL_MS = 50L
     }
 }

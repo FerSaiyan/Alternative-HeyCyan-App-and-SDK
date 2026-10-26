@@ -168,8 +168,9 @@ internal class GlassesQuestions private constructor(context: Context) : Question
         hostScope.cancel()
         hostScope = newScope()
         cancelLocalStreamingSpeech("activity destroyed")
+        // Cancelling the screen's scope closes a listening question's audio session, which
+        // restores the Bluetooth route unless another session (a meeting, Live) still uses it.
         val voiceQueryWasActive = voice.voiceQueryInProgress.getAndSet(null) != null
-        microphone.clearRouteForTeardown()
         if (voiceQueryWasActive) finish()
     }
 
