@@ -36,11 +36,7 @@ Latest version: %2$s</string>
     <string name="compose_local_agent_provider_description">AI provider and local model configuration are managed in Settings.</string>
     <string name="compose_open_settings">Open Settings</string>
     <string name="compose_local_agent_screenshot_planning">Screenshot Planning</string>
-    <string name="compose_local_agent_screenshot_description">Screenshots are optional, temporary planning attachments. Accessibility text and structured UI remain available when screenshot capture or vision is unavailable.</string>
-    <string name="compose_local_agent_use_screenshots">Use screenshots for Local Agent planning</string>
-    <string name="compose_local_agent_remote_screenshots">Allow screenshots to be sent to remote planners</string>
-    <string name="compose_local_agent_screenshot_requirements">Android 11+ and Accessibility screenshot support are required. Screenshots are deleted after each planning step and are not added to Local Agent history or memory.</string>
-    <string name="compose_local_agent_remote_screenshot_consent">Off by default. Enable this only if you consent to the selected cloud, relay, or remote OpenAI-compatible planner receiving the current screenshot. Otherwise remote planning stays text-only.</string>
+    <string name="compose_local_agent_screenshot_description">Screenshots are off by default. To let the planner see the screen, set the Tasker variable CB_LocalAgentScreenshot to 1 in the CyanBridge Local Agent profile. Tasker then sends a screenshot with each observation, and CyanBridge deletes it after the planning step. With a cloud or Pro planner, the screenshot is sent to that provider.</string>
     <string name="compose_local_agent_screenshot_status">Screenshot status: %1$s</string>
     <string name="compose_local_agent_runtime_safety">Runtime and Safety</string>
     <string name="compose_local_agent_runtime_description">The agent can inspect accessible app UI, tap, type, submit fields, scroll, and open apps. Calls, SMS, and email open the native dialer or composer and are high-risk under the default approval policy. Phone control and screenshot planning stop while the phone is locked or inactive.</string>

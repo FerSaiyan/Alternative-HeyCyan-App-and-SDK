@@ -36,11 +36,7 @@ Neueste Version: %2$s</string>
     <string name="compose_local_agent_provider_description">KI-Anbieter und lokale Modelle werden in den Einstellungen verwaltet.</string>
     <string name="compose_open_settings">Einstellungen öffnen</string>
     <string name="compose_local_agent_screenshot_planning">Planung mit Screenshots</string>
-    <string name="compose_local_agent_screenshot_description">Screenshots sind optionale, vorübergehende Anhänge für die Planung. Bedienungshilfetext und strukturierte UI bleiben verfügbar, wenn Screenshotaufnahme oder Vision nicht verfügbar sind.</string>
-    <string name="compose_local_agent_use_screenshots">Screenshots für Local-Agent-Planung verwenden</string>
-    <string name="compose_local_agent_remote_screenshots">Screenshots an externe Planer senden</string>
-    <string name="compose_local_agent_screenshot_requirements">Android 11+ und Screenshot-Unterstützung der Bedienungshilfen sind erforderlich. Screenshots werden nach jedem Planungsschritt gelöscht und nicht in Verlauf oder Speicher des Local Agent aufgenommen.</string>
-    <string name="compose_local_agent_remote_screenshot_consent">Standardmäßig deaktiviert. Aktivieren Sie dies nur, wenn der ausgewählte Cloud-, Relay- oder entfernte OpenAI-kompatible Planer den aktuellen Screenshot erhalten darf. Andernfalls bleibt die externe Planung textbasiert.</string>
+    <string name="compose_local_agent_screenshot_description">Screenshots sind standardmäßig aus. Damit der Planer den Bildschirm sieht, setzen Sie im Tasker-Profil „CyanBridge Local Agent“ die Variable CB_LocalAgentScreenshot auf 1. Tasker sendet dann mit jeder Beobachtung einen Screenshot, und CyanBridge löscht ihn nach dem Planungsschritt. Bei einem Cloud- oder Pro-Planer wird der Screenshot an diesen Anbieter gesendet.</string>
     <string name="compose_local_agent_screenshot_status">Screenshot-Status: %1$s</string>
     <string name="compose_local_agent_runtime_safety">Laufzeit und Sicherheit</string>
     <string name="compose_local_agent_runtime_description">Der Agent kann zugängliche App-Oberflächen prüfen, tippen, Text eingeben, Felder absenden, scrollen und Apps öffnen. Anrufe, SMS und E-Mails öffnen den nativen Wähler oder Verfasser und gelten gemäß Standardrichtlinie als risikoreich. Telefonsteuerung und Screenshotplanung werden bei gesperrtem oder inaktivem Telefon beendet.</string>

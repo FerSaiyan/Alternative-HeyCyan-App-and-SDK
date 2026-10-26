@@ -28,8 +28,6 @@ class LocalAgentSettingsActivityTest {
     @Test
     fun firstFrameStateComesFromPreferences() {
         AutomationPrefs.setMaxSteps(context, 17)
-        RuntimePrefs.setScreenshotPlanningEnabled(context, true)
-        RuntimePrefs.setRemoteScreenshotUploadEnabled(context, true)
         RuntimePrefs.setRequireActionConfirmationEnabled(context, false)
         RuntimePrefs.setStatus(context, "Idle")
 
@@ -37,8 +35,6 @@ class LocalAgentSettingsActivityTest {
 
         assertEquals(LocalAgentPlugin.isEnabled(context), state.enabled)
         assertEquals(17, state.maxSteps)
-        assertTrue(state.screenshotPlanningEnabled)
-        assertTrue(state.remoteScreenshotUploadEnabled)
         assertFalse(state.requireActionConfirmation)
         assertEquals("Idle", state.status)
     }
@@ -47,15 +43,11 @@ class LocalAgentSettingsActivityTest {
     fun preferenceActionsWriteAndRefreshState() {
         val activity = createSettingsActivity<LocalAgentSettingsActivity>()
 
-        activity.onScreenshotPlanningChange(true)
-        activity.onRemoteScreenshotUploadChange(true)
         activity.onMaxStepsChange(42)
         activity.onRequireActionConfirmationChange(false)
         activity.onAutoExecuteLowRiskChange(false)
         activity.onWhatsAppReadAloudChange(true)
 
-        assertTrue(RuntimePrefs.isScreenshotPlanningEnabled(context))
-        assertTrue(RuntimePrefs.isRemoteScreenshotUploadEnabled(context))
         assertEquals(42, AutomationPrefs.getMaxSteps(context))
         assertFalse(AutomationPrefs.isRequireConfirmationEnabled(context))
         assertFalse(RuntimePrefs.isRequireActionConfirmationEnabled(context))
@@ -63,8 +55,6 @@ class LocalAgentSettingsActivityTest {
         assertTrue(RuntimePrefs.isWhatsAppNotificationReadAloudEnabled(context))
 
         val state = activity.state
-        assertTrue(state.screenshotPlanningEnabled)
-        assertTrue(state.remoteScreenshotUploadEnabled)
         assertEquals(42, state.maxSteps)
         assertFalse(state.requireActionConfirmation)
         assertFalse(state.autoExecuteLowRisk)

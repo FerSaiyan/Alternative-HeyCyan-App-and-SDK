@@ -52,8 +52,6 @@ class LocalAiTaskerChromeHilTest {
         val previousAutomationEnabled = AutomationPrefs.isLocalAgentAutomationEnabled(context)
         val previousMaxSteps = AutomationPrefs.getMaxSteps(context)
         val previousRequireConfirmation = RuntimePrefs.isRequireActionConfirmationEnabled(context)
-        val previousScreenshotPlanning = RuntimePrefs.isScreenshotPlanningEnabled(context)
-        val previousRemoteScreenshotUpload = RuntimePrefs.isRemoteScreenshotUploadEnabled(context)
 
         HilWebFixtureServer().use { webFixture ->
         ActivityScenario.launch(HilFixtureActivity::class.java).use {
@@ -65,8 +63,6 @@ class LocalAiTaskerChromeHilTest {
                 AutomationPrefs.setLocalAgentAutomationEnabled(context, true)
                 AutomationPrefs.setMaxSteps(context, 16)
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, false)
-                RuntimePrefs.setScreenshotPlanningEnabled(context, false)
-                RuntimePrefs.setRemoteScreenshotUploadEnabled(context, false)
                 RuntimePrefs.setStatus(context, "HIL local AI starting")
                 RuntimePrefs.clearLastError(context)
 
@@ -128,8 +124,6 @@ class LocalAiTaskerChromeHilTest {
                 AutomationPrefs.setLocalAgentAutomationEnabled(context, previousAutomationEnabled)
                 AutomationPrefs.setMaxSteps(context, previousMaxSteps)
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, previousRequireConfirmation)
-                RuntimePrefs.setScreenshotPlanningEnabled(context, previousScreenshotPlanning)
-                RuntimePrefs.setRemoteScreenshotUploadEnabled(context, previousRemoteScreenshotUpload)
             }
         }
         }

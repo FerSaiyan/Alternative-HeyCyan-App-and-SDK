@@ -36,11 +36,7 @@
     <string name="compose_local_agent_provider_description">Провайдер ИИ и настройки локальных моделей управляются в разделе Настройки.</string>
     <string name="compose_open_settings">Открыть настройки</string>
     <string name="compose_local_agent_screenshot_planning">Планирование по снимкам экрана</string>
-    <string name="compose_local_agent_screenshot_description">Снимки экрана являются необязательными временными вложениями для планирования. Текст специальных возможностей и структурированный интерфейс остаются доступными, когда захват экрана или зрение недоступны.</string>
-    <string name="compose_local_agent_use_screenshots">Использовать снимки для планирования Local Agent</string>
-    <string name="compose_local_agent_remote_screenshots">Разрешить отправку снимков удаленным планировщикам</string>
-    <string name="compose_local_agent_screenshot_requirements">Требуются Android 11 или новее и поддержка снимков экрана службой специальных возможностей. Снимки удаляются после каждого шага планирования и не добавляются в историю или память Local Agent.</string>
-    <string name="compose_local_agent_remote_screenshot_consent">По умолчанию выключено. Включайте, только если согласны отправлять текущий снимок выбранному облачному, relay или удаленному планировщику с совместимостью OpenAI. Иначе удаленное планирование использует только текст.</string>
+    <string name="compose_local_agent_screenshot_description">Снимки экрана по умолчанию выключены. Чтобы планировщик видел экран, задайте переменной Tasker CB_LocalAgentScreenshot значение 1 в профиле CyanBridge Local Agent. Тогда Tasker будет отправлять снимок с каждым наблюдением, а CyanBridge удалит его после шага планирования. При облачном или Pro-планировщике снимок отправляется этому поставщику.</string>
     <string name="compose_local_agent_screenshot_status">Состояние снимков: %1$s</string>
     <string name="compose_local_agent_runtime_safety">Среда выполнения и безопасность</string>
     <string name="compose_local_agent_runtime_description">Агент может просматривать доступный интерфейс приложений, нажимать, вводить текст, отправлять формы, прокручивать и открывать приложения. Вызовы, SMS и электронная почта открывают системный номеронабиратель или редактор и считаются рискованными согласно политике подтверждения по умолчанию. Управление телефоном и планирование по снимкам прекращаются, когда телефон заблокирован или неактивен.</string>

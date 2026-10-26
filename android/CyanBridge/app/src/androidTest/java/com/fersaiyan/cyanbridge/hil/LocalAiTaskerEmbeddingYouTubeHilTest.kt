@@ -73,8 +73,6 @@ class LocalAiTaskerEmbeddingYouTubeHilTest {
         val previousAutomationEnabled = AutomationPrefs.isLocalAgentAutomationEnabled(context)
         val previousMaxSteps = AutomationPrefs.getMaxSteps(context)
         val previousRequireConfirmation = RuntimePrefs.isRequireActionConfirmationEnabled(context)
-        val previousScreenshotPlanning = RuntimePrefs.isScreenshotPlanningEnabled(context)
-        val previousRemoteScreenshotUpload = RuntimePrefs.isRemoteScreenshotUploadEnabled(context)
         val previousEmbeddingEnabled = AutomationPrefs.isEmbeddingDecisionEnabled(context)
         val previousEmbeddingPath = AutomationPrefs.getEmbeddingModelPath(context)
         val previousEmbeddingMargin = AutomationPrefs.getEmbeddingMarginThreshold(context)
@@ -100,8 +98,6 @@ class LocalAiTaskerEmbeddingYouTubeHilTest {
                 AutomationPrefs.setEmbeddingModelPath(context, EMBEDDING_GGUF_PATH)
                 AutomationPrefs.setEmbeddingMarginThreshold(context, EMBEDDING_MARGIN)
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, false)
-                RuntimePrefs.setScreenshotPlanningEnabled(context, false)
-                RuntimePrefs.setRemoteScreenshotUploadEnabled(context, false)
                 RuntimePrefs.setStatus(context, "HIL embedding-gated YouTube starting")
                 RuntimePrefs.clearLastError(context)
 
@@ -166,8 +162,6 @@ class LocalAiTaskerEmbeddingYouTubeHilTest {
                 AutomationPrefs.setEmbeddingModelPath(context, previousEmbeddingPath)
                 AutomationPrefs.setEmbeddingMarginThreshold(context, previousEmbeddingMargin)
                 RuntimePrefs.setRequireActionConfirmationEnabled(context, previousRequireConfirmation)
-                RuntimePrefs.setScreenshotPlanningEnabled(context, previousScreenshotPlanning)
-                RuntimePrefs.setRemoteScreenshotUploadEnabled(context, previousRemoteScreenshotUpload)
             }
         }
     }

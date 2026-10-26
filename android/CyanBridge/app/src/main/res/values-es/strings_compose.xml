@@ -36,11 +36,7 @@ Ultima version: %2$s</string>
     <string name="compose_local_agent_provider_description">El proveedor de IA y la configuracion de modelos locales se administran en Ajustes.</string>
     <string name="compose_open_settings">Abrir Ajustes</string>
     <string name="compose_local_agent_screenshot_planning">Planificacion con capturas</string>
-    <string name="compose_local_agent_screenshot_description">Las capturas son adjuntos de planificacion opcionales y temporales. El texto de accesibilidad y la interfaz estructurada siguen disponibles cuando no se puede capturar la pantalla o usar vision.</string>
-    <string name="compose_local_agent_use_screenshots">Usar capturas para la planificacion de Local Agent</string>
-    <string name="compose_local_agent_remote_screenshots">Permitir enviar capturas a planificadores remotos</string>
-    <string name="compose_local_agent_screenshot_requirements">Se necesita Android 11 o posterior y compatibilidad de capturas de Accesibilidad. Las capturas se eliminan despues de cada paso y no se anaden al historial ni a la memoria de Local Agent.</string>
-    <string name="compose_local_agent_remote_screenshot_consent">Desactivado de forma predeterminada. Activalo solo si aceptas que el planificador en la nube, relay o remoto compatible con OpenAI seleccionado reciba la captura actual. De lo contrario, la planificacion remota usa solo texto.</string>
+    <string name="compose_local_agent_screenshot_description">Las capturas están desactivadas de forma predeterminada. Para que el planificador vea la pantalla, pon la variable de Tasker CB_LocalAgentScreenshot en 1 en el perfil CyanBridge Local Agent. Tasker enviará entonces una captura con cada observación, y CyanBridge la eliminará después del paso de planificación. Con un planificador en la nube o Pro, la captura se envía a ese proveedor.</string>
     <string name="compose_local_agent_screenshot_status">Estado de captura: %1$s</string>
     <string name="compose_local_agent_runtime_safety">Runtime y seguridad</string>
     <string name="compose_local_agent_runtime_description">El agente puede inspeccionar la interfaz accesible, tocar, escribir, enviar formularios, desplazarse y abrir aplicaciones. Las llamadas, SMS y correos abren el marcador o redactor nativo y son de alto riesgo segun la politica de aprobacion predeterminada. El control del telefono y la planificacion con capturas se detienen cuando el telefono esta bloqueado o inactivo.</string>

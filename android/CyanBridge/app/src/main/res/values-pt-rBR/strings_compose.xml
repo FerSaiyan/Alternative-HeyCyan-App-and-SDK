@@ -36,11 +36,7 @@ Ultima versao: %2$s</string>
     <string name="compose_local_agent_provider_description">O provedor de IA e a configuração de modelos locais são gerenciados em Configurações.</string>
     <string name="compose_open_settings">Abrir Configurações</string>
     <string name="compose_local_agent_screenshot_planning">Planejamento com capturas de tela</string>
-    <string name="compose_local_agent_screenshot_description">As capturas são anexos de planejamento opcionais e temporários. O texto de acessibilidade e a interface estruturada continuam disponíveis quando a captura ou a visão não estão disponíveis.</string>
-    <string name="compose_local_agent_use_screenshots">Usar capturas no planejamento do Local Agent</string>
-    <string name="compose_local_agent_remote_screenshots">Permitir o envio de capturas para planejadores remotos</string>
-    <string name="compose_local_agent_screenshot_requirements">Android 11 ou posterior e suporte de captura da Acessibilidade são necessários. As capturas são excluídas após cada etapa e não são adicionadas ao histórico ou à memória do Local Agent.</string>
-    <string name="compose_local_agent_remote_screenshot_consent">Desativado por padrão. Ative somente se você aceitar que o planejador de nuvem, relay ou remoto compatível com OpenAI selecionado receba a captura atual. Caso contrário, o planejamento remoto permanece somente em texto.</string>
+    <string name="compose_local_agent_screenshot_description">As capturas de tela ficam desativadas por padrão. Para que o planejador veja a tela, defina a variável do Tasker CB_LocalAgentScreenshot como 1 no perfil CyanBridge Local Agent. O Tasker passa a enviar uma captura a cada observação, e o CyanBridge a exclui após a etapa de planejamento. Com um planejador na nuvem ou Pro, a captura é enviada a esse provedor.</string>
     <string name="compose_local_agent_screenshot_status">Status da captura: %1$s</string>
     <string name="compose_local_agent_runtime_safety">Runtime e segurança</string>
     <string name="compose_local_agent_runtime_description">O agente pode inspecionar a interface acessível, tocar, digitar, enviar campos, rolar e abrir aplicativos. Chamadas, SMS e e-mails abrem o discador ou compositor nativo e são de alto risco segundo a política padrão de aprovação. O controle do telefone e o planejamento por capturas param quando o telefone está bloqueado ou inativo.</string>

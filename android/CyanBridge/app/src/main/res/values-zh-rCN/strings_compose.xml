@@ -36,11 +36,7 @@
     <string name="compose_local_agent_provider_description">AI 提供商和本地模型配置在设置中管理。</string>
     <string name="compose_open_settings">打开设置</string>
     <string name="compose_local_agent_screenshot_planning">截图规划</string>
-    <string name="compose_local_agent_screenshot_description">截图是可选的临时规划附件。当截图或视觉功能不可用时，无障碍文本和结构化界面仍可使用。</string>
-    <string name="compose_local_agent_use_screenshots">使用截图进行 Local Agent 规划</string>
-    <string name="compose_local_agent_remote_screenshots">允许将截图发送给远程规划器</string>
-    <string name="compose_local_agent_screenshot_requirements">需要 Android 11 或更高版本以及无障碍截图支持。每个规划步骤后都会删除截图，不会添加到 Local Agent 历史记录或记忆中。</string>
-    <string name="compose_local_agent_remote_screenshot_consent">默认关闭。只有在你同意将当前截图发送给选定的云端、中继或远程 OpenAI 兼容规划器时才启用。否则远程规划只使用文本。</string>
+    <string name="compose_local_agent_screenshot_description">截图默认关闭。要让规划器看到屏幕，请在 CyanBridge Local Agent 的 Tasker 配置文件中将 Tasker 变量 CB_LocalAgentScreenshot 设为 1。之后 Tasker 会在每次观察时发送一张截图，CyanBridge 会在规划步骤结束后将其删除。如果使用云端或 Pro 规划器，截图会发送给该提供商。</string>
     <string name="compose_local_agent_screenshot_status">截图状态：%1$s</string>
     <string name="compose_local_agent_runtime_safety">运行时和安全</string>
     <string name="compose_local_agent_runtime_description">代理可以检查可访问的应用界面、点击、输入、提交表单、滚动和打开应用。通话、短信和电子邮件会打开系统拨号器或编辑器，按照默认批准策略属于高风险操作。手机锁定或不活动时，手机控制和截图规划会停止。</string>
