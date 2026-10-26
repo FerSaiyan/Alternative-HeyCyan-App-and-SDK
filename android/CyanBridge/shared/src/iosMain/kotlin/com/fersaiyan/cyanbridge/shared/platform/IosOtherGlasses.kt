@@ -29,6 +29,13 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesMediaCounts
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesTransferUiState
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
+import com.fersaiyan.cyanbridge.shared.glasses.MetaRegistrationEvent
+import com.fersaiyan.cyanbridge.shared.glasses.MetaRegistrationPhase
+import com.fersaiyan.cyanbridge.shared.glasses.MetaRegistrationTracker
+import com.fersaiyan.cyanbridge.shared.glasses.PrefsMetaRegistrationStore
+import com.fersaiyan.cyanbridge.shared.generated.resources.Res
+import com.fersaiyan.cyanbridge.shared.generated.resources.meta_setup_dev_mode_lost
+import org.jetbrains.compose.resources.getString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import platform.Foundation.NSData
@@ -78,6 +85,27 @@ internal class IosOtherGlasses(
     var isSdkConnected: Boolean = false
         private set
 
+    /**
+     * Hybrid Meta registration (see MetaRegistration.kt). iOS DAT 1.0 does not expose isDevMode,
+     * so the path is only known for an app id of "0", where it can only be Developer Mode.
+     */
+    private var metaAppIdConfigured = false
+    private var metaTracker = MetaRegistrationTracker(PrefsMetaRegistrationStore(), metaAppIdConfigured)
+
+    private fun metaPhase(label: String): MetaRegistrationPhase = when (label) {
+        "Registered" -> MetaRegistrationPhase.REGISTERED
+        "Registering" -> MetaRegistrationPhase.REGISTERING
+        else -> MetaRegistrationPhase.NOT_REGISTERED
+    }
+
+    private fun onMetaRegistration(label: String) {
+        val event = metaTracker.onPhase(metaPhase(label)) { null }
+        PlatformLogger.i(TAG, "Meta registration=$label path=${metaTracker.recordedPath} event=$event")
+        if (event == MetaRegistrationEvent.DeveloperModeLost) {
+            scope.launch { IosAssistantVoice.say(getString(Res.string.meta_setup_dev_mode_lost)) }
+        }
+    }
+
     private val sdkListener = object : SdkGlassesListener {
         override fun onConnectionChanged(state: Int, label: String) {
             val connected = state == SdkConnectionState.CONNECTED
@@ -123,13 +151,29 @@ internal class IosOtherGlasses(
             host.updateDashboard { state ->
                 val meta = state.metaRayban
                 when (key) {
-                    SdkGlassesStatus.META_REGISTRATION -> state.copy(
-                        metaRayban = meta.copy(
-                            registrationLabel = value,
-                            canRegister = value != "Registered",
-                            canUnregister = value == "Registered",
-                        ),
-                    )
+                    SdkGlassesStatus.META_REGISTRATION -> {
+                        onMetaRegistration(value)
+                        state.copy(
+                            metaRayban = meta.copy(
+                                registrationLabel = value,
+                                canRegister = value != "Registered",
+                                canUnregister = value == "Registered",
+                                registrationPath = metaTracker.recordedPath,
+                                showSetupChoice = true,
+                                registrationPhase = metaPhase(value),
+                                appIdConfigured = metaAppIdConfigured,
+                            ),
+                        )
+                    }
+                    SdkGlassesStatus.META_APP_ID_CONFIGURED -> {
+                        val configured = value == "true"
+                        // Sent once by the bridge before the registration state.
+                        if (configured != metaAppIdConfigured) {
+                            metaAppIdConfigured = configured
+                            metaTracker = MetaRegistrationTracker(PrefsMetaRegistrationStore(), configured)
+                        }
+                        state.copy(metaRayban = meta.copy(appIdConfigured = configured))
+                    }
                     SdkGlassesStatus.META_DEVICE_NAME -> state.copy(metaRayban = meta.copy(selectedDeviceName = value.ifBlank { null }))
                     SdkGlassesStatus.META_DEVICE_COUNT -> state.copy(
                         metaRayban = meta.copy(availableDeviceCount = value.toIntOrNull() ?: 0),
@@ -380,6 +424,19 @@ internal class IosOtherGlasses(
         /** The Meta panel: registration through the Meta AI app, and the diagnostics sheet. */
         override fun handlePanelAction(action: GlassesDashboardAction): Boolean {
             if (profile.controlPanel != GlassesControlPanel.META_RAYBAN) return false
+            if (action == GlassesDashboardAction.MetaRegister || action == GlassesDashboardAction.MetaOpenPairing) {
+                // Never register while registered or between states (it resets Meta's dev-mode value).
+                val phase = host.dashboard.metaRayban.registrationPhase
+                if (!metaTracker.beginRegistration(phase)) {
+                    PlatformLogger.i(TAG, "Not starting Meta registration while $phase")
+                    return true
+                }
+                // iOS DAT 1.0 has no dev-mode value to wait for.
+                metaTracker.registrationUiClosed()
+            }
+            if (action == GlassesDashboardAction.MetaUnregister) {
+                metaTracker.beginUnregistration(host.dashboard.metaRayban.registrationPhase)
+            }
             val name = when (action) {
                 GlassesDashboardAction.MetaRegister, GlassesDashboardAction.MetaOpenPairing -> SdkGlassesActions.META_REGISTER
                 GlassesDashboardAction.MetaUnregister -> SdkGlassesActions.META_UNREGISTER
