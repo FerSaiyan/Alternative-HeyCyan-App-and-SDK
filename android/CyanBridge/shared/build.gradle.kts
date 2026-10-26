@@ -54,6 +54,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
+            // Locks for common code: JVM monitors on Android, re-entrant native locks on iOS.
+            implementation(libs.kotlinx.atomicfu)
             // api: the shared AI clients expose JsonObject (relay capabilities, model replies).
             api(libs.kotlinx.serialization.json)
             implementation(compose.runtime)
@@ -97,6 +99,25 @@ dependencies {
         add("kspIosX64", libs.androidx.room.compiler)
         add("kspIosArm64", libs.androidx.room.compiler)
         add("kspIosSimulatorArm64", libs.androidx.room.compiler)
+    }
+}
+
+// Compiles the iOS targets without linking. Kotlin/Native cross-compiles Apple klibs on Linux,
+// so this catches JVM-only APIs in commonMain before macOS CI does (see docs/refactor/IOS_BUILD.md).
+tasks.register("iosCompileCheck") {
+    group = "verification"
+    description = "Compiles the shared module's iOS main and test sources (needs -PenableAppleTargets=true)."
+    if (enableAppleTargets) {
+        dependsOn(
+            "compileKotlinIosSimulatorArm64",
+            "compileKotlinIosArm64",
+            "compileKotlinIosX64",
+            "compileTestKotlinIosSimulatorArm64",
+        )
+    } else {
+        doFirst {
+            throw GradleException("iosCompileCheck needs -PenableAppleTargets=true")
+        }
     }
 }
 

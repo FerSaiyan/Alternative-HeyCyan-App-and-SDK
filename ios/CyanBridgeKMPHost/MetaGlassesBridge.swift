@@ -59,6 +59,9 @@ final class MetaGlassesBridge: NSObject, SdkGlassesBridge {
         self.listener = listener
         guard listener != nil else { return }
         startObserving()
+        // Before the registration state: the shared setup choice offers the email invite only
+        // with a registered app id.
+        listener?.onStatus(key: SdkGlassesStatus.shared.META_APP_ID_CONFIGURED, value: Self.appIdConfigured ? "true" : "false")
         onRegistration(Wearables.shared.registrationState)
         onDevices(Wearables.shared.devices)
     }
@@ -67,8 +70,8 @@ final class MetaGlassesBridge: NSObject, SdkGlassesBridge {
         pendingConnect?.onResult(success: false, message: "Replaced by a new connection")
         pendingConnect = nil
         guard Wearables.shared.registrationState == .registered else {
-            completion.onResult(success: false, message: "Approve CyanBridge in the Meta AI app, then come back here")
-            register()
+            // Registration starts from the setup choice in the Meta panel (Developer Mode or email invite).
+            completion.onResult(success: false, message: "Choose how you connect in the Meta panel, then tap Register")
             return
         }
         if session?.state == .started {
@@ -150,7 +153,17 @@ final class MetaGlassesBridge: NSObject, SdkGlassesBridge {
         }
     }
 
+    /// MWDAT/MetaAppID in Info.plist; "0" means Developer Mode only.
+    private static var appIdConfigured: Bool {
+        let config = Bundle.main.object(forInfoDictionaryKey: "MWDAT") as? [String: Any]
+        let appId = config?["MetaAppID"] as? String ?? "0"
+        return !appId.isEmpty && appId != "0"
+    }
+
     private func register() {
+        // Never while registered or registering (the shared tracker guards this too).
+        let state = Wearables.shared.registrationState
+        guard state != .registered && state != .registering else { return }
         Task { @MainActor in
             do {
                 try await Wearables.shared.startRegistration()
@@ -232,8 +245,7 @@ final class MetaGlassesBridge: NSObject, SdkGlassesBridge {
 
     private func ensureStartedSession() async throws {
         guard Wearables.shared.registrationState == .registered else {
-            register()
-            throw BridgeError("Approve CyanBridge in the Meta AI app first")
+            throw BridgeError("Register CyanBridge in the Meta panel first")
         }
         if session == nil { startSession() }
         for _ in 0..<60 where session?.state != .started {

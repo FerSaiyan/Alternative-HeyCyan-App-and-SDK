@@ -84,6 +84,8 @@ class PrefsInventoryTest {
         meta_permission_requests/* BOOLEAN false
         settings_sections/* BOOLEAN true
         local_models_sections/section_* BOOLEAN false
+        meta_registration/setup_choice STRING "NONE"
+        meta_registration/recorded_path STRING "UNKNOWN"
         ai_provider_prefs/provider STRING "cli_relay"
         ai_provider_prefs/relay_base_url STRING "https://cyanbridge.vercel.app"
         ai_provider_prefs/relay_backend STRING "gemini"

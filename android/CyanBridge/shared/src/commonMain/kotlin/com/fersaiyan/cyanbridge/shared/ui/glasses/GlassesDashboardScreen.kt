@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_connecting
+import com.fersaiyan.cyanbridge.shared.generated.resources.mentra_ota_open_button
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_bluetooth_unavailable
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_disconnecting
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_disconnected
@@ -103,6 +104,8 @@ import com.fersaiyan.cyanbridge.shared.glasses.FirmwarePatchRequestUiState
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
 import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
+import com.fersaiyan.cyanbridge.shared.glasses.META_BETA_ACCESS_URL
+import androidx.compose.ui.platform.LocalUriHandler
 import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
 import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
@@ -1227,6 +1230,17 @@ private fun MetaRaybanControls(
                 modifier = Modifier.testTag("meta_rayban_setup_guidance"),
             )
         }
+        if (state.showSetupChoice) {
+            val uriHandler = LocalUriHandler.current
+            MetaSetupChoiceSection(
+                phase = state.registrationPhase,
+                appIdConfigured = state.appIdConfigured,
+                onRegister = { onAction(GlassesDashboardAction.MetaRegister) },
+                onRequestAccess = { runCatching { uriHandler.openUri(META_BETA_ACCESS_URL) } },
+            )
+        } else {
+            state.registrationPath.labelResource()?.let { MetaRegistrationPathText(it) }
+        }
         // All pairing flows live in DeviceBindScreen (Scan → Pair Meta Glasses) → MetaPairingActivity.
         // Keep dashboard read-only: errors surface via the AlertDialog above (with Details → Send diagnostics).
         // Camera is consumed via Test image AI / Test voice in GlassesAssistantControls (capturePhotoOnce),
@@ -1437,6 +1451,13 @@ private fun AdvancedControls(
                         label = stringResource(Res.string.dashboard_sync_time),
                         onClick = { onAction(GlassesDashboardAction.SyncTime) },
                         modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (state.showSdkFirmwareUpdate) {
+                    ActionButton(
+                        label = stringResource(Res.string.mentra_ota_open_button),
+                        onClick = { onAction(GlassesDashboardAction.OpenSdkFirmwareUpdate) },
+                        modifier = Modifier.fillMaxWidth().testTag("advanced_sdk_firmware_update"),
                     )
                 }
             }

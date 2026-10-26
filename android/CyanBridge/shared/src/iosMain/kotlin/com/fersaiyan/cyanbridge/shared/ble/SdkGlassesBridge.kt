@@ -95,6 +95,9 @@ object SdkGlassesStatus {
     const val META_DEVICE_COUNT = "meta_device_count"
     const val META_AI_INSTALLED = "meta_ai_installed"
     const val META_DISPLAY_CAPABLE = "meta_display_capable"
+
+    /** "true" when Info.plist carries a registered MetaAppID (not "0"); gates the email invite path. */
+    const val META_APP_ID_CONFIGURED = "meta_app_id_configured"
     const val ERROR = "error"
 }
 

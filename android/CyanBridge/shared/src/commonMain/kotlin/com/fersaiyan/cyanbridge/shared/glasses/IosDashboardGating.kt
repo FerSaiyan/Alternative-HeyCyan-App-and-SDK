@@ -18,7 +18,7 @@ private val PANELS_WITHOUT_LINK = setOf(GlassesControlPanel.META_RAYBAN, Glasses
  *   HeyCyan: on iOS only its QCSDK path implements them;
  * - the Local Agent never shows: it runs through Tasker, which iOS does not have;
  * - the device-info label is kept: iOS fills it for HeyCyan and the SDK glasses too;
- * - iOS has no Wi-Fi ADB debugging and no live preview.
+ * - iOS has no Wi-Fi ADB debugging, no live preview and no SDK firmware update screen yet.
  */
 internal fun GlassesDashboardUiState.withIosFamilyGating(
     family: GlassesFamilyProfile,
@@ -53,6 +53,7 @@ internal fun GlassesDashboardUiState.withIosFamilyGating(
         showAdvancedImageQuality = imageQuality,
         showAdvancedDeveloperTools = developerTools,
         showAdvancedOta = ota,
+        showSdkFirmwareUpdate = false,
         showAdvancedControls = heyCyan || deviceInfo || volume || imageQuality || developerTools || ota,
     )
 }

@@ -102,6 +102,12 @@ enum class GlassesCapability {
     DEVELOPER_TOOLS,
     FIRMWARE_UPDATE,
     WIFI_ADB_DEBUG,
+
+    /**
+     * Firmware updates the glasses' own SDK runs on a dedicated screen (Mentra Live). Separate
+     * from [FIRMWARE_UPDATE], the HeyCyan/Eyevue OTA section, so the two flows never mix.
+     */
+    SDK_FIRMWARE_UPDATE,
 }
 
 sealed class GlassesBridgeState {

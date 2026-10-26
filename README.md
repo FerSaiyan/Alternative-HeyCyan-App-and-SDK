@@ -79,11 +79,10 @@ The Android integration uses Meta's Device Access Toolkit.
 
 Current code covers DAT registration state, device discovery and metadata, device sessions, camera streams, photo capture, display-capability detection, and camera access for features such as Visual Diary and Walking Aid.
 
-Meta controls access to third-party wearable integrations while DAT remains in preview. If you own Ray-Ban Meta glasses, request access at:
+Meta controls access to third-party wearable integrations while DAT remains in preview. CyanBridge's Meta setup screen offers two ways in, with the same app:
 
-**https://cyanbridgelabs.com/beta**
-
-Use the email connected to your Meta account and glasses.
+- **I use Developer Mode:** turn on Developer Mode in the Meta AI app (Settings → App info → tap the app version 5 times), then tap Register in CyanBridge. If Developer Mode is turned off later, CyanBridge says so and offers Register again.
+- **Request access with my Meta email:** submit the email connected to your Meta account and glasses at **https://cyanbridgelabs.com/beta**. After you accept Meta's invite, turn Developer Mode **off** in Meta AI, then tap Register. With Developer Mode on, Meta AI connects CyanBridge without release features such as "Hey Meta, open …".
 
 Technical notes are in [`meta_rayban_mvp.md`](android/CyanBridge/meta_rayban_mvp.md).
 

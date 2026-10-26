@@ -40,6 +40,7 @@ class DashboardSessionPolicyTest {
         GlassesDashboardAction.RequestVersion,
         GlassesDashboardAction.SyncTime,
         GlassesDashboardAction.RequestVolume,
+        GlassesDashboardAction.OpenSdkFirmwareUpdate,
         GlassesDashboardAction.AddDeviceListener,
         GlassesDashboardAction.StartClassicBluetoothScan,
         GlassesDashboardAction.DumpOtaInfo,
@@ -148,6 +149,7 @@ class DashboardSessionPolicyTest {
         GlassesDashboardAction.RequestVersion,
         GlassesDashboardAction.SyncTime,
         GlassesDashboardAction.RequestVolume,
+        GlassesDashboardAction.OpenSdkFirmwareUpdate,
         GlassesDashboardAction.AddDeviceListener,
         GlassesDashboardAction.StartClassicBluetoothScan,
         GlassesDashboardAction.DumpOtaInfo,
@@ -187,7 +189,7 @@ class DashboardSessionPolicyTest {
     @Test
     fun everyDashboardActionIsListedOnce() {
         allActions.forEach(::requireListed)
-        assertEquals(67, allActions.size)
+        assertEquals(68, allActions.size)
         assertEquals(allActions.size, allActions.map { it.name() }.toSet().size)
     }
 
@@ -233,7 +235,9 @@ class DashboardSessionPolicyTest {
         )
         ownStop.keys.forEach { session ->
             allActions.forEach { action ->
-                val expected = action is GlassesDashboardAction.Navigate || action == ownStop[session]
+                // The OTA lease also covers the Mentra firmware update, whose screen stays reachable.
+                val returnsToOta = session == GlassesSession.OTA && action == GlassesDashboardAction.OpenSdkFirmwareUpdate
+                val expected = action is GlassesDashboardAction.Navigate || action == ownStop[session] || returnsToOta
                 assertEqualsWithMessage(
                     "${action.name()} during $session",
                     expected,

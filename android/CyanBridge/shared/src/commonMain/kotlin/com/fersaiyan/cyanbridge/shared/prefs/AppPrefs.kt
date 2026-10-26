@@ -95,6 +95,15 @@ object AppPrefs {
         val requested = booleanFamily("*", false)
     }
 
+    /** Hybrid Meta registration (reader: shared/glasses/MetaRegistration). */
+    object MetaRegistration : PrefsFile("meta_registration") {
+        /** A MetaSetupChoice name. */
+        val setupChoice = string("setup_choice", "NONE")
+
+        /** A MetaRegistrationPath name: the path Meta AI took on the last registration. */
+        val recordedPath = string("recorded_path", "UNKNOWN")
+    }
+
     /** Expanded sections of Settings (reader: ui/SettingsActivity); `*` is the section key. */
     object SettingsSections : PrefsFile("settings_sections") {
         val expanded = booleanFamily("*", true)
@@ -107,7 +116,7 @@ object AppPrefs {
     val files: List<PrefsFile> = listOf(
         Main, IosOnboarding, Appearance, ChatAppearance, SharedChatAppearance, NoteTags, SharedSettings,
         Analytics, DeviceProfile, VersionCheck, RelayServer, MetaPermissionRequests, SettingsSections,
-        LocalModelsSections,
+        LocalModelsSections, MetaRegistration,
     )
 }
 

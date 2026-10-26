@@ -92,4 +92,26 @@
     <string name="meta_rayban_inactive">未启用</string>
     <string name="meta_rayban_start_display">启动显示</string>
     <string name="meta_rayban_stop_display">停止显示</string>
+    <string name="meta_setup_choice_title">你如何连接 Meta AI？</string>
+    <string name="meta_setup_choice_dev_mode">我使用开发者模式</string>
+    <string name="meta_setup_choice_dev_mode_detail">适用于已在 Meta AI 应用中开启开发者模式的用户。</string>
+    <string name="meta_setup_choice_email">用我的 Meta 邮箱申请访问</string>
+    <string name="meta_setup_choice_email_detail">CyanBridge 会把你的 Meta 账号加入测试人员，Meta 随后会通过邮件发送邀请。</string>
+    <string name="meta_setup_choice_email_unavailable">此版本暂不支持通过邮箱获取访问权限。请使用开发者模式。</string>
+    <string name="meta_setup_dev_step_1">1. 在 Meta AI 中打开“设置”，然后打开“应用信息”。</string>
+    <string name="meta_setup_dev_step_2">2. 点按应用版本 5 次（使用屏幕阅读器时，双击 5 次），然后开启开发者模式。</string>
+    <string name="meta_setup_dev_step_3">3. 返回这里并点按“注册”。</string>
+    <string name="meta_setup_email_step_1">1. 打开访问申请表，填写你的 Meta 账号邮箱。</string>
+    <string name="meta_setup_email_step_2">2. 通过后，打开 Meta 的邀请邮件并接受邀请。</string>
+    <string name="meta_setup_email_step_3">3. 在 Meta AI 中关闭开发者模式。若保持开启，CyanBridge 连接后将没有“Hey Meta, 打开 …”等正式版功能。</string>
+    <string name="meta_setup_email_step_4">4. 返回这里并点按“注册”。</string>
+    <string name="meta_setup_open_form">打开访问申请表</string>
+    <string name="meta_setup_register">注册</string>
+    <string name="meta_setup_register_again">重新注册</string>
+    <string name="meta_setup_dev_mode_lost">CyanBridge 已不再连接到 Meta AI。可能是开发者模式被关闭了。请在 Meta AI 中重新开启，然后点按“重新注册”。</string>
+    <string name="meta_setup_disconnected_invite">CyanBridge 已不再连接到 Meta AI。请保持开发者模式关闭，然后点按“重新注册”。</string>
+    <string name="meta_setup_invited_on_dev_path">你当前通过开发者模式连接。若要使用“Hey Meta, 打开 …”语音启动，请在 Meta AI 中关闭开发者模式，然后在这里点按“重新注册”。</string>
+    <string name="meta_setup_path_label">Meta AI 连接：%1$s</string>
+    <string name="meta_setup_path_developer_mode">开发者模式</string>
+    <string name="meta_setup_path_release_channel">受邀测试人员（发布渠道）</string>
 </resources>

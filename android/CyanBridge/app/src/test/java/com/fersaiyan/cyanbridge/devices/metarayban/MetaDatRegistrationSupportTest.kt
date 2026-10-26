@@ -19,6 +19,19 @@ class MetaDatRegistrationSupportTest {
     }
 
     @Test
+    fun developerModeChoiceIsNotSentToTheInviteForm() {
+        val accessState = resolveMetaAccessState(
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
+            availableDeviceCount = 0,
+            readiness = readiness(bondedMetaDeviceCount = 1, developerConfiguration = false).copy(developerModeChosen = true),
+            lastError = null,
+        )
+
+        assertEquals(MetaAccessState.FAILED, accessState)
+    }
+
+    @Test
     fun explicitSdkErrorIsNotMisclassifiedAsReleaseChannelGating() {
         val accessState = resolveMetaAccessState(
             initialized = true,

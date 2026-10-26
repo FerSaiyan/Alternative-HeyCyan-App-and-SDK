@@ -229,6 +229,7 @@ class GlassesDashboardController(
             GlassesDashboardAction.RequestVersion,
             GlassesDashboardAction.SyncTime,
             GlassesDashboardAction.RequestVolume,
+            GlassesDashboardAction.OpenSdkFirmwareUpdate,
             GlassesDashboardAction.AddDeviceListener,
             GlassesDashboardAction.RefreshRecordingSettings,
             is GlassesDashboardAction.SetVideoRecordingDuration,

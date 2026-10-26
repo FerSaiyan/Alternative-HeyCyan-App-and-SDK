@@ -136,4 +136,9 @@
     <string name="donation_intro_dialog_title">Информация о поддержке CyanBridge через Asaas</string>
     <string name="donation_intro_dialog_message">Здравствуйте, спасибо, что рассматриваете возможность поддержать CyanBridge пожертвованием! Я работаю над этим проектом параллельно с учёбой в докторантуре, и ваша поддержка очень важна для меня. Мне пока не удалось настроить Stripe из-за особых требований к бразильским компаниям, поэтому сейчас я использую платёжный сервис Asaas. Страница оплаты на португальском языке; при необходимости воспользуйтесь Google Переводчиком. Я активно ищу более удобную альтернативу. Ещё раз спасибо за поддержку!</string>
     <string name="donation_intro_open_button">Открыть форму оплаты Asaas</string>
+    <string name="meta_registration_channel_name">Подключение очков Meta</string>
+    <string name="meta_registration_lost_title">Очки Meta отключены</string>
+    <string name="meta_registration_lost_dev_mode_text">CyanBridge больше не подключён в Meta AI. Вероятно, режим разработчика был выключен. Включите его снова в Meta AI, затем зарегистрируйте CyanBridge снова.</string>
+    <string name="meta_registration_lost_invite_text">CyanBridge больше не подключён в Meta AI. Оставьте режим разработчика выключенным и зарегистрируйте CyanBridge снова.</string>
+    <string name="meta_registration_register_again">Зарегистрировать снова</string>
 </resources>
