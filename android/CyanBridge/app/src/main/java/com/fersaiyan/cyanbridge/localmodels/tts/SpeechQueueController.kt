@@ -1,11 +1,11 @@
 package com.fersaiyan.cyanbridge.localmodels.tts
 
 import android.content.Context
-import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
 import com.fersaiyan.cyanbridge.audio.AudioSessionHandle
+import com.fersaiyan.cyanbridge.audio.TtsSpeaker
 import com.fersaiyan.cyanbridge.shared.audio.AudioFocusMode
 import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import java.util.Locale
@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Session-aware application-level queue controller for Android TextToSpeech.
+ * Session-aware application-level queue controller for the questions' [TtsSpeaker].
  * Prevents over-queuing TTS utterances, tracks performance metrics (TTFT, TTFA),
  * and discards callbacks from stale or cancelled session IDs.
  */
@@ -55,7 +55,7 @@ class SpeechQueueController(
         val ttfaMs: Long get() = (firstTtsStartedAtMs - requestStartedAtMs).coerceAtLeast(0L)
     }
 
-    private var tts: TextToSpeech? = null
+    private var tts: TtsSpeaker? = null
     private var isTtsReady = false
     private var playbackSession: AudioSessionHandle? = null
     private var hasAudioFocus = false
@@ -70,7 +70,7 @@ class SpeechQueueController(
 
     val metrics = PerformanceMetrics()
 
-    fun attachTtsEngine(ttsEngine: TextToSpeech?, ready: Boolean) {
+    fun attachTtsEngine(ttsEngine: TtsSpeaker?, ready: Boolean) {
         this.tts = ttsEngine
         this.isTtsReady = ttsEngine != null && ready
         processNextInQueue()
@@ -93,7 +93,7 @@ class SpeechQueueController(
         metrics.cancelledCount++
         this.activeSessionId++
         clearQueue()
-        runCatching { tts?.stop() }
+        tts?.stop()
         abandonAudioFocus()
         Log.i(TAG, "Speech queue cancelled active session")
     }
@@ -159,14 +159,9 @@ class SpeechQueueController(
                 }
             }
 
-            val bundle = Bundle().apply {
-                putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
-            }
-
             val queueMode = if (item.sequence == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-            val result = ttsEngine.speak(item.normalizedSpeechText, queueMode, bundle, utteranceId)
-
-            if (result == TextToSpeech.SUCCESS) {
+            // Progress arrives through the speaker's observer (onUtteranceStart/Done/Error below).
+            if (ttsEngine.speak(item.normalizedSpeechText, utteranceId, queueMode)) {
                 currentlySpeakingItem.incrementAndGet()
                 if (metrics.firstTtsSubmittedAtMs == 0L) {
                     metrics.firstTtsSubmittedAtMs = System.currentTimeMillis()

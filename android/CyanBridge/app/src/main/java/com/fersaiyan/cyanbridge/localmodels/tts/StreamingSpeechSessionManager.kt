@@ -1,8 +1,8 @@
 package com.fersaiyan.cyanbridge.localmodels.tts
 
 import android.content.Context
-import android.speech.tts.TextToSpeech
 import android.util.Log
+import com.fersaiyan.cyanbridge.audio.TtsSpeaker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -60,7 +60,7 @@ class StreamingSpeechSessionManager(
     @Volatile
     private var currentLanguageTag: String? = null
 
-    fun attachTtsEngine(tts: TextToSpeech?, ready: Boolean) {
+    fun attachTtsEngine(tts: TtsSpeaker?, ready: Boolean) {
         speechQueueController.attachTtsEngine(tts, ready)
     }
 

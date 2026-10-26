@@ -19,7 +19,6 @@ import com.fersaiyan.cyanbridge.ai.router.AssistantTestKind
 import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
-import com.fersaiyan.cyanbridge.audio.VendorPlaybackSignal
 import com.fersaiyan.cyanbridge.bridge.core.DisplayCommand
 import com.fersaiyan.cyanbridge.bridge.core.GlassesBridge
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
@@ -143,7 +142,6 @@ internal class GlassesQuestions private constructor(context: Context) : Question
     )
 
     init {
-        speaker.answerPlayback = { playing -> VendorPlaybackSignal.forSelectedGlasses(appContext)?.setAppAudioPlaying(playing) }
         speaker.answerShown = ::showAnswerOnDisplay
     }
 
