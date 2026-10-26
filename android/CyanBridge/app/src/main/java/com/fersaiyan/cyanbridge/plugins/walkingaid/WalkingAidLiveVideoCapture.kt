@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLivePreviewManager
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
+import com.fersaiyan.cyanbridge.devices.mentra.MentraLivePreviewManager
+import com.fersaiyan.cyanbridge.media.rtsp.LibVlcLivePreviewManager
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.ota.LivePreviewManager
@@ -30,6 +32,7 @@ internal class WalkingAidLiveVideoCapture(
     private val eyevueFactory: () -> EyevueLivePreviewManager = {
         EyevueLivePreviewManager(context, EyevueManager.getInstance(context))
     },
+    private val mentraFactory: () -> LibVlcLivePreviewManager = { MentraLivePreviewManager(context) },
 ) {
     suspend fun collect(mode: WalkingAidVideoMode, onFrame: (VisionFrame) -> Unit) = coroutineScope {
         val lastFrameAt = AtomicLong(System.currentTimeMillis())
@@ -55,6 +58,7 @@ internal class WalkingAidLiveVideoCapture(
                 WalkingAidVideoMode.HEYCYAN_VIDEO -> collectHeyCyan(deliver)
                 WalkingAidVideoMode.EYEVUE_VIDEO -> collectEyevue(deliver)
                 WalkingAidVideoMode.META_VIDEO -> collectMeta(deliver)
+                WalkingAidVideoMode.MENTRA_VIDEO -> collectMentra(deliver)
                 WalkingAidVideoMode.PERIODIC_PHOTOS -> error("Select a live video source")
             }
         } catch (timeout: TimeoutCancellationException) {
@@ -94,6 +98,28 @@ internal class WalkingAidLiveVideoCapture(
             activeManager.startFrames(onFrame) { finished.complete(Unit) }
             finished.await()
             throw IOException(activeManager.uiState.value.detail.ifBlank { "Eyevue video stopped" })
+        } finally {
+            withContext(NonCancellable) {
+                try {
+                    manager?.stopAndJoin()
+                } finally {
+                    manager?.release()
+                    GlassesSessionCoordinator.release(lease)
+                }
+            }
+        }
+    }
+
+    private suspend fun collectMentra(onFrame: (Bitmap) -> Unit): Unit = withContext(Dispatchers.Main.immediate) {
+        val lease = GlassesSessionCoordinator.tryAcquireLease(GlassesSession.LIVE_PREVIEW)
+            ?: throw IOException("Stop the current glasses transport before starting Walking Aid video.")
+        var manager: LibVlcLivePreviewManager? = null
+        val finished = CompletableDeferred<Unit>()
+        try {
+            val activeManager = mentraFactory().also { manager = it }
+            activeManager.startFrames(onFrame) { finished.complete(Unit) }
+            finished.await()
+            throw IOException(activeManager.uiState.value.detail.ifBlank { "Mentra Live video stopped" })
         } finally {
             withContext(NonCancellable) {
                 try {

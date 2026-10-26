@@ -98,6 +98,7 @@ class WalkingAidSettingsActivity : AppCompatActivity() {
         if (WalkingAidPreferences.getVideoMode(this) in setOf(
                 WalkingAidVideoMode.EYEVUE_VIDEO,
                 WalkingAidVideoMode.HEYCYAN_VIDEO,
+                WalkingAidVideoMode.MENTRA_VIDEO,
             ) && !hasWifiP2pPermission(this)
         ) {
             requestTransportPermission(wifi = true)

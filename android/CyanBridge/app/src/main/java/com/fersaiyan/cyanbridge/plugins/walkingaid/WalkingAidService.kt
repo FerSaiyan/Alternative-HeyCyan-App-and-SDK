@@ -662,6 +662,8 @@ class WalkingAidService : Service() {
         com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager.getInstance(this).isConnected()
     } else if (DeviceProfileStore.isTuneBudsSelected(this)) {
         com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager.getInstance(this).isConnected()
+    } else if (DeviceProfileStore.selectedClass(this) == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.MENTRA_LIVE) {
+        com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager.instanceOrNull()?.ready == true
     } else BleOperateManager.getInstance().isConnected
 
     /** Save only analyzed frames, keeping video history and cloud/Q&A attachments bounded. */
