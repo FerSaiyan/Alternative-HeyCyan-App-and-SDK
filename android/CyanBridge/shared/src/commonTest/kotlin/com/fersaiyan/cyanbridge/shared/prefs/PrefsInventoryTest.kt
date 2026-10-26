@@ -271,6 +271,7 @@ class PrefsInventoryTest {
         tasker_image_profile/pending_token STRING null
         tasker_image_profile/verified_at_* LONG 0
         tasker_image_profile/version_* STRING null
+        mentra_broadcast (secure)/stream_url STRING ""
         community_plugins/tasker_assistant_enabled BOOLEAN false
         community_plugins/gemini_chatgpt_image_automation BOOLEAN false
         community_plugins/glasses_tab_shortcut_plugin STRING null

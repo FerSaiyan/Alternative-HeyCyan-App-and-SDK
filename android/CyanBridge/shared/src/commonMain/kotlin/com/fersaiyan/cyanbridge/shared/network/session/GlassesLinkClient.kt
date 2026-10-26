@@ -34,6 +34,9 @@ enum class GlassesLinkClient(
 
     /** The phone joins the glasses' own hotspot (access point, no group) to download the gallery. */
     MENTRA_GALLERY("Mentra Live gallery download", DeviceClass.MENTRA_LIVE),
+
+    /** The phone joins the glasses' hotspot so the glasses can stream the live preview to it. */
+    MENTRA_LIVE_STREAM("Mentra Live live preview", DeviceClass.MENTRA_LIVE),
     ;
 
     fun onBleLoss(lostDevice: DeviceClass): BleLossLinkAction = when {

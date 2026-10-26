@@ -18,7 +18,9 @@ class WalkingAidVideoModeTest {
             assertEquals(device == DeviceClass.HEY_CYAN, WalkingAidVideoMode.HEYCYAN_VIDEO.supports(device, 34))
             assertEquals(device == DeviceClass.META_RAYBAN, WalkingAidVideoMode.META_VIDEO.supports(device, 34))
             assertEquals(device == DeviceClass.EYEVUE, WalkingAidVideoMode.EYEVUE_VIDEO.supports(device, 34))
+            assertEquals(device == DeviceClass.MENTRA_LIVE, WalkingAidVideoMode.MENTRA_VIDEO.supports(device, 34))
         }
+        assertFalse(WalkingAidVideoMode.MENTRA_VIDEO.supports(DeviceClass.MENTRA_LIVE, 28))
         assertFalse(WalkingAidVideoMode.EYEVUE_VIDEO.supports(DeviceClass.EYEVUE, 28))
         assertTrue(WalkingAidVideoMode.EYEVUE_VIDEO.supports(DeviceClass.EYEVUE, 29))
     }

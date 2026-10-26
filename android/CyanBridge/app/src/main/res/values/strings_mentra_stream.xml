@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dashboard live preview section -->
+    <string name="mentra_live_preview_title">Mentra Live camera</string>
+    <string name="mentra_live_preview_description">Streams the glasses camera to this phone. Mentra Live turns on its hotspot and the phone joins it, unless both are already on the same Wi-Fi. No sound.</string>
+    <string name="mentra_live_preview_needs_android_10">Mentra Live preview needs Android 10 or newer.</string>
+    <string name="mentra_live_preview_busy">Mentra Live is busy with %1$s. Stop it first.</string>
+    <string name="mentra_live_preview_broadcasting">Stop the broadcast before starting the preview.</string>
+    <string name="mentra_broadcast_open">Broadcast to my server</string>
+    <string name="mentra_broadcast_dashboard_status">Broadcasting to %1$s</string>
+
+    <!-- Broadcast screen -->
+    <string name="mentra_broadcast_title">Mentra Live broadcast</string>
+    <string name="mentra_broadcast_intro">Mentra Live streams its camera and microphone straight to your own RTMP or SRT server over the glasses\' Wi-Fi. The glasses need a Wi-Fi network with internet; this phone only starts, watches and stops the stream.</string>
+    <string name="mentra_broadcast_url_label">Server URL</string>
+    <string name="mentra_broadcast_url_hint">rtmp://server/app/stream-key or srt://server:port</string>
+    <string name="mentra_broadcast_start">Start broadcast</string>
+    <string name="mentra_broadcast_stop">Stop broadcast</string>
+    <string name="mentra_broadcast_close">Close</string>
+    <string name="mentra_broadcast_wifi">Glasses Wi-Fi: %1$s</string>
+    <string name="mentra_broadcast_wifi_none">Glasses Wi-Fi: not connected</string>
+    <string name="mentra_broadcast_wifi_setup">Set up glasses Wi-Fi</string>
+    <string name="mentra_broadcast_destination">Destination: %1$s</string>
+    <string name="mentra_broadcast_video">Video: %1$s</string>
+    <string name="mentra_broadcast_stats">Now: %1$s</string>
+    <string name="mentra_broadcast_audio_on">Sound: glasses microphone</string>
+    <string name="mentra_broadcast_audio_off">Sound: off (another recording is using the microphone)</string>
+    <string name="mentra_broadcast_phase_idle">Not broadcasting</string>
+    <string name="mentra_broadcast_phase_starting">Starting…</string>
+    <string name="mentra_broadcast_phase_live">Live</string>
+    <string name="mentra_broadcast_phase_reconnecting">Reconnecting…</string>
+    <string name="mentra_broadcast_phase_stopping">Stopping…</string>
+    <string name="mentra_broadcast_phase_stopped">Stopped</string>
+    <string name="mentra_broadcast_phase_failed">Failed</string>
+    <string name="mentra_broadcast_status">Status: %1$s</string>
+
+    <!-- Broadcast refusals -->
+    <string name="mentra_broadcast_url_empty">Enter your server URL.</string>
+    <string name="mentra_broadcast_url_scheme">Use an rtmp://, rtmps:// or srt:// URL.</string>
+    <string name="mentra_broadcast_url_host">The URL has no server name.</string>
+    <string name="mentra_broadcast_url_local">The glasses cannot reach localhost. Use your server\'s network address.</string>
+    <string name="mentra_broadcast_url_path">RTMP URLs need an app and a stream key, for example rtmp://server/live/key.</string>
+    <string name="mentra_broadcast_url_port">SRT URLs need a port, for example srt://server:8890.</string>
+    <string name="mentra_broadcast_not_ready">Connect Mentra Live first.</string>
+    <string name="mentra_broadcast_no_wifi">Connect Mentra Live to a Wi-Fi network with internet first.</string>
+    <string name="mentra_broadcast_firmware_update">Mentra Live is updating its firmware.</string>
+    <string name="mentra_broadcast_busy">The glasses are busy with %1$s. Stop it first.</string>
+    <string name="mentra_broadcast_already_active">A broadcast is already running.</string>
+</resources>

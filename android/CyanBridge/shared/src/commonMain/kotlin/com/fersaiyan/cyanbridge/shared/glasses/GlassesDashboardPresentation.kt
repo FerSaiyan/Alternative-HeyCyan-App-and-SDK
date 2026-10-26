@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.glasses
 
+import androidx.compose.runtime.Composable
 import com.fersaiyan.cyanbridge.bridge.core.GlassesCapability
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
@@ -264,7 +265,20 @@ data class LivePreviewUiState(
     val streamUrl: String? = null,
     val canStart: Boolean = true,
     val canStop: Boolean = false,
+    /** Section title and description from the platform host; null keeps the built-in texts. */
+    val title: String? = null,
+    val description: String? = null,
+    /** Label of the broadcast button; null hides it (families without [GlassesCapability.LIVE_BROADCAST]). */
+    val broadcastLabel: String? = null,
+    /** Video the family renders itself while playing, for hosts whose video slot does not cover it. */
+    val inlineVideo: InlineLiveVideo? = null,
 )
+
+/** Live video a glasses family draws inside the live preview section (Mentra Live on Android). */
+interface InlineLiveVideo {
+    @Composable
+    fun Content()
+}
 
 data class WifiAdbDebugUiState(
     val isAvailable: Boolean = false,
@@ -326,6 +340,7 @@ fun GlassesDashboardUiState.withFamilyGating(
         ),
         livePreview = livePreview
             ?.takeIf { family.supports(GlassesCapability.LIVE_PREVIEW) }
+            ?.let { if (family.supports(GlassesCapability.LIVE_BROADCAST)) it else it.copy(broadcastLabel = null) }
             ?: LivePreviewUiState(),
     )
 }
@@ -376,6 +391,7 @@ sealed interface GlassesDashboardAction {
     data object CancelOta : GlassesDashboardAction
     data object StartLivePreview : GlassesDashboardAction
     data object StopLivePreview : GlassesDashboardAction
+    data object OpenLiveBroadcast : GlassesDashboardAction
     data object RequestStartWifiAdbDebug : GlassesDashboardAction
     data object StopWifiAdbDebug : GlassesDashboardAction
     data object MetaRegister : GlassesDashboardAction

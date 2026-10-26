@@ -30,6 +30,7 @@ internal fun WalkingAidVideoSourceButtons(
                     WalkingAidVideoMode.HEYCYAN_VIDEO -> R.string.walking_aid_heycyan_video
                     WalkingAidVideoMode.EYEVUE_VIDEO -> R.string.walking_aid_eyevue_video
                     WalkingAidVideoMode.META_VIDEO -> R.string.walking_aid_meta_video
+                    WalkingAidVideoMode.MENTRA_VIDEO -> R.string.walking_aid_mentra_video
                 })) },
             )
         }

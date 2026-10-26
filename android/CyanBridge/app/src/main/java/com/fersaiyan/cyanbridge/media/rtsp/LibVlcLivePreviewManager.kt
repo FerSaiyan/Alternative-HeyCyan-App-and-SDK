@@ -49,6 +49,10 @@ open class LibVlcLivePreviewManager internal constructor(
     private val networkCachingMs: Int = 1000,
     private val fileCachingMs: Int = 1000,
     private val liveCachingMs: Int = 100,
+    /** Headless frames for vision ([startFrames]): size and rotation that make them upright. */
+    private val frameWidth: Int = 640,
+    private val frameHeight: Int = 480,
+    private val frameRotationDegrees: Float = -90f,
 ) {
 
     private val _uiState = MutableStateFlow(LivePreviewState())
@@ -278,6 +282,9 @@ open class LibVlcLivePreviewManager internal constructor(
                         ready.completeExceptionally(error)
                         streamFailure.complete(error)
                     },
+                    rotationDegrees = frameRotationDegrees,
+                    width = frameWidth,
+                    height = frameHeight,
                 ).also { it.attach(vlcPlayer) }
             } else {
                 videoView?.let { attachVideoView(it) }

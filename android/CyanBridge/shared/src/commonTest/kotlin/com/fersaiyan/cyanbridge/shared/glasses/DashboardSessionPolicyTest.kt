@@ -41,6 +41,7 @@ class DashboardSessionPolicyTest {
         GlassesDashboardAction.SyncTime,
         GlassesDashboardAction.RequestVolume,
         GlassesDashboardAction.OpenSdkFirmwareUpdate,
+        GlassesDashboardAction.OpenLiveBroadcast,
         GlassesDashboardAction.AddDeviceListener,
         GlassesDashboardAction.StartClassicBluetoothScan,
         GlassesDashboardAction.DumpOtaInfo,
@@ -150,6 +151,7 @@ class DashboardSessionPolicyTest {
         GlassesDashboardAction.SyncTime,
         GlassesDashboardAction.RequestVolume,
         GlassesDashboardAction.OpenSdkFirmwareUpdate,
+        GlassesDashboardAction.OpenLiveBroadcast,
         GlassesDashboardAction.AddDeviceListener,
         GlassesDashboardAction.StartClassicBluetoothScan,
         GlassesDashboardAction.DumpOtaInfo,
@@ -189,7 +191,7 @@ class DashboardSessionPolicyTest {
     @Test
     fun everyDashboardActionIsListedOnce() {
         allActions.forEach(::requireListed)
-        assertEquals(68, allActions.size)
+        assertEquals(69, allActions.size)
         assertEquals(allActions.size, allActions.map { it.name() }.toSet().size)
     }
 
@@ -237,7 +239,10 @@ class DashboardSessionPolicyTest {
             allActions.forEach { action ->
                 // The OTA lease also covers the Mentra firmware update, whose screen stays reachable.
                 val returnsToOta = session == GlassesSession.OTA && action == GlassesDashboardAction.OpenSdkFirmwareUpdate
-                val expected = action is GlassesDashboardAction.Navigate || action == ownStop[session] || returnsToOta
+                // A Mentra broadcast holds the live preview lease; its screen stays reachable to stop it.
+                val returnsToBroadcast = session == GlassesSession.LIVE_PREVIEW && action == GlassesDashboardAction.OpenLiveBroadcast
+                val expected = action is GlassesDashboardAction.Navigate || action == ownStop[session] || returnsToOta ||
+                    returnsToBroadcast
                 assertEqualsWithMessage(
                     "${action.name()} during $session",
                     expected,

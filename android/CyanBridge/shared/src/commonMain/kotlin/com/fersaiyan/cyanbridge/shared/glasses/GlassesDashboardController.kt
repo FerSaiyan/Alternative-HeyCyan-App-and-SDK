@@ -225,6 +225,7 @@ class GlassesDashboardController(
             GlassesDashboardAction.StopSync,
             GlassesDashboardAction.StartLivePreview,
             GlassesDashboardAction.StopLivePreview,
+            GlassesDashboardAction.OpenLiveBroadcast,
             GlassesDashboardAction.RequestBattery,
             GlassesDashboardAction.RequestVersion,
             GlassesDashboardAction.SyncTime,

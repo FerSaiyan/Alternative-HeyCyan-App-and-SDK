@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.StringRes
@@ -11,12 +12,18 @@ import com.fersaiyan.cyanbridge.bridge.core.DeviceInfoReporting
 import com.fersaiyan.cyanbridge.bridge.core.GestureType
 import com.fersaiyan.cyanbridge.bridge.core.GlassesConnectionControl
 import com.fersaiyan.cyanbridge.bridge.core.InputEvent
+import com.fersaiyan.cyanbridge.bridge.core.LiveBroadcastControl
+import com.fersaiyan.cyanbridge.bridge.core.LivePreviewTransport
 import com.fersaiyan.cyanbridge.bridge.core.MediaSyncTransport
 import com.fersaiyan.cyanbridge.bridge.core.OnboardRecording
 import com.fersaiyan.cyanbridge.bridge.core.SdkFirmwareUpdate
 import com.fersaiyan.cyanbridge.bridge.core.VolumeReporting
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.devices.mentra.MentraBroadcastController
 import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
+import com.fersaiyan.cyanbridge.devices.mentra.MentraLivePreviewManager
+import com.fersaiyan.cyanbridge.glasses.GlassesSession
+import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.media.sync.GlassesMediaLibrary
 import com.fersaiyan.cyanbridge.media.sync.MentraMediaSyncController
 import com.fersaiyan.cyanbridge.media.sync.TransferProgressPresenter
@@ -24,12 +31,18 @@ import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesMediaCounts
+import com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
+import com.fersaiyan.cyanbridge.ui.MentraBroadcastActivity
 import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateActivity
+import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
+import com.fersaiyan.cyanbridge.ui.requestWifiP2pPermission
+import com.hjq.permissions.OnPermissionCallback
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import com.mentra.bluetoothsdk.GlassesRuntimeState
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -161,6 +174,70 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
         activity.startKtxActivity<MentraFirmwareUpdateActivity>()
     }
 
+    /**
+     * Live preview: the glasses stream RTMP to an ingest on this phone (see
+     * [com.fersaiyan.cyanbridge.devices.mentra.MentraLiveStreamConnection]), under the shared
+     * camera lease. The card's Stop also ends a running broadcast, which holds the same lease.
+     */
+    override val livePreview = object : LivePreviewTransport {
+        override fun startPreview() = startLivePreview()
+
+        override fun stopPreview() {
+            if (MentraBroadcastController.isActive) MentraBroadcastController.stop()
+            MentraLivePreviewManager.dashboardOrNull()?.stop()
+        }
+    }
+
+    override val liveBroadcast = LiveBroadcastControl { activity.startKtxActivity<MentraBroadcastActivity>() }
+
+    private fun startLivePreview() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return toast(R.string.mentra_live_preview_needs_android_10)
+        if (MentraLiveManager.instanceOrNull()?.ready != true) return toast(R.string.mentra_not_ready)
+        if (MentraBroadcastController.isActive) return toast(R.string.mentra_live_preview_broadcasting)
+        if (!hasWifiP2pPermission(activity)) {
+            requestWifiP2pPermission(activity, object : OnPermissionCallback {
+                override fun onGranted(permissions: MutableList<String>, all: Boolean) {
+                    if (all) startLivePreview() else toast(R.string.mentra_sync_permission_required)
+                }
+
+                override fun onDenied(permissions: MutableList<String>, never: Boolean) {
+                    toast(R.string.mentra_sync_permission_required)
+                }
+            })
+            return
+        }
+        val preview = MentraLivePreviewManager.forDashboard(activity)
+        if (preview.isActive) return
+        val lease = GlassesSessionCoordinator.tryAcquireLease(GlassesSession.LIVE_PREVIEW)
+            ?: return toast(R.string.mentra_live_preview_busy, GlassesSessionCoordinator.currentSession()?.label.orEmpty())
+        Log.i(MentraLiveManager.TAG, "Live preview requested")
+        preview.start { GlassesSessionCoordinator.release(lease) }
+    }
+
+    override fun dashboardLivePreview(): LivePreviewUiState {
+        val preview = context.livePreviewUiState(
+            MentraLivePreviewManager.dashboardOrNull()?.uiState?.value,
+            isAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
+        )
+        val broadcast = MentraBroadcastController.state.value
+        val shown = if (broadcast.phase.isActive) {
+            preview.copy(
+                stateLabel = activity.getString(R.string.mentra_broadcast_dashboard_status, broadcast.destination.orEmpty()),
+                detail = broadcast.detail.orEmpty(),
+                canStart = false,
+                canStop = true,
+            )
+        } else {
+            preview
+        }
+        return shown.copy(
+            title = activity.getString(R.string.mentra_live_preview_title),
+            description = activity.getString(R.string.mentra_live_preview_description),
+            broadcastLabel = activity.getString(R.string.mentra_broadcast_open),
+            inlineVideo = MentraInlineLiveVideo,
+        )
+    }
+
     override val volume = VolumeReporting {
         whenReady {
             runCatching { manager.mediaVolume() }
@@ -199,6 +276,14 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
             }
             launch {
                 manager.inputEvents.collect { event -> if (isSelected) onButton(event) }
+            }
+            launch {
+                combine(
+                    MentraLivePreviewManager.forDashboard(activity).uiState,
+                    MentraBroadcastController.state,
+                ) { _, _ -> Unit }.collect {
+                    if (isSelected) context.screen.updateDashboardState { it.copy(livePreview = dashboardLivePreview()) }
+                }
             }
         }
     }

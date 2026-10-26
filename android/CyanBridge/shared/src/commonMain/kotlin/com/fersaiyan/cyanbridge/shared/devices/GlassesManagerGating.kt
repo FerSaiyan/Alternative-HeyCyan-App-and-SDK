@@ -115,6 +115,7 @@ object GlassesManagerGating {
         GlassesDashboardAction.StopSync -> GlassesCapability.MEDIA_SYNC
         GlassesDashboardAction.StartLivePreview,
         GlassesDashboardAction.StopLivePreview -> GlassesCapability.LIVE_PREVIEW
+        GlassesDashboardAction.OpenLiveBroadcast -> GlassesCapability.LIVE_BROADCAST
         GlassesDashboardAction.RequestBattery -> GlassesCapability.BATTERY_STATUS
         GlassesDashboardAction.RequestVersion -> GlassesCapability.DEVICE_INFO
         GlassesDashboardAction.SyncTime -> GlassesCapability.TIME_SYNC

@@ -855,14 +855,14 @@ private fun CoreGlassesControls(
         if (state.livePreview.isAvailable) {
             Spacer(Modifier.height(8.dp))
             SectionTitle(
-                when {
+                state.livePreview.title ?: when {
                     state.showEyevueControls -> stringResource(Res.string.dashboard_eye_vue_live_preview)
                     state.showTuneBudsControls -> stringResource(Res.string.dashboard_tunebuds_live_preview)
                     else -> stringResource(Res.string.dashboard_heycyan_live_preview)
                 },
             )
             Text(
-                text = when {
+                text = state.livePreview.description ?: when {
                     state.showEyevueControls -> stringResource(Res.string.dashboard_eye_vue_description)
                     state.showTuneBudsControls -> stringResource(Res.string.dashboard_tunebuds_live_description)
                     else -> stringResource(Res.string.dashboard_heycyan_live_description)
@@ -906,6 +906,15 @@ private fun CoreGlassesControls(
                 state.livePreview.streamUrl != null
             ) {
                 liveVideoSlot()
+            } else if (state.livePreview.isPlaying) {
+                state.livePreview.inlineVideo?.Content()
+            }
+            state.livePreview.broadcastLabel?.let { label ->
+                ActionButton(
+                    label = label,
+                    onClick = { onAction(GlassesDashboardAction.OpenLiveBroadcast) },
+                    modifier = Modifier.fillMaxWidth().testTag("live_broadcast"),
+                )
             }
         }
     }

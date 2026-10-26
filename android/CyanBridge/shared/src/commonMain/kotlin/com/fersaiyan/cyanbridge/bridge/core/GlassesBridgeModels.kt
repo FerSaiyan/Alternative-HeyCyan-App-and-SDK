@@ -108,6 +108,12 @@ enum class GlassesCapability {
      * from [FIRMWARE_UPDATE], the HeyCyan/Eyevue OTA section, so the two flows never mix.
      */
     SDK_FIRMWARE_UPDATE,
+
+    /**
+     * The glasses stream their camera straight to the user's own RTMP/SRT server (Mentra Live).
+     * Shown next to the live preview; the phone only starts, watches and stops the stream.
+     */
+    LIVE_BROADCAST,
 }
 
 sealed class GlassesBridgeState {

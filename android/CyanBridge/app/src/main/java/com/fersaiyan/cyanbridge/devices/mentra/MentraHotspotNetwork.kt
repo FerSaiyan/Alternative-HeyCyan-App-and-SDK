@@ -33,7 +33,11 @@ import kotlinx.coroutines.withTimeout
  * overlaps a HeyCyan Wi-Fi Direct group, an Eyevue or TuneBuds transport or Wi-Fi ADB. The
  * hotspot is an access point (no Wi-Fi Direct group), so [close] releases the claim at once.
  */
-class MentraHotspotNetwork(context: Context) {
+class MentraHotspotNetwork(
+    context: Context,
+    private val client: GlassesLinkClient = GlassesLinkClient.MENTRA_GALLERY,
+    private val tag: String = MentraGallerySync.TAG,
+) {
     private val context = context.applicationContext
     private val connectivity = this.context.getSystemService(ConnectivityManager::class.java)
 
@@ -54,7 +58,7 @@ class MentraHotspotNetwork(context: Context) {
             throw IOException("Joining the Mentra Live hotspot needs Android 10 or newer")
         }
         close()
-        val claimed = GlassesNetworkSessionCoordinator.claimVendorLink(context, GlassesLinkClient.MENTRA_GALLERY)
+        val claimed = GlassesNetworkSessionCoordinator.claimVendorLink(context, client)
             ?: throw IOException("The glasses Wi-Fi link is still used by another session")
         claim = claimed
         GlassesNetworkSessionCoordinator.core.markConnectRequested(claimed)
@@ -62,7 +66,7 @@ class MentraHotspotNetwork(context: Context) {
         return try {
             val network = withTimeout(JOIN_TIMEOUT_MS) { request(ssid, password) }
             GlassesNetworkSessionCoordinator.core.markGroupFormed(claimed)
-            Log.i(TAG, "Joined the glasses hotspot $ssid (app-scoped, default network unchanged)")
+            Log.i(tag, "Joined the glasses hotspot $ssid (app-scoped, default network unchanged)")
             network
         } catch (timeout: TimeoutCancellationException) {
             close()
@@ -102,7 +106,7 @@ class MentraHotspotNetwork(context: Context) {
 
                 override fun onLost(network: Network) {
                     if (network != joined) return
-                    Log.w(TAG, "The glasses hotspot connection was lost")
+                    Log.w(tag, "The glasses hotspot connection was lost")
                     _lost.value = true
                 }
             }
@@ -115,6 +119,9 @@ class MentraHotspotNetwork(context: Context) {
             }
         }
 
+    /** The joined hotspot network, or null before [join] and after [close]. */
+    val network: Network? get() = joined
+
     /** Drops the hotspot request and releases the glasses link. Safe to call more than once. */
     fun close() {
         callback?.let { runCatching { connectivity.unregisterNetworkCallback(it) } }
@@ -123,12 +130,10 @@ class MentraHotspotNetwork(context: Context) {
         val released = claim ?: return
         claim = null
         GlassesNetworkSessionCoordinator.releaseVendorLink(context, released, driver = null)
-        Log.i(TAG, "Left the glasses hotspot and released the glasses link")
+        Log.i(tag, "Left the glasses hotspot and released the glasses link")
     }
 
     private companion object {
-        const val TAG = MentraGallerySync.TAG
-
         /** Covers the system approval dialog on first use (the MentraOS example allows 35 s). */
         const val JOIN_TIMEOUT_MS = 60_000L
     }

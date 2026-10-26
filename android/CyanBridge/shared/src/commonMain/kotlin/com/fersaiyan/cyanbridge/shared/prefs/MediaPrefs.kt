@@ -70,8 +70,13 @@ object MediaPrefs {
         val versionFor = optionalStringFamily("version_*")
     }
 
+    /** The user's Mentra Live broadcast destination. Secure: RTMP URLs carry the stream key. */
+    object MentraBroadcast : PrefsFile("mentra_broadcast", secure = true) {
+        val streamUrl = string("stream_url", "")
+    }
+
     val files: List<PrefsFile> = listOf(
         GlassesMedia, AutoAudioCapture, MeetingCapture, SyncWarnings, AdaptiveP2pProfiles, MoyoungW620,
-        ExternalImageAutomation, TaskerImageProfile,
+        ExternalImageAutomation, TaskerImageProfile, MentraBroadcast,
     )
 }
