@@ -4,6 +4,15 @@
 
 Avoid confusing Meta DAT pairing failures caused by users who are not registered in the Meta Developer release channel.
 
+## Hybrid registration (current)
+
+Every build carries the registered Meta app id. The Meta setup screen asks the user to pick
+"I use Developer Mode" or "Request access with my Meta email" before Register. Meta AI ignores
+the app id on its Developer Mode path, so both groups use the same build. After registration the
+app records which path Meta AI took (`Wearables.isDevMode`) and shows it as "Meta AI connection: …".
+The flow below still applies to the email path. Hardware checks:
+`docs/refactor/HARDWARE_TEST_CHECKLIST.md` → "Meta hybrid registration".
+
 ## App-side flow
 
 Before starting Meta DAT pairing:
