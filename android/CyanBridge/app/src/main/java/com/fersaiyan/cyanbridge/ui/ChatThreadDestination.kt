@@ -18,7 +18,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
+import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.chat.ChatStore
@@ -173,7 +173,7 @@ class ChatThreadDestination : NavScreen() {
 
     private fun showModelPickerForProvider() {
         when (viewModel.modelInfo.kind) {
-            ChatProviderKind.REMOTE_OPENAI -> startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
+            ChatProviderKind.REMOTE_OPENAI -> startActivity(AppRoute.LOCAL_MODELS.intent(this))
             ChatProviderKind.LOCAL -> showLocalModelPicker()
             ChatProviderKind.RELAY -> showRelayModelPicker()
             ChatProviderKind.OTHER ->
@@ -234,7 +234,7 @@ class ChatThreadDestination : NavScreen() {
             .setMessage("Local Models is selected, but no local model is installed. Configure one to start chatting.")
             .setNegativeButton("Not now", null)
             .setPositiveButton("Configure") { _, _ ->
-                startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
+                startActivity(AppRoute.LOCAL_MODELS.intent(this))
             }
             .show()
     }

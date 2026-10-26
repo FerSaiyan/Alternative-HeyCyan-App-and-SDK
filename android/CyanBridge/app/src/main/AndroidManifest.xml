@@ -77,7 +77,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".MainActivity" android:exported="true" android:label="@string/app_name" />
+        <!-- The only screen host: every in-app screen is a destination of its back stack. singleTask keeps
+             one instance (one glasses host); intents for it arrive in onNewIntent. -->
+        <activity android:name=".MainActivity" android:exported="true" android:label="@string/app_name" android:launchMode="singleTask" />
         <activity android:name=".ui.MetaPairingActivity" android:exported="true" android:launchMode="singleTask" android:label="@string/meta_pairing_title">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -91,7 +93,8 @@
         <activity android:name=".ui.voiceprofile.VoiceEnrollmentActivity" android:exported="false" android:label="Voice profile" />
         <activity android:name=".ui.DeviceBindActivity" />
         <service android:name=".devices.meizumyvu.MeizuMyvuConnectionService" android:exported="false" android:foregroundServiceType="connectedDevice" />
-        <activity android:name=".agent.ProSubscriptionActivity" android:exported="true" android:label="Pro Subscription">
+        <!-- Deep-link entry: forwards to the Pro screen in MainActivity. -->
+        <activity android:name=".agent.ProSubscriptionActivity" android:exported="true" android:label="Pro Subscription" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:noHistory="true">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -107,10 +110,7 @@
                 <data android:scheme="https" android:host="cyanbridge.vercel.app" android:path="/web-subscribe/callback" />
             </intent-filter>
         </activity>
-        <activity android:name=".agent.ProSubscriptionSettingsActivity" android:exported="false" android:label="Pro Subscription Settings" />
-        <activity android:name=".ai.live.GeminiLiveActivity" android:exported="false" android:label="Gemini Live Preview" />
         <activity android:name=".ai.live.GeminiLivePermissionGateActivity" android:exported="false" android:label="Gemini Live Permissions" />
-        <activity android:name=".agent.LocalModelsConfigureActivity" android:exported="false" android:label="Configure Local Models" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity
             android:name=".devices.memomind.webplugin.MemoMindWebPluginsActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"

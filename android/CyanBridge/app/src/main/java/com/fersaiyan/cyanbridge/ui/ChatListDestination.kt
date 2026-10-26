@@ -14,7 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
+import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
 import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationPrefs
 import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationsDestination
@@ -138,7 +138,7 @@ class ChatListDestination : NavScreen() {
             .setMessage("Local Models is selected, but no local model is installed. Configure a model to start a new chat.")
             .setNegativeButton("Not now", null)
             .setPositiveButton("Configure") { _, _ ->
-                startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
+                startActivity(AppRoute.LOCAL_MODELS.intent(this))
             }
             .show()
     }

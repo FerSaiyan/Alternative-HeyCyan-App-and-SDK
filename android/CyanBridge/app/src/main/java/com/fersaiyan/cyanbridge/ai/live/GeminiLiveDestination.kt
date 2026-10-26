@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ai.live
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -10,7 +11,7 @@ import android.os.Looper
 import android.view.View
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -43,7 +44,7 @@ import kotlinx.coroutines.withContext
  *
  * Opening/using other Pro models never starts this Activity or its audio/vision controllers.
  */
-class GeminiLiveActivity : AppCompatActivity() {
+class GeminiLiveDestination : NavScreen() {
     private val viewModel: GeminiLiveViewModel by viewModels {
         viewModelFactory {
             initializer {
@@ -237,6 +238,6 @@ private class AndroidGeminiLiveSession(
     }
 
     private companion object {
-        const val TAG = "GeminiLiveActivity"
+        const val TAG = "GeminiLiveDestination"
     }
 }

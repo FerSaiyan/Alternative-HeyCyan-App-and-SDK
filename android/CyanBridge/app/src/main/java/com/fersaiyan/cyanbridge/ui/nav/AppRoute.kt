@@ -26,6 +26,10 @@ import com.fersaiyan.cyanbridge.ui.ChatThreadDestination
 import com.fersaiyan.cyanbridge.ui.notes.NoteEditorDestination
 import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListDestination
 import com.fersaiyan.cyanbridge.ui.recordings.SyncedMediaGalleryDestination
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionDestination
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsDestination
+import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveDestination
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.ui.MentraBroadcastDestination
 import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateDestination
@@ -79,6 +83,10 @@ enum class AppRoute(
     NOTE_EDITOR(labelText = "Note editor", softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE),
     RECORDINGS(labelRes = R.string.nav_transcriptions_recordings, tab = AppDestination.MEDIA),
     SYNCED_MEDIA(labelText = "Synced photos and videos"),
+    PRO_SUBSCRIPTION(labelText = "Pro Subscription"),
+    PRO_SUBSCRIPTION_SETTINGS(labelText = "Pro Subscription Settings"),
+    LOCAL_MODELS(labelText = "Configure Local Models"),
+    GEMINI_LIVE(labelText = "Gemini Live Preview"),
     ;
 
     fun label(context: Context): String = labelText ?: context.getString(labelRes)
@@ -119,6 +127,10 @@ enum class AppRoute(
         NOTE_EDITOR -> NoteEditorDestination()
         RECORDINGS -> RecordingsListDestination()
         SYNCED_MEDIA -> SyncedMediaGalleryDestination()
+        PRO_SUBSCRIPTION -> ProSubscriptionDestination()
+        PRO_SUBSCRIPTION_SETTINGS -> ProSubscriptionSettingsDestination()
+        LOCAL_MODELS -> LocalModelsConfigureDestination()
+        GEMINI_LIVE -> GeminiLiveDestination()
     }
 
     companion object {

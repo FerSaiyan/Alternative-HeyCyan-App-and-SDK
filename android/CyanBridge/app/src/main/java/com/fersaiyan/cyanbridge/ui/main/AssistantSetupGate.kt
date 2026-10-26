@@ -5,8 +5,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
+import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionDestination
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationInspector
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationPolicy
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
@@ -29,10 +29,10 @@ internal class AssistantSetupGate(
                 .setNegativeButton("Not now", null)
                 .setPositiveButton(issue.actionLabel) { _, _ ->
                     val destination = when (issue.destination) {
-                        AssistantSetupDestination.LOCAL_MODELS -> LocalModelsConfigureActivity::class.java
-                        AssistantSetupDestination.PRO_SUBSCRIPTION -> ProSubscriptionActivity::class.java
+                        AssistantSetupDestination.LOCAL_MODELS -> AppRoute.LOCAL_MODELS
+                        AssistantSetupDestination.PRO_SUBSCRIPTION -> AppRoute.PRO_SUBSCRIPTION
                     }
-                    activity.startActivity(Intent(activity, destination))
+                    activity.startActivity(destination.intent(activity))
                 }
                 .show()
             return true

@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Intent
 import android.os.Build
@@ -56,7 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionDestination
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaDatPermissions
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
@@ -860,7 +861,7 @@ fun WalkingAidSettingsScreen(
                     TextButton(
                         onClick = {
                             vm.dismissReadiness()
-                            val intent = Intent(context, ProSubscriptionActivity::class.java)
+                            val intent = AppRoute.PRO_SUBSCRIPTION.intent(context)
                             context.startActivity(intent)
                         }
                     ) {

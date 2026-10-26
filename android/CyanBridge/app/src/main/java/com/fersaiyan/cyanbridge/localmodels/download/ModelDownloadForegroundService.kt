@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.localmodels.download
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -10,7 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
+import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
 import com.fersaiyan.cyanbridge.localmodels.engine.NpuCatalogVariants
 import kotlinx.coroutines.CancellationException
@@ -235,7 +236,7 @@ class ModelDownloadForegroundService : Service() {
         val tapIntent = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, LocalModelsConfigureActivity::class.java).apply {
+            AppRoute.LOCAL_MODELS.intent(this).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,

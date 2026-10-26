@@ -1,11 +1,12 @@
 package com.fersaiyan.cyanbridge.ai.questions
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Intent
 import android.util.Log
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
-import com.fersaiyan.cyanbridge.ai.live.GeminiLiveActivity
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveDestination
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveForegroundService
 import com.fersaiyan.cyanbridge.ai.live.GeminiLivePermissionGateActivity
 import com.fersaiyan.cyanbridge.ai.router.MediaInferenceRoutingPolicy
@@ -96,13 +97,13 @@ internal class GeminiLiveQuestions(
                 // Fallback to legacy activity path
                 try {
                     launchContext.startActivity(
-                        Intent(launchContext, GeminiLiveActivity::class.java)
-                            .putExtra(GeminiLiveActivity.EXTRA_AUTO_START, true)
-                            .putExtra(GeminiLiveActivity.EXTRA_INITIAL_PROMPT, prompt)
+                        AppRoute.GEMINI_LIVE.intent(launchContext)
+                            .putExtra(GeminiLiveDestination.EXTRA_AUTO_START, true)
+                            .putExtra(GeminiLiveDestination.EXTRA_INITIAL_PROMPT, prompt)
                             .apply {
                                 if (screen == null) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 imagePath?.takeIf { it.isNotBlank() }?.let {
-                                    putExtra(GeminiLiveActivity.EXTRA_INITIAL_IMAGE_PATH, it)
+                                    putExtra(GeminiLiveDestination.EXTRA_INITIAL_IMAGE_PATH, it)
                                 }
                             },
                     )

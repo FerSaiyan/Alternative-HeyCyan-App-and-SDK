@@ -25,11 +25,11 @@ import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
+import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionDestination
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsActivity
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsDestination
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionVerifier
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
@@ -322,11 +322,11 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
 
     override fun openSubscription() {
         val target = if (ProSubscriptionPrefs.isActiveLocally(this)) {
-            ProSubscriptionSettingsActivity::class.java
+            AppRoute.PRO_SUBSCRIPTION_SETTINGS
         } else {
-            ProSubscriptionActivity::class.java
+            AppRoute.PRO_SUBSCRIPTION
         }
-        startActivity(Intent(this, target))
+        startActivity(target.intent(this))
     }
 
     override fun setMemoryMode(mode: MemoryPrivacyMode) {
@@ -365,7 +365,7 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     }
 
     override fun openLocalModels() {
-        startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
+        startActivity(AppRoute.LOCAL_MODELS.intent(this))
     }
 
     override fun openTaskerIntegrations() {

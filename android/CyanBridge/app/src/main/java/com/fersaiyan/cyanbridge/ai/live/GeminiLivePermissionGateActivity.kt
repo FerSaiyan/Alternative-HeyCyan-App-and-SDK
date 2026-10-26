@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ai.live
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -56,10 +57,10 @@ class GeminiLivePermissionGateActivity : AppCompatActivity() {
                 initialPrompt = initialPrompt,
                 useRelay = intent.getBooleanExtra(EXTRA_USE_RELAY, false),
             )
-            GeminiLiveRoute.VISIBLE_PREVIEW -> startActivity(Intent(this, GeminiLiveActivity::class.java).apply {
-                putExtra(GeminiLiveActivity.EXTRA_AUTO_START, true)
-                initialImage?.let { putExtra(GeminiLiveActivity.EXTRA_INITIAL_IMAGE_PATH, it) }
-                initialPrompt?.let { putExtra(GeminiLiveActivity.EXTRA_INITIAL_PROMPT, it) }
+            GeminiLiveRoute.VISIBLE_PREVIEW -> startActivity(AppRoute.GEMINI_LIVE.intent(this).apply {
+                putExtra(GeminiLiveDestination.EXTRA_AUTO_START, true)
+                initialImage?.let { putExtra(GeminiLiveDestination.EXTRA_INITIAL_IMAGE_PATH, it) }
+                initialPrompt?.let { putExtra(GeminiLiveDestination.EXTRA_INITIAL_PROMPT, it) }
             })
         }
         finish()

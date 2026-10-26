@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ota
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -9,7 +10,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.BuildConfig
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionDestination
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.glasses.GlassesDeviceInfoReader
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
@@ -742,9 +743,9 @@ internal class OtaCoordinator(
                         .setNegativeButton("Not now", null)
                         .setPositiveButton(copy.actionLabel) { _, _ ->
                             activity.startActivity(
-                                Intent(activity, ProSubscriptionActivity::class.java).apply {
-                                    putExtra(ProSubscriptionActivity.EXTRA_INITIAL_PLAN, "standard")
-                                    putExtra(ProSubscriptionActivity.EXTRA_CHANGE_PLAN, true)
+                                AppRoute.PRO_SUBSCRIPTION.intent(activity).apply {
+                                    putExtra(ProSubscriptionDestination.EXTRA_INITIAL_PLAN, "standard")
+                                    putExtra(ProSubscriptionDestination.EXTRA_CHANGE_PLAN, true)
                                 },
                             )
                         }

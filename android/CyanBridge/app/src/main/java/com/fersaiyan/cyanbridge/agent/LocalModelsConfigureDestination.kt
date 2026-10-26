@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.agent
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -8,9 +9,8 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,14 +28,11 @@ import com.fersaiyan.cyanbridge.shared.localmodels.PickModelFile
 import com.fersaiyan.cyanbridge.shared.localmodels.ReportSettingsSaved
 import com.fersaiyan.cyanbridge.shared.localmodels.RequestStudioPermissions
 import com.fersaiyan.cyanbridge.shared.ui.localmodels.LocalModelsConfigureScreen
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.collectScreenEffects
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.Dispatchers
 
 /** Hosts the shared local models screen; [LocalModelsConfigureViewModel] owns its state and actions. */
-class LocalModelsConfigureActivity : AppCompatActivity() {
+class LocalModelsConfigureDestination : NavScreen() {
     private val viewModel by viewModels<LocalModelsConfigureViewModel> {
         viewModelFactory { initializer { LocalModelsConfigureViewModel(AndroidLocalModelsPlatform(applicationContext), Dispatchers.IO) } }
     }
@@ -50,21 +47,17 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
         collectScreenEffects(viewModel.effectFlow) { effect ->
             when (effect) {
                 PickModelFile -> importModelLauncher.launch(arrayOf("application/octet-stream", "*/*"))
-                ReportSettingsSaved -> setResult(RESULT_OK)
+                ReportSettingsSaved -> Unit // Nothing reads a result now that this is a screen.
                 is OpenModelTest -> startActivity(
                     AppRoute.LOCAL_MODEL_TEST.intent(this).putExtra(LocalModelTestDestination.EXTRA_MODEL_ID, effect.modelId),
                 )
                 is OpenModelSource -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(effect.url)))
-                RequestStudioPermissions -> PluginVoicePermissions.ensure(this) { viewModel.saveStudioBridge() }
+                RequestStudioPermissions -> PluginVoicePermissions.ensure(activity) { viewModel.saveStudioBridge() }
             }
         }
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
             val state by viewModel.state.collectAsState()
-            CyanBridgeTheme(appearance) {
-                LocalModelsConfigureScreen(state = state, onAction = viewModel::handle)
-            }
+            LocalModelsConfigureScreen(state = state, onAction = viewModel::handle)
         }
         onBackPressedDispatcher.addCallback(
             this,

@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.agent
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
@@ -28,11 +29,12 @@ class WebSubscriptionCallbackActivity : AppCompatActivity() {
     }
 
     private fun finishCallback(result: CheckoutReturn) {
-        val destination = if (result.success) ProSubscriptionSettingsActivity::class.java else ProSubscriptionActivity::class.java
-        startActivity(Intent(this, destination).apply {
-            putExtra(ProSubscriptionActivity.EXTRA_CALLBACK_MESSAGE, result.message)
-            putExtra(ProSubscriptionActivity.EXTRA_FROM_WEB_CALLBACK, true)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val destination = if (result.success) AppRoute.PRO_SUBSCRIPTION_SETTINGS else AppRoute.PRO_SUBSCRIPTION
+        // NEW_TASK: the browser may have opened this link in its own task; the screen opens in the app's.
+        startActivity(destination.intent(this).apply {
+            putExtra(ProSubscriptionDestination.EXTRA_CALLBACK_MESSAGE, result.message)
+            putExtra(ProSubscriptionDestination.EXTRA_FROM_WEB_CALLBACK, true)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         })
         finish()
     }

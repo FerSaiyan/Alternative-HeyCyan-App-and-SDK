@@ -58,6 +58,8 @@ abstract class NavScreen : ContextWrapper(null), LifecycleOwner, ViewModelStoreO
     private var attached = false
     private var finishing = false
     private var pendingRestore: Bundle? = null
+    private var transitioning = false
+    private var pendingTarget: Lifecycle.State? = null
     private var screenContent: (@Composable () -> Unit)? by mutableStateOf(null)
     private var contentView: View? = null
 
@@ -171,8 +173,27 @@ abstract class NavScreen : ContextWrapper(null), LifecycleOwner, ViewModelStoreO
     internal fun saveState(): Bundle = Bundle().also(::onSaveInstanceState)
 
     internal fun moveTo(target: Lifecycle.State) {
-        while (registry.currentState < target && registry.currentState != Lifecycle.State.DESTROYED) stepUp()
-        while (registry.currentState > target) stepDown()
+        if (transitioning) {
+            // Called from inside a callback (finish() in onCreate, a start from onResume…): the
+            // current step completes first, as with an Activity. Destroying always wins.
+            if (pendingTarget != Lifecycle.State.DESTROYED) pendingTarget = target
+            return
+        }
+        transitioning = true
+        try {
+            var goal = target
+            while (true) {
+                while (registry.currentState < goal && registry.currentState != Lifecycle.State.DESTROYED) {
+                    stepUp()
+                    if (pendingTarget != null) break
+                }
+                while (pendingTarget == null && registry.currentState > goal) stepDown()
+                goal = pendingTarget ?: break
+                pendingTarget = null
+            }
+        } finally {
+            transitioning = false
+        }
     }
 
     internal val currentState: Lifecycle.State get() = registry.currentState
