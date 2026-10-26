@@ -21,6 +21,9 @@ import java.nio.ByteOrder
 import java.util.concurrent.LinkedBlockingQueue
 import kotlin.coroutines.coroutineContext
 
+/** No speech started, and Android was feeding the recorder silence instead of the microphone. */
+class MicrophoneSilencedException : IllegalStateException("The microphone was silenced by Android")
+
 /**
  * Owns only PCM capture. The caller owns the [AudioSessionRequest.VoiceCapture] session (so Gemini
  * Live and voice plugins pause their microphones while the question is recorded and an ambient
@@ -69,7 +72,11 @@ class AudioQuestionRecorder(private val context: Context) {
                         )
                         when (decision) {
                             QuestionEndpoint.Decision.CONTINUE -> Unit
-                            QuestionEndpoint.Decision.NO_SPEECH -> return@withContext null
+                            QuestionEndpoint.Decision.NO_SPEECH -> {
+                                // Android fed silence instead of the microphone: nobody could be heard.
+                                if (active.silenced) throw MicrophoneSilencedException()
+                                return@withContext null
+                            }
                             QuestionEndpoint.Decision.LIMIT_REACHED -> error("Question exceeded the two-minute recording limit; please ask again")
                             QuestionEndpoint.Decision.COMPLETE -> break
                         }
@@ -116,6 +123,9 @@ class AudioQuestionRecorder(private val context: Context) {
     private interface SampleSource {
         val label: String
 
+        /** Android is feeding silence instead of the microphone (see [PcmRecorder.isSilenced]). */
+        val silenced: Boolean get() = false
+
         /** Fills [samples] with what is available; 0 when nothing is yet. */
         fun read(samples: ShortArray): Int
 
@@ -124,6 +134,8 @@ class AudioQuestionRecorder(private val context: Context) {
 
     private class RecorderSource(private val recorder: PcmRecorder) : SampleSource {
         override val label: String get() = "${recorder.routedDevice?.productName} id=${recorder.routedDevice?.id}"
+
+        override val silenced: Boolean get() = recorder.isSilenced
 
         override fun read(samples: ShortArray): Int = recorder.read(samples, 0, samples.size, blocking = false)
 

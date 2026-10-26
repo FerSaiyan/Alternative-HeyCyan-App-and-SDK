@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.os.Build
 import java.io.Closeable
 
 /**
@@ -27,6 +28,14 @@ class PcmRecorder private constructor(
     private var closed = false
 
     val routedDevice: AudioDeviceInfo? get() = runCatching { record.routedDevice }.getOrNull()
+
+    /**
+     * True while Android feeds this recorder silence instead of the microphone, for example when the
+     * app is in the background without a foreground service that holds the microphone (Android 10+).
+     */
+    val isSilenced: Boolean
+        get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !closed &&
+            runCatching { record.activeRecordingConfiguration?.isClientSilenced == true }.getOrDefault(false)
 
     val isRecording: Boolean
         get() = !closed && runCatching { record.recordingState == AudioRecord.RECORDSTATE_RECORDING }.getOrDefault(false)

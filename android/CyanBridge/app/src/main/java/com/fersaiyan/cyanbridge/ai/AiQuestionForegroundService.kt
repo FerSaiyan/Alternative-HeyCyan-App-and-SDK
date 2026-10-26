@@ -26,19 +26,31 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Keeps an already-started glasses voice or image question alive while MainActivity is stopped.
  * It also opportunistically wakes the selected local model at the beginning of a local question so
  * expensive model initialization can overlap the listening/capture phase instead of delaying the
  * answer after the user's input is already complete.
+ *
+ * The `microphone` type lets the question record while the app is not visible, but Android grants
+ * it only to a service started while the app has a visible activity (the "while-in-use" rule). A
+ * question started from the background (a glasses button with no screen) gets refused: Android 12+
+ * may refuse to start the service at all, and Android 14+ refuses the `microphone` type, in which
+ * case the service runs with its other types so it does not crash for never entering the
+ * foreground. [microphoneAccess] reports which happened.
  */
 class AiQuestionForegroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var idleStopJob: Job? = null
     private var modelPreloadJob: Job? = null
     private lateinit var wakeLock: PowerManager.WakeLock
+    private var foreground = false
 
     override fun onCreate() {
         super.onCreate()
@@ -64,7 +76,7 @@ class AiQuestionForegroundService : Service() {
         }
 
         val status = intent.getStringExtra(EXTRA_STATUS).orEmpty().ifBlank { "Processing glasses question" }
-        startForegroundSafely(status, isQueryActive = true)
+        startForegroundSafely(status)
         if (wakeLock.isHeld) wakeLock.release()
         wakeLock.acquire(MAX_WORK_DURATION_MS)
         preloadSelectedLocalModelIfUseful()
@@ -79,6 +91,8 @@ class AiQuestionForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        // A question that already asked for the next service keeps waiting for it.
+        microphone.update { if (it == MicrophoneAccess.STARTING) it else MicrophoneAccess.NOT_STARTED }
         idleStopJob?.cancel()
         modelPreloadJob?.cancel()
         if (wakeLock.isHeld) wakeLock.release()
@@ -124,7 +138,7 @@ class AiQuestionForegroundService : Service() {
         }
     }
 
-    private fun startForegroundSafely(status: String, isQueryActive: Boolean) {
+    private fun startForegroundSafely(status: String) {
         val openApp = PendingIntent.getActivity(
             this,
             0,
@@ -140,20 +154,32 @@ class AiQuestionForegroundService : Service() {
             .setOnlyAlertOnce(true)
             .setOngoing(true)
             .build()
-        runCatching {
-            ServiceCompat.startForeground(
-                this,
-                NOTIFICATION_ID,
-                notification,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
-                        if (isQueryActive) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
-                } else {
-                    0
-                },
-            )
-        }.onFailure { Log.e(TAG, "Unable to start AI question foreground service", it) }
+        fun start(types: Int) = runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, types) }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            if (start(0).onFailure { Log.e(TAG, "Unable to start AI question foreground service", it) }.isSuccess) foreground = true
+            publish(if (foreground) MicrophoneAccess.GRANTED else MicrophoneAccess.REFUSED)
+            return
+        }
+        val withoutMicrophone = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        val withMicrophone = start(withoutMicrophone or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        when {
+            withMicrophone.isSuccess -> {
+                foreground = true
+                publish(MicrophoneAccess.GRANTED)
+            }
+            // Already in the foreground (a second question step): it keeps the types it has.
+            foreground -> {
+                Log.w(TAG, "AI question foreground service update refused; keeping the running one", withMicrophone.exceptionOrNull())
+                microphone.compareAndSet(MicrophoneAccess.STARTING, MicrophoneAccess.REFUSED)
+            }
+            else -> {
+                Log.w(TAG, "Microphone foreground service refused (app not visible); the question may not hear the phone microphone", withMicrophone.exceptionOrNull())
+                start(withoutMicrophone)
+                    .onSuccess { foreground = true }
+                    .onFailure { Log.e(TAG, "Unable to start AI question foreground service", it) }
+                publish(MicrophoneAccess.REFUSED)
+            }
+        }
     }
 
     private fun stopQuestionWork() {
@@ -173,16 +199,55 @@ class AiQuestionForegroundService : Service() {
         private const val ACTION_STOP = "com.fersaiyan.cyanbridge.action.AI_QUESTION_STOP"
         private const val EXTRA_STATUS = "status"
 
+        private val microphone = MutableStateFlow(MicrophoneAccess.NOT_STARTED)
+
+        private fun publish(access: MicrophoneAccess) {
+            microphone.value = access
+        }
+
         fun start(context: Context, status: String) {
             val intent = Intent(context, AiQuestionForegroundService::class.java)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_STATUS, status)
+            // A service that already holds the microphone keeps it; otherwise onStartCommand reports again.
+            microphone.update { if (it == MicrophoneAccess.GRANTED) it else MicrophoneAccess.STARTING }
             runCatching { ContextCompat.startForegroundService(context, intent) }
-                .onFailure { Log.w(TAG, "Unable to request AI question foreground service", it) }
+                .onFailure {
+                    // Android 12+: a background app may not start a foreground service at all.
+                    Log.w(TAG, "Unable to request AI question foreground service", it)
+                    microphone.compareAndSet(MicrophoneAccess.STARTING, MicrophoneAccess.REFUSED)
+                }
         }
 
         fun stop(context: Context) {
+            microphone.value = MicrophoneAccess.NOT_STARTED
             context.stopService(Intent(context, AiQuestionForegroundService::class.java))
         }
+
+        /**
+         * Whether the question's foreground service holds the microphone, waiting up to [timeoutMs]
+         * for a service that is still starting. [MicrophoneAccess.NOT_STARTED] when no question
+         * asked for it (for example an image follow-up after the answer ended the service).
+         */
+        suspend fun awaitMicrophoneAccess(timeoutMs: Long = MICROPHONE_WAIT_MS): MicrophoneAccess =
+            withTimeoutOrNull(timeoutMs) { microphone.first { it != MicrophoneAccess.STARTING } }
+                ?: MicrophoneAccess.STARTING
+
+        private const val MICROPHONE_WAIT_MS = 1_000L
     }
+}
+
+/** What the question's foreground service got from Android. */
+enum class MicrophoneAccess {
+    /** No question asked for the service (or it stopped). */
+    NOT_STARTED,
+
+    /** Requested; the service has not reported yet. */
+    STARTING,
+
+    /** Running with the `microphone` type (before Android 10: running). */
+    GRANTED,
+
+    /** Not started, or started without the `microphone` type: the app was not visible. */
+    REFUSED,
 }

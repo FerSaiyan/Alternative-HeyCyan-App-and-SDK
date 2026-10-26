@@ -3,7 +3,10 @@ package com.fersaiyan.cyanbridge.ai.questions
 import android.content.Context
 import android.media.AudioManager
 import android.util.Log
+import com.fersaiyan.cyanbridge.ai.AiQuestionForegroundService
+import com.fersaiyan.cyanbridge.ai.MicrophoneAccess
 import com.fersaiyan.cyanbridge.ai.image.AudioQuestionRecorder
+import com.fersaiyan.cyanbridge.ai.image.MicrophoneSilencedException
 import com.fersaiyan.cyanbridge.ai.image.GlassesQuestionTestHooks
 import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
 import com.fersaiyan.cyanbridge.ai.speaker.VoiceProfile
@@ -97,7 +100,17 @@ internal class QuestionMicrophone(
                     speakCue(voiceOnly)
                     route
                 }
-                audioFile = AudioQuestionRecorder(appContext).record(session, timeoutMs, route.inputDevice)
+                // The question's foreground service is normally up by now; a phone-microphone
+                // recording needs it while no screen of the app is visible.
+                val foreground = AiQuestionForegroundService.awaitMicrophoneAccess()
+                Log.i("ImageQuestionAudio", "Question foreground microphone=$foreground")
+                audioFile = try {
+                    AudioQuestionRecorder(appContext).record(session, timeoutMs, route.inputDevice)
+                } catch (silenced: MicrophoneSilencedException) {
+                    Log.w("ImageQuestionAudio", "Question recording silenced by Android foreground=$foreground")
+                    // Without a question service (an image follow-up after the answer) it stays "not heard".
+                    if (foreground == MicrophoneAccess.NOT_STARTED) null else error(BACKGROUND_MICROPHONE_BLOCKED)
+                }
                 withContext(Dispatchers.Main) { playTone(android.media.ToneGenerator.TONE_PROP_BEEP2) }
             }
         } catch (cancelled: CancellationException) {
@@ -255,6 +268,8 @@ internal class QuestionMicrophone(
     private companion object {
         const val SESSION_OWNER = "AudioQuestionRecorder"
         const val MICROPHONE_BUSY = "The microphone is busy; please ask again"
+        const val BACKGROUND_MICROPHONE_BLOCKED =
+            "Android blocked the microphone while CyanBridge was in the background. Open CyanBridge and ask again."
 
         /**
          * The question's own timing: up to 3 s for the glasses' communication device (or a legacy SCO
