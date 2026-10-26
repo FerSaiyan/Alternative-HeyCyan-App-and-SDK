@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
+import com.fersaiyan.cyanbridge.ui.findFragmentActivity
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -755,8 +756,9 @@ class WalkingAidService : Service() {
         fun dismissFailure() { _lastFailure.value = null }
 
         fun start(context: Context) {
-            if (!hasNotificationPermission(context) && context is FragmentActivity) {
-                ensureNotificationPermission(context, "Walking Aid") { }
+            val activity = context.findFragmentActivity()
+            if (!hasNotificationPermission(context) && activity != null) {
+                ensureNotificationPermission(activity, "Walking Aid") { }
             }
             WalkingAidPreferences.setEnabled(context, true)
             val intent = Intent(context, WalkingAidService::class.java).setAction(ACTION_START)

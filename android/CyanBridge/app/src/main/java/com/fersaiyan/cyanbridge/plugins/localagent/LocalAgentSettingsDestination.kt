@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.localagent
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.BroadcastReceiver
 import android.content.Intent
@@ -57,20 +58,19 @@ import com.fersaiyan.cyanbridge.localagent.LocalAgentShizukuFallback
 import com.fersaiyan.cyanbridge.localagent.LocalAgentTaskHistory
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
-import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsActivity
+import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsDestination
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
 import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsDestination
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsActions {
+class LocalAgentSettingsDestination : NavScreen(), LocalAgentSettingsActions {
 
     private var uiState by mutableStateOf(LocalAgentSettingsUiState())
 
@@ -81,10 +81,10 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
         override fun onReceive(context: android.content.Context?, intent: Intent?) {
             if (intent?.action != LocalAgentIntents.ACTION_STATUS_CHANGED) return
             intent.getStringExtra(LocalAgentIntents.EXTRA_STATUS)?.let {
-                RuntimePrefs.setStatus(this@LocalAgentSettingsActivity, it)
+                RuntimePrefs.setStatus(this@LocalAgentSettingsDestination, it)
             }
             intent.getStringExtra(LocalAgentIntents.EXTRA_LAST_ERROR)?.let {
-                RuntimePrefs.setLastError(this@LocalAgentSettingsActivity, it)
+                RuntimePrefs.setLastError(this@LocalAgentSettingsDestination, it)
             }
             refreshUi()
         }
@@ -93,7 +93,7 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         refreshUi()
-        setThemedComposeScreen { LocalAgentSettingsScreen(state = uiState, actions = this) }
+        setContent { LocalAgentSettingsScreen(state = uiState, actions = this) }
     }
 
     override fun onStart() {
@@ -232,7 +232,7 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
     }
 
     override fun onOpenAutoDiarySettings() {
-        startActivity(Intent(this, AutoDiarySettingsActivity::class.java))
+        startActivity(AppRoute.AUTO_DIARY_SETTINGS.intent(this))
     }
 
     override fun onEditAgentPersonality() {
@@ -370,7 +370,7 @@ data class LocalAgentSettingsUiState(
     val lastError: String = "",
 )
 
-/** Every effect the Local Agent settings screen can trigger; implemented by [LocalAgentSettingsActivity]. */
+/** Every effect the Local Agent settings screen can trigger; implemented by [LocalAgentSettingsDestination]. */
 interface LocalAgentSettingsActions {
     fun onBack()
     fun onEnabledChange(enabled: Boolean)

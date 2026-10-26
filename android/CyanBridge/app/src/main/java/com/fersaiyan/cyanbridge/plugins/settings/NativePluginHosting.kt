@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.plugins.settings
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import android.content.Context
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -55,6 +57,19 @@ internal class AndroidNativePluginHost(private val context: Context) : NativePlu
  * [AndroidNativePluginHost], all bound to the application context.
  */
 internal inline fun <reified VM : ViewModel> ComponentActivity.nativePluginViewModel(
+    file: PrefsFile,
+    crossinline create: (store: PlatformPreferences, catalog: PlatformPreferences, host: NativePluginHost) -> VM,
+): Lazy<VM> = viewModels {
+    viewModelFactory {
+        initializer {
+            val context = applicationContext
+            create(file.store(context), PluginPrefs.Community.store(context), AndroidNativePluginHost(context))
+        }
+    }
+}
+
+/** The same for a screen of the single Activity. */
+internal inline fun <reified VM : ViewModel> NavScreen.nativePluginViewModel(
     file: PrefsFile,
     crossinline create: (store: PlatformPreferences, catalog: PlatformPreferences, host: NativePluginHost) -> VM,
 ): Lazy<VM> = viewModels {

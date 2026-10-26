@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.devices.meizumyvu
 
+import com.fersaiyan.cyanbridge.ui.findFragmentActivity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -86,8 +87,9 @@ class MeizuMyvuConnectionService : Service() {
         fun intent(context: Context): Intent = Intent(context, MeizuMyvuConnectionService::class.java)
 
         fun start(context: Context, macAddress: String, forceRestart: Boolean = false) {
-            if (!hasNotificationPermission(context) && context is FragmentActivity) {
-                ensureNotificationPermission(context, "MYVU connection") { }
+            val activity = context.findFragmentActivity()
+            if (!hasNotificationPermission(context) && activity != null) {
+                ensureNotificationPermission(activity, "MYVU connection") { }
             }
             val serviceIntent = intent(context)
                 .setAction(ACTION_CONNECT)

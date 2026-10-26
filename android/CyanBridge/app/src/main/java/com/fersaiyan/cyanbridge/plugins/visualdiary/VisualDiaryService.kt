@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.visualdiary
 
+import com.fersaiyan.cyanbridge.ui.findFragmentActivity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -193,8 +194,9 @@ class VisualDiaryService : Service() {
 
         fun captureNow(context: Context) {
             if (!hasNotificationPermission(context)) {
-                if (context is FragmentActivity) {
-                    ensureNotificationPermission(context, "Visual Diary") { captureNow(context) }
+                val activity = context.findFragmentActivity()
+                if (activity != null) {
+                    ensureNotificationPermission(activity, "Visual Diary") { captureNow(context) }
                 }
                 return
             }

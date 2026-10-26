@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.meetingsparknotes
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
@@ -27,9 +28,8 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.settings.MeetingSparkNotesSettingsViewModel
 import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs.MeetingSparkNotes
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 
-class MeetingSparkNotesSettingsActivity : AppCompatActivity() {
+class MeetingSparkNotesSettingsDestination : NavScreen() {
 
     internal val viewModel by nativePluginViewModel(MeetingSparkNotes) { store, catalog, host ->
         val app = applicationContext
@@ -38,7 +38,7 @@ class MeetingSparkNotesSettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setThemedComposeScreen { MeetingSparkNotesSettingsScreen(viewModel, onBack = ::finish) }
+        setContent { MeetingSparkNotesSettingsScreen(viewModel, onBack = ::finish) }
     }
 }
 

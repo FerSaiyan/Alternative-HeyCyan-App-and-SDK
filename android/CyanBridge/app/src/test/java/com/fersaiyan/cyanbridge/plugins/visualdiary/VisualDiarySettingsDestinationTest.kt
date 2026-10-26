@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.visualdiary
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.Manifest
 import android.app.Application
 import android.content.Context
@@ -8,7 +9,7 @@ import com.fersaiyan.cyanbridge.devices.DeviceCapabilityHelper
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.assertServiceIntent
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
-import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.settings.createSettingsScreen
 import com.fersaiyan.cyanbridge.plugins.settings.nextStartedServiceIntent
 import com.fersaiyan.cyanbridge.plugins.settings.nextStoppedServiceIntent
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
@@ -23,7 +24,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 
 @RunWith(RobolectricTestRunner::class)
-class VisualDiarySettingsActivityTest {
+class VisualDiarySettingsDestinationTest {
     private lateinit var context: Context
 
     @Before
@@ -38,7 +39,7 @@ class VisualDiarySettingsActivityTest {
         VisualDiaryPreferences.setLastError(context, "Glasses disconnected")
         VisualDiaryPreferences.setCustomPrompt(context, "Describe the room")
 
-        val state = createSettingsActivity<VisualDiarySettingsActivity>().state
+        val state = createSettingsScreen<VisualDiarySettingsDestination>(AppRoute.VISUAL_DIARY_SETTINGS).state
 
         assertEquals(
             VisualDiarySettingsState(
@@ -55,21 +56,21 @@ class VisualDiarySettingsActivityTest {
 
     @Test
     fun enableAndDisableGoThroughServiceAndRefreshState() {
-        val activity = createSettingsActivity<VisualDiarySettingsActivity>()
+        val screen = createSettingsScreen<VisualDiarySettingsDestination>(AppRoute.VISUAL_DIARY_SETTINGS)
         val hasCamera = DeviceCapabilityHelper.hasCamera(context)
 
-        activity.onEnabledChange(true)
+        screen.onEnabledChange(true)
 
-        assertEquals(hasCamera, activity.state.enabled)
+        assertEquals(hasCamera, screen.state.enabled)
         assertEquals(hasCamera, VisualDiaryPreferences.isEnabled(context))
         assertEquals(hasCamera, CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.VISUAL_DIARY))
 
-        activity.onEnabledChange(false)
+        screen.onEnabledChange(false)
 
-        assertFalse(activity.state.enabled)
+        assertFalse(screen.state.enabled)
         assertFalse(VisualDiaryPreferences.isEnabled(context))
         assertFalse(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.VISUAL_DIARY))
-        assertEquals(VisualDiaryService::class.java.name, activity.nextStoppedServiceIntent()?.component?.className)
+        assertEquals(VisualDiaryService::class.java.name, screen.nextStoppedServiceIntent()?.component?.className)
         assertEquals(
             VisualDiaryService.ACTION_TASKER_DISABLE,
             shadowOf(context as Application).broadcastIntents.last().action,
@@ -79,12 +80,12 @@ class VisualDiarySettingsActivityTest {
     @Test
     fun captureNowStartsTheCaptureService() {
         shadowOf(context as Application).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
-        val activity = createSettingsActivity<VisualDiarySettingsActivity>()
+        val screen = createSettingsScreen<VisualDiarySettingsDestination>(AppRoute.VISUAL_DIARY_SETTINGS)
 
-        activity.onCaptureSceneNow()
+        screen.onCaptureSceneNow()
 
         assertServiceIntent(
-            activity.nextStartedServiceIntent(),
+            screen.nextStartedServiceIntent(),
             VisualDiaryService::class.java,
             VisualDiaryService.ACTION_CAPTURE_NOW,
         )
@@ -92,14 +93,14 @@ class VisualDiarySettingsActivityTest {
 
     @Test
     fun customPromptPersistsAndBackFinishes() {
-        val activity = createSettingsActivity<VisualDiarySettingsActivity>()
+        val screen = createSettingsScreen<VisualDiarySettingsDestination>(AppRoute.VISUAL_DIARY_SETTINGS)
 
-        activity.onCustomPromptChange("Only objects")
+        screen.onCustomPromptChange("Only objects")
 
-        assertEquals("Only objects", activity.state.customPrompt)
+        assertEquals("Only objects", screen.state.customPrompt)
         assertEquals("Only objects", VisualDiaryPreferences.getCustomPrompt(context))
 
-        activity.onBack()
-        assertTrue(activity.isFinishing)
+        screen.onBack()
+        assertTrue(screen.isFinishing)
     }
 }

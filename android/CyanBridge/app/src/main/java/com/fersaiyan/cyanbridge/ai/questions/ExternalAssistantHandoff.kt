@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ai.questions
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.app.KeyguardManager
 import android.content.ClipData
 import android.content.Context
@@ -13,7 +14,7 @@ import androidx.core.content.FileProvider
 import com.fersaiyan.cyanbridge.ai.image.DefaultAssistantResolver
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationInspector
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationPolicy
-import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivity
+import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
 import com.fersaiyan.cyanbridge.ai.image.ExternalImageAutomationIntents
 import com.fersaiyan.cyanbridge.ai.image.ExternalImageAutomationStage
 import com.fersaiyan.cyanbridge.ai.image.ExternalImageAutomationStore
@@ -81,7 +82,7 @@ internal class ExternalAssistantHandoff(
             .setMessage(msg)
             .setNegativeButton("Not now", null)
             .setPositiveButton("Open setup") { _, _ ->
-                activity.startActivity(Intent(activity, ExternalAssistantAutomationSetupActivity::class.java))
+                activity.startActivity(AppRoute.EXTERNAL_ASSISTANT_SETUP.intent(activity))
             }
             .show()
 

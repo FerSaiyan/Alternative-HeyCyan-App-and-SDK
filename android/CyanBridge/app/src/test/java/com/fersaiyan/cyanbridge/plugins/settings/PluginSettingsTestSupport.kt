@@ -2,7 +2,10 @@ package com.fersaiyan.cyanbridge.plugins.settings
 
 import android.content.Context
 import android.content.Intent
-import androidx.appcompat.app.AppCompatActivity
+import androidx.test.core.app.ApplicationProvider
+import com.fersaiyan.cyanbridge.MainActivity
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.robolectric.Robolectric
@@ -17,13 +20,19 @@ fun Context.clearPreferenceFiles(vararg names: String) {
     }
 }
 
-/** Creates the Activity (onCreate only), without attaching or composing its window. */
-inline fun <reified A : AppCompatActivity> createSettingsActivity(): A =
-    Robolectric.buildActivity(A::class.java).create().get()
+/**
+ * Opens [route] in the single Activity (onCreate only, without attaching or composing its window)
+ * and returns its screen, as building the screen's own Activity used to.
+ */
+internal inline fun <reified S : NavScreen> createSettingsScreen(route: AppRoute): S {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val activity = Robolectric.buildActivity(MainActivity::class.java, route.intent(context)).create().get()
+    return activity.navigator.topScreen as S
+}
 
-fun AppCompatActivity.nextStartedServiceIntent(): Intent? = shadowOf(this).nextStartedService
+fun NavScreen.nextStartedServiceIntent(): Intent? = shadowOf(activity).nextStartedService
 
-fun AppCompatActivity.nextStoppedServiceIntent(): Intent? = shadowOf(this).nextStoppedService
+fun NavScreen.nextStoppedServiceIntent(): Intent? = shadowOf(activity).nextStoppedService
 
 fun assertServiceIntent(intent: Intent?, serviceClass: Class<*>, action: String?) {
     assertNotNull("expected a service intent for ${serviceClass.simpleName}", intent)

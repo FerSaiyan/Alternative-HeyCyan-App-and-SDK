@@ -1,10 +1,11 @@
 package com.fersaiyan.cyanbridge.plugins.meetingsparknotes
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
-import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.settings.createSettingsScreen
 import com.fersaiyan.cyanbridge.plugins.settings.nextStartedServiceIntent
 import com.fersaiyan.cyanbridge.plugins.settings.nextStoppedServiceIntent
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
@@ -20,7 +21,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
-class MeetingSparkNotesSettingsActivityTest {
+class MeetingSparkNotesSettingsDestinationTest {
     private lateinit var context: Context
 
     @Before
@@ -46,63 +47,63 @@ class MeetingSparkNotesSettingsActivityTest {
             maxHistory = 120,
             customPrompt = "Focus on decisions",
         )
-        assertEquals(expected, createSettingsActivity<MeetingSparkNotesSettingsActivity>().viewModel.state)
+        assertEquals(expected, createSettingsScreen<MeetingSparkNotesSettingsDestination>(AppRoute.MEETING_SPARK_NOTES_SETTINGS).viewModel.state)
     }
 
     @Test
     fun disablingPersistsBothFlagsAndStopsService() {
         MeetingSparkNotesPreferences.setEnabled(context, true)
         CommunityPluginPrefs.setNativePluginEnabled(context, NativePluginIds.MEETING_SPARK_NOTES, true)
-        val activity = createSettingsActivity<MeetingSparkNotesSettingsActivity>()
+        val screen = createSettingsScreen<MeetingSparkNotesSettingsDestination>(AppRoute.MEETING_SPARK_NOTES_SETTINGS)
 
-        activity.viewModel.onEnabledChange(false)
+        screen.viewModel.onEnabledChange(false)
 
-        assertFalse(activity.viewModel.state.enabled)
+        assertFalse(screen.viewModel.state.enabled)
         assertFalse(MeetingSparkNotesPreferences.isEnabled(context))
         assertFalse(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.MEETING_SPARK_NOTES))
-        val stopped = activity.nextStoppedServiceIntent()
+        val stopped = screen.nextStoppedServiceIntent()
         assertEquals(MeetingSparkNotesService::class.java.name, stopped?.component?.className)
         assertNull(stopped?.action)
-        assertNull(activity.nextStartedServiceIntent())
+        assertNull(screen.nextStartedServiceIntent())
     }
 
     @Test
     fun enablingPersistsBothFlagsWithoutTouchingService() {
-        val activity = createSettingsActivity<MeetingSparkNotesSettingsActivity>()
+        val screen = createSettingsScreen<MeetingSparkNotesSettingsDestination>(AppRoute.MEETING_SPARK_NOTES_SETTINGS)
 
-        activity.viewModel.onEnabledChange(true)
+        screen.viewModel.onEnabledChange(true)
 
-        assertTrue(activity.viewModel.state.enabled)
+        assertTrue(screen.viewModel.state.enabled)
         assertTrue(MeetingSparkNotesPreferences.isEnabled(context))
         assertTrue(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.MEETING_SPARK_NOTES))
-        assertNull(activity.nextStartedServiceIntent())
-        assertNull(activity.nextStoppedServiceIntent())
+        assertNull(screen.nextStartedServiceIntent())
+        assertNull(screen.nextStoppedServiceIntent())
     }
 
     @Test
     fun styleContentAndHistoryActionsPersist() {
-        val activity = createSettingsActivity<MeetingSparkNotesSettingsActivity>()
+        val screen = createSettingsScreen<MeetingSparkNotesSettingsDestination>(AppRoute.MEETING_SPARK_NOTES_SETTINGS)
 
-        activity.viewModel.onSummaryStyleSelected("action_focused")
-        activity.viewModel.onIncludeParticipantsChange(false)
-        activity.viewModel.onIncludeActionItemsChange(false)
-        activity.viewModel.onMaxHistoryChange(30)
+        screen.viewModel.onSummaryStyleSelected("action_focused")
+        screen.viewModel.onIncludeParticipantsChange(false)
+        screen.viewModel.onIncludeActionItemsChange(false)
+        screen.viewModel.onMaxHistoryChange(30)
 
         assertEquals("action_focused", MeetingSparkNotesPreferences.getSummaryStyle(context))
         assertFalse(MeetingSparkNotesPreferences.isIncludeParticipants(context))
         assertFalse(MeetingSparkNotesPreferences.isIncludeActionItems(context))
         assertEquals(30, MeetingSparkNotesPreferences.getMaxHistory(context))
-        assertEquals(createSettingsActivity<MeetingSparkNotesSettingsActivity>().viewModel.state, activity.viewModel.state)
+        assertEquals(createSettingsScreen<MeetingSparkNotesSettingsDestination>(AppRoute.MEETING_SPARK_NOTES_SETTINGS).viewModel.state, screen.viewModel.state)
     }
 
     @Test
     fun customPromptOverTheLimitIsIgnored() {
-        val activity = createSettingsActivity<MeetingSparkNotesSettingsActivity>()
+        val screen = createSettingsScreen<MeetingSparkNotesSettingsDestination>(AppRoute.MEETING_SPARK_NOTES_SETTINGS)
 
-        activity.viewModel.onCustomPromptChange("x".repeat(1500))
-        activity.viewModel.onCustomPromptChange("y".repeat(1501))
+        screen.viewModel.onCustomPromptChange("x".repeat(1500))
+        screen.viewModel.onCustomPromptChange("y".repeat(1501))
 
-        assertEquals("x".repeat(1500), activity.viewModel.state.customPrompt)
+        assertEquals("x".repeat(1500), screen.viewModel.state.customPrompt)
         assertEquals("x".repeat(1500), MeetingSparkNotesPreferences.getCustomPrompt(context))
     }
 }

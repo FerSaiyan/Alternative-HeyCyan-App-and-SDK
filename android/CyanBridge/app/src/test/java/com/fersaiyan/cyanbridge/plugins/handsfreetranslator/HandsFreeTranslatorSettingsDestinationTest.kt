@@ -1,11 +1,12 @@
 package com.fersaiyan.cyanbridge.plugins.handsfreetranslator
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.assertServiceIntent
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
-import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.settings.createSettingsScreen
 import com.fersaiyan.cyanbridge.plugins.settings.nextStartedServiceIntent
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.settings.HandsFreeTranslatorSettingsState
@@ -20,7 +21,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
-class HandsFreeTranslatorSettingsActivityTest {
+class HandsFreeTranslatorSettingsDestinationTest {
     private lateinit var context: Context
 
     @Before
@@ -48,65 +49,65 @@ class HandsFreeTranslatorSettingsActivityTest {
             maxHistory = 400,
             customPrompt = "Keep it formal",
         )
-        assertEquals(expected, createSettingsActivity<HandsFreeTranslatorSettingsActivity>().viewModel.state)
+        assertEquals(expected, createSettingsScreen<HandsFreeTranslatorSettingsDestination>(AppRoute.HANDS_FREE_TRANSLATOR_SETTINGS).viewModel.state)
     }
 
     @Test
     fun disablingPersistsBothFlagsAndSendsStopToService() {
         HandsFreeTranslatorPreferences.setEnabled(context, true)
         CommunityPluginPrefs.setNativePluginEnabled(context, NativePluginIds.HANDS_FREE_TRANSLATOR, true)
-        val activity = createSettingsActivity<HandsFreeTranslatorSettingsActivity>()
+        val screen = createSettingsScreen<HandsFreeTranslatorSettingsDestination>(AppRoute.HANDS_FREE_TRANSLATOR_SETTINGS)
 
-        activity.viewModel.onEnabledChange(false)
+        screen.viewModel.onEnabledChange(false)
 
-        assertFalse(activity.viewModel.state.enabled)
+        assertFalse(screen.viewModel.state.enabled)
         assertFalse(HandsFreeTranslatorPreferences.isEnabled(context))
         assertFalse(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.HANDS_FREE_TRANSLATOR))
         assertServiceIntent(
-            activity.nextStartedServiceIntent(),
+            screen.nextStartedServiceIntent(),
             HandsFreeTranslatorService::class.java,
             HandsFreeTranslatorService.ACTION_STOP,
         )
-        assertNull(activity.nextStartedServiceIntent())
+        assertNull(screen.nextStartedServiceIntent())
     }
 
     @Test
     fun enablingPersistsBothFlagsWithoutStartingService() {
-        val activity = createSettingsActivity<HandsFreeTranslatorSettingsActivity>()
+        val screen = createSettingsScreen<HandsFreeTranslatorSettingsDestination>(AppRoute.HANDS_FREE_TRANSLATOR_SETTINGS)
 
-        activity.viewModel.onEnabledChange(true)
+        screen.viewModel.onEnabledChange(true)
 
         assertTrue(HandsFreeTranslatorPreferences.isEnabled(context))
         assertTrue(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.HANDS_FREE_TRANSLATOR))
-        assertNull(activity.nextStartedServiceIntent())
+        assertNull(screen.nextStartedServiceIntent())
     }
 
     @Test
     fun languageOutputAndHistoryActionsPersist() {
-        val activity = createSettingsActivity<HandsFreeTranslatorSettingsActivity>()
+        val screen = createSettingsScreen<HandsFreeTranslatorSettingsDestination>(AppRoute.HANDS_FREE_TRANSLATOR_SETTINGS)
 
-        activity.viewModel.onAutoDetectChange(false)
-        activity.viewModel.onSourceLanguageSelected("it")
-        activity.viewModel.onTargetLanguageSelected("pt")
-        activity.viewModel.onSpeakTranslationChange(false)
-        activity.viewModel.onMaxHistoryChange(60)
+        screen.viewModel.onAutoDetectChange(false)
+        screen.viewModel.onSourceLanguageSelected("it")
+        screen.viewModel.onTargetLanguageSelected("pt")
+        screen.viewModel.onSpeakTranslationChange(false)
+        screen.viewModel.onMaxHistoryChange(60)
 
         assertFalse(HandsFreeTranslatorPreferences.isAutoDetect(context))
         assertEquals("it", HandsFreeTranslatorPreferences.getSourceLanguage(context))
         assertEquals("pt", HandsFreeTranslatorPreferences.getTargetLanguage(context))
         assertFalse(HandsFreeTranslatorPreferences.isSpeakTranslation(context))
         assertEquals(60, HandsFreeTranslatorPreferences.getMaxHistory(context))
-        assertEquals(createSettingsActivity<HandsFreeTranslatorSettingsActivity>().viewModel.state, activity.viewModel.state)
+        assertEquals(createSettingsScreen<HandsFreeTranslatorSettingsDestination>(AppRoute.HANDS_FREE_TRANSLATOR_SETTINGS).viewModel.state, screen.viewModel.state)
     }
 
     @Test
     fun customPromptOverTheLimitIsIgnored() {
-        val activity = createSettingsActivity<HandsFreeTranslatorSettingsActivity>()
+        val screen = createSettingsScreen<HandsFreeTranslatorSettingsDestination>(AppRoute.HANDS_FREE_TRANSLATOR_SETTINGS)
 
-        activity.viewModel.onCustomPromptChange("x".repeat(1000))
-        activity.viewModel.onCustomPromptChange("y".repeat(1001))
+        screen.viewModel.onCustomPromptChange("x".repeat(1000))
+        screen.viewModel.onCustomPromptChange("y".repeat(1001))
 
-        assertEquals("x".repeat(1000), activity.viewModel.state.customPrompt)
+        assertEquals("x".repeat(1000), screen.viewModel.state.customPrompt)
         assertEquals("x".repeat(1000), HandsFreeTranslatorPreferences.getCustomPrompt(context))
     }
 }

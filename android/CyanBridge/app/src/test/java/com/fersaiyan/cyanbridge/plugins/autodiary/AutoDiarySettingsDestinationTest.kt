@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.autodiary
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
@@ -8,7 +9,7 @@ import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyBulletsSettings
 import com.fersaiyan.cyanbridge.memoryvault.MemoryModeManager
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
-import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.settings.createSettingsScreen
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.get
@@ -24,7 +25,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 
 @RunWith(RobolectricTestRunner::class)
-class AutoDiarySettingsActivityTest {
+class AutoDiarySettingsDestinationTest {
     private lateinit var context: Context
 
     @Before
@@ -48,7 +49,7 @@ class AutoDiarySettingsActivityTest {
         MemoryModeManager.setScreenOcrRetentionDays(context, 9)
         DailyBulletsSettings.setCustomBulletPrompt(context, "One short bullet")
 
-        val state = createSettingsActivity<AutoDiarySettingsActivity>().state
+        val state = createSettingsScreen<AutoDiarySettingsDestination>(AppRoute.AUTO_DIARY_SETTINGS).state
 
         assertEquals(AutoDiarySettingsState.load(context), state)
         assertFalse(state.enabled)
@@ -63,19 +64,19 @@ class AutoDiarySettingsActivityTest {
 
     @Test
     fun enableAndDisableGoThroughServiceAndRefreshState() {
-        val activity = createSettingsActivity<AutoDiarySettingsActivity>()
+        val screen = createSettingsScreen<AutoDiarySettingsDestination>(AppRoute.AUTO_DIARY_SETTINGS)
         val app = context as Application
 
-        activity.onEnabledChange(true)
+        screen.onEnabledChange(true)
 
-        assertTrue(activity.state.enabled)
+        assertTrue(screen.state.enabled)
         assertTrue(AutoDiaryService.isEnabled(context))
         assertTrue(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.AUTO_DIARY))
         assertTrue(shadowOf(app).broadcastIntents.any { it.action == AutoDiaryService.ACTION_TASKER_ENABLE })
 
-        activity.onEnabledChange(false)
+        screen.onEnabledChange(false)
 
-        assertFalse(activity.state.enabled)
+        assertFalse(screen.state.enabled)
         assertFalse(AutoDiaryService.isEnabled(context))
         assertFalse(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.AUTO_DIARY))
         assertEquals(AutoDiaryService.ACTION_TASKER_DISABLE, shadowOf(app).broadcastIntents.last().action)
@@ -83,14 +84,14 @@ class AutoDiarySettingsActivityTest {
 
     @Test
     fun preferenceActionsPersist() {
-        val activity = createSettingsActivity<AutoDiarySettingsActivity>()
+        val screen = createSettingsScreen<AutoDiarySettingsDestination>(AppRoute.AUTO_DIARY_SETTINGS)
 
-        activity.onScreenOcrRetentionDaysChange(30)
-        activity.onDailyFactsReminderChange(true)
-        activity.onAutoSaveDailyFactsChange(false)
-        activity.onExtractUserFactCandidatesChange(false)
-        activity.onMaxTokensPerBulletChange(128)
-        activity.onBulletPromptChange("Custom prompt")
+        screen.onScreenOcrRetentionDaysChange(30)
+        screen.onDailyFactsReminderChange(true)
+        screen.onAutoSaveDailyFactsChange(false)
+        screen.onExtractUserFactCandidatesChange(false)
+        screen.onMaxTokensPerBulletChange(128)
+        screen.onBulletPromptChange("Custom prompt")
 
         assertEquals(30, MemoryModeManager.getScreenOcrRetentionDays(context))
         assertTrue(LocalAgentPrefs.isDailyFactsReminderEnabled(context))
@@ -98,17 +99,17 @@ class AutoDiarySettingsActivityTest {
         assertFalse(MemoryPrefs.ChatMemory.extractUserFactCandidates[context])
         assertEquals(128, DailyBulletsSettings.getMaxTokensPerBullet(context))
         assertEquals("Custom prompt", DailyBulletsSettings.getBulletPrompt(context))
-        assertEquals(AutoDiarySettingsState.load(context), activity.state)
+        assertEquals(AutoDiarySettingsState.load(context), screen.state)
     }
 
     @Test
     fun restoreDefaultPromptWritesAndShowsDefault() {
         DailyBulletsSettings.setCustomBulletPrompt(context, "Custom prompt")
-        val activity = createSettingsActivity<AutoDiarySettingsActivity>()
+        val screen = createSettingsScreen<AutoDiarySettingsDestination>(AppRoute.AUTO_DIARY_SETTINGS)
 
-        activity.onRestoreDefaultBulletPrompt()
+        screen.onRestoreDefaultBulletPrompt()
 
-        assertEquals(DailyBulletsSettings.DEFAULT_BULLET_PROMPT, activity.state.bulletPrompt)
+        assertEquals(DailyBulletsSettings.DEFAULT_BULLET_PROMPT, screen.state.bulletPrompt)
         assertEquals(DailyBulletsSettings.DEFAULT_BULLET_PROMPT, DailyBulletsSettings.getBulletPrompt(context))
     }
 }

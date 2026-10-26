@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.autodiary
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
 import android.content.Intent
@@ -55,7 +56,6 @@ import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsDestination
 import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryDestination
 import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesDestination
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -102,7 +102,7 @@ interface AutoDiarySettingsActions {
     fun onMaxTokensPerBulletChange(maxTokens: Int)
 }
 
-class AutoDiarySettingsActivity : AppCompatActivity(), AutoDiarySettingsActions {
+class AutoDiarySettingsDestination : NavScreen(), AutoDiarySettingsActions {
     private lateinit var uiState: MutableState<AutoDiarySettingsState>
 
     internal val state: AutoDiarySettingsState get() = uiState.value
@@ -111,7 +111,7 @@ class AutoDiarySettingsActivity : AppCompatActivity(), AutoDiarySettingsActions 
         super.onCreate(savedInstanceState)
         uiState = mutableStateOf(AutoDiarySettingsState.load(this))
         refreshUi()
-        setThemedComposeScreen {
+        setContent {
             AutoDiarySettingsScreen(state = uiState.value, actions = this)
         }
     }
@@ -150,7 +150,7 @@ class AutoDiarySettingsActivity : AppCompatActivity(), AutoDiarySettingsActions 
     override fun onScreenOcrRetentionDaysChange(days: Int) {
         update { copy(screenOcrRetentionDays = days) }
         MemoryModeManager.setScreenOcrRetentionDays(this, days)
-        lifecycleScope.launch(Dispatchers.Main) { MemoryVaultService.enforceScreenOcrRetention(this@AutoDiarySettingsActivity) }
+        lifecycleScope.launch(Dispatchers.Main) { MemoryVaultService.enforceScreenOcrRetention(this@AutoDiarySettingsDestination) }
     }
 
     override fun onDailyFactsReminderChange(enabled: Boolean) {

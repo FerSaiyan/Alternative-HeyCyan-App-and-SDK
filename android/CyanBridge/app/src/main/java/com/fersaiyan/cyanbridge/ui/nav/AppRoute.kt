@@ -8,6 +8,17 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalModelTestDestination
 import com.fersaiyan.cyanbridge.bridge.runtimes.evenhub.EvenHubRuntimeDestination
 import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationsDestination
+import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidSettingsDestination
+import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesSettingsDestination
+import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelaySettingsDestination
+import com.fersaiyan.cyanbridge.plugins.handsfreetranslator.HandsFreeTranslatorSettingsDestination
+import com.fersaiyan.cyanbridge.plugins.errandbrain.ErrandBrainSettingsDestination
+import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsDestination
+import com.fersaiyan.cyanbridge.plugins.localagent.LocalAgentSettingsDestination
+import com.fersaiyan.cyanbridge.plugins.autoaudio.AutoAudioSettingsDestination
+import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiarySettingsDestination
+import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidChatDestination
+import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.ui.MentraBroadcastDestination
 import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateDestination
@@ -43,6 +54,17 @@ enum class AppRoute(
     MENTRA_FIRMWARE_UPDATE(labelText = "Mentra Live firmware update"),
     MENTRA_BROADCAST(labelText = "Mentra Live broadcast"),
     EVENHUB_RUNTIME,
+    WALKING_AID_SETTINGS(labelText = "Walking Aid Settings"),
+    MEETING_SPARK_NOTES_SETTINGS(labelText = "Meeting Spark Notes Settings"),
+    LIVE_CAPTION_RELAY_SETTINGS(labelText = "Live Caption Relay Settings"),
+    HANDS_FREE_TRANSLATOR_SETTINGS(labelText = "Hands-Free Translator Settings"),
+    ERRAND_BRAIN_SETTINGS(labelText = "Errand Brain Settings"),
+    AUTO_DIARY_SETTINGS(labelText = "AutoDiary Settings"),
+    LOCAL_AGENT_SETTINGS(labelText = "Local Agent Settings"),
+    AUTO_AUDIO_SETTINGS(labelText = "Auto Audio Settings"),
+    VISUAL_DIARY_SETTINGS(labelText = "Visual Diary Settings"),
+    WALKING_AID_CHAT(labelText = "Walking Aid Chat", softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE),
+    EXTERNAL_ASSISTANT_SETUP(labelText = "Gemini / ChatGPT automation setup"),
     ;
 
     fun label(context: Context): String = labelText ?: context.getString(labelRes)
@@ -65,6 +87,17 @@ enum class AppRoute(
         MENTRA_FIRMWARE_UPDATE -> MentraFirmwareUpdateDestination()
         MENTRA_BROADCAST -> MentraBroadcastDestination()
         EVENHUB_RUNTIME -> EvenHubRuntimeDestination()
+        WALKING_AID_SETTINGS -> WalkingAidSettingsDestination()
+        MEETING_SPARK_NOTES_SETTINGS -> MeetingSparkNotesSettingsDestination()
+        LIVE_CAPTION_RELAY_SETTINGS -> LiveCaptionRelaySettingsDestination()
+        HANDS_FREE_TRANSLATOR_SETTINGS -> HandsFreeTranslatorSettingsDestination()
+        ERRAND_BRAIN_SETTINGS -> ErrandBrainSettingsDestination()
+        AUTO_DIARY_SETTINGS -> AutoDiarySettingsDestination()
+        LOCAL_AGENT_SETTINGS -> LocalAgentSettingsDestination()
+        AUTO_AUDIO_SETTINGS -> AutoAudioSettingsDestination()
+        VISUAL_DIARY_SETTINGS -> VisualDiarySettingsDestination()
+        WALKING_AID_CHAT -> WalkingAidChatDestination()
+        EXTERNAL_ASSISTANT_SETUP -> ExternalAssistantAutomationSetupDestination()
     }
 
     companion object {

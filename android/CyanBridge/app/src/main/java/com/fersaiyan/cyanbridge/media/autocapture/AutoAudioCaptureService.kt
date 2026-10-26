@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.media.autocapture
 
+import com.fersaiyan.cyanbridge.ui.findFragmentActivity
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -545,8 +546,9 @@ class AutoAudioCaptureService : Service() {
                 return
             }
             if (!hasBluetooth(context)) {
-                if (context is FragmentActivity) {
-                    ensureBluetoothRuntimePermission(context, "Auto Audio") {
+                val activity = context.findFragmentActivity()
+                if (activity != null) {
+                    ensureBluetoothRuntimePermission(activity, "Auto Audio") {
                         start(context)
                     }
                 } else {
@@ -556,8 +558,9 @@ class AutoAudioCaptureService : Service() {
             }
             if (!PluginVoicePermissions.hasRequiredPermissions(context)) {
                 AutoAudioCapturePrefs.setLastPauseReason(context, "missing_voice_permissions")
-                if (context is FragmentActivity) {
-                    PluginVoicePermissions.ensure(context) {
+                val activity = context.findFragmentActivity()
+                if (activity != null) {
+                    PluginVoicePermissions.ensure(activity) {
                         start(context)
                     }
                 } else {

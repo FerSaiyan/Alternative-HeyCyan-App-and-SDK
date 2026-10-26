@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.autoaudio
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.Manifest
 import android.app.Application
 import android.content.Context
@@ -9,7 +10,7 @@ import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.assertServiceIntent
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
-import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.settings.createSettingsScreen
 import com.fersaiyan.cyanbridge.plugins.settings.nextStartedServiceIntent
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.settings.AutoAudioSettingsState
@@ -25,7 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 
 @RunWith(RobolectricTestRunner::class)
-class AutoAudioSettingsActivityTest {
+class AutoAudioSettingsDestinationTest {
     private lateinit var context: Context
 
     @Before
@@ -42,32 +43,32 @@ class AutoAudioSettingsActivityTest {
         AutoAudioCapturePrefs.setLoopsPerSync(context, 40)
 
         val expected = AutoAudioSettingsState(enabled = true, visualNotes = true, speechExtend = false, loopsPerSync = 40)
-        assertEquals(expected, createSettingsActivity<AutoAudioSettingsActivity>().viewModel.state)
+        assertEquals(expected, createSettingsScreen<AutoAudioSettingsDestination>(AppRoute.AUTO_AUDIO_SETTINGS).viewModel.state)
     }
 
     @Test
     fun lastPauseReasonIsReadLiveFromPreferences() {
-        val activity = createSettingsActivity<AutoAudioSettingsActivity>()
-        assertEquals("", activity.viewModel.readLastPauseReason())
+        val screen = createSettingsScreen<AutoAudioSettingsDestination>(AppRoute.AUTO_AUDIO_SETTINGS)
+        assertEquals("", screen.viewModel.readLastPauseReason())
 
         AutoAudioCapturePrefs.setLastPauseReason(context, "meeting_active")
 
-        assertEquals("meeting_active", activity.viewModel.readLastPauseReason())
+        assertEquals("meeting_active", screen.viewModel.readLastPauseReason())
     }
 
     @Test
     fun disablingClearsCatalogFlagAndSendsStopToService() {
         AutoAudioCapturePrefs.setEnabled(context, true)
         CommunityPluginPrefs.setNativePluginEnabled(context, NativePluginIds.AUTO_AUDIO, true)
-        val activity = createSettingsActivity<AutoAudioSettingsActivity>()
+        val screen = createSettingsScreen<AutoAudioSettingsDestination>(AppRoute.AUTO_AUDIO_SETTINGS)
 
-        activity.onEnabledChange(false)
+        screen.onEnabledChange(false)
 
-        assertFalse(activity.viewModel.state.enabled)
+        assertFalse(screen.viewModel.state.enabled)
         assertFalse(AutoAudioCapturePrefs.isEnabled(context))
         assertFalse(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.AUTO_AUDIO))
         assertServiceIntent(
-            activity.nextStartedServiceIntent(),
+            screen.nextStartedServiceIntent(),
             AutoAudioCaptureService::class.java,
             AutoAudioCaptureService.ACTION_STOP,
         )
@@ -81,15 +82,15 @@ class AutoAudioSettingsActivityTest {
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,
         )
-        val activity = createSettingsActivity<AutoAudioSettingsActivity>()
+        val screen = createSettingsScreen<AutoAudioSettingsDestination>(AppRoute.AUTO_AUDIO_SETTINGS)
 
-        activity.onEnabledChange(true)
+        screen.onEnabledChange(true)
 
-        assertTrue(activity.viewModel.state.enabled)
+        assertTrue(screen.viewModel.state.enabled)
         assertTrue(AutoAudioCapturePrefs.isEnabled(context))
         assertTrue(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.AUTO_AUDIO))
         assertServiceIntent(
-            activity.nextStartedServiceIntent(),
+            screen.nextStartedServiceIntent(),
             AutoAudioCaptureService::class.java,
             AutoAudioCaptureService.ACTION_START,
         )
@@ -97,27 +98,27 @@ class AutoAudioSettingsActivityTest {
 
     @Test
     fun enablingWithoutPermissionsPersistsSwitchButWaitsForGrant() {
-        val activity = createSettingsActivity<AutoAudioSettingsActivity>()
+        val screen = createSettingsScreen<AutoAudioSettingsDestination>(AppRoute.AUTO_AUDIO_SETTINGS)
 
-        activity.onEnabledChange(true)
+        screen.onEnabledChange(true)
 
-        assertTrue(activity.viewModel.state.enabled)
+        assertTrue(screen.viewModel.state.enabled)
         assertTrue(AutoAudioCapturePrefs.isEnabled(context))
         assertFalse(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.AUTO_AUDIO))
-        assertNull(activity.nextStartedServiceIntent())
+        assertNull(screen.nextStartedServiceIntent())
     }
 
     @Test
     fun optionActionsPersist() {
-        val activity = createSettingsActivity<AutoAudioSettingsActivity>()
+        val screen = createSettingsScreen<AutoAudioSettingsDestination>(AppRoute.AUTO_AUDIO_SETTINGS)
 
-        activity.viewModel.onSpeechExtendChange(false)
-        activity.viewModel.onVisualNotesChange(true)
-        activity.viewModel.onLoopsPerSyncChange(7)
+        screen.viewModel.onSpeechExtendChange(false)
+        screen.viewModel.onVisualNotesChange(true)
+        screen.viewModel.onLoopsPerSyncChange(7)
 
         assertFalse(AutoAudioCapturePrefs.isSpeechExtendEnabled(context))
         assertTrue(AutoAudioCapturePrefs.isVisualNotesEnabled(context))
         assertEquals(7, AutoAudioCapturePrefs.getLoopsPerSync(context))
-        assertEquals(createSettingsActivity<AutoAudioSettingsActivity>().viewModel.state, activity.viewModel.state)
+        assertEquals(createSettingsScreen<AutoAudioSettingsDestination>(AppRoute.AUTO_AUDIO_SETTINGS).viewModel.state, screen.viewModel.state)
     }
 }

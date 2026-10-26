@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
 import android.content.Intent
 import androidx.appcompat.app.AlertDialog
@@ -8,7 +9,7 @@ import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationInspector
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationPolicy
-import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivity
+import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
 import com.fersaiyan.cyanbridge.ai.router.AssistantSetupDestination
 import com.fersaiyan.cyanbridge.ai.router.AssistantTestKind
 import com.fersaiyan.cyanbridge.ai.router.AssistantTestReadiness
@@ -44,7 +45,7 @@ internal class AssistantSetupGate(
                     .setMessage(reason)
                     .setNegativeButton("Not now", null)
                     .setPositiveButton("Open setup") { _, _ ->
-                        activity.startActivity(Intent(activity, ExternalAssistantAutomationSetupActivity::class.java))
+                        activity.startActivity(AppRoute.EXTERNAL_ASSISTANT_SETUP.intent(activity))
                     }
                     .show()
                 return true

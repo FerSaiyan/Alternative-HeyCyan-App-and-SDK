@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.visualdiary
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
@@ -38,7 +39,6 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.devices.DeviceCapabilityHelper
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 
 data class VisualDiarySettingsState(
     /** Refreshed from preferences on create, resume and every enable/disable. */
@@ -70,7 +70,7 @@ interface VisualDiarySettingsActions {
     fun onCustomPromptChange(prompt: String)
 }
 
-class VisualDiarySettingsActivity : AppCompatActivity(), VisualDiarySettingsActions {
+class VisualDiarySettingsDestination : NavScreen(), VisualDiarySettingsActions {
     private lateinit var uiState: MutableState<VisualDiarySettingsState>
 
     internal val state: VisualDiarySettingsState get() = uiState.value
@@ -79,7 +79,7 @@ class VisualDiarySettingsActivity : AppCompatActivity(), VisualDiarySettingsActi
         super.onCreate(savedInstanceState)
         uiState = mutableStateOf(VisualDiarySettingsState.load(this))
         refreshUi()
-        setThemedComposeScreen {
+        setContent {
             VisualDiarySettingsScreen(state = uiState.value, actions = this)
         }
     }

@@ -1,4 +1,5 @@
 package com.fersaiyan.cyanbridge.audio
+import com.fersaiyan.cyanbridge.ui.findFragmentActivity
 import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
 
 import android.app.Notification
@@ -368,8 +369,9 @@ class MeetingCaptureService : Service() {
 
         fun start(context: Context, timerDurationSec: Long?, deviceClass: String) {
             if (!PluginVoicePermissions.hasRequiredPermissions(context)) {
-                if (context is FragmentActivity) {
-                    PluginVoicePermissions.ensure(context) {
+                val activity = context.findFragmentActivity()
+                if (activity != null) {
+                    PluginVoicePermissions.ensure(activity) {
                         start(context, timerDurationSec, deviceClass)
                     }
                 } else {

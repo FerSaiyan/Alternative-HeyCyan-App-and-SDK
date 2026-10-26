@@ -16,24 +16,24 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivity
+import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
 import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
-import com.fersaiyan.cyanbridge.plugins.autoaudio.AutoAudioSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsActivity
-import com.fersaiyan.cyanbridge.plugins.errandbrain.ErrandBrainSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.handsfreetranslator.HandsFreeTranslatorSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelaySettingsActivity
-import com.fersaiyan.cyanbridge.plugins.localagent.LocalAgentSettingsActivity
-import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.autoaudio.AutoAudioSettingsDestination
+import com.fersaiyan.cyanbridge.plugins.autodiary.AutoDiarySettingsDestination
+import com.fersaiyan.cyanbridge.plugins.errandbrain.ErrandBrainSettingsDestination
+import com.fersaiyan.cyanbridge.plugins.handsfreetranslator.HandsFreeTranslatorSettingsDestination
+import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelaySettingsDestination
+import com.fersaiyan.cyanbridge.plugins.localagent.LocalAgentSettingsDestination
+import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesSettingsDestination
 import com.fersaiyan.cyanbridge.plugins.settings.AndroidNativePluginHost
-import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiarySettingsActivity
+import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiarySettingsDestination
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidService
-import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidSettingsDestination
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
@@ -229,10 +229,10 @@ class CommunityPluginsActivity : AppCompatActivity() {
 
     private fun openTaskerIntegrationSettings(pluginId: String) {
         val intent = when (pluginId) {
-            TASKER_AI_ID -> Intent(this, ExternalAssistantAutomationSetupActivity::class.java)
-            NativePluginIds.LOCAL_AGENT -> Intent(this, LocalAgentSettingsActivity::class.java)
-            NativePluginIds.AUTO_DIARY -> Intent(this, AutoDiarySettingsActivity::class.java)
-            NativePluginIds.VISUAL_DIARY -> Intent(this, VisualDiarySettingsActivity::class.java)
+            TASKER_AI_ID -> AppRoute.EXTERNAL_ASSISTANT_SETUP.intent(this)
+            NativePluginIds.LOCAL_AGENT -> AppRoute.LOCAL_AGENT_SETTINGS.intent(this)
+            NativePluginIds.AUTO_DIARY -> AppRoute.AUTO_DIARY_SETTINGS.intent(this)
+            NativePluginIds.VISUAL_DIARY -> AppRoute.VISUAL_DIARY_SETTINGS.intent(this)
             else -> null
         }
         if (intent != null) startActivity(intent)
@@ -240,12 +240,12 @@ class CommunityPluginsActivity : AppCompatActivity() {
 
     private fun openNativePluginSettings(pluginId: String) {
         val intent = when (pluginId) {
-            NativePluginIds.WALKING_AID -> Intent(this, WalkingAidSettingsActivity::class.java)
-            NativePluginIds.MEETING_SPARK_NOTES -> Intent(this, MeetingSparkNotesSettingsActivity::class.java)
-            NativePluginIds.LIVE_CAPTION_RELAY -> Intent(this, LiveCaptionRelaySettingsActivity::class.java)
-            NativePluginIds.HANDS_FREE_TRANSLATOR -> Intent(this, HandsFreeTranslatorSettingsActivity::class.java)
-            NativePluginIds.ERRAND_BRAIN -> Intent(this, ErrandBrainSettingsActivity::class.java)
-            NativePluginIds.AUTO_AUDIO -> Intent(this, AutoAudioSettingsActivity::class.java)
+            NativePluginIds.WALKING_AID -> AppRoute.WALKING_AID_SETTINGS.intent(this)
+            NativePluginIds.MEETING_SPARK_NOTES -> AppRoute.MEETING_SPARK_NOTES_SETTINGS.intent(this)
+            NativePluginIds.LIVE_CAPTION_RELAY -> AppRoute.LIVE_CAPTION_RELAY_SETTINGS.intent(this)
+            NativePluginIds.HANDS_FREE_TRANSLATOR -> AppRoute.HANDS_FREE_TRANSLATOR_SETTINGS.intent(this)
+            NativePluginIds.ERRAND_BRAIN -> AppRoute.ERRAND_BRAIN_SETTINGS.intent(this)
+            NativePluginIds.AUTO_AUDIO -> AppRoute.AUTO_AUDIO_SETTINGS.intent(this)
             else -> null
         }
         if (intent != null) startActivity(intent)

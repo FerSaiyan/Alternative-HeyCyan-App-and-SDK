@@ -1,11 +1,12 @@
 package com.fersaiyan.cyanbridge.plugins.errandbrain
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.assertServiceIntent
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
-import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.settings.createSettingsScreen
 import com.fersaiyan.cyanbridge.plugins.settings.nextStartedServiceIntent
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.settings.ErrandBrainSettingsState
@@ -20,7 +21,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
-class ErrandBrainSettingsActivityTest {
+class ErrandBrainSettingsDestinationTest {
     private lateinit var context: Context
 
     @Before
@@ -50,45 +51,45 @@ class ErrandBrainSettingsActivityTest {
             maxHistory = 600,
             customPrompt = "Group by store",
         )
-        assertEquals(expected, createSettingsActivity<ErrandBrainSettingsActivity>().viewModel.state)
+        assertEquals(expected, createSettingsScreen<ErrandBrainSettingsDestination>(AppRoute.ERRAND_BRAIN_SETTINGS).viewModel.state)
     }
 
     @Test
     fun disablingPersistsBothFlagsAndSendsStopToService() {
         ErrandBrainPreferences.setEnabled(context, true)
         CommunityPluginPrefs.setNativePluginEnabled(context, NativePluginIds.ERRAND_BRAIN, true)
-        val activity = createSettingsActivity<ErrandBrainSettingsActivity>()
+        val screen = createSettingsScreen<ErrandBrainSettingsDestination>(AppRoute.ERRAND_BRAIN_SETTINGS)
 
-        activity.viewModel.onEnabledChange(false)
+        screen.viewModel.onEnabledChange(false)
 
-        assertFalse(activity.viewModel.state.enabled)
+        assertFalse(screen.viewModel.state.enabled)
         assertFalse(ErrandBrainPreferences.isEnabled(context))
         assertFalse(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.ERRAND_BRAIN))
-        assertServiceIntent(activity.nextStartedServiceIntent(), ErrandBrainService::class.java, ErrandBrainService.ACTION_STOP)
-        assertNull(activity.nextStartedServiceIntent())
+        assertServiceIntent(screen.nextStartedServiceIntent(), ErrandBrainService::class.java, ErrandBrainService.ACTION_STOP)
+        assertNull(screen.nextStartedServiceIntent())
     }
 
     @Test
     fun enablingPersistsBothFlagsWithoutStartingService() {
-        val activity = createSettingsActivity<ErrandBrainSettingsActivity>()
+        val screen = createSettingsScreen<ErrandBrainSettingsDestination>(AppRoute.ERRAND_BRAIN_SETTINGS)
 
-        activity.viewModel.onEnabledChange(true)
+        screen.viewModel.onEnabledChange(true)
 
         assertTrue(ErrandBrainPreferences.isEnabled(context))
         assertTrue(CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.ERRAND_BRAIN))
-        assertNull(activity.nextStartedServiceIntent())
+        assertNull(screen.nextStartedServiceIntent())
     }
 
     @Test
     fun optionActionsPersist() {
-        val activity = createSettingsActivity<ErrandBrainSettingsActivity>()
+        val screen = createSettingsScreen<ErrandBrainSettingsDestination>(AppRoute.ERRAND_BRAIN_SETTINGS)
 
-        activity.viewModel.onAutoCreateTasksChange(false)
-        activity.viewModel.onVoiceCommandsChange(false)
-        activity.viewModel.onReminderEnabledChange(false)
-        activity.viewModel.onDefaultPrioritySelected("low")
-        activity.viewModel.onDefaultCategorySelected("finance")
-        activity.viewModel.onMaxHistoryChange(950)
+        screen.viewModel.onAutoCreateTasksChange(false)
+        screen.viewModel.onVoiceCommandsChange(false)
+        screen.viewModel.onReminderEnabledChange(false)
+        screen.viewModel.onDefaultPrioritySelected("low")
+        screen.viewModel.onDefaultCategorySelected("finance")
+        screen.viewModel.onMaxHistoryChange(950)
 
         assertFalse(ErrandBrainPreferences.isAutoCreateTasks(context))
         assertFalse(ErrandBrainPreferences.isVoiceCommands(context))
@@ -96,17 +97,17 @@ class ErrandBrainSettingsActivityTest {
         assertEquals("low", ErrandBrainPreferences.getDefaultPriority(context))
         assertEquals("finance", ErrandBrainPreferences.getDefaultCategory(context))
         assertEquals(950, ErrandBrainPreferences.getMaxHistory(context))
-        assertEquals(createSettingsActivity<ErrandBrainSettingsActivity>().viewModel.state, activity.viewModel.state)
+        assertEquals(createSettingsScreen<ErrandBrainSettingsDestination>(AppRoute.ERRAND_BRAIN_SETTINGS).viewModel.state, screen.viewModel.state)
     }
 
     @Test
     fun customPromptOverTheLimitIsIgnored() {
-        val activity = createSettingsActivity<ErrandBrainSettingsActivity>()
+        val screen = createSettingsScreen<ErrandBrainSettingsDestination>(AppRoute.ERRAND_BRAIN_SETTINGS)
 
-        activity.viewModel.onCustomPromptChange("x".repeat(1000))
-        activity.viewModel.onCustomPromptChange("y".repeat(1001))
+        screen.viewModel.onCustomPromptChange("x".repeat(1000))
+        screen.viewModel.onCustomPromptChange("y".repeat(1001))
 
-        assertEquals("x".repeat(1000), activity.viewModel.state.customPrompt)
+        assertEquals("x".repeat(1000), screen.viewModel.state.customPrompt)
         assertEquals("x".repeat(1000), ErrandBrainPreferences.getCustomPrompt(context))
     }
 }

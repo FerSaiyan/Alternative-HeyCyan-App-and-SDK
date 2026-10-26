@@ -31,7 +31,7 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionVerifier
-import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivity
+import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
@@ -378,7 +378,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
     }
 
     override fun openTaskerIntegrations() {
-        startActivity(Intent(this, ExternalAssistantAutomationSetupActivity::class.java))
+        startActivity(AppRoute.EXTERNAL_ASSISTANT_SETUP.intent(this))
     }
 
     override fun setDefaultImageQuestion(question: String) {

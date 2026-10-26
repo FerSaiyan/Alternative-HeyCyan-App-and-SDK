@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.autoaudio
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
@@ -38,15 +39,14 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.settings.AutoAudioSettingsViewModel
 import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs.AutoAudioCapture
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 
-class AutoAudioSettingsActivity : AppCompatActivity() {
+class AutoAudioSettingsDestination : NavScreen() {
 
     internal val viewModel by nativePluginViewModel(AutoAudioCapture, ::AutoAudioSettingsViewModel)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setThemedComposeScreen {
+        setContent {
             AutoAudioSettingsScreen(viewModel, onEnabledChange = ::onEnabledChange, onBack = ::finish)
         }
     }
@@ -55,7 +55,7 @@ class AutoAudioSettingsActivity : AppCompatActivity() {
     internal fun onEnabledChange(enabled: Boolean) {
         viewModel.onEnabledChange(enabled)
         if (!enabled) return
-        PluginVoicePermissions.ensure(this) {
+        PluginVoicePermissions.ensure(activity) {
             viewModel.setCatalogEnabled(true)
             AutoAudioCaptureService.start(this)
         }

@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.errandbrain
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
@@ -26,15 +27,14 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.plugins.settings.ErrandBrainSettingsViewModel
 import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs.ErrandBrain
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 
-class ErrandBrainSettingsActivity : AppCompatActivity() {
+class ErrandBrainSettingsDestination : NavScreen() {
 
     internal val viewModel by nativePluginViewModel(ErrandBrain, ::ErrandBrainSettingsViewModel)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setThemedComposeScreen { ErrandBrainSettingsScreen(viewModel, onBack = ::finish) }
+        setContent { ErrandBrainSettingsScreen(viewModel, onBack = ::finish) }
     }
 }
 

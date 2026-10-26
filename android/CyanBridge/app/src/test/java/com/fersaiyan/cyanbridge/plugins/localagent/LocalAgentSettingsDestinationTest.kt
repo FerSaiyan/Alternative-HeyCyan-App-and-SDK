@@ -1,10 +1,11 @@
 package com.fersaiyan.cyanbridge.plugins.localagent
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.plugins.settings.COMMUNITY_PLUGIN_PREFS
 import com.fersaiyan.cyanbridge.plugins.settings.clearPreferenceFiles
-import com.fersaiyan.cyanbridge.plugins.settings.createSettingsActivity
+import com.fersaiyan.cyanbridge.plugins.settings.createSettingsScreen
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -16,7 +17,7 @@ import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
 
 @RunWith(RobolectricTestRunner::class)
-class LocalAgentSettingsActivityTest {
+class LocalAgentSettingsDestinationTest {
     private lateinit var context: Context
 
     @Before
@@ -31,7 +32,7 @@ class LocalAgentSettingsActivityTest {
         RuntimePrefs.setRequireActionConfirmationEnabled(context, false)
         RuntimePrefs.setStatus(context, "Idle")
 
-        val state = createSettingsActivity<LocalAgentSettingsActivity>().state
+        val state = createSettingsScreen<LocalAgentSettingsDestination>(AppRoute.LOCAL_AGENT_SETTINGS).state
 
         assertEquals(LocalAgentPlugin.isEnabled(context), state.enabled)
         assertEquals(17, state.maxSteps)
@@ -41,12 +42,12 @@ class LocalAgentSettingsActivityTest {
 
     @Test
     fun preferenceActionsWriteAndRefreshState() {
-        val activity = createSettingsActivity<LocalAgentSettingsActivity>()
+        val screen = createSettingsScreen<LocalAgentSettingsDestination>(AppRoute.LOCAL_AGENT_SETTINGS)
 
-        activity.onMaxStepsChange(42)
-        activity.onRequireActionConfirmationChange(false)
-        activity.onAutoExecuteLowRiskChange(false)
-        activity.onWhatsAppReadAloudChange(true)
+        screen.onMaxStepsChange(42)
+        screen.onRequireActionConfirmationChange(false)
+        screen.onAutoExecuteLowRiskChange(false)
+        screen.onWhatsAppReadAloudChange(true)
 
         assertEquals(42, AutomationPrefs.getMaxSteps(context))
         assertFalse(AutomationPrefs.isRequireConfirmationEnabled(context))
@@ -54,7 +55,7 @@ class LocalAgentSettingsActivityTest {
         assertFalse(RuntimePrefs.isAutoExecuteLowRiskEnabled(context))
         assertTrue(RuntimePrefs.isWhatsAppNotificationReadAloudEnabled(context))
 
-        val state = activity.state
+        val state = screen.state
         assertEquals(42, state.maxSteps)
         assertFalse(state.requireActionConfirmation)
         assertFalse(state.autoExecuteLowRisk)

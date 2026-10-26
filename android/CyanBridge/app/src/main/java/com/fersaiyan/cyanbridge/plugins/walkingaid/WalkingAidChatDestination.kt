@@ -1,8 +1,9 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.os.Bundle
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
@@ -39,7 +40,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.initializer
@@ -55,13 +55,12 @@ import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidChatPlatform
 import com.fersaiyan.cyanbridge.shared.plugins.walkingaid.WalkingAidChatViewModel
 import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.store
-import com.fersaiyan.cyanbridge.ui.setThemedComposeContent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
-class WalkingAidChatActivity : AppCompatActivity() {
+class WalkingAidChatDestination : NavScreen() {
 
     private val viewModel by viewModels<WalkingAidChatViewModel> {
         viewModelFactory {
@@ -74,11 +73,9 @@ class WalkingAidChatActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val composeView = ComposeView(this).also(::setContentView)
-
         WalkingAidImageStore.load(this)
 
-        setThemedComposeContent(composeView) {
+        setContent {
             WalkingAidChatScreen(viewModel, onBack = ::finish)
         }
     }

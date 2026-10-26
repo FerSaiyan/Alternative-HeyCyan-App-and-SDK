@@ -1,13 +1,13 @@
 package com.fersaiyan.cyanbridge.ai.image
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
-import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -65,9 +65,6 @@ import com.fersaiyan.cyanbridge.shared.automation.IntegrationHealth
 import com.fersaiyan.cyanbridge.shared.automation.IntegrationState
 import com.fersaiyan.cyanbridge.ui.CommunityPluginsActivity
 import com.fersaiyan.cyanbridge.ui.collectScreenEffects
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import java.io.File
 
 /**
@@ -77,7 +74,7 @@ import java.io.File
  * screen is reachable from the glasses flow and from Settings, where it also exposes the shared
  * Tasker/AutoInput environment and the Tasker-dependent CyanBridge plugins.
  */
-class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
+class ExternalAssistantAutomationSetupDestination : NavScreen() {
     private val viewModel by viewModels<AssistantAutomationSetupViewModel> {
         viewModelFactory { initializer { AssistantAutomationSetupViewModel(AndroidAssistantAutomationPlatform(applicationContext)) } }
     }
@@ -98,7 +95,7 @@ class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
                     ?: error("The selected folder could not create the file")
             }
         }.onSuccess {
-            TaskerProfileGuidance.showSavedDialog(this, fileName, uri)
+            TaskerProfileGuidance.showSavedDialog(activity, fileName, uri)
         }.onFailure { error ->
             runCatching { contentResolver.delete(uri, null, null) }
             Toast.makeText(this, "Could not save the Tasker profile: ${error.message}", Toast.LENGTH_LONG).show()
@@ -113,24 +110,20 @@ class ExternalAssistantAutomationSetupActivity : AppCompatActivity() {
             if (effect is ImportTaskerProfile) importProfile(effect.assetName)
         }
         viewModel.refresh()
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
             val state by viewModel.state.collectAsState()
-            CyanBridgeTheme(appearance) {
-                ExternalAssistantAutomationSetupScreen(
-                    state = state,
-                    onBack = ::finish,
-                    onChooseDefaultAssistant = ::openDefaultAssistantSettings,
-                    onImportProfile = viewModel::importProfile,
-                    onVerifyProfile = viewModel::verifyProfile,
-                    onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                    onOpenPlugins = { startActivity(Intent(this, CommunityPluginsActivity::class.java)) },
-                    onWatchTutorial = { TaskerProfileGuidance.openTutorial(this) },
-                    onTestVoice = viewModel::testVoice,
-                    onRefresh = viewModel::refresh,
-                )
-            }
+            ExternalAssistantAutomationSetupScreen(
+                state = state,
+                onBack = ::finish,
+                onChooseDefaultAssistant = ::openDefaultAssistantSettings,
+                onImportProfile = viewModel::importProfile,
+                onVerifyProfile = viewModel::verifyProfile,
+                onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                onOpenPlugins = { startActivity(Intent(this, CommunityPluginsActivity::class.java)) },
+                onWatchTutorial = { TaskerProfileGuidance.openTutorial(this) },
+                onTestVoice = viewModel::testVoice,
+                onRefresh = viewModel::refresh,
+            )
         }
     }
 

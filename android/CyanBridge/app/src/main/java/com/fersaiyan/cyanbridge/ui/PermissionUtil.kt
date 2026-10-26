@@ -1,4 +1,5 @@
 package com.fersaiyan.cyanbridge.ui
+import android.content.ContextWrapper
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -177,4 +178,14 @@ fun ensureNotificationPermission(
             }
         }
     })
+}
+
+/**
+ * The Activity behind [this]: itself, or the one a screen of the single Activity wraps. Permission
+ * prompts need it; a plain application or service context has none.
+ */
+tailrec fun Context.findFragmentActivity(): FragmentActivity? = when (this) {
+    is FragmentActivity -> this
+    is ContextWrapper -> baseContext?.findFragmentActivity()
+    else -> null
 }

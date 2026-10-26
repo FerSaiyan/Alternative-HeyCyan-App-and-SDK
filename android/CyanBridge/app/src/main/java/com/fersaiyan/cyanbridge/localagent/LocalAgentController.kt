@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.localagent
 
+import com.fersaiyan.cyanbridge.ui.findFragmentActivity
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -25,8 +26,9 @@ object LocalAgentController {
             ?.let { return CommandResult(false, "Unlock and wake the phone before starting the Local Agent.", it.errorCode) }
 
         if (!hasNotificationPermission(context)) {
-            if (context is FragmentActivity) {
-                ensureNotificationPermission(context, "Local Agent") { start(context, goal) }
+            val activity = context.findFragmentActivity()
+            if (activity != null) {
+                ensureNotificationPermission(activity, "Local Agent") { start(context, goal) }
                 return CommandResult(true, "Notification permission is required before the Local Agent can start.")
             }
             return CommandResult(false, "Notification permission is required to start the Local Agent.", "missing_post_notifications")

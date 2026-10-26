@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -73,15 +74,14 @@ import com.fersaiyan.cyanbridge.ui.hasNotificationPermission
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import com.fersaiyan.cyanbridge.ui.requestBluetoothPermission
 import com.fersaiyan.cyanbridge.ui.requestWifiP2pPermission
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.XXPermissions
 
-class WalkingAidSettingsActivity : AppCompatActivity() {
+class WalkingAidSettingsDestination : NavScreen() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setThemedComposeScreen {
+        setContent {
             WalkingAidSettingsScreen(
                 onBack = ::finish,
                 onStartService = ::startWithPermissions,
@@ -106,7 +106,7 @@ class WalkingAidSettingsActivity : AppCompatActivity() {
         }
         if (!hasNotificationPermission(this)) {
             WalkingAidPreferences.setEnabled(this, false)
-            ensureNotificationPermission(this, "Walking Aid") { startWithPermissions() }
+            ensureNotificationPermission(activity, "Walking Aid") { startWithPermissions() }
             return
         }
         if (DeviceProfileStore.isMetaSelected(this)) {
@@ -136,16 +136,16 @@ class WalkingAidSettingsActivity : AppCompatActivity() {
                         if (all) startWithPermissions() else onDenied(permissions, false)
                     }
                     override fun onDenied(permissions: MutableList<String>, never: Boolean) {
-                        androidx.appcompat.app.AlertDialog.Builder(this@WalkingAidSettingsActivity)
+                        androidx.appcompat.app.AlertDialog.Builder(this@WalkingAidSettingsDestination)
                             .setTitle(R.string.walking_aid_permission_required)
                             .setMessage(R.string.walking_aid_permission_required_message)
                             .setPositiveButton(if (never) R.string.walking_aid_open_app_settings else R.string.walking_aid_try_again) { _, _ ->
-                                if (never) XXPermissions.startPermissionActivity(this@WalkingAidSettingsActivity, permissions)
+                                if (never) XXPermissions.startPermissionActivity(this@WalkingAidSettingsDestination, permissions)
                                 else requestTransportPermission(wifi)
                             }.setNegativeButton(android.R.string.cancel, null).show()
                     }
                 }
-                if (wifi) requestWifiP2pPermission(this, callback) else requestBluetoothPermission(this, callback)
+                if (wifi) requestWifiP2pPermission(activity, callback) else requestBluetoothPermission(activity, callback)
             }.show()
     }
 }
