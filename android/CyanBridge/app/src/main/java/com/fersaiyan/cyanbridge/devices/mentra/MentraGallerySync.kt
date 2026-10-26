@@ -198,7 +198,8 @@ class MentraGallerySync(
                 // Leave the phone side first, then stop the glasses AP (the MentraOS order).
                 http?.connectionPool?.evictAll()
                 link.close()
-                if (openedHotspot) {
+                // Without Bluetooth the glasses stop the idle hotspot themselves after ~120 s.
+                if (openedHotspot && manager.connected) {
                     runCatching { withTimeout(HOTSPOT_TIMEOUT_MS) { manager.setHotspot(false) } }
                         .onSuccess { Log.i(TAG, "Glasses hotspot turned off (${it.state})") }
                         .onFailure { Log.w(TAG, "Could not turn the glasses hotspot off: ${it.message}") }
