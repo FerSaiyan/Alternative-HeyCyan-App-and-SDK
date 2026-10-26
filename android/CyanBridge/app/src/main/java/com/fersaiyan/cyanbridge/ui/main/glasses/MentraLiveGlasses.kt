@@ -154,7 +154,8 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
             }
         }
 
-        override fun refreshAfterSelection() = renderConnectionStatus(manager.ready)
+        // Battery text only: renderConnectionStatus re-applies the gating, which calls this again.
+        override fun refreshAfterSelection() = context.connection.updateBatteryText(manager.batteryLevel())
     }
 
     override val deviceInfo = object : DeviceInfoReporting {
