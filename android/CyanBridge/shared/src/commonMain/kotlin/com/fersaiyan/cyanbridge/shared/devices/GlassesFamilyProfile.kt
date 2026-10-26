@@ -213,9 +213,9 @@ object GlassesFamilyProfiles {
     )
 
     /**
-     * Mentra Live over the Mentra Bluetooth SDK. Not declared because the SDK path is not wired
-     * here: live preview (the glasses push RTMP/SRT/WHIP to a server), gallery download (over
-     * the glasses' Wi-Fi hotspot) and firmware updates (the SDK's own OTA flow).
+     * Mentra Live over the Mentra Bluetooth SDK. Media sync downloads the glasses gallery over
+     * their Wi-Fi hotspot. Not declared because the SDK path is not wired here: live preview
+     * (the glasses push RTMP/SRT/WHIP to a server) and firmware updates (the SDK's own OTA flow).
      */
     val mentraLive = GlassesFamilyProfile(
         deviceClass = DeviceClass.MENTRA_LIVE,
@@ -226,6 +226,7 @@ object GlassesFamilyProfiles {
             GlassesCapability.AI_PHOTO_CAPTURE,
             GlassesCapability.VIDEO_RECORDING,
             GlassesCapability.MEDIA_COUNT,
+            GlassesCapability.MEDIA_SYNC,
             GlassesCapability.BUTTON_INPUT,
             GlassesCapability.BATTERY_STATUS,
             GlassesCapability.DEVICE_INFO,

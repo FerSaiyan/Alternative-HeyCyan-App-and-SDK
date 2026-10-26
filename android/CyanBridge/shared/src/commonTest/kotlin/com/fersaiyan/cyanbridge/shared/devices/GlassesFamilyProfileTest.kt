@@ -65,7 +65,10 @@ class GlassesFamilyProfileTest {
         assertEquals(setOf(DeviceClass.EYEVUE), classesWith(GlassesCapability.WEARING_DETECTION))
         assertEquals(setOf(DeviceClass.HEY_CYAN), classesWith(GlassesCapability.WIFI_ADB_DEBUG))
         assertEquals(
-            setOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MOYOUNG_W620),
+            setOf(
+                DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MOYOUNG_W620,
+                DeviceClass.MENTRA_LIVE,
+            ),
             classesWith(GlassesCapability.MEDIA_SYNC),
         )
     }
