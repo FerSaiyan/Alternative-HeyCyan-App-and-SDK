@@ -55,7 +55,7 @@ class ArchitectureGuardrailSourceTest {
         val UI_VENDOR_IMPORT_EXCEPTIONS = setOf(
             "ui/AutoPairManager.kt",
             "ui/BluetoothReceiver.kt",
-            "ui/CommunityPluginsActivity.kt",
+            "ui/CommunityPluginsDestination.kt",
             "ui/DeviceBindActivity.kt",
             "ui/MetaPairingActivity.kt",
             "ui/MyApplication.kt",
@@ -74,7 +74,7 @@ class ArchitectureGuardrailSourceTest {
             "src/main/java/com/fersaiyan/cyanbridge/ai/vision/ImageQuestionPreferences.kt",
             "src/main/java/com/fersaiyan/cyanbridge/privacy/LocalDataBackupManager.kt",
             "src/main/java/com/fersaiyan/cyanbridge/ui/OnboardingFeatureActivity.kt",
-            "src/main/java/com/fersaiyan/cyanbridge/ui/SettingsActivity.kt",
+            "src/main/java/com/fersaiyan/cyanbridge/ui/SettingsDestination.kt",
             "src/main/java/com/fersaiyan/cyanbridge/ui/WelcomeActivity.kt",
         )
     }

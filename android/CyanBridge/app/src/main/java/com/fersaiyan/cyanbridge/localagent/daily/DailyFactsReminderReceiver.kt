@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.localagent.daily
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -9,7 +10,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.ui.ChatThreadActivity
+import com.fersaiyan.cyanbridge.ui.ChatThreadDestination
 
 class DailyFactsReminderReceiver : BroadcastReceiver() {
 
@@ -21,11 +22,11 @@ class DailyFactsReminderReceiver : BroadcastReceiver() {
         if (date.isBlank() || count <= 0 || !NightlyEnrichmentPrefs.isReady(context, date)) return
         ensureChannel(context)
 
-        val openIntent = Intent(context, ChatThreadActivity::class.java)
-            .putExtra(ChatThreadActivity.EXTRA_CREATE_THREAD_TITLE, "Daily facts review")
-            .putExtra(ChatThreadActivity.EXTRA_DAILY_FACTS_REVIEW, true)
-            .putExtra(ChatThreadActivity.EXTRA_DAILY_FACTS_DATE, date)
-            .putExtra(ChatThreadActivity.EXTRA_DAILY_FACTS_LOOKBACK_DAYS, 1)
+        val openIntent = AppRoute.CHAT_THREAD.intent(context)
+            .putExtra(ChatThreadDestination.EXTRA_CREATE_THREAD_TITLE, "Daily facts review")
+            .putExtra(ChatThreadDestination.EXTRA_DAILY_FACTS_REVIEW, true)
+            .putExtra(ChatThreadDestination.EXTRA_DAILY_FACTS_DATE, date)
+            .putExtra(ChatThreadDestination.EXTRA_DAILY_FACTS_LOOKBACK_DAYS, 1)
 
         val openPi = PendingIntent.getActivity(
             context,

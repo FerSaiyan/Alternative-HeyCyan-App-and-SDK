@@ -160,7 +160,7 @@ class LocalAgentSettingsDestination : NavScreen(), LocalAgentSettingsActions {
     }
 
     override fun onOpenSettings() {
-        startActivity(Intent(this, com.fersaiyan.cyanbridge.ui.SettingsActivity::class.java))
+        startActivity(AppRoute.SETTINGS.intent(this))
     }
 
     override fun onMaxStepsChange(maxSteps: Int) {

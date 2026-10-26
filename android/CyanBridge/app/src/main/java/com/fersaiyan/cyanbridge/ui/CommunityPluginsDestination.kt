@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import com.fersaiyan.cyanbridge.R
 import android.content.Context
@@ -7,9 +8,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.core.content.FileProvider
@@ -48,9 +48,6 @@ import com.fersaiyan.cyanbridge.shared.ui.plugins.CommunityPluginsScreen
 import com.fersaiyan.cyanbridge.shared.ui.plugins.CommunityPluginsViewModel
 import com.fersaiyan.cyanbridge.tasker.TaskerProfileGuidance
 import com.fersaiyan.cyanbridge.ui.main.openAppDestination
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
@@ -86,7 +83,7 @@ internal fun requireValidTaskerProject(xml: String) {
     }
 }
 
-class CommunityPluginsActivity : AppCompatActivity() {
+class CommunityPluginsDestination : NavScreen() {
 
     private val viewModel by viewModels<CommunityPluginsViewModel> {
         viewModelFactory { initializer { CommunityPluginsViewModel(AndroidCommunityPluginsPlatform(applicationContext)) } }
@@ -187,31 +184,26 @@ class CommunityPluginsActivity : AppCompatActivity() {
         pendingTaskerDownloadUrl = savedInstanceState?.getString(STATE_PENDING_TASKER_URL)
         pendingTaskerDownloadFileName = savedInstanceState?.getString(STATE_PENDING_TASKER_FILE_NAME)
         viewModel.refreshNativePlugins()
-
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                CommunityPluginsScreen(
-                    plugins = viewModel.communityPlugins,
-                    selectedWindow = viewModel.selectedWindow,
-                    isRefreshing = viewModel.isRefreshing,
-                    nativePlugins = viewModel.nativePlugins,
-                    taskerIntegrations = taskerIntegrationPool(),
-                    onOpenNativePluginSettings = ::openNativePluginSettings,
-                    onToggleNativePlugin = ::toggleNativePlugin,
-                    onDownloadTaskerIntegration = ::downloadTaskerIntegration,
-                    onOpenTaskerIntegrationSettings = ::openTaskerIntegrationSettings,
-                    onWatchTaskerTutorial = { TaskerProfileGuidance.openTutorial(this) },
-                    onWindowSelected = viewModel::onWindowSelected,
-                    onRefresh = viewModel::refresh,
-                    onOpenCommunityPlugin = ::openCommunityPlugin,
-                    onPublishPlugin = {
-                        startActivity(AppRoute.PUBLISH_PLUGIN.intent(this))
-                    },
-                    onDestinationSelected = { if (it != AppDestination.PLUGINS) openAppDestination(it) },
-                )
-            }
+            CommunityPluginsScreen(
+                plugins = viewModel.communityPlugins,
+                selectedWindow = viewModel.selectedWindow,
+                isRefreshing = viewModel.isRefreshing,
+                nativePlugins = viewModel.nativePlugins,
+                taskerIntegrations = taskerIntegrationPool(),
+                onOpenNativePluginSettings = ::openNativePluginSettings,
+                onToggleNativePlugin = ::toggleNativePlugin,
+                onDownloadTaskerIntegration = ::downloadTaskerIntegration,
+                onOpenTaskerIntegrationSettings = ::openTaskerIntegrationSettings,
+                onWatchTaskerTutorial = { TaskerProfileGuidance.openTutorial(this) },
+                onWindowSelected = viewModel::onWindowSelected,
+                onRefresh = viewModel::refresh,
+                onOpenCommunityPlugin = ::openCommunityPlugin,
+                onPublishPlugin = {
+                    startActivity(AppRoute.PUBLISH_PLUGIN.intent(this))
+                },
+                onDestinationSelected = { if (it != AppDestination.PLUGINS) openAppDestination(it) },
+            )
         }
     }
 
@@ -267,11 +259,11 @@ class CommunityPluginsActivity : AppCompatActivity() {
                     val detail = manager.lastError.value
                         ?: "Register and connect a Meta camera before enabling $pluginId"
                     android.util.Log.e(
-                        "CommunityPluginsActivity",
+                        "CommunityPluginsDestination",
                         "Unable to enable Meta plugin=$pluginId: $detail\n${manager.diagnosticsSnapshot()}",
                     )
                     Toast.makeText(
-                        this@CommunityPluginsActivity,
+                        this@CommunityPluginsDestination,
                         "Meta camera unavailable: $detail",
                         Toast.LENGTH_LONG,
                     ).show()
@@ -285,11 +277,11 @@ class CommunityPluginsActivity : AppCompatActivity() {
                     },
                     onError = { error ->
                         android.util.Log.e(
-                            "CommunityPluginsActivity",
+                            "CommunityPluginsDestination",
                             "Meta camera permission error for plugin=$pluginId: $error\n${manager.diagnosticsSnapshot()}",
                         )
                         Toast.makeText(
-                            this@CommunityPluginsActivity,
+                            this@CommunityPluginsDestination,
                             "Meta camera permission error: $error",
                             Toast.LENGTH_LONG,
                         ).show()
@@ -299,7 +291,7 @@ class CommunityPluginsActivity : AppCompatActivity() {
             return
         }
         if (enabled && pluginId in VOICE_PLUGIN_IDS && !PluginVoicePermissions.hasRequiredPermissions(this)) {
-            PluginVoicePermissions.request(this) { granted ->
+            PluginVoicePermissions.request(activity) { granted ->
                 if (granted) {
                     applyNativePluginToggle(pluginId, enabled = true)
                 } else {
@@ -313,7 +305,7 @@ class CommunityPluginsActivity : AppCompatActivity() {
             return
         }
         if (enabled && pluginId in NOTIFICATION_PLUGIN_IDS && !hasNotificationPermission(this)) {
-            ensureNotificationPermission(this, pluginId) {
+            ensureNotificationPermission(activity, pluginId) {
                 applyNativePluginToggle(pluginId, enabled = true)
             }
             return
@@ -353,13 +345,13 @@ class CommunityPluginsActivity : AppCompatActivity() {
         val sourceFileName = Uri.parse(link).lastPathSegment ?: "${plugin.id}.prj.xml"
         Toast.makeText(this, "Preparing ${plugin.title} for Tasker...", Toast.LENGTH_SHORT).show()
         val appContext = applicationContext
-        val activityRef = WeakReference(this)
+        val screenRef = WeakReference(this)
         taskerDownloadScope.launch {
             val result = runCatching { downloadTaskerProject(link, sourceFileName) }
             withContext(Dispatchers.Main) {
-                val activity = activityRef.get()?.takeUnless { it.isFinishing || it.isDestroyed }
+                val screen = screenRef.get()?.takeUnless { it.isFinishing || it.isDestroyed }
                 result.onSuccess { file ->
-                    if (activity == null) {
+                    if (screen == null) {
                         Toast.makeText(
                             appContext,
                             "${plugin.title} is ready. Open Plugins and tap Download profile again to import it.",
@@ -368,25 +360,25 @@ class CommunityPluginsActivity : AppCompatActivity() {
                         return@onSuccess
                     }
                     val uri = FileProvider.getUriForFile(
-                        activity,
-                        "${activity.packageName}.fileprovider",
+                        screen,
+                        "${screen.packageName}.fileprovider",
                         file,
                     )
-                    if (!TaskerProfileGuidance.openImporter(activity, uri, sourceFileName)) {
+                    if (!TaskerProfileGuidance.openImporter(screen, uri, sourceFileName)) {
                         val fallbackFileName = taskerDownloadFileName(sourceFileName, System.currentTimeMillis())
-                        activity.pendingTaskerDownloadTitle = plugin.title
-                        activity.pendingTaskerDownloadUrl = link
-                        activity.pendingTaskerDownloadFileName = fallbackFileName
+                        screen.pendingTaskerDownloadTitle = plugin.title
+                        screen.pendingTaskerDownloadUrl = link
+                        screen.pendingTaskerDownloadFileName = fallbackFileName
                         Toast.makeText(
-                            activity,
+                            screen,
                             "Tasker could not import directly. Choose where to save the project.",
                             Toast.LENGTH_LONG,
                         ).show()
-                        activity.saveTaskerProfileLauncher.launch(fallbackFileName)
+                        screen.saveTaskerProfileLauncher.launch(fallbackFileName)
                     }
                 }.onFailure { error ->
                     Toast.makeText(
-                        activity ?: appContext,
+                        screen ?: appContext,
                         "Could not prepare ${plugin.title}: ${error.message}",
                         Toast.LENGTH_LONG,
                     ).show()
@@ -421,7 +413,7 @@ class CommunityPluginsActivity : AppCompatActivity() {
     private fun saveTaskerProfile(title: String, link: String, fileName: String, destination: Uri) {
         Toast.makeText(this, "Downloading $title...", Toast.LENGTH_SHORT).show()
         val appContext = applicationContext
-        val activityRef = WeakReference(this)
+        val screenRef = WeakReference(this)
         taskerDownloadScope.launch {
             val result = runCatching {
                 val connection = java.net.URL(link).openConnection() as java.net.HttpURLConnection
@@ -441,16 +433,16 @@ class CommunityPluginsActivity : AppCompatActivity() {
                 runCatching { appContext.contentResolver.delete(destination, null, null) }
             }
             withContext(Dispatchers.Main) {
-                val activity = activityRef.get()?.takeUnless { it.isFinishing || it.isDestroyed }
+                val screen = screenRef.get()?.takeUnless { it.isFinishing || it.isDestroyed }
                 result.onSuccess {
-                    if (activity != null) {
-                        TaskerProfileGuidance.showSavedDialog(activity, fileName, destination)
+                    if (screen != null) {
+                        TaskerProfileGuidance.showSavedDialog(screen.activity, fileName, destination)
                     } else {
                         Toast.makeText(appContext, "$title saved to the selected folder", Toast.LENGTH_LONG).show()
                     }
                 }.onFailure { error ->
                     Toast.makeText(
-                        activity ?: appContext,
+                        screen ?: appContext,
                         "Could not download $title: ${error.message}",
                         Toast.LENGTH_LONG,
                     ).show()

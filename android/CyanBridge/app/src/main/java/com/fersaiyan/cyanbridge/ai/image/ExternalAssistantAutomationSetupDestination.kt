@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ai.image
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.content.Intent
@@ -63,7 +64,7 @@ import com.fersaiyan.cyanbridge.shared.automation.ExternalAssistantSetupUiState
 import com.fersaiyan.cyanbridge.shared.automation.ImportTaskerProfile
 import com.fersaiyan.cyanbridge.shared.automation.IntegrationHealth
 import com.fersaiyan.cyanbridge.shared.automation.IntegrationState
-import com.fersaiyan.cyanbridge.ui.CommunityPluginsActivity
+import com.fersaiyan.cyanbridge.ui.CommunityPluginsDestination
 import com.fersaiyan.cyanbridge.ui.collectScreenEffects
 import java.io.File
 
@@ -119,7 +120,7 @@ class ExternalAssistantAutomationSetupDestination : NavScreen() {
                 onImportProfile = viewModel::importProfile,
                 onVerifyProfile = viewModel::verifyProfile,
                 onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                onOpenPlugins = { startActivity(Intent(this, CommunityPluginsActivity::class.java)) },
+                onOpenPlugins = { startActivity(AppRoute.COMMUNITY_PLUGINS.intent(this)) },
                 onWatchTutorial = { TaskerProfileGuidance.openTutorial(this) },
                 onTestVoice = viewModel::testVoice,
                 onRefresh = viewModel::refresh,

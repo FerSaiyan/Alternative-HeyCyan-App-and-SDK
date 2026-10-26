@@ -4,24 +4,24 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.shared.chat.ChatAppearanceMenuAction
 
 /**
  * Carries out the chat appearance menu: color pickers, the wallpaper picker and resets.
- * Create it while the Activity is initialized (it registers the picker); [onChanged] runs after
+ * Create it while the screen is initialized (it registers the picker); [onChanged] runs after
  * each saved change.
  */
 internal class ChatAppearanceMenu(
-    private val activity: AppCompatActivity,
+    private val screen: NavScreen,
     private val onChanged: () -> Unit = {},
 ) {
-    private val pickWallpaper = activity.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val pickWallpaper = screen.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching {
-                activity.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                screen.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            ChatAppearancePrefs.setWallpaperUri(activity, uri.toString())
+            ChatAppearancePrefs.setWallpaperUri(screen, uri.toString())
             onChanged()
             toast("Chat wallpaper updated")
         }
@@ -31,24 +31,24 @@ internal class ChatAppearanceMenu(
         when (action) {
             ChatAppearanceMenuAction.CHANGE_USER_BUBBLE_COLOR -> pickColor(
                 title = "User bubble color",
-                current = ChatAppearancePrefs.getUserBubbleColor(activity),
-            ) { ChatAppearancePrefs.setUserBubbleColor(activity, it) }
+                current = ChatAppearancePrefs.getUserBubbleColor(screen),
+            ) { ChatAppearancePrefs.setUserBubbleColor(screen, it) }
 
             ChatAppearanceMenuAction.CHANGE_ASSISTANT_BUBBLE_COLOR -> pickColor(
                 title = "Assistant bubble color",
-                current = ChatAppearancePrefs.getAssistantBubbleColor(activity),
-            ) { ChatAppearancePrefs.setAssistantBubbleColor(activity, it) }
+                current = ChatAppearancePrefs.getAssistantBubbleColor(screen),
+            ) { ChatAppearancePrefs.setAssistantBubbleColor(screen, it) }
 
             ChatAppearanceMenuAction.CHOOSE_WALLPAPER -> pickWallpaper.launch(arrayOf("image/*"))
 
             ChatAppearanceMenuAction.REMOVE_WALLPAPER -> {
-                ChatAppearancePrefs.clearWallpaper(activity)
+                ChatAppearancePrefs.clearWallpaper(screen)
                 onChanged()
                 toast("Wallpaper removed")
             }
 
             ChatAppearanceMenuAction.RESET_APPEARANCE -> {
-                ChatAppearancePrefs.reset(activity)
+                ChatAppearancePrefs.reset(screen)
                 onChanged()
                 toast("Chat appearance reset")
             }
@@ -59,7 +59,7 @@ internal class ChatAppearanceMenu(
 
     private fun pickColor(title: String, current: Int, save: (Int) -> Unit) {
         val labels = BUBBLE_COLORS.map { (name, color) -> if (color == current) "$name (Current)" else name }
-        AlertDialog.Builder(activity)
+        AlertDialog.Builder(screen.activity)
             .setTitle(title)
             .setItems(labels.toTypedArray()) { _, which ->
                 save(BUBBLE_COLORS[which].second)
@@ -68,7 +68,7 @@ internal class ChatAppearanceMenu(
             .show()
     }
 
-    private fun toast(text: String) = Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
+    private fun toast(text: String) = Toast.makeText(screen, text, Toast.LENGTH_SHORT).show()
 
     private companion object {
         val BUBBLE_COLORS = listOf(

@@ -19,6 +19,13 @@ import com.fersaiyan.cyanbridge.plugins.autoaudio.AutoAudioSettingsDestination
 import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiarySettingsDestination
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidChatDestination
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupDestination
+import com.fersaiyan.cyanbridge.ui.SettingsDestination
+import com.fersaiyan.cyanbridge.ui.CommunityPluginsDestination
+import com.fersaiyan.cyanbridge.ui.ChatListDestination
+import com.fersaiyan.cyanbridge.ui.ChatThreadDestination
+import com.fersaiyan.cyanbridge.ui.notes.NoteEditorDestination
+import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListDestination
+import com.fersaiyan.cyanbridge.ui.recordings.SyncedMediaGalleryDestination
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.ui.MentraBroadcastDestination
 import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateDestination
@@ -65,6 +72,13 @@ enum class AppRoute(
     VISUAL_DIARY_SETTINGS(labelText = "Visual Diary Settings"),
     WALKING_AID_CHAT(labelText = "Walking Aid Chat", softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE),
     EXTERNAL_ASSISTANT_SETUP(labelText = "Gemini / ChatGPT automation setup"),
+    SETTINGS(labelText = "Settings", tab = AppDestination.SETTINGS),
+    COMMUNITY_PLUGINS(labelText = "Community Plugins", tab = AppDestination.PLUGINS),
+    CHAT_LIST(labelText = "Chats", tab = AppDestination.CHATS),
+    CHAT_THREAD(labelText = "Chat", tab = AppDestination.CHATS, softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE),
+    NOTE_EDITOR(labelText = "Note editor", softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE),
+    RECORDINGS(labelRes = R.string.nav_transcriptions_recordings, tab = AppDestination.MEDIA),
+    SYNCED_MEDIA(labelText = "Synced photos and videos"),
     ;
 
     fun label(context: Context): String = labelText ?: context.getString(labelRes)
@@ -98,6 +112,13 @@ enum class AppRoute(
         VISUAL_DIARY_SETTINGS -> VisualDiarySettingsDestination()
         WALKING_AID_CHAT -> WalkingAidChatDestination()
         EXTERNAL_ASSISTANT_SETUP -> ExternalAssistantAutomationSetupDestination()
+        SETTINGS -> SettingsDestination()
+        COMMUNITY_PLUGINS -> CommunityPluginsDestination()
+        CHAT_LIST -> ChatListDestination()
+        CHAT_THREAD -> ChatThreadDestination()
+        NOTE_EDITOR -> NoteEditorDestination()
+        RECORDINGS -> RecordingsListDestination()
+        SYNCED_MEDIA -> SyncedMediaGalleryDestination()
     }
 
     companion object {

@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.BroadcastReceiver
 import android.content.Intent
@@ -12,7 +13,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -55,10 +55,8 @@ import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
 import com.fersaiyan.cyanbridge.audio.MeetingCapturePrefs
 import com.fersaiyan.cyanbridge.audio.MeetingCaptureService
 import com.fersaiyan.cyanbridge.ui.appearance.AppearanceDestination
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
-import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListActivity
+import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListDestination
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
@@ -74,7 +72,6 @@ import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsScreenActions
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsUiState
 import com.fersaiyan.cyanbridge.ui.localization.AppLanguage
 import com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -82,7 +79,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
+class SettingsDestination : NavScreen(), SettingsScreenActions {
 
     private var settingsUiState by mutableStateOf(SettingsUiState(taskerIntegrationsAvailable = true))
     private var expandedSections by mutableStateOf<Set<SettingsSection>>(emptySet())
@@ -135,18 +132,13 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             sectionPrefs.getBoolean(sectionPreferenceKey(section), section != SettingsSection.ACCESSIBILITY)
         }
         refreshSettingsUi()
-
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                SettingsScreen(
-                    state = settingsUiState,
-                    expandedSections = expandedSections,
-                    onToggleSection = ::toggleSection,
-                    actions = this@SettingsActivity,
-                )
-            }
+            SettingsScreen(
+                state = settingsUiState,
+                expandedSections = expandedSections,
+                onToggleSection = ::toggleSection,
+                actions = this@SettingsDestination,
+            )
         }
     }
 
@@ -159,7 +151,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             )
         if (shouldVerifyProState) {
             lifecycleScope.launch(Dispatchers.IO) {
-                ProSubscriptionVerifier.verifyNow(this@SettingsActivity)
+                ProSubscriptionVerifier.verifyNow(this@SettingsDestination)
                 withContext(Dispatchers.Main) { refreshSettingsUi() }
             }
         }
@@ -300,13 +292,12 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
         val target = when (destination) {
             AppDestination.GLASSES -> Intent(this, MainActivity::class.java)
             AppDestination.CHATS -> buildRecentChatIntent()
-            AppDestination.MEDIA -> Intent(this, RecordingsListActivity::class.java)
-            AppDestination.PLUGINS -> Intent(this, CommunityPluginsActivity::class.java)
+            AppDestination.MEDIA -> AppRoute.RECORDINGS.intent(this)
+            AppDestination.PLUGINS -> AppRoute.COMMUNITY_PLUGINS.intent(this)
             AppDestination.SETTINGS -> return
         }
-        target.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        target.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         startActivity(target)
-        overridePendingTransition(0, 0)
     }
 
     override fun openAppearance() {
@@ -398,9 +389,9 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch(Dispatchers.IO) {
-                    LocalAgentMemoryStore.deleteAllPassiveCapture(this@SettingsActivity)
+                    LocalAgentMemoryStore.deleteAllPassiveCapture(this@SettingsDestination)
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@SettingsActivity, "Passive OCR capture deleted", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@SettingsDestination, "Passive OCR capture deleted", Toast.LENGTH_SHORT).show()
                         refreshSettingsUi()
                     }
                 }
@@ -453,10 +444,10 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Reset") { _, _ ->
                 lifecycleScope.launch(Dispatchers.IO) {
-                    LocalAgentMemoryStore.resetVault(this@SettingsActivity)
-                    LocalAgentMemoryStore.ensureSeedFiles(this@SettingsActivity)
+                    LocalAgentMemoryStore.resetVault(this@SettingsDestination)
+                    LocalAgentMemoryStore.ensureSeedFiles(this@SettingsDestination)
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@SettingsActivity, "Memory vault reset", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@SettingsDestination, "Memory vault reset", Toast.LENGTH_LONG).show()
                         refreshSettingsUi()
                     }
                 }
@@ -511,14 +502,14 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             .setPositiveButton("Clear") { _, _ ->
                 Toast.makeText(this, "Clearing data...", Toast.LENGTH_SHORT).show()
                 lifecycleScope.launch(Dispatchers.IO) {
-                    val result = LocalDataClearer.clearAll(this@SettingsActivity)
+                    val result = LocalDataClearer.clearAll(this@SettingsDestination)
                     withContext(Dispatchers.Main) {
                         val message = if (result.errors.isEmpty()) {
                             "Local data cleared (deleted files: ${result.deletedFiles})"
                         } else {
                             "Cleared with warnings: ${result.errors.joinToString()}"
                         }
-                        Toast.makeText(this@SettingsActivity, message, Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@SettingsDestination, message, Toast.LENGTH_LONG).show()
                         refreshSettingsUi()
                     }
                 }
@@ -537,11 +528,11 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
     private fun exportLocalDataToUri(uri: Uri) {
         Toast.makeText(this, "Exporting data...", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { LocalDataBackupManager.exportToZip(this@SettingsActivity, uri) }
+            runCatching { LocalDataBackupManager.exportToZip(this@SettingsDestination, uri) }
                 .onSuccess { result ->
                     withContext(Dispatchers.Main) {
                         Toast.makeText(
-                            this@SettingsActivity,
+                            this@SettingsDestination,
                             "Export complete: ${result.threadCount} chats, ${result.messageCount} messages, ${result.memoryFileCount} memory files, ${result.recordingFileCount} recordings, ${result.vaultItemCount} vault items.",
                             Toast.LENGTH_LONG,
                         ).show()
@@ -549,7 +540,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
                 }
                 .onFailure { error ->
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@SettingsActivity, "Export failed: ${error.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@SettingsDestination, "Export failed: ${error.message}", Toast.LENGTH_LONG).show()
                     }
                 }
         }
@@ -558,12 +549,12 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
     private fun importLocalDataFromUri(uri: Uri) {
         Toast.makeText(this, "Importing data...", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { LocalDataBackupManager.importFromZip(this@SettingsActivity, uri) }
+            runCatching { LocalDataBackupManager.importFromZip(this@SettingsDestination, uri) }
                 .onSuccess { result ->
                     withContext(Dispatchers.Main) {
                         refreshSettingsUi()
                         Toast.makeText(
-                            this@SettingsActivity,
+                            this@SettingsDestination,
                             "Import complete: ${result.threadCount} chats, ${result.messageCount} messages, ${result.memoryFileCount} memory files, ${result.recordingFileCount} recordings, ${result.vaultItemCount} vault items.",
                             Toast.LENGTH_LONG,
                         ).show()
@@ -571,7 +562,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
                 }
                 .onFailure { error ->
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@SettingsActivity, "Import failed: ${error.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@SettingsDestination, "Import failed: ${error.message}", Toast.LENGTH_LONG).show()
                     }
                 }
         }
@@ -584,7 +575,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
         Toast.makeText(this, "Importing ${source.label} data...", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val result = runCatching {
-                KnowledgeImportCoordinator.importSelectedFile(this@SettingsActivity, uri, source)
+                KnowledgeImportCoordinator.importSelectedFile(this@SettingsDestination, uri, source)
             }
             val message = result.fold(
                 onSuccess = { items ->
@@ -592,7 +583,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
                 },
                 onFailure = { error -> "${source.label} import failed: ${error.message ?: "unknown error"}" },
             )
-            Toast.makeText(this@SettingsActivity, message, Toast.LENGTH_LONG).show()
+            Toast.makeText(this@SettingsDestination, message, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -614,7 +605,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             hint = "Contact email (optional)"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
             filters = arrayOf(InputFilter.LengthFilter(DebugLogSupport.MAX_CONTACT_EMAIL_LENGTH))
-            setText(ProSubscriptionServerPrefs.getAccountEmail(this@SettingsActivity))
+            setText(ProSubscriptionServerPrefs.getAccountEmail(this@SettingsDestination))
             contentDescription = "Contact email for log follow-up"
         }
         val content = LinearLayout(this).apply {
@@ -623,7 +614,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             setPadding(padding, 0, padding, 0)
             addView(descriptionInput)
             addView(contactEmailInput)
-            addView(TextView(this@SettingsActivity).apply {
+            addView(TextView(this@SettingsDestination).apply {
                 text = "Optional. This lets CyanBridge support reply to you about these logs."
             })
         }
@@ -657,11 +648,11 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
                 DebugLogSupport.sendLogsToServer(
-                    context = this@SettingsActivity,
+                    context = this@SettingsDestination,
                     issueType = issueType,
                     description = description,
                     logs = DebugLogSupport.collectLogcat(),
-                    deviceInfo = DebugLogSupport.buildDeviceInfo(this@SettingsActivity),
+                    deviceInfo = DebugLogSupport.buildDeviceInfo(this@SettingsDestination),
                     contactEmail = contactEmail.ifBlank { null },
                 )
             }.onSuccess { result ->
@@ -671,11 +662,11 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
                     } else {
                         "Failed to send logs: ${result.exceptionOrNull()?.message}"
                     }
-                    Toast.makeText(this@SettingsActivity, message, Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@SettingsDestination, message, Toast.LENGTH_LONG).show()
                 }
             }.onFailure { error ->
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@SettingsActivity, "Error collecting logs: ${error.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@SettingsDestination, "Error collecting logs: ${error.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -711,8 +702,8 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
         val openChatId = last?.id?.takeIf {
             lastUserAt > 0L && System.currentTimeMillis() - lastUserAt < 30 * 60 * 1_000
         }
-        return Intent(this, ChatThreadActivity::class.java).apply {
-            if (openChatId != null) putExtra(ChatThreadActivity.EXTRA_CHAT_ID, openChatId)
+        return AppRoute.CHAT_THREAD.intent(this).apply {
+            if (openChatId != null) putExtra(ChatThreadDestination.EXTRA_CHAT_ID, openChatId)
         }
     }
 

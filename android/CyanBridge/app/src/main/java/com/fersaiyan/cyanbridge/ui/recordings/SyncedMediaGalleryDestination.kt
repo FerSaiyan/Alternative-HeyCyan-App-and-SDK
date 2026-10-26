@@ -1,12 +1,13 @@
 package com.fersaiyan.cyanbridge.ui.recordings
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Size
 import android.widget.Toast
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -19,13 +20,12 @@ import com.fersaiyan.cyanbridge.shared.recordings.SyncedMediaItem
 import com.fersaiyan.cyanbridge.shared.ui.recordings.SyncedMediaGalleryScreen
 import com.fersaiyan.cyanbridge.shared.ui.recordings.SyncedMediaGalleryViewModel
 import com.fersaiyan.cyanbridge.shared.ui.recordings.SyncedMediaSource
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import com.fersaiyan.cyanbridge.ui.showToast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class SyncedMediaGalleryActivity : AppCompatActivity() {
+class SyncedMediaGalleryDestination : NavScreen() {
     private val viewModel by viewModels<SyncedMediaGalleryViewModel> {
         viewModelFactory { initializer { SyncedMediaGalleryViewModel(MediaStoreSyncedMedia(applicationContext)) } }
     }
@@ -33,7 +33,7 @@ class SyncedMediaGalleryActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         lifecycleScope.launch { viewModel.messages.collect { showToast(it) } }
-        setThemedComposeScreen {
+        setContent {
             SyncedMediaGalleryScreen(
                 mediaItems = viewModel.items,
                 isLoading = viewModel.isLoading,

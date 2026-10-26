@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.Manifest
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -8,7 +10,7 @@ import android.os.Bundle
 import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -46,7 +48,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ChatThreadActivity : AppCompatActivity() {
+class ChatThreadDestination : NavScreen() {
     private val viewModel by viewModels<ChatThreadViewModel> {
         viewModelFactory {
             initializer {
@@ -79,7 +81,7 @@ class ChatThreadActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         viewModel.openOnce(intent.toChatArgs())
         lifecycleScope.launch { viewModel.effects.collect(::handleEffect) }
-        setThemedComposeScreen {
+        setContent {
             val vm = viewModel
             ChatThreadScreen(
                 state = vm.state,
@@ -143,7 +145,7 @@ class ChatThreadActivity : AppCompatActivity() {
             ChatThreadEffect.RequestMicrophonePermission -> requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             is ChatThreadEffect.LocalGenerationFailed -> if (DebugLogSupport.isLocalRuntimeIssue(effect.error.message, effect.error)) {
                 DebugLogSupport.showSupportOptionsDialog(
-                    activity = this,
+                    activity = activity,
                     title = "Local runtime issue",
                     issueType = "Local runtime issue",
                     description = "CyanBridge hit a local model runtime error while generating this reply.",
@@ -158,7 +160,7 @@ class ChatThreadActivity : AppCompatActivity() {
     }
 
     private fun openChatList() {
-        startActivity(Intent(this, ChatListActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        startActivity(AppRoute.CHAT_LIST.intent(this).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         finish()
     }
 
@@ -166,7 +168,7 @@ class ChatThreadActivity : AppCompatActivity() {
     private fun chatsTabIntent(): Intent? {
         val lastUserAt = viewModel.chatId?.let(ChatStore::listMessages)?.lastOrNull { it.role == ChatRole.USER }?.createdAt
         if (lastUserAt != null && System.currentTimeMillis() - lastUserAt < 30 * 60 * 1000) return null
-        return Intent(this, ChatThreadActivity::class.java)
+        return Intent(this, ChatThreadDestination::class.java)
     }
 
     private fun showModelPickerForProvider() {
@@ -203,7 +205,7 @@ class ChatThreadActivity : AppCompatActivity() {
         val current = ProSubscriptionAiPrefs.getRequestsModel(this)
         lifecycleScope.launch {
             val options = withContext(Dispatchers.IO) {
-                val fetched = ProSubscriptionRelayClient.fetchAvailableModels(this@ChatThreadActivity).getOrElse { emptyList() }
+                val fetched = ProSubscriptionRelayClient.fetchAvailableModels(this@ChatThreadDestination).getOrElse { emptyList() }
                 val merged = linkedMapOf("auto" to "auto")
                 fetched.forEach { option ->
                     val id = option.id.trim()
@@ -213,13 +215,13 @@ class ChatThreadActivity : AppCompatActivity() {
                 merged.entries.toList()
             }
             val labels = options.map { (id, label) -> if (id.equals(current, ignoreCase = true)) "$label (Current)" else label }
-            AlertDialog.Builder(this@ChatThreadActivity)
+            AlertDialog.Builder(this@ChatThreadDestination)
                 .setTitle("Select relay model")
                 .setItems(labels.toTypedArray()) { _, which ->
                     val (pickedId, pickedLabel) = options.getOrNull(which) ?: return@setItems
-                    ProSubscriptionAiPrefs.setRequestsModel(this@ChatThreadActivity, pickedId)
+                    ProSubscriptionAiPrefs.setRequestsModel(this@ChatThreadDestination, pickedId)
                     viewModel.refreshModel()
-                    Toast.makeText(this@ChatThreadActivity, "Chat model set to $pickedLabel", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ChatThreadDestination, "Chat model set to $pickedLabel", Toast.LENGTH_SHORT).show()
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
@@ -287,7 +289,7 @@ class ChatThreadActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_CHAT_ID = "chat_id"
 
-        // If EXTRA_CHAT_ID is missing, ChatThreadActivity can create a new thread.
+        // If EXTRA_CHAT_ID is missing, ChatThreadDestination can create a new thread.
         const val EXTRA_CREATE_THREAD_TITLE = "create_thread_title"
 
         // Optional: prefill the composer input box.

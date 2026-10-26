@@ -1,12 +1,13 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -35,7 +36,7 @@ import com.fersaiyan.cyanbridge.ui.chat.chatModelInfo
 import com.fersaiyan.cyanbridge.ui.main.openAppDestination
 import com.fersaiyan.cyanbridge.ui.main.putChatExtras
 import com.fersaiyan.cyanbridge.ui.main.recentChatIntent
-import com.fersaiyan.cyanbridge.ui.notes.NoteEditorActivity
+import com.fersaiyan.cyanbridge.ui.notes.NoteEditorDestination
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -46,7 +47,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ChatListActivity : AppCompatActivity() {
+class ChatListDestination : NavScreen() {
     private val viewModel by viewModels<ChatListViewModel> {
         viewModelFactory {
             initializer {
@@ -64,13 +65,13 @@ class ChatListActivity : AppCompatActivity() {
             viewModel.effects.collect { effect ->
                 when (effect) {
                     ChatListEffect.ChatDeleted ->
-                        Toast.makeText(this@ChatListActivity, getString(R.string.chat_deleted), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@ChatListDestination, getString(R.string.chat_deleted), Toast.LENGTH_SHORT).show()
                     ChatListEffect.PromptLocalModelSetup -> promptLocalModelSetup()
                     ChatListEffect.ChooseNewChat -> showNewChatTypePicker()
                 }
             }
         }
-        setThemedComposeScreen {
+        setContent {
             val vm = viewModel
             NotesChatsScreen(
                 selectedTab = vm.selectedTab,
@@ -81,13 +82,13 @@ class ChatListActivity : AppCompatActivity() {
                 formatTimestamp = { millis ->
                     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(millis))
                 },
-                onOpenThread = { startActivity(Intent(this, ChatThreadActivity::class.java).putChatExtras(this, it.id)) },
+                onOpenThread = { startActivity(AppRoute.CHAT_THREAD.intent(this).putChatExtras(this, it.id)) },
                 onRequestDelete = { vm.pendingDelete = it },
                 onConfirmDelete = vm::confirmDelete,
                 onDismissDelete = { vm.pendingDelete = null },
                 onNewChat = vm::newChat,
                 onOpenNote = ::openNote,
-                onNewNote = { startActivity(Intent(this, NoteEditorActivity::class.java)) },
+                onNewNote = { startActivity(AppRoute.NOTE_EDITOR.intent(this)) },
                 onChatAppearance = { vm.appearanceMenuVisible = true },
                 onOpenNotesSettings = { startActivity(AppRoute.KNOWLEDGE_INTEGRATIONS.intent(this)) },
                 onDestinationSelected = { openAppDestination(it) { recentChatIntent(withDailyReview = true) } },
@@ -121,12 +122,12 @@ class ChatListActivity : AppCompatActivity() {
     }
 
     private fun openNote(note: NoteSummary) {
-        startActivity(Intent(this, NoteEditorActivity::class.java).apply {
+        startActivity(AppRoute.NOTE_EDITOR.intent(this).apply {
             if (note.source == NoteSource.OBSIDIAN) {
-                putExtra(NoteEditorActivity.EXTRA_OBSIDIAN_URI, note.externalId)
-                putExtra(NoteEditorActivity.EXTRA_OBSIDIAN_NAME, note.title)
+                putExtra(NoteEditorDestination.EXTRA_OBSIDIAN_URI, note.externalId)
+                putExtra(NoteEditorDestination.EXTRA_OBSIDIAN_NAME, note.title)
             } else {
-                putExtra(NoteEditorActivity.EXTRA_NOTE_ID, note.id)
+                putExtra(NoteEditorDestination.EXTRA_NOTE_ID, note.id)
             }
         })
     }
@@ -147,7 +148,7 @@ class ChatListActivity : AppCompatActivity() {
             .setTitle("Start a new chat")
             .setItems(arrayOf("Normal chat", "Daily review chat")) { _, which ->
                 when (which) {
-                    0 -> startActivity(Intent(this, ChatThreadActivity::class.java))
+                    0 -> startActivity(AppRoute.CHAT_THREAD.intent(this))
                     1 -> showDailyReviewDateChooser()
                 }
             }
@@ -218,11 +219,11 @@ class ChatListActivity : AppCompatActivity() {
 
     private fun startDailyReviewChat(date: String, lookbackDays: Int) {
         startActivity(
-            Intent(this, ChatThreadActivity::class.java)
-                .putExtra(ChatThreadActivity.EXTRA_CREATE_THREAD_TITLE, "Daily review ($date)")
-                .putExtra(ChatThreadActivity.EXTRA_DAILY_FACTS_REVIEW, true)
-                .putExtra(ChatThreadActivity.EXTRA_DAILY_FACTS_DATE, date)
-                .putExtra(ChatThreadActivity.EXTRA_DAILY_FACTS_LOOKBACK_DAYS, lookbackDays),
+            AppRoute.CHAT_THREAD.intent(this)
+                .putExtra(ChatThreadDestination.EXTRA_CREATE_THREAD_TITLE, "Daily review ($date)")
+                .putExtra(ChatThreadDestination.EXTRA_DAILY_FACTS_REVIEW, true)
+                .putExtra(ChatThreadDestination.EXTRA_DAILY_FACTS_DATE, date)
+                .putExtra(ChatThreadDestination.EXTRA_DAILY_FACTS_LOOKBACK_DAYS, lookbackDays),
         )
     }
 

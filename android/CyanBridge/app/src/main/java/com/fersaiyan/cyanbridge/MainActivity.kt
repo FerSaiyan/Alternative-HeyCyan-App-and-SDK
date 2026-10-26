@@ -61,7 +61,7 @@ import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiaryService
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidPreferences
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidImageCapture
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidService
-import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListActivity
+import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListDestination
 import com.fersaiyan.cyanbridge.ui.BluetoothUtils
 import com.fersaiyan.cyanbridge.ui.BluetoothEvent
 import com.fersaiyan.cyanbridge.ui.AutoPairManager

@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.ui.recordings
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -11,7 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -45,7 +47,6 @@ import com.fersaiyan.cyanbridge.shared.ui.recordings.RecordingsViewModel
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.fersaiyan.cyanbridge.ui.main.openAppDestination
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import com.fersaiyan.cyanbridge.ui.showToast
 import java.io.File
 import java.text.SimpleDateFormat
@@ -59,7 +60,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class RecordingsListActivity : AppCompatActivity() {
+class RecordingsListDestination : NavScreen() {
     private val viewModel by viewModels<RecordingsViewModel> {
         viewModelFactory { initializer { RecordingsViewModel(AndroidRecordings(applicationContext)) } }
     }
@@ -74,7 +75,7 @@ class RecordingsListActivity : AppCompatActivity() {
                 }
             }
         }
-        setThemedComposeScreen {
+        setContent {
             val vm = viewModel
             RecordingsScreen(
                 sessions = vm.sessions,
@@ -87,7 +88,7 @@ class RecordingsListActivity : AppCompatActivity() {
                 transcriptDialog = vm.transcriptDialog,
                 formatTimestamp = { ms -> java.text.DateFormat.getDateTimeInstance().format(Date(ms)) },
                 loadThumbnail = ::loadThumbnail,
-                onOpenSyncedMedia = { startActivity(Intent(this, SyncedMediaGalleryActivity::class.java)) },
+                onOpenSyncedMedia = { startActivity(AppRoute.SYNCED_MEDIA.intent(this)) },
                 onOpenSyncedMediaItem = ::openSyncedMediaItem,
                 onPlay = vm::togglePlayback,
                 onTranscribe = vm::transcribe,
@@ -113,7 +114,7 @@ class RecordingsListActivity : AppCompatActivity() {
     private fun offerLocalRuntimeLogs(failure: RecordingsEffect.TranscriptionFailed) {
         if (!DebugLogSupport.isLocalRuntimeIssue(failure.message, failure.error)) return
         DebugLogSupport.showSupportOptionsDialog(
-            activity = this,
+            activity = activity,
             title = "Local runtime issue",
             issueType = "Local runtime issue",
             description = if (failure.error != null) {
@@ -286,7 +287,7 @@ private class AndroidRecordings(private val context: Context) : RecordingsBacken
     }
 
     private companion object {
-        const val TAG = "RecordingsListActivity"
+        const val TAG = "RecordingsListDestination"
     }
 }
 

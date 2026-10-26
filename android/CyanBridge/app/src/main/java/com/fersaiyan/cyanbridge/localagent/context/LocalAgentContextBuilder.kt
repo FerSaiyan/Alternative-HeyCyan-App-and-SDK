@@ -12,7 +12,7 @@ import java.util.Locale
  * Builds a compact System prompt that injects *personal local context* for normal chats.
  *
  * Context timing (normal chats):
- * - [com.fersaiyan.cyanbridge.ui.ChatThreadActivity.buildRelayMessages] will:
+ * - [com.fersaiyan.cyanbridge.ui.ChatThreadDestination.buildRelayMessages] will:
  *   1) optionally queue daily-summary regeneration in background
  *   2) optionally add retrieval hits (LocalAgentMemorySearch)
  *   3) call [buildSystemMessage] to inject a System prompt on every send

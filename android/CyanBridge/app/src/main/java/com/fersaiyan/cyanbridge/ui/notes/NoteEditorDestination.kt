@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.notes
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -7,7 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
@@ -25,7 +26,6 @@ import com.fersaiyan.cyanbridge.shared.ui.notes.NoteEditorStore
 import com.fersaiyan.cyanbridge.shared.ui.notes.NoteEditorViewModel
 import com.fersaiyan.cyanbridge.shared.ui.notes.NoteStoreUnavailable
 import com.fersaiyan.cyanbridge.ui.MyApplication
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import com.fersaiyan.cyanbridge.ui.showToast
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -34,7 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class NoteEditorActivity : AppCompatActivity() {
+class NoteEditorDestination : NavScreen() {
     private val viewModel by viewModels<NoteEditorViewModel> {
         viewModelFactory {
             initializer {
@@ -62,7 +62,7 @@ class NoteEditorActivity : AppCompatActivity() {
                 }
             }
         }
-        setThemedComposeScreen {
+        setContent {
             val vm = viewModel
             MarkdownNoteEditorScreen(
                 screenTitle = if (vm.isNew) "New note" else "Edit note",
