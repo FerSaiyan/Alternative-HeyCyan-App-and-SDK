@@ -92,4 +92,26 @@
     <string name="meta_rayban_inactive">Неактивен</string>
     <string name="meta_rayban_start_display">Запустить дисплей</string>
     <string name="meta_rayban_stop_display">Остановить дисплей</string>
+    <string name="meta_setup_choice_title">Как вы подключаетесь к Meta AI?</string>
+    <string name="meta_setup_choice_dev_mode">Я использую режим разработчика</string>
+    <string name="meta_setup_choice_dev_mode_detail">Для тех, кто уже включил режим разработчика в приложении Meta AI.</string>
+    <string name="meta_setup_choice_email">Запросить доступ по моей почте Meta</string>
+    <string name="meta_setup_choice_email_detail">CyanBridge добавит ваш аккаунт Meta в тестировщики, и Meta пришлёт приглашение на почту.</string>
+    <string name="meta_setup_choice_email_unavailable">Доступ по почте в этой версии пока недоступен. Используйте режим разработчика.</string>
+    <string name="meta_setup_dev_step_1">1. В Meta AI откройте «Настройки», затем «О приложении».</string>
+    <string name="meta_setup_dev_step_2">2. Нажмите на версию приложения 5 раз (с программой чтения с экрана — 5 раз дважды коснитесь), затем включите режим разработчика.</string>
+    <string name="meta_setup_dev_step_3">3. Вернитесь сюда и нажмите «Зарегистрировать».</string>
+    <string name="meta_setup_email_step_1">1. Откройте форму доступа и введите почту вашего аккаунта Meta.</string>
+    <string name="meta_setup_email_step_2">2. Когда вас примут, откройте письмо-приглашение от Meta и примите его.</string>
+    <string name="meta_setup_email_step_3">3. В Meta AI выключите режим разработчика. Если он включён, CyanBridge подключится без функций релизной версии, например «Hey Meta, открой …».</string>
+    <string name="meta_setup_email_step_4">4. Вернитесь сюда и нажмите «Зарегистрировать».</string>
+    <string name="meta_setup_open_form">Открыть форму доступа</string>
+    <string name="meta_setup_register">Зарегистрировать</string>
+    <string name="meta_setup_register_again">Зарегистрировать снова</string>
+    <string name="meta_setup_dev_mode_lost">CyanBridge больше не подключён в Meta AI. Вероятно, режим разработчика был выключен. Включите его снова в Meta AI и нажмите «Зарегистрировать снова».</string>
+    <string name="meta_setup_disconnected_invite">CyanBridge больше не подключён в Meta AI. Оставьте режим разработчика выключенным и нажмите «Зарегистрировать снова».</string>
+    <string name="meta_setup_invited_on_dev_path">Вы подключены через режим разработчика. Для голосового запуска «Hey Meta, открой …» выключите режим разработчика в Meta AI и нажмите здесь «Зарегистрировать снова».</string>
+    <string name="meta_setup_path_label">Подключение к Meta AI: %1$s</string>
+    <string name="meta_setup_path_developer_mode">режим разработчика</string>
+    <string name="meta_setup_path_release_channel">приглашённый тестировщик (релизный канал)</string>
 </resources>

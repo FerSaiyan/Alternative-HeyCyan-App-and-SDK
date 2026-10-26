@@ -413,6 +413,7 @@ internal class MetaRaybanUiController(
                     canStopStream = streamState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.StreamState.STREAMING,
                     canCapturePhoto = streamState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.StreamState.STREAMING,
                     hasCapturedPhoto = manager.lastCapturedPhoto.value != null,
+                    registrationPath = manager.registrationPath.value,
                 ),
             )
         }

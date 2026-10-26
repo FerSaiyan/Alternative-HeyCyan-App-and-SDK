@@ -92,4 +92,26 @@
     <string name="meta_rayban_inactive">비활성</string>
     <string name="meta_rayban_start_display">디스플레이 시작</string>
     <string name="meta_rayban_stop_display">디스플레이 중지</string>
+    <string name="meta_setup_choice_title">Meta AI에 어떻게 연결하나요?</string>
+    <string name="meta_setup_choice_dev_mode">개발자 모드를 사용합니다</string>
+    <string name="meta_setup_choice_dev_mode_detail">Meta AI 앱에서 이미 개발자 모드를 켠 분을 위한 방법입니다.</string>
+    <string name="meta_setup_choice_email">Meta 이메일로 사용 권한 요청</string>
+    <string name="meta_setup_choice_email_detail">CyanBridge가 Meta 계정을 테스터로 추가하면 Meta가 초대 이메일을 보냅니다.</string>
+    <string name="meta_setup_choice_email_unavailable">이 버전에서는 아직 이메일로 사용 권한을 받을 수 없습니다. 개발자 모드를 사용하세요.</string>
+    <string name="meta_setup_dev_step_1">1. Meta AI에서 설정을 열고 앱 정보를 엽니다.</string>
+    <string name="meta_setup_dev_step_2">2. 앱 버전을 5번 탭한 다음(스크린 리더 사용 시 두 번 탭을 5번) 개발자 모드를 켭니다.</string>
+    <string name="meta_setup_dev_step_3">3. 여기로 돌아와 등록을 탭합니다.</string>
+    <string name="meta_setup_email_step_1">1. 사용 권한 요청 양식을 열고 Meta 계정의 이메일을 입력합니다.</string>
+    <string name="meta_setup_email_step_2">2. 승인되면 Meta의 초대 이메일을 열고 초대를 수락합니다.</string>
+    <string name="meta_setup_email_step_3">3. Meta AI에서 개발자 모드를 끕니다. 켜져 있으면 CyanBridge가 “Hey Meta, … 열어줘” 같은 정식 버전 기능 없이 연결됩니다.</string>
+    <string name="meta_setup_email_step_4">4. 여기로 돌아와 등록을 탭합니다.</string>
+    <string name="meta_setup_open_form">사용 권한 요청 양식 열기</string>
+    <string name="meta_setup_register">등록</string>
+    <string name="meta_setup_register_again">다시 등록</string>
+    <string name="meta_setup_dev_mode_lost">CyanBridge가 더 이상 Meta AI에 연결되어 있지 않습니다. 개발자 모드가 꺼진 것 같습니다. Meta AI에서 다시 켠 다음 다시 등록을 탭하세요.</string>
+    <string name="meta_setup_disconnected_invite">CyanBridge가 더 이상 Meta AI에 연결되어 있지 않습니다. 개발자 모드를 끈 상태로 두고 다시 등록을 탭하세요.</string>
+    <string name="meta_setup_invited_on_dev_path">개발자 모드로 연결되어 있습니다. “Hey Meta, … 열어줘” 음성 실행을 쓰려면 Meta AI에서 개발자 모드를 끈 다음 여기서 다시 등록을 탭하세요.</string>
+    <string name="meta_setup_path_label">Meta AI 연결: %1$s</string>
+    <string name="meta_setup_path_developer_mode">개발자 모드</string>
+    <string name="meta_setup_path_release_channel">초대된 테스터(릴리스 채널)</string>
 </resources>

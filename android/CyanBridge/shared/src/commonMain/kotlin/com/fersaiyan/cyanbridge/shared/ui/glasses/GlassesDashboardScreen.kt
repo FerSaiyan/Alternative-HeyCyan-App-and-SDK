@@ -104,6 +104,8 @@ import com.fersaiyan.cyanbridge.shared.glasses.FirmwarePatchRequestUiState
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
 import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
+import com.fersaiyan.cyanbridge.shared.glasses.META_BETA_ACCESS_URL
+import androidx.compose.ui.platform.LocalUriHandler
 import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
 import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
@@ -1227,6 +1229,17 @@ private fun MetaRaybanControls(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.testTag("meta_rayban_setup_guidance"),
             )
+        }
+        if (state.showSetupChoice) {
+            val uriHandler = LocalUriHandler.current
+            MetaSetupChoiceSection(
+                phase = state.registrationPhase,
+                appIdConfigured = state.appIdConfigured,
+                onRegister = { onAction(GlassesDashboardAction.MetaRegister) },
+                onRequestAccess = { runCatching { uriHandler.openUri(META_BETA_ACCESS_URL) } },
+            )
+        } else {
+            state.registrationPath.labelResource()?.let { MetaRegistrationPathText(it) }
         }
         // All pairing flows live in DeviceBindScreen (Scan → Pair Meta Glasses) → MetaPairingActivity.
         // Keep dashboard read-only: errors surface via the AlertDialog above (with Details → Send diagnostics).

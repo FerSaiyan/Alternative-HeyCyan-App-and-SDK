@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.devices.metarayban
 
+import com.fersaiyan.cyanbridge.shared.glasses.MetaRegistrationPhase
+
 internal data class MetaDatReadiness(
     val metaAiInstalled: Boolean,
     val bluetoothPermissionGranted: Boolean,
@@ -7,7 +9,12 @@ internal data class MetaDatReadiness(
     val bondedDeviceCount: Int?,
     val bondedMetaDeviceCount: Int?,
     val developerConfiguration: Boolean,
-)
+    /** The user picked "I use Developer Mode" on the setup screen (hybrid registration). */
+    val developerModeChosen: Boolean = false,
+) {
+    /** Registration is expected to go through Developer Mode: a `"0"` app id, or the user's choice. */
+    val developerPath: Boolean get() = developerConfiguration || developerModeChosen
+}
 
 enum class MetaAccessState {
     UNKNOWN,
@@ -26,7 +33,7 @@ internal fun resolveMetaAccessState(
     !lastError.isNullOrBlank() -> MetaAccessState.FAILED
     !initialized -> MetaAccessState.UNKNOWN
     registrationState != MetaRaybanManager.RegistrationState.UNAVAILABLE -> MetaAccessState.READY
-    !readiness.developerConfiguration &&
+    !readiness.developerPath &&
         availableDeviceCount == 0 &&
         readiness.metaAiInstalled &&
         readiness.bluetoothPermissionGranted &&
@@ -53,10 +60,10 @@ internal fun metaDatSetupGuidance(
     !readiness.bluetoothEnabled ->
         "Turn on Bluetooth, open Meta AI, and confirm the glasses are connected there."
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
-        readiness.developerConfiguration ->
+        readiness.developerPath ->
         "Open Meta AI, confirm the glasses are linked to this account and Developer Mode is enabled for this device, then tap Register again."
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
-        !readiness.developerConfiguration ->
+        !readiness.developerPath ->
         "Your Meta account is not currently enabled for CyanBridge Meta access. Request access at https://cyanbridge.vercel.app/beta. If you're already invited, pair your glasses in Meta AI and tap Register."
     // No bonded Meta wearable at all — actionable after release-channel hints (kept for completeness)
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
@@ -65,4 +72,13 @@ internal fun metaDatSetupGuidance(
     registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE ->
         "Meta DAT registration is unavailable. Confirm the glasses are linked and connected in Meta AI, then retry registration."
     else -> null
+}
+
+/** DAT registration states as the shared hybrid-registration logic sees them. */
+internal fun MetaRaybanManager.RegistrationState.toMetaRegistrationPhase(): MetaRegistrationPhase = when (this) {
+    MetaRaybanManager.RegistrationState.UNAVAILABLE, MetaRaybanManager.RegistrationState.AVAILABLE ->
+        MetaRegistrationPhase.NOT_REGISTERED
+    MetaRaybanManager.RegistrationState.REGISTERING -> MetaRegistrationPhase.REGISTERING
+    MetaRaybanManager.RegistrationState.REGISTERED -> MetaRegistrationPhase.REGISTERED
+    MetaRaybanManager.RegistrationState.UNREGISTERING -> MetaRegistrationPhase.UNREGISTERING
 }

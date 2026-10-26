@@ -136,4 +136,9 @@
     <string name="donation_intro_dialog_title">CyanBridge Asaas 支持说明</string>
     <string name="donation_intro_dialog_message">您好，感谢您考虑向 CyanBridge 捐赠！我在攻读博士的同时维护这个项目，您的支持对我意义重大。由于巴西企业有特殊要求，我还没能配置 Stripe，因此目前使用名为 Asaas 的支付处理商。结账页面是葡萄牙语，如有需要请使用 Google 翻译。我正在积极寻找更好的替代方案。再次感谢您的支持！</string>
     <string name="donation_intro_open_button">打开 Asaas 银行卡表单</string>
+    <string name="meta_registration_channel_name">Meta 眼镜连接</string>
+    <string name="meta_registration_lost_title">Meta 眼镜已断开</string>
+    <string name="meta_registration_lost_dev_mode_text">CyanBridge 已不再连接到 Meta AI。可能是开发者模式被关闭了。请在 Meta AI 中重新开启，然后在 CyanBridge 中重新注册。</string>
+    <string name="meta_registration_lost_invite_text">CyanBridge 已不再连接到 Meta AI。请保持开发者模式关闭，然后在 CyanBridge 中重新注册。</string>
+    <string name="meta_registration_register_again">重新注册</string>
 </resources>

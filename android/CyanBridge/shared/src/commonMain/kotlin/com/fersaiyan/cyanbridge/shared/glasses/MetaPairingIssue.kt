@@ -25,7 +25,7 @@ fun resolveMetaPairingIssue(
     return when {
         metaAccessRequired -> MetaPairingIssue(
             title = "Meta access required",
-            message = "Meta Ray-Ban access is currently limited to CyanBridge early testers. Your Meta account has not been registered yet. Submit the email associated with your Meta account at:\n\nhttps://cyanbridge.vercel.app/beta\n\nAfter you are invited to the Meta release channel, restart CyanBridge and try pairing again.",
+            message = "Your Meta account is not invited to CyanBridge's Meta release channel yet. To request an invite, submit the email associated with your Meta account at:\n\nhttps://cyanbridge.vercel.app/beta\n\nAfter you accept Meta's invite, turn Developer Mode off in Meta AI and tap Register. If you already use Developer Mode in Meta AI, choose \"I use Developer Mode\" on the Meta setup screen instead.",
             primaryLabel = "Request access",
             action = MetaPairingIssueAction.REQUEST_ACCESS,
         )

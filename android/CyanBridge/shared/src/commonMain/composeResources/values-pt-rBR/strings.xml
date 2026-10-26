@@ -100,4 +100,26 @@
     <string name="meta_rayban_inactive">Inativa</string>
     <string name="meta_rayban_start_display">Iniciar tela</string>
     <string name="meta_rayban_stop_display">Parar tela</string>
+    <string name="meta_setup_choice_title">Como você se conecta ao Meta AI?</string>
+    <string name="meta_setup_choice_dev_mode">Uso o Modo de desenvolvedor</string>
+    <string name="meta_setup_choice_dev_mode_detail">Para quem já ativou o Modo de desenvolvedor no app Meta AI.</string>
+    <string name="meta_setup_choice_email">Pedir acesso com meu e-mail da Meta</string>
+    <string name="meta_setup_choice_email_detail">O CyanBridge adiciona sua conta Meta aos testadores, e a Meta envia um convite por e-mail.</string>
+    <string name="meta_setup_choice_email_unavailable">O acesso por e-mail ainda não está disponível nesta versão. Use o Modo de desenvolvedor.</string>
+    <string name="meta_setup_dev_step_1">1. No Meta AI, abra Configurações e depois Informações do app.</string>
+    <string name="meta_setup_dev_step_2">2. Toque 5 vezes na versão do app (com leitor de tela, toque duas vezes nela 5 vezes) e ative o Modo de desenvolvedor.</string>
+    <string name="meta_setup_dev_step_3">3. Volte aqui e toque em Registrar.</string>
+    <string name="meta_setup_email_step_1">1. Abra o formulário de acesso e informe o e-mail da sua conta Meta.</string>
+    <string name="meta_setup_email_step_2">2. Quando for aceito, abra o e-mail de convite da Meta e aceite.</string>
+    <string name="meta_setup_email_step_3">3. No Meta AI, desative o Modo de desenvolvedor. Com ele ativo, o CyanBridge conecta sem recursos da versão publicada, como “Hey Meta, abrir …”.</string>
+    <string name="meta_setup_email_step_4">4. Volte aqui e toque em Registrar.</string>
+    <string name="meta_setup_open_form">Abrir o formulário de acesso</string>
+    <string name="meta_setup_register">Registrar</string>
+    <string name="meta_setup_register_again">Registrar de novo</string>
+    <string name="meta_setup_dev_mode_lost">O CyanBridge não está mais conectado no Meta AI. Provavelmente o Modo de desenvolvedor foi desativado. Ative-o de novo no Meta AI e toque em Registrar de novo.</string>
+    <string name="meta_setup_disconnected_invite">O CyanBridge não está mais conectado no Meta AI. Mantenha o Modo de desenvolvedor desativado e toque em Registrar de novo.</string>
+    <string name="meta_setup_invited_on_dev_path">Você está conectado pelo Modo de desenvolvedor. Para abrir por voz com “Hey Meta, abrir …”, desative o Modo de desenvolvedor no Meta AI e toque em Registrar de novo aqui.</string>
+    <string name="meta_setup_path_label">Conexão com o Meta AI: %1$s</string>
+    <string name="meta_setup_path_developer_mode">Modo de desenvolvedor</string>
+    <string name="meta_setup_path_release_channel">testador convidado (canal de lançamento)</string>
 </resources>
