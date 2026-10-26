@@ -7,6 +7,7 @@ import com.fersaiyan.cyanbridge.shared.assistant.AssistantBrain
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantGlassesHooks
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantSpeechStream
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantVoice
+import com.fersaiyan.cyanbridge.shared.assistant.VisionReplyPolicy
 import com.fersaiyan.cyanbridge.shared.ble.VendorAiSpeakMode
 import com.fersaiyan.cyanbridge.shared.ble.VendorGlassesBridge
 import com.fersaiyan.cyanbridge.shared.ble.VendorGlassesMode
@@ -47,7 +48,10 @@ internal class IosAssistantBrain(
         if (useLocalModel) {
             IosLocalModels.describeImage(image, question, onToken)
         } else {
-            imageAiService.analyzeImage(image, question)
+            // Like Android's relay answers: an empty or "please upload the image" reply becomes a short apology.
+            imageAiService.analyzeImage(image, question).let { reply ->
+                if (reply.startsWith("Error:")) reply else VisionReplyPolicy.relayReply(reply, detectVisionFailure = true).spoken
+            }
         }
 
     override suspend fun answerText(question: String, onToken: (String) -> Unit): String {
