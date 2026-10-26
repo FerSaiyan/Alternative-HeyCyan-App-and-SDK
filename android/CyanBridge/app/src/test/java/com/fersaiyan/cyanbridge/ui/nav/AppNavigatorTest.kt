@@ -145,6 +145,13 @@ class AppNavigatorTest {
     }
 
     @Test
+    fun defaultViewModelFactoryBuildsAndroidViewModels() {
+        // The voice profile screen's ViewModel takes the Application, as with the Activity's default factory.
+        val controller = launch(AppRoute.VOICE_ENROLLMENT)
+        assertEquals(Lifecycle.State.RESUMED, controller.navigator.topScreen!!.lifecycle.currentState)
+    }
+
+    @Test
     fun processDeathRestoresTheStackFromSavedState() {
         val controller = launch(AppRoute.APPEARANCE)
         controller.get().startActivity(AppRoute.PUBLISH_PLUGIN.intent(controller.get()))

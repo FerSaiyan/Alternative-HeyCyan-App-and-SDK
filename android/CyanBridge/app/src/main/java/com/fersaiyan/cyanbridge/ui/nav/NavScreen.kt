@@ -269,11 +269,14 @@ abstract class NavScreen : ContextWrapper(null), LifecycleOwner, ViewModelStoreO
     }
 }
 
-/** `by viewModels { factory }` for a [NavScreen], stored with its back-stack entry. */
+/**
+ * `by viewModels { factory }` for a [NavScreen], stored with its back-stack entry. Without a
+ * factory it builds no-argument and `AndroidViewModel` classes, as the Activity's default did.
+ */
 inline fun <reified VM : ViewModel> NavScreen.viewModels(
     noinline factoryProducer: (() -> ViewModelProvider.Factory)? = null,
 ): Lazy<VM> = ViewModelLazy(
     VM::class,
     { viewModelStore },
-    factoryProducer ?: { ViewModelProvider.NewInstanceFactory() },
+    factoryProducer ?: { ViewModelProvider.AndroidViewModelFactory.getInstance(activity.application) },
 )
