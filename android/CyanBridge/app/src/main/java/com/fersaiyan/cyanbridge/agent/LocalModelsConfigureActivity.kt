@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.agent
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -51,7 +52,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                 PickModelFile -> importModelLauncher.launch(arrayOf("application/octet-stream", "*/*"))
                 ReportSettingsSaved -> setResult(RESULT_OK)
                 is OpenModelTest -> startActivity(
-                    Intent(this, LocalModelTestActivity::class.java).putExtra(LocalModelTestActivity.EXTRA_MODEL_ID, effect.modelId),
+                    AppRoute.LOCAL_MODEL_TEST.intent(this).putExtra(LocalModelTestDestination.EXTRA_MODEL_ID, effect.modelId),
                 )
                 is OpenModelSource -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(effect.url)))
                 RequestStudioPermissions -> PluginVoicePermissions.ensure(this) { viewModel.saveStudioBridge() }

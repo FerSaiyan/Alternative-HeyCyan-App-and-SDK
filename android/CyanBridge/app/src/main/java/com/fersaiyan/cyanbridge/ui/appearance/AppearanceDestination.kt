@@ -1,14 +1,14 @@
 package com.fersaiyan.cyanbridge.ui.appearance
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Build
 import com.fersaiyan.cyanbridge.shared.ui.appearance.AppearanceScreen
 import android.os.Bundle
-import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 
-class AppearanceActivity : AppCompatActivity() {
+class AppearanceDestination : NavScreen() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val preferences = AppearancePreferences(this)

@@ -1,19 +1,16 @@
 package com.fersaiyan.cyanbridge.ui.localagent
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.shared.ui.localagent.LocalAgentDocumentScreen
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 
-class DailyFactsActivity : AppCompatActivity() {
+class DailyFactsDestination : NavScreen() {
 
     private var factsText by mutableStateOf("")
 
@@ -43,29 +40,25 @@ class DailyFactsActivity : AppCompatActivity() {
         }
 
         factsText = LocalAgentMemoryStore.readText(file)
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                LocalAgentDocumentScreen(
-                    title = title,
-                    path = file.absolutePath,
-                    text = factsText,
-                    hint = hint,
-                    editable = true,
-                    primaryLabel = "Save",
-                    onTextChange = { factsText = it },
-                    onPrimary = {
-                        LocalAgentMemoryStore.writeText(file, factsText)
-                        Toast.makeText(
-                            this,
-                            if (mode == MODE_CONFIRMED) "Saved confirmed facts" else "Saved daily facts",
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    },
-                    onBack = ::finish,
-                )
-            }
+            LocalAgentDocumentScreen(
+                title = title,
+                path = file.absolutePath,
+                text = factsText,
+                hint = hint,
+                editable = true,
+                primaryLabel = "Save",
+                onTextChange = { factsText = it },
+                onPrimary = {
+                    LocalAgentMemoryStore.writeText(file, factsText)
+                    Toast.makeText(
+                        this,
+                        if (mode == MODE_CONFIRMED) "Saved confirmed facts" else "Saved daily facts",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                },
+                onBack = ::finish,
+            )
         }
     }
 

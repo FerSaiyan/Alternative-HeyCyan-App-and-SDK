@@ -1,24 +1,21 @@
 package com.fersaiyan.cyanbridge.ui.localagent
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
 import com.fersaiyan.cyanbridge.shared.ui.localagent.LocalAgentDocumentScreen
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class ScreenCapturesActivity : AppCompatActivity() {
+class ScreenCapturesDestination : NavScreen() {
 
     private var title by mutableStateOf("Screen captures")
     private var path by mutableStateOf("")
@@ -28,24 +25,20 @@ class ScreenCapturesActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         LocalAgentMemoryStore.ensureSeedFiles(this)
         loadAndRender()
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                LocalAgentDocumentScreen(
-                    title = title,
-                    path = path,
-                    text = renderedText,
-                    hint = "Latest captures (tail)",
-                    editable = false,
-                    primaryLabel = "Refresh",
-                    onTextChange = {},
-                    onPrimary = ::loadAndRender,
-                    secondaryLabel = "Share",
-                    onSecondary = ::shareRenderedText,
-                    onBack = ::finish,
-                )
-            }
+            LocalAgentDocumentScreen(
+                title = title,
+                path = path,
+                text = renderedText,
+                hint = "Latest captures (tail)",
+                editable = false,
+                primaryLabel = "Refresh",
+                onTextChange = {},
+                onPrimary = ::loadAndRender,
+                secondaryLabel = "Share",
+                onSecondary = ::shareRenderedText,
+                onBack = ::finish,
+            )
         }
     }
 

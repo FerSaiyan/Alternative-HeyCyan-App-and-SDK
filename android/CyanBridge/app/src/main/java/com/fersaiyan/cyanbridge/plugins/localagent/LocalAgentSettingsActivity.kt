@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.localagent
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
@@ -61,7 +62,7 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
 import com.fersaiyan.cyanbridge.ui.hasAccessibilityServicePermission
-import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsActivity
+import com.fersaiyan.cyanbridge.ui.localagent.PendingActionsDestination
 import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -180,7 +181,7 @@ class LocalAgentSettingsActivity : AppCompatActivity(), LocalAgentSettingsAction
     }
 
     override fun onOpenPendingActions() {
-        startActivity(Intent(this, PendingActionsActivity::class.java))
+        startActivity(AppRoute.PENDING_ACTIONS.intent(this))
     }
 
     override fun onShizukuFallbackChange(enabled: Boolean) {

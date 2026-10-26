@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.autodiary
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -51,9 +52,9 @@ import com.fersaiyan.cyanbridge.shared.prefs.MemoryPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ui.NativePluginShortcutPreference
-import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsActivity
-import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryActivity
-import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesActivity
+import com.fersaiyan.cyanbridge.ui.localagent.DailyFactsDestination
+import com.fersaiyan.cyanbridge.ui.localagent.DailySummaryDestination
+import com.fersaiyan.cyanbridge.ui.localagent.ScreenCapturesDestination
 import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -143,7 +144,7 @@ class AutoDiarySettingsActivity : AppCompatActivity(), AutoDiarySettingsActions 
     }
 
     override fun onOpenCaptures() {
-        startActivity(Intent(this, ScreenCapturesActivity::class.java))
+        startActivity(AppRoute.SCREEN_CAPTURES.intent(this))
     }
 
     override fun onScreenOcrRetentionDaysChange(days: Int) {
@@ -169,20 +170,20 @@ class AutoDiarySettingsActivity : AppCompatActivity(), AutoDiarySettingsActions 
     }
 
     override fun onOpenSummary() {
-        startActivity(Intent(this, DailySummaryActivity::class.java))
+        startActivity(AppRoute.DAILY_SUMMARY.intent(this))
     }
 
     override fun onOpenDailyFactsDraft() {
         startActivity(
-            Intent(this, DailyFactsActivity::class.java)
-                .putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_DRAFT),
+            AppRoute.DAILY_FACTS.intent(this)
+                .putExtra(DailyFactsDestination.EXTRA_MODE, DailyFactsDestination.MODE_DRAFT),
         )
     }
 
     override fun onOpenConfirmedDailyFacts() {
         startActivity(
-            Intent(this, DailyFactsActivity::class.java)
-                .putExtra(DailyFactsActivity.EXTRA_MODE, DailyFactsActivity.MODE_CONFIRMED),
+            AppRoute.DAILY_FACTS.intent(this)
+                .putExtra(DailyFactsDestination.EXTRA_MODE, DailyFactsDestination.MODE_CONFIRMED),
         )
     }
 

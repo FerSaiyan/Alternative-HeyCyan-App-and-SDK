@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
@@ -52,19 +54,11 @@ import kotlinx.coroutines.launch
  * starts and stops it and shows the glasses' status events. The glasses' Wi-Fi is set up on the
  * Mentra firmware update screen, which this screen opens when the glasses have none.
  */
-class MentraBroadcastActivity : AppCompatActivity() {
+class MentraBroadcastDestination : NavScreen() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        lifecycleScope.launch {
-            MentraBroadcastController.state.map { it.phase.isActive }.distinctUntilChanged().collect { active ->
-                if (active) {
-                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                } else {
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                }
-            }
-        }
-        setThemedComposeScreen { BroadcastScreen() }
+        keepScreenOnWhile(MentraBroadcastController.state.map { it.phase.isActive }.distinctUntilChanged())
+        setContent { BroadcastScreen() }
     }
 
     @Composable
@@ -92,7 +86,7 @@ class MentraBroadcastActivity : AppCompatActivity() {
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 if (glassesWifi == null && !state.phase.isActive) {
-                    OutlinedButton(onClick = { startKtxActivity<MentraFirmwareUpdateActivity>() }) {
+                    OutlinedButton(onClick = { startActivity(AppRoute.MENTRA_FIRMWARE_UPDATE.intent(this@MentraBroadcastDestination)) }) {
                         Text(stringResource(R.string.mentra_broadcast_wifi_setup))
                     }
                 }
@@ -114,8 +108,8 @@ class MentraBroadcastActivity : AppCompatActivity() {
                     Button(
                         enabled = !state.phase.isActive,
                         onClick = {
-                            MediaPrefs.MentraBroadcast.streamUrl[this@MentraBroadcastActivity] = url.trim()
-                            refusal = MentraBroadcastController.start(this@MentraBroadcastActivity, url)?.let(::message)
+                            MediaPrefs.MentraBroadcast.streamUrl[this@MentraBroadcastDestination] = url.trim()
+                            refusal = MentraBroadcastController.start(this@MentraBroadcastDestination, url)?.let(::message)
                         },
                     ) { Text(stringResource(R.string.mentra_broadcast_start)) }
                     OutlinedButton(

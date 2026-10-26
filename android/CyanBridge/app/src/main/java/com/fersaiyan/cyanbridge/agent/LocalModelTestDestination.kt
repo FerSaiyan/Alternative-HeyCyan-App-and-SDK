@@ -1,10 +1,10 @@
 package com.fersaiyan.cyanbridge.agent
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.initializer
@@ -23,14 +23,11 @@ import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelTestViewModel
 import com.fersaiyan.cyanbridge.shared.prefs.AgentPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.shared.ui.localmodels.LocalModelTestScreen
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Hosts the shared model performance test; [LocalModelTestViewModel] runs it. */
-class LocalModelTestActivity : ComponentActivity() {
+class LocalModelTestDestination : NavScreen() {
     private val viewModel by viewModels<LocalModelTestViewModel> {
         viewModelFactory {
             initializer {
@@ -41,13 +38,9 @@ class LocalModelTestActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
             val state by viewModel.state.collectAsState()
-            CyanBridgeTheme(appearance) {
-                LocalModelTestScreen(state = state, onBack = { finish() })
-            }
+            LocalModelTestScreen(state = state, onBack = { finish() })
         }
         viewModel.start()
     }

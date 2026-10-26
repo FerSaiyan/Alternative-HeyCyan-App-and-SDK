@@ -1,28 +1,25 @@
 package com.fersaiyan.cyanbridge.bridge.runtimes.evenhub
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.annotation.SuppressLint
 import android.os.Bundle
 import android.util.Log
-import android.view.KeyEvent
+import androidx.activity.addCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.activity.compose.setContent
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.bridge.core.DisplayCommand
 import com.fersaiyan.cyanbridge.bridge.core.GlassesBridge
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
 /** Compose shell around the Android-only WebView and EvenHub JavaScript bridge. */
-class EvenHubRuntimeActivity : AppCompatActivity() {
+class EvenHubRuntimeDestination : NavScreen() {
     companion object {
         private const val TAG = EvenHubRuntimeViewModel.TAG
         private const val SHIM_ASSET_PATH = "evenhub-compat-shim.js"
@@ -36,19 +33,19 @@ class EvenHubRuntimeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                EvenHubRuntimeScreen(
-                    url = viewModel.url,
-                    logs = viewModel.logs,
-                    onUrlChange = viewModel::onUrlChange,
-                    onLoad = ::loadUrl,
-                    onStop = ::shutdown,
-                    onWebViewCreated = ::configureWebView,
-                )
-            }
+            EvenHubRuntimeScreen(
+                url = viewModel.url,
+                logs = viewModel.logs,
+                onUrlChange = viewModel::onUrlChange,
+                onLoad = ::loadUrl,
+                onStop = ::shutdown,
+                onWebViewCreated = ::configureWebView,
+            )
+        }
+        // Back goes back in the web app first, as the Activity's back key did.
+        onBackPressedDispatcher.addCallback(this) {
+            if (::webView.isInitialized && webView.canGoBack()) webView.goBack() else finish()
         }
     }
 
@@ -67,13 +64,6 @@ class EvenHubRuntimeActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && ::webView.isInitialized && webView.canGoBack()) {
-            webView.goBack()
-            return true
-        }
-        return super.onKeyDown(keyCode, event)
-    }
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView(createdWebView: WebView) {

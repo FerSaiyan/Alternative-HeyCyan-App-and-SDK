@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.os.Build
 import android.util.Log
 import android.widget.Toast
@@ -34,8 +35,8 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesMediaCounts
 import com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
-import com.fersaiyan.cyanbridge.ui.MentraBroadcastActivity
-import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateActivity
+import com.fersaiyan.cyanbridge.ui.MentraBroadcastDestination
+import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateDestination
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import com.fersaiyan.cyanbridge.ui.requestWifiP2pPermission
 import com.hjq.permissions.OnPermissionCallback
@@ -176,7 +177,7 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
 
     /** The SDK's own update on its own screen; never the HeyCyan OTA section. */
     override val firmwareUpdate = SdkFirmwareUpdate {
-        activity.startKtxActivity<MentraFirmwareUpdateActivity>()
+        activity.startActivity(AppRoute.MENTRA_FIRMWARE_UPDATE.intent(activity))
     }
 
     /**
@@ -193,7 +194,7 @@ internal class MentraLiveGlasses(private val context: GlassesDeviceContext) : An
         }
     }
 
-    override val liveBroadcast = LiveBroadcastControl { activity.startKtxActivity<MentraBroadcastActivity>() }
+    override val liveBroadcast = LiveBroadcastControl { activity.startActivity(AppRoute.MENTRA_BROADCAST.intent(activity)) }
 
     private fun startLivePreview() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return toast(R.string.mentra_live_preview_needs_android_10)

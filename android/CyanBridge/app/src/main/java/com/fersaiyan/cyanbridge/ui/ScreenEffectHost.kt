@@ -10,6 +10,7 @@ import com.fersaiyan.cyanbridge.shared.viewmodel.DialogButton
 import com.fersaiyan.cyanbridge.shared.viewmodel.ScreenDialog
 import com.fersaiyan.cyanbridge.shared.viewmodel.ScreenEffect
 import com.fersaiyan.cyanbridge.shared.viewmodel.ShowMessage
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
@@ -23,6 +24,20 @@ fun ComponentActivity.collectScreenEffects(effects: Flow<ScreenEffect>, handle: 
             when (effect) {
                 is ShowMessage -> showToast(effect.message)
                 is ScreenDialog -> showScreenDialog(effect)
+                CloseScreen -> finish()
+                else -> handle(effect)
+            }
+        }
+    }
+}
+
+/** The same for a screen of the single Activity; it lasts while the screen is in the back stack. */
+fun NavScreen.collectScreenEffects(effects: Flow<ScreenEffect>, handle: (ScreenEffect) -> Unit = {}) {
+    lifecycleScope.launch {
+        effects.collect { effect ->
+            when (effect) {
+                is ShowMessage -> showToast(effect.message)
+                is ScreenDialog -> activity.showScreenDialog(effect)
                 CloseScreen -> finish()
                 else -> handle(effect)
             }

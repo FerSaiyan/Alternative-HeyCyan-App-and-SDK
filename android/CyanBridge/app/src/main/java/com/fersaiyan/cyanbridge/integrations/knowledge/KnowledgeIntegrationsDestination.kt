@@ -1,21 +1,21 @@
 package com.fersaiyan.cyanbridge.integrations.knowledge
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.shared.ui.knowledge.KnowledgeIntegrationsScreen
 import com.fersaiyan.cyanbridge.shared.ui.knowledge.KnowledgeIntegrationsViewModel
 import com.fersaiyan.cyanbridge.shared.ui.knowledge.KnowledgeVaultBackend
-import com.fersaiyan.cyanbridge.ui.setThemedComposeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class KnowledgeIntegrationsActivity : AppCompatActivity() {
+class KnowledgeIntegrationsDestination : NavScreen() {
     private val viewModel by viewModels<KnowledgeIntegrationsViewModel> {
         viewModelFactory { initializer { KnowledgeIntegrationsViewModel(SafKnowledgeVault(applicationContext)) } }
     }
@@ -28,7 +28,7 @@ class KnowledgeIntegrationsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setThemedComposeScreen {
+        setContent {
             KnowledgeIntegrationsScreen(
                 viewModel = viewModel,
                 onChooseExisting = { existingVaultPicker.launch(viewModel.vault?.treeUri?.let(Uri::parse)) },

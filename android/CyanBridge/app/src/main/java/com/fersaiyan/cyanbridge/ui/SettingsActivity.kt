@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
@@ -53,7 +54,7 @@ import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
 import com.fersaiyan.cyanbridge.audio.MeetingCapturePrefs
 import com.fersaiyan.cyanbridge.audio.MeetingCaptureService
-import com.fersaiyan.cyanbridge.ui.appearance.AppearanceActivity
+import com.fersaiyan.cyanbridge.ui.appearance.AppearanceDestination
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
@@ -309,7 +310,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
     }
 
     override fun openAppearance() {
-        startActivity(Intent(this, AppearanceActivity::class.java))
+        startActivity(AppRoute.APPEARANCE.intent(this))
     }
 
     override fun openAppLanguageSelection() {

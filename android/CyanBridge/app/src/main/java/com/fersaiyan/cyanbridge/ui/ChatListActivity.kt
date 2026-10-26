@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
@@ -15,7 +16,7 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
 import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationPrefs
-import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationsActivity
+import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationsDestination
 import com.fersaiyan.cyanbridge.integrations.knowledge.ObsidianMarkdownCodec
 import com.fersaiyan.cyanbridge.integrations.knowledge.SafKnowledgeRepository
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsReviewThreadStore
@@ -88,7 +89,7 @@ class ChatListActivity : AppCompatActivity() {
                 onOpenNote = ::openNote,
                 onNewNote = { startActivity(Intent(this, NoteEditorActivity::class.java)) },
                 onChatAppearance = { vm.appearanceMenuVisible = true },
-                onOpenNotesSettings = { startActivity(Intent(this, KnowledgeIntegrationsActivity::class.java)) },
+                onOpenNotesSettings = { startActivity(AppRoute.KNOWLEDGE_INTEGRATIONS.intent(this)) },
                 onDestinationSelected = { openAppDestination(it) { recentChatIntent(withDailyReview = true) } },
             )
             if (vm.appearanceMenuVisible) {

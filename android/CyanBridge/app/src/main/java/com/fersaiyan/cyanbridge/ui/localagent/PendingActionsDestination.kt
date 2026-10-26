@@ -1,9 +1,9 @@
 package com.fersaiyan.cyanbridge.ui.localagent
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.os.Bundle
-import androidx.activity.compose.setContent
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.initializer
@@ -17,9 +17,6 @@ import com.fersaiyan.cyanbridge.shared.ui.localagent.PendingActionsViewModel
 import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.showToast
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -27,7 +24,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class PendingActionsActivity : AppCompatActivity() {
+class PendingActionsDestination : NavScreen() {
 
     private val viewModel by viewModels<PendingActionsViewModel> {
         viewModelFactory { initializer { PendingActionsViewModel(AndroidPendingActionsPlatform(applicationContext)) } }
@@ -35,20 +32,16 @@ class PendingActionsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                PendingActionsScreen(
-                    pendingCount = viewModel.pendingCount,
-                    renderedAction = viewModel.renderedAction,
-                    hasPendingAction = viewModel.hasPendingAction,
-                    onRefresh = viewModel::refresh,
-                    onApprove = viewModel::approve,
-                    onReject = viewModel::reject,
-                    onBack = ::finish,
-                )
-            }
+            PendingActionsScreen(
+                pendingCount = viewModel.pendingCount,
+                renderedAction = viewModel.renderedAction,
+                hasPendingAction = viewModel.hasPendingAction,
+                onRefresh = viewModel::refresh,
+                onApprove = viewModel::approve,
+                onReject = viewModel::reject,
+                onBack = ::finish,
+            )
         }
     }
 }

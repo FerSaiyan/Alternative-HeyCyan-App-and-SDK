@@ -1,9 +1,10 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.addCallback
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
@@ -20,7 +21,7 @@ import kotlinx.coroutines.launch
  * Separate from the HeyCyan OTA section on purpose. While the update runs the screen stays on and
  * back is refused; the update itself lives in [MentraOtaAdapter.session], not in this activity.
  */
-class MentraFirmwareUpdateActivity : AppCompatActivity() {
+class MentraFirmwareUpdateDestination : NavScreen() {
     private val viewModel by viewModels<MentraFirmwareUpdateViewModel> {
         viewModelFactory { initializer { MentraFirmwareUpdateViewModel(MentraOtaAdapter.session(applicationContext)) } }
     }
@@ -28,16 +29,8 @@ class MentraFirmwareUpdateActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this) { if (viewModel.onLeaveRequested()) finish() }
-        lifecycleScope.launch {
-            viewModel.uiState.map { it.ota.isActive }.distinctUntilChanged().collect { active ->
-                if (active) {
-                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                } else {
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                }
-            }
-        }
-        setThemedComposeScreen {
+        keepScreenOnWhile(viewModel.uiState.map { it.ota.isActive }.distinctUntilChanged())
+        setContent {
             MentraFirmwareUpdateScreen(viewModel = viewModel, onClose = ::finish)
         }
     }

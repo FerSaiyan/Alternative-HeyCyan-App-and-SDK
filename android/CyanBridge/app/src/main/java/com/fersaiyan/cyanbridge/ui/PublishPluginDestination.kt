@@ -1,9 +1,9 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.os.Bundle
-import androidx.activity.compose.setContent
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -12,14 +12,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.shared.ui.plugins.PublishPluginScreen
 import com.fersaiyan.cyanbridge.shared.ui.plugins.PublishPluginViewModel
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-class PublishPluginActivity : AppCompatActivity() {
+class PublishPluginDestination : NavScreen() {
 
     private val viewModel by viewModels<PublishPluginViewModel> {
         viewModelFactory {
@@ -37,24 +34,19 @@ class PublishPluginActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                LaunchedEffect(viewModel.submitted) { if (viewModel.submitted) finish() }
-                PublishPluginScreen(
-                    state = viewModel.state,
-                    categories = viewModel.categories,
-                    onTitleChanged = viewModel::onTitleChanged,
-                    onAuthorChanged = viewModel::onAuthorChanged,
-                    onDescriptionChanged = viewModel::onDescriptionChanged,
-                    onCategorySelected = viewModel::onCategorySelected,
-                    onTaskerNetLinkChanged = viewModel::onTaskerNetLinkChanged,
-                    onSubmit = viewModel::submit,
-                    onNavigateBack = ::finish,
-                )
-            }
+            LaunchedEffect(viewModel.submitted) { if (viewModel.submitted) finish() }
+            PublishPluginScreen(
+                state = viewModel.state,
+                categories = viewModel.categories,
+                onTitleChanged = viewModel::onTitleChanged,
+                onAuthorChanged = viewModel::onAuthorChanged,
+                onDescriptionChanged = viewModel::onDescriptionChanged,
+                onCategorySelected = viewModel::onCategorySelected,
+                onTaskerNetLinkChanged = viewModel::onTaskerNetLinkChanged,
+                onSubmit = viewModel::submit,
+                onNavigateBack = ::finish,
+            )
         }
     }
 }

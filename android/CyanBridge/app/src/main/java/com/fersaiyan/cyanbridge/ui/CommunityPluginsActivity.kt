@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import com.fersaiyan.cyanbridge.R
 import android.content.Context
 import android.content.Intent
@@ -206,7 +207,7 @@ class CommunityPluginsActivity : AppCompatActivity() {
                     onRefresh = viewModel::refresh,
                     onOpenCommunityPlugin = ::openCommunityPlugin,
                     onPublishPlugin = {
-                        startActivity(Intent(this, PublishPluginActivity::class.java))
+                        startActivity(AppRoute.PUBLISH_PLUGIN.intent(this))
                     },
                     onDestinationSelected = { if (it != AppDestination.PLUGINS) openAppDestination(it) },
                 )

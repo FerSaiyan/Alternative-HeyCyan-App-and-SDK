@@ -1,11 +1,11 @@
 package com.fersaiyan.cyanbridge.ui.localagent
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.compose.setContent
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.initializer
@@ -24,15 +24,12 @@ import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryScreen
 import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryViewModel
 import com.fersaiyan.cyanbridge.shared.ui.localagent.DailySummaryWork
 import com.fersaiyan.cyanbridge.shared.ui.UiMessage
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.showToast
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class DailySummaryActivity : AppCompatActivity() {
+class DailySummaryDestination : NavScreen() {
 
     private val date: String by lazy {
         intent.getStringExtra(EXTRA_DATE)?.trim().orEmpty().ifBlank {
@@ -49,25 +46,21 @@ class DailySummaryActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         LocalAgentMemoryStore.ensureSeedFiles(this)
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                DailySummaryScreen(
-                    title = "Daily summary ($date)",
-                    path = file.absolutePath,
-                    status = viewModel.status,
-                    summary = viewModel.summary,
-                    isBusy = viewModel.isRegenerating,
-                    progress = viewModel.progress,
-                    progressTitle = viewModel.progressTitle,
-                    progressDetail = viewModel.progressDetail,
-                    onRefresh = viewModel::refresh,
-                    onRegenerate = viewModel::regenerate,
-                    onShare = ::shareCurrent,
-                    onBack = ::finish,
-                )
-            }
+            DailySummaryScreen(
+                title = "Daily summary ($date)",
+                path = file.absolutePath,
+                status = viewModel.status,
+                summary = viewModel.summary,
+                isBusy = viewModel.isRegenerating,
+                progress = viewModel.progress,
+                progressTitle = viewModel.progressTitle,
+                progressDetail = viewModel.progressDetail,
+                onRefresh = viewModel::refresh,
+                onRegenerate = viewModel::regenerate,
+                onShare = ::shareCurrent,
+                onBack = ::finish,
+            )
         }
 
         viewModel.refresh()
