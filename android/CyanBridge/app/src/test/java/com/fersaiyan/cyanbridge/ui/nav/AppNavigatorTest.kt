@@ -156,4 +156,40 @@ class AppNavigatorTest {
         assertEquals(listOf(AppRoute.APPEARANCE, AppRoute.PUBLISH_PLUGIN), restored.routes())
         assertTrue(restored.navigator.top!!.route == AppRoute.PUBLISH_PLUGIN)
     }
+
+    @Test
+    fun launcherOpensOnboardingAloneUntilSetupIsDone() {
+        context.getSharedPreferences("cyanbridge_prefs", Context.MODE_PRIVATE).edit().putBoolean("onboarding_completed", false).commit()
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            .setClassName(context, "com.fersaiyan.cyanbridge.ui.WelcomeActivity")
+        val controller = Robolectric.buildActivity(MainActivity::class.java, launcher)
+            .create().start().postCreate(null).resume()
+
+        assertEquals(listOf(AppRoute.WELCOME), controller.routes())
+        assertEquals(false, controller.navigator.hasRoot)
+        // Back on the only onboarding screen is the system's (it leaves the app), not a pop to the glasses screen.
+        assertEquals(false, controller.navigator.canGoBack)
+
+        controller.navigator.topScreen!!.finish()
+        assertTrue(controller.get().isFinishing)
+    }
+
+    @Test
+    fun onboardingStepsReplaceEachOtherAndTheEndShowsTheGlassesScreen() {
+        context.getSharedPreferences("cyanbridge_prefs", Context.MODE_PRIVATE).edit().putBoolean("onboarding_completed", false).commit()
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            .setClassName(context, "com.fersaiyan.cyanbridge.ui.WelcomeActivity")
+        val controller = Robolectric.buildActivity(MainActivity::class.java, launcher).create()
+        val welcome = controller.navigator.topScreen!!
+
+        welcome.startActivity(AppRoute.BATTERY_GUIDE.intent(welcome))
+        welcome.finish()
+        assertEquals(listOf(AppRoute.BATTERY_GUIDE), controller.routes())
+        assertEquals(false, controller.get().isFinishing)
+
+        val guide = controller.navigator.topScreen!!
+        guide.startActivity(Intent(guide, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        assertTrue(controller.navigator.isRootVisible)
+        assertEquals(true, controller.navigator.hasRoot)
+    }
 }

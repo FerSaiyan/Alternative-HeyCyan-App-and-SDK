@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.voiceprofile
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.Manifest
 import android.content.Context
@@ -17,7 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.VoiceEnrollmentScreen
-import com.fersaiyan.cyanbridge.ui.OnboardingFeatureActivity
+import com.fersaiyan.cyanbridge.ui.OnboardingFeatureDestination
 
 /**
  * Voice enrollment: an onboarding step (with [EXTRA_STEP_INDEX]) or a standalone screen opened
@@ -95,7 +96,7 @@ class VoiceEnrollmentDestination : NavScreen() {
     }
 
     private fun navigateToStep(index: Int) {
-        startActivity(OnboardingFeatureActivity.stepIntent(this, index))
+        startActivity(OnboardingFeatureDestination.stepIntent(this, index))
         finish()
     }
 
@@ -103,7 +104,7 @@ class VoiceEnrollmentDestination : NavScreen() {
         private const val EXTRA_STEP_INDEX = "step_index"
         private const val EXTRA_STEP_COUNT = "step_count"
 
-        fun intent(context: Context) = Intent(context, VoiceEnrollmentDestination::class.java)
+        fun intent(context: Context) = AppRoute.VOICE_ENROLLMENT.intent(context)
 
         fun onboardingIntent(context: Context, stepIndex: Int, stepCount: Int) =
             intent(context).putExtra(EXTRA_STEP_INDEX, stepIndex).putExtra(EXTRA_STEP_COUNT, stepCount)

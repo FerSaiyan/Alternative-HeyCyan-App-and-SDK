@@ -71,15 +71,16 @@
         <meta-data android:name="com.meta.wearable.mwdat.DAM_ENABLED" android:value="true" />
         <meta-data android:name="com.mentra.bluetoothsdk.analytics.disabled" android:value="true" />
 
-        <activity android:name=".ui.WelcomeActivity" android:exported="true">
+        <!-- The only screen host: every in-app screen is a destination of its back stack. singleTask keeps
+             one instance (one glasses host); intents for it arrive in onNewIntent. -->
+        <activity android:name=".MainActivity" android:exported="true" android:label="@string/app_name" android:launchMode="singleTask" />
+        <!-- The launcher icon keeps the old launcher Activity's name (pinned shortcuts); MainActivity shows onboarding first when needed. -->
+        <activity-alias android:name=".ui.WelcomeActivity" android:targetActivity=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
-        <!-- The only screen host: every in-app screen is a destination of its back stack. singleTask keeps
-             one instance (one glasses host); intents for it arrive in onNewIntent. -->
-        <activity android:name=".MainActivity" android:exported="true" android:label="@string/app_name" android:launchMode="singleTask" />
+        </activity-alias>
         <!-- Meta AI registration callback (cyanbridge://): forwards to the Meta setup screen in MainActivity. -->
         <activity android:name=".ui.MetaPairingActivity" android:exported="true" android:launchMode="singleTask" android:label="@string/meta_pairing_title" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:noHistory="true">
             <intent-filter>
@@ -89,8 +90,6 @@
                 <data android:scheme="cyanbridge" />
             </intent-filter>
         </activity>
-        <activity android:name=".ui.BatteryOptimizationGuideActivity" android:exported="false" android:label="@string/battery_opt_title" />
-        <activity android:name=".ui.OnboardingFeatureActivity" android:exported="false" android:label="Setup" />
         <service android:name=".devices.meizumyvu.MeizuMyvuConnectionService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <!-- Deep-link entry: forwards to the Pro screen in MainActivity. -->
         <activity android:name=".agent.ProSubscriptionActivity" android:exported="true" android:label="Pro Subscription" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:noHistory="true">

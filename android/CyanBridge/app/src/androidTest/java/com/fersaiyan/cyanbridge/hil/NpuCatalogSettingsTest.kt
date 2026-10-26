@@ -5,7 +5,10 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.AndroidComposeTestRule
+import androidx.test.ext.junit.rules.ActivityScenarioRule
+import com.fersaiyan.cyanbridge.MainActivity
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -15,7 +18,6 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureDestination
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
 import com.fersaiyan.cyanbridge.localmodels.download.ModelDownloadForegroundService
 import com.fersaiyan.cyanbridge.localmodels.engine.NpuCatalogVariants
@@ -43,7 +45,17 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NpuCatalogSettingsTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<LocalModelsConfigureActivity>()
+    // The Local models screen is a route of MainActivity now.
+    val composeRule = AndroidComposeTestRule(
+        activityRule = ActivityScenarioRule<MainActivity>(
+            AppRoute.LOCAL_MODELS.intent(InstrumentationRegistry.getInstrumentation().targetContext),
+        ),
+        activityProvider = { rule ->
+            lateinit var activity: MainActivity
+            rule.scenario.onActivity { activity = it }
+            activity
+        },
+    )
 
     private val args = InstrumentationRegistry.getArguments()
     private val context = InstrumentationRegistry.getInstrumentation().targetContext

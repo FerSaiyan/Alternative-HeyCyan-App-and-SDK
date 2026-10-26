@@ -1,10 +1,10 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,14 +22,11 @@ import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.FeatureOnboardingScreen
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.OnboardingChoice
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentDestination
 import com.hjq.permissions.OnPermissionCallback
 import java.util.Locale
 
-class OnboardingFeatureActivity : AppCompatActivity() {
+class OnboardingFeatureDestination : NavScreen() {
 
     private var featureIndex = 0
     private var glassesConnectionPermissionGranted by mutableStateOf(false)
@@ -79,88 +76,84 @@ class OnboardingFeatureActivity : AppCompatActivity() {
         }
 
         glassesConnectionPermissionGranted = hasBluetooth(this)
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                FeatureOnboardingScreen(
-                    title = getString(feature.titleRes),
-                    description = getString(feature.descriptionRes),
-                    details = getString(feature.detailsRes),
-                    showGlassesConnectionPermission = featureIndex == GLASSES_CONNECTION_FEATURE_INDEX,
-                    glassesConnectionPermissionGranted = glassesConnectionPermissionGranted,
-                    // CyanBridge uses app-private storage, MediaStore and SAF; All Files Access is not requested.
-                    showStoragePermission = false,
-                    storagePermissionGranted = true,
-                    showOpenSourceContribution = featureIndex == OPEN_SOURCE_FEATURE_INDEX,
-                    choices = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) modelChoices else emptyList(),
-                    selectedChoiceId = selectedModelId,
-                    stepIndex = featureIndex,
-                    stepCount = STEP_COUNT,
-                    deviceCapabilitySummary = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) {
-                        getString(R.string.onboarding_device_ram, deviceRamGb)
-                    } else null,
-                    lowMemoryWarningTitle = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX && deviceRamGb < 6.0) {
-                        getString(R.string.onboarding_ram_warning_title)
-                    } else null,
-                    lowMemoryWarning = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX && deviceRamGb < 6.0) {
-                        getString(
-                            if (deviceRamGb < 4.0) R.string.onboarding_ram_too_low
-                            else R.string.onboarding_ram_limited,
-                            deviceRamGb,
-                        )
-                    } else null,
-                    showBluetoothSkipWarning = showBluetoothSkipWarning,
-                    bluetoothSkipWarningTitle = getString(R.string.onboarding_bluetooth_skip_title),
-                    bluetoothSkipWarningBody = getString(R.string.onboarding_bluetooth_skip_body),
-                    bluetoothSkipConfirmLabel = getString(R.string.onboarding_bluetooth_skip_confirm),
-                    bluetoothSkipCancelLabel = getString(R.string.onboarding_bluetooth_skip_cancel),
-                    findGlassesLabel = getString(R.string.onboarding_find_glasses),
-                    backLabel = getString(
-                        if (featureIndex == 0) R.string.onboarding_skip_all else R.string.onboarding_back,
-                    ),
-                    nextLabel = getString(
-                        if (featureIndex == LAST_STEP_INDEX) R.string.onboarding_get_started else R.string.onboarding_next,
-                    ),
-                    onRequestGlassesConnectionPermission = {
-                        requestBluetoothPermission(this, OnPermissionCallback { _, allGranted ->
-                            glassesConnectionPermissionGranted = allGranted && hasBluetooth(this)
-                            if (glassesConnectionPermissionGranted) openRealGlassesScanner()
-                        })
-                    },
-                    onFindGlasses = ::openRealGlassesScanner,
-                    onRequestStoragePermission = {},
-                    onOpenSourceRepository = {
-                        runCatching {
-                            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(GITHUB_REPOSITORY_URL)))
-                        }
-                    },
-                    onChoiceSelected = { modelId ->
-                        selectedModelId = modelId
-                        getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                            .edit()
-                            .putString(KEY_ONBOARDING_MODEL_ID, modelId)
-                            .apply()
-                    },
-                    onConfirmBluetoothSkip = {
-                        showBluetoothSkipWarning = false
-                        goToFeature(featureIndex + 1)
-                    },
-                    onDismissBluetoothSkip = { showBluetoothSkipWarning = false },
-                    onBack = {
-                        if (featureIndex == 0) skipAllOnboarding() else goToFeature(featureIndex - 1)
-                    },
-                    onNext = {
-                        if (featureIndex == GLASSES_CONNECTION_FEATURE_INDEX && !glassesConnectionPermissionGranted) {
-                            showBluetoothSkipWarning = true
-                        } else {
-                            if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) startSelectedModelDownload()
-                            if (featureIndex == LAST_STEP_INDEX) finishOnboarding()
-                            else goToFeature(featureIndex + 1)
-                        }
-                    },
-                )
-            }
+            FeatureOnboardingScreen(
+                title = getString(feature.titleRes),
+                description = getString(feature.descriptionRes),
+                details = getString(feature.detailsRes),
+                showGlassesConnectionPermission = featureIndex == GLASSES_CONNECTION_FEATURE_INDEX,
+                glassesConnectionPermissionGranted = glassesConnectionPermissionGranted,
+                // CyanBridge uses app-private storage, MediaStore and SAF; All Files Access is not requested.
+                showStoragePermission = false,
+                storagePermissionGranted = true,
+                showOpenSourceContribution = featureIndex == OPEN_SOURCE_FEATURE_INDEX,
+                choices = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) modelChoices else emptyList(),
+                selectedChoiceId = selectedModelId,
+                stepIndex = featureIndex,
+                stepCount = STEP_COUNT,
+                deviceCapabilitySummary = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) {
+                    getString(R.string.onboarding_device_ram, deviceRamGb)
+                } else null,
+                lowMemoryWarningTitle = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX && deviceRamGb < 6.0) {
+                    getString(R.string.onboarding_ram_warning_title)
+                } else null,
+                lowMemoryWarning = if (featureIndex == LOCAL_MODEL_FEATURE_INDEX && deviceRamGb < 6.0) {
+                    getString(
+                        if (deviceRamGb < 4.0) R.string.onboarding_ram_too_low
+                        else R.string.onboarding_ram_limited,
+                        deviceRamGb,
+                    )
+                } else null,
+                showBluetoothSkipWarning = showBluetoothSkipWarning,
+                bluetoothSkipWarningTitle = getString(R.string.onboarding_bluetooth_skip_title),
+                bluetoothSkipWarningBody = getString(R.string.onboarding_bluetooth_skip_body),
+                bluetoothSkipConfirmLabel = getString(R.string.onboarding_bluetooth_skip_confirm),
+                bluetoothSkipCancelLabel = getString(R.string.onboarding_bluetooth_skip_cancel),
+                findGlassesLabel = getString(R.string.onboarding_find_glasses),
+                backLabel = getString(
+                    if (featureIndex == 0) R.string.onboarding_skip_all else R.string.onboarding_back,
+                ),
+                nextLabel = getString(
+                    if (featureIndex == LAST_STEP_INDEX) R.string.onboarding_get_started else R.string.onboarding_next,
+                ),
+                onRequestGlassesConnectionPermission = {
+                    requestBluetoothPermission(activity, OnPermissionCallback { _, allGranted ->
+                        glassesConnectionPermissionGranted = allGranted && hasBluetooth(this)
+                        if (glassesConnectionPermissionGranted) openRealGlassesScanner()
+                    })
+                },
+                onFindGlasses = ::openRealGlassesScanner,
+                onRequestStoragePermission = {},
+                onOpenSourceRepository = {
+                    runCatching {
+                        startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(GITHUB_REPOSITORY_URL)))
+                    }
+                },
+                onChoiceSelected = { modelId ->
+                    selectedModelId = modelId
+                    getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                        .edit()
+                        .putString(KEY_ONBOARDING_MODEL_ID, modelId)
+                        .apply()
+                },
+                onConfirmBluetoothSkip = {
+                    showBluetoothSkipWarning = false
+                    goToFeature(featureIndex + 1)
+                },
+                onDismissBluetoothSkip = { showBluetoothSkipWarning = false },
+                onBack = {
+                    if (featureIndex == 0) skipAllOnboarding() else goToFeature(featureIndex - 1)
+                },
+                onNext = {
+                    if (featureIndex == GLASSES_CONNECTION_FEATURE_INDEX && !glassesConnectionPermissionGranted) {
+                        showBluetoothSkipWarning = true
+                    } else {
+                        if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) startSelectedModelDownload()
+                        if (featureIndex == LAST_STEP_INDEX) finishOnboarding()
+                        else goToFeature(featureIndex + 1)
+                    }
+                },
+            )
         }
     }
 
@@ -172,13 +165,11 @@ class OnboardingFeatureActivity : AppCompatActivity() {
                 stepIntent(this, index)
             },
         )
-        overridePendingTransition(R.anim.onboarding_fade_in, R.anim.onboarding_fade_out)
         finish()
     }
 
     private fun openRealGlassesScanner() {
         startActivity(AppRoute.DEVICE_BIND.intent(this))
-        overridePendingTransition(R.anim.onboarding_fade_in, R.anim.onboarding_fade_out)
     }
 
     private fun finishOnboarding() {
@@ -311,12 +302,12 @@ class OnboardingFeatureActivity : AppCompatActivity() {
         }
 
         fun stepIntent(context: Context, index: Int): Intent =
-            Intent(context, OnboardingFeatureActivity::class.java).putExtra(EXTRA_FEATURE_INDEX, index)
+            AppRoute.ONBOARDING_FEATURE.intent(context).putExtra(EXTRA_FEATURE_INDEX, index)
 
         fun launchIfNeeded(activity: AppCompatActivity) {
             val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             if (prefs.getBoolean("onboarding_completed", false)) return
-            activity.startActivity(Intent(activity, OnboardingFeatureActivity::class.java))
+            activity.startActivity(AppRoute.ONBOARDING_FEATURE.intent(activity))
         }
     }
 

@@ -168,7 +168,7 @@ class ChatThreadDestination : NavScreen() {
     private fun chatsTabIntent(): Intent? {
         val lastUserAt = viewModel.chatId?.let(ChatStore::listMessages)?.lastOrNull { it.role == ChatRole.USER }?.createdAt
         if (lastUserAt != null && System.currentTimeMillis() - lastUserAt < 30 * 60 * 1000) return null
-        return Intent(this, ChatThreadDestination::class.java)
+        return AppRoute.CHAT_THREAD.intent(this)
     }
 
     private fun showModelPickerForProvider() {

@@ -24,6 +24,19 @@ class ArchitectureGuardrailSourceTest {
     }
 
     @Test
+    fun screensAreDestinationsOfTheSingleActivity() {
+        val declared = Regex("""<activity\s[^>]*?android:name="([^"]+)"""")
+            .findAll(File("src/main/AndroidManifest.xml").readText())
+            .map { it.groupValues[1] }
+            .toSet()
+        assertEquals(
+            "A new screen is a ui/nav route in MainActivity; only add an Activity Android requires (see the list)",
+            ALLOWED_ACTIVITIES,
+            declared,
+        )
+    }
+
+    @Test
     fun vendorSdksStayOutOfUiOutsideTheDeviceAdapters() {
         val vendorImport = Regex("""^import (com\.oudmon|com\.glasses\.sdk|org\.jvcompress|com\.moyoung|com\.meta\.wearable|com\.mentra|com\.myvu)\.""", RegexOption.MULTILINE)
         val offenders = sources("src/main/java/com/fersaiyan/cyanbridge/ui")
@@ -48,8 +61,27 @@ class ArchitectureGuardrailSourceTest {
     }
 
     private companion object {
-        /** Lowered from 5,069 when the glasses questions moved to ai/questions (A3). */
-        const val MAIN_ACTIVITY_LINE_BUDGET = 1860
+        /**
+         * Lowered from 5,069 when the glasses questions moved to ai/questions (A3), then to 1,852
+         * when MainActivity became the single screen host (its live video slot moved to ui/main).
+         */
+        const val MAIN_ACTIVITY_LINE_BUDGET = 1852
+
+        /** Was 43. Every other screen is a route of MainActivity's back stack (ui/nav/AppRoute). */
+        val ALLOWED_ACTIVITIES = setOf(
+            // The screen host; the launcher icon is an alias of it named .ui.WelcomeActivity.
+            ".MainActivity",
+            // cyanbridge:// Meta AI registration callback: trampoline to the Meta setup route.
+            ".ui.MetaPairingActivity",
+            // fersaiyan://pro-sub/restore deep link: trampoline to the Pro route.
+            ".agent.ProSubscriptionActivity",
+            // Verified https app link: checks the web checkout, then opens a Pro route.
+            ".agent.WebSubscriptionCallbackActivity",
+            // Headless permission request started from services (glasses questions without the app open).
+            ".ai.live.GeminiLivePermissionGateActivity",
+            // Runs untrusted plugin JavaScript in WebViews that survive rotation (handles its config changes).
+            ".devices.memomind.webplugin.MemoMindWebPluginsActivity",
+        )
 
         /** Files that imported a vendor SDK when this test was added; shrink, never grow. */
         val UI_VENDOR_IMPORT_EXCEPTIONS = setOf(
@@ -73,9 +105,9 @@ class ArchitectureGuardrailSourceTest {
             "../shared/src/androidMain/kotlin/com/fersaiyan/cyanbridge/shared/prefs/AndroidPrefs.kt",
             "src/main/java/com/fersaiyan/cyanbridge/ai/vision/ImageQuestionPreferences.kt",
             "src/main/java/com/fersaiyan/cyanbridge/privacy/LocalDataBackupManager.kt",
-            "src/main/java/com/fersaiyan/cyanbridge/ui/OnboardingFeatureActivity.kt",
+            "src/main/java/com/fersaiyan/cyanbridge/ui/OnboardingFeatureDestination.kt",
             "src/main/java/com/fersaiyan/cyanbridge/ui/SettingsDestination.kt",
-            "src/main/java/com/fersaiyan/cyanbridge/ui/WelcomeActivity.kt",
+            "src/main/java/com/fersaiyan/cyanbridge/ui/WelcomeDestination.kt",
         )
     }
 }

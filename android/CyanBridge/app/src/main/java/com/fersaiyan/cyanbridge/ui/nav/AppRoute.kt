@@ -33,6 +33,9 @@ import com.fersaiyan.cyanbridge.ai.live.GeminiLiveDestination
 import com.fersaiyan.cyanbridge.ui.DeviceBindDestination
 import com.fersaiyan.cyanbridge.ui.MetaPairingDestination
 import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentDestination
+import com.fersaiyan.cyanbridge.ui.WelcomeDestination
+import com.fersaiyan.cyanbridge.ui.BatteryOptimizationGuideDestination
+import com.fersaiyan.cyanbridge.ui.OnboardingFeatureDestination
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.ui.MentraBroadcastDestination
 import com.fersaiyan.cyanbridge.ui.MentraFirmwareUpdateDestination
@@ -93,6 +96,9 @@ enum class AppRoute(
     DEVICE_BIND,
     META_PAIRING(labelRes = R.string.meta_pairing_title, singleTask = true),
     VOICE_ENROLLMENT(labelText = "Voice profile"),
+    WELCOME,
+    BATTERY_GUIDE(labelRes = R.string.battery_opt_title),
+    ONBOARDING_FEATURE(labelText = "Setup"),
     ;
 
     fun label(context: Context): String = labelText ?: context.getString(labelRes)
@@ -140,6 +146,9 @@ enum class AppRoute(
         DEVICE_BIND -> DeviceBindDestination()
         META_PAIRING -> MetaPairingDestination()
         VOICE_ENROLLMENT -> VoiceEnrollmentDestination()
+        WELCOME -> WelcomeDestination()
+        BATTERY_GUIDE -> BatteryOptimizationGuideDestination()
+        ONBOARDING_FEATURE -> OnboardingFeatureDestination()
     }
 
     companion object {

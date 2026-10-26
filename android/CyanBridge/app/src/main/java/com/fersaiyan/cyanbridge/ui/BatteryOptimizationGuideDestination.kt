@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.ui
 
+import com.fersaiyan.cyanbridge.ui.nav.AppRoute
+import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -9,8 +11,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
-import androidx.activity.compose.setContent
-import androidx.activity.viewModels
+import com.fersaiyan.cyanbridge.ui.nav.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.initializer
@@ -19,12 +20,9 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.store
 import com.fersaiyan.cyanbridge.shared.ui.battery.BatteryOptimizationGuideViewModel
-import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
-import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.BatteryOptimizationGuideScreen
-import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 
-class BatteryOptimizationGuideActivity : AppCompatActivity() {
+class BatteryOptimizationGuideDestination : NavScreen() {
     private val viewModel by viewModels<BatteryOptimizationGuideViewModel> {
         viewModelFactory {
             initializer {
@@ -37,20 +35,16 @@ class BatteryOptimizationGuideActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         viewModel.refresh()
-        val appearancePreferences = AppearancePreferences(this)
         setContent {
-            val appearance by rememberAppearanceSettings(appearancePreferences)
-            CyanBridgeTheme(appearance) {
-                BatteryOptimizationGuideScreen(
-                    optimizationIgnored = viewModel.optimizationIgnored,
-                    onDisableOptimization = ::openDisableBatteryOptimizationFlow,
-                    onOpenAppInfo = ::openAppInfo,
-                    onOpenOptimizationList = ::openBatteryOptimizationList,
-                    onContinue = { navigateToNext(viewModel.onContinue()) },
-                    onRemindLater = { navigateToNext(viewModel.onRemindLater()) },
-                    onDontShowAgain = { navigateToNext(viewModel.onDontShowAgain()) },
-                )
-            }
+            BatteryOptimizationGuideScreen(
+                optimizationIgnored = viewModel.optimizationIgnored,
+                onDisableOptimization = ::openDisableBatteryOptimizationFlow,
+                onOpenAppInfo = ::openAppInfo,
+                onOpenOptimizationList = ::openBatteryOptimizationList,
+                onContinue = { navigateToNext(viewModel.onContinue()) },
+                onRemindLater = { navigateToNext(viewModel.onRemindLater()) },
+                onDontShowAgain = { navigateToNext(viewModel.onDontShowAgain()) },
+            )
         }
     }
 
@@ -65,8 +59,7 @@ class BatteryOptimizationGuideActivity : AppCompatActivity() {
             return
         }
         // After battery optimization, continue to feature onboarding screens
-        startActivity(Intent(this, OnboardingFeatureActivity::class.java))
-        overridePendingTransition(R.anim.onboarding_fade_in, R.anim.onboarding_fade_out)
+        startActivity(AppRoute.ONBOARDING_FEATURE.intent(this))
         finish()
     }
 
@@ -114,7 +107,7 @@ class BatteryOptimizationGuideActivity : AppCompatActivity() {
                 isBatteryOptimizationIgnored(activity)
             }
             if (!shouldShow) return
-            activity.startActivity(Intent(activity, BatteryOptimizationGuideActivity::class.java))
+            activity.startActivity(AppRoute.BATTERY_GUIDE.intent(activity))
         }
 
         private fun isBatteryOptimizationIgnored(context: Context): Boolean {

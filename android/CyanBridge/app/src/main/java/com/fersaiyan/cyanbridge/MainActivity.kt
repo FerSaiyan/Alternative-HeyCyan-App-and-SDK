@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge
 
+import com.fersaiyan.cyanbridge.ui.main.GlassesLiveVideoSlot
+import com.fersaiyan.cyanbridge.ui.WelcomeDestination
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import android.Manifest
 import android.app.Activity
@@ -61,7 +63,6 @@ import com.fersaiyan.cyanbridge.plugins.visualdiary.VisualDiaryService
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidPreferences
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidImageCapture
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidService
-import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListDestination
 import com.fersaiyan.cyanbridge.ui.BluetoothUtils
 import com.fersaiyan.cyanbridge.ui.BluetoothEvent
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
@@ -80,7 +81,7 @@ import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
-import com.fersaiyan.cyanbridge.ui.BatteryOptimizationGuideActivity
+import com.fersaiyan.cyanbridge.ui.BatteryOptimizationGuideDestination
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -109,11 +110,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.ai.router.AssistantTestKind
 import com.fersaiyan.cyanbridge.ai.image.ExternalImageAutomationIntents
 import com.fersaiyan.cyanbridge.ai.image.ImageQuestionSource
@@ -205,6 +201,9 @@ class MainActivity : AppCompatActivity() {
         const val DEBUG_EVENT_WAKE = "wake"
         const val DEBUG_EVENT_PHOTO_BUTTON = "photo_button"
         private const val TAG = "MainActivity"
+
+        /** The launcher icon: an alias of this Activity under the old launcher Activity's name, so pinned shortcuts keep working. */
+        private const val LAUNCHER_ALIAS = "com.fersaiyan.cyanbridge.ui.WelcomeActivity"
         private var loggedLargeDataHandlerMethods = false
 
         fun actionTaskerCommand(appPackageName: String): String =
@@ -834,158 +833,25 @@ class MainActivity : AppCompatActivity() {
             appearanceSettings = appearance,
             onNavigateToActivity = ::navigateToDestination,
             liveVideoSlot = {
-                val live = dashboardState.livePreview
-                val isEyevueLive = dashboardState.showEyevueControls
-                val isHeyCyanLive = dashboardState.showHeyCyanControls
-                val isTuneBudsLive = dashboardState.showTuneBudsControls
-                val livePlayer = when {
-                    isEyevueLive -> eyevueLivePlayer
-                    isTuneBudsLive -> tuneBudsLivePlayer
-                    else -> heyCyanLivePlayer
-                }
-                if ((isEyevueLive || isHeyCyanLive || isTuneBudsLive) &&
-                    live.isPlaying &&
-                    live.streamUrl != null &&
-                    livePlayer != null
-                ) {
-                    val liveUrl = live.streamUrl ?: ""
-                    androidx.compose.foundation.layout.Column(
-                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                    ) {
-                        androidx.compose.foundation.layout.Spacer(
-                            modifier = androidx.compose.ui.Modifier.height(8.dp),
-                        )
-                        if (isEyevueLive) {
-                            androidx.compose.ui.viewinterop.AndroidView(
-                                factory = { ctx ->
-                                    com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveVideoView(ctx)
-                                },
-                                update = { view -> eyevueLivePreviewManager?.attachVideoView(view) },
-                                onRelease = { view -> eyevueLivePreviewManager?.detachVideoView(view) },
-                                modifier = androidx.compose.ui.Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(0.75f),
-                            )
-                        } else if (isTuneBudsLive) {
-                            androidx.compose.ui.viewinterop.AndroidView(
-                                factory = { ctx -> com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLiveVideoView(ctx) },
-                                update = { view -> tuneBudsLivePreviewManager?.attachVideoView(view) },
-                                onRelease = { view -> tuneBudsLivePreviewManager?.detachVideoView(view) },
-                                modifier = androidx.compose.ui.Modifier.fillMaxWidth().aspectRatio(4f / 3f),
-                            )
-                        } else {
-                            androidx.compose.ui.viewinterop.AndroidView(
-                                factory = { ctx ->
-                                    com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveVideoView(ctx)
-                                },
-                                update = { view -> livePreviewManager.attachVideoView(view) },
-                                onRelease = { view -> livePreviewManager.detachVideoView(view) },
-                                modifier = androidx.compose.ui.Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(4f / 3f),
-                            )
-                        }
-                        androidx.compose.foundation.layout.Spacer(
-                            modifier = androidx.compose.ui.Modifier.height(8.dp),
-                        )
-                        androidx.compose.material3.Text(
-                            text = liveUrl,
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        androidx.compose.material3.Text(
-                            text = "Shared local RTSP feed — keep Live preview running",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (isEyevueLive) {
-                            androidx.compose.material3.TextButton(
-                                onClick = {
-                                    eyevueLiveAudioMuted = !eyevueLiveAudioMuted
-                                    eyevueLivePreviewManager?.setAudioMuted(eyevueLiveAudioMuted)
-                                },
-                            ) {
-                                androidx.compose.material3.Text(
-                                    if (eyevueLiveAudioMuted) "Listen to audio" else "Mute audio",
-                                )
-                            }
-                        }
-                        if (isTuneBudsLive) {
-                            androidx.compose.material3.TextButton(onClick = {
-                                tuneBudsLiveAudioMuted = !tuneBudsLiveAudioMuted
-                                tuneBudsLivePreviewManager?.setAudioMuted(tuneBudsLiveAudioMuted)
-                            }) {
-                                androidx.compose.material3.Text(if (tuneBudsLiveAudioMuted) "Listen to audio" else "Mute audio")
-                            }
-                        }
-                        androidx.compose.foundation.layout.Row(
-                            modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                        ) {
-                            androidx.compose.material3.TextButton(
-                                onClick = {
-                                    val clipboard =
-                                        getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                                            as android.content.ClipboardManager
-                                    clipboard.setPrimaryClip(
-                                        android.content.ClipData.newPlainText(
-                                            "Glasses live URL",
-                                            liveUrl,
-                                        ),
-                                    )
-                                    android.widget.Toast.makeText(
-                                        this@MainActivity,
-                                        "Stream URL copied — open it while live preview is running",
-                                        android.widget.Toast.LENGTH_SHORT,
-                                    ).show()
-                                },
-                            ) {
-                                androidx.compose.material3.Text("Copy URL")
-                            }
-                            androidx.compose.foundation.layout.Spacer(
-                                modifier = androidx.compose.ui.Modifier.width(8.dp),
-                            )
-                            androidx.compose.material3.TextButton(
-                                onClick = {
-                                    if (isEyevueLive) {
-                                        eyevueLiveAudioMuted = true
-                                        eyevueLivePreviewManager?.setAudioMuted(true)
-                                    }
-                                    if (isTuneBudsLive) {
-                                        tuneBudsLiveAudioMuted = true
-                                        tuneBudsLivePreviewManager?.setAudioMuted(true)
-                                    }
-                                    val uri = android.net.Uri.parse(liveUrl)
-                                    val vlcIntent = android.content.Intent(
-                                        android.content.Intent.ACTION_VIEW,
-                                        uri,
-                                    ).setPackage("org.videolan.vlc")
-                                    val opened = runCatching {
-                                        startActivity(vlcIntent)
-                                        true
-                                    }.getOrDefault(false)
-                                    if (!opened) {
-                                        runCatching {
-                                            startActivity(
-                                                android.content.Intent(
-                                                    android.content.Intent.ACTION_VIEW,
-                                                    uri,
-                                                ),
-                                            )
-                                        }.onFailure {
-                                            android.widget.Toast.makeText(
-                                                this@MainActivity,
-                                                "No app found for RTSP",
-                                                android.widget.Toast.LENGTH_SHORT,
-                                            ).show()
-                                        }
-                                    }
-                                },
-                            ) {
-                                androidx.compose.material3.Text("Open in VLC")
-                            }
-                        }
-                    }
-                }
+                GlassesLiveVideoSlot(
+                    dashboardState = dashboardState,
+                    eyevueLivePlayer = eyevueLivePlayer,
+                    tuneBudsLivePlayer = tuneBudsLivePlayer,
+                    heyCyanLivePlayer = heyCyanLivePlayer,
+                    eyevueLivePreviewManager = eyevueLivePreviewManager,
+                    tuneBudsLivePreviewManager = tuneBudsLivePreviewManager,
+                    livePreviewManager = livePreviewManager,
+                    eyevueMuted = eyevueLiveAudioMuted,
+                    onEyevueMuted = { muted ->
+                        eyevueLiveAudioMuted = muted
+                        eyevueLivePreviewManager?.setAudioMuted(muted)
+                    },
+                    tuneBudsMuted = tuneBudsLiveAudioMuted,
+                    onTuneBudsMuted = { muted ->
+                        tuneBudsLiveAudioMuted = muted
+                        tuneBudsLivePreviewManager?.setAudioMuted(muted)
+                    },
+                )
             },
         )
         if (showOfficialHeyCyanWarningDialog) {
@@ -1050,7 +916,8 @@ class MainActivity : AppCompatActivity() {
         maybeStartMetaImageQuestion(intent)
         maybeHandleDebugGlassesEvent(intent)
 
-        BatteryOptimizationGuideActivity.launchIfNeeded(this)
+        // Posted: this runs while the glasses screen is being shown, so open the guide after that.
+        window.decorView.post { BatteryOptimizationGuideDestination.launchIfNeeded(this) }
     }
 
     /** Was onStart: the glasses screen became visible (app in front, no screen over it). */
@@ -1306,9 +1173,16 @@ class MainActivity : AppCompatActivity() {
         if (showWhenLockedRequested) super.setShowWhenLocked(top == null)
     }
 
-    /** The intent that created the Activity: the launcher (through onboarding when needed), a route, or the glasses screen. */
+    /**
+     * The intent that created the Activity: the launcher (onboarding first when needed, as the
+     * old launcher Activity did), a route, or the glasses screen.
+     */
     private fun openStartScreen(startIntent: Intent) {
-        navigator.open(startIntent)
+        if (startIntent.component?.className == LAUNCHER_ALIAS && WelcomeDestination.isNeeded(this)) {
+            navigator.startWithoutRoot(AppRoute.WELCOME.intent(this))
+        } else {
+            navigator.open(startIntent)
+        }
     }
 
     private fun handleOwnIntent(intent: Intent) {
