@@ -3,7 +3,8 @@ package com.fersaiyan.cyanbridge.shared.devices.eyevue
 import com.fersaiyan.cyanbridge.shared.devices.GlassesPhotoLimits
 import com.fersaiyan.cyanbridge.shared.platform.platformCurrentTimeMillis
 import com.fersaiyan.cyanbridge.shared.platform.platformUtcOffsetMinutes
-import kotlin.jvm.Synchronized
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 
 data class EyevueFrame(val commandId: Int, val payload: ByteArray)
 
@@ -340,53 +341,56 @@ class EyevueFrameDecoder {
 
 /** Reassembles the AA15 photo stream used by the vendor's AI-photo path. */
 class EyevuePhotoAssembler(private val maxImageBytes: Int = GlassesPhotoLimits.MAX_IMAGE_BYTES) {
+    private val lock = SynchronizedObject()
     private val chunks = mutableListOf<ByteArray>()
     private var size = 0
     private var receiving = false
 
-    @Synchronized
     fun append(packet: ByteArray): ByteArray? {
-        if (packet.size < 8) return null
-        val payloadEnd = packet.size - 3
-        return when (packet[4].toInt() and 0xFF) {
-            EyevueProtocol.CMD_RECEIVE_PHOTO_DATA_START -> {
-                clear()
-                receiving = true
-                null
-            }
-            EyevueProtocol.CMD_RECEIVE_PHOTO_DATA -> {
-                // Each photo-data payload starts with a four-byte chunk address.
-                val imageStart = 9
-                if (receiving && payloadEnd > imageStart) {
-                    if (size + payloadEnd - imageStart > maxImageBytes) {
-                        reset()
-                        return null
+        return synchronized(lock) {
+            if (packet.size < 8) return null
+            val payloadEnd = packet.size - 3
+            when (packet[4].toInt() and 0xFF) {
+                EyevueProtocol.CMD_RECEIVE_PHOTO_DATA_START -> {
+                    clear()
+                    receiving = true
+                    null
+                }
+                EyevueProtocol.CMD_RECEIVE_PHOTO_DATA -> {
+                    // Each photo-data payload starts with a four-byte chunk address.
+                    val imageStart = 9
+                    if (receiving && payloadEnd > imageStart) {
+                        if (size + payloadEnd - imageStart > maxImageBytes) {
+                            reset()
+                            return null
+                        }
+                        chunks += packet.copyOfRange(imageStart, payloadEnd)
+                        size += payloadEnd - imageStart
                     }
-                    chunks += packet.copyOfRange(imageStart, payloadEnd)
-                    size += payloadEnd - imageStart
+                    null
                 }
-                null
-            }
-            EyevueProtocol.CMD_RECEIVE_PHOTO_DATA_END -> {
-                if (!receiving) return null
-                receiving = false
-                val image = ByteArray(size)
-                var offset = 0
-                chunks.forEach { chunk ->
-                    chunk.copyInto(image, offset)
-                    offset += chunk.size
+                EyevueProtocol.CMD_RECEIVE_PHOTO_DATA_END -> {
+                    if (!receiving) return null
+                    receiving = false
+                    val image = ByteArray(size)
+                    var offset = 0
+                    chunks.forEach { chunk ->
+                        chunk.copyInto(image, offset)
+                        offset += chunk.size
+                    }
+                    clear()
+                    image.takeIf { it.isNotEmpty() }
                 }
-                clear()
-                image.takeIf { it.isNotEmpty() }
+                else -> null
             }
-            else -> null
         }
     }
 
-    @Synchronized
     fun reset() {
-        receiving = false
-        clear()
+        synchronized(lock) {
+            receiving = false
+            clear()
+        }
     }
 
     private fun clear() {

@@ -234,7 +234,7 @@ object TuneBudsProtocol {
     fun parseStatus(payload: ByteArray): Int? = payload.firstOrNull()?.toInt()?.and(0xFF)
 
     fun parseP2pAddress(payload: ByteArray): String? = if (payload.size == 6) {
-        payload.joinToString(":") { "%02X".format(it.toInt() and 0xFF) }
+        payload.joinToString(":") { (it.toInt() and 0xFF).toString(16).uppercase().padStart(2, '0') }
     } else null
 
     fun buildSetTimePayload(

@@ -119,7 +119,7 @@ internal class IosAppController {
 
     private val bleConnection = glassesConnection { scope.launch { bleManager.disconnect() } }
 
-    private val glassesHost = object : IosGlassesHost {
+    private val glassesHost: IosGlassesHost = object : IosGlassesHost {
         override val dashboard: GlassesDashboardUiState get() = _dashboardState.value
         override val isBleConnected: Boolean get() = this@IosAppController.isBleConnected
 
@@ -151,7 +151,7 @@ internal class IosAppController {
     private val eyevue = IosEyevueGlasses(bleManager, scope, glassesHost, bleConnection)
 
     /** TuneBuds, MoYoung, Meta, Mentra and Meizu (see IosOtherGlasses). */
-    private val otherGlasses = IosOtherGlasses(bleManager, scope, glassesHost, bleConnection)
+    private val otherGlasses: IosOtherGlasses = IosOtherGlasses(bleManager, scope, glassesHost, bleConnection)
 
     private val assistant = GlassesAssistant(
         scope = scope,
