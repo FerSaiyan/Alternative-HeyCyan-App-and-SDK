@@ -12,6 +12,7 @@ import com.mentra.bluetoothsdk.ConnectOptions
 import com.mentra.bluetoothsdk.Device
 import com.mentra.bluetoothsdk.DeviceModel
 import com.mentra.bluetoothsdk.GlassesRuntimeState
+import com.mentra.bluetoothsdk.HotspotStatus
 import com.mentra.bluetoothsdk.MentraBluetoothSdk
 import com.mentra.bluetoothsdk.MentraBluetoothSdkCallback
 import com.mentra.bluetoothsdk.MentraBluetoothSdkConfig
@@ -272,6 +273,17 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     }
 
     private fun Int?.orZero() = this ?: 0
+
+    // --- Gallery hotspot ----------------------------------------------------------------------
+
+    /** The glasses hotspot as the connection status last reported it; null while it is off. */
+    fun hotspot(): HotspotStatus.Enabled? = connectedState?.hotspot as? HotspotStatus.Enabled
+
+    /**
+     * Turns the glasses Wi-Fi hotspot (which serves the gallery) on or off and returns the
+     * state the glasses confirm; an enabled hotspot carries its SSID, password and IP.
+     */
+    suspend fun setHotspot(enabled: Boolean): HotspotStatus = sdk.setHotspotState(enabled).status
 
     // --- Camera -----------------------------------------------------------------------------
 
