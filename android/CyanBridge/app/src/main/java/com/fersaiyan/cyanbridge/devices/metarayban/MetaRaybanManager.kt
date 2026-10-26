@@ -18,6 +18,14 @@ import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionLease
+import com.fersaiyan.cyanbridge.shared.glasses.MetaRegistrationEvent
+import com.fersaiyan.cyanbridge.shared.glasses.MetaRegistrationPath
+import com.fersaiyan.cyanbridge.shared.glasses.MetaRegistrationTracker
+import com.fersaiyan.cyanbridge.shared.glasses.MetaSetupChoice
+import com.fersaiyan.cyanbridge.shared.glasses.PrefsMetaRegistrationStore
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.meta.wearable.dat.camera.Stream
 import com.meta.wearable.dat.camera.addStream
 import com.meta.wearable.dat.camera.types.PhotoData
@@ -126,6 +134,18 @@ class MetaRaybanManager private constructor(context: Context) {
 
     private val _metaAccessState = MutableStateFlow(MetaAccessState.UNKNOWN)
     val metaAccessState: StateFlow<MetaAccessState> = _metaAccessState.asStateFlow()
+
+    /**
+     * Hybrid registration: the registered app id serves Developer-Mode users and invited
+     * release-channel users. False only for a build made with `-PmetaDatZeroAppId`.
+     */
+    val appIdConfigured: Boolean = !BuildConfig.META_DAT_DEVELOPER_CONFIGURATION
+    private val registrationStore by lazy { PrefsMetaRegistrationStore() }
+    private val registrationTracker by lazy { MetaRegistrationTracker(registrationStore, appIdConfigured) }
+
+    private val _registrationPath = MutableStateFlow(MetaRegistrationPath.UNKNOWN)
+    /** The path Meta AI took on the last registration (from `Wearables.isDevMode`). */
+    val registrationPath: StateFlow<MetaRegistrationPath> = _registrationPath.asStateFlow()
 
     private val _availableDeviceCount = MutableStateFlow(0)
     val availableDeviceCount: StateFlow<Int> = _availableDeviceCount.asStateFlow()
@@ -236,6 +256,7 @@ class MetaRaybanManager private constructor(context: Context) {
 
     private fun observeWearables() {
         if (registrationJob != null) return
+        _registrationPath.value = runCatching { registrationStore.path }.getOrDefault(MetaRegistrationPath.UNKNOWN)
 
         registrationJob = scope.launch {
             Wearables.registrationState.collect { state ->
@@ -247,6 +268,7 @@ class MetaRaybanManager private constructor(context: Context) {
                 if (previousState != nextState) {
                     recordInfo("registrationState", "$previousState -> $nextState")
                 }
+                trackRegistrationPhase(nextState)
                 updateMetaAccessState()
             }
         }
@@ -340,20 +362,83 @@ class MetaRaybanManager private constructor(context: Context) {
         }
     }
 
+    /**
+     * Opens Meta AI to register CyanBridge. Never while registered or between states: DAT
+     * resets `isDevMode` when registration starts, and Meta AI would report ALREADY_REGISTERED.
+     */
     fun startRegistration(activity: Activity) {
         if (!requireInitialized()) return
-        if (_registrationState.value == RegistrationState.REGISTERED) return
+        if (_debugMockEnabled.value) return
+        val current = runCatching { Wearables.registrationState.value.toManagerState() }.getOrDefault(_registrationState.value)
+        if (!registrationTracker.beginRegistration(current.toMetaRegistrationPhase())) {
+            recordInfo("registration", "Not starting registration while $current")
+            return
+        }
         clearError()
-        recordInfo("registration", "Launching Meta registration UI")
+        recordInfo("registration", "Launching Meta registration UI; setupChoice=${registrationStore.choice}")
+        closeTrackerWhenActivityReturns(activity)
         Wearables.startRegistration(activity)
     }
 
     fun startUnregistration(activity: Activity) {
         if (!requireInitialized()) return
         if (_registrationState.value != RegistrationState.REGISTERED) return
+        registrationTracker.beginUnregistration(_registrationState.value.toMetaRegistrationPhase())
         recordInfo("registration", "Launching Meta unregistration UI")
         Wearables.startUnregistration(activity)
     }
+
+    /** The setup choice changed on the pairing screen; it decides the release-channel hints. */
+    fun onSetupChoiceChanged() {
+        recordInfo("registration", "setupChoice=${registrationStore.choice}")
+        updateMetaAccessState()
+    }
+
+    /**
+     * DAT stores `isDevMode` from Meta AI's activity result, which arrives before the activity
+     * resumes. The path is read once the activity that started registration resumes again.
+     */
+    private fun closeTrackerWhenActivityReturns(activity: Activity) {
+        val owner = activity as? LifecycleOwner ?: run {
+            registrationTracker.registrationUiClosed()
+            return
+        }
+        owner.lifecycle.addObserver(object : LifecycleEventObserver {
+            private var left = false
+            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+                when (event) {
+                    Lifecycle.Event.ON_PAUSE -> left = true
+                    Lifecycle.Event.ON_RESUME -> if (left) finish(source)
+                    Lifecycle.Event.ON_DESTROY -> finish(source)
+                    else -> Unit
+                }
+            }
+
+            private fun finish(source: LifecycleOwner) {
+                source.lifecycle.removeObserver(this)
+                registrationTracker.registrationUiClosed()
+                if (_isInitialized.value && !_debugMockEnabled.value) {
+                    trackRegistrationPhase(Wearables.registrationState.value.toManagerState())
+                }
+            }
+        })
+    }
+
+    private fun trackRegistrationPhase(state: RegistrationState) {
+        val event = registrationTracker.onPhase(state.toMetaRegistrationPhase()) { runCatching { Wearables.isDevMode }.getOrNull() }
+        _registrationPath.value = registrationTracker.recordedPath
+        when (event) {
+            MetaRegistrationEvent.None -> Unit
+            is MetaRegistrationEvent.PathRecorded ->
+                recordInfo("registrationPath", "Registered through ${event.path}; setupChoice=${registrationStore.choice}")
+            MetaRegistrationEvent.UserUnregistered -> recordInfo("registrationPath", "Unregistered by the user; path cleared")
+            MetaRegistrationEvent.DeveloperModeLost -> {
+                recordWarning("registrationPath", "Developer Mode registration ended (Developer Mode off or disconnected in Meta AI)")
+                MetaRegistrationNotices.developerModeLost(context, registrationStore.choice)
+            }
+        }
+    }
+
 
     fun isRegistered(): Boolean = _registrationState.value == RegistrationState.REGISTERED
 
@@ -1093,6 +1178,8 @@ class MetaRaybanManager private constructor(context: Context) {
             appendLine("initialized=${_isInitialized.value}")
             appendLine("sdkDeveloperMode=${runCatching { Wearables.isDevMode }.getOrDefault(false)}")
             appendLine("developerConfiguration=${readiness.developerConfiguration}")
+            appendLine("setupChoice=${runCatching { registrationStore.choice }.getOrNull()}")
+            appendLine("registrationPath=${runCatching { registrationStore.path }.getOrNull()}")
             appendLine("metaAiInstalled=${readiness.metaAiInstalled}")
             appendLine("bluetoothPermissionGranted=${readiness.bluetoothPermissionGranted}")
             appendLine("bluetoothEnabled=${readiness.bluetoothEnabled}")
@@ -1163,6 +1250,7 @@ class MetaRaybanManager private constructor(context: Context) {
             bondedDeviceCount = bondedDevices?.size,
             bondedMetaDeviceCount = bondedMetaDevices,
             developerConfiguration = BuildConfig.META_DAT_DEVELOPER_CONFIGURATION,
+            developerModeChosen = runCatching { registrationStore.choice == MetaSetupChoice.DEVELOPER_MODE }.getOrDefault(false),
         )
     }
 

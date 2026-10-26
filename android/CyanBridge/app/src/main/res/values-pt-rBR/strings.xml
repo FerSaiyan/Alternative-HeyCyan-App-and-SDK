@@ -146,4 +146,9 @@
     <string name="donation_intro_dialog_title">Nota de apoio ao CyanBridge via Asaas</string>
     <string name="donation_intro_dialog_message">Olá, obrigado por considerar uma doação ao CyanBridge! Trabalho neste projeto além dos meus estudos de doutorado, e seu apoio significa muito para mim. Ainda não consegui configurar o Stripe devido aos requisitos especiais para empresas brasileiras, então por enquanto uso um processador de pagamentos chamado Asaas. A página de checkout está em português; use o Google Tradutor se necessário. Estou procurando ativamente uma alternativa melhor. Obrigado novamente pelo seu apoio!</string>
     <string name="donation_intro_open_button">Abrir formulário de cartão Asaas</string>
+    <string name="meta_registration_channel_name">Conexão dos óculos Meta</string>
+    <string name="meta_registration_lost_title">Óculos Meta desconectados</string>
+    <string name="meta_registration_lost_dev_mode_text">O CyanBridge não está mais conectado no Meta AI. Provavelmente o Modo de desenvolvedor foi desativado. Ative-o de novo no Meta AI e registre o CyanBridge de novo.</string>
+    <string name="meta_registration_lost_invite_text">O CyanBridge não está mais conectado no Meta AI. Mantenha o Modo de desenvolvedor desativado e registre o CyanBridge de novo.</string>
+    <string name="meta_registration_register_again">Registrar de novo</string>
 </resources>

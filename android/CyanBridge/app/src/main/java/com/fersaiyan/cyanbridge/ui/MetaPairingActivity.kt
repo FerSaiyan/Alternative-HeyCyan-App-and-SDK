@@ -61,6 +61,11 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaAccessState
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaDatPermissions
+import com.fersaiyan.cyanbridge.devices.metarayban.MetaRegistrationNotices
+import com.fersaiyan.cyanbridge.devices.metarayban.toMetaRegistrationPhase
+import com.fersaiyan.cyanbridge.shared.glasses.META_BETA_ACCESS_URL
+import com.fersaiyan.cyanbridge.shared.glasses.MetaSetupChoice
+import com.fersaiyan.cyanbridge.shared.ui.glasses.MetaSetupChoiceSection
 import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
 import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
@@ -89,6 +94,8 @@ data class MetaPairingScreenState(
     val deviceConnected: Boolean = true,
     val androidPermissionPermanentlyDenied: Boolean = false,
     val checkingCameraPermission: Boolean = false,
+    /** False for a build with app id `"0"`: only Developer Mode can register. */
+    val appIdConfigured: Boolean = true,
 ) {
     val androidPermissionsGranted: Boolean
         get() = androidCameraGranted && nearbyDevicesGranted
@@ -181,6 +188,7 @@ class MetaPairingActivity : AppCompatActivity() {
     private var androidPermissionError: String? = null
     private var androidPermissionPermanentlyDenied = false
     private var requestingGlassesCameraPermission = false
+    private var registerAgainRequested = false
 
     private val androidPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -233,11 +241,14 @@ class MetaPairingActivity : AppCompatActivity() {
                     onRequestAccess = ::openBetaAccess,
                     onRefreshInvite = ::refreshInviteStatus,
                     onToggleMock = { enabled -> manager.setDebugMockEnabled(enabled); refreshState() },
+                    onRegister = ::registerFromSetupChoice,
+                    onSetupChoiceChanged = { manager.onSetupChoiceChanged(); refreshState() },
                 )
             }
         }
         observeManager()
         if (hasRequiredAndroidPermissions()) initializeDat()
+        registerAgainRequested = intent.getBooleanExtra(EXTRA_REGISTER_AGAIN, false)
         handleRegistrationCallback(intent)
         refreshState()
     }
@@ -245,6 +256,7 @@ class MetaPairingActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_REGISTER_AGAIN, false)) registerAgainRequested = true
         handleRegistrationCallback(intent)
     }
 
@@ -253,6 +265,11 @@ class MetaPairingActivity : AppCompatActivity() {
         cameraCheckKey = null
         refreshState()
         if (hasRequiredAndroidPermissions()) initializeDat()
+        // "Register again" from the notice: register once the screen is in front.
+        if (registerAgainRequested) {
+            registerAgainRequested = false
+            registerFromSetupChoice()
+        }
     }
 
     private fun observeManager() {
@@ -296,6 +313,7 @@ class MetaPairingActivity : AppCompatActivity() {
             }.getOrDefault(false),
             androidPermissionPermanentlyDenied = androidPermissionPermanentlyDenied,
             checkingCameraPermission = checkingGlassesCameraPermission,
+            appIdConfigured = manager.appIdConfigured,
         )
         if (checkGlassesCamera && screenState.androidPermissionsGranted && screenState.initialized && screenState.deviceConnected &&
             !requestingGlassesCameraPermission) {
@@ -382,6 +400,19 @@ class MetaPairingActivity : AppCompatActivity() {
         }
     }
 
+    /** Register from the setup choice; missing permissions or Meta AI are handled first. */
+    private fun registerFromSetupChoice() {
+        MetaRegistrationNotices.cancel(this)
+        refreshState(checkGlassesCamera = false)
+        val state = screenState
+        if (!state.androidPermissionsGranted || !state.bluetoothEnabled || !state.initialized || !state.metaAiInstalled) {
+            performPrimaryAction()
+            return
+        }
+        // The manager refuses while registered or between states (see MetaRegistrationTracker).
+        manager.startRegistration(this)
+    }
+
     private fun retryPairing() {
         cameraCheckKey = null
         if (!screenState.isReadyForImageQuestion) performPrimaryAction() else refreshState()
@@ -457,10 +488,11 @@ class MetaPairingActivity : AppCompatActivity() {
         )
     }
 
-    private companion object {
-        const val META_AI_PACKAGE = "com.facebook.stella"
-        const val META_AI_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.facebook.stella"
-        const val META_BETA_ACCESS_URL = "https://cyanbridge.vercel.app/beta"
+    companion object {
+        /** Set by the "Register again" notice action. */
+        const val EXTRA_REGISTER_AGAIN = "com.fersaiyan.cyanbridge.extra.META_REGISTER_AGAIN"
+        private const val META_AI_PACKAGE = "com.facebook.stella"
+        private const val META_AI_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.facebook.stella"
     }
 }
 
@@ -476,6 +508,8 @@ fun MetaPairingScreen(
     onRequestAccess: () -> Unit = {},
     onRefreshInvite: () -> Unit = {},
     onToggleMock: (Boolean) -> Unit = {},
+    onRegister: () -> Unit = onPrimaryAction,
+    onSetupChoiceChanged: (MetaSetupChoice) -> Unit = {},
 ) {
     var showInitialPairingNotice by androidx.compose.runtime.remember {
         mutableStateOf(true)
@@ -612,6 +646,15 @@ fun MetaPairingScreen(
                         state.androidPermissionsGranted -> "Camera and Nearby Devices granted"
                         else -> "Permission required"
                     },
+                )
+            }
+            item {
+                MetaSetupChoiceSection(
+                    phase = state.registrationState.toMetaRegistrationPhase(),
+                    appIdConfigured = state.appIdConfigured,
+                    onRegister = onRegister,
+                    onRequestAccess = onRequestAccess,
+                    onChoiceChanged = onSetupChoiceChanged,
                 )
             }
             item {

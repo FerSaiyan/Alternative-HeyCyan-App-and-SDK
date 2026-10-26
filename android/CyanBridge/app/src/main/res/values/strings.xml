@@ -162,4 +162,9 @@
     <string name="walking_aid_source_cloud">Cloud (Pro)</string>
     <string name="walking_aid_not_connected">Walking Aid: Glasses not connected. Please connect your glasses first.</string>
     <string name="walking_aid_meeting_active">Walking Aid: Meeting recording is active. Stop the meeting before enabling Walking Aid.</string>
+    <string name="meta_registration_channel_name">Meta glasses connection</string>
+    <string name="meta_registration_lost_title">Meta glasses disconnected</string>
+    <string name="meta_registration_lost_dev_mode_text">CyanBridge is no longer connected in Meta AI. Developer Mode was probably turned off. Turn it back on in Meta AI, then register again in CyanBridge.</string>
+    <string name="meta_registration_lost_invite_text">CyanBridge is no longer connected in Meta AI. Keep Developer Mode off, then register again in CyanBridge.</string>
+    <string name="meta_registration_register_again">Register again</string>
 </resources>
