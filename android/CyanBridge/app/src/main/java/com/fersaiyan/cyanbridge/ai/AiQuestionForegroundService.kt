@@ -77,6 +77,11 @@ class AiQuestionForegroundService : Service() {
 
         val status = intent.getStringExtra(EXTRA_STATUS).orEmpty().ifBlank { "Processing glasses question" }
         startForegroundSafely(status)
+        if (startHandled()) {
+            // The question ended before the service started: it may stop only now it is in the foreground.
+            stopQuestionWork()
+            return START_NOT_STICKY
+        }
         if (wakeLock.isHeld) wakeLock.release()
         wakeLock.acquire(MAX_WORK_DURATION_MS)
         preloadSelectedLocalModelIfUseful()
@@ -201,6 +206,20 @@ class AiQuestionForegroundService : Service() {
 
         private val microphone = MutableStateFlow(MicrophoneAccess.NOT_STARTED)
 
+        // Android kills the app when a service started with startForegroundService() is stopped before
+        // it calls startForeground(), so a stop that arrives first waits for onStartCommand.
+        private val startLock = Any()
+        private var startPending = false
+        private var stopPending = false
+
+        /** Marks the pending start as handled; true when a stop arrived meanwhile. */
+        private fun startHandled(): Boolean = synchronized(startLock) {
+            val stop = stopPending
+            startPending = false
+            stopPending = false
+            stop
+        }
+
         private fun publish(access: MicrophoneAccess) {
             microphone.value = access
         }
@@ -211,8 +230,13 @@ class AiQuestionForegroundService : Service() {
                 .putExtra(EXTRA_STATUS, status)
             // A service that already holds the microphone keeps it; otherwise onStartCommand reports again.
             microphone.update { if (it == MicrophoneAccess.GRANTED) it else MicrophoneAccess.STARTING }
+            synchronized(startLock) {
+                startPending = true
+                stopPending = false
+            }
             runCatching { ContextCompat.startForegroundService(context, intent) }
                 .onFailure {
+                    synchronized(startLock) { startPending = false }
                     // Android 12+: a background app may not start a foreground service at all.
                     Log.w(TAG, "Unable to request AI question foreground service", it)
                     microphone.compareAndSet(MicrophoneAccess.STARTING, MicrophoneAccess.REFUSED)
@@ -221,6 +245,12 @@ class AiQuestionForegroundService : Service() {
 
         fun stop(context: Context) {
             microphone.value = MicrophoneAccess.NOT_STARTED
+            synchronized(startLock) {
+                if (startPending) {
+                    stopPending = true
+                    return
+                }
+            }
             context.stopService(Intent(context, AiQuestionForegroundService::class.java))
         }
 
