@@ -41,7 +41,7 @@ Keep the collaborator's UI changes except two, which were reverted:
   - This looks like a duplicate connect being removed. It is listed in HARDWARE_TEST_CHECKLIST.md.
 
 ## Not covered
-- Meizu MYVU crashes on the emulator in both builds, which is an existing issue.
+- Meizu MYVU crashes on the emulator in both builds, which is an existing issue. Fixed later in c50e7c27; see CRASH_SWEEP.md.
 - iOS screens: no Mac is available here.
 - Flows beyond the first screen of each Activity (dialogs, long flows) are covered by HARDWARE_TEST_CHECKLIST.md.
 
@@ -98,3 +98,7 @@ Targets compared: 45 (107 screenshots). Against the baseline, 21 targets are pix
 ### Still open
 - **Bottom-bar colors (owner decision, not unified).** The per-tab bars use the secondary container for the selected item. The glasses screen's shell bar uses the primary container with a semibold label. Letting the shell draw the bar for every tab would match iOS: MainActivity would draw `CyanBridgeNavShell` around the tab routes, and those screens would pass `showNavigationBar = false`. That changes those bars' colors, so it was left out. The capture confirms both bars are unchanged from the baseline.
 - **Not seen by a static capture:** window animations between screens are gone, including the onboarding fade.
+
+## Crash sweep (2026-10-27)
+
+A crash sweep then tapped the controls of every route, family dashboard, onboarding path and dialog, and ran lifecycle and monkey passes. It found and fixed two crashes: Meizu MYVU at launch, and Test voice with the Pro / Gemini Live provider. See [CRASH_SWEEP.md](CRASH_SWEEP.md).
