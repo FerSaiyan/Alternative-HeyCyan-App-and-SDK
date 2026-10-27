@@ -53,11 +53,13 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
 
     private val appContext = context.applicationContext
     private val connection = ConnectionManager(appContext, this)
-    private val adapter = MyvuDisplayAdapter(this)
     private val _state = MutableStateFlow(MeizuMyvuUiState())
     val state: StateFlow<MeizuMyvuUiState> = _state.asStateFlow()
     private val _failurePrompt = MutableStateFlow<MeizuMyvuFailure?>(null)
     val failurePrompt: StateFlow<MeizuMyvuFailure?> = _failurePrompt.asStateFlow()
+
+    // After the state flows: the adapter reads [state] while it is constructed.
+    private val adapter = MyvuDisplayAdapter(this)
     private val connectionRequestLock = Any()
     @Volatile
     private var failureReportedForCycle = false
