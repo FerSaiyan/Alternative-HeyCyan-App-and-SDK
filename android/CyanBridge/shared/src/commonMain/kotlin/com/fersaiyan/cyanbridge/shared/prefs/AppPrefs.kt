@@ -122,10 +122,22 @@ object AppPrefs {
         val visionAssistanceChoice = string("vision_assistance_choice", "UNSET")
     }
 
+    /**
+     * The Mentra SDK's record of the paired display glasses (reader: devices/mentra on Android),
+     * restored with `setDefaultDevice` before `connectDefault` on launch.
+     */
+    object MentraSdkDevice : PrefsFile("mentra_sdk_device") {
+        /** The SDK's `DeviceModel.deviceType`. */
+        val model = optionalString("model")
+        val deviceName = optionalString("name")
+        val address = optionalString("address")
+        val projectName = optionalString("project_name")
+    }
+
     val files: List<PrefsFile> = listOf(
         Main, IosOnboarding, Appearance, ChatAppearance, SharedChatAppearance, NoteTags, SharedSettings,
         Analytics, DeviceProfile, VersionCheck, RelayServer, MetaPermissionRequests, SettingsSections,
-        LocalModelsSections, MetaRegistration, Accessibility,
+        LocalModelsSections, MetaRegistration, Accessibility, MentraSdkDevice,
     )
 }
 
