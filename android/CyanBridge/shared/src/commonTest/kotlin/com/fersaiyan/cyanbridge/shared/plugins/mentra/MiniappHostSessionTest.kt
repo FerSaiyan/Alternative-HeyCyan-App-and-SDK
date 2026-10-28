@@ -145,6 +145,8 @@ class MiniappHostSessionTest {
         h.session.onUiFrame("""{"type":"msg","seq":1,"channel":"captions:clear","payload":{}}""")
         assertTrue(h.background.none { it["payload"]!!.jsonObject["streamType"]?.jsonPrimitive?.content == "_ui" })
 
+        h.send("""{"type":"miniapp_connect","packageName":"","initReady":true,"sessionId":"s1"}""", "c1")
+        assertFalse(h.session.isBackgroundReady)
         h.send("""{"type":"miniapp_ready","sessionId":"s1"}""")
         val ui = h.background.map { it["payload"]!!.jsonObject }.filter { it["streamType"]?.jsonPrimitive?.content == "_ui" }
         assertEquals(listOf("UI_OPEN", "UI_MESSAGE"), ui.map { it["data"]!!.jsonObject.type })
@@ -161,11 +163,24 @@ class MiniappHostSessionTest {
     }
 
     @Test
+    fun aSessionWithoutInitReadyIsReadyOnConnect() {
+        // Bundles packed with older SDKs connect without initReady and never send READY.
+        val h = Harness()
+        h.send("""{"type":"miniapp_connect","packageName":""}""", "c1")
+        assertTrue(h.session.isBackgroundReady)
+    }
+
+    @Test
     fun pluginsPageSectionsFollowTheSelectedGlasses() {
         fun sections(deviceClass: DeviceClass) = PluginEcosystems.sectionsFor(GlassesFamilyProfiles.forClass(deviceClass))
         assertEquals(listOf(PluginEcosystem.MEMOMIND_WEB_PLUGINS, PluginEcosystem.MENTRA_MINIAPPS), sections(DeviceClass.MEMOMIND))
         assertEquals(listOf(PluginEcosystem.MENTRA_MINIAPPS), sections(DeviceClass.MEIZU_MYVU))
-        assertEquals(listOf(PluginEcosystem.MENTRA_MINIAPPS), sections(DeviceClass.MENTRA_LIVE))
+        listOf(DeviceClass.MENTRA_LIVE, DeviceClass.EVEN_G1, DeviceClass.EVEN_G2, DeviceClass.MENTRA_DISPLAY, DeviceClass.NIMO, DeviceClass.XINGYI_AR99)
+            .forEach { assertEquals(listOf(PluginEcosystem.MENTRA_MINIAPPS), sections(it), it.name) }
+        // Display metrics follow the Mentra SDK model's text limits (G1: 40 columns, 5 lines).
+        val g1 = MiniappDisplayProfile.forClass(DeviceClass.EVEN_G1)
+        assertEquals(40, g1.charsPerLine(g1.width))
+        assertEquals(5, g1.maxLines)
         assertEquals(emptyList(), sections(DeviceClass.HEY_CYAN))
         assertEquals(emptyList(), sections(DeviceClass.META_RAYBAN))
 

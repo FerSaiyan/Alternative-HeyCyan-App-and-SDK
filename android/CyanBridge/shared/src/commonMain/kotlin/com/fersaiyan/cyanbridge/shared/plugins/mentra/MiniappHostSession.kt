@@ -85,7 +85,7 @@ class MiniappHostSession(
         val type = payload.string("type") ?: return
         if (closed) return
         when (type) {
-            CONNECT -> connect(requestId)
+            CONNECT -> connect(requestId, announcedReady = (payload["initReady"] as? JsonPrimitive)?.content == "true")
             READY -> markReady()
             SUBSCRIBE -> subscribe(payload)
             RENDER -> reply(requestId, render(payload))
@@ -99,7 +99,11 @@ class MiniappHostSession(
 
     // region handshake and lifecycle
 
-    private fun connect(requestId: String?) {
+    /**
+     * Answers CONNECT. A session that did not announce `initReady` (bundles packed with older
+     * SDKs) never sends READY, so its UI may open right away, as the Mentra host does.
+     */
+    private fun connect(requestId: String?, announcedReady: Boolean) {
         synchronized(lock) { connected = true }
         val ack = buildJsonObject {
             put("type", CONNECT_ACK)
@@ -112,6 +116,7 @@ class MiniappHostSession(
             putJsonObject("hostFeatures") { put("initReady", true) }
         }
         send(ack, requestId)
+        if (!announcedReady) markReady()
     }
 
     /** READY, or the host's start-up timeout: open the UI if it is waiting and flush what it sent. */

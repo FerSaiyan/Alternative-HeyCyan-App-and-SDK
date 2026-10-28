@@ -142,10 +142,10 @@ A miniapp talks to "the glasses" and never to a vendor. CyanBridge serves it fro
 
 | Miniapp call | CyanBridge contract | MYVU | MemoMind | Mentra Live | Mentra display models (G1/G2, Mach1, Z100…) |
 |---|---|---|---|---|---|
-| `display.render` (text) | Host wraps text (`MiniappTextLayout`) → `DisplayCommand.Text` via `GlassesBridge.showText` (`canPosition:false`, as on G1) | yes | yes | no display: `status:"blocked"` | through their `GlassesDeviceAdapter` once the parallel Mentra-display work registers one |
+| `display.render` (text) | Host wraps text (`MiniappTextLayout`) → `DisplayCommand.Text` via `GlassesBridge.showText` (`canPosition:false`, as on G1) | yes | yes | no display: `status:"blocked"` | yes, through the `mentra_display` adapter (`MentraDisplayAdapter`); the canvas follows the model's `MentraDisplayLimits` (G1 40×5, G2 40×8, NIMO 60×11) |
 | `render([])` | `GlassesBridge.clearDisplay` | yes | yes | — | same |
 | `render` image/rect | dropped and reported in `dropped` (no `IMAGE_DISPLAY` contract yet) | — | — | — | gap |
-| `transcription.on` / `forLanguage` | `PluginVoiceRecognizer` (Android speech recognition through the plugin audio session; the glasses mic over SCO when routed) → `transcription:<lang>` events | phone/SCO mic | phone/SCO mic | phone/SCO mic | same |
+| `transcription.on` / `forLanguage` | `PluginVoiceRecognizer` (Android speech recognition through the plugin audio session; the glasses mic over SCO when routed) → `transcription:<lang>` events | phone/SCO mic | phone/SCO mic | phone/SCO mic | phone mic (their vendor PCM stream is not routed to Android speech recognition yet) |
 | `input.onButtonPress` / `onTouch` | `GlassesBridge.bridgeEvents` `InputEvent.Button` → `button_press {buttonId, pressType}` / `touch_event {kind}` | — | button and head gestures | button | via their adapter |
 | `storage.*` | per-app JSON file in app storage | all | all | all | all |
 | `speaker.speak` | phone TTS (Android `TextToSpeech`) | yes | yes | yes | yes |
@@ -215,7 +215,7 @@ The page shows sections by the selected family (`PluginEcosystems.sectionsFor`):
 |---|---|
 | CyanBridge native plugins | always |
 | MemoMind Web plugins | MemoMind is selected; the card opens the existing `.mmpkg` host |
-| Mentra miniapps | a Mentra family is selected, or the family has `TEXT_DISPLAY` (MYVU, MemoMind, and the Mentra display models the parallel work adds) |
+| Mentra miniapps | a Mentra SDK family is selected (`MentraSdkModel.usesMentraSdk`: Mentra Live, Even G1/G2, Mentra Display, NIMO, AR99), or the family has `TEXT_DISPLAY` (MYVU, MemoMind) |
 
 Even Hub is removed. The `EVENHUB_RUNTIME` route had no caller, so the screen, its JavaScript bridge, ViewModel, strings and `evenhub-compat-shim.js` were dead code.
 
@@ -226,3 +226,21 @@ Even Hub is removed. The `EVENHUB_RUNTIME` route had no caller, so the screen, i
 - **API churn.** The SDK is beta: 3.4.0 here, while manifests say `sdkVersion 0.3.0` and `minHostVersion 3.2.1`, and the wire protocol changed several times in `agents/*.md`. CyanBridge answers unknown requests with `NOT_IMPLEMENTED` and pins the polyfill to the upstream commit above. Re-check `protocol.ts` and `startup.ts` when updating.
 - **Security.** Miniapp background code can `fetch` any http(s) URL, as in Mentra. It is sandboxed by QuickJS limits and has no file or Android API access. The UI WebView is origin-locked and gets no host object besides the message port. A malicious miniapp can still exfiltrate what the user types into its UI and the transcripts it subscribes to; the consent dialog says so.
 - **Signatures.** `META-INF/MENTRA.SIG` is detected but not verified yet, and no key is pinned. The SHA-256 from the HTTPS-served manifest is the integrity check.
+
+## 9. First version (2026-10-27)
+
+Built (Android, experimental switch on the Plugins page, off by default):
+- Install from a miniapp URL (or an apps.mentraglass.com `open?url=` link), from the store browser (public feed → directory lookup → first-party host), update checks with `If-None-Match`, remove. SHA-256, ZIP limits, inner-manifest match and the domain rule are enforced; downgrades are refused.
+- QuickJS background runtime with Mentra's polyfill; the host protocol in shared code (handshake, subscriptions, `render` with host text layout, legacy layouts, storage, speak, open URL, UI bus, visibility); everything else answers `NOT_IMPLEMENTED`.
+- Sandboxed UI WebView with Mentra's `window.mentra` shim over an origin-scoped message listener.
+- Consent dialog from `miniapp.json` permissions; manifest + consent gates on every gated subscription and request; Android microphone permission requested when MICROPHONE is granted.
+- Speech recognition through the plugins' recognizer in a microphone foreground service while a miniapp subscribes; button and gesture events from the display bridge.
+- Device-aware Plugins page; Even Hub removed.
+
+Verified without a device: the four public first-party bundles (Captions 1.0.24, Teleprompter 1.0.12, Translation 1.0.25, Recorder 1.0.19, downloaded from miniapps.mentraglass.com) were checked by `MiniappBundle.read` (SHA-256 against the served manifest, DEFLATE ZIPs with directory entries) and run in a JVM harness. The harness used the same QuickJS library (JVM build of quickjs-kt 1.0.3), the vendored `startup.js`, the shared `MiniappHostSession`/`MiniappRuntimeBridge` and a copy of `QuickJsMiniappEngine`; it is not committed.
+- **Captions:** connects with `initReady`, sends READY, subscribes `transcription:auto` (the host starts recognition), turns host transcripts into `render` calls (the glasses get "hello there", then the final sentence), and drives its UI (snapshot, live transcript, display preview). Closing stops recognition and clears the glasses.
+- **Teleprompter:** an older SDK build without `initReady` (the host now treats such a CONNECT as ready). It loads settings from storage, renders the script with `includeTextLayout`, takes `tp:set-script`/`tp:set-wpm`/`tp:play`/`tp:pause` from the UI, and scrolls line by line on the host's `textLayout` offsets.
+- **Translation:** starts and subscribes `translation:*:en-US`, its UI hydrates; no translations arrive (no provider). Gap.
+- **Recorder:** starts, `blob.*` answers `NOT_IMPLEMENTED`, the miniapp logs it and shows "Recorder ready"; recording needs `audio_chunk` and blobs. Gap.
+
+Deferred: translation, audio chunks, blobs, camera/photos, location/navigation, phone notifications/calendar, LED/IMU, `session.auth`, actions/interop, signature verification (TOFU pinning), autostart after process death, background crash respawn, a watchdog for runaway scripts (QuickJS interrupt), the iOS port, and per-device display calibration.

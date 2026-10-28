@@ -15,6 +15,7 @@ import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.plugins.mentra.MiniappApprovals
 import com.fersaiyan.cyanbridge.shared.plugins.mentra.MiniappDeviceIo
+import com.fersaiyan.cyanbridge.shared.plugins.mentra.MiniappDisplayProfile
 import com.fersaiyan.cyanbridge.shared.plugins.mentra.MiniappException
 import com.fersaiyan.cyanbridge.shared.plugins.mentra.MiniappHardwareSupport
 import com.fersaiyan.cyanbridge.shared.plugins.mentra.MiniappHostOutput
@@ -65,7 +66,8 @@ object MentraMiniappHost {
         }
         val polyfill = withContext(Dispatchers.IO) { context.assets.open(POLYFILL_ASSET).bufferedReader().use { it.readText() } }
         val bundle = withContext(Dispatchers.IO) { store.readBackground(app) }
-        val running = RunningMiniapp(context.applicationContext, app, approvals, store, hardware)
+        val displayProfile = MiniappDisplayProfile.forClass(DeviceProfileStore.selectedClass(context))
+        val running = RunningMiniapp(context.applicationContext, app, approvals, store, hardware, displayProfile)
         if (!running.start(polyfill, bundle)) {
             running.close()
             throw MiniappException("${app.manifest.name} failed to start: ${running.logs.value.lastOrNull().orEmpty()}")
@@ -119,6 +121,7 @@ class RunningMiniapp internal constructor(
     approvals: MiniappApprovals,
     store: MiniappStore,
     override val hardware: MiniappHardwareSupport,
+    override val displayProfile: MiniappDisplayProfile,
 ) : MiniappDeviceIo, MiniappHostOutput {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val random = SecureRandom()

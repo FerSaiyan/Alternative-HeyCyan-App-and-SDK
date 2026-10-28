@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.shared.plugins.mentra
 
 import com.fersaiyan.cyanbridge.bridge.core.GlassesCapability
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
 
 /** What the user allowed one miniapp. [decided] are the declared permissions they were asked about. */
 data class MiniappApprovals(
@@ -105,7 +106,7 @@ data class MiniappHardwareSupport(
 
     companion object {
         fun of(profile: GlassesFamilyProfile): MiniappHardwareSupport = MiniappHardwareSupport(
-            modelName = profile.deviceClass.displayName(),
+            modelName = MentraSdkModel.forClass(profile.deviceClass)?.sdkDeviceType ?: profile.deviceClass.displayName(),
             display = profile.supports(GlassesCapability.TEXT_DISPLAY),
             microphone = profile.supports(GlassesCapability.MICROPHONE_AUDIO),
             speaker = profile.supports(GlassesCapability.SPEAKER_AUDIO),

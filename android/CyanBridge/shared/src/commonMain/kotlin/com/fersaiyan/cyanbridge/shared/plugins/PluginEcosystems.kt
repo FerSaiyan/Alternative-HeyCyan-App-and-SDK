@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.shared.plugins
 import com.fersaiyan.cyanbridge.bridge.core.GlassesCapability
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
 
 /** Third-party plugin ecosystems the Plugins page can offer next to CyanBridge's native plugins. */
 enum class PluginEcosystem {
@@ -39,6 +40,6 @@ object PluginEcosystems {
     fun runsMentraMiniapps(profile: GlassesFamilyProfile): Boolean =
         isMentraFamily(profile.deviceClass) || profile.supports(GlassesCapability.TEXT_DISPLAY)
 
-    /** Families paired through the Mentra Bluetooth SDK (their class names start with MENTRA). */
-    fun isMentraFamily(deviceClass: DeviceClass): Boolean = deviceClass.name.startsWith("MENTRA")
+    /** Families paired through the Mentra Bluetooth SDK: Mentra Live and the display glasses it drives. */
+    fun isMentraFamily(deviceClass: DeviceClass): Boolean = MentraSdkModel.usesMentraSdk(deviceClass)
 }

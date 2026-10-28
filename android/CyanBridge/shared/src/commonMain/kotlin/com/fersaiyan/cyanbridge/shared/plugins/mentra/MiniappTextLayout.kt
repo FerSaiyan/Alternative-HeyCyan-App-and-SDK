@@ -1,5 +1,8 @@
 package com.fersaiyan.cyanbridge.shared.plugins.mentra
 
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
+
 /**
  * The text canvas CyanBridge reports to miniapps (`capabilities.display`). Its glasses take plain
  * text, so scenes degrade to a text wall (`canPosition:false`, as on the G1). The metrics are
@@ -13,6 +16,19 @@ data class MiniappDisplayProfile(
     val maxLines: Int = 5,
 ) {
     fun charsPerLine(widthPx: Int): Int = maxOf(1, widthPx / glyphWidthPx)
+
+    companion object {
+        /** Mentra SDK display glasses: a canvas of their text limits (columns × lines) in the same glyph metrics. */
+        fun forClass(deviceClass: DeviceClass): MiniappDisplayProfile {
+            val limits = MentraSdkModel.forClass(deviceClass)?.display ?: return MiniappDisplayProfile()
+            val base = MiniappDisplayProfile()
+            return base.copy(
+                width = limits.columns * base.glyphWidthPx,
+                height = limits.lines * base.lineHeightPx,
+                maxLines = limits.lines,
+            )
+        }
+    }
 }
 
 /** One visible line with UTF-16 offsets into the element's text (end exclusive), as `RenderTextLine`. */
