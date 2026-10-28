@@ -1,4 +1,4 @@
-# Mentra Live integration audit
+# Mentra integration audit (Mentra Live and the SDK display glasses)
 
 Sources checked: the cached Android SDK `com.mentraglass:bluetooth-sdk:3.2.0-dev.227` (public API read with `javap`), and the open-source Mentra repository `Mentra-Community/MentraOS`. From that repository I read the SDK sources (`mobile/modules/bluetooth-sdk`, version 3.4.0), the SDK docs (`mintlify-docs/bluetooth-sdk`) and the official Android, iOS and React Native examples (`examples/bluetooth`). Behavior notes come from the 3.4 sources. Every API call in CyanBridge was checked against the 3.2.0-dev.227 AAR.
 
@@ -157,3 +157,77 @@ The question flows left MainActivity for `app/.../ai/questions` (A3), and these 
 3. **Playback signal.** `AssistantSpeaker.speakVision` (relay answers, Classic voice answers and decision-flow answers) and the local model's streamed photo answers call `VendorPlaybackSignal.forSelectedGlasses(context)?.setAppAudioPlaying(true/false)` around the answer; the lookup returns Mentra's manager only when `AudioRoutePolicy.needsPlaybackSignal(profile.audio)` and the manager exists. Cues are not bracketed.
 
 The button also works without the main screen: `MentraLiveManager.onButtonPress` calls `GlassesButtonQuestions`, which starts the image or voice question in the background when the app has no main screen and Mentra Live is the selected family (see the MemoMind README, "Questions").
+
+## Display glasses through the SDK
+
+Sources: the 3.2.0-dev.227 AAR (`javap`, and a jadx decompile of `DeviceManager.initSGC`, `sgcs/G1`, `G2`, `MentraNex`, `Nimo`, `Ar99`), the iOS Swift package at tag `3.2.0-dev.227` (`Package.swift`, `DeviceManager.swift`, `MentraBluetoothSDK.swift`, `Events/BluetoothEvents.swift`), and in MentraOS the 3.4 SDK sources, `glasses-compatibility.md`, `mintlify-docs/app-devs/core-concepts/display/layouts.mdx` and the engine's display profiles (`mobile/modules/engine/src/utils/display/profiles`, `services/DisplayProcessor.ts`).
+
+### What the SDK can drive
+
+`DeviceModel` lists G1, G2, MENTRA_LIVE, MENTRA_NEX, MACH1, Z100, FRAME, NIMO, AR99, SIMULATED and R1, but a model only works when the SDK creates a driver for it (`initSGC`):
+
+| Model | Android 3.2 | iOS 3.2 Swift package | CyanBridge |
+|---|---|---|---|
+| G1, G2 (Even Realities) | driver | driver | `EVEN_G1`, `EVEN_G2` |
+| MENTRA_NEX ("Mentra Display") | driver | excluded from the package (`MENTRA_FEATURE_NEX`) | `MENTRA_DISPLAY`, Android only |
+| NIMO | driver | driver | `NIMO` |
+| AR99 (Xingyi) | driver | driver | `XINGYI_AR99` |
+| MACH1, Z100 (Vuzix) | needs `com.vuzix:ultralite-sdk-android:1.8`, compile-only in the public AAR (`createOptionalMach1Sgc` returns null without it), plus the Vuzix Connect app | excluded (`MENTRA_FEATURE_VUZIX`) | not added: the Vuzix SDK is under a proprietary licence (JitPack), so adding it is an owner decision |
+| FRAME (Brilliant Labs) | no driver (`// sgc = FrameManager()`) | no driver | not added |
+| R1 | the Even Realities R1 ring, a controller (`controllers/R1`), not glasses | | not added |
+
+If the owner adds the Vuzix dependency, Mach1 and Z100 would be: text display (Mentra matrix "Full"), no images, no speaker, no camera, microphone through the phone ("Partial*"), tap → head-up toggle, 390 px usable width × 7 lines (~34 columns), and pairing through the Vuzix Connect app (the SDK scan reports a single "NOTREQUIREDSKIP" entry).
+
+### Design: one device class per model
+
+`GlassesFamilyProfiles.forClass(DeviceClass)` is the capability lookup for the dashboard gating, plugins, audio routing, Android and iOS; Device Bind's type picker lists classes; the profile persists the class name. One class per SDK model keeps all of that unchanged and lets each model declare its own input and microphone. A single `MENTRA_LIVE` class plus a model field would have needed a second lookup key everywhere and a new persisted field. `shared/devices/mentra/MentraSdkGlasses.kt` (`MentraSdkModel`) maps class ↔ SDK `deviceType`, holds the name rules, the display limits and which models the iOS package has. Mentra Live keeps its class, profile, adapter and code paths.
+
+### Capabilities
+
+| Class | Display | Input reported by the 3.2 driver | Microphone | Speaker | Camera |
+|---|---|---|---|---|---|
+| `EVEN_G1` | text, lines, cards, pages, clear, notifications | head-up (IMU); touchpads are not forwarded | SDK PCM (LC3 decoded) | no | no |
+| `EVEN_G2` | same | touch gestures | SDK PCM | no | no |
+| `MENTRA_DISPLAY` | same | none (button, IMU and head events are only logged) | SDK PCM | no | no |
+| `NIMO` | same | single/double tap, long press, head-up | SDK PCM | no | no |
+| `XINGYI_AR99` | same | none | SDK PCM (Opus decoded) | no | no |
+
+All five: `BATTERY_STATUS`, `showsAssistantAnswers = true`, audio `VENDOR_PCM_STREAM` in / no output (questions record the SDK stream, `DEVICE_SDK` route, no SCO; answers play on the phone), and Walking Aid, Visual Diary and Auto Audio refused like MYVU/MemoMind. Images (`IMAGE_DISPLAY`) are not declared: the SDK's bitmap paths are internal or model-specific, and the shared contract has no image command yet. Brightness: `setBrightness` is internal in 3.2.
+
+### Pairing
+
+The SDK drives one model at a time, and scanning a model replaces the current driver (`initSGC` cleans up the previous one, even a connected Mentra Live). So Device Bind does not run SDK scans to list display glasses: it lists them from its own BLE scan with the SDK scanners' name rules, and only scans with the SDK, for the chosen model, after the user confirms.
+
+- Names: G1 `Even G1_<n>_L_…`/`_R_…`, G2 `Even G2_<n>_L_…`/`_R_…`, Mentra Display `Nex1-…`/`MENTRA_DISPLAY_…`, NIMO `nimo…` (the SDK pairs its Classic "nimo…" device, not the `…_ble` one).
+- G1/G2 arms: the SDK connects both arms from one pick (G1 `connectById(<n>)` finds `_L_` then `_R_` with that pair number; G2 matches both arms by the serial number in their manufacturer data). Device Bind therefore drops right-arm rows (Android and iOS). The SDK's scan result names: G1 the pair number, G2 the serial number.
+- AR99: never by name. Device Bind parses the advertisement like the SDK driver (first manufacturer-specific structure ≥ 21 bytes; project ID = its first 4 bytes, company ID included; BLE address = the next 6 bytes XOR 0xAD) and lists a row as AR99 only for the exact ID "AR99" (`Ar99Advertisement`). AF98, AF99, HVXM, HVXF, a missing ID or no manufacturer data fail closed. The type picker never offers AR99 from a saved choice alone, and `DeviceBindViewModel.confirmConnection` refuses a display class the row was not detected as. The SDK pick then requires the project name "AR99" and the advertised address (`MentraSdkPairing`); the SDK's own scanner also only accepts "AR99". iOS reads the manufacturer data from CoreBluetooth and checks `projectName == "AR99"` in Swift.
+- Connect (`MentraLiveManager.connectDisplayGlasses`): drop another model's link, scan the model for 20 s, pick the row's glasses (address, else the SDK name derived from the BLE name, else the only result for G2/NIMO), `connect`. Several G2/NIMO and no match → "More than one … nearby"; none → "… not found". The SDK record is saved in the typed prefs `AppPrefs.MentraSdkDevice` because the SDK name is not the Bluetooth name.
+- Reconnect: `AutoPairManager` (startup, Bluetooth on, ACL) calls `reconnectSavedDisplay`: the saved record becomes `setDefaultDevice`, then `connectDefault`. The SDK keeps owning link-loss reconnects. Device Bind's Mentra Live scan is skipped while display glasses hold the SDK (`scanWouldDropLink`).
+
+### Display
+
+The SDK's `displayText(text, x, y, size)` ignores x/y/size and sends the text as is (`sendTextWall`); the Mentra app wraps it first with per-model font tables. CyanBridge wraps and pages in shared code (`MentraDisplayText`, tested), with character limits set below Mentra's average glyph widths so mixed text does not overflow (wide CJK characters count 2):
+
+| Model | Mentra profile | Screen used | UTF-8 budget per screen |
+|---|---|---|---|
+| G1 | 576 px, 5 lines, glyphs (w+1)×2 px | 40 columns × 5 lines | 390 bytes |
+| G2 | G1 font, 8 lines | 40 × 8 | 390 |
+| Mentra Display | 480 px, 8 lines | 44 × 8 | 450 |
+| NIMO | 500 px, 8 px ASCII advance, 11 lines | 60 × 11 | 2,000 (firmware 8,192) |
+| AR99 | none (Mentra falls back to G1) | 40 × 5 | 390 |
+
+`MentraDisplayAdapter` (shared, used by Android and iOS) implements `GlassesDeviceAdapter` and `GlassesNotificationDisplay`: text, lines and cards (title on the first line) are paged, later screens follow at a reading pace (3-12 s, `dwellMs`), a tap shows the next screen at once, a new command replaces the pages, `ttlMs` clears afterwards, and notifications ("app: title" + body) clear 10 s after their last screen. Android registers it as `mentra_display` next to Mentra Live's adapter; connecting display glasses makes it the active bridge adapter, so assistant answers (`showsAssistantAnswers`), plugins, notifications and runtimes reach the glasses.
+
+Dashboard APIs are not used: `setDashboardContent`/`showDashboard`/`setDashboardPosition` feed the SDK's head-up dashboard (status header plus content), which has no counterpart in the shared contract. A possible use is showing the last answer when the user looks up. `setHeadUpAngle` would need a settings control. `setScreenDisabled` is not needed. Unconfirmed: whether the SDK's head-up dashboard redraws over text sent with `displayText`, and whether looking down restores it (hardware checklist step 10).
+
+### Audio and input
+
+Questions record the SDK microphone (`VendorPcmMicrophone` covers the five classes; `AudioRoutePolicy` gives `DEVICE_SDK`, no SCO). Input (`MentraDisplayInput`): touch gesture names and button presses become `InputEvent.Button`; long press → voice question (background `GlassesButtonQuestions` without the main screen, the dashboard's voice question with it), tap → next screen, double tap → clear; head-up/down reach the bridge listeners only. Gallery mode is not touched for display glasses.
+
+### iOS
+
+`MentraGlassesBridge.swift` takes a model; one instance per model shares one SDK and the bridge with a listener gets the events. G1, G2, NIMO and AR99 are registered; Mentra Display shows a "needs the Android app" message. Swift handles `display_text`/`clear_display` and forwards touch gesture names; Kotlin (`IosOtherGlasses`) builds the same `MentraDisplayAdapter` over those actions as the answer display. Not on iOS: the Mentra microphone stream (as for Mentra Live), head-up events and the SDK default-device reconnect (iOS reconnects by scanning for the saved identifier). The Swift was not compiled here (no Mac); the Kotlin side passes `iosCompileCheck`.
+
+### Not confirmed without hardware
+
+Everything above comes from sources; no display glasses were available. Open per model: the exact line overflow of the chosen limits, G1/G2 text throttling (G1 keeps only the latest text within its throttle window), whether the PCM path works for each driver's LC3/Opus audio, the G2 and NIMO gesture names in 3.2, the NIMO Classic/BLE name pairing, AR99's advertised address equalling its scan address, and how the SDK's own dashboard interacts with `displayText`.

@@ -524,6 +524,47 @@ Setup: Android 10 or newer, phone Wi-Fi on, Mentra Live connected and ready. For
 12. **Broadcast audio arbitration.** Start meeting capture first, then the broadcast: it runs with "Sound: off (another recording is using the microphone)". Voice questions during a broadcast still work; note whether the stream's sound cuts out while the assistant uses the glasses microphone.
 13. **Broadcast stop.** Stop broadcast (or Stop on the dashboard card): `Broadcast ended (STOPPED)`, the server stream ends, and AI photos and the preview work again.
 
+## Mentra SDK display glasses (see MENTRA_AUDIT.md, "Display glasses through the SDK")
+
+Models: Even Realities G1 and G2, Mentra Display (Android only), NIMO, Xingyi AR99. Logs:
+
+`adb logcat -s MentraLive MentraDisplay DeviceBindActivity AutoPair GlassesBridge AudioQuestionRecorder ImageQuestionAudio AIHijack`
+
+The Mentra SDK's own lines (`MAN:`, `G1:`, `G2:`, `Nex:`, `NIMO:`, `AR99`) come through its log callback and logcat. The SDK drives one model at a time; test one pair of glasses at a time unless a step says otherwise.
+
+**Every model**
+1. **Detection.** Open Scan with the glasses on and in pairing mode. The row appears with its Bluetooth name (AR99: its name, or "Xingyi AR99" when it advertises none). The type dialog preselects the model and offers it; no other row offers it. A HeyCyan or Mentra Live row never offers these models.
+2. **Pair.** Connect. Expect the toast "Looking for your <model> to connect.", `MentraLive` `"SDK scan for <MODEL> started to pair …"`, `"Connecting to <MODEL> <sdk name> (<address>)"`, then `"Glasses ready=true"`. Accept any Android pairing dialog. The dashboard shows "Connected - <model>", the battery and the meeting card only (no camera, gallery, preview or firmware sections). There is no "Gallery mode off" line.
+3. **Not found.** Turn the glasses off and pair: after about 20 s the toast "<model> not found. …" and `"<MODEL> pairing failed: NOT_FOUND"`.
+4. **Assistant answer on the display.** Ask a voice question from the dashboard. The answer is spoken on the phone and shows on the glasses as wrapped text; long answers continue on the next screens at a reading pace (3-12 s each). `GlassesBridge` `"Active adapter set to: mentra_display"` appears when the glasses connect. **Record** whether any line overflows or wraps a second time on the glasses (limits per model in MENTRA_AUDIT.md), and whether non-Latin text (accents, Cyrillic, CJK) shows.
+5. **Voice question through the glasses microphone.** Expect `"Question route: glasses SDK microphone, no Bluetooth call route"`, `"Capture started input=glasses SDK PCM"` and `"Microphone opened by AudioQuestionRecorder"`. The transcript must match what you said. **Record** the audio quality (G1/G2/Mentra Display send LC3, NIMO and AR99 PCM/Opus through the SDK).
+6. **Plugins.** Live Caption Relay and Hands-Free Translator show their text on the glasses; Errand Brain and Meeting Spark Notes show their cards (title on the first line). Walking Aid, Visual Diary and Auto Audio refuse with "<model> supports display and microphone plugins only."
+7. **Notifications.** With notification forwarding on, a phone notification shows as "<app>: <title>" plus the body and clears itself about 10 s after its last screen.
+8. **Reconnect on launch.** Force-stop the app with the glasses on and relaunch: `"Reconnect (startup) to <MODEL> <sdk name> requested"` and a connection without Scan. Turn Bluetooth off and on: the SDK reconnects by itself.
+9. **Switching.** Pair Mentra Live, then the display glasses again (and the reverse): each switch drops the other model's link, Device Bind does not start a Mentra Live scan while the display glasses are connected, and the answers go to the right glasses.
+10. **Head-up.** On models that report it (G1, NIMO), look up and down while text shows: `MentraLive` `"<MODEL> input head SWIPE_UP/SWIPE_DOWN"`. **Record** whether the SDK's own dashboard replaces the text while you look up, and whether the text comes back when you look down.
+
+**Even Realities G1**
+- Only the left arm appears in Scan (`Even G1_<n>_L_…`); the right arm has no row. After Connect, both arms connect (SDK log: left first, then right). The saved SDK name is the pair number `<n>`.
+- 5 lines of 40 columns per screen. G1 has no app-visible touch input in this SDK; questions start from the phone or the wake word.
+
+**Even Realities G2**
+- Only the left arm appears. The SDK picks the glasses by the serial number in their advertisement: with two G2 pairs on, pairing fails with "More than one Even Realities G2 is nearby." (expected, fail-closed).
+- 8 lines of 40 columns. Touch: long press → voice question, tap → next screen, double tap → clear (`"<MODEL> input touch LONG_PRESS|SINGLE_TAP|DOUBLE_TAP"`). **Record** the gesture names the glasses send if a gesture logs "has no action".
+
+**Mentra Display (Android only)**
+- Names `Nex1-…` or `MENTRA_DISPLAY_…`. 8 lines of 44 columns. No input events (the 3.2 driver only logs them). On iOS, choosing it shows "Mentra Display needs the Android app…".
+
+**NIMO**
+- Name starts with "nimo". The SDK pairs the Classic Bluetooth "nimo…" device; with one NIMO on, the row's glasses are picked even if the BLE row is the "…_ble" companion. 11 lines of 60 columns. Taps as for G2; head-up as for G1.
+
+**Xingyi AR99**
+- Only glasses whose advertisement carries the exact project ID "AR99" are listed as AR99. **Fail-closed check:** with AF98/AF99/HVXM/HVXF hardware (or any other ID), the row is never offered "Xingyi AR99". A device previously saved as AR99 that no longer advertises the ID is not offered either.
+- The SDK picks the glasses by the address in their advertisement; the saved SDK name is "SN: <serial>" or "MAC: <address>". 5 lines of 40 columns (G1 limits). No input events.
+
+**iOS (Mac build; G1, G2, NIMO, AR99)**
+- Pair from Scan: the bridge scans the chosen model and connects the row's CoreBluetooth identifier; AR99 also needs the "AR99" project ID. Answers show on the glasses through `display_text`. Long press/tap/double tap work as on Android when the SDK reports touch. The Mentra microphone is not streamed on iOS (voice questions use the phone route, as for Mentra Live).
+
 ## Local Agent screenshots through Tasker (Android)
 
 Needs a phone with Tasker, AutoInput (Accessibility on) and the current `CyanBridge_LocalAgent_Tasker.prj.xml` imported from Plugins. Filter logcat with `adb logcat -s TaskerLocalAgent LocalAgentBrain`. Tasker's run log (Tasker → Monitoring → Run Log) shows the "CyanBridge LocalAgent Observe Handler" actions.
