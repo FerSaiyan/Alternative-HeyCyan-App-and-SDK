@@ -41,6 +41,12 @@ enum class GlassesAudioOutput {
 data class GlassesAudioProfile(
     val input: GlassesAudioInput,
     val output: GlassesAudioOutput,
+    /**
+     * Where spoken questions record while that path is available (see `AudioRoutePolicy.forQuestion`);
+     * [input] is their fallback and the route of every other feature. MemoMind: the Opus recording
+     * link ([GlassesAudioInput.VENDOR_PCM_STREAM]) in front of the HFP headset microphone.
+     */
+    val questionInput: GlassesAudioInput = input,
 ) {
     val hasMicrophone: Boolean get() = input != GlassesAudioInput.NONE
     val hasSpeaker: Boolean get() = output != GlassesAudioOutput.NONE
@@ -299,8 +305,9 @@ object GlassesFamilyProfiles {
             GlassesCapability.SPEAKER_AUDIO,
         ),
         controlPanel = GlassesControlPanel.MEMOMIND,
-        // Voice questions use the HFP route like other headsets; the Opus stream is opt-in.
-        audio = bluetoothHeadsetAudio,
+        // Voice questions record the Opus stream (no phone microphone, so they work in the
+        // background) and fall back to HFP; Live, meetings and plugins keep the HFP route.
+        audio = bluetoothHeadsetAudio.copy(questionInput = GlassesAudioInput.VENDOR_PCM_STREAM),
         showsAssistantAnswers = true,
         cameraUnavailableReason = "Selected device profile (MemoMind) has no camera.",
         unsupportedNativePlugins = mapOf(

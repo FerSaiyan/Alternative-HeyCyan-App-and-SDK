@@ -138,4 +138,18 @@ class AudioRoutePolicyTest {
         assertFalse(AudioRoutePolicy.needsPlaybackSignal(heyCyan))
         assertFalse(AudioRoutePolicy.needsPlaybackSignal(null))
     }
+
+    @Test
+    fun questionsUseTheSdkStreamOnlyWhereTheProfileOffersItAndItIsUp() {
+        val memoMind = GlassesFamilyProfiles.memoMind.audio
+        val conversation = AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED
+        assertEquals(AudioRoutePreference.DEVICE_SDK, AudioRoutePolicy.forQuestion(memoMind, sdkStreamAvailable = true))
+        // HFP fallback: link down, firmware without it, iOS over BLE.
+        assertEquals(conversation, AudioRoutePolicy.forQuestion(memoMind, sdkStreamAvailable = false))
+        // Everything else MemoMind does keeps the headset route.
+        assertEquals(conversation, AudioRoutePolicy.forDevice(conversation, memoMind))
+        val mentra = GlassesFamilyProfiles.mentraLive.audio
+        assertEquals(AudioRoutePreference.DEVICE_SDK, AudioRoutePolicy.forQuestion(mentra, sdkStreamAvailable = false))
+        assertEquals(conversation, AudioRoutePolicy.forQuestion(GlassesFamilyProfiles.heyCyan.audio, sdkStreamAvailable = true))
+    }
 }
