@@ -616,7 +616,7 @@ Check the Activity stack with `adb shell dumpsys activity activities | grep -E "
    - No screen should open twice or flash a blank window. Screens now switch without the old window animations, including the onboarding fade.
 2. **Back.**
    - Back walks the same path as before, then leaves the app from the glasses screen.
-   - Screens that handle Back themselves still do: the Mentra firmware update refuses Back during an update, Local models backs out of its sub-pages, the EvenHub web app goes back in its own history, and the voice profile steps back.
+   - Screens that handle Back themselves still do: the Mentra firmware update refuses Back during an update, Local models backs out of its sub-pages, the Mentra miniapps screen closes a miniapp's UI or the store first, and the voice profile steps back.
    - Onboarding (fresh install, or clear data): Welcome → battery guide → feature steps (voice profile is step 4) → glasses screen. Back on an onboarding step leaves the app, as before, and nothing glasses-related runs until onboarding ends: no Bluetooth or permission prompts over Welcome.
    - Glasses connected: while a tab or settings screen covers the glasses screen, battery polling and the glasses event listener pause, as when those were separate Activities. Back to the glasses screen resumes them, refreshes the plugin shortcuts and asks for any permissions newly enabled plugins need.
 3. **Rotation.** Rotate on each screen above. The screen stays, with its state (the chat being typed, plugin settings, the Pro plan picker, the Local models page, the device-bind scan resets and rescans as before), and Back afterwards still walks the same stack.
@@ -646,3 +646,36 @@ Check the Activity stack with `adb shell dumpsys activity activities | grep -E "
    - "Register again" from the notification opens or reuses the Meta setup screen, and registration starts once it is in front. Also check this with the app killed first: the Meta setup screen opens alone, and Back shows the glasses screen.
    - The "Test AI image question" button returns to the glasses screen and starts the question.
 8. **Lock screen.** A wake-word question while the phone is locked shows the glasses screen over the lock screen, as before. Locked, with a settings screen on top: that screen does not show over the lock screen, and unlocking shows it.
+
+## Mentra miniapps (experimental; see MENTRA_MINIAPPS.md)
+
+Filter logcat with `adb logcat -s MentraMiniapps MentraMiniappJs MentraMiniappUi MentraMiniappService PluginVoiceSupport GlassesBridge`.
+
+1. **Plugins page by device.** Select each family in Device Bind and open Plugins.
+   - HeyCyan, Eyevue, TuneBuds, W620, Meta: only the native plugins (and Tasker integrations, community list) as before.
+   - MemoMind: a "MemoMind Web plugins" section whose Open button shows the existing `.mmpkg` host, then a "Mentra miniapps" section.
+   - MYVU and Mentra Live: a "Mentra miniapps" section only. Mentra display models added later appear here when their profile has `TEXT_DISPLAY`.
+   - The Mentra section's switch is off on first run; Open is disabled until it is on. Turning it off stops every running miniapp.
+   - The rest of the page looks as before (hero, notice, native cards, period filter, rankings).
+2. **Install from a URL.** Turn the switch on, Open, paste `https://miniapps.mentraglass.com/com.mentra.teleprompter/` and tap Install from URL.
+   - The install dialog names the host and version, lists MICROPHONE and the trust note. Install. Expect `com.mentra.teleprompter` in the list with its icon.
+   - Paste `https://example.com/` (no miniapp: "No miniapp was found"), `http://…` (refused) and a URL whose package does not match its domain (refused with the domain-rule message).
+   - Tap Update on the installed copy: "up to date" (a 304 with the stored ETag). Nothing is downloaded again.
+3. **Store.** Browse the Mentra Miniapp Store: about 10 listings with icons, categories and versions; search filters. Install Captions from the store (resolved to the public first-party URL). A listing outside `com.mentra.*` without a public URL says to use the Mentra App; "Store page" opens apps.mentraglass.com.
+4. **Consent and start.** Open Captions: the permission dialog lists Microphone (required). Allow: Android asks for the microphone (and notifications) the first time. Deny the required one: nothing starts.
+5. **Captions on MemoMind and on MYVU (connected).**
+   - Open Captions, keep the default language. The notification "A miniapp is listening for speech" appears (microphone foreground service).
+   - Speak: captions appear on the glasses within about a second, at most one update every 300 ms, the newest text at the end; the miniapp UI shows the transcript.
+   - Change lines/width in the UI: the glasses layout follows.
+   - Back closes the UI; captions keep appearing on the glasses (the background runs). Stop (in the list or the notification's "Stop miniapps") clears the glasses and removes the notification.
+   - Check the audio coordination: start a glasses question while Captions listens; listening pauses and resumes (the plugin recognizer's audio session).
+6. **Teleprompter on MemoMind / MYVU.**
+   - Paste a script, set the speed, Play: lines scroll on the glasses; Pause, Restart, Seek and the line nudges work from the UI.
+   - Voice follow (AI Scroll): the script advances as you read aloud.
+   - On Mentra Live (no display) Teleprompter refuses to start ("needs display").
+7. **Buttons.** With a miniapp that uses `input.onButtonPress` (the Mentra example app), press the MemoMind or Mentra Live button: short and long presses reach the miniapp (`button_press`), taps and swipes arrive as `touch_event`.
+8. **Robustness.**
+   - Rotate with a miniapp UI open: the UI reloads and re-hydrates from the background (snapshot), the background is not restarted.
+   - Kill the app process while a miniapp runs: it does not restart by itself (no autostart yet); reopening it starts it fresh.
+   - Recorder (background-only, needs audio chunks and blobs): it starts, its unsupported calls answer NOT_IMPLEMENTED in the Log, and nothing crashes.
+   - Remove a miniapp: its files, storage and permission choices are gone; reinstalling asks for permissions again.
