@@ -14,11 +14,13 @@ import com.fersaiyan.cyanbridge.shared.audio.QuestionEndpoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import java.io.Closeable
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 
 /** No speech started, and Android was feeding the recorder silence instead of the microphone. */
@@ -31,18 +33,23 @@ class MicrophoneSilencedException : IllegalStateException("The microphone was si
  */
 class AudioQuestionRecorder(private val context: Context) {
     /**
-     * Records into a session the caller owns (and closes); its route is left as is.
-     * Glasses whose SDK streams the microphone as PCM (Mentra Live) are recorded from that
-     * stream instead of an Android input, so no Bluetooth headset route is needed.
+     * Records into a session the caller owns (and closes); its route is left as is. With
+     * [sdkStream] (Mentra Live PCM, MemoMind's decoded Opus link) the glasses' SDK stream is
+     * recorded instead of an Android input, so no Bluetooth headset route and no phone microphone
+     * access are needed; it is closed with the recording.
      */
-    suspend fun record(session: AudioSessionHandle, onsetTimeoutMs: Long, preferredInput: AudioDeviceInfo?): File? =
+    suspend fun record(
+        session: AudioSessionHandle,
+        onsetTimeoutMs: Long,
+        preferredInput: AudioDeviceInfo?,
+        sdkStream: SdkMicrophoneStream? = null,
+    ): File? =
         withContext(Dispatchers.IO) {
             val file = File.createTempFile("question-", ".wav", File(context.cacheDir, "audio-questions").apply { mkdirs() })
             var completed = false
             var source: SampleSource? = null
             try {
-                val vendor = VendorPcmMicrophone.forSelectedGlasses(context)?.takeIf { it.sampleRateHz == SAMPLE_RATE }
-                val active = if (vendor != null) VendorSource(vendor) else recorderSource(session, preferredInput)
+                val active = if (sdkStream != null) SdkSource(sdkStream) else recorderSource(session, preferredInput)
                 source = active
                 Log.i(TAG, "Capture started input=${active.label}")
                 val endpoint = QuestionEndpoint(onsetTimeoutMs = onsetTimeoutMs)
@@ -142,13 +149,12 @@ class AudioQuestionRecorder(private val context: Context) {
         override fun close(session: AudioSessionHandle) = session.closeRecorder(recorder)
     }
 
-    /** Buffers the PCM the glasses SDK pushes and hands it out in reads. */
-    private class VendorSource(private val microphone: VendorPcmMicrophone) : SampleSource {
-        private val chunks = LinkedBlockingQueue<ByteArray>()
+    /** Hands out the PCM [stream] keeps from now on. */
+    private class SdkSource(private val stream: SdkMicrophoneStream) : SampleSource {
         private var pending: ByteBuffer? = null
 
         init {
-            microphone.open(TAG) { pcm -> if (chunks.size < MAX_QUEUED_CHUNKS) chunks.offer(pcm) }
+            stream.listen()
         }
 
         override val label: String get() = "glasses SDK PCM"
@@ -157,14 +163,40 @@ class AudioQuestionRecorder(private val context: Context) {
             var count = 0
             while (count < samples.size) {
                 val buffer = pending?.takeIf { it.remaining() >= 2 }
-                    ?: chunks.poll()?.let { ByteBuffer.wrap(it).order(ByteOrder.LITTLE_ENDIAN) }?.also { pending = it }
+                    ?: stream.poll()?.let { ByteBuffer.wrap(it).order(ByteOrder.LITTLE_ENDIAN) }?.also { pending = it }
                     ?: break
                 while (count < samples.size && buffer.remaining() >= 2) samples[count++] = buffer.short
             }
             return count
         }
 
-        override fun close(session: AudioSessionHandle) = microphone.close(TAG)
+        override fun close(session: AudioSessionHandle) = stream.close()
+    }
+
+    /**
+     * A glasses SDK microphone opened ahead of the recording (at the beep), so a slow start
+     * (MemoMind's recording link: 01/2F, RFCOMM connect, `52 01 00`) overlaps the beep and cue.
+     * PCM is kept only from [listen], when the recording starts, so the cue is not recorded.
+     */
+    class SdkMicrophoneStream(private val microphone: VendorPcmMicrophone) : Closeable {
+        private val chunks = LinkedBlockingQueue<ByteArray>()
+        private val closed = AtomicBoolean(false)
+
+        @Volatile private var keeping = false
+
+        /** Starts the glasses stream; returns once it runs, throws when it cannot. */
+        suspend fun open() = microphone.open(TAG) { pcm -> if (keeping && chunks.size < MAX_QUEUED_CHUNKS) chunks.offer(pcm) }
+
+        internal fun listen() {
+            chunks.clear()
+            keeping = true
+        }
+
+        internal fun poll(): ByteArray? = chunks.poll()
+
+        override fun close() {
+            if (closed.compareAndSet(false, true)) microphone.close(TAG)
+        }
 
         private companion object {
             /** About 20 s of 20 ms packets; older audio is dropped rather than growing without bound. */

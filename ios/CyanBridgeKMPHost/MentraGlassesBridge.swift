@@ -4,40 +4,61 @@ import Foundation
 import MentraBluetoothSDK
 import Network
 
-/// Mentra Live glasses through the Mentra Bluetooth SDK, the iOS counterpart of Android's
-/// MentraLiveManager (same SDK version). The camera button becomes the assistant's AI button;
-/// photos travel over BLE to a one-shot loopback receiver, as in Android's MentraPhotoCapture,
-/// so they never leave the phone.
+/// Glasses through the Mentra Bluetooth SDK, the iOS counterpart of Android's MentraLiveManager
+/// (same SDK version). Mentra Live: the camera button becomes the assistant's AI button; photos
+/// travel over BLE to a one-shot loopback receiver, as in Android's MentraPhotoCapture, so they
+/// never leave the phone. Display glasses (G1, G2, NIMO, AR99; MentraSdkModel.onIos) show text
+/// through the display actions. One bridge per model, all on one SDK instance: the SDK drives one
+/// model at a time, and the bridge of the selected class (the one with a listener) gets its events.
 final class MentraGlassesBridge: NSObject, SdkGlassesBridge {
-    static let shared = MentraGlassesBridge()
+    static let shared = MentraGlassesBridge(model: .mentraLive, deviceClassName: "MENTRA_LIVE")
 
+    /// The display glasses the public Swift package can drive (Nex, Mach1 and Z100 are left out of it).
+    static let displayBridges = [
+        MentraGlassesBridge(model: .g1, deviceClassName: "EVEN_G1"),
+        MentraGlassesBridge(model: .g2, deviceClassName: "EVEN_G2"),
+        MentraGlassesBridge(model: .nimo, deviceClassName: "NIMO"),
+        MentraGlassesBridge(model: .ar99, deviceClassName: "XINGYI_AR99"),
+    ]
+
+    private static var sdkInstance: MentraBluetoothSDK?
+    private static var events: MentraEvents?
+    fileprivate static weak var active: MentraGlassesBridge?
+
+    private let model: DeviceModel
+    let deviceClassName: String
     private var listener: SdkGlassesListener?
-    private var events: MentraEvents?
-    private var sdkInstance: MentraBluetoothSDK?
     private var pendingConnect: SdkResultCallback?
     private var connectedId = ""
 
-    private override init() {
+    private init(model: DeviceModel, deviceClassName: String) {
+        self.model = model
+        self.deviceClassName = deviceClassName
         super.init()
     }
 
-    var deviceClassName: String { "MENTRA_LIVE" }
+    private var modelName: String { model == .mentraLive ? "Mentra Live" : deviceClassName }
 
     @MainActor
     private var sdk: MentraBluetoothSDK {
-        if let sdkInstance { return sdkInstance }
+        if let sdkInstance = Self.sdkInstance { return sdkInstance }
         let created = MentraBluetoothSDK(
             configuration: MentraBluetoothSDKConfiguration(analytics: .disabled)
         )
-        let delegate = MentraEvents(owner: self)
-        events = delegate
+        let delegate = MentraEvents()
+        Self.events = delegate
         created.delegate = delegate
-        sdkInstance = created
+        Self.sdkInstance = created
         return created
     }
 
     func setListener(listener: SdkGlassesListener?) {
         self.listener = listener
+        if listener != nil {
+            Self.active = self
+        } else if Self.active === self {
+            Self.active = nil
+        }
     }
 
     func connect(identifier: String, name: String, completion: SdkResultCallback) {
@@ -46,11 +67,13 @@ final class MentraGlassesBridge: NSObject, SdkGlassesBridge {
         Task { @MainActor in
             do {
                 var started = false
-                try self.sdk.scan(model: .mentraLive, timeout: 10, onResults: { [weak self] devices in
+                try self.sdk.scan(model: self.model, timeout: 10, onResults: { [weak self] devices in
                     guard let self, !started else { return }
+                    // AR99 fails closed: only the exact project ID of Mentra's compatibility matrix.
+                    let candidates = self.model == .ar99 ? devices.filter { $0.projectName == "AR99" } : devices
                     // The shared pairing list passes the CoreBluetooth identifier; the name is the fallback.
-                    let match = devices.first { identifier.isEmpty || $0.id == identifier || $0.identifier == identifier }
-                        ?? devices.first { !name.isEmpty && $0.name == name }
+                    let match = candidates.first { identifier.isEmpty || $0.id == identifier || $0.identifier == identifier }
+                        ?? candidates.first { !name.isEmpty && $0.name == name && self.model != .ar99 }
                     guard let device = match else { return }
                     started = true
                     self.connectedId = device.id
@@ -61,7 +84,7 @@ final class MentraGlassesBridge: NSObject, SdkGlassesBridge {
                     }
                 }, onComplete: { [weak self] _ in
                     guard let self, !started else { return }
-                    self.finishConnect(success: false, message: "Mentra Live not found. Turn the glasses on and retry.")
+                    self.finishConnect(success: false, message: "\(self.modelName) not found. Turn the glasses on and retry.")
                 })
             } catch {
                 self.finishConnect(success: false, message: error.localizedDescription)
@@ -101,8 +124,21 @@ final class MentraGlassesBridge: NSObject, SdkGlassesBridge {
                     completion.onResult(success: false, value: error.localizedDescription)
                 }
             }
+        case SdkGlassesActions.shared.DISPLAY_TEXT, SdkGlassesActions.shared.CLEAR_DISPLAY:
+            Task { @MainActor in
+                do {
+                    if action == SdkGlassesActions.shared.DISPLAY_TEXT {
+                        try await self.sdk.displayText(argument)
+                    } else {
+                        try await self.sdk.clearDisplay()
+                    }
+                    completion.onResult(success: true, value: "")
+                } catch {
+                    completion.onResult(success: false, value: error.localizedDescription)
+                }
+            }
         default:
-            completion.onResult(success: false, value: "Mentra Live does not support \(action) on iOS")
+            completion.onResult(success: false, value: "\(self.modelName) does not support \(action) on iOS")
         }
     }
 
@@ -111,12 +147,12 @@ final class MentraGlassesBridge: NSObject, SdkGlassesBridge {
     @MainActor
     fileprivate func publish(_ glasses: GlassesRuntimeState) {
         if glasses.ready {
-            listener?.onConnectionChanged(state: SdkConnectionState.shared.CONNECTED, label: "Mentra Live connected")
+            listener?.onConnectionChanged(state: SdkConnectionState.shared.CONNECTED, label: "\(modelName) connected")
             finishConnect(success: true, message: connectedId)
         } else if glasses.connected {
-            listener?.onConnectionChanged(state: SdkConnectionState.shared.CONNECTING, label: "Connecting to Mentra Live")
+            listener?.onConnectionChanged(state: SdkConnectionState.shared.CONNECTING, label: "Connecting to \(modelName)")
         } else {
-            listener?.onConnectionChanged(state: SdkConnectionState.shared.DISCONNECTED, label: "Mentra Live disconnected")
+            listener?.onConnectionChanged(state: SdkConnectionState.shared.DISCONNECTED, label: "\(modelName) disconnected")
         }
         if let battery = glasses.battery, let level = battery.level {
             listener?.onBattery(level: Int32(level), charging: battery.charging)
@@ -126,6 +162,13 @@ final class MentraGlassesBridge: NSObject, SdkGlassesBridge {
     @MainActor
     fileprivate func onButton(_ event: ButtonPressEvent) {
         listener?.onButton(gesture: event.pressType)
+    }
+
+    /// Display glasses: taps and presses reach the shared input mapping as gesture names.
+    @MainActor
+    fileprivate func onTouch(_ event: TouchEvent) {
+        guard model != .mentraLive, let gesture = event.gestureName else { return }
+        listener?.onButton(gesture: gesture)
     }
 
     @MainActor
@@ -163,14 +206,10 @@ final class MentraGlassesBridge: NSObject, SdkGlassesBridge {
     }
 }
 
-/// The SDK's delegate is main-actor isolated; this forwards to the bridge.
+/// The SDK's delegate is main-actor isolated; this forwards to the bridge of the selected class.
 @MainActor
 private final class MentraEvents: MentraBluetoothSDKDelegate {
-    private weak var owner: MentraGlassesBridge?
-
-    init(owner: MentraGlassesBridge) {
-        self.owner = owner
-    }
+    private var owner: MentraGlassesBridge? { MentraGlassesBridge.active }
 
     func mentraBluetoothSDK(_ sdk: MentraBluetoothSDK, didUpdateGlasses glasses: GlassesRuntimeState) {
         owner?.publish(glasses)
@@ -179,6 +218,8 @@ private final class MentraEvents: MentraBluetoothSDKDelegate {
     func mentraBluetoothSDK(_ sdk: MentraBluetoothSDK, didReceive event: BluetoothEvent) {
         if case let .buttonPress(press) = event {
             owner?.onButton(press)
+        } else if case let .touch(touch) = event {
+            owner?.onTouch(touch)
         }
     }
 

@@ -87,6 +87,10 @@ class PrefsInventoryTest {
         meta_registration/setup_choice STRING "NONE"
         meta_registration/recorded_path STRING "UNKNOWN"
         cyanbridge_accessibility/vision_assistance_choice STRING "UNSET"
+        mentra_sdk_device/model STRING null
+        mentra_sdk_device/name STRING null
+        mentra_sdk_device/address STRING null
+        mentra_sdk_device/project_name STRING null
         ai_provider_prefs/provider STRING "cli_relay"
         ai_provider_prefs/relay_base_url STRING "https://cyanbridge.vercel.app"
         ai_provider_prefs/relay_backend STRING "gemini"

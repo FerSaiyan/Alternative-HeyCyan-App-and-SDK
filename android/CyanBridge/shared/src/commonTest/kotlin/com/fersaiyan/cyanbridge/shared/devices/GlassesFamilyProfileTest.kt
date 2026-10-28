@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.devices
 
 import com.fersaiyan.cyanbridge.bridge.core.GlassesCapability
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -117,10 +118,38 @@ class GlassesFamilyProfileTest {
             setOf(NativePluginIds.AUTO_AUDIO, NativePluginIds.VISUAL_DIARY, NativePluginIds.WALKING_AID),
             GlassesFamilyProfiles.memoMind.unsupportedNativePlugins.keys,
         )
-        val withMessages = setOf(DeviceClass.MEIZU_MYVU, DeviceClass.META_RAYBAN, DeviceClass.MEMOMIND)
+        val mentraDisplays = GlassesFamilyProfiles.all.filter { MentraSdkModel.isDisplayGlasses(it.deviceClass) }
+        assertEquals(5, mentraDisplays.size)
+        mentraDisplays.forEach { profile ->
+            val name = profile.deviceClass.displayName()
+            assertEquals(
+                "This plugin requires a camera or HeyCyan onboard media. $name supports display and microphone plugins only.",
+                profile.unsupportedNativePlugins[NativePluginIds.WALKING_AID],
+            )
+            assertEquals(GlassesFamilyProfiles.memoMind.unsupportedNativePlugins.keys, profile.unsupportedNativePlugins.keys)
+        }
+        val withMessages = setOf(DeviceClass.MEIZU_MYVU, DeviceClass.META_RAYBAN, DeviceClass.MEMOMIND) +
+            mentraDisplays.map { it.deviceClass }
         GlassesFamilyProfiles.all
             .filter { it.deviceClass !in withMessages }
             .forEach { assertTrue(it.unsupportedNativePlugins.isEmpty(), "${it.deviceClass}") }
+    }
+
+    @Test
+    fun displayFamiliesShowAssistantAnswersAndMentraDisplaysStreamTheSdkMicrophone() {
+        assertEquals(
+            setOf(
+                DeviceClass.MEMOMIND, DeviceClass.EVEN_G1, DeviceClass.EVEN_G2, DeviceClass.MENTRA_DISPLAY,
+                DeviceClass.NIMO, DeviceClass.XINGYI_AR99,
+            ),
+            GlassesFamilyProfiles.all.filter { it.showsAssistantAnswers }.map { it.deviceClass }.toSet(),
+        )
+        GlassesFamilyProfiles.all.filter { it.showsAssistantAnswers }.forEach {
+            assertTrue(it.supports(GlassesCapability.TEXT_DISPLAY), "${it.deviceClass}")
+        }
+        GlassesFamilyProfiles.all.filter { MentraSdkModel.isDisplayGlasses(it.deviceClass) }.forEach {
+            assertEquals(GlassesAudioProfile(GlassesAudioInput.VENDOR_PCM_STREAM, GlassesAudioOutput.NONE), it.audio)
+        }
     }
 
     @Test

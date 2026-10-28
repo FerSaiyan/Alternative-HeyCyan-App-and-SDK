@@ -126,7 +126,7 @@ Dashboard dispatch was ported one-to-one. Families without their own transport s
 Filter logcat with:
 `adb logcat -s AudioSession GeminiLiveClient PluginVoiceRecognizer MeetingCaptureService AmbientSpeech AudioQuestionRecorder LocalAgentApprovalVoice StudioApprovalHandler HandsFreeTranslator WalkingAidService SpeechQueueController ImageQuestionAudio`
 
-Every session logs `"<owner> <KIND> granted state=…"`, `"<owner> route plan=… users=N mode=…, sco=…, communication=…"`, `"<owner> <KIND> -> SUSPENDED|ACTIVE|ENDED"` and `"<owner> <KIND> released restoredRoute=…"`. The glasses voice and image questions (`ai/questions/QuestionMicrophone`) use the coordinator too: owner `AudioQuestionRecorder`, kind `VOICE_COMMAND`, route from the glasses profile (`DEVICE_SDK` for Mentra Live); their answers hold an `AssistantSpeaker` `PLAYBACK` session.
+Every session logs `"<owner> <KIND> granted state=…"`, `"<owner> route plan=… users=N mode=…, sco=…, communication=…"`, `"<owner> <KIND> -> SUSPENDED|ACTIVE|ENDED"` and `"<owner> <KIND> released restoredRoute=…"`. The glasses voice and image questions (`ai/questions/QuestionMicrophone`) use the coordinator too: owner `AudioQuestionRecorder`, kind `VOICE_COMMAND`, route from the glasses profile (`AudioRoutePolicy.forQuestion`: `DEVICE_SDK` for Mentra Live, and for MemoMind while its Opus recording link is available); their answers hold an `AssistantSpeaker` `PLAYBACK` session.
 
 **Shared route (applies everywhere)**
 - The Bluetooth route is restored only when the last session using it ends (`restoredRoute=true` once). Before, ending any feature reset the mode and dropped SCO under the others.
@@ -167,13 +167,13 @@ Every session logs `"<owner> <KIND> granted state=…"`, `"<owner> route plan=�
 - A voice question asked while another spoken prompt is listening (voice enrollment, a Local Agent or Studio approval) is refused with "The microphone is busy; please ask again" (spoken), now before the beep and cue (`Question refused: microphone is held by …`), with no route change. A chat voice note in that case shows "Unable to start recording".
 - Live and voice plugins pause during question and voice-note recording (`GeminiLiveClient -> SUSPENDED`, then `-> ACTIVE` after the beep that ends the question). A meeting recording keeps recording.
 
-**Glasses questions on the shared route (HeyCyan, Eyevue, TuneBuds, Meta, MemoMind, MYVU: Bluetooth headset; Mentra Live: SDK)**
+**Glasses questions on the shared route (HeyCyan, Eyevue, TuneBuds, Meta, MYVU: Bluetooth headset; Mentra Live: SDK; MemoMind: SDK Opus link, Bluetooth headset as fallback)**
 1. Test voice and a wake-word question per family: `AudioQuestionRecorder VOICE_COMMAND granted`, `AudioQuestionRecorder route plan=…`, `Question route ready=true … input=<glasses>`, beep, cue, recording from the glasses mic, second beep, then `released restoredRoute=true` before the answer plays as normal media. Same cue, beep and listening timing as before (up to 3 s for the route, then 500 ms).
 2. Android 11 or older (legacy SCO): the route waits up to 3 s for SCO "connected", as before; a stale sticky "disconnected" no longer counts as a failure.
 3. Two Bluetooth headsets connected (glasses plus earbuds): the glasses are picked by name; if neither matches, "Could not connect the glasses microphone" is spoken, as before.
 4. During a meeting recording with the glasses: ask a voice question and an image question with a follow-up. The meeting keeps recording, the question joins its route (`users=2`), and after the question `users=1` with no `restoredRoute=true`; the meeting audio has no gap and stays on the glasses. Before, every question reset the mode and stopped SCO under the meeting.
 5. During Gemini Live: a question suspends Live and hands the microphone back afterwards; Live's route stays up (no `restoredRoute=true` while Live runs).
-6. Mentra Live: `Question route: glasses SDK microphone, no Bluetooth call route`; no `route plan` change for the question.
+6. Mentra Live and MemoMind (recording link up): `Question route: glasses SDK microphone, no Bluetooth call route`; no `route plan` change for the question. The SDK stream now opens before the beep (Mentra: `Microphone opened by AudioQuestionRecorder` before the cue); the cue must not end up in the recording (the question is not cut short right after the cue). MemoMind with the link unavailable: the HFP checks above apply.
 7. The cue and the answers sound as before (cue on the call route, answers as media); a Mentra answer still sets and clears the SDK playback signal, and `AssistantSpeaker PLAYBACK granted` / `released` brackets every answer.
 
 **TTS (all features)**
@@ -408,7 +408,13 @@ Force-stop the official MemoMind app first: the glasses accept one app connectio
    - With the Web Bridge plugin started from the official app (then the official app closed): reconnect, log shows `webBridge=true`; Show text is drawn as a text box instead of the teleprompter, Clear wipes it.
    - Plugins: Live Caption Relay / Errand Brain cards appear on the HUD (teleprompter for text, notification cards for cards).
 4. **Buttons and head gestures.** Only with the Web Bridge plugin running: presses log `Input Button(...)`; a primary long press logs `Voice question requested by the glasses button` and starts the dashboard voice question (CyanBridge open), or the same question in the background with the app closed (A3 section below). Without the plugin, record any `Unsolicited service=… command=…` lines the native buttons produce; they map future native triggers.
-5. **Mic question.** "Test voice" in the assistant card listens through the glasses' HFP microphone and speaks the answer on the glasses speaker. "Test microphone" in the MemoMind panel: `Microphone streaming compact=…`, then "N Opus frames, peak level X%" (expect about 150 frames in 3 s and a level that follows your voice); log `Opus decoder output 48000 Hz` or 16000. During the test start a voice question: the MemoMind capture is suspended and resumes (`AudioSession` log).
+5. **Mic question (Opus link, README "Questions (Android)").** Add `ImageQuestionAudio AudioQuestionRecorder` to the filter.
+   - "Test microphone" in the MemoMind panel: `Microphone streaming compact=… ms: processing=… link=… format=… started=…`, then "N Opus frames, peak level X%" (expect about 150 frames in 3 s and a level that follows your voice); log `Opus decoder output 48000 Hz` or 16000. Record the `started=` time (the link's start latency).
+   - "Test voice" and a long press: `AudioQuestionRecorder VOICE_COMMAND granted` with route `DEVICE_SDK`, `Question route: glasses SDK microphone, no Bluetooth call route`, `Question beep done at +N ms`, then `Question SDK stream ready, recording from +M ms` and `Capture started input=glasses SDK PCM`. Record N and M: M should be close to the end of the cue (the link starts at the beep); note any extra wait after the cue. The question is heard and answered on the glasses speaker; listen for clipping of the first word and for the cue leaking into the question (a question that ends right after the cue).
+   - No SCO during the question (`route plan` unchanged, the phone does not enter a call); the answer plays as before. Ask a follow-up in the follow-up window: it records from the Opus link too (a second `Microphone streaming` line).
+   - Recognition quality: ask the same sentence as with an older build (HFP) and note whether the answer understood it as well (the Opus stream is 16 kHz with the glasses' noise reduction; HFP is often 8 or 16 kHz).
+   - Coexistence: during a meeting recording with the glasses, a question records Opus while the meeting keeps HFP (`users=` unchanged, no gap in the meeting audio). Note whether the firmware delivers both at once. During Gemini Live the question suspends Live as before. During a voice enrollment or a spoken approval the question is refused ("The microphone is busy"). A MemoMind Web plugin capturing audio (Audio Capture Lab) is paused by a question from the phone and resumes afterwards, still receiving frames.
+   - Fallback: with firmware or a moment where the link cannot start, `Question SDK stream failed at +N ms: …`, `Glasses SDK stream unavailable …; using the headset route`, then a second beep and cue on HFP; later questions go straight to HFP (`Question route ready=…`) until a reconnect or a successful panel test. Note how often this happens.
 6. **Notifications.** Forward notifications (grant notification access when asked): phone notifications appear as native cards with the app name; WhatsApp read-aloud is unaffected. Disconnect turns forwarding off.
 7. **Reconnect.** Power the glasses off and on: the link-loss log, then reconnection within ~5–30 s (manager retries and the ACL-connected auto-pair). Disconnect in the panel stays disconnected (auto-reconnect suppressed) until Connect.
 8. **Other families unchanged:** the device type dialog shows one extra choice (MemoMind); HeyCyan, MYVU and the rest pair and connect as before, and MYVU notification forwarding (if enabled elsewhere) still shows "app: title" text.
@@ -518,6 +524,47 @@ Setup: Android 10 or newer, phone Wi-Fi on, Mentra Live connected and ready. For
 12. **Broadcast audio arbitration.** Start meeting capture first, then the broadcast: it runs with "Sound: off (another recording is using the microphone)". Voice questions during a broadcast still work; note whether the stream's sound cuts out while the assistant uses the glasses microphone.
 13. **Broadcast stop.** Stop broadcast (or Stop on the dashboard card): `Broadcast ended (STOPPED)`, the server stream ends, and AI photos and the preview work again.
 
+## Mentra SDK display glasses (see MENTRA_AUDIT.md, "Display glasses through the SDK")
+
+Models: Even Realities G1 and G2, Mentra Display (Android only), NIMO, Xingyi AR99. Logs:
+
+`adb logcat -s MentraLive MentraDisplay DeviceBindActivity AutoPair GlassesBridge AudioQuestionRecorder ImageQuestionAudio AIHijack`
+
+The Mentra SDK's own lines (`MAN:`, `G1:`, `G2:`, `Nex:`, `NIMO:`, `AR99`) come through its log callback and logcat. The SDK drives one model at a time; test one pair of glasses at a time unless a step says otherwise.
+
+**Every model**
+1. **Detection.** Open Scan with the glasses on and in pairing mode. The row appears with its Bluetooth name (AR99: its name, or "Xingyi AR99" when it advertises none). The type dialog preselects the model and offers it; no other row offers it. A HeyCyan or Mentra Live row never offers these models.
+2. **Pair.** Connect. Expect the toast "Looking for your <model> to connect.", `MentraLive` `"SDK scan for <MODEL> started to pair …"`, `"Connecting to <MODEL> <sdk name> (<address>)"`, then `"Glasses ready=true"`. Accept any Android pairing dialog. The dashboard shows "Connected - <model>", the battery and the meeting card only (no camera, gallery, preview or firmware sections). There is no "Gallery mode off" line.
+3. **Not found.** Turn the glasses off and pair: after about 20 s the toast "<model> not found. …" and `"<MODEL> pairing failed: NOT_FOUND"`.
+4. **Assistant answer on the display.** Ask a voice question from the dashboard. The answer is spoken on the phone and shows on the glasses as wrapped text; long answers continue on the next screens at a reading pace (3-12 s each). `GlassesBridge` `"Active adapter set to: mentra_display"` appears when the glasses connect. **Record** whether any line overflows or wraps a second time on the glasses (limits per model in MENTRA_AUDIT.md), and whether non-Latin text (accents, Cyrillic, CJK) shows.
+5. **Voice question through the glasses microphone.** Expect `"Question route: glasses SDK microphone, no Bluetooth call route"`, `"Capture started input=glasses SDK PCM"` and `"Microphone opened by AudioQuestionRecorder"`. The transcript must match what you said. **Record** the audio quality (G1/G2/Mentra Display send LC3, NIMO and AR99 PCM/Opus through the SDK).
+6. **Plugins.** Live Caption Relay and Hands-Free Translator show their text on the glasses; Errand Brain and Meeting Spark Notes show their cards (title on the first line). Walking Aid, Visual Diary and Auto Audio refuse with "<model> supports display and microphone plugins only."
+7. **Notifications.** With notification forwarding on, a phone notification shows as "<app>: <title>" plus the body and clears itself about 10 s after its last screen.
+8. **Reconnect on launch.** Force-stop the app with the glasses on and relaunch: `"Reconnect (startup) to <MODEL> <sdk name> requested"` and a connection without Scan. Turn Bluetooth off and on: the SDK reconnects by itself.
+9. **Switching.** Pair Mentra Live, then the display glasses again (and the reverse): each switch drops the other model's link, Device Bind does not start a Mentra Live scan while the display glasses are connected, and the answers go to the right glasses.
+10. **Head-up.** On models that report it (G1, NIMO), look up and down while text shows: `MentraLive` `"<MODEL> input head SWIPE_UP/SWIPE_DOWN"`. **Record** whether the SDK's own dashboard replaces the text while you look up, and whether the text comes back when you look down.
+
+**Even Realities G1**
+- Only the left arm appears in Scan (`Even G1_<n>_L_…`); the right arm has no row. After Connect, both arms connect (SDK log: left first, then right). The saved SDK name is the pair number `<n>`.
+- 5 lines of 40 columns per screen. G1 has no app-visible touch input in this SDK; questions start from the phone or the wake word.
+
+**Even Realities G2**
+- Only the left arm appears. The SDK picks the glasses by the serial number in their advertisement: with two G2 pairs on, pairing fails with "More than one Even Realities G2 is nearby." (expected, fail-closed).
+- 8 lines of 40 columns. Touch: long press → voice question, tap → next screen, double tap → clear (`"<MODEL> input touch LONG_PRESS|SINGLE_TAP|DOUBLE_TAP"`). **Record** the gesture names the glasses send if a gesture logs "has no action".
+
+**Mentra Display (Android only)**
+- Names `Nex1-…` or `MENTRA_DISPLAY_…`. 8 lines of 44 columns. No input events (the 3.2 driver only logs them). On iOS, choosing it shows "Mentra Display needs the Android app…".
+
+**NIMO**
+- Name starts with "nimo". The SDK pairs the Classic Bluetooth "nimo…" device; with one NIMO on, the row's glasses are picked even if the BLE row is the "…_ble" companion. 11 lines of 60 columns. Taps as for G2; head-up as for G1.
+
+**Xingyi AR99**
+- Only glasses whose advertisement carries the exact project ID "AR99" are listed as AR99. **Fail-closed check:** with AF98/AF99/HVXM/HVXF hardware (or any other ID), the row is never offered "Xingyi AR99". A device previously saved as AR99 that no longer advertises the ID is not offered either.
+- The SDK picks the glasses by the address in their advertisement; the saved SDK name is "SN: <serial>" or "MAC: <address>". 5 lines of 40 columns (G1 limits). No input events.
+
+**iOS (Mac build; G1, G2, NIMO, AR99)**
+- Pair from Scan: the bridge scans the chosen model and connects the row's CoreBluetooth identifier; AR99 also needs the "AR99" project ID. Answers show on the glasses through `display_text`. Long press/tap/double tap work as on Android when the SDK reports touch. The Mentra microphone is not streamed on iOS (voice questions use the phone route, as for Mentra Live).
+
 ## Local Agent screenshots through Tasker (Android)
 
 Needs a phone with Tasker, AutoInput (Accessibility on) and the current `CyanBridge_LocalAgent_Tasker.prj.xml` imported from Plugins. Filter logcat with `adb logcat -s TaskerLocalAgent LocalAgentBrain`. Tasker's run log (Tasker → Monitoring → Run Log) shows the "CyanBridge LocalAgent Observe Handler" actions.
@@ -589,13 +636,12 @@ The image, voice and spoken-decision question flows moved from MainActivity to `
 **MemoMind (README, "Questions (Android)"):**
 10. **Answer on the HUD.** Ask by voice (button or Test voice): the answer appears on the glasses (Web Bridge text box with the plugin running, else the teleprompter) when it starts being spoken. Other display glasses (MYVU) do not show answers.
 11. **Background button question.** Open CyanBridge, connect MemoMind, then remove CyanBridge from recents (the SPP link stays up) or open another app and let Android destroy the activity. Long-press: `AIHijack Background voice question source=memomind screen=false`, the cue on the glasses. Same with Mentra Live: press asks about a photo (`source=mentra`), long press asks a voice question; Mentra records the SDK PCM and is answered whatever Android decides below. With the microphone permission revoked: a toast, no prompt. With Local selected but no local model: a toast with the setup message.
-    MemoMind records through the phone's Bluetooth (HFP) input, which Android only lets an app use while it has a visible screen or a microphone foreground service started while it had one. Expected per Android version (record the version, the log lines and what was spoken):
+    MemoMind questions record the glasses' Opus link (route `DEVICE_SDK`), which needs no phone microphone, so the background question is heard and answered on every Android version: `Question SDK stream ready, recording from +N ms`, no `Question foreground microphone=` line and no "Android blocked the microphone" sentence. Record the Android version, N and what was spoken. Also check with the screen off and the phone locked.
+    Only the HFP fallback (link unavailable, see the MemoMind section, check 5) records through the phone's Bluetooth input, which Android only lets an app use while it has a visible screen or a microphone foreground service started while it had one. Test it when the fallback happens (firmware without the link, or after the fallback line of the MemoMind section, check 5), asking from the background. Expected per Android version (record the version and the log lines):
     - Android 12+ without a background-start exemption: `AiQuestionForegroundService Unable to request AI question foreground service` and `Question foreground microphone=REFUSED`.
-    - Android 14+ with the start allowed (for example battery optimization off for CyanBridge): `Microphone foreground service refused (app not visible)`, `Question foreground microphone=REFUSED`, and the service keeps running without the microphone type. The app must not crash about 10 s later (before, the service never entered the foreground).
+    - Android 14+ with the start allowed (for example battery optimization off for CyanBridge): `Microphone foreground service refused (app not visible)`, `Question foreground microphone=REFUSED`, and the service keeps running without the microphone type. The app must not crash about 10 s later.
     - Android 10–13 with the start allowed: `Question foreground microphone=GRANTED`, but Android still silences the recording.
-    - In every case: the beep and cue, then `Question recording silenced by Android` and the spoken sentence "Android blocked the microphone while CyanBridge was in the background. Open CyanBridge and ask again." (Android 9 cannot report silencing: "I couldn't hear a voice question".) If a MemoMind question is heard here, note the Android version: the documented rules say it should not be.
-    - With a meeting recording, Gemini Live or a voice plugin already running (each started from the screen, so its service holds the microphone): the background MemoMind question is heard and answered.
-    - With CyanBridge only in the background (activity not destroyed) or the screen locked after asking from the app, questions keep working because the service was started while the screen was visible.
+    - In every fallback case: the beep and cue, then `Question recording silenced by Android` and "Android blocked the microphone while CyanBridge was in the background. Open CyanBridge and ask again." (Android 9 cannot report silencing: "I couldn't hear a voice question".) With a meeting recording, Gemini Live or a voice plugin already running from the screen, the fallback question is heard.
 12. **Foreground unchanged.** With CyanBridge open (or only in the background, not destroyed), the buttons still press the dashboard's Test voice / Test image buttons (setup dialog when needed); no `Background … question` log line.
 
 **iOS (Mac build):**

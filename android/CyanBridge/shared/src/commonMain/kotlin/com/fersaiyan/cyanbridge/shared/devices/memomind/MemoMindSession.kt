@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.devices.memomind
 
 import com.fersaiyan.cyanbridge.shared.platform.PlatformLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.Channel
@@ -19,6 +20,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.Volatile
 import kotlin.random.Random
+import kotlin.time.TimeSource
 
 /**
  * The GM command link a [MemoMindSession] talks over: Classic SPP (Android), iAP2, or BLE GATT
@@ -98,6 +100,8 @@ class MemoMindSession(private val transport: MemoMindTransport) {
     private val recordingParser = MemoMindRecordingParser()
     private val requestMutex = Mutex()
     private val microphoneMutex = Mutex()
+    private val microphoneUsersMutex = Mutex()
+    private var microphoneUser: Any? = null
     private var nextEventId = 1
     private var nextNotificationId = 1
 
@@ -110,6 +114,10 @@ class MemoMindSession(private val transport: MemoMindTransport) {
     @Volatile
     private var captureStarted: CompletableDeferred<Unit>? = null
 
+    /** The last capture start on this connection failed (no 0x2024 service, no start ACK, …). */
+    @Volatile
+    private var recordingFailed = false
+
     private val _state = MutableStateFlow(MemoMindSessionState())
     private val _events = MutableSharedFlow<MemoMindEvent>(extraBufferCapacity = 64)
 
@@ -118,7 +126,17 @@ class MemoMindSession(private val transport: MemoMindTransport) {
     /** Unsolicited messages and plugin events; responses to requests are not repeated here. */
     val events: SharedFlow<MemoMindEvent> = _events.asSharedFlow()
 
+    /** Receives the frames of the running capture; [joinMicrophone] sets it for its user. */
     var audioListener: MemoMindAudioListener? = null
+
+    /**
+     * A capture may be tried now: the link is up, has a recording channel (not BLE, not an iAP2
+     * accessory without protocol01), and the last start on this connection did not fail (firmware
+     * without the recording service, or no start acknowledgement). A successful start or a new
+     * connection clears the failure. Voice questions use HFP while this is false.
+     */
+    val recordingAvailable: Boolean
+        get() = transport.isConnected && transport.recordingLink != null && !recordingFailed
 
     /** Command-link frames the decoder had to skip since the last [onDisconnected]. */
     val malformedFrameCount: Int get() = decoder.malformedCount
@@ -158,6 +176,7 @@ class MemoMindSession(private val transport: MemoMindTransport) {
         pending = null
         formatSelected?.cancel()
         captureStarted?.cancel()
+        recordingFailed = false
         _state.value = MemoMindSessionState()
     }
 
@@ -302,30 +321,70 @@ class MemoMindSession(private val transport: MemoMindTransport) {
     }
 
     /**
+     * Starts the capture for [user] with [listener], or hands a running capture over to it: the
+     * frames go to the user that joined last until it leaves. [leaveMicrophone] stops the capture
+     * only for that user, so a user that pauses late (a web plugin suspended by a voice question)
+     * cannot stop the capture the newer user took over. A running capture keeps its options.
+     */
+    suspend fun joinMicrophone(user: Any, listener: MemoMindAudioListener, options: MemoMindCaptureOptions = MemoMindCaptureOptions()) =
+        microphoneUsersMutex.withLock {
+            microphoneUser = user
+            audioListener = listener
+            try {
+                startMicrophone(options)
+            } catch (error: Throwable) {
+                if (microphoneUser === user) {
+                    microphoneUser = null
+                    audioListener = null
+                }
+                throw error
+            }
+        }
+
+    /** Stops the capture if [user] is the one receiving it; otherwise does nothing. */
+    suspend fun leaveMicrophone(user: Any) = microphoneUsersMutex.withLock {
+        if (microphoneUser !== user) return@withLock
+        microphoneUser = null
+        audioListener = null
+        stopMicrophone()
+    }
+
+    /**
      * Starts microphone capture: GM 01/2F, then on the recording link the format negotiation
      * (800 ms, legacy when unanswered) and `52 01 00`, waiting up to 3 s for the start.
-     * Opus frames of stream 0x92 then go to [audioListener].
+     * Opus frames of stream 0x92 then go to [audioListener]. Logs the time of each step.
      */
     suspend fun startMicrophone(options: MemoMindCaptureOptions = MemoMindCaptureOptions()) = microphoneMutex.withLock {
         val link = transport.recordingLink ?: error("This MemoMind link has no recording channel")
         if (_state.value.microphone != MemoMindMicrophoneState.IDLE) return@withLock
         _state.update { it.copy(microphone = MemoMindMicrophoneState.STARTING, capturedFrames = 0, compactRecording = null) }
+        val begin = TimeSource.Monotonic.markNow()
+        val steps = mutableListOf<String>()
+        fun step(name: String) {
+            steps += "$name=${begin.elapsedNow().inWholeMilliseconds}"
+        }
         try {
             requireSuccess(request(MemoMindCommands.recordingProcessing(options.noise, options.pickup)))
+            step("processing")
             recordingParser.reset()
             val format = CompletableDeferred<Boolean>().also { formatSelected = it }
             val started = CompletableDeferred<Unit>().also { captureStarted = it }
             link.open()
+            step("link")
             link.write(MemoMindRecordingControl.selectFormat(options.compact))
             val compact = withTimeoutOrNull(FORMAT_NEGOTIATION_TIMEOUT_MS) { format.await() } ?: false
+            step("format")
             recordingParser.compact = compact
             _state.update { it.copy(compactRecording = compact, microphone = MemoMindMicrophoneState.STREAMING) }
             link.write(MemoMindRecordingControl.start())
             withTimeoutOrNull(CAPTURE_START_TIMEOUT_MS) { started.await() }
                 ?: throw IllegalStateException("MemoMind did not start recording within ${CAPTURE_START_TIMEOUT_MS / 1000} s")
-            PlatformLogger.i(TAG, "Microphone streaming compact=$compact")
+            step("started")
+            recordingFailed = false
+            PlatformLogger.i(TAG, "Microphone streaming compact=$compact ms: ${steps.joinToString(" ")}")
         } catch (error: Throwable) {
-            PlatformLogger.w(TAG, "Microphone start failed: ${error.message}")
+            PlatformLogger.w(TAG, "Microphone start failed after ${begin.elapsedNow().inWholeMilliseconds} ms (${steps.joinToString(" ")}): ${error.message}")
+            if (error !is CancellationException) recordingFailed = true
             _state.update { it.copy(microphone = MemoMindMicrophoneState.IDLE, lastError = error.message) }
             runCatching { link.close() }
             throw error

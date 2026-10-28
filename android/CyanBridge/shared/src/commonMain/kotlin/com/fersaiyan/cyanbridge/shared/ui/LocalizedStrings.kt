@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import com.fersaiyan.cyanbridge.shared.appearance.AccentProfile
 import com.fersaiyan.cyanbridge.shared.appearance.ThemeMode
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
 import com.fersaiyan.cyanbridge.shared.generated.resources.accent_cyan
 import com.fersaiyan.cyanbridge.shared.generated.resources.accent_lavender
 import com.fersaiyan.cyanbridge.shared.generated.resources.accent_mint
@@ -74,6 +75,8 @@ fun localizedDestinationLabel(destination: AppDestination): String = stringResou
 fun localizedDeviceClass(deviceClass: DeviceClass): String {
     if (deviceClass == DeviceClass.MENTRA_LIVE) return "Mentra Live"
     if (deviceClass == DeviceClass.MEMOMIND) return "MemoMind"
+    // Product names of the Mentra SDK display glasses, not translated.
+    if (MentraSdkModel.isDisplayGlasses(deviceClass)) return deviceClass.displayName()
     return stringResource(
         when (deviceClass) {
             DeviceClass.HEY_CYAN -> Res.string.device_class_heycyan
@@ -83,7 +86,13 @@ fun localizedDeviceClass(deviceClass: DeviceClass): String {
             DeviceClass.META_RAYBAN -> Res.string.device_class_meta_rayban
             DeviceClass.MENTRA_LIVE -> Res.string.device_class_unknown
             DeviceClass.MEIZU_MYVU -> Res.string.device_class_meizu_myvu
-            DeviceClass.MEMOMIND -> Res.string.device_class_unknown
+            DeviceClass.MEMOMIND,
+            DeviceClass.EVEN_G1,
+            DeviceClass.EVEN_G2,
+            DeviceClass.MENTRA_DISPLAY,
+            DeviceClass.NIMO,
+            DeviceClass.XINGYI_AR99,
+            -> Res.string.device_class_unknown
             DeviceClass.GENERIC_AUDIO -> Res.string.device_class_generic_audio
             DeviceClass.UNKNOWN -> Res.string.device_class_unknown
         },

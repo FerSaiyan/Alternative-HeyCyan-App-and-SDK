@@ -16,6 +16,7 @@ import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
 import com.oudmon.ble.base.bluetooth.BleOperateManager
@@ -80,7 +81,7 @@ object AutoPairManager {
 
                 val selectedClass = DeviceProfileStore.selectedClass(appContext)
                 // The Mentra SDK runs its own link-loss and Bluetooth-on reconnects.
-                if (selectedClass == DeviceClass.MENTRA_LIVE || selectedClass == DeviceClass.META_RAYBAN) {
+                if (MentraSdkModel.usesMentraSdk(selectedClass) || selectedClass == DeviceClass.META_RAYBAN) {
                     delay(20_000L)
                     continue
                 }
@@ -139,7 +140,7 @@ object AutoPairManager {
             return
         }
         val appContext = context.applicationContext
-        if (DeviceProfileStore.selectedClass(appContext) == DeviceClass.MENTRA_LIVE) {
+        if (MentraSdkModel.usesMentraSdk(DeviceProfileStore.selectedClass(appContext))) {
             scope.launch { reconnectMentraLive(appContext, reason) }
             return
         }
@@ -149,17 +150,23 @@ object AutoPairManager {
     }
 
     /**
-     * Mentra Live reconnects the SDK's way: restore the saved device as the SDK default and
-     * call connectDefault (see MentraLiveManager.reconnectSaved).
+     * Glasses on the Mentra SDK reconnect the SDK's way: restore the saved device as the SDK
+     * default and call connectDefault (see MentraLiveManager.reconnectSaved and
+     * reconnectSavedDisplay).
      */
     private fun reconnectMentraLive(context: Context, reason: String) {
-        val profile = DeviceProfileStore.loadLastSelected(context)
-            ?.takeIf { it.selectedClass == DeviceClass.MENTRA_LIVE } ?: return
-        MentraLiveManager.getInstance(context).reconnectSaved(profile.advertisedName, profile.macAddress, reason)
+        val profile = DeviceProfileStore.loadLastSelected(context) ?: return
+        val model = MentraSdkModel.forClass(profile.selectedClass) ?: return
+        val manager = MentraLiveManager.getInstance(context)
+        if (model == MentraSdkModel.LIVE) {
+            manager.reconnectSaved(profile.advertisedName, profile.macAddress, reason)
+        } else {
+            manager.reconnectSavedDisplay(model, reason)
+        }
     }
 
     fun requestConnectToMac(context: Context, mac: String, reason: String) {
-        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) {
+        if (MentraSdkModel.usesMentraSdk(DeviceProfileStore.selectedClass(context))) {
             if (!suppressAutoReconnect) {
                 val appContext = context.applicationContext
                 scope.launch { reconnectMentraLive(appContext, reason) }
@@ -312,7 +319,7 @@ object AutoPairManager {
      * @return true if we attempted a connection.
      */
     private fun tryConnectOnce(context: Context, reason: String): Boolean {
-        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) return false
+        if (MentraSdkModel.usesMentraSdk(DeviceProfileStore.selectedClass(context))) return false
         if (suppressAutoReconnect) {
             Log.d(TAG, "Skipping auto-pair ($reason): suppressed")
             return false
@@ -387,7 +394,7 @@ object AutoPairManager {
     }
 
     private fun tryConnectToMacOnce(context: Context, mac: String, reason: String): Boolean {
-        if (DeviceProfileStore.selectedClass(context) == DeviceClass.MENTRA_LIVE) return false
+        if (MentraSdkModel.usesMentraSdk(DeviceProfileStore.selectedClass(context))) return false
         if (suppressAutoReconnect) {
             Log.d(TAG, "Skipping auto-pair ($reason): suppressed")
             return false

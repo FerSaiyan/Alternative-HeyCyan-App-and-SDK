@@ -9,6 +9,13 @@ enum class DeviceClass {
     MENTRA_LIVE,
     MEIZU_MYVU,
     MEMOMIND,
+
+    // Display glasses driven by the Mentra Bluetooth SDK (see devices/mentra/MentraSdkGlasses).
+    EVEN_G1,
+    EVEN_G2,
+    MENTRA_DISPLAY,
+    NIMO,
+    XINGYI_AR99,
     GENERIC_AUDIO,
     UNKNOWN;
 
@@ -21,6 +28,11 @@ enum class DeviceClass {
         MENTRA_LIVE -> "Mentra Live"
         MEIZU_MYVU -> "Meizu MYVU / Star Air"
         MEMOMIND -> "MemoMind"
+        EVEN_G1 -> "Even Realities G1"
+        EVEN_G2 -> "Even Realities G2"
+        MENTRA_DISPLAY -> "Mentra Display"
+        NIMO -> "NIMO"
+        XINGYI_AR99 -> "Xingyi AR99"
         GENERIC_AUDIO -> "Earbuds / Audio-only glasses"
         UNKNOWN -> "Unknown"
     }

@@ -41,6 +41,12 @@ enum class GlassesAudioOutput {
 data class GlassesAudioProfile(
     val input: GlassesAudioInput,
     val output: GlassesAudioOutput,
+    /**
+     * Where spoken questions record while that path is available (see `AudioRoutePolicy.forQuestion`);
+     * [input] is their fallback and the route of every other feature. MemoMind: the Opus recording
+     * link ([GlassesAudioInput.VENDOR_PCM_STREAM]) in front of the HFP headset microphone.
+     */
+    val questionInput: GlassesAudioInput = input,
 ) {
     val hasMicrophone: Boolean get() = input != GlassesAudioInput.NONE
     val hasSpeaker: Boolean get() = output != GlassesAudioOutput.NONE
@@ -299,8 +305,9 @@ object GlassesFamilyProfiles {
             GlassesCapability.SPEAKER_AUDIO,
         ),
         controlPanel = GlassesControlPanel.MEMOMIND,
-        // Voice questions use the HFP route like other headsets; the Opus stream is opt-in.
-        audio = bluetoothHeadsetAudio,
+        // Voice questions record the Opus stream (no phone microphone, so they work in the
+        // background) and fall back to HFP; Live, meetings and plugins keep the HFP route.
+        audio = bluetoothHeadsetAudio.copy(questionInput = GlassesAudioInput.VENDOR_PCM_STREAM),
         showsAssistantAnswers = true,
         cameraUnavailableReason = "Selected device profile (MemoMind) has no camera.",
         unsupportedNativePlugins = mapOf(
@@ -309,6 +316,54 @@ object GlassesFamilyProfiles {
             NativePluginIds.WALKING_AID to MEMOMIND_PLUGIN_MESSAGE,
         ),
     )
+
+    /**
+     * Display glasses over the Mentra Bluetooth SDK (see devices/mentra/MentraSdkGlasses): text on
+     * the display (wrapped and paged per model), the glasses microphone as SDK PCM, battery, and
+     * the input each driver reports. None has a camera or a speaker; answers are spoken on the
+     * phone and shown on the glasses.
+     */
+    private fun mentraDisplayGlasses(deviceClass: DeviceClass, vararg input: GlassesCapability): GlassesFamilyProfile {
+        val name = deviceClass.displayName()
+        val pluginMessage =
+            "This plugin requires a camera or HeyCyan onboard media. $name supports display and microphone plugins only."
+        return GlassesFamilyProfile(
+            deviceClass = deviceClass,
+            capabilities = setOf(
+                GlassesCapability.TEXT_DISPLAY,
+                GlassesCapability.LINE_DISPLAY,
+                GlassesCapability.CARD_DISPLAY,
+                GlassesCapability.CLEAR_DISPLAY,
+                GlassesCapability.PAGINATION,
+                GlassesCapability.NOTIFICATIONS,
+                GlassesCapability.BATTERY_STATUS,
+                GlassesCapability.MICROPHONE_AUDIO,
+            ) + input,
+            audio = GlassesAudioProfile(input = GlassesAudioInput.VENDOR_PCM_STREAM, output = GlassesAudioOutput.NONE),
+            showsAssistantAnswers = true,
+            cameraUnavailableReason = "Selected device profile ($name) has no camera.",
+            unsupportedNativePlugins = mapOf(
+                NativePluginIds.AUTO_AUDIO to pluginMessage,
+                NativePluginIds.VISUAL_DIARY to pluginMessage,
+                NativePluginIds.WALKING_AID to pluginMessage,
+            ),
+        )
+    }
+
+    /** Even Realities G1: the SDK reports head-up (IMU); its touchpads do not reach the app. */
+    val evenG1 = mentraDisplayGlasses(DeviceClass.EVEN_G1, GlassesCapability.HEAD_GESTURE_INPUT)
+
+    /** Even Realities G2: the SDK reports the touch gestures. */
+    val evenG2 = mentraDisplayGlasses(DeviceClass.EVEN_G2, GlassesCapability.TOUCH_INPUT)
+
+    /** Mentra Display: the 3.2 driver only logs its button and head events. */
+    val mentraDisplay = mentraDisplayGlasses(DeviceClass.MENTRA_DISPLAY)
+
+    /** NIMO: taps and head-up. */
+    val nimo = mentraDisplayGlasses(DeviceClass.NIMO, GlassesCapability.TOUCH_INPUT, GlassesCapability.HEAD_GESTURE_INPUT)
+
+    /** Xingyi AR99: no input events from the driver. */
+    val xingyiAr99 = mentraDisplayGlasses(DeviceClass.XINGYI_AR99)
 
     val genericAudio = GlassesFamilyProfile(
         deviceClass = DeviceClass.GENERIC_AUDIO,
@@ -338,6 +393,11 @@ object GlassesFamilyProfiles {
         mentraLive,
         meizuMyvu,
         memoMind,
+        evenG1,
+        evenG2,
+        mentraDisplay,
+        nimo,
+        xingyiAr99,
         genericAudio,
         unknown,
     )

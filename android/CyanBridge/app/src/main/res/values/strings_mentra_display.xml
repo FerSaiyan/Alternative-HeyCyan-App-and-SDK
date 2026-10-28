@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Display glasses through the Mentra SDK. %1$s is the model name (for example "Even Realities G1"). -->
+    <string name="mentra_display_status_connected">Connected - %1$s</string>
+    <string name="mentra_display_status_connecting">Connecting to %1$s…</string>
+    <string name="mentra_display_status_disconnected">%1$s disconnected</string>
+    <string name="mentra_display_connecting">Looking for your %1$s to connect.</string>
+    <string name="mentra_display_connect_failed">Could not connect to %1$s: %2$s</string>
+    <string name="mentra_display_not_found">%1$s not found. Turn the glasses on, close other apps that use them, and try again.</string>
+    <string name="mentra_display_several_found">More than one %1$s is nearby. Turn the others off and try again.</string>
+    <string name="mentra_display_reconnect_busy">%1$s is already connected or connecting.</string>
+    <string name="mentra_display_battery">%1$s battery: %2$d%%</string>
+    <string name="mentra_display_battery_unknown">%1$s has not reported its battery yet.</string>
+</resources>

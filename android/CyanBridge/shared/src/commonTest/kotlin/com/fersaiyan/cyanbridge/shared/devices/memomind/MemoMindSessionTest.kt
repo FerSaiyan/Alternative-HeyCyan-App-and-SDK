@@ -7,6 +7,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class MemoMindSessionTest {
@@ -20,6 +22,7 @@ class MemoMindSessionTest {
         val recordingWrites = mutableListOf<ByteArray>()
         var flowControlReplies = 0
         var recordingOpen = false
+        var recordingServiceMissing = false
         var onRequest: (GmMessage) -> Unit = {}
         private val decoder = GmFrameDecoder(maxFrameBytes)
 
@@ -60,6 +63,7 @@ class MemoMindSessionTest {
             reply(GmMessage(0x42, MemoMindService.PLUGIN, MemoMindCommand.APP_MESSAGE_FROM_GLASSES, listOf(GmTlv.int16(channel), GmTlv.bytes(data))))
 
         override suspend fun open() {
+            if (recordingServiceMissing) throw IllegalStateException("Service discovery failed")
             recordingOpen = true
         }
 
@@ -145,5 +149,39 @@ class MemoMindSessionTest {
         assertContentEquals(MemoMindRecordingControl.stop(), glasses.recordingWrites.last())
         assertEquals(false, glasses.recordingOpen)
         assertEquals(MemoMindMicrophoneState.IDLE, session.state.value.microphone)
+    }
+
+    @Test
+    fun aUserThatLeavesAfterAnotherTookOverDoesNotStopTheCapture() = runTest {
+        val glasses = FakeGlasses()
+        val session = sessionWith(glasses)
+        val plugin = Any()
+        val question = Any()
+        val questionFrames = mutableListOf<ByteArray>()
+        session.joinMicrophone(plugin, {})
+
+        session.joinMicrophone(question, { questionFrames += it })
+        session.leaveMicrophone(plugin) // the suspended plugin's late pause
+        session.onRecordingBytes(byteArrayOf(0x52, 0x92.toByte(), 0, 0, 0x09, 0xFF.toByte(), 1, 0, 0, 0, 0, 0xFF.toByte()) + ByteArray(40) { 3 })
+
+        assertEquals(1, glasses.recordingWrites.count { it.contentEquals(MemoMindRecordingControl.start()) })
+        assertEquals(MemoMindMicrophoneState.STREAMING, session.state.value.microphone)
+        assertEquals(listOf(3), questionFrames.map { it.first().toInt() })
+        session.leaveMicrophone(question)
+        assertEquals(MemoMindMicrophoneState.IDLE, session.state.value.microphone)
+    }
+
+    @Test
+    fun aFailedStartMakesTheRecordingLinkUnavailableUntilTheNextConnection() = runTest {
+        val glasses = FakeGlasses().apply { recordingServiceMissing = true }
+        val session = sessionWith(glasses)
+        assertTrue(session.recordingAvailable)
+
+        assertFailsWith<IllegalStateException> { session.joinMicrophone(Any(), {}) }
+
+        assertFalse(session.recordingAvailable)
+        assertEquals(MemoMindMicrophoneState.IDLE, session.state.value.microphone)
+        session.onDisconnected()
+        assertTrue(session.recordingAvailable)
     }
 }

@@ -17,6 +17,8 @@ import com.mentra.bluetoothsdk.MentraBluetoothSdk
 import com.mentra.bluetoothsdk.MentraBluetoothSdkCallback
 import com.mentra.bluetoothsdk.MentraBluetoothSdkConfig
 import com.mentra.bluetoothsdk.MentraBluetoothSdkListener
+import com.mentra.bluetoothsdk.MentraBluetoothScanCallback
+import com.mentra.bluetoothsdk.TouchEvent
 import com.mentra.bluetoothsdk.OtaStartAckEvent
 import com.mentra.bluetoothsdk.BluetoothSdkAnalyticsConfig
 import com.mentra.bluetoothsdk.MicPcmEvent
@@ -46,11 +48,23 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.bridge.core.DeviceInfo
+import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraDisplayAdapter
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraDisplayInput
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraDisplayPort
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkCandidate
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkPairing
+import android.os.Handler
+import android.os.Looper
+import java.util.concurrent.atomic.AtomicBoolean
 import com.fersaiyan.cyanbridge.ai.questions.MentraQuestionPhoto
 import com.fersaiyan.cyanbridge.ai.questions.GlassesButtonQuestions
 
 /**
- * The single owner of the Mentra Bluetooth SDK and its Mentra Live connection. It follows the
+ * The single owner of the Mentra Bluetooth SDK, for Mentra Live and for the display glasses the
+ * SDK drives ([MentraSdkModel]; one model at a time). It follows the
  * SDK's intended flow: [startScan] for the pairing list, [connect] with a scanned [Device] (the
  * SDK bonds and saves it as the default device), and [reconnectSaved] on launch, which restores
  * the app-persisted default device with `setDefaultDevice` and calls `connectDefault`. Link-loss
@@ -92,7 +106,16 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     @Volatile private var configuredForReady = false
     @Volatile private var activeVideoRequestId: String? = null
 
-    init { GlassesBridge.registerAdapter(MentraLiveAdapter(this)) }
+    /** The model the link was last started for; the SDK runs one model at a time. */
+    @Volatile private var linkModel: MentraSdkModel? = null
+
+    /** Display glasses (G1, G2, Mentra Display, NIMO, AR99) as a display adapter; Live keeps [MentraLiveAdapter]. */
+    val displayAdapter = MentraDisplayAdapter(DisplayPort(), scope)
+
+    init {
+        GlassesBridge.registerAdapter(MentraLiveAdapter(this))
+        GlassesBridge.registerAdapter(displayAdapter)
+    }
 
     val connected: Boolean get() = _glasses.value.connected
     val ready: Boolean get() = _glasses.value.ready
@@ -110,9 +133,11 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
             else -> GlassesBridgeState.Disconnected
         }
         if (glasses.ready != wasReady) Log.i(TAG, "Glasses ready=${glasses.ready} connection=${glasses.connection}")
+        connectedModel(glasses)?.let { linkModel = it }
         if (glasses.ready && !configuredForReady) {
             configuredForReady = true
-            scope.launch { reserveButtonForAssistant() }
+            // Gallery mode is a Mentra Live setting; display glasses have no camera button.
+            if (linkModel?.hasDisplay != true) scope.launch { reserveButtonForAssistant() }
         }
         if (!glasses.connected) {
             configuredForReady = false
@@ -131,6 +156,10 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     }
 
     override fun onButtonPress(event: ButtonPressEvent) {
+        selectedDisplayModel()?.let { model ->
+            onDisplayInput(model, MentraDisplayInput.button(event.buttonId, event.pressType))
+            return
+        }
         if (firmwareUpdateActive) {
             Log.i(TAG, "Button ${event.pressType} ignored during the firmware update")
             return
@@ -150,6 +179,38 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
                 GlassesButtonQuestions.onPhotoButton(appContext, DeviceClass.MENTRA_LIVE, "mentra") { buttonQuestionPhoto }
             GestureType.LONG_PRESS -> GlassesButtonQuestions.onVoiceButton(appContext, DeviceClass.MENTRA_LIVE, "mentra")
             else -> Unit
+        }
+    }
+
+    override fun onTouch(event: TouchEvent) {
+        val model = selectedDisplayModel() ?: return
+        val input = MentraDisplayInput.touch(event.gestureName) ?: run {
+            Log.i(TAG, "Touch ${event.gestureName} has no action")
+            return
+        }
+        onDisplayInput(model, input)
+    }
+
+    override fun onHeadUpChanged(headUp: Boolean) {
+        val model = selectedDisplayModel() ?: return
+        onDisplayInput(model, MentraDisplayInput.headUp(headUp))
+    }
+
+    /**
+     * Display glasses input: every event reaches the bridge listeners; a long press asks a spoken
+     * question (in the background when the main screen does not exist, else MentraDisplayGlasses
+     * runs it), a tap shows the next page of the shown text and a double tap clears the display.
+     */
+    private fun onDisplayInput(model: MentraSdkModel, input: InputEvent.Button) {
+        Log.i(TAG, "${model.name} input ${input.button} ${input.gesture}")
+        _inputEvents.tryEmit(input)
+        GlassesBridge.onInputEvent(MentraDisplayAdapter.ADAPTER_ID, input)
+        when (MentraDisplayInput.actionFor(input)) {
+            MentraDisplayInput.Action.VOICE_QUESTION ->
+                GlassesButtonQuestions.onVoiceButton(appContext, model.deviceClass, "mentra")
+            MentraDisplayInput.Action.NEXT_PAGE -> scope.launch { displayAdapter.showNextPage() }
+            MentraDisplayInput.Action.CLEAR_DISPLAY -> scope.launch { displayAdapter.clearDisplay() }
+            MentraDisplayInput.Action.NONE -> Unit
         }
     }
 
@@ -230,6 +291,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
         require(device.model == DeviceModel.MENTRA_LIVE) { "Not Mentra Live" }
         require(device.name.isNotBlank()) { "Mentra Live needs its Bluetooth name to connect" }
         stopScan()
+        linkModel = MentraSdkModel.LIVE
         GlassesBridge.setActiveAdapter(ADAPTER_ID)
         _bridgeState.value = GlassesBridgeState.Connecting
         Log.i(TAG, "Connecting to ${device.name} (${device.address})")
@@ -242,6 +304,10 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
      * reconnect the SDK is already running. Returns false when nothing was started.
      */
     fun reconnectSaved(name: String?, address: String?, reason: String): Boolean {
+        if (scanWouldDropLink(MentraSdkModel.LIVE)) {
+            Log.d(TAG, "Reconnect ($reason) skipped: the SDK is linked to ${linkModel?.name}")
+            return false
+        }
         val glasses = _glasses.value
         if (glasses.connected || glasses.connection.isBusy) {
             Log.d(TAG, "Reconnect ($reason) skipped: connection=${glasses.connection}")
@@ -258,6 +324,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
                     Device(model = DeviceModel.MENTRA_LIVE, name = savedName, address = address?.takeIf { it.isNotBlank() }),
                 )
             }
+            linkModel = MentraSdkModel.LIVE
             GlassesBridge.setActiveAdapter(ADAPTER_ID)
             sdk.connectDefault(ConnectOptions(saveAsDefault = true, cancelExistingConnectionAttempt = false))
             Log.i(TAG, "Reconnect ($reason) to $savedName requested")
@@ -266,6 +333,140 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
             Log.w(TAG, "Reconnect ($reason) failed: ${error.message}")
             false
         }
+    }
+
+    // --- Display glasses --------------------------------------------------------------------------
+
+    /** Why display glasses chosen in Device Bind did not connect. */
+    enum class DisplayConnectFailure { NOT_FOUND, SEVERAL_FOUND, SCAN_FAILED }
+
+    /**
+     * True when starting [model] (a scan or a connect) would drop the SDK's link to another model:
+     * the SDK replaces its glasses driver for each model.
+     */
+    fun scanWouldDropLink(model: MentraSdkModel): Boolean {
+        val glasses = _glasses.value
+        val current = linkModel ?: return false
+        return current != model && (glasses.connected || glasses.connection.isBusy)
+    }
+
+    /**
+     * Pairs the display glasses chosen in Device Bind: scans with the SDK for [model], picks the row's
+     * glasses ([MentraSdkPairing]: AR99 by its advertised address and exact project ID) and connects;
+     * the SDK bonds both arms of G1/G2 itself and saves the glasses as its default. Throws when the
+     * scan cannot start; [onFailure] runs on the main thread when the glasses are not found.
+     */
+    fun connectDisplayGlasses(
+        model: MentraSdkModel,
+        advertisedName: String?,
+        address: String?,
+        onFailure: (DisplayConnectFailure) -> Unit,
+    ) {
+        require(model.hasDisplay) { "${model.name} has no display" }
+        stopScan()
+        if (scanWouldDropLink(model)) disconnect()
+        linkModel = model
+        GlassesBridge.setActiveAdapter(MentraDisplayAdapter.ADAPTER_ID)
+        _bridgeState.value = GlassesBridgeState.Connecting
+        val started = AtomicBoolean(false)
+        val main = Handler(Looper.getMainLooper())
+        fun fail(reason: DisplayConnectFailure) {
+            if (!started.compareAndSet(false, true)) return
+            Log.w(TAG, "${model.name} pairing failed: $reason")
+            _bridgeState.value = GlassesBridgeState.Disconnected
+            main.post { onFailure(reason) }
+        }
+        val callback = object : MentraBluetoothScanCallback() {
+            override fun onResults(devices: List<Device>) {
+                devices.forEach(::remember)
+                val chosen = MentraSdkPairing.choose(
+                    model,
+                    devices.map { MentraSdkCandidate(it.name, it.address, it.projectName) },
+                    advertisedName,
+                    address,
+                ) ?: return
+                if (!started.compareAndSet(false, true)) return
+                val device = devices.first { it.name == chosen.name && it.address == chosen.address }
+                main.post {
+                    stopScan()
+                    Log.i(TAG, "Connecting to ${model.name} ${device.name} (${device.address})")
+                    MentraSdkDeviceStore.save(appContext, device)
+                    runCatching { sdk.connect(device) }.onFailure { error ->
+                        Log.w(TAG, "${model.name} connect failed", error)
+                        _bridgeState.value = GlassesBridgeState.Disconnected
+                        onFailure(DisplayConnectFailure.SCAN_FAILED)
+                    }
+                }
+            }
+
+            override fun onComplete(devices: List<Device>) {
+                fail(if (devices.size > 1) DisplayConnectFailure.SEVERAL_FOUND else DisplayConnectFailure.NOT_FOUND)
+            }
+
+            override fun onError(error: BluetoothError) {
+                Log.w(TAG, "${model.name} scan error ${error.code}: ${error.message}")
+                fail(DisplayConnectFailure.SCAN_FAILED)
+            }
+        }
+        scanSession = sdk.scan(model.sdkModel(), callback, DISPLAY_SCAN_TIMEOUT_MS)
+        Log.i(TAG, "SDK scan for ${model.name} started to pair $advertisedName ($address)")
+    }
+
+    /**
+     * Reconnects the saved display glasses the SDK's way: the record the SDK scanner returned at
+     * pairing ([MentraSdkDeviceStore]) becomes the SDK default, then `connectDefault`. Returns false
+     * when nothing was started.
+     */
+    fun reconnectSavedDisplay(model: MentraSdkModel, reason: String): Boolean {
+        val glasses = _glasses.value
+        if ((glasses.connected || glasses.connection.isBusy) && !scanWouldDropLink(model)) {
+            Log.d(TAG, "Reconnect ($reason) skipped: connection=${glasses.connection}")
+            return false
+        }
+        val saved = MentraSdkDeviceStore.load(appContext, model) ?: run {
+            Log.w(TAG, "Reconnect ($reason) skipped: no saved ${model.name}")
+            return false
+        }
+        return runCatching {
+            val current = sdk.getDefaultDevice()
+            if (current?.model != saved.model || current.name != saved.name || current.address != saved.address) {
+                sdk.setDefaultDevice(saved)
+            }
+            linkModel = model
+            GlassesBridge.setActiveAdapter(MentraDisplayAdapter.ADAPTER_ID)
+            sdk.connectDefault(ConnectOptions(saveAsDefault = true, cancelExistingConnectionAttempt = false))
+            Log.i(TAG, "Reconnect ($reason) to ${model.name} ${saved.name} requested")
+            true
+        }.getOrElse { error ->
+            Log.w(TAG, "Reconnect ($reason) failed: ${error.message}")
+            false
+        }
+    }
+
+    /** The display model of the selected family, or null for Mentra Live and other families. */
+    fun selectedDisplayModel(): MentraSdkModel? =
+        MentraSdkModel.forClass(DeviceProfileStore.selectedClass(appContext))?.takeIf { it.hasDisplay }
+
+    private fun connectedModel(glasses: GlassesRuntimeState): MentraSdkModel? =
+        (glasses as? GlassesRuntimeState.Connected)?.device?.deviceModel?.let { MentraSdkModel.forSdkDeviceType(it.deviceType) }
+
+    /** [displayAdapter]'s view of this manager. */
+    private inner class DisplayPort : MentraDisplayPort {
+        override val displayModel: MentraSdkModel? get() = selectedDisplayModel()
+        override val bridgeState: StateFlow<GlassesBridgeState> get() = _bridgeState
+        override val inputEvents: Flow<InputEvent> get() = _inputEvents
+        override fun batteryLevel(): Int? = this@MentraLiveManager.batteryLevel()
+        override suspend fun displayText(text: String) = sdk.displayText(text)
+        override suspend fun clearDisplay() = sdk.clearDisplay()
+
+        override suspend fun connect(device: DeviceInfo) {
+            val model = selectedDisplayModel() ?: error("No Mentra display glasses selected")
+            check(reconnectSavedDisplay(model, reason = "bridge")) { "${model.name} did not reconnect" }
+        }
+
+        override suspend fun disconnect() = this@MentraLiveManager.disconnect()
+        override fun openMicrophone(owner: String) = this@MentraLiveManager.openMicrophone(owner) {}
+        override fun closeMicrophone(owner: String) = this@MentraLiveManager.closeMicrophone(owner)
     }
 
     fun disconnect() {
@@ -451,6 +652,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
         const val ADAPTER_ID = "mentra_live"
         const val PCM_SAMPLE_RATE_HZ = 16_000
         private const val SCAN_TIMEOUT_MS = 15_000L
+        private const val DISPLAY_SCAN_TIMEOUT_MS = 20_000L
 
         @Volatile private var instance: MentraLiveManager? = null
 
