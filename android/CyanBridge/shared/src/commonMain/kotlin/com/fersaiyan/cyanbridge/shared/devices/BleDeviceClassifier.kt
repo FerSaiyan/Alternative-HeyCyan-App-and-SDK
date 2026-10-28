@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.devices
 
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
+
 /**
  * Platform-neutral port of the Android app's DeviceClassifier heuristics so iOS
  * classifies scan results the same way. UUIDs are compared as lowercase 128-bit
@@ -64,6 +66,7 @@ object BleDeviceClassifier {
         if (name.isEmpty()) return DeviceClass.UNKNOWN
 
         if (isMentraLiveName(name)) return DeviceClass.MENTRA_LIVE
+        MentraSdkModel.forAdvertisedName(name)?.let { return it.deviceClass }
         if (lower.contains("eyevue")) return DeviceClass.EYEVUE
         if (lower.contains("xk one") || lower.contains("tunebuds") || lower.contains("ab mate")) {
             return DeviceClass.TUNEBUDS

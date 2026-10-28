@@ -75,6 +75,11 @@ class GlassesManagerGatingMatrixTest {
             Action.MEMOMIND_CONTROLS,
             Action.STATUS_BATTERY,
         ),
+        DeviceClass.EVEN_G1 to setOf(Action.MEETING_CAPTURE, Action.STATUS_BATTERY),
+        DeviceClass.EVEN_G2 to setOf(Action.MEETING_CAPTURE, Action.STATUS_BATTERY),
+        DeviceClass.MENTRA_DISPLAY to setOf(Action.MEETING_CAPTURE, Action.STATUS_BATTERY),
+        DeviceClass.NIMO to setOf(Action.MEETING_CAPTURE, Action.STATUS_BATTERY),
+        DeviceClass.XINGYI_AR99 to setOf(Action.MEETING_CAPTURE, Action.STATUS_BATTERY),
         DeviceClass.GENERIC_AUDIO to setOf(Action.MEETING_CAPTURE),
         DeviceClass.UNKNOWN to setOf(Action.MEETING_CAPTURE),
     )

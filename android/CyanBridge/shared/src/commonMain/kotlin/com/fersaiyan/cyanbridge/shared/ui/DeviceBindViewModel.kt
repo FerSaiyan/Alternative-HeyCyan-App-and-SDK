@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
 
 /** A pairing the user confirmed; the host connects [device] as [deviceClass]. */
 data class DeviceBindConnection(val device: ScannedDevice, val deviceClass: DeviceClass)
@@ -33,7 +34,10 @@ class DeviceBindViewModel : ViewModel() {
 
     fun selectDevice(device: ScannedDevice) {
         connectingDevice = device
-        selectedClass = pairingChoiceFor(device.effectiveSelectedClass())
+        val chosen = device.effectiveSelectedClass()
+        // A Mentra display model is only offered when detected (see detectedOnlyChoicesFor).
+        val offered = if (MentraSdkModel.isDisplayGlasses(chosen) && chosen != device.detectedClass) device.detectedClass else chosen
+        selectedClass = pairingChoiceFor(offered)
     }
 
     fun selectDeviceClass(deviceClass: DeviceClass) {
@@ -53,6 +57,7 @@ class DeviceBindViewModel : ViewModel() {
         val device = connectingDevice ?: return null
         if (!canConnect()) return null
         val deviceClass = selectedClass
+        if (MentraSdkModel.isDisplayGlasses(deviceClass) && deviceClass != device.detectedClass) return null
         if (deviceClass in CONSUMER_PROTOCOLS || deviceClass == DeviceClass.UNKNOWN) {
             return confirmManualProtocol(
                 if (deviceClass in CONSUMER_PROTOCOLS) deviceClass else DeviceClass.HEY_CYAN,
@@ -81,13 +86,16 @@ class DeviceBindViewModel : ViewModel() {
         )
 
         /**
-         * Type choices offered only for devices detected as that family: Mentra Live pairs
-         * through its SDK, so other devices never show it.
+         * Type choices offered only for devices detected as that family: the Mentra SDK families
+         * (Mentra Live and the display glasses) pair through the SDK, so other devices never show
+         * them. Mentra Live is also offered when it was chosen for the device before; a display
+         * model only when detected, so AR99 is never offered without its project ID.
          */
         fun detectedOnlyChoicesFor(device: ScannedDevice): List<DeviceClass> = listOfNotNull(
             DeviceClass.MENTRA_LIVE.takeIf {
                 device.detectedClass == DeviceClass.MENTRA_LIVE || device.selectedClass == DeviceClass.MENTRA_LIVE
             },
+            device.detectedClass.takeIf { MentraSdkModel.isDisplayGlasses(it) },
         )
 
         fun pairingChoiceFor(detected: DeviceClass): DeviceClass =

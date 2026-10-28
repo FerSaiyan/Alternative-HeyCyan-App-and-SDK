@@ -50,4 +50,22 @@ class DeviceBindViewModelTest {
         assertEquals("AA:BB", connection?.device?.macAddress)
         assertNull(viewModel.connectingDevice)
     }
+
+    @Test
+    fun mentraDisplayGlassesAreOfferedOnlyWhenDetected() {
+        val g1 = device(DeviceClass.EVEN_G1)
+        assertEquals(listOf(DeviceClass.EVEN_G1), DeviceBindViewModel.detectedOnlyChoicesFor(g1))
+        // A saved AR99 choice alone never offers AR99: only its advertised project ID does.
+        val previouslyAr99 = ScannedDevice("AA:BB", "Glasses", -50, DeviceClass.UNKNOWN, DeviceClass.XINGYI_AR99, true)
+        assertEquals(emptyList(), DeviceBindViewModel.detectedOnlyChoicesFor(previouslyAr99))
+        val picker = DeviceBindViewModel()
+        picker.selectDevice(previouslyAr99)
+        assertEquals(DeviceClass.HEY_CYAN, picker.selectedClass)
+        picker.selectDeviceClass(DeviceClass.XINGYI_AR99)
+        assertNull(picker.confirmConnection { true })
+
+        val viewModel = DeviceBindViewModel()
+        viewModel.selectDevice(g1)
+        assertEquals(DeviceClass.EVEN_G1, viewModel.confirmConnection { true }?.deviceClass)
+    }
 }
