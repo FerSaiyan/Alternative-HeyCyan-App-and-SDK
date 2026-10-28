@@ -325,6 +325,9 @@ class MemoMindManager private constructor(context: Context) {
         @Volatile
         private var instance: MemoMindManager? = null
 
+        /** The manager if MemoMind was used in this process; never creates it. */
+        fun instanceOrNull(): MemoMindManager? = instance
+
         fun getInstance(context: Context): MemoMindManager =
             instance ?: synchronized(this) {
                 instance ?: MemoMindManager(context.applicationContext).also { instance = it }

@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.devices.memomind
 import android.media.MediaCodec
 import android.media.MediaFormat
 import android.util.Log
+import com.fersaiyan.cyanbridge.shared.audio.OpusPacketDecoder
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -11,15 +12,19 @@ import java.nio.ByteOrder
  * Decodes the MemoMind microphone stream (40-byte Opus packets, mono, 16 kHz input, 20 ms) with
  * the platform MediaCodec decoder and returns 16 kHz mono PCM16LE. The decoder needs the Opus
  * header and pre-skip as codec-specific data, and may output 48 kHz whatever the header says,
- * so the real output rate is read and integer-decimated to 16 kHz. Not thread-safe.
+ * so the real output rate is read and integer-decimated to 16 kHz. Not thread-safe. The platform
+ * Opus decoder (`audio/opus`) exists since Android 5.0, below the app's minSdk, so no library
+ * is bundled.
  */
-class MemoMindOpusDecoder {
+class MemoMindOpusDecoder : OpusPacketDecoder {
+    override val sampleRateHz: Int = SAMPLE_RATE
+
     private var codec: MediaCodec? = null
     private var outputRate = SAMPLE_RATE
     private var outputChannels = 1
     private var presentationUs = 0L
 
-    fun start() {
+    override fun start() {
         release()
         val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_OPUS, SAMPLE_RATE, 1).apply {
             setByteBuffer("csd-0", ByteBuffer.wrap(opusHead()))
@@ -36,7 +41,7 @@ class MemoMindOpusDecoder {
     }
 
     /** Queues one packet (never dropping it) and returns whatever PCM became available. */
-    fun decode(packet: ByteArray): ByteArray {
+    override fun decode(packet: ByteArray): ByteArray {
         val decoder = codec ?: return ByteArray(0)
         val out = ByteArrayOutputStream()
         var queued = false
@@ -58,7 +63,7 @@ class MemoMindOpusDecoder {
         return toTarget(out.toByteArray())
     }
 
-    fun release() {
+    override fun release() {
         val decoder = codec ?: return
         codec = null
         runCatching { decoder.stop() }

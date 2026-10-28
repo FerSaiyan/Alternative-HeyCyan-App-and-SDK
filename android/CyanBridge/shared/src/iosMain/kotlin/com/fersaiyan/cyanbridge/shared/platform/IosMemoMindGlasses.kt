@@ -12,7 +12,6 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.devices.memomind.GmCodec
 import com.fersaiyan.cyanbridge.shared.devices.memomind.MemoMindAssistantTrigger
-import com.fersaiyan.cyanbridge.shared.devices.memomind.MemoMindAudioListener
 import com.fersaiyan.cyanbridge.shared.devices.memomind.MemoMindDisplayAdapter
 import com.fersaiyan.cyanbridge.shared.devices.memomind.MemoMindHud
 import com.fersaiyan.cyanbridge.shared.devices.memomind.MemoMindLinkControl
@@ -26,12 +25,14 @@ import com.fersaiyan.cyanbridge.shared.glasses.MemoMindUiState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * MemoMind glasses on iOS (Android: MemoMindGlasses over the SPP MemoMindManager). The shared
@@ -272,18 +273,17 @@ internal class IosMemoMindGlasses(
             var frames = 0
             microphoneLabel = "Microphone: listening for 3 seconds…"
             render()
+            val user = Any()
             microphoneLabel = try {
-                session.audioListener = MemoMindAudioListener { frames += it.size }
-                session.startMicrophone()
+                session.joinMicrophone(user, { frames += it.size })
                 delay(MIC_TEST_MS)
-                session.stopMicrophone()
                 "Microphone: $frames Opus frames in 3 s (iAP2)"
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
                 "Microphone test failed: ${error.message}"
             } finally {
-                session.audioListener = null
+                withContext(NonCancellable) { session.leaveMicrophone(user) }
             }
             render()
         }

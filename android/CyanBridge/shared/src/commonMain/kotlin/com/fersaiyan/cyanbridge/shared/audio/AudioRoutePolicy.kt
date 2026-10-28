@@ -100,6 +100,19 @@ object AudioRoutePolicy {
         else -> requested
     }
 
+    /**
+     * The route of a spoken question: the glasses' SDK stream when their profile records questions
+     * from it ([GlassesAudioProfile.questionInput]) and [sdkStreamAvailable] (the platform has the
+     * stream up now), else what [forDevice] gives a voice prompt. MemoMind: the Opus recording link,
+     * or the HFP headset route when the link is down, the firmware has none, or iOS uses BLE.
+     */
+    fun forQuestion(device: GlassesAudioProfile?, sdkStreamAvailable: Boolean): AudioRoutePreference =
+        if (sdkStreamAvailable && device?.questionInput == GlassesAudioInput.VENDOR_PCM_STREAM) {
+            AudioRoutePreference.DEVICE_SDK
+        } else {
+            forDevice(AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED, device)
+        }
+
     /** True when the glasses' SDK must be told whenever the app plays audio to them. */
     fun needsPlaybackSignal(device: GlassesAudioProfile?): Boolean =
         device?.output == GlassesAudioOutput.BLUETOOTH_WITH_PLAYBACK_SIGNAL

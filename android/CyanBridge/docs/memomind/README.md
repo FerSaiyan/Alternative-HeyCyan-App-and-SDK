@@ -72,7 +72,12 @@ Shared (`shared/src/commonMain/.../devices/memomind/`):
 
 Android (`app/.../devices/memomind/`, `ui/main/glasses/MemoMindGlasses.kt`): SPP transport,
 manager (bring-up, reconnect, battery polling, notifications forwarding, button → voice question),
-MediaCodec Opus decoder to 16 kHz PCM, and the microphone as an `AudioSessionCoordinator` session.
+MediaCodec Opus decoder to 16 kHz PCM (`MemoMindOpusDecoder`, behind the shared
+`OpusPacketDecoder` interface; the platform `audio/opus` decoder exists since Android 5.0, below
+minSdk, so no library is bundled), and the microphone as an `AudioSessionCoordinator` session.
+The capture's users (voice question, Web plugin, panel test) share the one stream through
+`MemoMindSession.joinMicrophone` / `leaveMicrophone`: the last to join receives the frames, and a
+user that leaves late (a plugin paused by a question) cannot stop a capture another user took over.
 
 ### Questions (Android)
 
@@ -82,21 +87,38 @@ MediaCodec Opus decoder to 16 kHz PCM, and the microphone as an `AudioSessionCoo
   `GlassesButtonQuestions.onVoiceButton`, which starts the same question in the background
   (`GlassesQuestions.askByVoiceInBackground`): the speech engine starts on demand, and a missing setup
   or microphone permission is a toast instead of a dialog.
-- **Background microphone limit.** The question records MemoMind through the phone's HFP input. Android
-  lets an app record only while it has a visible screen or a `microphone` foreground service that was
-  started while it had one. A button read from the app's own SPP socket is none of Android's
-  exemptions for that (system component, notification or widget tap, a visible app's PendingIntent,
-  device owner, voice interaction service). The exemptions that let a background app *start* a
-  foreground service (a system Bluetooth broadcast, a companion-device association, battery
-  optimization off) do not give it the microphone, and a button press over SPP is not a system
-  broadcast anyway. So `AiQuestionForegroundService` is refused the `microphone` type (Android 14+:
-  it then runs with its other types; 12+: it may not start at all), Android silences the recording,
-  and the question says "Android blocked the microphone while CyanBridge was in the background. Open
-  CyanBridge and ask again." It works when a microphone service started from the screen is still
-  running (meeting recording, Gemini Live, a voice plugin), or when CyanBridge was only in the
-  background. Recording the glasses' own Opus microphone over SPP (`MemoMindMicrophone`, a
-  `DEVICE_SDK` session like Mentra's PCM) would not need the phone microphone; it is not used for
-  questions yet (owner decision, hardware check).
+- **Microphone: the Opus recording link.** `GlassesFamilyProfiles.memoMind` records questions from
+  the glasses' own stream (`audio.questionInput = VENDOR_PCM_STREAM`); everything else (Gemini Live,
+  meetings, voice plugins, enrollment) keeps the HFP route. `QuestionMicrophone` takes its
+  `VoiceCapture` session on the route `AudioRoutePolicy.forQuestion` picks: `DEVICE_SDK` while
+  `MemoMindSession.recordingAvailable`, so there is no SCO and no phone microphone. The stream
+  (`MemoMindMicrophone.capture`, decoded to 16 kHz PCM) starts before the beep, so `01/2F`, the RFCOMM
+  connect to `0x2024`, the format negotiation and `52 01 00` overlap the beep and the cue; the audio
+  is kept only from the moment the recording starts, so the cue is not recorded. Log lines
+  (`MemoMindSession`, `ImageQuestionAudio`): `Microphone streaming compact=… ms: processing=… link=…
+  format=… started=…`, `Question beep done at +N ms`, `Question SDK stream ready, recording from +N ms`.
+  Follow-up windows record the same way (every capture starts its own stream). The arbitration is
+  unchanged: the question's `VoiceCapture` session still refuses or pauses enrollment, Local Agent
+  approvals, Gemini Live and voice plugins, and coexists with a meeting (which keeps HFP). Answers
+  still play over HFP/A2DP as before.
+- **HFP fallback.** The question uses the HFP headset microphone when the recording link is not
+  available: MemoMind not connected or not brought up, a transport without a recording channel (iOS
+  over BLE), or a failed start on this connection (firmware without the `0x2024` service, no start
+  acknowledgement); a new connection or a successful start clears that. When the stream does not
+  start within 5 s of the request, the question is asked again on HFP, with its own beep and cue, and
+  later questions use HFP until the link works again.
+- **Background.** On the Opus route a button question works with CyanBridge in the background or
+  closed (the SPP link up): no Android input is opened, so Android's while-in-use microphone rule
+  does not apply and the question's foreground service is not awaited for it. Only the HFP fallback
+  records through the phone's Bluetooth input, which Android lets an app use only while it has a
+  visible screen or a `microphone` foreground service started while it had one; a button read from
+  the app's own SPP socket is none of Android's exemptions (system component, notification or widget
+  tap, a visible app's PendingIntent, device owner, voice interaction service), and the exemptions
+  that let a background app *start* a foreground service (a system Bluetooth broadcast, a
+  companion-device association, battery optimization off) do not give it the microphone. Then
+  `AiQuestionForegroundService` is refused the `microphone` type, Android silences the recording, and
+  the question says "Android blocked the microphone while CyanBridge was in the background. Open
+  CyanBridge and ask again." That message can only come from the HFP fallback.
 - **Answers on the HUD.** `GlassesFamilyProfiles.memoMind` sets `showsAssistantAnswers`. Every spoken
   answer (`AssistantSpeaker.speakVision`, and the local model's streamed photo answer) is also sent to
   the display bridge (`GlassesBridge.showText`), which the MemoMind adapter draws as Web Bridge text
@@ -136,7 +158,14 @@ What works on iOS:
   (`showsAssistantAnswers`).
 - `IosAppController.memoMindSession` / `memoMindDisplay` expose the session and the display adapter
   for a web plugin host.
-- Over iAP2 only: the Opus recording stream (the panel's microphone test counts frames).
+- Over iAP2 only: the Opus recording stream (the panel's microphone test counts frames, through the
+  shared `joinMicrophone` / `leaveMicrophone`).
+- Voice questions still use HFP on iOS, also over iAP2. The shared pieces are ready
+  (`AudioRoutePolicy.forQuestion`, `MemoMindSession.recordingAvailable`, the parser, the
+  `OpusPacketDecoder` interface), but iOS has no Opus decoder yet (an `AVAudioConverter` from
+  `kAudioFormatOpus` would implement `OpusPacketDecoder`) and its question path is
+  `SFSpeechRecognizer` on the `AVAudioEngine` input (`IosVoiceQuestion`), which would need a buffer
+  request fed from the decoded PCM instead of the input tap. Not wired in this change.
 
 Not available on iOS, and why:
 
