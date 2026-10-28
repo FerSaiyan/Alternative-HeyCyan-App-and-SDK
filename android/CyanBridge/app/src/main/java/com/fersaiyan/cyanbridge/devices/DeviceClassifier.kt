@@ -4,6 +4,7 @@ import android.os.ParcelUuid
 import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueProtocol
 import com.fersaiyan.cyanbridge.shared.devices.BleDeviceClassifier
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
 import java.util.UUID
 
 /**
@@ -73,6 +74,7 @@ object DeviceClassifier {
         if (name.isEmpty()) return DeviceClass.UNKNOWN
 
         if (BleDeviceClassifier.isMentraLiveName(name)) return DeviceClass.MENTRA_LIVE
+        MentraSdkModel.forAdvertisedName(name)?.let { return it.deviceClass }
 
         if (lower.contains("eyevue")) {
             return DeviceClass.EYEVUE

@@ -37,7 +37,13 @@ interface VendorPcmMicrophone {
             val deviceClass = DeviceProfileStore.selectedClass(context)
             if (GlassesFamilyProfiles.forClass(deviceClass).audio.questionInput != GlassesAudioInput.VENDOR_PCM_STREAM) return null
             return when (deviceClass) {
-                DeviceClass.MENTRA_LIVE -> MentraLiveManager.instanceOrNull()?.takeIf { it.ready }?.let(::MentraMicrophone)
+                DeviceClass.MENTRA_LIVE,
+                DeviceClass.EVEN_G1,
+                DeviceClass.EVEN_G2,
+                DeviceClass.MENTRA_DISPLAY,
+                DeviceClass.NIMO,
+                DeviceClass.XINGYI_AR99,
+                -> MentraLiveManager.instanceOrNull()?.takeIf { it.ready }?.let(::MentraMicrophone)
                 DeviceClass.MEMOMIND -> MemoMindManager.instanceOrNull()
                     ?.takeIf { it.ready.value && it.session.recordingAvailable }
                     ?.let { MemoMindOpusMicrophone(it.microphone) }

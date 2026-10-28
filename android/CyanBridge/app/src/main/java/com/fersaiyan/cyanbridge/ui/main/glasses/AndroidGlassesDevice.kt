@@ -127,6 +127,11 @@ internal class AndroidGlassesDevices(context: GlassesDeviceContext) {
         DeviceClass.MEIZU_MYVU to lazy { MeizuMyvuGlasses(context) },
         DeviceClass.MEMOMIND to lazy { MemoMindGlasses(context) },
         DeviceClass.MENTRA_LIVE to lazy { MentraLiveGlasses(context) },
+        DeviceClass.EVEN_G1 to lazy { MentraDisplayGlasses(context, GlassesFamilyProfiles.evenG1) },
+        DeviceClass.EVEN_G2 to lazy { MentraDisplayGlasses(context, GlassesFamilyProfiles.evenG2) },
+        DeviceClass.MENTRA_DISPLAY to lazy { MentraDisplayGlasses(context, GlassesFamilyProfiles.mentraDisplay) },
+        DeviceClass.NIMO to lazy { MentraDisplayGlasses(context, GlassesFamilyProfiles.nimo) },
+        DeviceClass.XINGYI_AR99 to lazy { MentraDisplayGlasses(context, GlassesFamilyProfiles.xingyiAr99) },
         DeviceClass.GENERIC_AUDIO to lazy { LegacySdkGlasses(GlassesFamilyProfiles.genericAudio, context) },
         DeviceClass.UNKNOWN to lazy { LegacySdkGlasses(GlassesFamilyProfiles.unknown, context) },
     )

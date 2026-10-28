@@ -7,6 +7,8 @@ import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
 import com.fersaiyan.cyanbridge.shared.devices.BleDeviceClassifier
 import com.fersaiyan.cyanbridge.shared.devices.DeviceProfile
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice as SharedScannedDevice
+import com.fersaiyan.cyanbridge.shared.devices.mentra.Ar99Advertisement
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
 
 import android.annotation.SuppressLint
 import com.fersaiyan.cyanbridge.R
@@ -65,6 +67,9 @@ class DeviceBindDestination : NavScreen() {
 
     /** Addresses the Mentra SDK scanner reported; their rows are Mentra Live whatever their name. */
     private val mentraSdkAddresses = mutableSetOf<String>()
+
+    /** AR99 advertisements by row address; only the exact "AR99" project ID gets here. */
+    private val ar99Advertisements = mutableMapOf<String, Ar99Advertisement>()
     private var mentraScanStarted = false
     private var initialScanStarted = false
     private var lastDeviceListPublishAtMs = 0L
@@ -142,8 +147,10 @@ class DeviceBindDestination : NavScreen() {
         BleScannerHelper.getInstance().scanDevice(this, null, bleScanCallback)
         handler.postDelayed(scanTimeout, 15_000)
         mentraSdkAddresses.clear()
+        ar99Advertisements.clear()
         mentraScanStarted = false
-        // An existing Mentra SDK means Mentra Live was used before: scan with it right away.
+        // An existing Mentra SDK means Mentra glasses were used before: scan for Live right away,
+        // unless that would drop the SDK's link to display glasses (one model at a time).
         if (MentraLiveManager.instanceOrNull() != null) startMentraScan()
     }
 
@@ -161,6 +168,7 @@ class DeviceBindDestination : NavScreen() {
      */
     private fun startMentraScan() {
         if (mentraScanStarted) return
+        if (MentraLiveManager.instanceOrNull()?.scanWouldDropLink(MentraSdkModel.LIVE) == true) return
         mentraScanStarted = true
         runCatching {
             MentraLiveManager.getInstance(this).startScan { devices ->
@@ -196,7 +204,7 @@ class DeviceBindDestination : NavScreen() {
         stopScan()
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
         val deviceClass = connection.deviceClass
-        if (deviceClass != DeviceClass.MENTRA_LIVE) MentraLiveManager.releaseIfStarted("selected $deviceClass")
+        if (!MentraSdkModel.usesMentraSdk(deviceClass)) MentraLiveManager.releaseIfStarted("selected $deviceClass")
         if (deviceClass in DeviceBindViewModel.CONSUMER_PROTOCOLS) {
             saveSelectedProfile(device, deviceClass, userOverridden = true)
             // Apply device-specific maximum capture defaults (HeyCyan video/audio,
@@ -251,6 +259,13 @@ class DeviceBindDestination : NavScreen() {
                     }
             }
 
+            DeviceClass.EVEN_G1,
+            DeviceClass.EVEN_G2,
+            DeviceClass.MENTRA_DISPLAY,
+            DeviceClass.NIMO,
+            DeviceClass.XINGYI_AR99,
+            -> connectMentraDisplay(device, deviceClass)
+
             DeviceClass.MEIZU_MYVU -> {
                 saveSelectedProfile(device, DeviceClass.MEIZU_MYVU, userOverridden = true)
                 connectMeizuMyvu(device)
@@ -269,6 +284,42 @@ class DeviceBindDestination : NavScreen() {
 
             // Should not happen; the pairing choices only expose the classes above.
             else -> Toast.makeText(this, "Unknown device type.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Display glasses pair through the Mentra SDK: it scans for the chosen model, connects the
+     * row's glasses (both arms of G1/G2) and saves them as its default. AR99 is matched by the
+     * address in its advertisement and refused without the exact project ID.
+     */
+    private fun connectMentraDisplay(device: ScannedDevice, deviceClass: DeviceClass) {
+        val model = MentraSdkModel.forClass(deviceClass) ?: return
+        val name = deviceClass.displayName()
+        val address = if (model == MentraSdkModel.AR99) {
+            ar99Advertisements[device.macAddress.uppercase()]?.bleAddress ?: run {
+                Log.w(TAG, "AR99 refused: no AR99 project ID for ${device.macAddress}")
+                Toast.makeText(this, getString(R.string.mentra_display_not_found, name), Toast.LENGTH_LONG).show()
+                return
+            }
+        } else {
+            device.connectionAddress
+        }
+        saveSelectedProfile(device, deviceClass, userOverridden = true)
+        val appContext = applicationContext
+        runCatching {
+            MentraLiveManager.getInstance(this).connectDisplayGlasses(model, device.advertisedName, address) { failure ->
+                val message = when (failure) {
+                    MentraLiveManager.DisplayConnectFailure.SEVERAL_FOUND -> R.string.mentra_display_several_found
+                    else -> R.string.mentra_display_not_found
+                }
+                Toast.makeText(appContext, appContext.getString(message, name), Toast.LENGTH_LONG).show()
+            }
+        }.onSuccess {
+            Toast.makeText(this, getString(R.string.mentra_display_connecting, name), Toast.LENGTH_SHORT).show()
+            finish()
+        }.onFailure { error ->
+            Log.w(TAG, "$name connect failed", error)
+            Toast.makeText(this, getString(R.string.mentra_display_connect_failed, name, error.message.orEmpty()), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -415,6 +466,8 @@ class DeviceBindDestination : NavScreen() {
         connectionAddress: String? = null,
     ) {
         val sanitizedName = name?.trim()?.takeIf { it.isNotEmpty() }
+        // G1/G2: the SDK connects both arms from the left one, so the right arm gets no row.
+        if (MentraSdkModel.isSecondaryArm(sanitizedName)) return
         val existingIndex = deviceList.indexOfFirst { it.macAddress.equals(mac, ignoreCase = true) }
         if (existingIndex >= 0) {
             val existing = deviceList[existingIndex]
@@ -445,11 +498,12 @@ class DeviceBindDestination : NavScreen() {
             manufacturerCompanyIds,
             connectionAddress ?: mac,
         )
-        if (sanitizedName == null && detectedClass == DeviceClass.UNKNOWN) return
+        val isAr99 = mac.uppercase() in ar99Advertisements
+        if (sanitizedName == null && detectedClass == DeviceClass.UNKNOWN && !isAr99) return
 
         val newDevice = ScannedDevice(
             macAddress = mac,
-            advertisedName = sanitizedName ?: detectedClass.displayName(),
+            advertisedName = sanitizedName ?: (if (isAr99) DeviceClass.XINGYI_AR99 else detectedClass).displayName(),
             rssi = rssi,
             serviceUuids = scanRecord?.serviceUuids.orEmpty(),
         )
@@ -521,6 +575,7 @@ class DeviceBindDestination : NavScreen() {
             val bluetoothDevice = device ?: return
             val address = bluetoothDevice.address
             val name = runCatching { bluetoothDevice.name }.getOrNull()
+            Ar99Advertisement.parse(scanRecord)?.let { ar99Advertisements[address.uppercase()] = it }
             upsertDevice(address, name, rssi)
         }
 
@@ -535,6 +590,7 @@ class DeviceBindDestination : NavScreen() {
             val bluetoothDevice = device ?: return
             val address = bluetoothDevice.address
             val name = runCatching { scanRecord?.deviceName ?: bluetoothDevice.name }.getOrNull()
+            Ar99Advertisement.parse(scanRecord?.bytes)?.let { ar99Advertisements[address.uppercase()] = it }
             val rssi = deviceList.firstOrNull { it.macAddress.equals(address, true) }?.rssi ?: 0
             val manufacturerData = scanRecord?.manufacturerSpecificData
             val companyIds = buildSet {
@@ -566,7 +622,11 @@ class DeviceBindDestination : NavScreen() {
         macAddress = macAddress,
         advertisedName = advertisedName,
         rssi = rssi,
-        detectedClass = if (macAddress.uppercase() in mentraSdkAddresses) DeviceClass.MENTRA_LIVE else detectedClass,
+        detectedClass = when (macAddress.uppercase()) {
+            in mentraSdkAddresses -> DeviceClass.MENTRA_LIVE
+            in ar99Advertisements -> DeviceClass.XINGYI_AR99
+            else -> detectedClass
+        },
         selectedClass = userSelectedClass,
         userOverridden = userOverridden(),
     )
