@@ -297,6 +297,9 @@ dependencies {
     implementation "androidx.browser:browser:1.8.0"
     // MemoMind Web plugins: origin-scoped message listener, document-start script, binary message ports.
     implementation "androidx.webkit:webkit:1.14.0"
+    // Mentra miniapps: the background layer runs in QuickJS (Apache-2.0, QuickJS MIT), as in
+    // Mentra's own Android host. 1.0.3 is the last release built with Kotlin 2.3 / coroutines 1.10.
+    implementation "io.github.dokar3:quickjs-kt-android:1.0.3"
     implementation("com.github.getActivity:XXPermissions:20.0")
     implementation("org.greenrobot:eventbus:3.2.0")
     implementation("com.github.ForgetAll:LoadingDialog:v1.1.2")

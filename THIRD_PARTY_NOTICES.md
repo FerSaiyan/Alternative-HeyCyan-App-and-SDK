@@ -16,6 +16,9 @@ upstream license texts.
 | QCSDK iOS framework | `ios/QCSDK.framework/` | Vendor material with upstream copyright notices. It is not relicensed under Apache-2.0 by this repository. | Vendor-supplied SDK |
 | Vendor SDK guides | `android/Android_SDK_Development_Guide_CN.pdf` and `ios/iOS_SDK_Development_Guide.pdf` | Vendor documentation. It is not covered by the CyanBridge Apache-2.0 license. | Vendor-supplied documentation |
 | Meta Wearables Device Access Toolkit | Resolved as Android dependencies when Meta support is enabled | Subject to the Meta Wearables Developer Terms and related policies, not the CyanBridge license. | [facebook/meta-wearables-dat-android](https://github.com/facebook/meta-wearables-dat-android) |
+| MentraOS miniapp runtime pieces | `android/CyanBridge/app/src/main/assets/mentra/startup.js` (verbatim polyfill, `mobile/modules/jspolyfill/assets/startup.js`) and `ui-shim.js` (ported from `mobile/modules/engine/src/services/mentraUiShim.ts`), MentraOS commit f500314 | Apache-2.0, Copyright Mentra Labs. The license text ships as `assets/mentra/LICENSE-startup.txt`. | [Mentra-Community/MentraOS](https://github.com/Mentra-Community/MentraOS) |
+| quickjs-kt (QuickJS for Android) | Android dependency `io.github.dokar3:quickjs-kt-android:1.0.3` | Apache-2.0; QuickJS itself is MIT. | [dokar3/quickjs-kt](https://github.com/dokar3/quickjs-kt) |
+| Mentra miniapps installed by users | Downloaded at runtime into app storage | Each miniapp keeps its publisher's license and terms. | Miniapp-specific |
 | Downloadable AI models | Downloaded or imported through CyanBridge model features | Each model keeps its upstream model license. A model download is not relicensed as Apache-2.0. | Model-specific |
 
 ## Referenced projects

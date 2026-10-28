@@ -281,6 +281,7 @@ class PrefsInventoryTest {
         community_plugins/gemini_chatgpt_image_automation BOOLEAN false
         community_plugins/glasses_tab_shortcut_plugin STRING null
         community_plugins/native_plugin_enabled_* BOOLEAN false
+        community_plugins/mentra_miniapps_enabled BOOLEAN false
         visual_diary_prefs/enabled BOOLEAN false
         visual_diary_prefs/interval_minutes INT 15
         visual_diary_prefs/custom_prompt STRING ""

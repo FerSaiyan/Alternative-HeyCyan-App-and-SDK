@@ -131,6 +131,7 @@
         <service android:name=".plugins.walkingaid.WalkingAidService" android:exported="false" android:foregroundServiceType="dataSync|connectedDevice" />
         <service android:name=".plugins.meetingsparknotes.MeetingSparkNotesService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.livecaptionrelay.LiveCaptionRelayService" android:exported="false" android:foregroundServiceType="microphone" />
+        <service android:name=".plugins.mentra.MentraMiniappService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.handsfreetranslator.HandsFreeTranslatorService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.errandbrain.ErrandBrainService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".plugins.visualdiary.VisualDiaryService" android:exported="false" android:foregroundServiceType="connectedDevice" />

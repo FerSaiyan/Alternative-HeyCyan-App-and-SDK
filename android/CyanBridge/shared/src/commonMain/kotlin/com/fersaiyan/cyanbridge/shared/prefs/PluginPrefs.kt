@@ -12,6 +12,8 @@ object PluginPrefs {
         val glassesTabShortcutPlugin = optionalString("glasses_tab_shortcut_plugin")
         /** `*` is the native plugin id. */
         val nativePluginEnabled = booleanFamily("native_plugin_enabled_*", false)
+        /** Experimental Mentra miniapp hosting on the Plugins page (off until the user turns it on). */
+        val mentraMiniappsEnabled = boolean("mentra_miniapps_enabled", false)
     }
 
     object VisualDiary : PrefsFile("visual_diary_prefs") {
