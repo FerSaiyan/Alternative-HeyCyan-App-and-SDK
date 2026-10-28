@@ -17,6 +17,7 @@ import com.fersaiyan.cyanbridge.audio.AudioRouteResult
 import com.fersaiyan.cyanbridge.audio.AudioSessionCoordinator
 import com.fersaiyan.cyanbridge.audio.AudioSessionGrant
 import com.fersaiyan.cyanbridge.audio.AudioSessionHandle
+import com.fersaiyan.cyanbridge.audio.VendorPcmMicrophone
 import com.fersaiyan.cyanbridge.shared.assistant.CapturedQuestion
 import com.fersaiyan.cyanbridge.shared.assistant.SpokenQuestionMicrophone
 import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePolicy
@@ -27,14 +28,19 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesAudioProfile
 import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
 import com.oudmon.ble.base.bluetooth.DeviceManager
 import kotlinx.coroutines.CancellationException
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
@@ -48,8 +54,11 @@ import kotlin.coroutines.resume
  * The session decides who else may use the microphone: Gemini Live and voice plugins pause while
  * the question records, a meeting recording keeps going (and keeps its route), and another spoken
  * prompt (voice enrollment, a spoken approval) refuses the question before any beep. Glasses whose
- * SDK streams microphone PCM (Mentra Live, [AudioRoutePreference.DEVICE_SDK]) are recorded from
- * that stream, so no Bluetooth call route is opened next to it.
+ * profile records questions from an SDK stream ([AudioRoutePolicy.forQuestion]: Mentra Live PCM,
+ * MemoMind's Opus recording link) are recorded from that stream on the DEVICE_SDK route, so no
+ * Bluetooth call route is opened next to it and Android's background microphone rules do not
+ * apply. The stream starts before the beep so its start-up overlaps the beep and cue; when it
+ * cannot start and the profile has another route (MemoMind: HFP), the question is asked there.
  */
 internal class QuestionMicrophone(
     context: Context,
@@ -61,13 +70,19 @@ internal class QuestionMicrophone(
     private val onQuestionRecorded: () -> Unit,
     /** A model hears the recording, so no on-device transcript is needed. */
     private val audioGoesToModel: () -> Boolean,
+    /** The selected glasses' SDK microphone when it can stream now (see [VendorPcmMicrophone.forSelectedGlasses]). */
+    private val sdkMicrophone: () -> VendorPcmMicrophone? = { VendorPcmMicrophone.forSelectedGlasses(context) },
 ) : SpokenQuestionMicrophone {
     private val appContext = context.applicationContext
     private val mutex = Mutex()
 
-    /** The route a question asks for, after the selected glasses' audio profile. */
-    private fun routePreference(): AudioRoutePreference =
-        AudioRoutePolicy.forDevice(AudioRoutePreference.COMMUNICATION_BLUETOOTH_PREFERRED, deviceAudio())
+    /** Starts SDK streams; outlives a question so an abandoned start can finish on its own. */
+    private val streamScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** The SDK stream could not start, and the profile has another route for questions. */
+    private class SdkStreamUnavailableException(cause: Throwable) : Exception(cause.message, cause)
+
+    private class MicrophoneBusyException : Exception(MICROPHONE_BUSY)
 
     override suspend fun recordQuestion(onsetTimeoutMs: Long): CapturedQuestion =
         capture(onsetTimeoutMs, voiceOnly = true, transcribe = false)
@@ -88,25 +103,58 @@ internal class QuestionMicrophone(
                 ?: return@withLock CapturedQuestion(null, false)
             return@withLock processRecordedQuestion(fixture, voiceOnly, transcribe)
         }
-        val session = openSession() ?: return@withLock CapturedQuestion(null, false, error = MICROPHONE_BUSY)
+        val sdk = sdkMicrophone()?.takeIf { it.sampleRateHz == AudioQuestionRecorder.SAMPLE_RATE }
+        val recorded = try {
+            try {
+                record(timeoutMs, voiceOnly, sdk)
+            } catch (unavailable: SdkStreamUnavailableException) {
+                // Link down, firmware without the stream, or no start: the headset route asks again.
+                Log.w("ImageQuestionAudio", "Glasses SDK stream unavailable (${unavailable.message}); using the headset route")
+                record(timeoutMs, voiceOnly, sdk = null)
+            }
+        } catch (busy: MicrophoneBusyException) {
+            return@withLock CapturedQuestion(null, false, error = MICROPHONE_BUSY)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w("ImageQuestionAudio", "Question capture failed", error)
+            return@withLock CapturedQuestion(null, false, error = error.message ?: "Microphone capture failed")
+        } ?: return@withLock CapturedQuestion(null, false)
+        processRecordedQuestion(recorded, voiceOnly, transcribe)
+    }
+
+    /**
+     * One attempt on the route [AudioRoutePolicy.forQuestion] picks for [sdk]: session, route,
+     * beep, cue, recording, closing beep. Returns null when nobody spoke.
+     */
+    private suspend fun record(timeoutMs: Long, voiceOnly: Boolean, sdk: VendorPcmMicrophone?): File? {
+        val route = AudioRoutePolicy.forQuestion(deviceAudio(), sdkStreamAvailable = sdk != null)
+        val session = openSession(route) ?: throw MicrophoneBusyException()
+        val stream = sdk?.takeIf { route == AudioRoutePreference.DEVICE_SDK }?.let(AudioQuestionRecorder::SdkMicrophoneStream)
+        val begin = SystemClock.elapsedRealtime()
+        // Started before the beep: MemoMind's link start (01/2F, RFCOMM, 52 01 00) overlaps beep and cue.
+        val streaming = stream?.let { streamScope.async { it.open() } }
         var audioFile: File? = null
         try {
             // Closing the session (also on cancellation) closes the recorder and leaves the shared
             // route; the route is restored only if no other session (a meeting, Live) still uses it.
             session.use {
-                val route = withContext(Dispatchers.Main) {
-                    val route = connectRoute(session)
+                val joined = withContext(Dispatchers.Main) {
+                    val joined = connectRoute(session)
                     playTone(android.media.ToneGenerator.TONE_PROP_BEEP)
+                    if (streaming != null) Log.i("ImageQuestionAudio", "Question beep done at +${SystemClock.elapsedRealtime() - begin} ms")
                     speakCue(voiceOnly)
-                    route
+                    joined
                 }
-                // The question's foreground service is normally up by now; a phone-microphone
-                // recording needs it while no screen of the app is visible.
-                val foreground = AiQuestionForegroundService.awaitMicrophoneAccess()
-                Log.i("ImageQuestionAudio", "Question foreground microphone=$foreground")
+                if (streaming != null) awaitStream(streaming, stream, begin)
+                // A phone-microphone recording needs the question's foreground service while no
+                // screen of the app is visible; it is normally up by now. SDK streams do not.
+                val foreground = if (stream == null) AiQuestionForegroundService.awaitMicrophoneAccess() else null
+                if (foreground != null) Log.i("ImageQuestionAudio", "Question foreground microphone=$foreground")
                 audioFile = try {
-                    AudioQuestionRecorder(appContext).record(session, timeoutMs, route.inputDevice)
+                    AudioQuestionRecorder(appContext).record(session, timeoutMs, joined.inputDevice, stream)
                 } catch (silenced: MicrophoneSilencedException) {
+                    // Only an Android input (the HFP fallback for MemoMind) can be silenced.
                     Log.w("ImageQuestionAudio", "Question recording silenced by Android foreground=$foreground")
                     // Without a question service (an image follow-up after the answer) it stays "not heard".
                     if (foreground == MicrophoneAccess.NOT_STARTED) null else error(BACKGROUND_MICROPHONE_BLOCKED)
@@ -114,20 +162,48 @@ internal class QuestionMicrophone(
                 withContext(Dispatchers.Main) { playTone(android.media.ToneGenerator.TONE_PROP_BEEP2) }
             }
         } catch (cancelled: CancellationException) {
+            streaming?.cancel()
             audioFile?.delete()
             throw cancelled
         } catch (error: Exception) {
             audioFile?.delete()
-            Log.w("ImageQuestionAudio", "Question capture failed", error)
-            return@withLock CapturedQuestion(null, false, error = error.message ?: "Microphone capture failed")
+            throw error
+        } finally {
+            stream?.close()
         }
-        val recorded = audioFile ?: return@withLock CapturedQuestion(null, false)
-        processRecordedQuestion(recorded, voiceOnly, transcribe)
+        return audioFile
+    }
+
+    /**
+     * Waits for the SDK stream started before the beep, up to [SDK_STREAM_START_TIMEOUT_MS] from
+     * [begin]. A failed or late start becomes [SdkStreamUnavailableException] when the profile has
+     * another question route; a late start is left to finish (and stop) on its own.
+     */
+    private suspend fun awaitStream(streaming: Deferred<Unit>, stream: AudioQuestionRecorder.SdkMicrophoneStream, begin: Long) {
+        val remaining = (SDK_STREAM_START_TIMEOUT_MS - (SystemClock.elapsedRealtime() - begin)).coerceAtLeast(1)
+        val failure: Exception? = try {
+            val started = withTimeoutOrNull(remaining) { streaming.await() } != null
+            if (started) null else IllegalStateException("The glasses stream did not start within ${SDK_STREAM_START_TIMEOUT_MS / 1000} s")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            error
+        }
+        val elapsed = SystemClock.elapsedRealtime() - begin
+        if (failure == null) {
+            Log.i("ImageQuestionAudio", "Question SDK stream ready, recording from +$elapsed ms")
+            return
+        }
+        stream.close()
+        Log.w("ImageQuestionAudio", "Question SDK stream failed at +$elapsed ms: ${failure.message}")
+        val fallback = AudioRoutePolicy.forQuestion(deviceAudio(), sdkStreamAvailable = false)
+        if (fallback == AudioRoutePreference.DEVICE_SDK) throw failure
+        throw SdkStreamUnavailableException(failure)
     }
 
     /** The question's microphone session, or null when another spoken prompt holds the microphone. */
-    private fun openSession(): AudioSessionHandle? {
-        val request = AudioSessionRequest.VoiceCapture(SESSION_OWNER, route = routePreference())
+    private fun openSession(route: AudioRoutePreference): AudioSessionHandle? {
+        val request = AudioSessionRequest.VoiceCapture(SESSION_OWNER, route = route)
         return when (val grant = AudioSessionCoordinator.open(appContext, request)) {
             is AudioSessionGrant.Granted -> grant.handle.takeIf { it.isActive } ?: run {
                 grant.handle.close()
@@ -277,5 +353,8 @@ internal class QuestionMicrophone(
          */
         val ROUTE_WAIT = AudioRouteWait(communicationDeviceTimeoutMs = 3_000, legacyScoTimeoutMs = 3_000, settleMs = 500)
         const val CUE_BLUETOOTH_TAIL_MS = 50L
+
+        /** From the stream start (before the beep) to recording; MemoMind's start gives up after ~4 s. */
+        const val SDK_STREAM_START_TIMEOUT_MS = 5_000L
     }
 }
