@@ -1,9 +1,6 @@
 <resources>
     <string name="compose_action_load">Charger</string>
     <string name="compose_action_stop">Arreter</string>
-    <string name="compose_evenhub_runtime_title">Runtime EvenHub</string>
-    <string name="compose_evenhub_app_url">URL de l\'application EvenHub</string>
-    <string name="compose_evenhub_log_empty">Le journal du runtime apparaitra ici.</string>
     <string name="compose_native_shortcut_add">Ajouter des raccourcis de plugins a l\'onglet Lunettes</string>
     <string name="compose_native_shortcut_enabled">%1$s est affiche dans l\'onglet Lunettes. Choisir un autre plugin deplace l\'emplacement.</string>
     <string name="compose_native_shortcut_disabled">Afficher les actions de %1$s dans l\'onglet Lunettes. Un seul plugin natif utilise cet emplacement a la fois.</string>

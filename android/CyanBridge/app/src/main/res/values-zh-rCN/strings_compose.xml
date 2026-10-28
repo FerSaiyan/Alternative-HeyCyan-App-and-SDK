@@ -1,9 +1,6 @@
 <resources>
     <string name="compose_action_load">加载</string>
     <string name="compose_action_stop">停止</string>
-    <string name="compose_evenhub_runtime_title">EvenHub 运行时</string>
-    <string name="compose_evenhub_app_url">EvenHub 应用 URL</string>
-    <string name="compose_evenhub_log_empty">运行时日志会显示在这里。</string>
     <string name="compose_native_shortcut_add">将插件快捷方式添加到眼镜页</string>
     <string name="compose_native_shortcut_enabled">%1$s 会显示在眼镜页。选择其他插件会移动快捷方式位置。</string>
     <string name="compose_native_shortcut_disabled">在眼镜页显示 %1$s 操作。同一时间只有一个原生插件使用此快捷方式位置。</string>

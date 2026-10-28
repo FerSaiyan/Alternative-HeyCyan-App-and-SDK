@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
+import com.fersaiyan.cyanbridge.shared.plugins.PluginEcosystemSection
 import com.fersaiyan.cyanbridge.shared.plugins.PluginTimeWindow
 import com.fersaiyan.cyanbridge.shared.ui.UiMessage
 import kotlinx.coroutines.CancellationException
@@ -16,6 +17,9 @@ import kotlinx.coroutines.launch
 interface CommunityPluginsPlatform {
     /** The native plugin cards for the selected glasses, with their saved switches. */
     fun nativePlugins(): List<NativePluginCardData>
+
+    /** Third-party ecosystem sections for the selected glasses (see PluginEcosystems.sectionsFor). */
+    fun ecosystemSections(): List<PluginEcosystemSection> = emptyList()
 
     suspend fun fetchCommunityPlugins(): List<CommunityPluginCardData>
 
@@ -32,6 +36,8 @@ class CommunityPluginsViewModel(private val platform: CommunityPluginsPlatform) 
         private set
     var nativePlugins by mutableStateOf(platform.nativePlugins())
         private set
+    var ecosystemSections by mutableStateOf(platform.ecosystemSections())
+        private set
     private var serverPluginsLoaded = false
 
     init {
@@ -45,6 +51,7 @@ class CommunityPluginsViewModel(private val platform: CommunityPluginsPlatform) 
     /** Re-reads the native plugin switches, which other screens may have changed. */
     fun refreshNativePlugins() {
         nativePlugins = platform.nativePlugins()
+        ecosystemSections = platform.ecosystemSections()
     }
 
     /** Shows a switch the host has applied (after any permission it needed). */

@@ -1,9 +1,6 @@
 <resources>
     <string name="compose_action_load">로드</string>
     <string name="compose_action_stop">중지</string>
-    <string name="compose_evenhub_runtime_title">EvenHub 런타임</string>
-    <string name="compose_evenhub_app_url">EvenHub 앱 URL</string>
-    <string name="compose_evenhub_log_empty">런타임 로그가 여기에 표시됩니다.</string>
     <string name="compose_native_shortcut_add">안경 탭에 플러그인 바로가기 추가</string>
     <string name="compose_native_shortcut_enabled">%1$s이(가) 안경 탭에 표시됩니다. 다른 플러그인을 선택하면 바로가기 슬롯이 이동합니다.</string>
     <string name="compose_native_shortcut_disabled">안경 탭에 %1$s 작업 표시. 한 번에 하나의 네이티브 플러그인만 이 슬롯을 사용합니다.</string>

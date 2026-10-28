@@ -1,9 +1,6 @@
 <resources>
     <string name="compose_action_load">Laden</string>
     <string name="compose_action_stop">Stopp</string>
-    <string name="compose_evenhub_runtime_title">EvenHub-Laufzeit</string>
-    <string name="compose_evenhub_app_url">EvenHub-App-URL</string>
-    <string name="compose_evenhub_log_empty">Hier wird das Laufzeitprotokoll angezeigt.</string>
     <string name="compose_native_shortcut_add">Plugin-Verknüpfungen zur Brillenseite hinzufügen</string>
     <string name="compose_native_shortcut_enabled">%1$s wird auf der Brillenseite angezeigt. Bei Auswahl eines anderen Plugins wird der Platz verschoben.</string>
     <string name="compose_native_shortcut_disabled">Aktionen von %1$s auf der Brillenseite anzeigen. Gleichzeitig kann nur ein natives Plugin diesen Platz verwenden.</string>

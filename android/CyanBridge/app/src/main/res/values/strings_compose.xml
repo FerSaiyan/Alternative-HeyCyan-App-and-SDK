@@ -1,9 +1,6 @@
 <resources>
     <string name="compose_action_load">Load</string>
     <string name="compose_action_stop">Stop</string>
-    <string name="compose_evenhub_runtime_title">EvenHub runtime</string>
-    <string name="compose_evenhub_app_url">EvenHub app URL</string>
-    <string name="compose_evenhub_log_empty">Runtime log will appear here.</string>
     <string name="compose_native_shortcut_add">Add plugin shortcuts to Glasses Tab</string>
     <string name="compose_native_shortcut_enabled">%1$s is shown in the Glasses tab. Selecting another plugin moves the shortcut slot.</string>
     <string name="compose_native_shortcut_disabled">Show %1$s actions in the Glasses tab. Only one native plugin uses this shortcut slot at a time.</string>

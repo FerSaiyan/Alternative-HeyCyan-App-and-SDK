@@ -64,6 +64,8 @@ import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.navigation.icon
 import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
+import com.fersaiyan.cyanbridge.shared.plugins.PluginEcosystem
+import com.fersaiyan.cyanbridge.shared.plugins.PluginEcosystemSection
 import com.fersaiyan.cyanbridge.shared.plugins.PluginTimeWindow
 import com.fersaiyan.cyanbridge.shared.ui.localizedDestinationLabel
 import kotlin.math.floor
@@ -90,6 +92,10 @@ fun CommunityPluginsScreen(
     onWatchTaskerTutorial: (() -> Unit)? = null,
     // Hosts that already draw the app-level navigation shell (iOS) pass false.
     showNavigationBar: Boolean = true,
+    // Third-party plugin ecosystems for the selected glasses (PluginEcosystems.sectionsFor).
+    ecosystemSections: List<PluginEcosystemSection> = emptyList(),
+    onOpenEcosystem: (PluginEcosystem) -> Unit = {},
+    onToggleEcosystem: (PluginEcosystem, Boolean) -> Unit = { _, _ -> },
 ) {
     var selectedPluginTitle by rememberSaveable { mutableStateOf<String?>(null) }
     var detailsPluginTitle by rememberSaveable { mutableStateOf<String?>(null) }
@@ -208,6 +214,17 @@ fun CommunityPluginsScreen(
                         plugin = plugin,
                         onOpenSettings = { onOpenNativePluginSettings(plugin.id) },
                         onToggle = { enabled -> onToggleNativePlugin(plugin.id, enabled) },
+                    )
+                }
+            }
+
+            ecosystemSections.forEach { section ->
+                item(key = "ecosystem-label-${section.ecosystem}") { PluginSectionLabel(ecosystemTitle(section.ecosystem)) }
+                item(key = "ecosystem-${section.ecosystem}") {
+                    PluginEcosystemCard(
+                        section = section,
+                        onOpen = { onOpenEcosystem(section.ecosystem) },
+                        onToggle = { enabled -> onToggleEcosystem(section.ecosystem, enabled) },
                     )
                 }
             }
@@ -457,6 +474,93 @@ private fun NativePluginCard(
                             contentDescription = stringResource(Res.string.plugins_settings_content_description, plugin.title),
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ecosystemTitle(ecosystem: PluginEcosystem): String = when (ecosystem) {
+    PluginEcosystem.MEMOMIND_WEB_PLUGINS -> stringResource(Res.string.plugins_ecosystem_memomind_title)
+    PluginEcosystem.MENTRA_MINIAPPS -> stringResource(Res.string.plugins_ecosystem_mentra_title)
+}
+
+/** A third-party ecosystem: what it is, an Open button, and its experimental switch when it has one. */
+@Composable
+private fun PluginEcosystemCard(
+    section: PluginEcosystemSection,
+    onOpen: () -> Unit,
+    onToggle: (Boolean) -> Unit,
+) {
+    val enabled = section.enabled
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("plugin_ecosystem_${section.ecosystem.name.lowercase()}"),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = when (section.ecosystem) {
+                        PluginEcosystem.MEMOMIND_WEB_PLUGINS -> stringResource(Res.string.plugins_ecosystem_memomind_body)
+                        PluginEcosystem.MENTRA_MINIAPPS -> stringResource(Res.string.plugins_ecosystem_mentra_body)
+                    },
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (enabled != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.plugins_ecosystem_experimental),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+            section.installedCount?.let { count ->
+                Text(
+                    text = stringResource(Res.string.plugins_ecosystem_installed, count),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (enabled != null) {
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = onToggle,
+                        modifier = Modifier.testTag("plugin_ecosystem_switch_${section.ecosystem.name.lowercase()}"),
+                    )
+                    Text(
+                        text = stringResource(Res.string.plugins_ecosystem_enable),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                FilledTonalButton(
+                    onClick = onOpen,
+                    enabled = enabled != false,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(Res.string.plugins_ecosystem_open))
                 }
             }
         }

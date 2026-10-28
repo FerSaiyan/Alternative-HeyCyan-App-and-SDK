@@ -13,6 +13,16 @@ enum class PluginEcosystem {
     MENTRA_MINIAPPS,
 }
 
+/**
+ * One ecosystem section of the Plugins page. [enabled] is the experimental switch (null for
+ * ecosystems without one); [installedCount] is shown when known.
+ */
+data class PluginEcosystemSection(
+    val ecosystem: PluginEcosystem,
+    val enabled: Boolean? = null,
+    val installedCount: Int? = null,
+)
+
 /** Which ecosystem sections the Plugins page shows for the selected glasses. */
 object PluginEcosystems {
     /**

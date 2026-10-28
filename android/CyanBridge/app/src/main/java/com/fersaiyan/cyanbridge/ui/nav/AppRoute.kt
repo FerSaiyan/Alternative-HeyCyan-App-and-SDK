@@ -6,8 +6,8 @@ import android.view.WindowManager
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalModelTestDestination
-import com.fersaiyan.cyanbridge.bridge.runtimes.evenhub.EvenHubRuntimeDestination
 import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationsDestination
+import com.fersaiyan.cyanbridge.plugins.mentra.MentraMiniappsDestination
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidSettingsDestination
 import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesSettingsDestination
 import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelaySettingsDestination
@@ -70,7 +70,7 @@ enum class AppRoute(
     LOCAL_MODEL_TEST(labelText = "Model performance test"),
     MENTRA_FIRMWARE_UPDATE(labelText = "Mentra Live firmware update"),
     MENTRA_BROADCAST(labelText = "Mentra Live broadcast"),
-    EVENHUB_RUNTIME,
+    MENTRA_MINIAPPS(labelText = "Mentra miniapps", softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE),
     WALKING_AID_SETTINGS(labelText = "Walking Aid Settings"),
     MEETING_SPARK_NOTES_SETTINGS(labelText = "Meeting Spark Notes Settings"),
     LIVE_CAPTION_RELAY_SETTINGS(labelText = "Live Caption Relay Settings"),
@@ -120,7 +120,7 @@ enum class AppRoute(
         LOCAL_MODEL_TEST -> LocalModelTestDestination()
         MENTRA_FIRMWARE_UPDATE -> MentraFirmwareUpdateDestination()
         MENTRA_BROADCAST -> MentraBroadcastDestination()
-        EVENHUB_RUNTIME -> EvenHubRuntimeDestination()
+        MENTRA_MINIAPPS -> MentraMiniappsDestination()
         WALKING_AID_SETTINGS -> WalkingAidSettingsDestination()
         MEETING_SPARK_NOTES_SETTINGS -> MeetingSparkNotesSettingsDestination()
         LIVE_CAPTION_RELAY_SETTINGS -> LiveCaptionRelaySettingsDestination()

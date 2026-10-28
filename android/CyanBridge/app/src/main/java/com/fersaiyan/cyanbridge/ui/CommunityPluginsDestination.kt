@@ -20,7 +20,9 @@ import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCapturePrefs
 import com.fersaiyan.cyanbridge.media.autocapture.AutoAudioCaptureService
+import com.fersaiyan.cyanbridge.devices.memomind.webplugin.MemoMindWebPluginsActivity
 import com.fersaiyan.cyanbridge.plugins.PluginVoicePermissions
+import com.fersaiyan.cyanbridge.plugins.mentra.MentraMiniappHost
 import com.fersaiyan.cyanbridge.plugins.settings.AndroidNativePluginHost
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidService
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
@@ -29,6 +31,12 @@ import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.CommunityPluginCatalogParser
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginIds
+import com.fersaiyan.cyanbridge.shared.plugins.PluginEcosystem
+import com.fersaiyan.cyanbridge.shared.plugins.PluginEcosystemSection
+import com.fersaiyan.cyanbridge.shared.plugins.PluginEcosystems
+import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
+import com.fersaiyan.cyanbridge.shared.prefs.PluginPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.shared.plugins.settings.nativePluginEnabledPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.shared.ui.UiMessage
@@ -192,6 +200,9 @@ class CommunityPluginsDestination : NavScreen() {
                     startActivity(AppRoute.PUBLISH_PLUGIN.intent(this))
                 },
                 onDestinationSelected = { if (it != AppDestination.PLUGINS) openAppDestination(it) },
+                ecosystemSections = viewModel.ecosystemSections,
+                onOpenEcosystem = ::openEcosystem,
+                onToggleEcosystem = ::toggleEcosystem,
             )
         }
     }
@@ -205,6 +216,20 @@ class CommunityPluginsDestination : NavScreen() {
 
     override fun onResume() {
         super.onResume()
+        viewModel.refreshNativePlugins()
+    }
+
+    private fun openEcosystem(ecosystem: PluginEcosystem) {
+        when (ecosystem) {
+            PluginEcosystem.MEMOMIND_WEB_PLUGINS -> startActivity(Intent(this, MemoMindWebPluginsActivity::class.java))
+            PluginEcosystem.MENTRA_MINIAPPS -> startActivity(AppRoute.MENTRA_MINIAPPS.intent(this))
+        }
+    }
+
+    private fun toggleEcosystem(ecosystem: PluginEcosystem, enabled: Boolean) {
+        if (ecosystem != PluginEcosystem.MENTRA_MINIAPPS) return
+        PluginPrefs.Community.mentraMiniappsEnabled[this] = enabled
+        if (!enabled) MentraMiniappHost.stopAll(this)
         viewModel.refreshNativePlugins()
     }
 
@@ -552,6 +577,15 @@ private class AndroidCommunityPluginsPlatform(private val context: Context) : Co
             ),
         )
     }
+
+    override fun ecosystemSections(): List<PluginEcosystemSection> =
+        PluginEcosystems.sectionsFor(GlassesFamilyProfiles.forClass(DeviceProfileStore.selectedClass(context))).map { ecosystem ->
+            when (ecosystem) {
+                PluginEcosystem.MEMOMIND_WEB_PLUGINS -> PluginEcosystemSection(ecosystem)
+                PluginEcosystem.MENTRA_MINIAPPS ->
+                    PluginEcosystemSection(ecosystem, enabled = PluginPrefs.Community.mentraMiniappsEnabled[context])
+            }
+        }
 
     override suspend fun fetchCommunityPlugins(): List<CommunityPluginCardData> = withContext(Dispatchers.IO) {
         val relayUrl = AiProviderPrefs.getRelayBaseUrl(context).trimEnd('/')

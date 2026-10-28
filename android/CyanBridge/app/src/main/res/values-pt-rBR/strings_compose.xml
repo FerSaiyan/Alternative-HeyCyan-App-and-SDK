@@ -1,9 +1,6 @@
 <resources>
     <string name="compose_action_load">Carregar</string>
     <string name="compose_action_stop">Parar</string>
-    <string name="compose_evenhub_runtime_title">Runtime do EvenHub</string>
-    <string name="compose_evenhub_app_url">URL do app EvenHub</string>
-    <string name="compose_evenhub_log_empty">O log do runtime aparecera aqui.</string>
     <string name="compose_native_shortcut_add">Adicionar atalhos de plugins a aba Oculos</string>
     <string name="compose_native_shortcut_enabled">%1$s aparece na aba Oculos. Selecionar outro plugin move o espaco do atalho.</string>
     <string name="compose_native_shortcut_disabled">Mostrar as acoes de %1$s na aba Oculos. Apenas um plugin nativo usa este espaco por vez.</string>

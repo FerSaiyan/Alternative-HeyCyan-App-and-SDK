@@ -1,9 +1,6 @@
 <resources>
     <string name="compose_action_load">Carica</string>
     <string name="compose_action_stop">Interrompi</string>
-    <string name="compose_evenhub_runtime_title">Runtime EvenHub</string>
-    <string name="compose_evenhub_app_url">URL app EvenHub</string>
-    <string name="compose_evenhub_log_empty">Il log del runtime apparira qui.</string>
     <string name="compose_native_shortcut_add">Aggiungi scorciatoie plugin alla scheda Occhiali</string>
     <string name="compose_native_shortcut_enabled">%1$s viene mostrato nella scheda Occhiali. Selezionando un altro plugin lo spazio viene spostato.</string>
     <string name="compose_native_shortcut_disabled">Mostra le azioni di %1$s nella scheda Occhiali. Uno solo plugin nativo usa questo spazio alla volta.</string>

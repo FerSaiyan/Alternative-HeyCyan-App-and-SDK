@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="plugins_ecosystem_memomind_title">MemoMind Web plugins</string>
+    <string name="plugins_ecosystem_memomind_body">Web plugins built with the MemoMind PhoneSDK (.mmpkg). CyanBridge runs them in a sandbox with only the permissions you allow.</string>
+    <string name="plugins_ecosystem_mentra_title">Mentra miniapps</string>
+    <string name="plugins_ecosystem_mentra_body">Miniapps from the Mentra Miniapp Store or a developer\'s miniapp URL, shown on your glasses\' display. Captions and Teleprompter work; features that need Mentra\'s cloud are unavailable.</string>
+    <string name="plugins_ecosystem_experimental">Experimental</string>
+    <string name="plugins_ecosystem_open">Open</string>
+    <string name="plugins_ecosystem_enable">Enable Mentra miniapps</string>
+    <string name="plugins_ecosystem_installed">%1$d installed</string>
+</resources>
