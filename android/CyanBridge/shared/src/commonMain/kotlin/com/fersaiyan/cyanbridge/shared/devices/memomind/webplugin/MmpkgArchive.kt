@@ -20,6 +20,14 @@ object MmpkgLimits {
     const val MAX_PATH_LENGTH = 512
 }
 
+/** Size limits [MmpkgZip.read] enforces; the defaults are the `.mmpkg` ones. Messages name them in MB. */
+data class ZipLimits(
+    val maxPackageBytes: Int = MmpkgLimits.MAX_PACKAGE_BYTES,
+    val maxExtractedBytes: Long = MmpkgLimits.MAX_EXTRACTED_BYTES.toLong(),
+    val maxFileBytes: Int = MmpkgLimits.MAX_FILE_BYTES,
+    val maxFiles: Int = MmpkgLimits.MAX_FILES,
+)
+
 /**
  * A strict reader for the ZIP container of an `.mmpkg`: one disk, no ZIP64, no encryption,
  * methods STORED and DEFLATE, regular files and directory entries only (symbolic links and
@@ -39,8 +47,8 @@ internal object MmpkgZip {
     private const val UNIX_DIRECTORY = 0x4000
 
     /** Path to content of every regular file, in archive order. */
-    fun read(archive: ByteArray, inflater: RawInflater): LinkedHashMap<String, ByteArray> {
-        if (archive.size > MmpkgLimits.MAX_PACKAGE_BYTES) fail("The package is larger than 10 MB")
+    fun read(archive: ByteArray, inflater: RawInflater, limits: ZipLimits = ZipLimits()): LinkedHashMap<String, ByteArray> {
+        if (archive.size > limits.maxPackageBytes) fail("The package is larger than ${limits.maxPackageBytes.mb()} MB")
         val end = findEnd(archive)
         if (u16(archive, end + 4) != 0 || u16(archive, end + 6) != 0) fail("Multi-disk archives are not supported")
         val count = u16(archive, end + 10)
@@ -87,10 +95,10 @@ internal object MmpkgZip {
             requireSafePath(name)
             if (!seen.add(name.lowercase())) fail("Duplicate file $name")
             if (method != METHOD_STORED && method != METHOD_DEFLATE) fail("Unsupported compression in $name")
-            if (size > MmpkgLimits.MAX_FILE_BYTES) fail("$name is larger than 10 MB")
+            if (size > limits.maxFileBytes) fail("$name is larger than ${limits.maxFileBytes.mb()} MB")
             total += size
-            if (total > MmpkgLimits.MAX_EXTRACTED_BYTES) fail("The package expands to more than 30 MB")
-            if (entries.size >= MmpkgLimits.MAX_FILES) fail("The package has more than 500 files")
+            if (total > limits.maxExtractedBytes) fail("The package expands to more than ${(limits.maxExtractedBytes / MB).toInt()} MB")
+            if (entries.size >= limits.maxFiles) fail("The package has more than ${limits.maxFiles} files")
             entries += Entry(name, rawName, method, crc, compressedSize.toInt(), size.toInt(), localOffset.toInt())
         }
 
@@ -156,6 +164,9 @@ internal object MmpkgZip {
         u16(data, offset).toLong() or (u16(data, offset + 2).toLong() shl 16)
 
     private fun fail(message: String): Nothing = throw MmpkgException(message)
+
+    private const val MB = 1024 * 1024
+    private fun Int.mb() = this / MB
 }
 
 /** CRC-32 (IEEE 802.3), as used by ZIP. */
