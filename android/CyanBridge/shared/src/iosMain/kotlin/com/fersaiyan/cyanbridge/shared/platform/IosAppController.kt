@@ -21,6 +21,8 @@ import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice
 import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueProtocol
+import com.fersaiyan.cyanbridge.shared.devices.mentra.Ar99Advertisement
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
 import com.fersaiyan.cyanbridge.shared.devices.memomind.MemoMindDisplayAdapter
 import com.fersaiyan.cyanbridge.shared.devices.memomind.MemoMindSession
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
@@ -59,8 +61,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import platform.CoreBluetooth.CBAdvertisementDataManufacturerDataKey
 import platform.CoreBluetooth.CBAdvertisementDataServiceUUIDsKey
 import platform.CoreBluetooth.CBUUID
+import platform.Foundation.NSData
 
 private const val IOS_BLE_CONNECT_TIMEOUT_MS = 20_000L
 private const val GLASSES_CHAT_ID = "glasses-assistant"
@@ -229,6 +233,11 @@ internal class IosAppController {
             DeviceClass.MOYOUNG_W620,
             DeviceClass.META_RAYBAN,
             DeviceClass.MENTRA_LIVE,
+            DeviceClass.EVEN_G1,
+            DeviceClass.EVEN_G2,
+            DeviceClass.MENTRA_DISPLAY,
+            DeviceClass.NIMO,
+            DeviceClass.XINGYI_AR99,
             -> otherGlasses.sdkDevice(selectedDeviceClass)
             DeviceClass.MEIZU_MYVU -> otherGlasses.meizuDevice
             DeviceClass.MEMOMIND -> memoMindGlasses
@@ -432,11 +441,17 @@ internal class IosAppController {
                     }
                 }
                 bleManager.startScan(timeoutMs = 15_000L).collect { found ->
-                    val detected = BleDeviceClassifier.guessDeviceClass(
-                        advertisedName = found.name,
-                        serviceUuids = advertisedServiceUuids(found.advertisementData),
-                        heyCyanServiceUuids = heyCyan.serviceUuids,
-                    )
+                    // G1/G2: the Mentra SDK connects both arms from the left one.
+                    if (MentraSdkModel.isSecondaryArm(found.name)) return@collect
+                    val detected = if (isAr99Advertisement(found.advertisementData)) {
+                        DeviceClass.XINGYI_AR99
+                    } else {
+                        BleDeviceClassifier.guessDeviceClass(
+                            advertisedName = found.name,
+                            serviceUuids = advertisedServiceUuids(found.advertisementData),
+                            heyCyanServiceUuids = heyCyan.serviceUuids,
+                        )
+                    }
                     _deviceBindState.value?.let { bind ->
                         bind.onDevicesChanged(bind.devices.upsert(found.identifier, found.name, found.rssi, detected))
                     }
@@ -449,6 +464,16 @@ internal class IosAppController {
 
     fun selectDevice(device: ScannedDevice) {
         _deviceBindState.value?.selectDevice(device)
+    }
+
+    /**
+     * True for an AR99 with its exact project ID. CoreBluetooth gives the manufacturer data alone
+     * (company ID first), so it is wrapped as one advertising structure for the shared parser.
+     */
+    private fun isAr99Advertisement(advertisementData: Map<String, Any>): Boolean {
+        val data = (advertisementData[CBAdvertisementDataManufacturerDataKey] as? NSData)?.toKotlinBytes() ?: return false
+        if (data.size > 254) return false
+        return Ar99Advertisement.parse(byteArrayOf((data.size + 1).toByte(), 0xFF.toByte()) + data + byteArrayOf(0)) != null
     }
 
     private fun advertisedServiceUuids(advertisementData: Map<String, Any>): List<String> =
@@ -485,9 +510,15 @@ internal class IosAppController {
         when (connection.deviceClass) {
             DeviceClass.META_RAYBAN -> pairMetaGlasses()
             // The Mentra SDK connects to the chosen glasses (by identifier, then name).
-            DeviceClass.MENTRA_LIVE -> pairSdkGlasses(
-                DeviceClass.MENTRA_LIVE,
-                device.advertisedName ?: DeviceClass.MENTRA_LIVE.displayName(),
+            DeviceClass.MENTRA_LIVE,
+            DeviceClass.EVEN_G1,
+            DeviceClass.EVEN_G2,
+            DeviceClass.MENTRA_DISPLAY,
+            DeviceClass.NIMO,
+            DeviceClass.XINGYI_AR99,
+            -> pairSdkGlasses(
+                connection.deviceClass,
+                device.advertisedName ?: connection.deviceClass.displayName(),
                 identifier = device.macAddress,
             )
             DeviceClass.GENERIC_AUDIO -> saveProfileAndConnect(device, DeviceClass.GENERIC_AUDIO, connect = false)

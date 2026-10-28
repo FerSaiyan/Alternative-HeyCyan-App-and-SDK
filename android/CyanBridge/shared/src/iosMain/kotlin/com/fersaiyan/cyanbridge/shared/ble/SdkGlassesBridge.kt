@@ -86,6 +86,10 @@ object SdkGlassesActions {
     const val META_UNREGISTER = "meta_unregister"
     const val META_OPEN_META_AI = "meta_open_meta_ai"
     const val META_DIAGNOSTICS = "meta_diagnostics"
+
+    /** Mentra display glasses: show the argument (one wrapped screen) / clear the display. */
+    const val DISPLAY_TEXT = "display_text"
+    const val CLEAR_DISPLAY = "clear_display"
 }
 
 /** Keys for [SdkGlassesListener.onStatus]. */

@@ -14,6 +14,7 @@ enum SdkGlassesSetup {
         #endif
         #if canImport(MentraBluetoothSDK)
         SdkGlassesRegistry.shared.register(bridge: MentraGlassesBridge.shared)
+        MentraGlassesBridge.displayBridges.forEach { SdkGlassesRegistry.shared.register(bridge: $0) }
         #endif
     }
 

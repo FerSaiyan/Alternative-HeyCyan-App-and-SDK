@@ -24,6 +24,20 @@ import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsSession
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraDisplayAdapter
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraDisplayInput
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraDisplayPort
+import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
+import com.fersaiyan.cyanbridge.bridge.core.BridgeError
+import com.fersaiyan.cyanbridge.bridge.core.DeviceInfo
+import com.fersaiyan.cyanbridge.bridge.core.GlassesBridgeState
+import com.fersaiyan.cyanbridge.bridge.core.GlassesCapability
+import com.fersaiyan.cyanbridge.bridge.core.GlassesDeviceAdapter
+import com.fersaiyan.cyanbridge.bridge.core.InputEvent
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesMediaCounts
@@ -85,6 +99,9 @@ internal class IosOtherGlasses(
     var isSdkConnected: Boolean = false
         private set
 
+    /** The SDK connection as a bridge state, for the Mentra display adapters. */
+    private val sdkBridgeState = MutableStateFlow<GlassesBridgeState>(GlassesBridgeState.Disconnected)
+
     /**
      * Hybrid Meta registration (see MetaRegistration.kt). iOS DAT 1.0 does not expose isDevMode,
      * so the path is only known for an app id of "0", where it can only be Developer Mode.
@@ -119,6 +136,11 @@ internal class IosOtherGlasses(
                     agentStatus = label.ifBlank { it.agentStatus },
                 )
             }
+            sdkBridgeState.value = when (state) {
+                SdkConnectionState.CONNECTED -> GlassesBridgeState.Connected
+                SdkConnectionState.CONNECTING -> GlassesBridgeState.Connecting
+                else -> GlassesBridgeState.Disconnected
+            }
             if (connected != isSdkConnected) {
                 isSdkConnected = connected
                 host.onSdkConnectionChanged(connected)
@@ -144,7 +166,16 @@ internal class IosOtherGlasses(
 
         override fun onButton(gesture: String) {
             PlatformLogger.i(TAG, "Glasses button: $gesture")
-            host.onGlassesButton()
+            val display = (sdkDevices[deviceClass] as? SdkGlasses)?.displayAdapter
+            if (display == null) return host.onGlassesButton()
+            // Mentra display glasses: long press asks, tap pages, double tap clears (as on Android).
+            val input = MentraDisplayInput.touch(gesture) ?: return
+            when (MentraDisplayInput.actionFor(input)) {
+                MentraDisplayInput.Action.VOICE_QUESTION -> host.onGlassesButton()
+                MentraDisplayInput.Action.NEXT_PAGE -> scope.launch { display.showNextPage() }
+                MentraDisplayInput.Action.CLEAR_DISPLAY -> scope.launch { display.clearDisplay() }
+                MentraDisplayInput.Action.NONE -> Unit
+            }
         }
 
         override fun onStatus(key: String, value: String) {
@@ -252,6 +283,8 @@ internal class IosOtherGlasses(
         !usesSdk || sdkBridge != null -> null
         deviceClass == DeviceClass.MOYOUNG_W620 ->
             "MoYoung glasses need a device build with the MoYoung SDK (run ios/scripts/fetch_moyoung_sdk.sh)"
+        MentraSdkModel.forClass(deviceClass)?.onIos == false ->
+            "${deviceClass.displayName()} needs the Android app: the Mentra SDK's iOS package leaves out its driver"
         else -> "${deviceClass.displayName()} needs a device build of the iOS app"
     }
 
@@ -346,6 +379,14 @@ internal class IosOtherGlasses(
     }
 
     private inner class SdkGlasses(override val profile: GlassesFamilyProfile) : IosGlassesDevice {
+        /** Mentra display glasses only: text through the bridge's display actions (Android: MentraLiveManager). */
+        val displayAdapter: MentraDisplayAdapter? =
+            MentraSdkModel.forClass(profile.deviceClass)?.takeIf { it.hasDisplay }?.let { model ->
+                MentraDisplayAdapter(BridgeDisplayPort(model), scope)
+            }
+
+        override val answerDisplay: GlassesDeviceAdapter? get() = displayAdapter
+
         override val connection = object : GlassesConnectionControl {
             override fun scan() = bleConnection.scan()
 
@@ -449,6 +490,38 @@ internal class IosOtherGlasses(
         }
     }
 
+    /** A Mentra display model over the Swift bridge of the selected class. */
+    private inner class BridgeDisplayPort(private val model: MentraSdkModel) : MentraDisplayPort {
+        override val displayModel: MentraSdkModel? get() = model.takeIf { deviceClass == it.deviceClass }
+        override val bridgeState: StateFlow<GlassesBridgeState> get() = sdkBridgeState
+        override val inputEvents: Flow<InputEvent> = emptyFlow()
+        override fun batteryLevel(): Int? = host.dashboard.batteryPercent
+
+        override suspend fun displayText(text: String) {
+            perform(SdkGlassesActions.DISPLAY_TEXT, text)
+        }
+
+        override suspend fun clearDisplay() {
+            perform(SdkGlassesActions.CLEAR_DISPLAY, "")
+        }
+
+        private suspend fun perform(action: String, argument: String) {
+            val bridge = sdkBridge ?: throw BridgeError.NotConnected(missingSdkMessage() ?: "SDK unavailable")
+            bridge.awaitPerform(action, argument).getOrThrow()
+        }
+
+        override suspend fun connect(device: DeviceInfo) {
+            connectSdk(device.address, device.name).getOrThrow()
+        }
+
+        override suspend fun disconnect() = disconnectSdk()
+
+        // The iOS bridge does not stream the Mentra microphone; voice questions use the phone's route.
+        override fun openMicrophone(owner: String) = throw BridgeError.UnsupportedCapability(GlassesCapability.MICROPHONE_AUDIO)
+
+        override fun closeMicrophone(owner: String) = Unit
+    }
+
     private inner class MeizuGlasses : IosGlassesDevice {
         override val profile: GlassesFamilyProfile = GlassesFamilyProfiles.meizuMyvu
         override val connection: GlassesConnectionControl = bleConnection
@@ -467,7 +540,8 @@ internal class IosOtherGlasses(
 
     companion object {
         private const val TAG = "IosOtherGlasses"
-        val SDK_CLASSES = setOf(DeviceClass.MOYOUNG_W620, DeviceClass.META_RAYBAN, DeviceClass.MENTRA_LIVE)
+        val SDK_CLASSES = setOf(DeviceClass.MOYOUNG_W620, DeviceClass.META_RAYBAN) +
+            MentraSdkModel.entries.map { it.deviceClass }
         const val MEIZU_UNSUPPORTED =
             "Meizu MYVU display features need the Android app: after the Bluetooth LE handshake the glasses " +
                 "only talk over classic Bluetooth (RFCOMM), which iOS apps cannot open. Pair them in iOS " +
