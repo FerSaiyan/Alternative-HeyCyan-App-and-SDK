@@ -13,6 +13,22 @@ class ScannedDevice(
     var serviceUuids: List<ParcelUuid> = emptyList(),
 ) {
     var connectionAddress: String = macAddress
+
+    /** Other addresses the same unit was seen with, e.g. a TuneBuds BLE advert next to its Classic row. */
+    private val otherAddresses = mutableSetOf<String>()
+
+    fun hasAddress(address: String): Boolean =
+        address.equals(macAddress, ignoreCase = true) ||
+            address.equals(connectionAddress, ignoreCase = true) ||
+            address.uppercase() in otherAddresses
+
+    fun addAddress(address: String) {
+        if (!hasAddress(address)) otherAddresses += address.uppercase()
+    }
+
+    /** [macAddress], [connectionAddress] and every other address this row answers to. */
+    fun addresses(): Set<String> = otherAddresses + macAddress.uppercase() + connectionAddress.uppercase()
+
     var detectedClass: DeviceClass = DeviceClassifier.guessDeviceClass(
         advertisedName,
         serviceUuids,
@@ -40,4 +56,24 @@ class ScannedDevice(
     }
 
     override fun hashCode(): Int = macAddress.uppercase().hashCode()
+}
+
+/**
+ * The row for a unit seen as [address] (plus, for a TuneBuds BLE advert, the Classic
+ * [connectionAddress] from its manufacturer data), or null when no row knows either. Rows that
+ * turn out to be the same unit (a bonded or Classic-inquiry row and an advert row) fold into the
+ * first one, which then answers to all their addresses, so later scans that carry only the BLE
+ * address update it instead of adding a row.
+ */
+fun MutableList<ScannedDevice>.mergeRowFor(address: String, connectionAddress: String?): ScannedDevice? {
+    val keys = listOfNotNull(address, connectionAddress)
+    val matching = filter { row -> keys.any(row::hasAddress) }
+    val row = matching.firstOrNull() ?: return null
+    matching.drop(1).forEach { duplicate ->
+        removeAll { it === duplicate }
+        duplicate.addresses().forEach(row::addAddress)
+    }
+    keys.forEach(row::addAddress)
+    connectionAddress?.let { row.connectionAddress = it }
+    return row
 }

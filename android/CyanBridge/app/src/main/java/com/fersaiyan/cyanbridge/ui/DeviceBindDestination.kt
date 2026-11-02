@@ -20,6 +20,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -37,6 +38,7 @@ import com.fersaiyan.cyanbridge.devices.memomind.MemoMindManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.ScannedDevice
+import com.fersaiyan.cyanbridge.devices.mergeRowFor
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindConnection
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindScreen
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindViewModel
@@ -78,18 +80,28 @@ class DeviceBindDestination : NavScreen() {
     private var initialScanStarted = false
     private var classicReceiverRegistered = false
 
-    /** Classic inquiry results: TuneBuds/MemoMind units that talk SPP and may not advertise over BLE. */
+    /**
+     * Classic inquiry results: TuneBuds/MemoMind units that talk SPP and may not advertise over BLE.
+     * Registered exported: the Bluetooth stack sends ACTION_FOUND as its own uid (1002), not as
+     * the system, and Android 14+ drops that at a not-exported receiver ("Exported Denial").
+     * The filter holds only [CLASSIC_DISCOVERY_ACTIONS] (protected, system-sent), and the intent is
+     * still read defensively since any app can reach an exported receiver.
+     */
     private val classicDiscoveryReceiver = object : BroadcastReceiver() {
         @SuppressLint("MissingPermission")
         override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action !in CLASSIC_DISCOVERY_ACTIONS) return
             if (!hasBluetooth(this@DeviceBindDestination)) return
-            @Suppress("DEPRECATION")
-            val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE) ?: return
+            val device = runCatching {
+                IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            }.getOrNull() ?: return
+            val address = runCatching { device.address }.getOrNull()
+                ?.takeIf(BluetoothAdapter::checkBluetoothAddress) ?: return
             if (runCatching { device.type }.getOrNull() == BluetoothDevice.DEVICE_TYPE_LE) return
-            val name = intent.getStringExtra(BluetoothDevice.EXTRA_NAME) ?: runCatching { device.name }.getOrNull()
+            val name = runCatching { intent.getStringExtra(BluetoothDevice.EXTRA_NAME) ?: device.name }.getOrNull()
             if (!BleDeviceClassifier.isClassicGlassesName(name)) return
-            val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0).toInt()
-            upsertDevice(device.address, name, rssi, connectionAddress = device.address)
+            val rssi = runCatching { intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0).toInt() }.getOrDefault(0)
+            upsertDevice(address, name, rssi, connectionAddress = address)
         }
     }
     private var lastDeviceListPublishAtMs = 0L
@@ -100,11 +112,8 @@ class DeviceBindDestination : NavScreen() {
         ContextCompat.registerReceiver(
             this,
             classicDiscoveryReceiver,
-            IntentFilter().apply {
-                addAction(BluetoothDevice.ACTION_FOUND)
-                addAction(BluetoothDevice.ACTION_NAME_CHANGED)
-            },
-            ContextCompat.RECEIVER_NOT_EXPORTED,
+            IntentFilter().apply { CLASSIC_DISCOVERY_ACTIONS.forEach(::addAction) },
+            ContextCompat.RECEIVER_EXPORTED,
         )
         classicReceiverRegistered = true
         setContent {
@@ -519,20 +528,13 @@ class DeviceBindDestination : NavScreen() {
         // G1/G2: the SDK connects both arms from the left one, so the right arm gets no row.
         if (MentraSdkModel.isSecondaryArm(sanitizedName)) return
         // A TuneBuds BLE advert (connectionAddress = its Classic address) and the same unit found
-        // bonded or by Classic inquiry share one row.
-        val keys = listOfNotNull(mac, connectionAddress)
-        val matching = deviceList.filter { row ->
-            keys.any { it.equals(row.macAddress, ignoreCase = true) || it.equals(row.connectionAddress, ignoreCase = true) }
-        }
-        // The advert can arrive first without its Classic address (onLeScan): fold that row in.
-        if (matching.size > 1) deviceList.removeAll(matching.drop(1).toSet())
-        val existingIndex = matching.firstOrNull()?.let(deviceList::indexOf) ?: -1
-        if (existingIndex >= 0) {
-            val existing = deviceList[existingIndex]
+        // bonded or by Classic inquiry share one row, which keeps both addresses.
+        val rowsBefore = deviceList.size
+        val existing = deviceList.mergeRowFor(mac, connectionAddress)
+        if (existing != null) {
             val previousName = existing.advertisedName
             val previousClass = existing.detectedClass
             existing.rssi = rssi
-            connectionAddress?.let { existing.connectionAddress = it }
             if (existing.advertisedName.isNullOrBlank() && sanitizedName != null) {
                 existing.advertisedName = sanitizedName
             }
@@ -546,7 +548,9 @@ class DeviceBindDestination : NavScreen() {
                 ),
             )
             publishDevices(
-                force = previousName != existing.advertisedName || previousClass != existing.detectedClass,
+                force = deviceList.size != rowsBefore ||
+                    previousName != existing.advertisedName ||
+                    previousClass != existing.detectedClass,
             )
             return
         }
@@ -655,7 +659,7 @@ class DeviceBindDestination : NavScreen() {
             val address = bluetoothDevice.address
             val name = runCatching { scanRecord?.deviceName ?: bluetoothDevice.name }.getOrNull()
             Ar99Advertisement.parse(scanRecord?.bytes)?.let { ar99Advertisements[address.uppercase()] = it }
-            val rssi = deviceList.firstOrNull { it.macAddress.equals(address, true) }?.rssi ?: 0
+            val rssi = deviceList.firstOrNull { it.hasAddress(address) }?.rssi ?: 0
             val manufacturerData = scanRecord?.manufacturerSpecificData
             val companyIds = buildSet {
                 if (manufacturerData != null) {
@@ -703,5 +707,6 @@ class DeviceBindDestination : NavScreen() {
         const val HEY_CYAN_MAX_AUDIO_SECONDS = 7_200
         const val EYEVUE_MAX_RECORDING_SECONDS = 600
         val TUNEBUDS_COMPANY_IDS = setOf(0x475A, 0x455A, 0x535A, 0x4D5A)
+        val CLASSIC_DISCOVERY_ACTIONS = setOf(BluetoothDevice.ACTION_FOUND, BluetoothDevice.ACTION_NAME_CHANGED)
     }
 }
