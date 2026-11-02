@@ -88,6 +88,12 @@ internal class DeviceConnectionCoordinator(
         }
     }
 
+    override fun onTuneBudsWakeWord() {
+        if (connectionHost.isAiHijackEnabled) {
+            connectionHost.handleAiWakeWordActivation("tunebuds")
+        }
+    }
+
     override fun onTuneBudsStateChanged(tuneBuds: TuneBudsState) {
         val storage = tuneBuds.storage?.let {
             "${it.usedMiB} MiB used / ${it.freeMiB} MiB free"

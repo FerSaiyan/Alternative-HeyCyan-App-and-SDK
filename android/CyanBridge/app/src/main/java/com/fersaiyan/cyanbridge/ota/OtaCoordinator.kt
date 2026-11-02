@@ -61,6 +61,11 @@ internal class OtaCoordinator(
     }
 
     private val otaManager: OtaManager get() = otaManagerProvider()
+
+    init {
+        // The Pro customization card installs custom HeyCyan firmware through this coordinator.
+        customFirmwareHost = java.lang.ref.WeakReference(this)
+    }
     private val bleReadiness = OtaBleReadiness()
     var otaPreparationJob: Job? = null
     private var pendingPersonalFirmwareTarget: OtaTarget? = null
@@ -332,6 +337,25 @@ internal class OtaCoordinator(
             OtaFirmwareSource.DEBUG_CATALOG,
             -> startCatalogOta(source)
         }
+    }
+
+    /**
+     * Installs a customer's custom HeyCyan firmware (from the Pro customization card) through the
+     * same combined OTA as personal files. Returns null when the OTA started, else why not.
+     */
+    fun startCustomFirmware(wifiFile: File, bleFile: File): String? {
+        if (host.rejectHeyCyanOnlyFeature("HeyCyan OTA")) return "Select your HeyCyan glasses first."
+        if (!hasBluetooth(activity) || !hasWifiP2pPermission(activity)) {
+            return "Allow Bluetooth and Wi-Fi Direct access (start a firmware update from the Glasses dashboard once), then try again."
+        }
+        if (otaManager.isActive || otaPreparationJob?.isActive == true || otaSessionLease != null) {
+            return "A firmware update is already running."
+        }
+        if (AutoAudioCaptureService.isRunning()) return "Stop auto audio capture before starting a firmware update."
+        val otaLease = host.acquireExclusiveGlassesSession(GlassesSession.OTA) ?: return "The glasses are busy. Try again in a moment."
+        otaSessionLease = otaLease
+        startCombinedOtaWithLease(wifiFile, bleFile, OtaFirmwareSource.PERSONAL_FILE, otaLease)
+        return null
     }
 
     /** Result of the personal firmware document picker registered by the activity. */
@@ -852,3 +876,7 @@ internal fun OtaTarget.toOtaTargetSelection(): com.fersaiyan.cyanbridge.shared.g
     OtaTarget.V821_WIFI -> com.fersaiyan.cyanbridge.shared.glasses.OtaTargetSelection.V821_WIFI
     OtaTarget.JIELI_BLE -> com.fersaiyan.cyanbridge.shared.glasses.OtaTargetSelection.JIELI_BLE
 }
+
+/** The live coordinator, for [startCustomFirmware] calls from the Pro customization card. */
+@Volatile
+internal var customFirmwareHost: java.lang.ref.WeakReference<OtaCoordinator>? = null

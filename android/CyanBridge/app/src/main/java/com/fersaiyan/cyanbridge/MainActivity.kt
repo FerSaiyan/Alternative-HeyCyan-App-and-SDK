@@ -1726,8 +1726,8 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 //Glasses activate microphone / AI button
-                0x03 -> {
-                    if (response.loadData.size > 7 && response.loadData[7].toInt() == 1) {
+                0x03 -> { // During a customization mic capture this is the echo of our own start: ignored.
+                    if (response.loadData.size > 7 && response.loadData[7].toInt() == 1 && !com.fersaiyan.cyanbridge.customization.HeyCyanMicCapture.isCapturing.get()) {
                         Log.i("DeviceNotify", "AI Button Pressed - Hijacking to Phone Assistant")
                         if (isAiHijackEnabled) {
                             handleAiWakeWordActivation("heycyan")

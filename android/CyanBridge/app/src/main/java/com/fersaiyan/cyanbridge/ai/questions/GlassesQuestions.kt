@@ -277,6 +277,9 @@ internal class GlassesQuestions private constructor(context: Context) : Question
         runOnUiThread {
             if (source == "eyevue") {
                 EyevueManager.getInstance(appContext).stopVoiceRecognition()
+            } else if (source == "tunebuds") {
+                // The phone answers; close the AI chat the glasses opened on their wake word.
+                com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager.getInstance(appContext).closeAiChat()
             } else {
                 stopGlassesAiAudio("$source wake-word route")
             }

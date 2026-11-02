@@ -7,6 +7,10 @@ import com.fersaiyan.cyanbridge.glasses.GlassesPhotoCapture
 import com.fersaiyan.cyanbridge.glasses.NativeGlassesPhotoCapture
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsAiPhotoListener
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFota
+import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsProtocol
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.withTimeoutOrNull
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsMediaCounts
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsSessionState
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsStorageInfo
@@ -51,6 +55,7 @@ data class TuneBudsState(
 class TuneBudsManager private constructor(context: Context) {
     companion object {
         private const val TAG = "TuneBudsManager"
+        private const val MIC_REQUEST_WAIT_MS = 2_000L
 
         @Volatile
         private var instance: TuneBudsManager? = null
@@ -76,6 +81,9 @@ class TuneBudsManager private constructor(context: Context) {
     )
 
     val state: StateFlow<TuneBudsState> = _state.asStateFlow()
+
+    /** The glasses opened an AI chat on their own (their wake word): 1 = SCO, 2 = Opus. */
+    val wakeWordEvents: SharedFlow<Int> get() = session.wakeEvents
 
     init {
         session.aiPhotoListener = object : TuneBudsAiPhotoListener {
@@ -231,6 +239,66 @@ class TuneBudsManager private constructor(context: Context) {
         return TuneBudsRtspStartup(session.frames, session::request).open(
             credentials.ssid, credentials.password, credentials.channel, quality,
         )
+    }
+
+    /** Re-reads the firmware version, model and coprocessor version; returns the session state. */
+    suspend fun refreshVersions() = operationMutex.withLock {
+        if (client.isConnected) runCatching { session.requestVersion() }
+        session.state.value
+    }
+
+    /**
+     * Opens the glasses microphone as Opus over 0xB2 (AI chat, Opus mode); [listener] gets the raw
+     * 0xB2 bytes. The glasses may not answer the request itself, so only a short wait is spent on it.
+     */
+    suspend fun startMicStream(listener: (ByteArray) -> Unit): Boolean {
+        if (!client.isConnected) return false
+        session.micAudioListener = listener
+        return runCatching {
+            withTimeoutOrNull(MIC_REQUEST_WAIT_MS) {
+                session.request(TuneBudsProtocol.CMD_AI_CHAT_STATE, byteArrayOf(TuneBudsProtocol.AI_CHAT_OPEN_OPUS.toByte()))
+            } ?: Log.i(TAG, "TuneBuds sent no response to the Opus mic request; waiting for audio anyway")
+            true
+        }.getOrElse { error ->
+            Log.w(TAG, "Could not open the TuneBuds microphone", error)
+            session.micAudioListener = null
+            false
+        }
+    }
+
+    suspend fun stopMicStream() {
+        try {
+            if (client.isConnected) {
+                runCatching {
+                    withTimeoutOrNull(MIC_REQUEST_WAIT_MS) {
+                        session.request(TuneBudsProtocol.CMD_AI_CHAT_STATE, byteArrayOf(TuneBudsProtocol.AI_CHAT_CLOSE.toByte()))
+                    }
+                }
+            }
+        } finally {
+            session.micAudioListener = null
+        }
+    }
+
+    /** Closes an AI chat the glasses opened (request 0xB0 [00]); fire and forget. */
+    fun closeAiChat() {
+        scope.launch {
+            if (!client.isConnected) return@launch
+            runCatching {
+                session.sendWithoutResponse(TuneBudsProtocol.CMD_AI_CHAT_STATE, byteArrayOf(TuneBudsProtocol.AI_CHAT_CLOSE.toByte()))
+            }.onFailure { Log.w(TAG, "Could not close the TuneBuds AI chat", it) }
+        }
+    }
+
+    /** AB Mate firmware update (the glasses verify the whole image before applying it). */
+    suspend fun installFirmware(
+        image: ByteArray,
+        md5Prefix: ByteArray,
+        version: Long,
+        onProgress: (Long, Long) -> Unit,
+    ): TuneBudsFota.Outcome = operationMutex.withLock {
+        if (!client.isConnected) return@withLock TuneBudsFota.Outcome.Failed("TuneBuds Bluetooth is not connected")
+        TuneBudsFota(session).push(image, md5Prefix, version, onProgress)
     }
 
     private fun launchCommand(operation: String, usesCamera: Boolean = false, block: suspend () -> Unit) {

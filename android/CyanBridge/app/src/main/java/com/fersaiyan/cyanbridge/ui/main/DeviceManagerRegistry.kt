@@ -49,6 +49,7 @@ internal class DeviceManagerRegistry(
         fun onEyevueStateChanged(eyevue: EyevueState)
         fun onEyevueWakeWord()
         fun onTuneBudsStateChanged(tuneBuds: TuneBudsState)
+        fun onTuneBudsWakeWord()
         fun onMoyoungW620StateChanged(moyoung: MoyoungW620State)
         fun onEyevueLivePreviewStateChanged(manager: EyevueLivePreviewManager, lp: LivePreviewState)
         fun onTuneBudsLivePreviewStateChanged(manager: TuneBudsLivePreviewManager, lp: LivePreviewState)
@@ -71,6 +72,7 @@ internal class DeviceManagerRegistry(
     var tuneBudsManager: TuneBudsManager? = null
         private set
     private var tuneBudsUiJob: Job? = null
+    private var tuneBudsWakeWordJob: Job? = null
     var moyoungW620Manager: MoyoungW620Manager? = null
         private set
     private var moyoungW620UiJob: Job? = null
@@ -189,6 +191,13 @@ internal class DeviceManagerRegistry(
                 tuneBudsUiJob = activity.lifecycleScope.launch {
                     manager.state.collect { tuneBuds ->
                         if (isSelected(DeviceClass.TUNEBUDS)) listener().onTuneBudsStateChanged(tuneBuds)
+                    }
+                }
+            }
+            if (tuneBudsWakeWordJob == null) {
+                tuneBudsWakeWordJob = activity.lifecycleScope.launch {
+                    manager.wakeWordEvents.collect {
+                        if (isSelected(DeviceClass.TUNEBUDS)) listener().onTuneBudsWakeWord()
                     }
                 }
             }

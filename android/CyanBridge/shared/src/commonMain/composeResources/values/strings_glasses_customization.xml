@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="customization_title">Glasses customization</string>
+    <string name="customization_subtitle">Custom tones, LED, shutter sound and wake word</string>
+    <string name="customization_upgrade">View Standard &amp; Max</string>
+    <string name="customization_refresh">Check glasses again</string>
+    <string name="customization_tones">Tones</string>
+    <string name="customization_tones_hint">Pick an audio file for any sound you want to replace. Leave the others as they are.</string>
+    <string name="customization_choose_file">Choose file</string>
+    <string name="customization_remove">Remove</string>
+    <string name="customization_options">Options</string>
+    <string name="customization_disable_led">Disable recording LED</string>
+    <string name="customization_mute_shutter">Disable shutter sound</string>
+    <string name="customization_wake_word">Wake word</string>
+    <string name="customization_wake_phrase">Wake phrase (optional)</string>
+    <string name="customization_wake_language">Language</string>
+    <string name="customization_wake_guidance">Wear the glasses. Each sample records about 3 seconds through the glasses microphone. Say the phrase once per sample, in a quiet room, the way you will use it.</string>
+    <string name="customization_record">Record sample</string>
+    <string name="customization_stop">Stop</string>
+    <string name="customization_samples">Samples: %1$d (need %2$d to %3$d)</string>
+    <string name="customization_sample_row">Sample %1$d · %2$s s · peak %3$d dBFS</string>
+    <string name="customization_delete">Delete</string>
+    <string name="customization_consent">I agree that my recordings and files are uploaded to build this firmware, and are deleted after the build is emailed (consent version %1$s). I install the firmware at my own risk.</string>
+    <string name="customization_submit">Send customization</string>
+    <string name="customization_builds">Your builds</string>
+    <string name="customization_no_builds">No builds yet.</string>
+    <string name="customization_cancel_build">Cancel</string>
+    <string name="customization_install">Install custom firmware</string>
+    <string name="customization_install_hint">After the email arrives, save its attachment and install it here.</string>
+    <string name="customization_mic_level">Microphone level</string>
+</resources>

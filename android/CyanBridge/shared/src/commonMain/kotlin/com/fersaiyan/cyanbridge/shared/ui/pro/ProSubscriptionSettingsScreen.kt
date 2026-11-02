@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.billing.BillingCatalog
 import com.fersaiyan.cyanbridge.shared.billing.BillingPlan
 import com.fersaiyan.cyanbridge.shared.billing.ProSubscriptionSettingsUiState
+import com.fersaiyan.cyanbridge.shared.customization.GlassesCustomizationActions
+import com.fersaiyan.cyanbridge.shared.customization.GlassesCustomizationUiState
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
@@ -90,6 +92,8 @@ fun ProSubscriptionSettingsScreen(
     liveEconomyDescription: String? = null,
     livePrivateDescription: String? = null,
     onLiveEconomyChange: ((Boolean) -> Unit)? = null,
+    customization: GlassesCustomizationUiState? = null,
+    customizationActions: GlassesCustomizationActions? = null,
 ) {
     var showChangePlanDialog by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -144,6 +148,9 @@ fun ProSubscriptionSettingsScreen(
                     Text(state.accountSubscription, style = MaterialTheme.typography.bodySmall)
                      OutlinedButton(onClick = onRefreshAccount, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.pro_refresh_account)) }
                 }
+            }
+            if (customization != null && customizationActions != null) {
+                item { GlassesCustomizationCard(customization, customizationActions) }
             }
             item {
                  ProSettingsCard(stringResource(Res.string.pro_model_routing)) {

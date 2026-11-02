@@ -7,6 +7,12 @@ import com.fersaiyan.cyanbridge.glasses.NativeGlassesPhotoCapture
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueFrame
 import com.fersaiyan.cyanbridge.shared.devices.eyevue.EyevueProtocol
+import com.fersaiyan.cyanbridge.shared.devices.eyevue.RcspOtaSender
+import com.fersaiyan.cyanbridge.shared.devices.eyevue.RcspTargetInfo
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveImageButtonRouter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -50,6 +56,11 @@ data class EyevueState(
 class EyevueManager private constructor(context: Context) {
     companion object {
         private const val TAG = "EyevueManager"
+        private const val RCSP_IDLE_TIMEOUT_MS = 20_000L
+        private const val RCSP_INFO_TIMEOUT_MS = 6_000L
+        private const val RCSP_RESTART_WAIT_MS = 4_000L
+        private const val RCSP_RECONNECT_ATTEMPTS = 20
+        private const val RCSP_RECONNECT_DELAY_MS = 3_000L
 
         @Volatile
         private var instance: EyevueManager? = null
@@ -80,6 +91,11 @@ class EyevueManager private constructor(context: Context) {
 
     val state: StateFlow<EyevueState> = _state.asStateFlow()
     val wakeWordEvents: SharedFlow<Unit> = _wakeWordEvents.asSharedFlow()
+    private val rcspMutex = Mutex()
+
+    /** The RCSP target info read last on this connection (firmware version). */
+    @Volatile var rcspInfo: RcspTargetInfo? = null
+        private set
 
     init {
         client.photoPacketListener = { packet ->
@@ -338,6 +354,112 @@ class EyevueManager private constructor(context: Context) {
         sendNow(packet, "finish transfer")
     }
 
+    // ── Glasses microphone (customization wake samples) ──
+
+    /** Opens the glasses-mic Opus stream; [listener] gets every 0x46 payload (N x 40-byte packets). */
+    suspend fun startMicStream(listener: (ByteArray) -> Unit): Boolean {
+        client.voiceListener = listener
+        val sent = sendNow(EyevueProtocol.buildStartVoiceStreamPacket(), "start the glasses microphone")
+        if (!sent) client.voiceListener = null
+        return sent
+    }
+
+    suspend fun stopMicStream() {
+        try {
+            sendNow(EyevueProtocol.buildStopVoiceRecognitionPacket(), "stop the glasses microphone")
+        } finally {
+            client.voiceListener = null
+        }
+    }
+
+    // ── JieLi RCSP (AE00): firmware version and firmware update ──
+
+    /** Authenticates on AE00 and reads the target info (op 0x03); null when the glasses do not answer. */
+    suspend fun readRcspTargetInfo(): RcspTargetInfo? = rcspMutex.withLock {
+        if (!client.isConnected() || !client.hasRcsp()) return@withLock null
+        val sender = RcspOtaSender(ByteArray(0), readInfoOnly = true)
+        val result = runRcsp(sender, reconnect = { false }, onProgress = {}, idleTimeoutMs = RCSP_INFO_TIMEOUT_MS)
+        if (result == "ok") sender.info.also { rcspInfo = it } else {
+            Log.w(TAG, "RCSP target info failed: $result")
+            null
+        }
+    }
+
+    /**
+     * Installs a `.ufw` through JieLi RCSP. The glasses restart during the update; this reconnects
+     * by address (the loader exposes only AE00). Returns "ok" or "error: ...".
+     */
+    suspend fun installRcspFirmware(ufw: ByteArray, onProgress: (String) -> Unit): String = rcspMutex.withLock {
+        val address = _state.value.deviceAddress ?: return@withLock "error: no EyeVue address"
+        if (!client.isConnected()) return@withLock "error: EyeVue is not connected"
+        val sender = RcspOtaSender(ufw)
+        val result = runRcsp(
+            sender,
+            reconnect = {
+                onProgress("The glasses are restarting; reconnecting…")
+                reconnectForUpdate(address)
+            },
+            onProgress = onProgress,
+        )
+        rcspInfo = sender.info
+        if (result == "ok") {
+            "ok: firmware ${sender.versionBefore ?: "?"} -> ${sender.info.version ?: "?"}"
+        } else {
+            result
+        }
+    }
+
+    private suspend fun reconnectForUpdate(address: String): Boolean {
+        repeat(RCSP_RECONNECT_ATTEMPTS) {
+            delay(RCSP_RECONNECT_DELAY_MS)
+            client.disconnect()
+            if (client.connect(address, requireVendorService = false).isSuccess) return true
+        }
+        return false
+    }
+
+    private suspend fun runRcsp(
+        sender: RcspOtaSender,
+        reconnect: suspend () -> Boolean,
+        onProgress: (String) -> Unit,
+        idleTimeoutMs: Long = RCSP_IDLE_TIMEOUT_MS,
+    ): String {
+        val incoming = Channel<ByteArray>(Channel.UNLIMITED)
+        client.rcspListener = { incoming.trySend(it) }
+        try {
+            if (client.enableRcsp().isFailure) return "error: the glasses have no JieLi update service"
+            suspend fun flush(): Boolean = sender.drainOutbox().all { client.writeRcsp(it).isSuccess }
+            sender.onConnected()
+            if (!flush()) return "error: write failed"
+            var lastPercent = -1
+            while (sender.state != RcspOtaSender.State.DONE) {
+                val restarting = sender.state == RcspOtaSender.State.RECONNECT || sender.state == RcspOtaSender.State.REBOOTING
+                val data = withTimeoutOrNull(if (restarting) RCSP_RESTART_WAIT_MS else idleTimeoutMs) { incoming.receive() }
+                if (data != null) {
+                    sender.onBytes(data)
+                    if (!flush() && !restarting) return "error: write failed"
+                    sender.progressPercent?.takeIf { it != lastPercent }?.let {
+                        lastPercent = it
+                        onProgress("Sending firmware: $it%")
+                    }
+                    continue
+                }
+                if (!restarting && client.isConnected()) return "error: the glasses stopped answering (${sender.state})"
+                val wasRebooting = sender.state == RcspOtaSender.State.REBOOTING
+                if (!reconnect()) {
+                    return if (wasRebooting) "ok" else "error: could not reconnect to the glasses"
+                }
+                if (client.enableRcsp().isFailure) return "error: the glasses have no JieLi update service after restart"
+                while (incoming.tryReceive().isSuccess) Unit
+                sender.onReconnected()
+                if (!flush()) return "error: write failed"
+            }
+            return sender.result ?: "error: no result"
+        } finally {
+            client.rcspListener = null
+        }
+    }
+
     private fun send(packet: ByteArray, operation: String) {
         if (packet.size > 4 && (packet[4].toInt() and 255) == EyevueProtocol.CMD_TAKE_PHOTO) {
             launchCameraCommand(operation) { sendNow(packet, operation) }
@@ -402,7 +524,7 @@ class EyevueManager private constructor(context: Context) {
         }
 
         when (frame.commandId) {
-            EyevueProtocol.CMD_RECEIVE_VOICE_DATA_START -> {
+            EyevueProtocol.CMD_RECEIVE_VOICE_DATA_START -> if (client.voiceListener == null) {
                 Log.i(TAG, "Eyevue AI wake word started a voice stream")
                 _wakeWordEvents.tryEmit(Unit)
             }

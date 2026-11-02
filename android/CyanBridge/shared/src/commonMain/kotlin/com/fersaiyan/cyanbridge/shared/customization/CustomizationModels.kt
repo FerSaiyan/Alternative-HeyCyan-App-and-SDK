@@ -1,0 +1,298 @@
+package com.fersaiyan.cyanbridge.shared.customization
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+
+/** The glasses families the customization service builds for (`device_family` on the wire). */
+enum class CustomizationFamily(val wire: String, val label: String) {
+    HEYCYAN("heycyan", "HeyCyan"),
+    EYEVUE("eyevue", "EyeVue"),
+    TUNEBUDS("tunebuds", "TuneBuds");
+
+    companion object {
+        fun fromWire(value: String?): CustomizationFamily? = entries.firstOrNull { it.wire.equals(value?.trim(), ignoreCase = true) }
+    }
+}
+
+/** What the connected glasses reported: the base firmware a custom build must start from. */
+data class GlassesFirmwareInfo(
+    val family: CustomizationFamily,
+    val model: String,
+    val bleHardwareVersion: String,
+    val bleFirmwareVersion: String,
+    val wifiHardwareVersion: String? = null,
+    val wifiFirmwareVersion: String? = null,
+) {
+    val label: String
+        get() = buildString {
+            append(family.label)
+            if (model.isNotBlank() && !model.equals(family.label, ignoreCase = true)) append(" ").append(model)
+            append(" · BLE ").append(bleFirmwareVersion)
+            wifiFirmwareVersion?.takeIf { it.isNotBlank() }?.let { append(" · Wi-Fi ").append(it) }
+        }
+}
+
+data class ToneSlot(val id: String, val label: String, val maxBytes: Long?, val format: String?)
+
+data class WakeLanguage(val code: String, val maxChars: Int, val maxWords: Int, val minLetters: Int)
+
+/** `/api/customization/config` for one exact base firmware (generic limits when the server has no catalog yet). */
+data class CustomizationConfig(
+    val enabled: Boolean,
+    val eligible: Boolean,
+    val ineligibleReason: String?,
+    val consentVersion: String,
+    /** The server holds this base firmware (absent from older servers: assumed true). */
+    val supported: Boolean,
+    val toneSlots: List<ToneSlot>,
+    val toneMaxBytes: Long,
+    val toneContentTypes: List<String>,
+    val disableLedSupported: Boolean,
+    val muteShutterSupported: Boolean,
+    val wakeWordSupported: Boolean,
+    val wakeLanguages: List<WakeLanguage>,
+    val phonemesNote: String?,
+    val sampleMin: Int,
+    val sampleMax: Int,
+    val sampleMaxBytes: Long,
+    val sampleMinMs: Long,
+    val sampleMaxMs: Long,
+)
+
+data class CustomizationAssetRef(val kind: String, val slot: String)
+
+data class CustomizationGate(val name: String, val passed: Boolean)
+
+data class CustomizationJob(
+    val id: String,
+    val status: String,
+    val statusMessage: String,
+    val deviceFamily: String,
+    val wakePhrase: String?,
+    val toneSlots: List<String>,
+    val disableLedFlash: Boolean,
+    val muteShutter: Boolean,
+    val expectedAssets: List<CustomizationAssetRef>,
+    val gates: List<CustomizationGate>,
+    val artifactFilename: String?,
+    val createdAt: String,
+) {
+    val isActive: Boolean get() = status in ACTIVE_STATUSES
+
+    companion object {
+        val ACTIVE_STATUSES = setOf("draft", "uploading", "queued", "building", "built")
+    }
+}
+
+data class UploadTicket(
+    val kind: String,
+    val slot: String,
+    val method: String,
+    val url: String,
+    val headers: Map<String, String>,
+)
+
+/** A declared upload: the bytes plus the metadata the server checks on submit. */
+data class CustomizationUpload(
+    val kind: String,
+    val slot: String,
+    val contentType: String,
+    val bytes: ByteArray,
+    val sha256: String,
+    val durationMs: Long? = null,
+)
+
+/** The server's `{"error": code, "message": ...}` body with the extra fields the app acts on. */
+data class CustomizationApiError(
+    val httpStatus: Int,
+    val code: String,
+    override val message: String,
+    val currentPlan: String? = null,
+    val jobId: String? = null,
+    val problemSlots: List<String> = emptyList(),
+) : Exception(message)
+
+/** The job-create request body (one place, so the ViewModel test can read it back). */
+data class CustomizationJobRequest(
+    val glasses: GlassesFirmwareInfo,
+    val wakePhrase: String?,
+    val wakeLanguage: String?,
+    val wakeSampleCount: Int?,
+    val toneSlots: List<String>,
+    val disableLedFlash: Boolean,
+    val muteShutter: Boolean,
+    val consentVersion: String,
+)
+
+object CustomizationJson {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun parseObject(text: String): JsonObject? = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
+
+    /** Generic limits come from the top level; the per-firmware fields from the contract override them. */
+    fun parseConfig(text: String): CustomizationConfig {
+        val root = parseObject(text) ?: error("Invalid customization config")
+        val tones = root.obj("tones")
+        val samples = root.obj("wake_samples")
+        val sampleDuration = samples?.obj("duration_ms")
+        val genericLanguages = root.array("wake_languages").mapNotNull { element ->
+            val o = element as? JsonObject ?: return@mapNotNull null
+            val code = o.str("code") ?: return@mapNotNull null
+            WakeLanguage(code, o.int("max_chars") ?: 32, o.int("max_words") ?: 4, o.int("min_letters") ?: 4)
+        }
+        val toneMaxBytes = tones?.long("max_bytes") ?: 5_242_880L
+        val perFirmwareSlots = root["tone_slots"]?.let { it as? JsonArray }?.mapNotNull { element ->
+            val o = element as? JsonObject ?: return@mapNotNull null
+            val id = o.str("id") ?: return@mapNotNull null
+            ToneSlot(id, o.str("label") ?: slotLabel(id), o.long("max_bytes"), o.str("format"))
+        }
+        val genericSlots = tones?.array("slots")?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            ?.map { ToneSlot(it, slotLabel(it), null, null) }
+            .orEmpty()
+        val options = root.obj("options_supported")
+        val wake = root.obj("wake_word")
+        val wakeCodes = wake?.array("languages")?.mapNotNull { element ->
+            (element as? JsonPrimitive)?.contentOrNull ?: (element as? JsonObject)?.str("code")
+        }
+        val languages = if (wakeCodes == null) {
+            genericLanguages
+        } else {
+            wakeCodes.map { code -> genericLanguages.firstOrNull { it.code == code } ?: WakeLanguage(code, 32, 4, 4) }
+        }
+        return CustomizationConfig(
+            enabled = root.bool("enabled") ?: false,
+            eligible = root.bool("eligible") ?: false,
+            ineligibleReason = root.str("ineligible_reason"),
+            consentVersion = root.str("consent_version").orEmpty(),
+            supported = root.bool("supported") ?: true,
+            toneSlots = perFirmwareSlots ?: genericSlots,
+            toneMaxBytes = toneMaxBytes,
+            toneContentTypes = tones?.array("content_types")?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty(),
+            disableLedSupported = options?.bool("disable_led_flash") ?: false,
+            muteShutterSupported = options?.bool("mute_shutter") ?: false,
+            wakeWordSupported = wake?.bool("supported") ?: true,
+            wakeLanguages = languages,
+            phonemesNote = wake?.str("phonemes_note")?.takeIf { it.isNotBlank() },
+            sampleMin = samples?.int("min") ?: 8,
+            sampleMax = samples?.int("max") ?: 12,
+            sampleMaxBytes = samples?.long("max_bytes") ?: 2_097_152L,
+            sampleMinMs = sampleDuration?.long("min") ?: 300L,
+            sampleMaxMs = sampleDuration?.long("max") ?: 10_000L,
+        )
+    }
+
+    fun parseJob(obj: JsonObject): CustomizationJob {
+        val options = obj.obj("options")
+        val gates = (obj["gates"] as? JsonObject)?.map { (name, value) ->
+            CustomizationGate(name, (value as? JsonObject)?.bool("passed") ?: false)
+        }.orEmpty()
+        return CustomizationJob(
+            id = obj.str("id") ?: error("Job without id"),
+            status = obj.str("status").orEmpty(),
+            statusMessage = obj.str("status_message").orEmpty(),
+            deviceFamily = obj.str("device_family").orEmpty(),
+            wakePhrase = obj.str("wake_phrase"),
+            toneSlots = obj.array("tone_slots").mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+            disableLedFlash = options?.bool("disable_led_flash") ?: false,
+            muteShutter = options?.bool("mute_shutter") ?: false,
+            expectedAssets = obj.array("expected_assets").mapNotNull { element ->
+                val o = element as? JsonObject ?: return@mapNotNull null
+                CustomizationAssetRef(o.str("kind") ?: return@mapNotNull null, o.str("slot") ?: return@mapNotNull null)
+            },
+            gates = gates,
+            artifactFilename = obj.obj("artifact")?.str("filename"),
+            createdAt = obj.str("created_at").orEmpty(),
+        )
+    }
+
+    fun parseJobEnvelope(text: String): CustomizationJob =
+        parseJob(parseObject(text)?.obj("job") ?: error("Response has no job"))
+
+    fun parseJobList(text: String): List<CustomizationJob> =
+        parseObject(text)?.array("jobs")?.mapNotNull { (it as? JsonObject)?.let(::parseJob) }.orEmpty()
+
+    fun parseUploads(text: String): List<UploadTicket> =
+        parseObject(text)?.array("uploads")?.mapNotNull { element ->
+            val o = element as? JsonObject ?: return@mapNotNull null
+            UploadTicket(
+                kind = o.str("kind") ?: return@mapNotNull null,
+                slot = o.str("slot") ?: return@mapNotNull null,
+                method = o.str("method") ?: "PUT",
+                url = o.str("upload_url") ?: return@mapNotNull null,
+                headers = o.obj("headers")?.mapValues { (_, v) -> (v as? JsonPrimitive)?.contentOrNull.orEmpty() }.orEmpty(),
+            )
+        }.orEmpty()
+
+    fun parseError(httpStatus: Int, text: String): CustomizationApiError {
+        val o = parseObject(text)
+        return CustomizationApiError(
+            httpStatus = httpStatus,
+            code = o?.str("error") ?: "http_$httpStatus",
+            message = o?.str("message") ?: "Server answered HTTP $httpStatus",
+            currentPlan = o?.str("currentPlan"),
+            jobId = o?.str("job_id"),
+            problemSlots = o?.array("problems")?.mapNotNull { (it as? JsonObject)?.str("slot") }.orEmpty(),
+        )
+    }
+
+    fun jobRequestBody(request: CustomizationJobRequest): String = buildJsonObject {
+        val g = request.glasses
+        put("device_family", g.family.wire)
+        put("device_model", g.model)
+        put("ble_hardware_version", g.bleHardwareVersion)
+        put("ble_firmware_version", g.bleFirmwareVersion)
+        g.wifiHardwareVersion?.takeIf { it.isNotBlank() }?.let { put("wifi_hardware_version", it) }
+        g.wifiFirmwareVersion?.takeIf { it.isNotBlank() }?.let { put("wifi_firmware_version", it) }
+        if (request.wakePhrase != null) {
+            put("wake_phrase", request.wakePhrase)
+            put("wake_language", request.wakeLanguage)
+            put("wake_sample_count", request.wakeSampleCount)
+        }
+        put("tone_slots", buildJsonArray { request.toneSlots.forEach { add(JsonPrimitive(it)) } })
+        put("options", buildJsonObject {
+            put("disable_led_flash", request.disableLedFlash)
+            put("mute_shutter", request.muteShutter)
+        })
+        put("consent", buildJsonObject {
+            put("version", request.consentVersion)
+            put("accepted", true)
+        })
+    }.toString()
+
+    fun uploadRequestBody(uploads: List<CustomizationUpload>): String = buildJsonObject {
+        put("assets", buildJsonArray {
+            uploads.forEach { upload ->
+                add(buildJsonObject {
+                    put("kind", upload.kind)
+                    put("slot", upload.slot)
+                    put("content_type", upload.contentType)
+                    put("size_bytes", upload.bytes.size)
+                    put("sha256", upload.sha256)
+                    upload.durationMs?.let { put("duration_ms", it) }
+                })
+            }
+        })
+    }.toString()
+
+    /** "power_on" -> "Power on". */
+    fun slotLabel(id: String): String = id.replace('_', ' ').replaceFirstChar { it.uppercaseChar() }
+
+    private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
+    private fun JsonObject.array(key: String): List<JsonElement> = (this[key] as? JsonArray)?.jsonArray.orEmpty()
+    private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.contentOrNull
+    private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull
+    private fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.longOrNull
+    private fun JsonObject.int(key: String): Int? = long(key)?.toInt()
+}

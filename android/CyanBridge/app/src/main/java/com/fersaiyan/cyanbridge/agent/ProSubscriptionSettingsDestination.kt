@@ -23,6 +23,19 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import com.fersaiyan.cyanbridge.customization.AndroidCustomizationPlatform
+import com.fersaiyan.cyanbridge.shared.customization.GlassesCustomizationViewModel
+import com.fersaiyan.cyanbridge.shared.customization.OpenCustomizationUpgrade
+import com.fersaiyan.cyanbridge.shared.customization.PickCustomFirmware
+import com.fersaiyan.cyanbridge.shared.customization.PickCustomizationTone
 
 /** Hosts the shared Pro settings screen; [ProSubscriptionSettingsViewModel] owns its state. */
 class ProSubscriptionSettingsDestination : NavScreen() {
@@ -34,17 +47,38 @@ class ProSubscriptionSettingsDestination : NavScreen() {
         }
     }
 
+    private val customization: GlassesCustomizationViewModel by viewModels {
+        viewModelFactory {
+            initializer { GlassesCustomizationViewModel(AndroidCustomizationPlatform(applicationContext), Dispatchers.IO) }
+        }
+    }
+
+    /** The tone slot whose file picker is open. */
+    private var pendingToneSlot: String? = null
+
+    private val tonePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val slot = pendingToneSlot ?: return@registerForActivityResult
+        pendingToneSlot = null
+        customization.onTonePicked(slot, uri?.let(::keepReadable))
+    }
+
+    private val firmwarePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        customization.onFirmwarePicked(uri?.let(::keepReadable))
+    }
+
     internal val state: ProSubscriptionSettingsUiState get() = viewModel.state.value.ui
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         collectScreenEffects(viewModel.effectFlow, ::handleEffect)
+        collectScreenEffects(customization.effectFlow, ::handleEffect)
         if (!viewModel.start()) return
         setContent {
             val screen by viewModel.state.collectAsState()
+            val customizationState by customization.state.collectAsState()
             val economyMode = screen.liveModes.first { it.id == "economy" }
             val privateMode = screen.liveModes.first { it.id == "private" }
-            ProSubscriptionSettingsScreen(
+            Box(modifier = tagsAsResourceIds()) { ProSubscriptionSettingsScreen(
                 liveEconomy = screen.liveEconomy,
                 liveEconomyLabel = economyMode.displayLabel,
                 livePrivateLabel = privateMode.displayLabel,
@@ -72,17 +106,30 @@ class ProSubscriptionSettingsDestination : NavScreen() {
                 onSystemPromptChange = viewModel::setSystemPrompt,
                 onResetSystemPrompt = viewModel::resetSystemPrompt,
                 onBack = ::finish,
-            )
+                customization = customizationState,
+                customizationActions = customization,
+            ) }
         }
+    }
+
+    /** Test tags double as UI Automator resource ids (the E2E test drives the customization card). */
+    @OptIn(ExperimentalComposeUiApi::class)
+    private fun tagsAsResourceIds(): Modifier = Modifier.semantics { testTagsAsResourceId = true }
+
+    private fun keepReadable(uri: Uri): String {
+        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        return uri.toString()
     }
 
     override fun onStart() {
         super.onStart()
         viewModel.visible = true
+        customization.visible = true
     }
 
     override fun onStop() {
         viewModel.visible = false
+        customization.visible = false
         super.onStop()
     }
 
@@ -94,6 +141,15 @@ class ProSubscriptionSettingsDestination : NavScreen() {
 
     private fun handleEffect(effect: ScreenEffect) {
         when (effect) {
+            is PickCustomizationTone -> {
+                pendingToneSlot = effect.slotId
+                tonePicker.launch(arrayOf("audio/*"))
+            }
+            PickCustomFirmware -> firmwarePicker.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+            OpenCustomizationUpgrade -> startActivity(AppRoute.PRO_SUBSCRIPTION.intent(this).apply {
+                putExtra(ProSubscriptionDestination.EXTRA_INITIAL_PLAN, "standard")
+                putExtra(ProSubscriptionDestination.EXTRA_CHANGE_PLAN, true)
+            })
             OpenStoreSubscriptions -> activity.openPlaySubscriptionManagement()
             is ChangeProPlan -> startActivity(AppRoute.PRO_SUBSCRIPTION.intent(this).apply {
                 putExtra(ProSubscriptionDestination.EXTRA_INITIAL_PLAN, effect.plan)
