@@ -147,3 +147,19 @@ class OtaFirmwareTargetTest {
         assertEquals("Manage subscription", copy.actionLabel)
     }
 }
+
+class FirmwareTransportPolicyTest {
+    private val local = listOf("http://10.0.2.2:3100/api/x", "http://127.0.0.1:3100", "http://192.168.1.5/f.swu", "http://localhost:3100")
+    private val public = listOf("http://cyanbridge.vercel.app/api", "http://8.8.8.8/f", "ftp://10.0.2.2/f", "not a url")
+
+    @Test
+    fun releaseBuildsNeverAllowPlainHttp() {
+        (local + public).forEach { assertFalse(it, allowsDebugLocalHttp(it, debugBuild = false)) }
+    }
+
+    @Test
+    fun debugBuildsAllowPlainHttpOnlyToLocalHosts() {
+        local.forEach { assertTrue(it, allowsDebugLocalHttp(it, debugBuild = true)) }
+        public.forEach { assertFalse(it, allowsDebugLocalHttp(it, debugBuild = true)) }
+    }
+}

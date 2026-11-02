@@ -90,13 +90,14 @@ internal fun firmwarePatchUnavailableMessage(
 }
 
 /**
- * Firmware and customization traffic goes over HTTPS, or plain HTTP only to a loopback or
- * private-network host (a self-hosted relay on the LAN, or the emulator's host at 10.0.2.2).
+ * Debug builds only: plain HTTP to a loopback or private-network host (the local end-to-end stack
+ * on the emulator's host at 10.0.2.2). Release builds ([debugBuild] false) never allow it, so their
+ * firmware and customization traffic stays HTTPS-only.
  */
-internal fun isTrustedFirmwareTransport(url: String): Boolean {
+internal fun allowsDebugLocalHttp(url: String, debugBuild: Boolean = com.fersaiyan.cyanbridge.BuildConfig.DEBUG): Boolean {
+    if (!debugBuild) return false
     val parsed = runCatching { URL(url) }.getOrNull() ?: return false
     val host = parsed.host.orEmpty()
-    if (parsed.protocol.equals("https", ignoreCase = true)) return host.isNotBlank()
     if (!parsed.protocol.equals("http", ignoreCase = true)) return false
     if (host.equals("localhost", ignoreCase = true) || host.endsWith(".local", ignoreCase = true)) return true
     if (!host.matches(Regex("[0-9.]+"))) return false
@@ -177,7 +178,7 @@ class FirmwareClient(
         // Step 1: Resolve relay base URL
         val relayBase = firmwareRelayBaseUrl(context)
         Log.i(TAG, "[1/5] Relay base URL: $relayBase")
-        if (!isTrustedFirmwareTransport(relayBase)) {
+        if (!isHttpsRelayUrl(relayBase) && !allowsDebugLocalHttp(relayBase)) {
             Log.e(TAG, "[1/5] Refusing non-HTTPS firmware relay URL")
             return FirmwareResult.Error("Firmware relay must use HTTPS")
         }
@@ -453,7 +454,7 @@ class FirmwareClient(
         outputDir: File,
     ): FirmwareResult {
         val relayBase = firmwareRelayBaseUrl(context).trimEnd('/')
-        if (!isTrustedFirmwareTransport(relayBase)) return FirmwareResult.Error("Firmware relay must use HTTPS")
+        if (!isHttpsRelayUrl(relayBase) && !allowsDebugLocalHttp(relayBase)) return FirmwareResult.Error("Firmware relay must use HTTPS")
         val apiToken = ProSubscriptionServerPrefs.getApiToken(context)
         if (apiToken.isBlank()) return FirmwareResult.Error("No API token available. Please sign in to your CyanBridge account.")
         return try {
@@ -492,6 +493,11 @@ class FirmwareClient(
             Log.e(TAG, "Pure firmware fetch failed", e)
             FirmwareResult.Error("Server request failed: ${e.message}")
         }
+    }
+
+    private fun isHttpsRelayUrl(url: String): Boolean {
+        val uri = Uri.parse(url)
+        return uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank()
     }
 
     private fun gateOrError(statusCode: Int, body: String, fallback: String): FirmwareResult {
@@ -536,7 +542,7 @@ class FirmwareClient(
             }
 
             val url = URL(downloadUrl)
-            if (!isTrustedFirmwareTransport(downloadUrl)) {
+            if (!url.protocol.equals("https", ignoreCase = true) && !allowsDebugLocalHttp(downloadUrl)) {
                 Log.e(TAG, "Refusing non-HTTPS firmware URL")
                 return null
             }
@@ -561,7 +567,7 @@ class FirmwareClient(
                 Log.e(TAG, "Error body: ${errorBody.take(300)}")
                 return null
             }
-            if (!isTrustedFirmwareTransport(conn.url.toString())) {
+            if (!conn.url.protocol.equals("https", ignoreCase = true) && !allowsDebugLocalHttp(conn.url.toString())) {
                 Log.e(TAG, "Refusing firmware redirect to non-HTTPS URL")
                 return null
             }

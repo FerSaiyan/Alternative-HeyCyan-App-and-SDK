@@ -7,7 +7,7 @@ import com.fersaiyan.cyanbridge.ota.FirmwareClient
 import com.fersaiyan.cyanbridge.ota.FirmwareResult
 import com.fersaiyan.cyanbridge.ota.InstalledFirmwareVersions
 import com.fersaiyan.cyanbridge.ota.customFirmwareHost
-import com.fersaiyan.cyanbridge.ota.isTrustedFirmwareTransport
+import com.fersaiyan.cyanbridge.ota.allowsDebugLocalHttp
 import com.fersaiyan.cyanbridge.agent.AndroidProAccountPlatform
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
@@ -265,7 +265,10 @@ class AndroidCustomizationPlatform(context: Context) : CustomizationPlatform {
             return parts.joinToString(".")
         }
 
-        /** Recordings and firmware use the same transport rule as the firmware client. */
-        internal fun isAllowedEndpoint(url: String): Boolean = isTrustedFirmwareTransport(url)
+        /** Recordings and tone files go over HTTPS; debug builds also allow the local stack (see [allowsDebugLocalHttp]). */
+        internal fun isAllowedEndpoint(url: String): Boolean {
+            val parsed = runCatching { URL(url) }.getOrNull() ?: return false
+            return (parsed.protocol.equals("https", ignoreCase = true) && parsed.host.isNotBlank()) || allowsDebugLocalHttp(url)
+        }
     }
 }
