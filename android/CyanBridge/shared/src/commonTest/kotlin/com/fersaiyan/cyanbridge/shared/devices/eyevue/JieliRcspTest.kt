@@ -37,20 +37,35 @@ class JieliRcspTest {
     fun doubleBackupUpdateSendsTheWholeImageAndVerifiesTheNewVersion() {
         val image = ByteArray(1500) { (it * 31).toByte() }
         val device = FakeBr28(image)
+        // The card's version read authenticates the link; the install on the same link reuses it
+        // (vendor isDeviceAuthPass) instead of sending a second E1 auth.
+        val versionRead = RcspOtaSender(ByteArray(0), readInfoOnly = true, random = Random(3))
+        versionRead.onConnected()
+        pump(versionRead, device)
+        assertEquals("ok", versionRead.result)
+        assertTrue(versionRead.linkAuthenticated)
+
         val sender = RcspOtaSender(image, random = Random(7))
-        sender.onConnected()
+        sender.onConnected(linkAuthenticated = versionRead.linkAuthenticated)
         pump(sender, device)
         assertEquals(RcspOtaSender.State.REBOOTING, sender.state)
         assertContentEquals(image, device.received)
         assertEquals(1500L, sender.contentSize)
+        assertEquals(1, device.auths)
 
         device.reboot()
-        sender.onReconnected()
+        sender.onReconnected() // a new link authenticates again
         pump(sender, device)
 
         assertEquals("ok", sender.result)
+        assertEquals(2, device.auths)
         assertEquals("1.3.5.0", sender.versionBefore)
         assertEquals("1.3.6.0", sender.info.version)
+    }
+
+    @Test
+    fun attWritesNeverExceedTheAttributeMaximum() {
+        assertEquals(listOf(20, 20, 244, 506, 512, 512), listOf(0, 23, 247, 509, 515, 517).map(JieliRcsp::attWriteSize))
     }
 
     @Test
@@ -75,6 +90,7 @@ class JieliRcspTest {
         var versionCode = 0x1350
         val received = ByteArray(image.size)
         private var authed = false
+        var auths = 0
         private var authStage = 0
         private val myChallenge = byteArrayOf(0) + ByteArray(16) { (it * 7 + 1).toByte() }
         private val parser = RcspParser()
@@ -105,6 +121,7 @@ class JieliRcspTest {
             }
             authStage == 2 && data.contentEquals(JieliRcsp.authResponse(myChallenge)) -> {
                 authed = true
+                auths++
                 listOf(JieliRcsp.AUTH_OK)
             }
             else -> emptyList()

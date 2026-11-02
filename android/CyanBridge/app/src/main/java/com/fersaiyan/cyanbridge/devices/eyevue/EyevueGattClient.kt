@@ -98,6 +98,18 @@ class EyevueGattClient(
     private var rcspWriteCharacteristic: BluetoothGattCharacteristic? = null
     private var rcspNotifyCharacteristic: BluetoothGattCharacteristic? = null
     private var rcspNotificationsEnabled = false
+
+    /**
+     * True once this GATT link passed JieLi RCSP auth. The vendor SDK authenticates once per link
+     * (`isDeviceAuthPass`), so later RCSP sessions on the same link skip auth. Cleared with the link.
+     */
+    @Volatile var rcspAuthenticated = false
+        private set
+
+    fun markRcspAuthenticated() {
+        if (gatt != null) rcspAuthenticated = true
+    }
+
     private var connectContinuation: CancellableContinuation<Unit>? = null
     private var serviceContinuation: CancellableContinuation<Unit>? = null
     private var descriptorContinuation: CancellableContinuation<Unit>? = null
@@ -381,7 +393,7 @@ class EyevueGattClient(
         }
     }
 
-    /** Writes [data] to AE01 in ATT-sized pieces. */
+    /** Writes [data] to AE01 in ATT-sized pieces (MTU - 3, at most 512 bytes each). */
     @SuppressLint("MissingPermission")
     suspend fun writeRcsp(data: ByteArray): Result<Unit> {
         if (_state.value != EyevueGattState.CONNECTED) return Result.failure(IOException("Eyevue GATT is not connected"))
@@ -391,7 +403,7 @@ class EyevueGattClient(
         } else {
             BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         }
-        val piece = (mtu - 3).coerceAtLeast(20)
+        val piece = JieliRcsp.attWriteSize(mtu)
         var offset = 0
         while (offset < data.size) {
             val end = minOf(offset + piece, data.size)
@@ -457,6 +469,7 @@ class EyevueGattClient(
         rcspWriteCharacteristic = null
         rcspNotifyCharacteristic = null
         rcspNotificationsEnabled = false
+        rcspAuthenticated = false
         mtu = 23
         try {
             currentGatt?.disconnect()

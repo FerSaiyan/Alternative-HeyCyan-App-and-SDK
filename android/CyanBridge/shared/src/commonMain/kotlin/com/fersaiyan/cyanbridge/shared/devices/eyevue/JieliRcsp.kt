@@ -75,6 +75,15 @@ object JieliRcsp {
         254 to "reboot to continue",
     )
 
+    /** The largest attribute value ATT allows (Core spec Vol 3 Part F 3.2.9), whatever the MTU. */
+    const val MAX_ATT_VALUE = 512
+
+    /**
+     * Bytes per AE01 write at the negotiated ATT [mtu]: MTU - 3, capped at [MAX_ATT_VALUE].
+     * At MTU 517 a 514-byte write is rejected by the peer's GATT server.
+     */
+    fun attWriteSize(mtu: Int): Int = (mtu - 3).coerceIn(20, MAX_ATT_VALUE)
+
     fun encode(p: RcspPacket): ByteArray {
         val body = ArrayList<Byte>(p.payload.size + 3)
         if (!p.isCommand) body += p.status.toByte()
@@ -281,6 +290,11 @@ class RcspParser(private val maxMtu: Int = 530) {
  *
  * Link drops are part of an update: after [State.RECONNECT] (single-bank loader switch) or
  * [State.REBOOTING] the glasses restart; reconnect and call [onReconnected].
+ *
+ * Authentication is per link, like the vendor SDK (`isDeviceAuthPass`: once a device passed
+ * RcspAuth it skips auth until it disconnects). A second sender on a link that already passed
+ * auth starts with `onConnected(linkAuthenticated = true)`; [linkAuthenticated] tells the caller
+ * when the current link has passed.
  */
 class RcspOtaSender(
     private val file: ByteArray,
@@ -313,9 +327,14 @@ class RcspOtaSender(
     private var myChallenge = ByteArray(0)
     private var resume: State? = null
 
+    /** True once the current link passed RCSP auth (or needs none). Reset by a reconnect. */
+    var linkAuthenticated = false
+        private set
+
     fun drainOutbox(): List<ByteArray> = List(outbox.size) { outbox.removeFirst() }
 
-    fun onConnected() = startSession(resumeState = null)
+    /** Starts on a connected link; [linkAuthenticated] when an earlier session already authenticated it. */
+    fun onConnected(linkAuthenticated: Boolean = false) = startSession(resumeState = null, authenticated = linkAuthenticated)
 
     /** After the glasses dropped the link as part of the update: authenticate again and continue. */
     fun onReconnected() {
@@ -324,7 +343,7 @@ class RcspOtaSender(
             State.REBOOTING, State.VERIFY -> State.VERIFY
             else -> State.RECONNECT
         }
-        startSession(resumeState = next)
+        startSession(resumeState = next, authenticated = false)
     }
 
     fun onBytes(data: ByteArray) {
@@ -335,11 +354,12 @@ class RcspOtaSender(
     val progressPercent: Int?
         get() = if (contentSize > 0) (bytesSent * 100 / contentSize).toInt().coerceIn(0, 100) else null
 
-    private fun startSession(resumeState: State?) {
+    private fun startSession(resumeState: State?, authenticated: Boolean) {
         parser = RcspParser(mtu)
         waiting.clear()
         resume = resumeState
-        if (useAuth) {
+        linkAuthenticated = authenticated || !useAuth
+        if (!linkAuthenticated) {
             state = State.AUTH1
             outbox += JieliRcsp.AUTH_RESET_CMD
             myChallenge = byteArrayOf(0) + random.nextBytes(16)
@@ -358,7 +378,10 @@ class RcspOtaSender(
             }
             State.AUTH2 -> when {
                 data.size == 17 && data[0].toInt() == 0 -> outbox += JieliRcsp.authResponse(data)
-                data.size >= 5 && data.copyOf(5).contentEquals(JieliRcsp.AUTH_OK) -> syncInfo()
+                data.size >= 5 && data.copyOf(5).contentEquals(JieliRcsp.AUTH_OK) -> {
+                    linkAuthenticated = true
+                    syncInfo()
+                }
             }
             else -> Unit
         }

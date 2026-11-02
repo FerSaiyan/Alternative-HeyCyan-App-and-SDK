@@ -428,8 +428,12 @@ class EyevueManager private constructor(context: Context) {
         client.rcspListener = { incoming.trySend(it) }
         try {
             if (client.enableRcsp().isFailure) return "error: the glasses have no JieLi update service"
-            suspend fun flush(): Boolean = sender.drainOutbox().all { client.writeRcsp(it).isSuccess }
-            sender.onConnected()
+            suspend fun flush(): Boolean {
+                // Remember a passed auth before writing: the next session on this link reuses it.
+                if (sender.linkAuthenticated) client.markRcspAuthenticated()
+                return sender.drainOutbox().all { client.writeRcsp(it).isSuccess }
+            }
+            sender.onConnected(linkAuthenticated = client.rcspAuthenticated)
             if (!flush()) return "error: write failed"
             var lastPercent = -1
             while (sender.state != RcspOtaSender.State.DONE) {
