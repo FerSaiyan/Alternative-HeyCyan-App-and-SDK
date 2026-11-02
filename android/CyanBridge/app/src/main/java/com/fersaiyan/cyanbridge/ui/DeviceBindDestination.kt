@@ -205,6 +205,8 @@ class DeviceBindDestination : NavScreen() {
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
         val deviceClass = connection.deviceClass
         if (!MentraSdkModel.usesMentraSdk(deviceClass)) MentraLiveManager.releaseIfStarted("selected $deviceClass")
+        // Other glasses chosen: close the EyeVue GATT link (nothing else would, and it keeps the glasses busy).
+        if (deviceClass != DeviceClass.EYEVUE) EyevueManager.instanceOrNull()?.takeIf { it.state.value.deviceAddress != null }?.disconnect()
         if (deviceClass in DeviceBindViewModel.CONSUMER_PROTOCOLS) {
             saveSelectedProfile(device, deviceClass, userOverridden = true)
             // Apply device-specific maximum capture defaults (HeyCyan video/audio,

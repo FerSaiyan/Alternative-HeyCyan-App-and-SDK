@@ -69,6 +69,9 @@ class EyevueManager private constructor(context: Context) {
             instance ?: synchronized(this) {
                 instance ?: EyevueManager(context.applicationContext).also { instance = it }
             }
+
+        /** The manager if EyeVue was used in this process (so switching devices does not create one). */
+        fun instanceOrNull(): EyevueManager? = instance
     }
 
     private val client = EyevueGattClient(context.applicationContext)
@@ -138,6 +141,9 @@ class EyevueManager private constructor(context: Context) {
         }
         connectJob?.cancel()
         GlassesPhotoCapture.invalidate(DeviceClass.EYEVUE)
+        // The GATT client keeps an open link as is: drop it first when other glasses were chosen.
+        val previous = _state.value.deviceAddress
+        if (previous != null && !previous.equals(normalized, ignoreCase = true)) client.disconnect()
         _state.value = EyevueState(
             connectionLabel = "Connecting to Eyevue",
             protocolState = EyevueGattState.CONNECTING.name,

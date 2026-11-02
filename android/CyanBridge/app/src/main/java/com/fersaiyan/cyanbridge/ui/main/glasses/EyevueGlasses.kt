@@ -24,6 +24,7 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.glasses.LivePreviewUiState
+import com.fersaiyan.cyanbridge.ui.AutoPairManager
 import kotlinx.coroutines.launch
 
 /** Eyevue glasses over [EyevueManager] (BLE commands, Wi-Fi media and live preview). */
@@ -41,12 +42,15 @@ internal class EyevueGlasses(private val context: GlassesDeviceContext) : Androi
         }
 
         override fun reconnect() {
+            AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_reconnect_button")
             DeviceProfileStore.loadLastSelected(activity)?.let { profile ->
                 manager.connect(profile.macAddress, profile.advertisedName)
             } ?: activity.startActivity(AppRoute.DEVICE_BIND.intent(activity))
         }
 
         override fun disconnect() {
+            // Without this the AutoPair loop reopens the GATT link within seconds.
+            AutoPairManager.setAutoReconnectSuppressed(true, reason = "user_disconnect_button")
             manager.disconnect()
         }
     }
