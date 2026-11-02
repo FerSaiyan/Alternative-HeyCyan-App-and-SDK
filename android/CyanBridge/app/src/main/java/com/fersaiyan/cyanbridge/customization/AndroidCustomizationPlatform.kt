@@ -3,7 +3,11 @@ package com.fersaiyan.cyanbridge.customization
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.fersaiyan.cyanbridge.ota.FirmwareClient
+import com.fersaiyan.cyanbridge.ota.FirmwareResult
+import com.fersaiyan.cyanbridge.ota.InstalledFirmwareVersions
 import com.fersaiyan.cyanbridge.ota.customFirmwareHost
+import com.fersaiyan.cyanbridge.ota.isTrustedFirmwareTransport
 import com.fersaiyan.cyanbridge.agent.AndroidProAccountPlatform
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
@@ -28,7 +32,6 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
-import java.net.InetAddress
 import java.net.URL
 import java.security.MessageDigest
 
@@ -187,7 +190,8 @@ class AndroidCustomizationPlatform(context: Context) : CustomizationPlatform {
             CustomizationFamily.HEYCYAN -> {
                 val dir = File(context.filesDir, "ota/custom").apply { mkdirs() }
                 val stamp = System.currentTimeMillis()
-                val wifi = File(dir, "custom_wifi_$stamp.swu").apply { writeBytes(requireNotNull(bundle.wifi).bytes) }
+                val wifi = bundle.wifi?.let { attached -> File(dir, "custom_wifi_$stamp.swu").apply { writeBytes(attached.bytes) } }
+                    ?: fetchCatalogWifi(requireNotNull(bundle.wifiCatalog), File(dir, "wifi_$stamp"), progress)
                 val ble = File(dir, "custom_ble_$stamp.bin").apply { writeBytes(bundle.ble.bytes) }
                 val coordinator = customFirmwareHost?.get()
                 val refusal = if (coordinator == null) {
@@ -227,6 +231,26 @@ class AndroidCustomizationPlatform(context: Context) : CustomizationPlatform {
         }
     }
 
+    /** Downloads the bundle's Wi-Fi `.swu` from the firmware catalog (the Patched LED OTA path). */
+    private suspend fun fetchCatalogWifi(ref: WifiCatalogRef, dir: File, progress: (String) -> Unit): File {
+        progress("Downloading the Wi-Fi firmware (${ref.channel})…")
+        val info = GlassesDeviceInfoReader.readGlassesDeviceInfo()
+            ?: throw IllegalStateException("The glasses did not report their firmware versions")
+        val versions = InstalledFirmwareVersions(
+            wifiHardwareVersion = info.wifiHardwareVersion.orEmpty(),
+            wifiFirmwareVersion = info.wifiFirmwareVersion.orEmpty(),
+            bleHardwareVersion = info.hardwareVersion.orEmpty(),
+            bleFirmwareVersion = info.firmwareVersion.orEmpty(),
+        )
+        return when (val result = FirmwareClient(context).fetchCustomizationWifiFirmware(ref.channel, versions, ref.sha256, ref.size, dir)) {
+            is FirmwareResult.Ready -> result.file
+            is FirmwareResult.SubscriptionRequired -> throw IllegalStateException("${result.message} (plan: ${result.currentPlan})")
+            is FirmwareResult.NotAvailable -> throw IllegalStateException(result.message)
+            is FirmwareResult.DebugAccessRequired -> throw IllegalStateException(result.message)
+            is FirmwareResult.Error -> throw IllegalStateException(result.message)
+        }
+    }
+
     companion object {
         private const val MAX_DOCUMENT_BYTES = 96 * 1024 * 1024
 
@@ -241,19 +265,7 @@ class AndroidCustomizationPlatform(context: Context) : CustomizationPlatform {
             return parts.joinToString(".")
         }
 
-        /**
-         * Recordings leave the phone only over HTTPS, or plain HTTP to a loopback or private-network
-         * host (a self-hosted relay on the LAN, or the emulator's host at 10.0.2.2).
-         */
-        internal fun isAllowedEndpoint(url: String): Boolean {
-            val uri = runCatching { URL(url) }.getOrNull() ?: return false
-            if (uri.protocol.equals("https", ignoreCase = true)) return uri.host.isNotBlank()
-            if (!uri.protocol.equals("http", ignoreCase = true)) return false
-            val host = uri.host.orEmpty()
-            if (host.equals("localhost", ignoreCase = true) || host.endsWith(".local", ignoreCase = true)) return true
-            if (!host.matches(Regex("[0-9.]+"))) return false
-            val address = runCatching { InetAddress.getByName(host) }.getOrNull() ?: return false
-            return address.isLoopbackAddress || address.isSiteLocalAddress
-        }
+        /** Recordings and firmware use the same transport rule as the firmware client. */
+        internal fun isAllowedEndpoint(url: String): Boolean = isTrustedFirmwareTransport(url)
     }
 }

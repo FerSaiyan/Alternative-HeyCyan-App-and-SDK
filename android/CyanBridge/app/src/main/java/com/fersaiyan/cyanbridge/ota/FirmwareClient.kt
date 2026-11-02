@@ -89,6 +89,21 @@ internal fun firmwarePatchUnavailableMessage(
         .ifBlank { DEFAULT_PATCH_UNAVAILABLE_MESSAGE }
 }
 
+/**
+ * Firmware and customization traffic goes over HTTPS, or plain HTTP only to a loopback or
+ * private-network host (a self-hosted relay on the LAN, or the emulator's host at 10.0.2.2).
+ */
+internal fun isTrustedFirmwareTransport(url: String): Boolean {
+    val parsed = runCatching { URL(url) }.getOrNull() ?: return false
+    val host = parsed.host.orEmpty()
+    if (parsed.protocol.equals("https", ignoreCase = true)) return host.isNotBlank()
+    if (!parsed.protocol.equals("http", ignoreCase = true)) return false
+    if (host.equals("localhost", ignoreCase = true) || host.endsWith(".local", ignoreCase = true)) return true
+    if (!host.matches(Regex("[0-9.]+"))) return false
+    val address = runCatching { java.net.InetAddress.getByName(host) }.getOrNull() ?: return false
+    return address.isLoopbackAddress || address.isSiteLocalAddress
+}
+
 /** Keep patch requests on the same relay that resolved the firmware catalog. */
 internal fun firmwareRelayBaseUrl(context: Context): String =
     AppPrefs.RelayServer.baseUrl[context]
@@ -162,7 +177,7 @@ class FirmwareClient(
         // Step 1: Resolve relay base URL
         val relayBase = firmwareRelayBaseUrl(context)
         Log.i(TAG, "[1/5] Relay base URL: $relayBase")
-        if (!isHttpsRelayUrl(relayBase)) {
+        if (!isTrustedFirmwareTransport(relayBase)) {
             Log.e(TAG, "[1/5] Refusing non-HTTPS firmware relay URL")
             return FirmwareResult.Error("Firmware relay must use HTTPS")
         }
@@ -399,6 +414,95 @@ class FirmwareClient(
         }
     }
 
+    /**
+     * The HeyCyan Wi-Fi `.swu` a custom-firmware bundle names but does not carry (Pro customization):
+     * channel `led` resolves through the same exact-base LED path as the Patched LED OTA, `pure` finds
+     * the stock artifact in the pure catalog by its sha256. Either way the file must match
+     * [expectedSha256] and [expectedSizeBytes] from the bundle manifest.
+     */
+    fun fetchCustomizationWifiFirmware(
+        channel: String,
+        deviceVersions: InstalledFirmwareVersions,
+        expectedSha256: String,
+        expectedSizeBytes: Long,
+        outputDir: File,
+    ): FirmwareResult {
+        if (!isSha256Hex(expectedSha256) || expectedSizeBytes !in 1L..MAX_SERVER_FIRMWARE_SIZE_BYTES) {
+            return FirmwareResult.Error("The bundle's Wi-Fi firmware reference is invalid")
+        }
+        return when (channel) {
+            "led" -> when (val result = fetchAndDownload(deviceVersions, outputDir, OtaTarget.V821_WIFI, OtaFirmwareSource.STEALTH_CATALOG)) {
+                is FirmwareResult.Ready ->
+                    if (result.file.length() == expectedSizeBytes && sha256Hex(result.file).equals(expectedSha256, ignoreCase = true)) {
+                        result
+                    } else {
+                        result.file.delete()
+                        FirmwareResult.Error("The catalog's LED Wi-Fi firmware is not the one this build was tested with")
+                    }
+                else -> result
+            }
+            "pure" -> fetchPureArtifact(OtaTarget.V821_WIFI, expectedSha256, expectedSizeBytes, outputDir)
+            else -> FirmwareResult.Error("Unknown firmware channel: $channel")
+        }
+    }
+
+    private fun fetchPureArtifact(
+        target: OtaTarget,
+        expectedSha256: String,
+        expectedSizeBytes: Long,
+        outputDir: File,
+    ): FirmwareResult {
+        val relayBase = firmwareRelayBaseUrl(context).trimEnd('/')
+        if (!isTrustedFirmwareTransport(relayBase)) return FirmwareResult.Error("Firmware relay must use HTTPS")
+        val apiToken = ProSubscriptionServerPrefs.getApiToken(context)
+        if (apiToken.isBlank()) return FirmwareResult.Error("No API token available. Please sign in to your CyanBridge account.")
+        return try {
+            val ack = acknowledgeFirmwareRisk(relayBase, apiToken, "pure")
+            if (ack.statusCode !in 200..299) return gateOrError(ack.statusCode, ack.body, "Firmware risk acknowledgement was not accepted")
+            val catalog = httpGet("$relayBase/api/firmware/catalog?channel=pure", apiToken)
+                ?: return FirmwareResult.Error("Empty response from server")
+            if (catalog.statusCode != 200) return gateOrError(catalog.statusCode, catalog.body, "Could not list the stock firmware")
+            val artifacts = JSONObject(catalog.body).optJSONArray("artifacts")
+            val artifactId = (0 until (artifacts?.length() ?: 0)).map { artifacts!!.getJSONObject(it) }.firstOrNull {
+                it.optString("target") == target.serverTargetParameter() &&
+                    it.optString("sha256").equals(expectedSha256, ignoreCase = true) &&
+                    it.optLong("size_bytes", -1L) == expectedSizeBytes
+            }?.optString("artifact_id")?.takeIf { it.isNotBlank() }
+                ?: return FirmwareResult.NotAvailable("The stock Wi-Fi firmware for this build is not in the catalog", "")
+            val download = httpGet(
+                Uri.parse("$relayBase/api/firmware/download").buildUpon()
+                    .appendQueryParameter("channel", "pure")
+                    .appendQueryParameter("artifact_id", artifactId)
+                    .appendQueryParameter("target", target.serverTargetParameter())
+                    .build().toString(),
+                apiToken,
+            ) ?: return FirmwareResult.Error("Empty response from server")
+            if (download.statusCode != 200) return gateOrError(download.statusCode, download.body, "Server error (${download.statusCode})")
+            val json = JSONObject(download.body)
+            val filename = json.getString("filename").trim()
+            if (!isSafeFirmwareFilename(filename) || !target.isExpectedFirmwareFilename(filename)) {
+                return FirmwareResult.Error("Server returned an unexpected firmware file")
+            }
+            if (!json.optString("sha256").equals(expectedSha256, ignoreCase = true) || json.optLong("size_bytes", -1L) != expectedSizeBytes) {
+                return FirmwareResult.Error("Server returned a different stock firmware")
+            }
+            val file = downloadFirmware(json.getString("download_url"), filename, outputDir, expectedSha256, expectedSizeBytes)
+            if (file != null) FirmwareResult.Ready(file, filename) else FirmwareResult.Error("Failed to download firmware file from storage")
+        } catch (e: Exception) {
+            Log.e(TAG, "Pure firmware fetch failed", e)
+            FirmwareResult.Error("Server request failed: ${e.message}")
+        }
+    }
+
+    private fun gateOrError(statusCode: Int, body: String, fallback: String): FirmwareResult {
+        val json = runCatching { JSONObject(body) }.getOrDefault(JSONObject())
+        return when (json.optString("error")) {
+            "subscription_required", "subscription_expired" ->
+                FirmwareResult.SubscriptionRequired(json.optString("message", fallback), json.optString("currentPlan", "unknown"), listOf("standard", "max"))
+            else -> FirmwareResult.Error(json.optString("message").ifBlank { "$fallback (HTTP $statusCode)" })
+        }
+    }
+
     private fun downloadFirmware(
         downloadUrl: String,
         filename: String,
@@ -432,7 +536,7 @@ class FirmwareClient(
             }
 
             val url = URL(downloadUrl)
-            if (!url.protocol.equals("https", ignoreCase = true)) {
+            if (!isTrustedFirmwareTransport(downloadUrl)) {
                 Log.e(TAG, "Refusing non-HTTPS firmware URL")
                 return null
             }
@@ -457,7 +561,7 @@ class FirmwareClient(
                 Log.e(TAG, "Error body: ${errorBody.take(300)}")
                 return null
             }
-            if (!conn.url.protocol.equals("https", ignoreCase = true)) {
+            if (!isTrustedFirmwareTransport(conn.url.toString())) {
                 Log.e(TAG, "Refusing firmware redirect to non-HTTPS URL")
                 return null
             }
@@ -560,10 +664,6 @@ class FirmwareClient(
             !filename.contains('\\') &&
             File(filename).name == filename
 
-    private fun isHttpsRelayUrl(url: String): Boolean {
-        val uri = Uri.parse(url)
-        return uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank()
-    }
 
     private fun OtaTarget.serverTargetParameter(): String = when (this) {
         OtaTarget.V821_WIFI -> "v821"

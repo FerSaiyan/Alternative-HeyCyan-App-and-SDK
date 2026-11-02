@@ -8,12 +8,25 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
 class FirmwareFile(val name: String, val bytes: ByteArray)
+
+/**
+ * The HeyCyan Wi-Fi `.swu` a bundle does not carry: the app fetches it from the firmware catalog
+ * (`/api/firmware/download`, channel `led` or `pure`) and checks it against [sha256] and [size].
+ */
+data class WifiCatalogRef(
+    val channel: String,
+    val wifiHardwareVersion: String,
+    val wifiFirmwareVersion: String,
+    val sha256: String,
+    val size: Long,
+)
 
 /** A customer's emailed custom firmware, checked and split into what each family's OTA takes. */
 data class CustomFirmwareBundle(
@@ -23,7 +36,10 @@ data class CustomFirmwareBundle(
     /** The version the new image reports, when the worker states it (TuneBuds GET_INFO). */
     val firmwareVersion: String?,
     val ble: FirmwareFile,
+    /** An attached Wi-Fi `.swu` (fallback bundles only). */
     val wifi: FirmwareFile?,
+    /** The catalog `.swu` to fetch (HeyCyan bundles without an attached `.swu`). */
+    val wifiCatalog: WifiCatalogRef? = null,
 )
 
 /**
@@ -31,8 +47,10 @@ data class CustomFirmwareBundle(
  * - `.zip` with `manifest.json`:
  *   `{"format": "cyanbridge-custom-firmware", "format_version": 1, "device_family": "heycyan",
  *     "base_ble_firmware_version": "...", "base_wifi_firmware_version": "...", "firmware_version": "...",
- *     "files": [{"role": "ble", "name": "x.bin", "sha256": "..."}, {"role": "wifi", "name": "x.swu", "sha256": "..."}]}`
- *   HeyCyan needs `ble` (.bin) and `wifi` (.swu); EyeVue `ble` (.ufw); TuneBuds `ble` (.fot/.fota/.bin).
+ *     "files": [{"role": "ble", "name": "x.bin", "sha256": "..."}],
+ *     "wifi": {"channel": "led|pure", "wifi_hardware_version": "...", "wifi_firmware_version": "...", "sha256": "...", "size": 1}}`
+ *   HeyCyan: `ble` (.bin) plus the `wifi` catalog reference (or, as a fallback, a `wifi` role file with the
+ *   full .swu); EyeVue `ble` (.ufw); TuneBuds `ble` (.fot/.fota/.bin).
  * - a bare `.ufw` (EyeVue) or `.fot`/`.fota` (TuneBuds), without base-version checks.
  */
 object CustomFirmwareBundleReader {
@@ -58,6 +76,11 @@ object CustomFirmwareBundleReader {
             "This firmware is for ${bundle.family.label} glasses, but ${glasses.family.label} glasses are connected."
         bundle.baseBleFirmwareVersion != null && !bundle.baseBleFirmwareVersion.equals(glasses.bleFirmwareVersion, ignoreCase = true) ->
             "This firmware was built for Bluetooth firmware ${bundle.baseBleFirmwareVersion}, but the glasses run ${glasses.bleFirmwareVersion}."
+        bundle.wifiCatalog != null && (
+            !bundle.wifiCatalog.wifiFirmwareVersion.equals(glasses.wifiFirmwareVersion.orEmpty(), ignoreCase = true) ||
+                !bundle.wifiCatalog.wifiHardwareVersion.equals(glasses.wifiHardwareVersion.orEmpty(), ignoreCase = true)
+            ) ->
+            "This firmware's Wi-Fi part is for ${bundle.wifiCatalog.wifiHardwareVersion} ${bundle.wifiCatalog.wifiFirmwareVersion}, but the glasses run ${glasses.wifiHardwareVersion ?: "?"} ${glasses.wifiFirmwareVersion ?: "?"}."
         bundle.family == CustomizationFamily.HEYCYAN && bundle.baseWifiFirmwareVersion != null &&
             !bundle.baseWifiFirmwareVersion.equals(glasses.wifiFirmwareVersion.orEmpty(), ignoreCase = true) ->
             "This firmware was built for Wi-Fi firmware ${bundle.baseWifiFirmwareVersion}, but the glasses run ${glasses.wifiFirmwareVersion ?: "an unknown version"}."
@@ -108,11 +131,27 @@ object CustomFirmwareBundleReader {
         }
         val ble = files["ble"] ?: throw IllegalArgumentException("The firmware zip has no Bluetooth image")
         val wifi = files["wifi"]
+        val wifiCatalog = (manifest["wifi"] as? JsonObject)?.let { ref ->
+            fun refStr(key: String) = (ref[key] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
+            val channel = refStr("channel").lowercase()
+            require(channel == "led" || channel == "pure") { "The manifest's Wi-Fi channel must be led or pure" }
+            val sha = refStr("sha256").lowercase()
+            require(sha.matches(Regex("[0-9a-f]{64}"))) { "The manifest has no valid Wi-Fi sha256" }
+            val size = (ref["size"] as? JsonPrimitive)?.longOrNull?.takeIf { it > 0 }
+                ?: throw IllegalArgumentException("The manifest has no Wi-Fi size")
+            WifiCatalogRef(
+                channel = channel,
+                wifiHardwareVersion = refStr("wifi_hardware_version").ifEmpty { throw IllegalArgumentException("The manifest has no Wi-Fi hardware version") },
+                wifiFirmwareVersion = refStr("wifi_firmware_version").ifEmpty { throw IllegalArgumentException("The manifest has no Wi-Fi firmware version") },
+                sha256 = sha,
+                size = size,
+            )
+        }
         when (family) {
             CustomizationFamily.HEYCYAN -> {
                 require(ble.name.endsWith(".bin", ignoreCase = true)) { "The HeyCyan Bluetooth image must be a .bin" }
-                require(wifi != null && wifi.name.endsWith(".swu", ignoreCase = true)) {
-                    "HeyCyan firmware needs both the Wi-Fi .swu and the Bluetooth .bin"
+                require(wifiCatalog != null || (wifi != null && wifi.name.endsWith(".swu", ignoreCase = true))) {
+                    "HeyCyan firmware needs the Wi-Fi .swu reference and the Bluetooth .bin"
                 }
             }
             CustomizationFamily.EYEVUE -> require(ble.name.endsWith(".ufw", ignoreCase = true)) { "The EyeVue image must be a .ufw" }
@@ -127,6 +166,7 @@ object CustomFirmwareBundleReader {
             firmwareVersion = str("firmware_version"),
             ble = ble,
             wifi = wifi,
+            wifiCatalog = wifiCatalog,
         )
     }
 
