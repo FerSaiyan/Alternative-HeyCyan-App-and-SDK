@@ -71,6 +71,7 @@ import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
+import com.fersaiyan.cyanbridge.shared.ui.components.ExpandableSectionCard
 import com.fersaiyan.cyanbridge.shared.ui.localizedDestinationLabel
 import com.fersaiyan.cyanbridge.shared.ui.localizedProviderLabel
 
@@ -245,7 +246,7 @@ fun SettingsScreen(
                 )
             }
             item {
-                SettingsSectionCard(
+                ExpandableSectionCard(
                     title = stringResource(Res.string.settings_custom_ai_provider),
                     expanded = SettingsSection.AI_AUTOMATION in expandedSections,
                     onToggle = { onToggleSection(SettingsSection.AI_AUTOMATION) },
@@ -254,7 +255,7 @@ fun SettingsScreen(
                 }
             }
             item {
-                SettingsSectionCard(
+                ExpandableSectionCard(
                     title = stringResource(Res.string.settings_memory_privacy),
                     expanded = SettingsSection.MEMORY_PRIVACY in expandedSections,
                     onToggle = { onToggleSection(SettingsSection.MEMORY_PRIVACY) },
@@ -263,7 +264,7 @@ fun SettingsScreen(
                 }
             }
             item {
-                SettingsSectionCard(
+                ExpandableSectionCard(
                     title = stringResource(Res.string.settings_transcripts),
                     expanded = SettingsSection.TRANSCRIPTS in expandedSections,
                     onToggle = { onToggleSection(SettingsSection.TRANSCRIPTS) },
@@ -272,7 +273,7 @@ fun SettingsScreen(
                 }
             }
             item {
-                SettingsSectionCard(
+                ExpandableSectionCard(
                     title = stringResource(Res.string.settings_data),
                     expanded = SettingsSection.DATA in expandedSections,
                     onToggle = { onToggleSection(SettingsSection.DATA) },
@@ -281,7 +282,7 @@ fun SettingsScreen(
                 }
             }
             item {
-                SettingsSectionCard(
+                ExpandableSectionCard(
                     title = stringResource(Res.string.settings_accessibility),
                     expanded = SettingsSection.ACCESSIBILITY in expandedSections,
                     onToggle = { onToggleSection(SettingsSection.ACCESSIBILITY) },
@@ -290,7 +291,7 @@ fun SettingsScreen(
                 }
             }
             item {
-                SettingsSectionCard(
+                ExpandableSectionCard(
                     title = stringResource(Res.string.settings_support),
                     expanded = SettingsSection.SUPPORT in expandedSections,
                     onToggle = { onToggleSection(SettingsSection.SUPPORT) },
@@ -487,87 +488,6 @@ private fun QuickActionCard(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
-        }
-    }
-}
-
-@Composable
-private fun SettingsSectionCard(
-    title: String,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-            ),
-        colors = CardDefaults.cardColors(
-            containerColor = if (expanded) {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            },
-        ),
-        shape = MaterialTheme.shapes.extraLarge,
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 64.dp)
-                    .testTag("settings_section_$title")
-                    .clickable(onClick = onToggle),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = title,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Surface(
-                    modifier = Modifier.size(40.dp),
-                    color = if (expanded) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    },
-                    contentColor = if (expanded) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    },
-                    shape = MaterialTheme.shapes.large,
-                ) {
-                    Icon(
-                        imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                        contentDescription = if (expanded) {
-                            stringResource(Res.string.local_models_collapse, title)
-                        } else {
-                            stringResource(Res.string.local_models_expand, title)
-                        },
-                        modifier = Modifier.padding(8.dp),
-                    )
-                }
-            }
-            AnimatedVisibility(
-                visible = expanded,
-                enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
-                exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
-            ) {
-                Column {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Column(
-                        modifier = Modifier.padding(top = 16.dp, bottom = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        content()
-                    }
-                }
-            }
         }
     }
 }
