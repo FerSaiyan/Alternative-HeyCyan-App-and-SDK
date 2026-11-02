@@ -44,7 +44,19 @@ data class GlassesFirmwareInfo(
         }
 }
 
-data class ToneSlot(val id: String, val label: String, val maxBytes: Long?, val format: String?)
+/**
+ * One firmware tone slot. [maxBytes] is the slot's capacity in the firmware (the encoded tone the
+ * worker writes), not an upload limit: uploads use [CustomizationConfig.toneMaxBytes] and the worker
+ * encodes and shortens the sound to fit. [maxDurationMs] is the catalog's estimate of how long a
+ * sound fits, when the server sends it.
+ */
+data class ToneSlot(
+    val id: String,
+    val label: String,
+    val maxBytes: Long?,
+    val format: String?,
+    val maxDurationMs: Long? = null,
+)
 
 data class WakeLanguage(val code: String, val maxChars: Int, val maxWords: Int, val minLetters: Int)
 
@@ -156,7 +168,7 @@ object CustomizationJson {
         val perFirmwareSlots = root["tone_slots"]?.let { it as? JsonArray }?.mapNotNull { element ->
             val o = element as? JsonObject ?: return@mapNotNull null
             val id = o.str("id") ?: return@mapNotNull null
-            ToneSlot(id, o.str("label") ?: slotLabel(id), o.long("max_bytes"), o.str("format"))
+            ToneSlot(id, o.str("label") ?: slotLabel(id), o.long("max_bytes"), o.str("format"), o.long("max_duration_ms_est"))
         }
         val genericSlots = tones?.array("slots")?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
             ?.map { ToneSlot(it, slotLabel(it), null, null) }

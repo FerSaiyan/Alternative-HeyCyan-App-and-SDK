@@ -22,7 +22,14 @@ import kotlinx.coroutines.withContext
 
 enum class CustomizationPhase { IDLE, LOCKED, LOADING, NO_GLASSES, UNSUPPORTED, DISABLED, READY }
 
-data class ToneChoiceUi(val id: String, val label: String, val fileName: String? = null, val error: String? = null)
+/** [hint]: how long a sound the slot holds, when the server knows it (longer sounds are shortened). */
+data class ToneChoiceUi(
+    val id: String,
+    val label: String,
+    val fileName: String? = null,
+    val error: String? = null,
+    val hint: String? = null,
+)
 
 data class WakeSampleUi(val index: Int, val durationMs: Long, val peakDbfs: Int, val warning: String? = null)
 
@@ -191,7 +198,7 @@ class GlassesCustomizationViewModel(
                 glassesLabel = found.label,
                 tones = cfg.toneSlots.map { slot ->
                     val picked = current.tones.firstOrNull { it.id == slot.id }
-                    ToneChoiceUi(slot.id, slot.label, picked?.fileName?.takeIf { toneRefs.containsKey(slot.id) })
+                    ToneChoiceUi(slot.id, slot.label, picked?.fileName?.takeIf { toneRefs.containsKey(slot.id) }, hint = toneHint(slot))
                 },
                 showDisableLed = cfg.disableLedSupported,
                 disableLed = current.disableLed && cfg.disableLedSupported,
@@ -217,7 +224,8 @@ class GlassesCustomizationViewModel(
 
     fun onTonePicked(slotId: String, ref: String?) {
         if (ref == null) return
-        val slot = config?.toneSlots?.firstOrNull { it.id == slotId } ?: return
+        val cfg = config ?: return
+        if (cfg.toneSlots.none { it.id == slotId }) return
         viewModelScope.launch {
             val result = runCatching { withContext(io) { platform.readDocument(ref) } }
             val doc = result.getOrElse { error ->
@@ -225,10 +233,12 @@ class GlassesCustomizationViewModel(
                 return@launch
             }
             val contentType = toneContentType(doc)
-            val limit = minOf(slot.maxBytes ?: Long.MAX_VALUE, config?.toneMaxBytes ?: Long.MAX_VALUE)
+            // The upload limit is the server's per-kind cap. The slot's max_bytes is the firmware
+            // capacity of the encoded tone: the worker encodes and shortens the sound to fit it.
+            val limit = cfg.toneMaxBytes
             val error = when {
                 contentType == null -> "Use a WAV, MP3, OGG, AAC, M4A or FLAC file."
-                doc.bytes.size > limit -> "The file is too large (max ${limit / 1024} KB)."
+                doc.bytes.size > limit -> "The file is too large (max ${sizeLabel(limit)})."
                 doc.bytes.isEmpty() -> "The file is empty."
                 else -> null
             }
@@ -246,6 +256,14 @@ class GlassesCustomizationViewModel(
         toneRefs.remove(slotId)
         _state.update { s -> s.copy(tones = s.tones.map { if (it.id == slotId) it.copy(fileName = null, error = null) else it }) }
     }
+
+    private fun toneHint(slot: ToneSlot): String? = slot.maxDurationMs?.takeIf { it > 0 }?.let { ms ->
+        val tenths = (ms + 50) / 100
+        "Plays up to about ${tenths / 10}.${tenths % 10} s; longer sounds are shortened to fit."
+    }
+
+    private fun sizeLabel(bytes: Long): String =
+        if (bytes >= 1_048_576) "${bytes / 1_048_576} MB" else "${(bytes / 1024).coerceAtLeast(1)} KB"
 
     private fun setToneError(slotId: String, message: String) =
         _state.update { s -> s.copy(tones = s.tones.map { if (it.id == slotId) it.copy(fileName = null, error = message) else it }) }

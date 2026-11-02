@@ -5,7 +5,7 @@
     <string name="customization_upgrade">View Standard &amp; Max</string>
     <string name="customization_refresh">Check glasses again</string>
     <string name="customization_tones">Tones</string>
-    <string name="customization_tones_hint">Pick an audio file for any sound you want to replace. Leave the others as they are.</string>
+    <string name="customization_tones_hint">Pick an audio file for any sound you want to replace. Leave the others as they are. The glasses hold only short sounds, so longer sounds are shortened to fit.</string>
     <string name="customization_choose_file">Choose file</string>
     <string name="customization_remove">Remove</string>
     <string name="customization_options">Options</string>

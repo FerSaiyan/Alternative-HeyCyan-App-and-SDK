@@ -83,7 +83,8 @@ class GlassesCustomizationViewModelTest {
         }
 
         override fun sha256Hex(bytes: ByteArray) = "a".repeat(64)
-        override suspend fun readDocument(ref: String) = PickedDocument("chime.wav", "audio/wav", ByteArray(2_000) { 1 })
+        /** A 2 s WAV: far over the slot's firmware capacity, well under the server's 5 MB tone cap. */
+        override suspend fun readDocument(ref: String) = PickedDocument("chime.wav", "audio/wav", ByteArray(64_044) { 1 })
 
         override fun micCapture(family: CustomizationFamily) = object : GlassesMicCapture {
             override suspend fun record(maxMs: Long, stop: Deferred<Unit>, onPcm: (ByteArray) -> Unit): ByteArray {
@@ -97,7 +98,7 @@ class GlassesCustomizationViewModelTest {
 
         companion object {
             const val CONFIG = """{"enabled":true,"eligible":true,"ineligible_reason":null,"consent_version":"2026-11-01",
-                "supported":true,"tone_slots":[{"id":"power_on","label":"Power on","max_bytes":33000,"format":"wts"}],
+                "supported":true,"tone_slots":[{"id":"power_on","label":"Power on","max_bytes":2976,"format":"wts","max_duration_ms_est":3718}],
                 "options_supported":{"disable_led_flash":true,"mute_shutter":false},
                 "wake_word":{"supported":true,"languages":["en","pt"],"phonemes_note":null},
                 "wake_languages":[{"code":"en","max_chars":32,"max_words":4,"min_letters":4},{"code":"pt","max_chars":32,"max_words":4,"min_letters":4}],
@@ -139,6 +140,7 @@ class GlassesCustomizationViewModelTest {
         val ready = vm.state.value
         assertEquals(CustomizationPhase.READY, ready.phase)
         assertEquals(listOf("power_on"), ready.tones.map { it.id })
+        assertEquals("Plays up to about 3.7 s; longer sounds are shortened to fit.", ready.tones.single().hint)
         assertTrue(ready.showDisableLed && !ready.showMuteShutter)
         assertEquals(listOf("en", "pt"), ready.wakeLanguages)
 
@@ -158,6 +160,7 @@ class GlassesCustomizationViewModelTest {
         assertEquals("true", created["options"]!!.jsonObject["disable_led_flash"]!!.jsonPrimitive.content)
         assertEquals((1..8).map { "wake_0$it" } + "power_on", platform.uploaded.keys.toList())
         assertEquals(44 + 32_000, platform.uploaded.getValue("wake_01"))
+        assertEquals(64_044, platform.uploaded.getValue("power_on")) // the slot's 2976-B capacity is not an upload limit
         assertTrue("POST /api/customization/jobs/job123456789/submit" in platform.calls)
         val after = vm.state.value
         assertEquals(emptyList(), after.samples)

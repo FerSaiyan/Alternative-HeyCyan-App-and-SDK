@@ -98,6 +98,11 @@ private fun ReadyContent(state: GlassesCustomizationUiState, actions: GlassesCus
                             modifier = Modifier.testTag("customization_tone_file_${tone.id}"),
                         )
                     }
+                    if (tone.error == null && tone.fileName == null) {
+                        tone.hint?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
                 if (tone.fileName != null) {
                     TextButton(onClick = { actions.clearTone(tone.id) }, modifier = Modifier.testTag("customization_tone_clear_${tone.id}")) {
