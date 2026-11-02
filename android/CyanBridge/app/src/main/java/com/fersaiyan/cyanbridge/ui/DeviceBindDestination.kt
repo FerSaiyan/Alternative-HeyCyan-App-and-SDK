@@ -15,7 +15,11 @@ import com.fersaiyan.cyanbridge.R
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.ScanResult
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -72,11 +76,37 @@ class DeviceBindDestination : NavScreen() {
     private val ar99Advertisements = mutableMapOf<String, Ar99Advertisement>()
     private var mentraScanStarted = false
     private var initialScanStarted = false
+    private var classicReceiverRegistered = false
+
+    /** Classic inquiry results: TuneBuds/MemoMind units that talk SPP and may not advertise over BLE. */
+    private val classicDiscoveryReceiver = object : BroadcastReceiver() {
+        @SuppressLint("MissingPermission")
+        override fun onReceive(context: Context, intent: Intent) {
+            if (!hasBluetooth(this@DeviceBindDestination)) return
+            @Suppress("DEPRECATION")
+            val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE) ?: return
+            if (runCatching { device.type }.getOrNull() == BluetoothDevice.DEVICE_TYPE_LE) return
+            val name = intent.getStringExtra(BluetoothDevice.EXTRA_NAME) ?: runCatching { device.name }.getOrNull()
+            if (!BleDeviceClassifier.isClassicGlassesName(name)) return
+            val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0).toInt()
+            upsertDevice(device.address, name, rssi, connectionAddress = device.address)
+        }
+    }
     private var lastDeviceListPublishAtMs = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         EventBus.getDefault().register(this)
+        ContextCompat.registerReceiver(
+            this,
+            classicDiscoveryReceiver,
+            IntentFilter().apply {
+                addAction(BluetoothDevice.ACTION_FOUND)
+                addAction(BluetoothDevice.ACTION_NAME_CHANGED)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        classicReceiverRegistered = true
         setContent {
             DeviceBindScreen(
                 devices = viewModel.devices,
@@ -143,8 +173,9 @@ class DeviceBindDestination : NavScreen() {
         }
         scanSize = 0
         viewModel.isScanning = true
-        addBondedMemoMindGlasses()
+        addBondedClassicGlasses()
         BleScannerHelper.getInstance().scanDevice(this, null, bleScanCallback)
+        startClassicDiscovery()
         handler.postDelayed(scanTimeout, 15_000)
         mentraSdkAddresses.clear()
         ar99Advertisements.clear()
@@ -157,6 +188,7 @@ class DeviceBindDestination : NavScreen() {
     private fun stopScan() {
         handler.removeCallbacks(scanTimeout)
         BleScannerHelper.getInstance().stopScan(this)
+        cancelClassicDiscovery()
         MentraLiveManager.instanceOrNull()?.stopScan()
         viewModel.isScanning = false
     }
@@ -421,14 +453,30 @@ class DeviceBindDestination : NavScreen() {
     }
 
     /**
-     * MemoMind glasses already bonded in Android may not advertise over BLE while the official
-     * App holds them, so bonded devices with a MemoMind name are listed too.
+     * SPP glasses already bonded in Android (MemoMind, TuneBuds) may not advertise over BLE while
+     * another app holds them, so bonded devices with such a name are listed too, by their Classic
+     * address (the one the SPP link connects to).
      */
     @SuppressLint("MissingPermission")
-    private fun addBondedMemoMindGlasses() {
+    private fun addBondedClassicGlasses() {
         val bonded = runCatching { BluetoothAdapter.getDefaultAdapter()?.bondedDevices.orEmpty() }.getOrDefault(emptySet())
-        bonded.filter { BleDeviceClassifier.isMemoMindName(it.name.orEmpty().lowercase()) }
-            .forEach { upsertDevice(it.address, it.name, rssi = 0) }
+        bonded.filter { BleDeviceClassifier.isClassicGlassesName(it.name) }
+            .forEach { upsertDevice(it.address, it.name, rssi = 0, connectionAddress = it.address) }
+    }
+
+    /** Classic inquiry next to the BLE scan; results arrive in [classicDiscoveryReceiver]. */
+    @SuppressLint("MissingPermission")
+    private fun startClassicDiscovery() {
+        runCatching {
+            val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
+            if (!adapter.isDiscovering) adapter.startDiscovery()
+        }.onFailure { Log.w(TAG, "Classic discovery did not start: ${it.message}") }
+    }
+
+    /** Inquiry slows RFCOMM connects, so it stops with the scan (and before any connect). */
+    @SuppressLint("MissingPermission")
+    private fun cancelClassicDiscovery() {
+        runCatching { BluetoothAdapter.getDefaultAdapter()?.takeIf { it.isDiscovering }?.cancelDiscovery() }
     }
 
     /** MemoMind talks Classic SPP, which needs an Android bond (the RFCOMM connect can also prompt). */
@@ -470,7 +518,15 @@ class DeviceBindDestination : NavScreen() {
         val sanitizedName = name?.trim()?.takeIf { it.isNotEmpty() }
         // G1/G2: the SDK connects both arms from the left one, so the right arm gets no row.
         if (MentraSdkModel.isSecondaryArm(sanitizedName)) return
-        val existingIndex = deviceList.indexOfFirst { it.macAddress.equals(mac, ignoreCase = true) }
+        // A TuneBuds BLE advert (connectionAddress = its Classic address) and the same unit found
+        // bonded or by Classic inquiry share one row.
+        val keys = listOfNotNull(mac, connectionAddress)
+        val matching = deviceList.filter { row ->
+            keys.any { it.equals(row.macAddress, ignoreCase = true) || it.equals(row.connectionAddress, ignoreCase = true) }
+        }
+        // The advert can arrive first without its Classic address (onLeScan): fold that row in.
+        if (matching.size > 1) deviceList.removeAll(matching.drop(1).toSet())
+        val existingIndex = matching.firstOrNull()?.let(deviceList::indexOf) ?: -1
         if (existingIndex >= 0) {
             val existing = deviceList[existingIndex]
             val previousName = existing.advertisedName
@@ -532,6 +588,11 @@ class DeviceBindDestination : NavScreen() {
 
     override fun onDestroy() {
         handler.removeCallbacks(scanTimeout)
+        cancelClassicDiscovery()
+        if (classicReceiverRegistered) {
+            runCatching { unregisterReceiver(classicDiscoveryReceiver) }
+            classicReceiverRegistered = false
+        }
         MentraLiveManager.instanceOrNull()?.stopScan()
         if (EventBus.getDefault().isRegistered(this)) EventBus.getDefault().unregister(this)
         super.onDestroy()
@@ -542,6 +603,7 @@ class DeviceBindDestination : NavScreen() {
     private inner class ScanTimeout : Runnable {
         override fun run() {
             BleScannerHelper.getInstance().stopScan(this@DeviceBindDestination)
+            cancelClassicDiscovery()
             viewModel.isScanning = false
         }
     }

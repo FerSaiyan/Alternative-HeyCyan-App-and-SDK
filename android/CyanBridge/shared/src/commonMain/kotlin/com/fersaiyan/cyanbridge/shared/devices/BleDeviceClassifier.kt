@@ -38,6 +38,15 @@ object BleDeviceClassifier {
     fun isMemoMindName(lowercaseName: String): Boolean =
         lowercaseName.contains("memomind") || lowercaseName.contains("memo mind") || lowercaseName.contains("memo-mind")
 
+    /**
+     * Glasses that talk Classic Bluetooth SPP (TuneBuds, MemoMind). Besides their BLE adverts
+     * (TuneBuds: company 0x475A carrying the Classic address), the device picker also lists bonded
+     * and Classic-inquiry devices whose name matches, so units that do not advertise over BLE
+     * (or are held by another app) can still be chosen.
+     */
+    fun isClassicGlassesName(name: String?): Boolean =
+        guessDeviceClass(name) in setOf(DeviceClass.TUNEBUDS, DeviceClass.MEMOMIND)
+
     fun guessDeviceClass(
         advertisedName: String?,
         serviceUuids: List<String> = emptyList(),

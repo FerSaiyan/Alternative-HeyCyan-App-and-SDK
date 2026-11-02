@@ -46,6 +46,11 @@ class IosMigrationPortsTest {
             BleDeviceClassifier.guessDeviceClass(null, serviceUuids = listOf("FEE7"), heyCyanServiceUuids = listOf("fee7")),
         )
         assertEquals(DeviceClass.UNKNOWN, BleDeviceClassifier.guessDeviceClass("Kitchen speaker"))
+        // Bonded / Classic-inquiry rows in the device picker: SPP glasses only.
+        assertEquals(
+            listOf(true, true, true, false, false, false),
+            listOf("xk one Pro", "TuneBuds-5606", "MemoMind One 2", "Galaxy Buds2", "O_W3", null).map(BleDeviceClassifier::isClassicGlassesName),
+        )
     }
 
     @Test
