@@ -75,6 +75,23 @@ object TuneBudsProtocol {
     const val CMD_TELEPROMPTER = 0xF8
     const val CMD_TELEPROMPTER_CONTROL = 0xFB
 
+    /** AI chat state: notify 1 = chat opened over SCO, 2 = over Opus (0xB2), 0 = closed, 0xFF = error. */
+    const val CMD_AI_CHAT_STATE = 0xB0
+    const val CMD_AI_RECORD_DATA = 0xB2
+    const val AI_CHAT_CLOSE = 0
+    const val AI_CHAT_OPEN_SCO = 1
+    const val AI_CHAT_OPEN_OPUS = 2
+
+    // AB Mate FOTA (vendor com.bluetrum.fota.OtaManager).
+    const val CMD_FOTA_GET_INFO = 0xA0
+    const val CMD_FOTA_START = 0xA1
+    const val CMD_FOTA_SEND_DATA = 0xA2
+    const val CMD_FOTA_STATE = 0xA3
+    const val FOTA_STATE_NEXT_BLOCK = 0x00
+    const val FOTA_STATE_CONTINUE = 0xFE
+    const val FOTA_STATE_PAUSE = 0xFD
+    const val FOTA_STATE_FINISH = 0xFF
+
     const val INFO_BATTERY = 0x01
     const val INFO_FIRMWARE_VERSION = 0x02
     const val INFO_IN_EAR_STATE = 0x09

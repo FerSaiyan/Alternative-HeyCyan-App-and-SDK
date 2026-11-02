@@ -61,6 +61,8 @@ object EyevueProtocol {
     const val CMD_FILE_DOWNLOAD_FINISH = 68
     const val CMD_GET_SUPPORT_FUNCTION = 149
     const val CMD_STOP_VOICE_RECOGNITION = 86
+    /** Firmware APP2BLE_SET_RETRY_VOICE_TRANSFER: opens the glasses-mic Opus stream (0x46 notifies). */
+    const val CMD_START_VOICE_STREAM = 87
     const val CMD_GET_VOICE_ASSISTANT_STATUS = 113
     const val CMD_SET_VOICE_ASSISTANT_STATUS = 114
 
@@ -184,6 +186,9 @@ object EyevueProtocol {
         valuePacket(CMD_WEAR_DETECT, if (enabled) 0x31 else 0x30)
 
     fun buildStopVoiceRecognitionPacket(): ByteArray = valuePacket(CMD_STOP_VOICE_RECOGNITION, 0)
+
+    /** `AB 55 00 03 57 00 57`: the glasses stream their microphone as 40-byte Opus packets. */
+    fun buildStartVoiceStreamPacket(): ByteArray = valuePacket(CMD_START_VOICE_STREAM, 0)
 
     fun buildGetVoiceAssistantStatusPacket(): ByteArray = valuePacket(CMD_GET_VOICE_ASSISTANT_STATUS, 0)
 

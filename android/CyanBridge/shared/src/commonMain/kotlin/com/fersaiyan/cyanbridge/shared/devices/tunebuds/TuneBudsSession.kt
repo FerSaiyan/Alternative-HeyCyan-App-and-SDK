@@ -17,6 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.concurrent.Volatile
 
 /** The link a [TuneBudsSession] talks over: RFCOMM on Android, BLE (FDB3/FF17/FF18) on iOS. */
 interface TuneBudsTransport {
@@ -94,12 +95,33 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
 
     var aiPhotoListener: TuneBudsAiPhotoListener? = null
 
+    /**
+     * Receives every 0xB2 glasses-microphone chunk on the reading thread, losslessly, while set.
+     * Those notifications then bypass [frames] (50 per second would overflow its buffer).
+     */
+    @Volatile var micAudioListener: ((ByteArray) -> Unit)? = null
+
+    private val _wakeEvents = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+
+    /**
+     * The glasses opened an AI chat on their own (notify 0xB0 with 1 = SCO or 2 = Opus): their
+     * wake word or AI gesture. Not emitted while [micAudioListener] is set (our own capture).
+     */
+    val wakeEvents: SharedFlow<Int> = _wakeEvents.asSharedFlow()
+
     /** Frames the decoder had to skip or accept with a sequence gap since the last [reset]. */
     val malformedFrameCount: Int get() = decoder.malformedFrameCount
 
     /** Feed every chunk received from the link. */
     fun onBytesReceived(chunk: ByteArray) {
         decoder.append(chunk).forEach { frame ->
+            val micListener = micAudioListener
+            if (micListener != null && frame.command == TuneBudsProtocol.CMD_AI_RECORD_DATA &&
+                frame.type == TuneBudsFrameType.NOTIFICATION
+            ) {
+                micListener(frame.payload)
+                return@forEach
+            }
             handleFrame(frame)
             _frames.tryEmit(frame)
         }
@@ -314,6 +336,12 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
             }
         }
 
+    /** Sends [command] without waiting for a response (FOTA data, AI-chat state). */
+    suspend fun sendWithoutResponse(command: Int, payload: ByteArray = byteArrayOf()) = send(command, payload)
+
+    /** Largest payload that fits one unfragmented frame on this link. */
+    val maxFramePayload: Int get() = maxPacketSize - TuneBudsProtocol.HEADER_SIZE
+
     private suspend fun requestWorkState() {
         TuneBudsProtocol.parseStatus(request(TuneBudsProtocol.CMD_WORK_STATE).payload)?.let { value ->
             _state.value = _state.value.copy(workState = value)
@@ -374,6 +402,14 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
             }
             TuneBudsProtocol.CMD_MEDIA_COUNTS -> if (notification) {
                 TuneBudsProtocol.parseMediaCounts(payload)?.let { applyStatus(current.copy(mediaCounts = it)) }
+            }
+            TuneBudsProtocol.CMD_AI_CHAT_STATE -> if (notification && micAudioListener == null) {
+                when (val mode = TuneBudsProtocol.parseStatus(payload)) {
+                    TuneBudsProtocol.AI_CHAT_OPEN_SCO, TuneBudsProtocol.AI_CHAT_OPEN_OPUS -> {
+                        PlatformLogger.i(TAG, "TuneBuds opened an AI chat (mode=$mode): wake event")
+                        _wakeEvents.tryEmit(mode)
+                    }
+                }
             }
         }
     }
