@@ -92,12 +92,19 @@ data class MetaPairingScreenState(
     val checkingCameraPermission: Boolean = false,
     /** False for a build with app id `"0"`: only Developer Mode can register. */
     val appIdConfigured: Boolean = true,
+    /** No bonded Bluetooth device advertises the Meta glasses service (DAT's AVAILABLE check). */
+    val noMetaGlassesBonded: Boolean = false,
 ) {
     val androidPermissionsGranted: Boolean
         get() = androidCameraGranted && nearbyDevicesGranted
 
     val isRegistered: Boolean
         get() = registrationState == MetaRaybanManager.RegistrationState.REGISTERED
+
+    /** DAT sees no Meta glasses bonded to this phone; pairing happens in Meta AI, not here. */
+    val needsGlassesPairedInMetaAi: Boolean
+        get() = registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE &&
+            metaAccessState == MetaAccessState.NEEDS_SETUP && metaAiInstalled && noMetaGlassesBonded
 
     val isReadyForImageQuestion: Boolean
         get() = androidPermissionsGranted && initialized && isRegistered &&
@@ -112,6 +119,7 @@ data class MetaPairingScreenState(
             !initialized -> "Initialize Meta connection"
             !metaAiInstalled -> "Install Meta AI"
             metaAccessState == MetaAccessState.NEEDS_META_INVITE -> "Request Meta access"
+            needsGlassesPairedInMetaAi -> "Pair glasses in Meta AI"
             !isRegistered -> "Register CyanBridge in Meta AI"
             availableDeviceCount == 0 -> "Refresh glasses connection"
             !deviceConnected -> "Reconnect glasses in Meta AI"
@@ -162,6 +170,7 @@ internal fun inferredMetaPairingError(state: MetaPairingScreenState): String? {
 
     if (state.registrationState == MetaRaybanManager.RegistrationState.UNAVAILABLE) {
         val guidance = state.guidance.orEmpty()
+        if (state.needsGlassesPairedInMetaAi) return "No Meta glasses are paired with this phone"
         if (guidance.contains("DAT cannot see", ignoreCase = true)) {
             return "DAT cannot see a linked Meta wearable"
         }
@@ -306,6 +315,7 @@ class MetaPairingDestination : NavScreen() {
             androidPermissionPermanentlyDenied = androidPermissionPermanentlyDenied,
             checkingCameraPermission = checkingGlassesCameraPermission,
             appIdConfigured = manager.appIdConfigured,
+            noMetaGlassesBonded = manager.metaGlassesBondedToPhone() == false,
         )
         if (checkGlassesCamera && screenState.androidPermissionsGranted && screenState.initialized && screenState.deviceConnected &&
             !requestingGlassesCameraPermission) {
@@ -366,6 +376,7 @@ class MetaPairingDestination : NavScreen() {
             !screenState.initialized -> initializeDat()
             !screenState.metaAiInstalled -> openMetaAi()
             screenState.metaAccessState == MetaAccessState.NEEDS_META_INVITE -> openBetaAccess()
+            screenState.needsGlassesPairedInMetaAi -> openMetaAi()
             !screenState.isRegistered -> manager.startRegistration(activity)
             !screenState.deviceConnected && screenState.availableDeviceCount > 0 -> openMetaAi()
             screenState.availableDeviceCount == 0 -> {

@@ -62,6 +62,13 @@ fun resolveMetaPairingIssue(
             primaryLabel = "Request access",
             action = MetaPairingIssueAction.REQUEST_ACCESS,
         )
+        "no meta glasses are paired with this phone" in normalized -> MetaPairingIssue(
+            title = "Pair your glasses in Meta AI",
+            message = setupGuidance
+                ?: "No Meta glasses are paired with this phone. Pair your glasses in Meta AI, keep them powered on and nearby, then return to CyanBridge.",
+            primaryLabel = "Open Meta AI",
+            action = MetaPairingIssueAction.OPEN_META_AI,
+        )
         "no dat device was discovered after meta registration" in normalized -> MetaPairingIssue(
             title = "No Meta glasses paired",
             message = setupGuidance

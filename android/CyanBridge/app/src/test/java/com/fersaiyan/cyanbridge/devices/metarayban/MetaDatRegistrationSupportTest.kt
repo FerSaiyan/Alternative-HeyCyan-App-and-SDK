@@ -2,17 +2,32 @@ package com.fersaiyan.cyanbridge.devices.metarayban
 
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class MetaDatRegistrationSupportTest {
+    /** 2.3.0 reports: Meta AI installed, no bonded Meta glasses, DAT UNAVAILABLE, told to request an invite. */
     @Test
-    fun silentUnavailableProductionRegistrationNeedsMetaInvite() {
+    fun unavailableBeforeRegistrationIsSetupNotAnInvite() {
+        for (bonded in listOf(0, 1)) {
+            val accessState = resolveMetaAccessState(
+                initialized = true,
+                registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
+                readiness = readiness(bondedMetaDeviceCount = bonded, developerConfiguration = false),
+                lastError = null,
+            )
+            assertEquals(MetaAccessState.NEEDS_SETUP, accessState)
+        }
+    }
+
+    @Test
+    fun rejectedRegistrationOutsideDeveloperModeNeedsMetaInvite() {
         val accessState = resolveMetaAccessState(
             initialized = true,
-            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
-            availableDeviceCount = 0,
+            registrationState = MetaRaybanManager.RegistrationState.AVAILABLE,
             readiness = readiness(bondedMetaDeviceCount = 1, developerConfiguration = false),
-            lastError = null,
+            lastError = "registration: Registration process failed for an unspecified reason",
+            registrationRejected = true,
         )
 
         assertEquals(MetaAccessState.NEEDS_META_INVITE, accessState)
@@ -22,10 +37,10 @@ class MetaDatRegistrationSupportTest {
     fun developerModeChoiceIsNotSentToTheInviteForm() {
         val accessState = resolveMetaAccessState(
             initialized = true,
-            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
-            availableDeviceCount = 0,
+            registrationState = MetaRaybanManager.RegistrationState.AVAILABLE,
             readiness = readiness(bondedMetaDeviceCount = 1, developerConfiguration = false).copy(developerModeChosen = true),
-            lastError = null,
+            lastError = "registration: Registration process failed for an unspecified reason",
+            registrationRejected = true,
         )
 
         assertEquals(MetaAccessState.FAILED, accessState)
@@ -36,7 +51,6 @@ class MetaDatRegistrationSupportTest {
         val accessState = resolveMetaAccessState(
             initialized = true,
             registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
-            availableDeviceCount = 0,
             readiness = readiness(bondedMetaDeviceCount = 1, developerConfiguration = false),
             lastError = "registration: SDK failure 42",
         )
@@ -45,11 +59,10 @@ class MetaDatRegistrationSupportTest {
     }
 
     @Test
-    fun bluetoothFailureIsNotMisclassifiedAsReleaseChannelGating() {
+    fun bluetoothOffIsSetupNotReleaseChannelGating() {
         val accessState = resolveMetaAccessState(
             initialized = true,
             registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
-            availableDeviceCount = 0,
             readiness = readiness(
                 bondedMetaDeviceCount = 1,
                 developerConfiguration = false,
@@ -58,41 +71,54 @@ class MetaDatRegistrationSupportTest {
             lastError = null,
         )
 
-        assertEquals(MetaAccessState.FAILED, accessState)
+        assertEquals(MetaAccessState.NEEDS_SETUP, accessState)
+    }
+
+    /** 2.3.0 reports: registered glasses whose stream failed were logged as meta_access_failed. */
+    @Test
+    fun cameraOrStreamErrorWhileRegisteredKeepsAccessReady() {
+        val accessState = resolveMetaAccessState(
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.REGISTERED,
+            readiness = readiness(bondedMetaDeviceCount = 1),
+            lastError = "cameraPermission: All discovered devices are powered off or disconnected",
+        )
+
+        assertEquals(MetaAccessState.READY, accessState)
     }
 
     @Test
-    fun unavailableDeveloperBuildWithoutBondedMetaDeviceExplainsDeveloperModeFirst() {
-        val guidance = metaDatSetupGuidance(
-            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
-            availableDeviceCount = 0,
-            readiness = readiness(bondedMetaDeviceCount = 0, developerConfiguration = true),
-        )
+    fun unavailableWithoutBondedGlassesAsksToPairInMetaAiOnBothPaths() {
+        for (developer in listOf(true, false)) {
+            val guidance = metaDatSetupGuidance(
+                registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
+                availableDeviceCount = 0,
+                readiness = readiness(bondedMetaDeviceCount = 0, developerConfiguration = developer),
+            ).orEmpty()
 
-        assertTrue(guidance.orEmpty().contains("Developer Mode"))
+            assertTrue(guidance.contains("No Meta glasses are paired with this phone"))
+            assertFalse(guidance.contains("not currently enabled"))
+        }
     }
 
     @Test
-    fun unavailableDeveloperBuildExplainsDeveloperMode() {
-        val guidance = metaDatSetupGuidance(
-            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
+    fun rejectedRegistrationGuidanceFollowsTheSetupChoice() {
+        val invite = metaDatSetupGuidance(
+            registrationState = MetaRaybanManager.RegistrationState.AVAILABLE,
             availableDeviceCount = 0,
-            readiness = readiness(bondedMetaDeviceCount = 1, developerConfiguration = true),
-        )
-
-        assertTrue(guidance.orEmpty().contains("Developer Mode"))
-    }
-
-    @Test
-    fun unavailableProductionBuildExplainsReleaseChannelEvenWithoutBondedMetaDevice() {
-        val guidance = metaDatSetupGuidance(
-            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
+            readiness = readiness(bondedMetaDeviceCount = 1, developerConfiguration = false),
+            registrationRejected = true,
+        ).orEmpty()
+        val developer = metaDatSetupGuidance(
+            registrationState = MetaRaybanManager.RegistrationState.AVAILABLE,
             availableDeviceCount = 0,
-            readiness = readiness(bondedMetaDeviceCount = 0, developerConfiguration = false),
-        )
+            readiness = readiness(bondedMetaDeviceCount = 1, developerConfiguration = false).copy(developerModeChosen = true),
+            registrationRejected = true,
+        ).orEmpty()
 
-        assertTrue(guidance.orEmpty().contains("not currently enabled"))
-        assertTrue(guidance.orEmpty().contains("https://cyanbridge.vercel.app/beta"))
+        assertTrue(invite.contains("https://cyanbridge.vercel.app/beta"))
+        assertTrue(developer.contains("Developer Mode is on"))
+        assertFalse(developer.contains("https://cyanbridge.vercel.app/beta"))
     }
 
     @Test

@@ -148,6 +148,25 @@ class MetaPairingScreenStateTest {
         assertEquals(null, inferredMetaPairingError(state))
     }
 
+    /** UNAVAILABLE before registration means no bonded Meta glasses: send the user to Meta AI, not the invite form. */
+    @Test
+    fun unavailableWithoutPairedGlassesOpensMetaAiInsteadOfTheInviteForm() {
+        val state = MetaPairingScreenState(
+            androidCameraGranted = true,
+            nearbyDevicesGranted = true,
+            initialized = true,
+            registrationState = MetaRaybanManager.RegistrationState.UNAVAILABLE,
+            metaAccessState = MetaAccessState.NEEDS_SETUP,
+            noMetaGlassesBonded = true,
+            guidance = "No Meta glasses are paired with this phone. Pair your glasses in Meta AI.",
+        )
+
+        assertEquals("Pair glasses in Meta AI", state.primaryLabel)
+        val issue = resolveMetaPairingIssue(true, inferredMetaPairingError(state), state.guidance)
+        assertEquals("Pair your glasses in Meta AI", issue?.title)
+        assertEquals(MetaPairingIssueAction.OPEN_META_AI, issue?.action)
+    }
+
     @Test
     fun productionReleaseChannelGateRequestsMetaAccess() {
         val state = MetaPairingScreenState(
