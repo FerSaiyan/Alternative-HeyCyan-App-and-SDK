@@ -76,15 +76,12 @@ class ProSubscriptionSettingsDestination : NavScreen() {
         setContent {
             val screen by viewModel.state.collectAsState()
             val customizationState by customization.state.collectAsState()
-            val economyMode = screen.liveModes.first { it.id == "economy" }
-            val privateMode = screen.liveModes.first { it.id == "private" }
+            // The Live mode is picked with the Questions model; the Live card describes the current one.
+            val liveMode = screen.liveModes.firstOrNull { it.id == if (screen.liveEconomy) "economy" else "private" }
             Box(modifier = tagsAsResourceIds()) { ProSubscriptionSettingsScreen(
                 liveEconomy = screen.liveEconomy,
-                liveEconomyLabel = economyMode.displayLabel,
-                livePrivateLabel = privateMode.displayLabel,
-                liveEconomyDescription = economyMode.description,
-                livePrivateDescription = privateMode.description,
-                onLiveEconomyChange = viewModel::setLiveEconomy,
+                liveModeLabel = liveMode?.displayLabel,
+                liveModeDescription = liveMode?.description,
                 state = screen.ui,
                 onRefreshPlan = clicked(viewModel::refreshPlan),
                 onChangePlan = viewModel::changePlan,

@@ -83,9 +83,15 @@ data class ProQuota(
     val model: String,
 )
 
-data class ProModelOption(val id: String, val label: String, val supportsVision: Boolean)
+/** [supportsAudio]: the model hears a recording itself (no on-device speech-to-text first). */
+data class ProModelOption(
+    val id: String,
+    val label: String,
+    val supportsVision: Boolean,
+    val supportsAudio: Boolean = false,
+)
 
-data class ProLiveMode(val id: String, val displayLabel: String, val description: String)
+data class ProLiveMode(val id: String, val displayLabel: String, val description: String, val quotaMultiplier: Int = 0)
 
 data class ProModelCatalog(val models: List<ProModelOption>, val liveModes: List<ProLiveMode>)
 

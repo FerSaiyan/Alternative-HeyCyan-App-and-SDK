@@ -23,10 +23,23 @@ class ProSubscriptionAiPrefsTest {
                 questionsModel = "google/gemini-3.1-flash-live-preview",
             ),
         )
+        // The server catalog's Live id (picked from the Questions list) also routes to Live.
+        assertTrue(
+            ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
+                isProActive = true,
+                questionsModel = "google/gemini-3.8-live",
+            ),
+        )
         assertFalse(
             ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
                 isProActive = true,
                 questionsModel = "deepseek/deepseek-v4-flash-vision-exp",
+            ),
+        )
+        assertFalse(
+            ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
+                isProActive = true,
+                questionsModel = "google/gemini-3.1-flash-lite",
             ),
         )
     }

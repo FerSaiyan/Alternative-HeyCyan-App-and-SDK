@@ -86,12 +86,10 @@ fun ProSubscriptionSettingsScreen(
     onSystemPromptChange: (String) -> Unit,
     onResetSystemPrompt: () -> Unit,
     onBack: () -> Unit,
-    liveEconomy: Boolean = true,
-    liveEconomyLabel: String? = null,
-    livePrivateLabel: String? = null,
-    liveEconomyDescription: String? = null,
-    livePrivateDescription: String? = null,
-    onLiveEconomyChange: ((Boolean) -> Unit)? = null,
+    /** The Live mode picked in the Questions model list; null hides the mode lines. */
+    liveEconomy: Boolean? = null,
+    liveModeLabel: String? = null,
+    liveModeDescription: String? = null,
     customization: GlassesCustomizationUiState? = null,
     customizationActions: GlassesCustomizationActions? = null,
 ) {
@@ -155,7 +153,12 @@ fun ProSubscriptionSettingsScreen(
             item {
                  ProSettingsCard(stringResource(Res.string.pro_model_routing)) {
                      ModelChoice(stringResource(Res.string.pro_requests), state.requestsModel, state.modelOptions, onRequestsModelChange)
-                     ModelChoice(stringResource(Res.string.pro_questions), state.questionsModel, state.modelOptions, onQuestionsModelChange)
+                     ModelChoice(
+                         stringResource(Res.string.pro_questions),
+                         state.questionsModel,
+                         state.questionsModelOptions.ifEmpty { state.modelOptions },
+                         onQuestionsModelChange,
+                     )
                      ModelChoice(stringResource(Res.string.pro_tasks), state.tasksModel, state.modelOptions, onTasksModelChange)
                     OutlinedTextField(
                         value = state.systemPrompt,
@@ -224,18 +227,21 @@ fun ProSubscriptionSettingsScreen(
             }
             item {
                  ProSettingsCard(stringResource(Res.string.pro_gemini_live_title)) {
-                    if (onLiveEconomyChange != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(selected = liveEconomy, onClick = { onLiveEconomyChange(true) },
-                                label = { Text(liveEconomyLabel ?: stringResource(Res.string.pro_live_economy)) })
-                            FilterChip(selected = !liveEconomy, onClick = { onLiveEconomyChange(false) },
-                                label = { Text(livePrivateLabel ?: stringResource(Res.string.pro_live_private)) })
-                        }
+                    if (liveEconomy != null) {
                         Text(
-                            if (liveEconomy) {
-                                liveEconomyDescription ?: stringResource(Res.string.pro_live_economy_description)
+                            liveModeLabel ?: if (liveEconomy) {
+                                stringResource(Res.string.pro_live_economy)
                             } else {
-                                livePrivateDescription ?: stringResource(Res.string.pro_live_private_description)
+                                stringResource(Res.string.pro_live_private)
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            liveModeDescription ?: if (liveEconomy) {
+                                stringResource(Res.string.pro_live_economy_description)
+                            } else {
+                                stringResource(Res.string.pro_live_private_description)
                             },
                             style = MaterialTheme.typography.bodySmall,
                         )

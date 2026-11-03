@@ -11,7 +11,6 @@ import com.fersaiyan.cyanbridge.shared.ui.pro.ProSubscriptionSettingsScreen
 import com.fersaiyan.cyanbridge.ui.OfficialHeyCyanWarningDialog
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -78,12 +77,21 @@ class ReleaseDialogsAndLiveModeTest {
     }
 
     @Test
-    fun proSettingsShowsBothGeminiLiveModes() {
-        var economySelected = true
+    fun proSettingsOffersEachGeminiLiveModeAsAQuestionsModel() {
+        var pickedQuestionsModel = ""
         composeRule.setContent {
             CyanBridgeTheme {
                 ProSubscriptionSettingsScreen(
-                    state = ProSubscriptionSettingsUiState(),
+                    state = ProSubscriptionSettingsUiState(
+                        modelOptions = listOf("Cheap models router (1x)", "MiMo V2.6 Flash (1x)"),
+                        questionsModelOptions = listOf(
+                            "Cheap models router (1x)",
+                            "Gemini 3.8 Live · Economy (7x)",
+                            "Gemini 3.8 Live · Private (36x)",
+                            "MiMo V2.6 Flash (1x)",
+                        ),
+                        questionsModel = "Gemini 3.8 Live · Economy (7x)",
+                    ),
                     onRefreshPlan = {},
                     onChangePlan = {},
                     onCancelSubscription = {},
@@ -99,20 +107,25 @@ class ReleaseDialogsAndLiveModeTest {
                     onBackupFrequencyChange = {},
                     onSupportChannelChange = {},
                     onRequestsModelChange = {},
-                    onQuestionsModelChange = {},
+                    onQuestionsModelChange = { pickedQuestionsModel = it },
                     onTasksModelChange = {},
                     onSystemPromptChange = {},
                     onResetSystemPrompt = {},
                     onBack = {},
-                    liveEconomy = economySelected,
-                    onLiveEconomyChange = { economySelected = it },
+                    liveEconomy = true,
+                    liveModeLabel = "Gemini Live Economy · 7×",
                 )
             }
         }
 
+        // The Live card names the current mode; the chips are gone.
         composeRule.onNodeWithTag("pro_settings_list").performScrollToIndex(5)
         composeRule.onNodeWithText("Gemini Live Economy · 7×").assertExists()
-        composeRule.onNodeWithText("Gemini Live Private · 36×").assertExists().performClick()
-        composeRule.runOnIdle { assertFalse(economySelected) }
+        composeRule.onNodeWithText("Gemini Live Private · 36×").assertDoesNotExist()
+
+        composeRule.onNodeWithTag("pro_settings_list").performScrollToIndex(2)
+        composeRule.onNodeWithText("Photo & voice questions model: Gemini 3.8 Live · Economy (7x)").performClick()
+        composeRule.onNodeWithText("Gemini 3.8 Live · Private (36x)").assertExists().performClick()
+        composeRule.runOnIdle { assertEquals("Gemini 3.8 Live · Private (36x)", pickedQuestionsModel) }
     }
 }

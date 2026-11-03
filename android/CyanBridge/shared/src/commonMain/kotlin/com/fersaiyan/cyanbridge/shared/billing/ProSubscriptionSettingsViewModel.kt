@@ -14,7 +14,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** The Pro plan's on-device settings: feature toggles, Pro AI models and the Live mode. */
+/**
+ * The Pro plan's on-device settings: feature toggles, Pro AI models and the Live mode. The Live mode
+ * is chosen with the Questions model (one Live entry per mode) and stored in [liveEconomy].
+ */
 interface ProSettingsStore {
     fun loadToggles(): ProSettingsToggles
     fun saveToggles(toggles: ProSettingsToggles)
@@ -61,6 +64,7 @@ class ProSubscriptionSettingsViewModel(
 
     private var draft = ProSubscriptionSettingsDraft()
     private var models = ProSubscriptionModelLabels()
+    private var questionModels = ProSubscriptionModelLabels(emptyMap())
     private var systemPrompt = ""
     private var started = false
 
@@ -69,7 +73,7 @@ class ProSubscriptionSettingsViewModel(
 
     /** Copies the working draft to the screen. */
     private fun publish() {
-        _state.value = _state.value.copy(ui = draft.toUiState(models, systemPrompt))
+        _state.value = _state.value.copy(ui = draft.toUiState(models, questionModels, systemPrompt))
     }
 
     /** Loads the screen once; false (with a message) when there is no active plan. */
@@ -88,9 +92,16 @@ class ProSubscriptionSettingsViewModel(
     private fun load() {
         draft = ProSubscriptionSettingsDraft()
         models = ProSubscriptionModelLabels()
+        val liveModes = settings.defaultLiveModes()
+        questionModels = ProSubscriptionModelLabels(
+            ProLiveModelChoice.expand(
+                ProSubscriptionModelLabels.DEFAULT_MODELS + (ProSubscriptionModelLabels.DEFAULT_LIVE_MODEL to ProSubscriptionModelLabels.DEFAULT_LIVE_LABEL),
+                liveModes,
+            ),
+        )
         _state.value = ProSubscriptionSettingsScreenState(
             liveEconomy = settings.liveEconomy,
-            liveModes = settings.defaultLiveModes(),
+            liveModes = liveModes,
         )
         val toggles = settings.loadToggles()
         draft.cloudSync = toggles.cloudSync
@@ -105,9 +116,10 @@ class ProSubscriptionSettingsViewModel(
         val savedTasksModel = settings.tasksModel
         systemPrompt = settings.systemPrompt
 
-        models.includeSaved(listOf(savedRequestsModel, savedQuestionsModel, savedTasksModel))
+        models.includeSaved(listOf(savedRequestsModel, savedTasksModel).filterNot(ProLiveModelChoice::isLiveModel))
+        questionModels.includeSaved(listOf(savedQuestionsModel).filterNot(ProLiveModelChoice::isLiveModel))
         draft.requestsModelIndex = models.positionOf(savedRequestsModel)
-        draft.questionsModelIndex = models.positionOf(savedQuestionsModel)
+        draft.questionsModelIndex = questionModels.positionOf(questionsEntry(savedQuestionsModel))
         draft.tasksModelIndex = models.positionOf(savedTasksModel)
 
         draft.accountEmail = "Email: ${platform.accountEmail().ifBlank { "-" }}"
@@ -129,11 +141,6 @@ class ProSubscriptionSettingsViewModel(
     }
 
     // ── Actions (each publishes where the screen always did) ──
-
-    fun setLiveEconomy(enabled: Boolean) {
-        settings.liveEconomy = enabled
-        _state.value = _state.value.copy(liveEconomy = enabled)
-    }
 
     fun refreshPlan() {
         effects.toast("Checking subscription status…")
@@ -199,18 +206,18 @@ class ProSubscriptionSettingsViewModel(
     }
 
     fun selectRequestsModel(label: String) {
-        selectModel(label) { draft.requestsModelIndex = it }
+        selectModel(models, label) { draft.requestsModelIndex = it }
         saveSettings()
         refreshQuota()
     }
 
     fun selectQuestionsModel(label: String) {
-        selectModel(label) { draft.questionsModelIndex = it }
+        selectModel(questionModels, label) { draft.questionsModelIndex = it }
         saveSettings()
     }
 
     fun selectTasksModel(label: String) {
-        selectModel(label) { draft.tasksModelIndex = it }
+        selectModel(models, label) { draft.tasksModelIndex = it }
         saveSettings()
     }
 
@@ -257,8 +264,8 @@ class ProSubscriptionSettingsViewModel(
     // ── Loading ──
 
     /** Selects the model with exactly [label] (no-op when it is not listed), then publishes. */
-    private inline fun selectModel(label: String, select: (Int) -> Unit) {
-        val index = models.labels.indexOfFirst { it == label }
+    private inline fun selectModel(catalog: ProSubscriptionModelLabels, label: String, select: (Int) -> Unit) {
+        val index = catalog.labels.indexOfFirst { it == label }
         if (index >= 0) select(index)
         publish()
     }
@@ -275,9 +282,27 @@ class ProSubscriptionSettingsViewModel(
             ),
         )
         settings.requestsModel = models.modelAt(draft.requestsModelIndex)
-        settings.questionsModel = models.modelAt(draft.questionsModelIndex)
+        val question = questionModels.modelAt(draft.questionsModelIndex)
+        val live = ProLiveModelChoice.parse(question)
+        if (live == null) {
+            settings.questionsModel = question
+        } else {
+            settings.questionsModel = live.first
+            settings.liveEconomy = live.second
+            _state.value = _state.value.copy(liveEconomy = live.second)
+        }
         settings.tasksModel = models.modelAt(draft.tasksModelIndex)
         settings.systemPrompt = systemPrompt
+    }
+
+    /**
+     * The Questions entry for a saved questions model. A saved Live id (any version, as older builds
+     * stored it) maps to the Live entry of the saved Live mode; nothing stored is rewritten.
+     */
+    private fun questionsEntry(saved: String): String {
+        if (!ProLiveModelChoice.isLiveModel(saved)) return saved
+        val economy = settings.liveEconomy
+        return questionModels.ids.firstOrNull { ProLiveModelChoice.parse(it)?.second == economy } ?: saved
     }
 
     private fun refreshPlanDetails() {
@@ -335,23 +360,34 @@ class ProSubscriptionSettingsViewModel(
                     }
                     _state.value = _state.value.copy(liveModes = catalog.liveModes)
                     val currentRequests = models.modelAt(draft.requestsModelIndex)
-                    val currentQuestions = models.modelAt(draft.questionsModelIndex)
+                    val currentQuestions = ProLiveModelChoice.parse(questionModels.modelAt(draft.questionsModelIndex))
+                        ?.let { (liveId, _) -> liveId }
+                        ?: questionModels.modelAt(draft.questionsModelIndex)
                     val currentTasks = models.modelAt(draft.tasksModelIndex)
 
-                    val merged = linkedMapOf<String, String>()
+                    val labelled = linkedMapOf<String, String>()
                     catalog.models.forEach { option ->
                         val id = option.id.trim()
                         if (id.isBlank()) return@forEach
                         val baseLabel = option.label.trim().ifBlank { id }
                         val label = if (option.supportsVision && !baseLabel.contains("vision", ignoreCase = true)) "$baseLabel · Vision" else baseLabel
-                        if (!merged.containsKey(id)) merged[id] = label
+                        if (!labelled.containsKey(id)) labelled[id] = label
                     }
-                    models.replaceAll(merged)
+                    // Pro offers only models that hear the recording itself (no speech-to-text
+                    // first); an older server without audio flags keeps its whole list. A saved
+                    // model outside the list stays shown as the current choice, never rewritten.
+                    val offered = catalog.models.filter { it.supportsAudio }.map { it.id.trim() }.toSet()
+                        .ifEmpty { labelled.keys }
+                    val merged = LinkedHashMap(labelled.filterKeys { it in offered })
+                    models.replaceAll(merged.filterKeys { !ProLiveModelChoice.isLiveModel(it) })
+                    models.includeSaved(listOf(currentRequests, currentTasks), labelled)
+                    questionModels.replaceAll(ProLiveModelChoice.expand(merged, catalog.liveModes))
+                    questionModels.includeSaved(listOf(currentQuestions).filterNot(ProLiveModelChoice::isLiveModel), labelled)
                     draft.requestsModelIndex = models.positionOf(currentRequests)
-                    draft.questionsModelIndex = models.positionOf(currentQuestions)
+                    draft.questionsModelIndex = questionModels.positionOf(questionsEntry(currentQuestions))
                     draft.tasksModelIndex = models.positionOf(currentTasks)
 
-                    effects.toast("Loaded ${catalog.models.size} models")
+                    effects.toast("Loaded ${offered.size} models")
                     refreshQuota()
                 }.onFailure {
                     effects.toast(platform.relayUnavailableHint(it) ?: "Could not load models: ${it.message ?: "unknown error"}", long = true)

@@ -46,7 +46,10 @@ data class ProSubscriptionSettingsUiState(
     val earlyAccessDevices: Boolean = true,
     val backupFrequencyIndex: Int = 1,
     val supportChannelIndex: Int = 0,
+    /** Requests and Tasks pickers. */
     val modelOptions: List<String> = emptyList(),
+    /** Questions picker: [modelOptions] plus one Gemini Live entry per Live mode. */
+    val questionsModelOptions: List<String> = emptyList(),
     val requestsModel: String = "",
     val questionsModel: String = "",
     val tasksModel: String = "",

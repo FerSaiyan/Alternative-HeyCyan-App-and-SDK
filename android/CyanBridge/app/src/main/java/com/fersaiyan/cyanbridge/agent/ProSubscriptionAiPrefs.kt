@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.agent
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalGenerationSettings
+import com.fersaiyan.cyanbridge.shared.billing.ProLiveModelChoice
 import com.fersaiyan.cyanbridge.shared.prefs.ProPrefs.Ai
 import com.fersaiyan.cyanbridge.shared.prefs.edit
 import com.fersaiyan.cyanbridge.shared.prefs.get
@@ -40,8 +41,8 @@ object ProSubscriptionAiPrefs {
     fun shouldUseGeminiLiveForQuestions(isProActive: Boolean, questionsModel: String): Boolean {
         if (!isProActive) return true
         val normalized = normalizeModel(questionsModel)
-        return normalized.equals(LIVE_MODEL, ignoreCase = true) ||
-            normalized.equals("live", ignoreCase = true) ||
+        // Any Live id: the server catalog's (gemini-3.8-live) as well as the one older builds saved.
+        return ProLiveModelChoice.isLiveModel(normalized) ||
             normalized.equals(DEFAULT_MODEL, ignoreCase = true)
     }
 

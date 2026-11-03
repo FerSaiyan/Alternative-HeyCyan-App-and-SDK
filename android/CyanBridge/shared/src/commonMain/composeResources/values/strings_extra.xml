@@ -489,7 +489,7 @@
     <string name="pro_live_private">Gemini Live Private · 36×</string>
     <string name="pro_live_economy_description">Lower-cost conversations. Usage costs 7 quota tokens per Gemini token. Google may use conversations to improve its models.</string>
     <string name="pro_live_private_description">Conversations are not used to train Google’s models under its paid API terms. Standard Pro Live usage pricing applies.</string>
-    <string name="pro_live_mode_scope">Applies to new Live sessions from voice, images, or this screen.</string>
+    <string name="pro_live_mode_scope">Pick the Economy or Private Live entry as the photo &amp; voice questions model above. Applies to new Live sessions from voice, images, or this screen.</string>
     <string name="native_walking_aid_title">Walking Aid</string>
     <string name="native_walking_aid_description">Takes a glasses photo every few seconds and speaks obstacle warnings. Uses the CyanBridge relay AI on iOS.</string>
     <string name="native_meeting_spark_notes_title">Meeting Spark Notes</string>

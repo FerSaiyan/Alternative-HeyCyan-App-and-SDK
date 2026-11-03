@@ -260,7 +260,7 @@ class AndroidProAccountPlatform(context: Context) : ProAccountPlatform {
 
     override fun fetchModelCatalog() = ProSubscriptionRelayClient.fetchModelCatalog(context).map { catalog ->
         ProModelCatalog(
-            models = catalog.models.map { ProModelOption(it.id, it.label, it.supportsVision) },
+            models = catalog.models.map { ProModelOption(it.id, it.label, it.supportsVision, it.supportsAudio) },
             liveModes = catalog.liveModes.map { it.toShared() },
         )
     }
@@ -270,7 +270,7 @@ class AndroidProAccountPlatform(context: Context) : ProAccountPlatform {
     }
 }
 
-internal fun ProSubscriptionRelayClient.LiveModeOption.toShared() = ProLiveMode(id, displayLabel, description)
+internal fun ProSubscriptionRelayClient.LiveModeOption.toShared() = ProLiveMode(id, displayLabel, description, quotaMultiplier)
 
 /** The Pro settings screen's preferences on Android. */
 class AndroidProSettingsStore(context: Context) : ProSettingsStore {

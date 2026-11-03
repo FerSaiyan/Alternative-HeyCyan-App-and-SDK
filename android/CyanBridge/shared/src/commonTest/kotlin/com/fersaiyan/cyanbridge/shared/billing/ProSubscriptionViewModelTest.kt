@@ -122,13 +122,61 @@ class ProSubscriptionSettingsViewModelTest {
         assertTrue(vm.start())
         assertEquals("Status: Active", vm.state.value.ui.planStatus)
 
-        vm.selectRequestsModel("DeepSeek V4 Flash (2x)")
-        assertEquals("deepseek/deepseek-v4-flash", settings.requestsModel)
-        assertEquals("Quota (deepseek/deepseek-v4-flash): 0 left", vm.state.value.ui.quotaStatus)
+        vm.selectRequestsModel("MiMo V2.6 Flash (1x)")
+        assertEquals("xiaomi/mimo-v2.6-flash", settings.requestsModel)
+        assertEquals("Quota (xiaomi/mimo-v2.6-flash): 0 left", vm.state.value.ui.quotaStatus)
 
         vm.cancelSubscription()
         assertFalse(platform.entitlement.isSubscribed)
         assertEquals(listOf(ShowMessage(UiMessage("Cancelled", long = true)), CloseScreen), effects.takeLast(2))
+    }
+
+    @Test
+    fun onlyAudioModelsAreOfferedAndTheLiveEntryPicksTheLiveMode() = runTest(dispatcher) {
+        platform.catalog = ProModelCatalog(
+            models = listOf(
+                ProModelOption("openrouter/free", "Cheap models router (1x)", supportsVision = true, supportsAudio = true),
+                ProModelOption("google/gemini-3.8-live", "Gemini 3.8 Live (36x)", supportsVision = true, supportsAudio = true),
+                ProModelOption("google/gemma-4-26b-a4b-it", "Gemma 4 26B Vision (1x)", supportsVision = true),
+                ProModelOption("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash (1x)", supportsVision = false),
+                ProModelOption("xiaomi/mimo-v2.6-flash", "MiMo V2.6 Flash (1x)", supportsVision = true, supportsAudio = true),
+            ),
+            liveModes = listOf(ProLiveMode("economy", "Economy · 7×", "", 7), ProLiveMode("private", "Private · 36×", "", 36)),
+        )
+        // As an older build saved them: the old Live id plus the Live-mode flag, and a text-only model.
+        settings.questionsModel = "google/gemini-3.1-flash-live-preview"
+        settings.liveEconomy = false
+        settings.requestsModel = "google/gemma-4-26b-a4b-it"
+        val vm = ProSubscriptionSettingsViewModel(platform, settings, dispatcher)
+        vm.visible = true
+        assertTrue(vm.start())
+
+        val ui = vm.state.value.ui
+        assertEquals(
+            listOf("Cheap models router (1x) · Vision", "MiMo V2.6 Flash (1x) · Vision", "Gemma 4 26B Vision (1x)"),
+            ui.modelOptions,
+        )
+        assertEquals("Gemma 4 26B Vision (1x)", ui.requestsModel)
+        assertEquals(
+            listOf(
+                "Cheap models router (1x) · Vision",
+                "Gemini 3.8 Live · Economy (7x)",
+                "Gemini 3.8 Live · Private (36x)",
+                "MiMo V2.6 Flash (1x) · Vision",
+            ),
+            ui.questionsModelOptions,
+        )
+        assertEquals("Gemini 3.8 Live · Private (36x)", ui.questionsModel)
+        assertEquals("google/gemini-3.1-flash-live-preview", settings.questionsModel)
+
+        vm.selectQuestionsModel("Gemini 3.8 Live · Economy (7x)")
+        assertEquals("google/gemini-3.8-live", settings.questionsModel)
+        assertTrue(settings.liveEconomy)
+        assertTrue(vm.state.value.liveEconomy)
+
+        vm.selectQuestionsModel("MiMo V2.6 Flash (1x) · Vision")
+        assertEquals("xiaomi/mimo-v2.6-flash", settings.questionsModel)
+        assertTrue(settings.liveEconomy)
     }
 }
 
@@ -229,6 +277,7 @@ private class FakeProAccountPlatform : ProAccountPlatform {
     override fun setAwaitingDonationReturn(awaiting: Boolean) = Unit
     override fun clearDonation() = Unit
     override fun fetchQuota(model: String) = Result.success(ProQuota(0, 0, 0, 0L, model))
-    override fun fetchModelCatalog() = Result.success(ProModelCatalog(emptyList(), emptyList()))
+    var catalog = ProModelCatalog(emptyList(), emptyList())
+    override fun fetchModelCatalog() = Result.success(catalog)
     override fun registerBetaCloudInterest() = Result.success(ProBetaSignup("Thanks", null))
 }

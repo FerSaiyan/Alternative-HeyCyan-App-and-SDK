@@ -72,7 +72,11 @@ internal class ProSubscriptionSettingsDraft {
         }
     }
 
-    fun toUiState(models: ProSubscriptionModelLabels, systemPrompt: String) = ProSubscriptionSettingsUiState(
+    fun toUiState(
+        models: ProSubscriptionModelLabels,
+        questionModels: ProSubscriptionModelLabels,
+        systemPrompt: String,
+    ) = ProSubscriptionSettingsUiState(
         planStatus = planStatus,
         plan = plan,
         expires = expires,
@@ -91,14 +95,69 @@ internal class ProSubscriptionSettingsDraft {
         backupFrequencyIndex = backupFrequencyIndex,
         supportChannelIndex = supportChannelIndex,
         modelOptions = models.labels.toList(),
+        questionsModelOptions = questionModels.labels.toList(),
         requestsModel = models.labelAt(requestsModelIndex).orEmpty(),
-        questionsModel = models.labelAt(questionsModelIndex).orEmpty(),
+        questionsModel = questionModels.labelAt(questionsModelIndex).orEmpty(),
         tasksModel = models.labelAt(tasksModelIndex).orEmpty(),
         systemPrompt = systemPrompt,
     )
 }
 
-/** Model id → label catalog shared by the three model pickers; positions index into [labels]. */
+/**
+ * Gemini Live is offered in the Questions picker once per Live mode, so picking an entry also picks
+ * Economy (relay proxy, Google may use conversations) or Private (paid API, direct token). The
+ * choice is still saved as before: the Live model id as the questions model plus the Live-mode flag.
+ */
+object ProLiveModelChoice {
+    const val ECONOMY = "economy"
+    const val PRIVATE = "private"
+    private const val SEPARATOR = "#"
+    private val MULTIPLIER = Regex("\\s*\\(\\s*\\d+\\s*x\\s*\\)", RegexOption.IGNORE_CASE)
+
+    /** Any Gemini Live id: the server's (gemini-3.8-live), older builds' (gemini-3.1-flash-live-preview) or "live". */
+    fun isLiveModel(id: String): Boolean {
+        val clean = id.trim().lowercase().substringBefore(SEPARATOR)
+        return clean == "live" || ("gemini" in clean && "-live" in clean)
+    }
+
+    fun entryId(liveModelId: String, mode: String): String = "$liveModelId$SEPARATOR$mode"
+
+    /** The Live model id and whether the entry is Economy; null for an ordinary model id. */
+    fun parse(entryId: String): Pair<String, Boolean>? {
+        val mode = entryId.substringAfterLast(SEPARATOR, "")
+        if (mode != ECONOMY && mode != PRIVATE) return null
+        return entryId.substringBeforeLast(SEPARATOR) to (mode == ECONOMY)
+    }
+
+    /**
+     * The Questions catalog: [models] with the first Live model replaced, in place, by one entry
+     * per mode ("Gemini 3.8 Live · Economy (7x)"). Further Live ids are dropped.
+     */
+    fun expand(models: Map<String, String>, liveModes: List<ProLiveMode>): Map<String, String> {
+        val out = linkedMapOf<String, String>()
+        var liveAdded = false
+        models.forEach { (id, label) ->
+            if (!isLiveModel(id)) {
+                out[id] = label
+                return@forEach
+            }
+            if (liveAdded) return@forEach
+            liveAdded = true
+            // "Gemini 3.8 Live (36x) · Vision" → "Gemini 3.8 Live"; each mode carries its own multiplier.
+            val base = label.substringBefore(" · ").replace(MULTIPLIER, "").trim().ifBlank { id }
+            listOf(ECONOMY to DEFAULT_ECONOMY_MULTIPLIER, PRIVATE to DEFAULT_PRIVATE_MULTIPLIER).forEach { (mode, fallback) ->
+                val multiplier = liveModes.firstOrNull { it.id == mode }?.quotaMultiplier?.takeIf { it > 0 } ?: fallback
+                out[entryId(id, mode)] = "$base · ${mode.replaceFirstChar { it.uppercase() }} (${multiplier}x)"
+            }
+        }
+        return out
+    }
+
+    private const val DEFAULT_ECONOMY_MULTIPLIER = 7
+    private const val DEFAULT_PRIVATE_MULTIPLIER = 36
+}
+
+/** Model id → label catalog behind a model picker; positions index into [labels]. */
 internal class ProSubscriptionModelLabels(initial: Map<String, String> = DEFAULT_MODELS) {
     private val idToLabel = LinkedHashMap(initial)
     val labels = mutableListOf<String>()
@@ -107,10 +166,13 @@ internal class ProSubscriptionModelLabels(initial: Map<String, String> = DEFAULT
         rebuild()
     }
 
-    /** Adds saved model ids the catalog does not know yet, keeping them selectable. */
-    fun includeSaved(saved: List<String>) {
+    /** Adds saved model ids the list does not show, keeping them selectable (labelled from [knownLabels]). */
+    fun includeSaved(saved: List<String>, knownLabels: Map<String, String> = emptyMap()) {
         saved.forEach { id ->
-            if (id.isNotBlank() && idToLabel.keys.none { it.equals(id, ignoreCase = true) }) idToLabel[id] = id
+            // "auto" is the cheap router, the first entry.
+            if (id.isNotBlank() && !id.equals("auto", ignoreCase = true) && idToLabel.keys.none { it.equals(id, ignoreCase = true) }) {
+                idToLabel[id] = knownLabels.entries.firstOrNull { it.key.equals(id, ignoreCase = true) }?.value ?: id
+            }
         }
         rebuild()
     }
@@ -122,6 +184,8 @@ internal class ProSubscriptionModelLabels(initial: Map<String, String> = DEFAULT
     }
 
     fun labelAt(position: Int): String? = labels.getOrNull(position)
+
+    val ids: Set<String> get() = idToLabel.keys
 
     /** Position for a saved model id (or label), falling back to the first entry. */
     fun positionOf(value: String): Int {
@@ -154,12 +218,20 @@ internal class ProSubscriptionModelLabels(initial: Map<String, String> = DEFAULT
     }
 
     companion object {
+        /**
+         * Shown until the server catalog loads. Pro offers only models that hear a recording
+         * directly (speech-to-text first adds about 2 s): the cheap router answers audio through
+         * its Gemini route, and MiMo V2.6 Flash replaced the text/image-only Gemma 4 26B A4B.
+         */
         val DEFAULT_MODELS: Map<String, String> = linkedMapOf(
             "openrouter/free" to "Cheap models router (1x)",
-            "google/gemini-3.1-flash-live-preview" to "Gemini 3.1 Flash Live (36x)",
-            "google/gemma-4-26b-a4b-it" to "Gemma 4 26B Vision (2x)",
-            "deepseek/deepseek-v4-flash" to "DeepSeek V4 Flash (2x)",
+            "xiaomi/mimo-v2.6-flash" to "MiMo V2.6 Flash (1x)",
+            "google/gemini-3.7-flash" to "Gemini 3.7 Flash (6x)",
         )
+
+        /** Live, offered only in the Questions picker (once per mode). */
+        const val DEFAULT_LIVE_MODEL = "google/gemini-3.8-live"
+        const val DEFAULT_LIVE_LABEL = "Gemini 3.8 Live (36x)"
     }
 }
 
