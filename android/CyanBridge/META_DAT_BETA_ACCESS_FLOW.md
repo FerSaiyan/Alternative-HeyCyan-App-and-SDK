@@ -13,6 +13,15 @@ app records which path Meta AI took (`Wearables.isDevMode`) and shows it as "Met
 The flow below still applies to the email path. Hardware checks:
 `docs/refactor/HARDWARE_TEST_CHECKLIST.md` → "Meta hybrid registration".
 
+## What DAT reports before Register
+
+DAT 0.8 sets `UNAVAILABLE` or `AVAILABLE` before registration from Bluetooth only: `AVAILABLE` when a
+bonded device advertises the Meta glasses service UUID (`8b0d2687-…`, the app's `bondedMetaDeviceCount`).
+`UNAVAILABLE` therefore means "no Meta glasses paired with this phone", not "no invite"; the app sends
+those users to Meta AI to pair. Meta AI decides access only after Register, and DAT reports a refusal as a
+registration error (`FAILED_TO_REGISTER`/`UNKNOWN`). Only then does the app show the access form
+(email path) or the Developer Mode steps (Developer Mode path).
+
 ## App-side flow
 
 Before starting Meta DAT pairing:
