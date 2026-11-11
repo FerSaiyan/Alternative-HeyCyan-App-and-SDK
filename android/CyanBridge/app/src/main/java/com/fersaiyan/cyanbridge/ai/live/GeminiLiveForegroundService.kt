@@ -47,7 +47,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     private var client: GeminiLiveClient? = null
     private var visionController: GeminiLiveVisionController? = null
     private var idleStopJob: Job? = null // Existing absolute maximum duration
-    private var responseIdleJob: Job? = null // 30 seconds after Gemini completes its response
+    private var responseIdleJob: Job? = null // POST_RESPONSE_IDLE_MS after Gemini completes its response
     private var stopping = false
     private var sessionStarted = false
     private var tickerJob: Job? = null
@@ -211,11 +211,11 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         responseIdleJob = serviceScope.launch {
             delay(GeminiLiveSessionPolicy.POST_RESPONSE_IDLE_MS)
             if (!stopping && sessionStarted) {
-                Log.i(TAG, "Closing Live after 30 seconds without interaction following Gemini response")
+                Log.i(TAG, "Closing Live after ${GeminiLiveSessionPolicy.POST_RESPONSE_IDLE_MS / 1_000L} seconds without interaction following Gemini response")
                 stopLive()
             }
         }
-        Log.i(TAG, "30-second post-response idle timeout armed")
+        Log.i(TAG, "${GeminiLiveSessionPolicy.POST_RESPONSE_IDLE_MS / 1_000L}-second post-response idle timeout armed")
     }
 
     private fun startTicker() {

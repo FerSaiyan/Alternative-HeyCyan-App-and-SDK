@@ -39,8 +39,13 @@ class GeminiLiveViewModelTest {
         assertEquals("Session 0:00", vm.state.value.elapsed)
         assertTrue(vm.state.value.active)
 
+        // A finished answer keeps Live open for 60 s of silence, then it closes.
+        assertEquals(60_000L, GeminiLiveViewModel.POST_RESPONSE_IDLE_MS)
+        val callsBeforeIdle = session.calls.toList()
         vm.onModelTurnComplete()
-        advanceTimeBy(GeminiLiveViewModel.POST_RESPONSE_IDLE_MS + 1)
+        advanceTimeBy(59_000L)
+        assertEquals(callsBeforeIdle, session.calls)
+        advanceTimeBy(1_001L)
         assertEquals(listOf("stopVision", "stop"), session.calls.takeLast(2))
 
         vm.onStateChanged(GeminiLiveState.STOPPED, "")
