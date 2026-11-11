@@ -68,6 +68,10 @@ jobs:
     if: github.repository == 'FerSaiyan/Alternative-HeyCyan-App-and-SDK'
     runs-on: [self-hosted, linux, x64, homelab]
     timeout-minutes: 90
+    env:
+      # start_emulator.sh starts a -read-only Pixel_9a instance on port 5584; install.sh may replace a
+      # differently signed app only inside such an instance (never on a phone or a writable AVD).
+      CYANBRIDGE_HIL_UNINSTALL_ON_SIGNATURE_MISMATCH: 'true'
     steps:
       - name: Check out source
         uses: actions/checkout@v4

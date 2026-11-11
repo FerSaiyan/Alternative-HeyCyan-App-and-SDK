@@ -25,6 +25,10 @@ jobs:
     if: github.repository == 'FerSaiyan/Alternative-HeyCyan-App-and-SDK'
     runs-on: [self-hosted, linux, x64, homelab]
     timeout-minutes: 90
+    env:
+      # Every emulator step (and run_instrumentation.sh's offline recovery) uses this instance.
+      CYANBRIDGE_HIL_EMULATOR_AVD: ${{ vars.CYANBRIDGE_HIL_EMULATOR_AVD || 'Pixel_9a' }}
+      CYANBRIDGE_HIL_EMULATOR_PORT: '5584'
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -82,11 +86,15 @@ jobs:
           :app:assembleDebug
           :app:assembleDebugAndroidTest
 
-      - name: Find or start local automation emulator
+      # CI runs every emulator step on its own -read-only instance of the persistent automation AVD
+      # (Pixel_9a) on port 5584. Changes inside it are discarded on exit, so the persistent phone's
+      # account, Tasker setup and release-signed app stay intact, and a running user emulator is
+      # never reused or stopped.
+      - name: Start read-only CI emulator
         id: emulator
         shell: bash
         env:
-          CYANBRIDGE_HIL_EMULATOR_AVD: ${{ vars.CYANBRIDGE_HIL_EMULATOR_AVD || '' }}
+          CYANBRIDGE_HIL_DISABLE_PLAY_STORE: 'true'
         run: |
           set -euo pipefail
           serial="$(bash tools/hil/start_emulator.sh)"
@@ -94,7 +102,10 @@ jobs:
           test "$(adb -s "$serial" get-state)" = "device"
           echo "serial=$serial" >> "$GITHUB_OUTPUT"
 
-      - name: Install branch build on local emulator
+      - name: Install branch build on the read-only emulator
+        env:
+          # The persistent AVD holds a release-signed app; CI builds carry the debug key.
+          CYANBRIDGE_HIL_UNINSTALL_ON_SIGNATURE_MISMATCH: 'true'
         run: bash tools/hil/install.sh '${{ steps.emulator.outputs.serial }}'
 
       - name: Run Mock DAT, Meta pairing, and Walking Aid video controls
@@ -111,22 +122,19 @@ jobs:
           emulator
           com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#assets_AllThreeFixturesExist,com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#meetingTranscriptionFromSeededAsset_hermetic,com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#handsFreeTranslator_fromAssetTranscript,com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#geminiLive_pcmInjectionDoesNotCrash
 
-      - name: Start storage-sized Walking Aid emulator
-        id: walking_aid_emulator
-        env:
-          CYANBRIDGE_WALKING_AID_AVD: ${{ vars.CYANBRIDGE_WALKING_AID_AVD || 'CyanBridge_Walking_Aid_CI' }}
-          CYANBRIDGE_WALKING_AID_STOP_OTHER_EMULATORS: 'true'
-        run: |
-          serial="$(bash tools/hil/start_walking_aid_emulator.sh)"
-          echo "serial=$serial" >> "$GITHUB_OUTPUT"
-
-      - name: Install branch build on Walking Aid emulator
-        run: bash tools/hil/install.sh '${{ steps.walking_aid_emulator.outputs.serial }}'
-
       - name: Run Walking Aid real models and glasses video streams on emulator
         env:
           WALKING_AID_CI_CACHE_DIR: ${{ runner.temp }}/../cyanbridge-model-cache/walking-aid
-        run: bash tools/hil/run_walking_aid_model_ci.sh '${{ steps.walking_aid_emulator.outputs.serial }}'
+        run: bash tools/hil/run_walking_aid_model_ci.sh '${{ steps.emulator.outputs.serial }}'
+
+      - name: Stop the read-only CI emulator
+        if: always()
+        shell: bash
+        run: |
+          adb="$HOME/Android/Sdk/platform-tools/adb"
+          if [ "$("$adb" -s emulator-5584 get-state 2>/dev/null || true)" = "device" ]; then
+            "$adb" -s emulator-5584 emu kill || true
+          fi
 
       - name: Upload Walking Aid model diagnostics
         if: always()

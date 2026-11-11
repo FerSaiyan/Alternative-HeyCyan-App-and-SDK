@@ -86,3 +86,20 @@ wait_for_package() {
   done
   return 1
 }
+
+# Prints the PID of the local emulator process whose console listens on the serial's port.
+emulator_pid_for_serial() {
+  local serial="$1" port
+  [[ "$serial" == emulator-* ]] || return 1
+  port="${serial#emulator-}"
+  ss -ltnpH "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | head -n1 | cut -d= -f2
+}
+
+# True only for a local emulator started with -read-only. Changes made inside such an instance
+# are discarded when it exits, so CI may replace the app there without touching the persistent AVD.
+is_read_only_emulator() {
+  local pid
+  pid="$(emulator_pid_for_serial "$1" || true)"
+  [[ -n "$pid" && -r "/proc/$pid/cmdline" ]] || return 1
+  tr '\0' '\n' < "/proc/$pid/cmdline" | grep -Fxq -- '-read-only'
+}

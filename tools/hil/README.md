@@ -141,6 +141,14 @@ Recommended state once you create the dedicated Google Play AVD:
 - Configure either an on-device CyanBridge local model or Pro Subscription if those AI HIL layers should run.
 - Do not use `-wipe-data`, delete the AVD, or make CI recreate Google/account/app setup.
 
+CI never boots or reuses that AVD writable. `start_emulator.sh` starts a `-read-only` instance of
+`CYANBRIDGE_HIL_EMULATOR_AVD` on `CYANBRIDGE_HIL_EMULATOR_PORT` (default 5584, `-memory 3072`) and
+reuses only that serial when it is a read-only instance of the same AVD. A writable instance (the
+one you use by hand, on any other port) is never reused or stopped. Changes inside the read-only
+instance are discarded on exit, so `install.sh` may uninstall a differently signed app there when
+`CYANBRIDGE_HIL_UNINSTALL_ON_SIGNATURE_MISMATCH=true`; on a phone or writable emulator it fails
+with a hint instead.
+
 ## Opt-in Artemis black-box fixture (separate AVD)
 
 `jev-like-local-agent.yml` has an optional manual `artemis_serial` input. Use
@@ -211,8 +219,8 @@ exception for Tasker/CyanBridge during HIL profile sync.
 All variables are optional. Defaults avoid destructive or hardware-dependent checks until the lab is ready.
 
 - `CYANBRIDGE_HIL_EMULATOR_AVD`
-  - Recommended once the licensed automation AVD exists.
-  - Exact AVD name used when the emulator must be cold-booted/recovered.
+  - Required by `start_emulator.sh` (there is no fallback AVD); currently `Pixel_9a`.
+  - Exact AVD name whose `-read-only` instance CI boots on port 5584.
 
 - `CYANBRIDGE_HIL_SERIAL`
   - Optional exact serial for the core Tasker/physical target.
