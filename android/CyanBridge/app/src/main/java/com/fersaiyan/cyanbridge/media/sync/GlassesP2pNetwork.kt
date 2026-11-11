@@ -11,6 +11,8 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
 import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
 import com.fersaiyan.cyanbridge.shared.network.session.GlassesLinkClaim
 import com.fersaiyan.cyanbridge.ui.bleIpBridge
+import java.io.EOFException
+import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -202,7 +204,21 @@ internal class GlassesP2pNetwork(
         onStream: ((InputStream, Long) -> Unit)? = null
     ): Boolean {
         if (downloadFlowMode() == GlassesSyncFlow.CUSTOM) {
-            adaptiveActiveRoute()?.let { route ->
+            adaptiveActiveRoute()?.let { requestedRoute ->
+                // An active VPN can capture SYSTEM routing and reset the P2P network
+                // mid-transfer; only a local-address-bound socket is VPN-proof. Force it
+                // when a VPN is up (CUSTOM flow only — OFFICIAL_HEYCYAN is untouched).
+                val route = vpnSafeCustomRoute(
+                    requested = requestedRoute,
+                    vpnActive = isVpnActive(),
+                    vpnSafeClientAvailable = vpnSafeHttpClient(connectTimeoutMs, readTimeoutMs) != null,
+                )
+                if (route != requestedRoute) {
+                    Log.i(
+                        "DataDownload",
+                        "VPN active — forcing VPN-safe $route for CUSTOM download (requested $requestedRoute)",
+                    )
+                }
                 return httpGetViaAdaptiveRoute(url, route, connectTimeoutMs, readTimeoutMs, onStream)
             }
         }
@@ -264,54 +280,110 @@ internal class GlassesP2pNetwork(
         onStream: ((InputStream, Long) -> Unit)?,
     ): Boolean {
         return try {
-            when (route) {
-                AdaptiveHttpRoute.P2P_NETWORK -> {
-                    val network = downloadP2pNetwork ?: findLikelyP2pNetwork() ?: return false
-                    val connection = network.openConnection(url) as HttpURLConnection
-                    try {
-                        connection.requestMethod = "GET"
-                        connection.connectTimeout = connectTimeoutMs
-                        connection.readTimeout = readTimeoutMs
-                        connection.setRequestProperty("Connection", "close")
-                        if (connection.responseCode != HttpURLConnection.HTTP_OK) return false
-                        onStream?.invoke(connection.inputStream, connection.contentLengthLong)
-                        true
-                    } finally {
-                        connection.disconnect()
-                    }
-                }
-                AdaptiveHttpRoute.LOCAL_ADDRESS -> {
-                    val client = vpnSafeHttpClient(connectTimeoutMs, readTimeoutMs) ?: return false
-                    val request = okhttp3.Request.Builder()
-                        .url(url)
-                        .header("Connection", "close")
-                        .get()
-                        .build()
-                    client.newCall(request).execute().use { response ->
-                        val body = response.body
-                        if (!response.isSuccessful || body == null) return@use false
-                        onStream?.invoke(body.byteStream(), body.contentLength())
-                        true
-                    }
-                }
-                AdaptiveHttpRoute.SYSTEM -> {
-                    val connection = url.openConnection() as HttpURLConnection
-                    try {
-                        connection.requestMethod = "GET"
-                        connection.connectTimeout = connectTimeoutMs
-                        connection.readTimeout = readTimeoutMs
-                        connection.setRequestProperty("Connection", "close")
-                        if (connection.responseCode != HttpURLConnection.HTTP_OK) return false
-                        onStream?.invoke(connection.inputStream, connection.contentLengthLong)
-                        true
-                    } finally {
-                        connection.disconnect()
-                    }
-                }
+            val initial = openRangedHttp(url, route, 0L, connectTimeoutMs, readTimeoutMs) ?: return false
+            if (onStream == null) {
+                initial.chunk.close()
+                return true
+            }
+            // A fresh (non-ranged) request answers 200 with the full length; the firmware
+            // may still truncate or reset it, so hand the consumer a stream that transparently
+            // resumes with Range: bytes=<delivered>- (206 Partial Content) up to the budget.
+            val totalExpected = if (initial.chunk.partial) -1L else initial.chunkLength
+            val resuming = ResumingHttpStream(
+                totalExpected = totalExpected,
+                initial = initial.chunk,
+                onResume = { attempt, offset ->
+                    adaptiveSyncSession()?.mark(
+                        AdaptiveSyncCheckpoint.MEDIA_FILE_RETRY,
+                        "resume=$attempt,offset=$offset,total=$totalExpected,route=${route.name}",
+                    )
+                },
+                openFrom = { rangeStart ->
+                    openRangedHttp(url, route, rangeStart, connectTimeoutMs, readTimeoutMs)?.chunk
+                },
+            )
+            resuming.use { stream ->
+                onStream.invoke(stream, totalExpected)
+                stream.completedFully()
             }
         } catch (e: Exception) {
             Log.w("DataDownload", "Adaptive $route GET failed for $url: ${e.message}")
             false
+        }
+    }
+
+    private class RangedResponse(val chunk: RangedChunk, val chunkLength: Long)
+
+    /**
+     * Opens one HTTP response for [route], optionally resuming from [rangeStart]. A positive
+     * [rangeStart] sends `Range: bytes=<rangeStart>-` and accepts 206 Partial Content. Returns
+     * null when the route is unavailable or the server answers an unusable status.
+     */
+    private fun openRangedHttp(
+        url: URL,
+        route: AdaptiveHttpRoute,
+        rangeStart: Long,
+        connectTimeoutMs: Int,
+        readTimeoutMs: Int,
+    ): RangedResponse? {
+        return when (route) {
+            AdaptiveHttpRoute.P2P_NETWORK -> {
+                val network = downloadP2pNetwork ?: findLikelyP2pNetwork() ?: return null
+                httpUrlRanged(network.openConnection(url) as HttpURLConnection, rangeStart, connectTimeoutMs, readTimeoutMs)
+            }
+            AdaptiveHttpRoute.SYSTEM -> {
+                httpUrlRanged(url.openConnection() as HttpURLConnection, rangeStart, connectTimeoutMs, readTimeoutMs)
+            }
+            AdaptiveHttpRoute.LOCAL_ADDRESS -> {
+                val client = vpnSafeHttpClient(connectTimeoutMs, readTimeoutMs) ?: return null
+                val builder = okhttp3.Request.Builder()
+                    .url(url)
+                    .header("Connection", "close")
+                if (rangeStart > 0L) builder.header("Range", "bytes=$rangeStart-")
+                val response = client.newCall(builder.get().build()).execute()
+                val body = response.body
+                if (body == null || (!response.isSuccessful && response.code != HttpURLConnection.HTTP_PARTIAL)) {
+                    response.close()
+                    return null
+                }
+                RangedResponse(
+                    chunk = RangedChunk(body.byteStream(), response.code == HttpURLConnection.HTTP_PARTIAL) {
+                        response.close()
+                    },
+                    chunkLength = body.contentLength(),
+                )
+            }
+        }
+    }
+
+    private fun httpUrlRanged(
+        connection: HttpURLConnection,
+        rangeStart: Long,
+        connectTimeoutMs: Int,
+        readTimeoutMs: Int,
+    ): RangedResponse? {
+        return try {
+            connection.requestMethod = "GET"
+            connection.connectTimeout = connectTimeoutMs
+            connection.readTimeout = readTimeoutMs
+            connection.instanceFollowRedirects = true
+            connection.setRequestProperty("Connection", "close")
+            if (rangeStart > 0L) connection.setRequestProperty("Range", "bytes=$rangeStart-")
+            val status = connection.responseCode
+            if (status != HttpURLConnection.HTTP_OK && status != HttpURLConnection.HTTP_PARTIAL) {
+                connection.disconnect()
+                null
+            } else {
+                RangedResponse(
+                    chunk = RangedChunk(connection.inputStream, status == HttpURLConnection.HTTP_PARTIAL) {
+                        connection.disconnect()
+                    },
+                    chunkLength = connection.contentLengthLong,
+                )
+            }
+        } catch (e: Exception) {
+            connection.disconnect()
+            null
         }
     }
 
@@ -363,4 +435,121 @@ internal class GlassesP2pNetwork(
     }
 
     fun isVpnActive(): Boolean = routes.isVpnActive()
+}
+
+/** One HTTP response chunk for a (possibly ranged) CUSTOM-flow download. */
+internal class RangedChunk(
+    val stream: InputStream,
+    /** The server answered 206 Partial Content (its body starts at the requested offset). */
+    val partial: Boolean,
+    private val onClose: () -> Unit,
+) {
+    fun close() {
+        runCatching { onClose() }
+    }
+}
+
+/**
+ * Presents a single continuous stream over a CUSTOM-flow download that the glasses firmware
+ * may truncate or reset mid-transfer. When the underlying chunk ends (or throws) before
+ * [totalExpected] bytes have been delivered, it reopens the transfer from the current offset
+ * via [openFrom] — which issues `Range: bytes=<delivered>-` and accepts 206 — and keeps going,
+ * up to [maxResumeAttempts] times. A server that ignores Range and restarts from zero (non-206)
+ * is tolerated by skipping the bytes already delivered, so the consumer never sees a duplicate
+ * or a short read where a resume was still possible. [totalExpected] < 0 disables resuming
+ * (unknown length), matching the pre-fix behaviour.
+ */
+internal class ResumingHttpStream(
+    private val totalExpected: Long,
+    initial: RangedChunk,
+    private val maxResumeAttempts: Int = DEFAULT_MAX_RESUME_ATTEMPTS,
+    private val onResume: ((attempt: Int, offset: Long) -> Unit)? = null,
+    private val openFrom: (rangeStart: Long) -> RangedChunk?,
+) : InputStream() {
+    private var current: RangedChunk? = initial
+    private var delivered: Long = 0L
+    var resumeAttempts: Int = 0
+        private set
+
+    fun completedFully(): Boolean = totalExpected < 0L || delivered >= totalExpected
+
+    override fun read(): Int {
+        val one = ByteArray(1)
+        return if (read(one, 0, 1) <= 0) -1 else one[0].toInt() and 0xff
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        if (len == 0) return 0
+        while (true) {
+            val cur = current ?: return -1
+            val n = try {
+                cur.stream.read(b, off, len)
+            } catch (io: IOException) {
+                if (resume()) continue else return -1
+            }
+            if (n > 0) {
+                delivered += n
+                return n
+            }
+            // Underlying chunk ended: genuine EOF only once the whole body is delivered.
+            if (completedFully()) return -1
+            if (!resume()) return -1
+        }
+    }
+
+    private fun resume(): Boolean {
+        if (completedFully() || resumeAttempts >= maxResumeAttempts) return false
+        resumeAttempts++
+        current?.close()
+        current = null
+        onResume?.invoke(resumeAttempts, delivered)
+        val next = openFrom(delivered) ?: return false
+        // Server ignored Range and restarted from 0 → drop the bytes we already delivered.
+        if (!next.partial && delivered > 0L) {
+            try {
+                skipFully(next.stream, delivered)
+            } catch (e: IOException) {
+                next.close()
+                return false
+            }
+        }
+        current = next
+        return true
+    }
+
+    override fun close() {
+        current?.close()
+        current = null
+    }
+
+    private fun skipFully(stream: InputStream, count: Long) {
+        var remaining = count
+        val scratch = ByteArray(32 * 1024)
+        while (remaining > 0L) {
+            val toRead = minOf(remaining, scratch.size.toLong()).toInt()
+            val read = stream.read(scratch, 0, toRead)
+            if (read < 0) throw EOFException("could not skip $count bytes to resume")
+            remaining -= read
+        }
+    }
+
+    companion object {
+        const val DEFAULT_MAX_RESUME_ATTEMPTS = 8
+    }
+}
+
+/**
+ * CUSTOM-flow route hardening. A VPN can capture SYSTEM routing (`url.openConnection()`) and
+ * reset [AdaptiveHttpRoute.P2P_NETWORK] mid-transfer; only a local-address-bound socket is
+ * VPN-proof. When a VPN is active, force [AdaptiveHttpRoute.LOCAL_ADDRESS] as long as a
+ * VPN-safe client is available; otherwise leave the requested route unchanged.
+ */
+internal fun vpnSafeCustomRoute(
+    requested: AdaptiveHttpRoute,
+    vpnActive: Boolean,
+    vpnSafeClientAvailable: Boolean,
+): AdaptiveHttpRoute = when {
+    requested == AdaptiveHttpRoute.LOCAL_ADDRESS -> requested
+    vpnActive && vpnSafeClientAvailable -> AdaptiveHttpRoute.LOCAL_ADDRESS
+    else -> requested
 }
