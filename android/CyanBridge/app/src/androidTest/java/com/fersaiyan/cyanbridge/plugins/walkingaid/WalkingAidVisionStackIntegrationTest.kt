@@ -59,7 +59,7 @@ class WalkingAidVisionStackIntegrationTest {
         }
         // Only the BLE/Wi-Fi connection is substituted: production VLC output, rotation,
         // Walking Aid acquisition/queue, and real YOLO inference are exercised below.
-        val capture = WalkingAidLiveVideoCapture(context) { EyevueLivePreviewManager(context, connection) }
+        val capture = WalkingAidLiveVideoCapture(context, eyevueFactory = { EyevueLivePreviewManager(context, connection) })
         runVideoDetector(capture, WalkingAidVideoMode.EYEVUE_VIDEO)
         assertTrue("Eyevue transport must close on stop", connectionClosed)
         assertNull("Eyevue lease leaked", GlassesSessionCoordinator.currentSession())

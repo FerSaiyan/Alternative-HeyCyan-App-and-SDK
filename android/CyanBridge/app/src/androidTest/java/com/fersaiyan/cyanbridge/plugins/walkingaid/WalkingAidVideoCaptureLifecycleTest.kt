@@ -32,7 +32,7 @@ class WalkingAidVideoCaptureLifecycleTest {
             }
             override suspend fun close() { closed = true }
         }
-        val capture = WalkingAidLiveVideoCapture(context) { EyevueLivePreviewManager(context, connection) }
+        val capture = WalkingAidLiveVideoCapture(context, eyevueFactory = { EyevueLivePreviewManager(context, connection) })
         val job = launch { capture.collect(WalkingAidVideoMode.EYEVUE_VIDEO) { it.bitmap.recycle() } }
         try {
             withTimeout(5_000) { connecting.await() }
@@ -48,7 +48,7 @@ class WalkingAidVideoCaptureLifecycleTest {
             override suspend fun open(onStatus: (String, String) -> Unit): String = throw IOException("Eyevue Wi-Fi permission denied")
             override suspend fun close() { closed = true }
         }
-        val capture = WalkingAidLiveVideoCapture(context) { EyevueLivePreviewManager(context, connection) }
+        val capture = WalkingAidLiveVideoCapture(context, eyevueFactory = { EyevueLivePreviewManager(context, connection) })
         val error = runCatching {
             withTimeout(5_000) { capture.collect(WalkingAidVideoMode.EYEVUE_VIDEO) { it.bitmap.recycle() } }
         }.exceptionOrNull()
@@ -60,7 +60,7 @@ class WalkingAidVideoCaptureLifecycleTest {
     @Test fun walkingAidDoesNotTakeOverAnExistingGlassesTransport() = runBlocking {
         val lease = checkNotNull(GlassesSessionCoordinator.tryAcquireLease(GlassesSession.MEDIA_SYNC))
         var factoryCalled = false
-        val capture = WalkingAidLiveVideoCapture(context) { factoryCalled = true; error("Must not create a second transport") }
+        val capture = WalkingAidLiveVideoCapture(context, eyevueFactory = { factoryCalled = true; error("Must not create a second transport") })
         try {
             val error = runCatching { capture.collect(WalkingAidVideoMode.EYEVUE_VIDEO) {} }.exceptionOrNull()
             assertTrue(error is IOException)
