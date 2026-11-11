@@ -71,3 +71,50 @@ No other FATAL EXCEPTION, ANR, StackOverflow or "has stopped" dialog appeared in
 - **Accessibility windows:** while a modal dialog is open, only the dialog is listed. The harness compares the top window with the screen's own window id rather than looking for a second window. It also calls `UiAutomation.clearCache()` before each read, because routes swap content inside one window.
 - **Gesture navigation and monkey:** a monkey edge swipe can move the task to the back. Monkey's controller then refuses to resume the launcher, and the app gets blamed with an "Application does not have a focused window" ANR (main thread idle). The monkey runs therefore use 3-button navigation.
 - **Play Store updates fill the overlay:** on this read-only AVD, Play Store updates GMS and other apps in the background and fills the overlay (ENOSPC on install). The sweep disables `com.android.vending` for the session and rolls back the updates with `pm uninstall-system-updates`.
+
+## 2026-11-11: screens and features added since ff329c7f (`cyan-refactor-pro-questions` b695e3ca)
+
+Run on the read-only `CyanBridge_Walking_Aid_CI` emulator (Android 36, port 5610, `-memory 3072`,
+3-button navigation, Play Store disabled for the session). The APK was built from b695e3ca. The
+tools are the same (`parity-tools/crash-sweep`), plus three helpers and new jobs (`job-new.sh`,
+`job-fam2.sh`, `job-extra.sh`):
+- `fresh_routed`: a fresh install now opens "What brought you to CyanBridge?" before any route, so the
+  job taps Skip once, then opens the route.
+- `seed_pro`: Pro settings opens only with an active plan, so the job writes a locally active Standard
+  plan (`pro_subscription_prefs`). The app has no server Pro account, so the customization card shows
+  its upgrade state.
+- `bt_on`: monkey seed 808 switched Bluetooth off from the quick settings. Every later dashboard then
+  opened the system "turn on Bluetooth" prompt first. The jobs now switch it back on, and the
+  affected family runs were repeated.
+
+Coverage: 106 runs, about 1,400 control actions and 123 dialogs, 4 monkey seeds × 3,000 events, and
+16 instrumentation tests.
+- **Pro settings**, with HeyCyan, TuneBuds, EyeVue and MYVU selected: the glasses customization card
+  (expand, upgrade path), the Photo & voice questions model picker with the Live Economy/Private modes,
+  the Chats and Background models, Refresh, Change plan, Cancel (kept), and "Open Gemini Live preview".
+- **Device picker** (`DEVICE_BIND`): scan, rescan, Meta pairing. No Bluetooth devices exist on the
+  emulator, so the Classic-inquiry and bonded TuneBuds rows were not drawn.
+- **Meta:** the setup choice (Developer Mode / request access), diagnostics and Send logs.
+  `MetaPairingMockFlowTest` (7/7) and `MetaPairingScreenTest` (9/9) cover NEEDS_SETUP and Register again
+  on MockDeviceKit.
+- **Mentra SDK display glasses** (Even G1, G2, Mentra Display, NIMO, Xingyi AR99): dashboards and
+  advanced passes. Disconnected, they show only the connection card.
+- **Mentra miniapps:** the route with Mentra Live and Even G1 selected, URL install field, store browser
+  and search, and the Enable switch on the Plugins page.
+- **Plugins page** with HeyCyan, MemoMind, Mentra Live, Even G2 and TuneBuds selected.
+- **Question routing** (Settings → AI provider): Classic, Shadow and Smart selected by hand.
+- **MemoMind:** dashboard and Web plugins.
+- **Onboarding from a cleared app** through the launcher alias: full path, Skip all, Don't show again,
+  language change, Back.
+- **All 39 routes** (90 s each). The family dashboards and advanced passes were repeated with
+  Bluetooth on.
+- **Monkey:** seeds 101 (fresh), 404, 707 (Even G1) and 808 (TuneBuds).
+
+Result: no FATAL EXCEPTION, ANR, StackOverflow or "has stopped" dialog in any run. Nothing to fix.
+
+Not exercised: TuneBuds Classic rows and connected display glasses (need hardware); customization
+upload and install (needs a Standard/Max server plan and glasses); miniapp install from the store;
+Pro model answers (no test Pro account, see worklog 2026-11-11).
+
+Side effect: each `pm clear` launch registers an anonymous relay account in production, as in earlier
+sweeps.

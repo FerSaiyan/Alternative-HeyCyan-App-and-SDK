@@ -1,5 +1,35 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-11 — Live idle stop 60 s, second-photo Live fix, AVD audit, crash sweep of new screens
+
+- Branch `cyan-refactor-pro-questions` (worktree `cyan-refactor-wt/pro-questions`, from `b76eba7d`), not
+  pushed or merged.
+- `b69fd95f`: Gemini Live closes 60 s (was 30 s) after an answer with no reply or new question
+  (`GeminiLiveViewModel.POST_RESPONSE_IDLE_MS`, also used by the Live service). The 5-minute Free/Economy
+  cap (`METERED_SESSION_LIMIT_MS`) is unchanged. No user-facing string stated 30 s for Live.
+- `b695e3ca`: **second and later photo questions in a Live session were dropped.** Every photo question
+  routed to Live calls `GeminiLiveForegroundService.start(ACTION_START, image, prompt)`. With a session
+  running, `onStartCommand` logged "Ignoring duplicate Live start" and returned, so only the first image
+  ever reached the model (second/third photo, photo after a voice question). Now a start carrying an image
+  joins the running session (`LiveStartDecision`). Turns that arrive before setup are queued and sent in
+  order (`LiveQuestionTurnQueue`, one sender). Text-only repeats are still ignored. Covered by
+  `GeminiLiveQuestionTurnsTest`; not verified against the network, see below.
+- **Test Pro account:** none exists that skips code verification. Production has no bypass (the
+  `email_match` fallback is non-production only). The only one is the website's local E2E stack
+  (`feat/glasses-customization`, `lib/e2e-mode.ts`): `@cyanbridgelabs.test` addresses with
+  `RELAY_E2E_FIXED_CODE` and `POST /api/dev/e2e/seed` (Standard/Max, verified). That stack blanks
+  `GEMINI_API_KEY`/`OPENROUTER_API_KEY`, and Live tokens require an `https://` relay, so it cannot answer
+  Pro questions. Pixel_9a shows "standard, active" but holds no API token. The Pro model emulator tests
+  were therefore not run.
+- Follow-ups for Live photo questions: the "Initializing Live" cue is still spoken for every photo,
+  even into a running session (the Live mic can hear it). The notifications-denied preview route
+  (`GeminiLiveDestination`) has its own one-shot initial turn and was not changed.
+- AVD audit and consolidation proposal: `docs/EMULATOR_RETENTION.md` (2026-11-11 section). It found the
+  cause of the CI `INSTALL_FAILED_UPDATE_INCOMPATIBLE`: local builds (debug included) are signed with the
+  release key whenever `keystore.properties` exists, while CI builds use the debug key.
+- Crash sweep of the new and changed screens: `docs/refactor/CRASH_SWEEP.md` (2026-11-11). 106 runs, 0
+  crashes or ANRs.
+
 ## 2026-10-26 — Question microphone, route and speech on the shared audio session
 
 - Branch `cyan-refactor-question-audio` (from `6d29a02e`). `QuestionMicrophone` opens an

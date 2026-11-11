@@ -375,7 +375,7 @@ Smoke test:
   - Permission gate with notifications denied (preview runs) and allowed (service runs).
   - Auto-start with an initial image.
   - AI-photo button.
-  - 30 s idle stop.
+  - 60 s idle stop after an answer with no reply or new question (the 5-minute Free/Economy cap is separate).
 - **Tasker setup:** import, verify, test voice.
 
 ## Found by the screen comparison

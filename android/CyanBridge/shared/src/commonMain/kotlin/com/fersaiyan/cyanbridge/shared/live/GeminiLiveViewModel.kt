@@ -227,7 +227,7 @@ class GeminiLiveViewModel(
             idleStopJob = viewModelScope.launch {
                 delay(POST_RESPONSE_IDLE_MS)
                 if (listening) {
-                    PlatformLogger.i(TAG, "Closing after 30 seconds following completed model turn")
+                    PlatformLogger.i(TAG, "Closing after ${POST_RESPONSE_IDLE_MS / 1_000L} seconds following completed model turn")
                     session.stopVision()
                     session.stop()
                 }
@@ -298,7 +298,7 @@ class GeminiLiveViewModel(
 
     companion object {
         /** A finished answer keeps the session open this long for a follow-up. */
-        const val POST_RESPONSE_IDLE_MS = 30_000L
+        const val POST_RESPONSE_IDLE_MS = 60_000L
         private const val TAG = "GeminiLiveActivity"
     }
 }
