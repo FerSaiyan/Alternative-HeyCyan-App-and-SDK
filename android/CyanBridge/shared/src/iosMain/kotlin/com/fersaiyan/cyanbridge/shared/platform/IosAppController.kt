@@ -420,7 +420,8 @@ internal class IosAppController {
 
     fun handle(action: GlassesDashboardAction) = dashboardController.handle(action)
 
-    private fun openDeviceBind() {
+    /** Device bind over the dashboard, or over first-run setup ("Find available glasses"). */
+    fun openDeviceBind() {
         _deviceBindState.value = DeviceBindViewModel()
         updateState { it.copy(agentLastError = "") }
         startDeviceScan()

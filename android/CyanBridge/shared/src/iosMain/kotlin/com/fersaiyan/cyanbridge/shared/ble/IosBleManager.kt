@@ -88,11 +88,23 @@ class IosBleManager : BleManager {
     private val _isVendorAttached = MutableStateFlow(false)
     val isVendorAttached: StateFlow<Boolean> = _isVendorAttached.asStateFlow()
     private val centralDelegate = CentralDelegate()
-    private val central = CBCentralManager(
-        delegate = centralDelegate,
-        queue = null,
-        options = null,
-    )
+
+    /**
+     * Created on first use: creating it shows iOS's Bluetooth prompt, which first-run setup asks
+     * for in context (glasses step) instead of over the welcome card. See [activate].
+     */
+    private val central: CBCentralManager by lazy {
+        CBCentralManager(
+            delegate = centralDelegate,
+            queue = null,
+            options = null,
+        )
+    }
+
+    /** Starts Bluetooth (and the permission prompt while iOS has not asked yet). */
+    fun activate() {
+        central
+    }
 
     override fun startScan(timeoutMs: Long?): Flow<BleScannedDevice> = callbackFlow {
         val emitter = this

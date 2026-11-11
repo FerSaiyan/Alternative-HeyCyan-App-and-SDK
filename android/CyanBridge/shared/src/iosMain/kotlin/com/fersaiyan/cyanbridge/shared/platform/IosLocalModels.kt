@@ -554,6 +554,16 @@ object IosLocalModels {
         scope.launch { uiState = uiState.copy(download = state) }
     }
 
+    /** First-run setup's starter model: downloads it unless it is installed (then selects it) or downloading. */
+    fun downloadStarter(id: String) {
+        val entry = findEntry(id) ?: return
+        if (entry.expectedFilename in installedFiles()) {
+            if (selectedName == null) preferences.putString(KEY_SELECTED, entry.expectedFilename)
+            return
+        }
+        download(id)
+    }
+
     /** Same gate as Android's requestDownload: blockers and warnings are shown before starting. */
     private fun download(id: String) {
         val entry = findEntry(id) ?: return
