@@ -46,6 +46,7 @@ import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.LinkState
 import com.meta.wearable.dat.core.types.WearablesError
+import com.meta.wearable.dat.core.types.RegistrationError
 import com.meta.wearable.dat.core.types.RegistrationState as DatRegistrationState
 import com.meta.wearable.dat.display.Display
 import com.meta.wearable.dat.display.addDisplay
@@ -134,6 +135,8 @@ class MetaRaybanManager private constructor(context: Context) {
 
     private val _metaAccessState = MutableStateFlow(MetaAccessState.UNKNOWN)
     val metaAccessState: StateFlow<MetaAccessState> = _metaAccessState.asStateFlow()
+    /** Meta AI turned down the last Register (FAILED_TO_REGISTER/UNKNOWN); cleared by the next attempt. */
+    private var registrationRejected = false
 
     /**
      * Hybrid registration: the registered app id serves Developer-Mode users and invited
@@ -265,6 +268,7 @@ class MetaRaybanManager private constructor(context: Context) {
                 val previousState = _registrationState.value
                 _registrationState.value = nextState
                 if (nextState != RegistrationState.REGISTERED) _cameraPermissionGranted.value = false
+                if (nextState == RegistrationState.REGISTERED) registrationRejected = false
                 if (previousState != nextState) {
                     recordInfo("registrationState", "$previousState -> $nextState")
                 }
@@ -275,6 +279,8 @@ class MetaRaybanManager private constructor(context: Context) {
         registrationErrorJob = scope.launch {
             Wearables.registrationErrorStream.collect { error ->
                 if (_debugMockEnabled.value) return@collect
+                // The only point where Meta AI can refuse access (no invite, Developer Mode off).
+                registrationRejected = error == RegistrationError.FAILED_TO_REGISTER || error == RegistrationError.UNKNOWN
                 reportFailure("registration", error.getLocalizedDescription(context))
             }
         }
@@ -374,6 +380,7 @@ class MetaRaybanManager private constructor(context: Context) {
             recordInfo("registration", "Not starting registration while $current")
             return
         }
+        registrationRejected = false
         clearError()
         recordInfo("registration", "Launching Meta registration UI; setupChoice=${registrationStore.choice}")
         closeTrackerWhenActivityReturns(activity)
@@ -457,9 +464,10 @@ class MetaRaybanManager private constructor(context: Context) {
         if (!ready) {
             reportFailure(
                 "awaitCameraReady",
-                "Timed out after ${timeoutMs}ms; initialized=${_isInitialized.value}, " +
+                "Meta glasses are not ready. Register CyanBridge in Meta AI and keep the glasses connected there " +
+                    "(waited ${timeoutMs}ms; initialized=${_isInitialized.value}, " +
                     "registration=${_registrationState.value}, availableDevices=${_availableDeviceCount.value}, " +
-                    "selectedDevice=${_selectedDeviceName.value ?: "(none)"}",
+                    "link=${_selectedDeviceLinkState.value ?: "(none)"})",
             )
         }
         return ready
@@ -496,6 +504,11 @@ class MetaRaybanManager private constructor(context: Context) {
         if (_debugMockEnabled.value) { onGranted(); return }
         if (!requireInitialized(onError)) return
         scope.launch {
+            // Asking DAT before registration and a connected link only yields NO_DEVICE errors.
+            if (!isCameraReady() && !awaitCameraReady()) {
+                onError(_lastError.value ?: "cameraPermission: Meta glasses are not ready")
+                return@launch
+            }
             cameraPermissionMutex.withLock {
                 try {
                     val result = withTimeoutOrNull(12_000) {
@@ -1187,6 +1200,7 @@ class MetaRaybanManager private constructor(context: Context) {
             appendLine("bondedMetaDeviceCount=${readiness.bondedMetaDeviceCount ?: "(unavailable)"}")
             appendLine("registration=${_registrationState.value}")
             appendLine("metaAccessState=${_metaAccessState.value}")
+            appendLine("registrationRejected=$registrationRejected")
             appendLine("availableDeviceCount=${_availableDeviceCount.value}")
             appendLine("selectedDeviceId=${selectedDeviceId ?: "(none)"}")
             appendLine("selectedDeviceName=${_selectedDeviceName.value ?: "(unknown)"}")
@@ -1215,6 +1229,9 @@ class MetaRaybanManager private constructor(context: Context) {
 
     fun isMetaAiInstalled(): Boolean = installedMetaAiPackageName() != null
 
+    /** Whether a bonded device advertises the Meta glasses service; null without Bluetooth access. */
+    fun metaGlassesBondedToPhone(): Boolean? = datReadiness().bondedMetaDeviceCount?.let { it > 0 }
+
     private fun registrationGuidance(readiness: MetaDatReadiness): String? {
         if (isRegistered() && _availableDeviceCount.value > 0 && _selectedDeviceLinkState.value != LinkState.CONNECTED) {
             return "Meta registration is complete, but the glasses are disconnected or still connecting. Power them on, unfold them, and confirm they are connected in Meta AI, then return here."
@@ -1223,6 +1240,7 @@ class MetaRaybanManager private constructor(context: Context) {
             registrationState = _registrationState.value,
             availableDeviceCount = _availableDeviceCount.value,
             readiness = readiness,
+            registrationRejected = registrationRejected,
         )
     }
 
@@ -1285,15 +1303,16 @@ class MetaRaybanManager private constructor(context: Context) {
         val nextState = resolveMetaAccessState(
             initialized = _isInitialized.value,
             registrationState = _registrationState.value,
-            availableDeviceCount = _availableDeviceCount.value,
             readiness = datReadiness(),
             lastError = _lastError.value,
+            registrationRejected = registrationRejected,
         )
         val previousState = _metaAccessState.value
         if (previousState == nextState) return
         _metaAccessState.value = nextState
         when (nextState) {
             MetaAccessState.UNKNOWN -> Unit
+            MetaAccessState.NEEDS_SETUP -> recordInfo("telemetry", "meta_setup_incomplete")
             MetaAccessState.NEEDS_META_INVITE -> {
                 recordInfo("telemetry", "meta_access_required")
                 recordInfo("telemetry", "meta_access_pending")

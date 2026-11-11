@@ -23,7 +23,7 @@ instrumentation_args=(
   --stacktrace
   -PtestAbi=x86_64
   :app:connectedDebugAndroidTest
-  -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.ui.MetaPairingMockFlowTest,com.fersaiyan.cyanbridge.ui.MetaPairingScreenTest
+  -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.ui.MetaPairingMockFlowTest,com.fersaiyan.cyanbridge.ui.MetaPairingScreenTest,com.fersaiyan.cyanbridge.devices.metarayban.MetaDatSdkMockTest
 )
 if ! ./gradlew "${instrumentation_args[@]}"; then
   echo "Mock DAT instrumentation failed; retrying once on the same emulator" >&2
