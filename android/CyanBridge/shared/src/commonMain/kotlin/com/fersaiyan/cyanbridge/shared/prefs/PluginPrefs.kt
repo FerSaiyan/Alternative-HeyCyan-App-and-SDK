@@ -128,8 +128,18 @@ object PluginPrefs {
         val historyJson = string("history_json", "[]")
     }
 
+    /** Oral Lesion Bench (experimental, Android): the switch, the chosen model and spoken replies. */
+    object OralLesionBench : PrefsFile("oral_lesion_bench_prefs") {
+        val enabled = boolean("enabled", false)
+        val selectedModelId = optionalString("selected_model_id")
+        val speakReplies = boolean("speak_replies", true)
+        /** App-catalog model files already checked against a bench model's SHA-256: path to "size:modified:sha256". */
+        val verifiedFilesJson = string("verified_files_json", "{}")
+    }
+
     val files: List<PrefsFile> = listOf(
         Community, VisualDiary, WalkingAid, ErrandBrain, HandsFreeTranslator, LiveCaptionRelay, MeetingSparkNotes,
         ErrandBrainStore, HandsFreeTranslatorStore, LiveCaptionRelayStore, MeetingSparkNotesStore, WalkingAidImageStore,
+        OralLesionBench,
     )
 }

@@ -321,6 +321,15 @@ private fun SharedPluginsDestination(onDestinationSelected: (AppDestination) -> 
             hasSettings = false,
             isAvailable = false,
         ),
+        NativePluginCardData(
+            id = NativePluginIds.ORAL_LESION_BENCH,
+            title = stringResource(Res.string.native_oral_lesion_title),
+            description = stringResource(Res.string.native_oral_lesion_description),
+            badge = stringResource(Res.string.native_android_only),
+            enabled = false,
+            hasSettings = false,
+            isAvailable = false,
+        ),
     )
 
     CommunityPluginsScreen(

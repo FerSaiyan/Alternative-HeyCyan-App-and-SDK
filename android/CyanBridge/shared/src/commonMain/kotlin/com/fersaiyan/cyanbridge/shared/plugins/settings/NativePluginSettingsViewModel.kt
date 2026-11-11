@@ -79,4 +79,5 @@ val nativePluginEnabledPrefs: Map<String, PrefValue<Boolean>> = mapOf(
     NativePluginIds.HANDS_FREE_TRANSLATOR to PluginPrefs.HandsFreeTranslator.enabled,
     NativePluginIds.ERRAND_BRAIN to PluginPrefs.ErrandBrain.enabled,
     NativePluginIds.AUTO_AUDIO to MediaPrefs.AutoAudioCapture.enabled,
+    NativePluginIds.ORAL_LESION_BENCH to PluginPrefs.OralLesionBench.enabled,
 )

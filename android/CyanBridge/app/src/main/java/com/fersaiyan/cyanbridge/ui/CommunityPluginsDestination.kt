@@ -252,6 +252,7 @@ class CommunityPluginsDestination : NavScreen() {
             NativePluginIds.HANDS_FREE_TRANSLATOR -> AppRoute.HANDS_FREE_TRANSLATOR_SETTINGS.intent(this)
             NativePluginIds.ERRAND_BRAIN -> AppRoute.ERRAND_BRAIN_SETTINGS.intent(this)
             NativePluginIds.AUTO_AUDIO -> AppRoute.AUTO_AUDIO_SETTINGS.intent(this)
+            NativePluginIds.ORAL_LESION_BENCH -> AppRoute.ORAL_LESION_BENCH.intent(this)
             else -> null
         }
         if (intent != null) startActivity(intent)
@@ -574,6 +575,16 @@ private class AndroidCommunityPluginsPlatform(private val context: Context) : Co
                 enabled = hasOnboardStorage && AutoAudioCapturePrefs.isEnabled(context),
                 hasSettings = true,
                 isAvailable = hasOnboardStorage,
+            ),
+            // Research use only; works with the phone camera, so no glasses camera is required.
+            NativePluginCardData(
+                id = NativePluginIds.ORAL_LESION_BENCH,
+                title = "Oral Lesion Bench (experimental)",
+                description = "Uso em pesquisa, não é diagnóstico. Benchmarks oral-lesion models on a photo (glasses or phone) " +
+                    "and a spoken consultation in pt-BR, on this phone only.",
+                badge = "Experimental",
+                enabled = CommunityPluginPrefs.isNativePluginEnabled(context, NativePluginIds.ORAL_LESION_BENCH),
+                hasSettings = true,
             ),
         )
     }
