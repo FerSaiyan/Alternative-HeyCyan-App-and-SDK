@@ -13,5 +13,13 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:label="CyanBridge HIL Tasker Import" />
+        <!-- add.219 debug-only: arm/disarm the glasses BLE->TCP sim bridge over adb. -->
+        <receiver
+            android:name=".glassessim.GlassesSimBridgeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.fersaiyan.cyanbridge.debug.SIM_BRIDGE" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
