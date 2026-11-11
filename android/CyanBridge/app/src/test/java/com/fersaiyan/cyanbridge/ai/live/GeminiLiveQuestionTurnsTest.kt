@@ -1,7 +1,9 @@
 package com.fersaiyan.cyanbridge.ai.live
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Photo questions after the first one must reach the running Live session (users saw them dropped). */
@@ -42,5 +44,14 @@ class GeminiLiveQuestionTurnsTest {
         queue.reset()
         assertNull(queue.offer(photo3))
         assertEquals(listOf(photo3), queue.onSetupComplete())
+    }
+
+    @Test
+    fun initializingCueOnlyWhenTheQuestionStartsASession() {
+        assertTrue(photo1.speaksInitializingCue(sessionRunning = false))
+        assertTrue(voice.speaksInitializingCue(sessionRunning = false))
+        // Spoken into a running session, the Live microphone heard the cue.
+        assertFalse(photo2.speaksInitializingCue(sessionRunning = true))
+        assertFalse(voice.speaksInitializingCue(sessionRunning = true))
     }
 }

@@ -24,6 +24,13 @@ internal enum class LiveStartDecision {
 }
 
 /**
+ * "Initializing Live" is spoken only for a question that starts a session. A photo that joins a
+ * running session goes in silently: the Live microphone would hear the cue as user speech.
+ */
+internal fun LiveQuestionTurn.speaksInitializingCue(sessionRunning: Boolean): Boolean =
+    LiveStartDecision.of(sessionStarted = sessionRunning, stopping = false, turn = this) == LiveStartDecision.START_SESSION
+
+/**
  * The questions of one Live session, in arrival order.
  *
  * The first one is the session's initial turn. A photo question that arrives while the session

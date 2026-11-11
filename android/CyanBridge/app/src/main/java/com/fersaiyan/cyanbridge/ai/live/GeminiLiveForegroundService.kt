@@ -143,6 +143,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                     LiveStartDecision.START_SESSION -> Unit
                 }
                 sessionStarted = true
+                sessionRunning = true
                 val language = intent.getStringExtra(EXTRA_LANGUAGE)?.takeIf { it.isNotBlank() }
                     ?: AppLanguagePreferences.selected(this).languageTag.ifBlank { Locale.getDefault().toLanguageTag() }
                 questionTurns.reset()
@@ -185,6 +186,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     }
 
     override fun onDestroy() {
+        sessionRunning = false
         idleStopJob?.cancel()
         responseIdleJob?.cancel()
         tickerJob?.cancel()
@@ -300,6 +302,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         if (stopping) return
         stopping = true
         sessionStarted = false
+        sessionRunning = false
         idleStopJob?.cancel()
         cancelResponseIdleTimeout("session stopped")
         tickerJob?.cancel()
@@ -533,6 +536,11 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         private const val EXTRA_INITIAL_IMAGE_PATH = "initial_image_path"
         private const val EXTRA_INITIAL_PROMPT = "initial_prompt"
         private const val EXTRA_USE_RELAY = "use_relay"
+
+        /** True from an accepted session start until that session stops (one service per process). */
+        @Volatile
+        var sessionRunning: Boolean = false
+            private set
 
         fun start(
             context: Context,
