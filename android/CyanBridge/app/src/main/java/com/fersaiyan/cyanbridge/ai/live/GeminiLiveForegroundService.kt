@@ -55,9 +55,9 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     private var isListening = false
     private var visionStatus = "Glasses vision: waiting"
     private var currentDetail = "Connecting to Gemini Live"
-    private var initialImagePath: String? = null
-    private var initialPrompt: String? = null
-    private var initialTurnSent = false
+    private val questionTurns = LiveQuestionTurnQueue()
+    /** One sender in arrival order, so an image and its prompt never interleave with the next question. */
+    private val questionTurnDispatcher = Dispatchers.IO.limitedParallelism(1)
     private val hardwareInProgress = AtomicBoolean(false)
     private var hardwareRegistered = false
     private var announcementTts: TtsSpeaker? = null
@@ -124,15 +124,29 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 return START_NOT_STICKY
             }
             ACTION_START -> {
-                if (sessionStarted || stopping) {
-                    Log.i(TAG, "Ignoring duplicate Live start while an existing session is active or stopping")
-                    return START_NOT_STICKY
+                val turn = LiveQuestionTurn(
+                    imagePath = intent.getStringExtra(EXTRA_INITIAL_IMAGE_PATH)?.takeIf { it.isNotBlank() },
+                    prompt = intent.getStringExtra(EXTRA_INITIAL_PROMPT)?.takeIf { it.isNotBlank() },
+                )
+                when (LiveStartDecision.of(sessionStarted, stopping, turn)) {
+                    LiveStartDecision.ADD_TO_SESSION -> {
+                        // A photo question while Live runs belongs to this session.
+                        Log.i(TAG, "Adding a photo question to the running Live session prompt=${turn.prompt != null}")
+                        cancelResponseIdleTimeout("new photo question")
+                        questionTurns.offer(turn)?.let { sendQuestionTurns(listOf(it)) }
+                        return START_NOT_STICKY
+                    }
+                    LiveStartDecision.IGNORE -> {
+                        Log.i(TAG, "Ignoring duplicate Live start while an existing session is active or stopping")
+                        return START_NOT_STICKY
+                    }
+                    LiveStartDecision.START_SESSION -> Unit
                 }
                 sessionStarted = true
                 val language = intent.getStringExtra(EXTRA_LANGUAGE)?.takeIf { it.isNotBlank() }
                     ?: AppLanguagePreferences.selected(this).languageTag.ifBlank { Locale.getDefault().toLanguageTag() }
-                initialImagePath = intent.getStringExtra(EXTRA_INITIAL_IMAGE_PATH)?.takeIf { it.isNotBlank() }
-                initialPrompt = intent.getStringExtra(EXTRA_INITIAL_PROMPT)?.takeIf { it.isNotBlank() }
+                questionTurns.reset()
+                questionTurns.offer(turn)
                 // Base image question without strict "Answer only in X" - Live's systemInstruction handles language permissively
                 // (97 languages, switch on request). Single-shot paths keep the strict Resolver.
                 val imagePrompt = intent.getStringExtra(EXTRA_IMAGE_PROMPT)?.takeIf { it.isNotBlank() }
@@ -153,13 +167,12 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 // Vision + client start
                 visionController?.start()
                 // Reset per-session flags
-                initialTurnSent = false
                 terminalAnnouncementIssued = false
                 isListening = false
                 currentDetail = if (intent.getBooleanExtra(EXTRA_USE_RELAY, false)) "Connecting to CyanBridge Live relay" else "Connecting to Gemini Live"
                 updateNotification()
                 client?.start(language, imagePrompt)
-                Log.i(TAG, "Live service started language=$language initialImage=${initialImagePath != null} useRelay=${intent.getBooleanExtra(EXTRA_USE_RELAY, false)}")
+                Log.i(TAG, "Live service started language=$language initialImage=${turn.hasImage} useRelay=${intent.getBooleanExtra(EXTRA_USE_RELAY, false)}")
                 return START_NOT_STICKY
             }
         }
@@ -457,18 +470,25 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     }
 
     override fun onSetupComplete() {
-        if (initialTurnSent) return
-        initialTurnSent = true
-        Log.i(TAG, "Sending initial Live turn image=${initialImagePath != null} prompt=${initialPrompt != null}")
-        initialImagePath?.let { path ->
-            serviceScope.launch(Dispatchers.IO) {
-                val image = runCatching { File(path).readBytes() }.getOrNull()
-                if (image != null && image.isNotEmpty()) {
-                    if (client?.sendImage(image) == true) visionController?.onVisualContextSent()
+        sendQuestionTurns(questionTurns.onSetupComplete())
+    }
+
+    private fun sendQuestionTurns(turns: List<LiveQuestionTurn>) {
+        if (turns.isEmpty()) return
+        serviceScope.launch(questionTurnDispatcher) {
+            for (turn in turns) {
+                Log.i(TAG, "Sending Live question turn image=${turn.hasImage} prompt=${turn.prompt != null}")
+                turn.imagePath?.let { path ->
+                    val image = runCatching { File(path).readBytes() }.getOrNull()
+                    if (image != null && image.isNotEmpty()) {
+                        if (client?.sendImage(image) == true) visionController?.onVisualContextSent()
+                    } else {
+                        Log.w(TAG, "Live question image could not be read")
+                    }
                 }
-                initialPrompt?.let { client?.sendTextTurn(it) }
+                turn.prompt?.let { client?.sendTextTurn(it) }
             }
-        } ?: initialPrompt?.let { client?.sendTextTurn(it) }
+        }
     }
 
     override fun onAnnouncement(kind: GeminiLiveAnnouncement) {
