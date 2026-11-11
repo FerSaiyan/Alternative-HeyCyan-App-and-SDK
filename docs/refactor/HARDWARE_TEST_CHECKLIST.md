@@ -725,3 +725,30 @@ Filter logcat with `adb logcat -s MentraMiniapps MentraMiniappJs MentraMiniappUi
    - Kill the app process while a miniapp runs: it does not restart by itself (no autostart yet); reopening it starts it fresh.
    - Recorder (background-only, needs audio chunks and blobs): it starts, its unsupported calls answer NOT_IMPLEMENTED in the Log, and nothing crashes.
    - Remove a miniapp: its files, storage and permission choices are gone; reinstalling asks for permissions again.
+
+## iOS first-run setup (shared `OnboardingFlowViewModel`)
+
+iPhone with the KMP host build (`ios/CyanBridgeKMPHost`). Filter the device log (Console.app) on `IosBleManager` and `IosLocalModels`. Android onboarding is unchanged; on Android only re-check that the model step still lists the same three models with the same "Requirements" lines.
+
+1. **Fresh install, VoiceOver off.** Delete the app first, then install and open it.
+   - No Bluetooth alert on the welcome card. The note under "Get started" reads "About 1 minute · You stay in control".
+   - Changing the language on the welcome card keeps you on the welcome card.
+   - "Get started" leads to four steps, shown as "1 / 4" to "4 / 4": Connect your glasses, Choose your on-device AI, Ask out loud, Welcome to CyanBridge. There is no battery, accessibility, Tasker, Plugins or voice-profile step, and no "Local / Pro / Tasker" label.
+   - Glasses step: "Allow glasses connection" shows the iOS Bluetooth alert; after "Allow" the card reads "Bluetooth access is allowed". "Find available glasses" opens Device Bind over the setup, pairs as usual, and returns to the step.
+   - Glasses step, refused: "Next" asks "Continue without Bluetooth?". After a refusal, the button reads "Open Settings" and opens CyanBridge's page in the Settings app.
+   - Model step: it shows the iPhone's RAM. The recommended starter is preselected (Gemma 4 E2B with 6 GB or more, Qwen3.5 0.8B with 4 GB), models that need more RAM are greyed out, and "No on-device model for now" is listed. "Next" starts the download (Settings → Local models shows its progress); with "No on-device model" nothing downloads.
+   - Voice step: the button shows the microphone alert, then the speech-recognition alert, and the card turns to allowed. With either refused, the button reads "Open Settings".
+   - Last step: "Open CyanBridge on GitHub" opens the repository. "Get started" opens the app on the Glasses tab. The Glasses screen selects the custom-provider assistant mode.
+   - Relaunch: no setup is shown. Force-quit during setup, then relaunch: setup starts again at the welcome card.
+   - "Skip all" on the first step opens the app, and setup does not come back.
+2. **Fresh install, VoiceOver on.**
+   - "Do you need vision assistance?" comes first, with "Yes" preselected. "Continue" leads to the welcome card.
+   - VoiceOver reads every control on every step: the language selector, the step counter, the permission buttons, the model radio choices and Back/Next.
+   - After setup, Settings → Accessibility shows vision assistance on.
+3. **VoiceOver turned on later.**
+   - Finish setup with VoiceOver off. Turn VoiceOver on, either with the app open or from Settings followed by a return to the app: the vision-assistance question appears once, over the app.
+   - Answer "No", then turn VoiceOver off and on again: the question does not come back.
+4. **Upgrade from a build that showed only the welcome card** (`cyanbridge_onboarding/welcome_done` = true; for example the collaborator's build or cyan-refactor before this branch).
+   - Install over it without deleting. The app opens straight to the dashboard, with no setup steps.
+   - On first launch Bluetooth starts as before: the dashboard shows the Bluetooth state, and reconnecting to the saved glasses works.
+   - With VoiceOver on and vision assistance never answered, the vision-assistance question is shown once, as on Android.
