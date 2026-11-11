@@ -1,0 +1,14 @@
+<resources>
+    <string name="onboarding_glasses_connection_title">Подключите очки</string>
+    <string name="onboarding_glasses_connection_desc">Разрешите CyanBridge найти и подключить очки поблизости.</string>
+    <string name="onboarding_glasses_connection_details">Разрешение Bluetooth используется только для поиска, сопряжения и связи с очками. Можно продолжить без него и предоставить разрешение позже при подключении устройства.</string>
+    <string name="onboarding_local_model_title">Выберите локальный ИИ</string>
+    <string name="onboarding_local_model_desc">Выберите стартовую модель. CyanBridge загрузит её в фоновом режиме, пока вы завершаете настройку.</string>
+    <string name="onboarding_local_model_details">Настройки генерации автоматически подбираются для модели, при этом предпочтение отдаётся ускорению GPU. Позже вы сможете изменить или импортировать модели в разделе «Локальные модели».</string>
+    <string name="onboarding_open_source_title">Открытая разработка</string>
+    <string name="onboarding_open_source_desc">Изучайте код, сообщайте о проблемах и помогайте улучшать CyanBridge.</string>
+    <string name="onboarding_open_source_details">CyanBridge — проект с открытым исходным кодом. Изучайте код, сообщайте об ошибках или проблемах безопасности, предлагайте улучшения или участвуйте через GitHub.</string>
+    <string name="onboarding_skip_all">Пропустить всё</string>
+    <string name="onboarding_next">Далее</string>
+    <string name="onboarding_get_started">Начать</string>
+</resources>

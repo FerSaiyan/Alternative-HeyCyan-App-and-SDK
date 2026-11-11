@@ -1,0 +1,14 @@
+<resources>
+    <string name="onboarding_glasses_connection_title">안경 연결</string>
+    <string name="onboarding_glasses_connection_desc">CyanBridge가 주변 안경을 찾고 연결하도록 허용합니다.</string>
+    <string name="onboarding_glasses_connection_details">Bluetooth 권한은 안경을 검색하고 페어링하며 통신하는 데만 사용됩니다. 지금 허용하지 않고 계속 진행한 후 기기 연결 시 나중에 허용할 수 있습니다.</string>
+    <string name="onboarding_local_model_title">온디바이스 AI 선택</string>
+    <string name="onboarding_local_model_desc">시작 모델을 선택하세요. 설정을 마치는 동안 CyanBridge가 백그라운드에서 다운로드합니다.</string>
+    <string name="onboarding_local_model_details">모델에 맞는 생성 설정이 자동으로 선택되며 GPU 가속이 우선됩니다. 나중에 로컬 모델에서 모델을 변경하거나 가져올 수 있습니다.</string>
+    <string name="onboarding_open_source_title">공개적으로 만들어 가는 앱</string>
+    <string name="onboarding_open_source_desc">코드를 검토하고 문제를 신고하며 모두를 위한 CyanBridge 개선에 참여하세요.</string>
+    <string name="onboarding_open_source_details">CyanBridge는 오픈 소스입니다. 동작을 이해하기 위해 코드를 확인하고 버그나 보안 문제를 신고하거나 개선 사항을 제안하거나 GitHub를 통해 기여할 수 있습니다.</string>
+    <string name="onboarding_skip_all">모두 건너뛰기</string>
+    <string name="onboarding_next">다음</string>
+    <string name="onboarding_get_started">시작하기</string>
+</resources>

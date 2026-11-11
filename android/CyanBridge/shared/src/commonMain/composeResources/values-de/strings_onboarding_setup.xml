@@ -1,0 +1,14 @@
+<resources>
+    <string name="onboarding_glasses_connection_title">Brille verbinden</string>
+    <string name="onboarding_glasses_connection_desc">Erlauben Sie CyanBridge, Ihre Brille in der Nähe zu finden und zu verbinden.</string>
+    <string name="onboarding_glasses_connection_details">Die Bluetooth-Berechtigung wird nur zum Finden, Koppeln und Kommunizieren mit Ihrer Brille verwendet. Sie können jetzt ohne Erlaubnis fortfahren und sie später beim Verbinden eines Geräts erteilen.</string>
+    <string name="onboarding_local_model_title">Lokale KI auswählen</string>
+    <string name="onboarding_local_model_desc">Wählen Sie ein Startmodell. CyanBridge lädt es im Hintergrund herunter, während Sie die Einrichtung abschließen.</string>
+    <string name="onboarding_local_model_details">Die Generierungseinstellungen werden automatisch für das Modell ausgewählt und GPU-Beschleunigung wird bevorzugt. Später können Sie Modelle unter Lokale Modelle ändern oder importieren.</string>
+    <string name="onboarding_open_source_title">Offen entwickelt</string>
+    <string name="onboarding_open_source_desc">Prüfen Sie den Code, melden Sie Probleme und helfen Sie, CyanBridge für alle zu verbessern.</string>
+    <string name="onboarding_open_source_details">CyanBridge ist Open Source. Untersuchen Sie den Code, melden Sie Fehler oder Sicherheitsprobleme, schlagen Sie Verbesserungen vor oder tragen Sie über GitHub bei.</string>
+    <string name="onboarding_skip_all">Alle überspringen</string>
+    <string name="onboarding_next">Weiter</string>
+    <string name="onboarding_get_started">Loslegen</string>
+</resources>

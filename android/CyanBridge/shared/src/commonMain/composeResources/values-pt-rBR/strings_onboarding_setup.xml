@@ -1,0 +1,33 @@
+<resources>
+    <string name="onboarding_glasses_connection_title">Conecte seus óculos</string>
+    <string name="onboarding_glasses_connection_desc">Permita que o CyanBridge encontre e conecte seus óculos próximos.</string>
+    <string name="onboarding_glasses_connection_details">A permissão Bluetooth é usada somente para encontrar, emparelhar e se comunicar com seus óculos. Você pode continuar sem permiti-la agora e concedê-la depois ao conectar um dispositivo.</string>
+    <string name="onboarding_local_model_title">Escolha sua IA no dispositivo</string>
+    <string name="onboarding_local_model_desc">Escolha um modelo inicial. O CyanBridge fará o download em segundo plano enquanto você termina a configuração.</string>
+    <string name="onboarding_local_model_details">As configurações de geração são selecionadas automaticamente para o modelo, com preferência pela aceleração da GPU. Você poderá alterar ou importar modelos mais tarde em Modelos locais.</string>
+    <string name="onboarding_device_ram">Este aparelho: %1$s GB de RAM</string>
+    <string name="onboarding_ram_warning_title">Memória limitada</string>
+    <string name="onboarding_ram_limited">Este aparelho tem %1$s GB de RAM. Recomendamos apenas IAs locais compactas; modelos maiores podem ficar lentos ou fechar inesperadamente.</string>
+    <string name="onboarding_ram_too_low">Este aparelho tem apenas %1$s GB de RAM. A IA local exige pelo menos 4 GB, portanto nenhum modelo local é compatível no momento. Você pode continuar e configurar uma IA na nuvem ou remota depois.</string>
+    <string name="onboarding_open_source_title">Boas-vindas ao CyanBridge</string>
+    <string name="onboarding_open_source_desc">Tudo pronto. Conecte seus óculos, explore os recursos e deixe o CyanBridge do seu jeito.</string>
+    <string name="onboarding_open_source_details">O CyanBridge é um projeto open source feito pela comunidade e para a comunidade. Você pode consultar o código, relatar problemas, sugerir ideias ou contribuir diretamente pelo nosso repositório no GitHub.</string>
+    <string name="onboarding_bluetooth_skip_title">Continuar sem Bluetooth?</string>
+    <string name="onboarding_bluetooth_skip_body">Você poderá conceder essa permissão posteriormente. Até lá, o CyanBridge não conseguirá encontrar, emparelhar nem conectar seus óculos.</string>
+    <string name="onboarding_bluetooth_skip_confirm">Continuar mesmo assim</string>
+    <string name="onboarding_bluetooth_skip_cancel">Voltar</string>
+    <string name="onboarding_find_glasses">Procurar óculos disponíveis</string>
+    <string name="onboarding_skip_all">Pular tudo</string>
+    <string name="onboarding_next">Avançar</string>
+    <string name="onboarding_get_started">Começar</string>
+    <string name="onboarding_duration_note_short">Cerca de 1 minuto · Você mantém o controle</string>
+    <string name="onboarding_voice_title">Pergunte em voz alta</string>
+    <string name="onboarding_voice_desc">Faça perguntas por voz pelos seus óculos ou pelo celular.</string>
+    <string name="onboarding_voice_details">O CyanBridge usa o microfone quando você faz uma pergunta, diz a palavra de ativação ou grava uma reunião, e o reconhecimento de fala da Apple para transformar suas palavras em texto. Você também pode permitir isso depois, na primeira pergunta.</string>
+    <string name="onboarding_voice_allowed">Microfone e reconhecimento de fala permitidos</string>
+    <string name="onboarding_voice_denied">Microfone e reconhecimento de fala ainda não foram permitidos</string>
+    <string name="onboarding_allow_voice">Permitir microfone e reconhecimento de fala</string>
+    <string name="onboarding_open_ios_settings">Abrir Ajustes</string>
+    <string name="onboarding_model_none_title">Nenhum modelo no aparelho por enquanto</string>
+    <string name="onboarding_model_none_desc">Baixe ou importe um modelo, ou conecte seu próprio servidor, depois em Ajustes.</string>
+</resources>

@@ -19,6 +19,15 @@ import org.jetbrains.compose.resources.stringResource
 
 data class OnboardingChoice(val id: String, val title: String, val description: String, val enabled: Boolean = true)
 
+/** A permission asked in context on a setup step; the button hides once [granted]. */
+data class OnboardingPermissionCard(
+    val granted: Boolean,
+    val grantedText: String,
+    val pendingText: String,
+    val buttonText: String,
+    val onRequest: () -> Unit,
+)
+
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 fun FeatureOnboardingScreen(
@@ -34,6 +43,9 @@ fun FeatureOnboardingScreen(
     bluetoothSkipWarningTitle: String = "", bluetoothSkipWarningBody: String = "",
     bluetoothSkipConfirmLabel: String = "", bluetoothSkipCancelLabel: String = "",
     findGlassesLabel: String = "",
+    permissionCards: List<OnboardingPermissionCard> = emptyList(),
+    showFindGlassesButton: Boolean = false,
+    icon: AppIcon? = null,
     onRequestGlassesConnectionPermission: () -> Unit, onRequestStoragePermission: () -> Unit,
     onFindGlasses: () -> Unit = {},
     onOpenSourceRepository: () -> Unit, onChoiceSelected: (String) -> Unit = {},
@@ -74,7 +86,7 @@ fun FeatureOnboardingScreen(
                 Box(Modifier.size(72.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
                     contentAlignment = Alignment.Center) {
                     Icon(
-                        (if (choices.isNotEmpty()) AppIcon.Model else AppIcon.Glasses).imageVector(), null,
+                        (icon ?: if (choices.isNotEmpty()) AppIcon.Model else AppIcon.Glasses).imageVector(), null,
                         Modifier.size(38.dp), tint = MaterialTheme.colorScheme.primary,
                     )
                 }
@@ -157,16 +169,16 @@ fun FeatureOnboardingScreen(
                     )
                     if (glassesConnectionPermissionGranted) {
                         Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = onFindGlasses,
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
-                            shape = MaterialTheme.shapes.medium,
-                        ) {
-                            Icon(AppIcon.Sync.imageVector(), null, Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(findGlassesLabel, fontWeight = FontWeight.Bold)
-                        }
+                        FindGlassesButton(findGlassesLabel, onFindGlasses)
                     }
+                }
+                permissionCards.forEach { card ->
+                    Spacer(Modifier.height(16.dp))
+                    PermissionCard(card.granted, card.grantedText, card.pendingText, card.buttonText, card.onRequest)
+                }
+                if (showFindGlassesButton) {
+                    Spacer(Modifier.height(12.dp))
+                    FindGlassesButton(findGlassesLabel, onFindGlasses)
                 }
                 if (showStoragePermission) {
                     Spacer(Modifier.height(16.dp))
@@ -196,6 +208,19 @@ fun FeatureOnboardingScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FindGlassesButton(label: String, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Icon(AppIcon.Sync.imageVector(), null, Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, fontWeight = FontWeight.Bold)
     }
 }
 
