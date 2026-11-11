@@ -27,6 +27,7 @@ fun WelcomeScreen(
     languageOptions: List<OnboardingLanguageOption>, selectedLanguageId: String,
     languageSelectionComplete: Boolean, onLanguageSelected: (OnboardingLanguageOption) -> Unit,
     onStartSetup: () -> Unit,
+    durationNote: String? = null,
 ) {
     var languageMenuOpen by remember { mutableStateOf(false) }
     val selectedLanguage = languageOptions.firstOrNull { it.id == selectedLanguageId }
@@ -107,7 +108,7 @@ fun WelcomeScreen(
                 shape = MaterialTheme.shapes.medium) {
                 Text(stringResource(Res.string.onboarding_start_setup), fontWeight = FontWeight.Bold)
             }
-            Text(stringResource(Res.string.onboarding_duration_note), Modifier.padding(top = 12.dp, bottom = 8.dp),
+            Text(durationNote ?: stringResource(Res.string.onboarding_duration_note), Modifier.padding(top = 12.dp, bottom = 8.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center)
         }

@@ -1,0 +1,14 @@
+<resources>
+    <string name="onboarding_glasses_connection_title">连接眼镜</string>
+    <string name="onboarding_glasses_connection_desc">允许 CyanBridge 查找并连接附近的眼镜。</string>
+    <string name="onboarding_glasses_connection_details">蓝牙权限仅用于发现、配对和与眼镜通信。您可以现在不允许，稍后连接设备时再授予权限。</string>
+    <string name="onboarding_local_model_title">选择设备端 AI</string>
+    <string name="onboarding_local_model_desc">选择一个入门模型。CyanBridge 会在您完成设置期间于后台下载该模型。</string>
+    <string name="onboarding_local_model_details">系统会根据模型自动选择生成设置，并优先使用 GPU 加速。以后可以在“本地模型”中更改或导入模型。</string>
+    <string name="onboarding_open_source_title">坚持开源</string>
+    <string name="onboarding_open_source_desc">查看代码、报告问题并帮助改进 CyanBridge。</string>
+    <string name="onboarding_open_source_details">CyanBridge 是开源项目。您可以查看代码了解行为，报告错误或安全问题，提出改进建议，或通过 GitHub 贡献代码。</string>
+    <string name="onboarding_skip_all">全部跳过</string>
+    <string name="onboarding_next">下一步</string>
+    <string name="onboarding_get_started">开始使用</string>
+</resources>

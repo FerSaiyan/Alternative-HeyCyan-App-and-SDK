@@ -1,0 +1,14 @@
+<resources>
+    <string name="onboarding_glasses_connection_title">Collega i tuoi occhiali</string>
+    <string name="onboarding_glasses_connection_desc">Consenti a CyanBridge di trovare e collegare gli occhiali vicini.</string>
+    <string name="onboarding_glasses_connection_details">Il permesso Bluetooth viene usato solo per trovare, associare e comunicare con gli occhiali. Puoi continuare senza concederlo ora e farlo in seguito quando colleghi un dispositivo.</string>
+    <string name="onboarding_local_model_title">Scegli la tua IA sul dispositivo</string>
+    <string name="onboarding_local_model_desc">Scegli un modello iniziale. CyanBridge lo scaricherà in background mentre completi la configurazione.</string>
+    <string name="onboarding_local_model_details">Le impostazioni di generazione vengono selezionate automaticamente per il modello e viene privilegiata l'accelerazione GPU. Potrai modificare o importare modelli in seguito in Modelli locali.</string>
+    <string name="onboarding_open_source_title">Sviluppato apertamente</string>
+    <string name="onboarding_open_source_desc">Esamina il codice, segnala i problemi e aiuta a migliorare CyanBridge per tutti.</string>
+    <string name="onboarding_open_source_details">CyanBridge è open source. Esamina il codice per capire il comportamento, segnala bug o problemi di sicurezza, suggerisci miglioramenti o contribuisci tramite GitHub.</string>
+    <string name="onboarding_skip_all">Salta tutto</string>
+    <string name="onboarding_next">Avanti</string>
+    <string name="onboarding_get_started">Inizia</string>
+</resources>

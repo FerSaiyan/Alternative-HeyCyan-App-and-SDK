@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -30,10 +31,11 @@ import com.fersaiyan.cyanbridge.shared.ui.LocalPlatformBackHandler
 import com.fersaiyan.cyanbridge.shared.ui.PlatformBackHandler
 import com.fersaiyan.cyanbridge.shared.ui.SystemBackHandler
 import com.fersaiyan.cyanbridge.shared.ui.localmodels.LocalModelsConfigureScreen
-import com.fersaiyan.cyanbridge.shared.ui.onboarding.WelcomeScreen
+import com.fersaiyan.cyanbridge.shared.ui.onboarding.OnboardingScreen
 import com.fersaiyan.cyanbridge.shared.ui.theme.CyanBridgeMaterialTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import platform.UIKit.UIAccessibilityIsVoiceOverRunning
 
 private val IOS_PRO_SUBSCRIPTION_STATE = ProSubscriptionUiState(
     status = "iOS checkout is unavailable until account sign-in and verified billing are implemented. Pro is not active.",
@@ -125,8 +127,12 @@ private fun IosCyanBridgeApp(
     }
     var appearanceSettings by remember { mutableStateOf(appearanceStore.load()) }
 
-    val deviceBindState by controller.deviceBindState.collectAsState()
-    var welcomeDone by remember { mutableStateOf(AppPrefs.IosOnboarding.welcomeDone.get()) }
+    // Outside the language key below, so a language change on the welcome card keeps the flow.
+    val onboarding = remember { iosOnboardingFlow() }
+    IosAccessibilityAndResumeEvents { onboarding.onScreenReaderChanged(UIAccessibilityIsVoiceOverRunning()) }
+    val setupDone = onboarding.isCompleted
+    // Bluetooth starts (and iOS asks for it) from the glasses step on first run; at once afterwards.
+    LaunchedEffect(setupDone) { if (setupDone) controller.bleManager.activate() }
 
     // Re-keying on the language rebuilds the tree so Compose resources pick up the new locale.
     key(IosAppLanguage.selectedId) {
@@ -135,17 +141,11 @@ private fun IosCyanBridgeApp(
         com.fersaiyan.cyanbridge.shared.ui.chat.LocalChatMathRenderer provides IosKatexRenderer,
     ) {
     CyanBridgeMaterialTheme(settings = appearanceSettings) {
-        if (!welcomeDone) {
-            WelcomeScreen(
-                languageOptions = IosAppLanguage.options,
-                selectedLanguageId = IosAppLanguage.selectedId,
-                languageSelectionComplete = true,
-                onLanguageSelected = { option -> IosAppLanguage.select(option.id) },
-                onStartSetup = {
-                    AppPrefs.IosOnboarding.welcomeDone.set(true)
-                    welcomeDone = true
-                },
-            )
+        if (!setupDone) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                IosOnboardingFlow(onboarding, controller)
+                DeviceBindOverlay(controller)
+            }
             return@CyanBridgeMaterialTheme
         }
         Box(modifier = Modifier.fillMaxSize()) {
@@ -167,24 +167,7 @@ private fun IosCyanBridgeApp(
                 onProSubscriptionAction = ::iosProSubscriptionActionStatus,
                 hiddenDestinations = setOf(AppDestination.PLUGINS),
             )
-            // Android opens its device bind screen for Scan; iOS shows the same shared screen on top.
-            deviceBindState?.let { bind ->
-                SystemBackHandler { controller.closeDeviceBind() }
-                DeviceBindScreen(
-                    devices = bind.devices,
-                    isScanning = bind.isScanning,
-                    connectingDevice = bind.connectingDevice,
-                    selectedClass = bind.selectedClass,
-                    onScan = controller::startDeviceScan,
-                    onPairMetaGlasses = controller::pairMetaGlasses,
-                    onSelectDevice = controller::selectDevice,
-                    onSelectedClassChange = controller::selectDeviceClass,
-                    onConfirmConnection = controller::confirmConnection,
-                    onConfirmManualProtocol = controller::confirmManualProtocol,
-                    onDismissConnection = controller::dismissConnection,
-                    onBack = { controller.closeDeviceBind() },
-                )
-            }
+            DeviceBindOverlay(controller)
             if (IosLocalModels.isOpen) {
                 SystemBackHandler { IosLocalModels.handle(com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsAction.Back) }
                 LocalModelsConfigureScreen(
@@ -194,10 +177,33 @@ private fun IosCyanBridgeApp(
                     onCatalogSearchQueryChange = IosLocalModels::onCatalogSearchQueryChange,
                 )
             }
+            // VoiceOver came on after setup: the vision-assistance offer, once, over the app.
+            if (onboarding.screen is OnboardingScreen.VisionOffer) IosOnboardingFlow(onboarding, controller)
         }
     }
     }
     }
+}
+
+/** Android opens its device bind screen for Scan; iOS shows the same shared screen on top. */
+@Composable
+private fun DeviceBindOverlay(controller: IosAppController) {
+    val bind = controller.deviceBindState.collectAsState().value ?: return
+    SystemBackHandler { controller.closeDeviceBind() }
+    DeviceBindScreen(
+        devices = bind.devices,
+        isScanning = bind.isScanning,
+        connectingDevice = bind.connectingDevice,
+        selectedClass = bind.selectedClass,
+        onScan = controller::startDeviceScan,
+        onPairMetaGlasses = controller::pairMetaGlasses,
+        onSelectDevice = controller::selectDevice,
+        onSelectedClassChange = controller::selectDeviceClass,
+        onConfirmConnection = controller::confirmConnection,
+        onConfirmManualProtocol = controller::confirmManualProtocol,
+        onDismissConnection = controller::dismissConnection,
+        onBack = { controller.closeDeviceBind() },
+    )
 }
 
 /** UIKit's back swipe (Compose Multiplatform BackHandler) for shared sub-screens. */

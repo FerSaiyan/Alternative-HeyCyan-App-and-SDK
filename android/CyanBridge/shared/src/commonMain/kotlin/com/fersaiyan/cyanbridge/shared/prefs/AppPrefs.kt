@@ -15,7 +15,11 @@ object AppPrefs {
         val batteryGuideRemindAfter = long("battery_opt_guide_remind_after", 0L)
     }
 
-    /** iOS only: the welcome screen was dismissed. */
+    /**
+     * iOS only: the welcome card was dismissed. Builds before November 2026 had no other setup, so
+     * it reads as onboarding finished (shared/ui/onboarding/isOnboardingCompleted); newer builds
+     * set [Main.onboardingCompleted] instead.
+     */
     object IosOnboarding : PrefsFile("cyanbridge_onboarding") {
         val welcomeDone = boolean("welcome_done", false)
     }

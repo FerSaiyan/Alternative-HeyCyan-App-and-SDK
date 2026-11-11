@@ -22,9 +22,9 @@ import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.FeatureOnboardingScreen
 import com.fersaiyan.cyanbridge.shared.ui.onboarding.OnboardingChoice
+import com.fersaiyan.cyanbridge.shared.ui.onboarding.starterModelChoices
 import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentDestination
 import com.hjq.permissions.OnPermissionCallback
-import java.util.Locale
 
 class OnboardingFeatureDestination : NavScreen() {
 
@@ -56,7 +56,7 @@ class OnboardingFeatureDestination : NavScreen() {
             ?.takeIf { it.enabled && !it.comingSoon && ramGb >= it.minRamGb }
             ?.id
             ?: recommended?.id
-        modelChoices = buildModelChoices(ramGb, recommended?.id)
+        modelChoices = starterModelChoices(ramGb)
         setupFeatureScreen()
     }
 
@@ -274,24 +274,6 @@ class OnboardingFeatureDestination : NavScreen() {
             ),
         )
 
-        private val MODEL_CHOICE_COPY = listOf(
-            Triple(
-                "gemma4-e2b-it-litert",
-                "Gemma 4 E2B - Fast",
-                "Fast local text, image, and audio understanding.",
-            ),
-            Triple(
-                "gemma4-e4b-it-litert",
-                "Gemma 4 E4B - Slower but smarter",
-                "Higher-quality local answers for devices with more memory.",
-            ),
-            Triple(
-                "qwen3.5-0.8b-q4",
-                "Qwen3.5 0.8B - Super small",
-                "A compact, quick text model for lower-memory devices.",
-            ),
-        )
-
         private val STEP_COUNT get() = FEATURES.size + 1
         private val LAST_STEP_INDEX get() = STEP_COUNT - 1
 
@@ -310,19 +292,4 @@ class OnboardingFeatureDestination : NavScreen() {
             activity.startActivity(AppRoute.ONBOARDING_FEATURE.intent(activity))
         }
     }
-
-    private fun buildModelChoices(ramGb: Double, recommendedId: String?): List<OnboardingChoice> =
-        MODEL_CHOICE_COPY.mapNotNull { (id, title, description) ->
-            val entry = LocalModelCatalogRepository.findById(id) ?: return@mapNotNull null
-            val enabled = ramGb >= entry.minRamGb
-            val ramLabel = String.format(Locale.US, "%.0f", entry.minRamGb)
-            val storageLabel = String.format(Locale.US, "%.1f", entry.minStorageGb)
-            val downloadLabel = String.format(Locale.US, "%.1f", entry.sizeBytes / 1_000_000_000.0)
-            OnboardingChoice(
-                id = id,
-                title = if (id == recommendedId) "$title - Recommended" else title,
-                description = "$description\nRequirements: $ramLabel GB RAM • $storageLabel GB free • $downloadLabel GB download",
-                enabled = enabled,
-            )
-        }
 }
