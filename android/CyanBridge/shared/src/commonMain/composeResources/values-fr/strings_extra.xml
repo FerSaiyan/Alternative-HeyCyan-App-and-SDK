@@ -409,7 +409,14 @@
     <string name="sync_flow_official_title">Flux de l'application HeyCyan</string>
     <string name="sync_flow_official_description">Synchronisation BLE + P2P stricte comme le fournisseur</string>
     <string name="sync_flow_custom_title">Flux personnalise</string>
-    <string name="sync_flow_custom_description">Resolution CyanBridge avec analyse de secours</string>
+    <string name="sync_flow_custom_description">Résolution CyanBridge : d'abord l'IP signalée par les lunettes, puis une analyse du sous-réseau local</string>
+    <string name="sync_flow_adaptive_title">Flux adaptatif</string>
+    <string name="sync_flow_adaptive_description">Reprise par points de contrôle qui apprend la route fiable pour ce téléphone et ces lunettes</string>
+    <string name="sync_flow_experimental">Expérimental</string>
+    <string name="settings_media_sync">Synchronisation des médias</string>
+    <string name="settings_media_sync_description">Flux de synchronisation Wi-Fi des lunettes : %1$s</string>
+    <string name="settings_media_sync_ask">Toujours demander</string>
+    <string name="settings_media_sync_hint">Utilisé pour chaque appui sur Synchroniser et pour les questions sur une image en pleine résolution.</string>
     <string name="ota_target_wifi">Puce Wi-Fi (.swu)</string>
     <string name="ota_target_ble">Puce BLE (.bin)</string>
     <string name="ota_source_personal">Fichiers firmware personnels</string>

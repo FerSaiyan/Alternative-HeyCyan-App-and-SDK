@@ -409,7 +409,14 @@
     <string name="sync_flow_official_title">HeyCyan 应用流程</string>
     <string name="sync_flow_official_description">类似供应商的严格 BLE + P2P 同步</string>
     <string name="sync_flow_custom_title">自定义流程</string>
-    <string name="sync_flow_custom_description">带备用扫描的 CyanBridge 解析器</string>
+    <string name="sync_flow_custom_description">CyanBridge 解析器：先使用眼镜上报的 IP，再扫描本地子网</string>
+    <string name="sync_flow_adaptive_title">自适应流程</string>
+    <string name="sync_flow_adaptive_description">按检查点恢复，并学习此手机与眼镜的可靠路由</string>
+    <string name="sync_flow_experimental">实验性</string>
+    <string name="settings_media_sync">媒体同步</string>
+    <string name="settings_media_sync_description">眼镜 Wi-Fi 同步流程：%1$s</string>
+    <string name="settings_media_sync_ask">每次询问</string>
+    <string name="settings_media_sync_hint">用于每次点按同步，以及全分辨率图片提问。</string>
     <string name="ota_target_wifi">Wi-Fi 芯片（.swu）</string>
     <string name="ota_target_ble">BLE 芯片（.bin）</string>
     <string name="ota_source_personal">个人固件文件</string>

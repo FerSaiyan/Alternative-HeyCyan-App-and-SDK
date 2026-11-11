@@ -1541,7 +1541,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showDownloadFlowPicker() {
-        showDownloadFlowPicker = true
+        mediaSync.startSavedFlowOr { showDownloadFlowPicker = true } // Settings → Media sync, else ask
     }
 
     private fun showOfficialHeyCyanWarningOrContinue() {

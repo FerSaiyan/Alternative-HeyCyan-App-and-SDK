@@ -164,7 +164,14 @@
     <string name="sync_flow_official_title">HeyCyan-App-Ablauf</string>
     <string name="sync_flow_official_description">Strikte BLE- und P2P-Synchronisierung wie beim Anbieter</string>
     <string name="sync_flow_custom_title">Benutzerdefinierter Ablauf</string>
-    <string name="sync_flow_custom_description">CyanBridge-Auflösung mit Ersatzsuche</string>
+    <string name="sync_flow_custom_description">CyanBridge-Auflösung: zuerst die von der Brille gemeldete IP, dann eine Suche im lokalen Subnetz</string>
+    <string name="sync_flow_adaptive_title">Adaptiver Ablauf</string>
+    <string name="sync_flow_adaptive_description">Wiederherstellung über Kontrollpunkte, die den zuverlässigen Weg für dieses Telefon und diese Brille lernt</string>
+    <string name="sync_flow_experimental">Experimentell</string>
+    <string name="settings_media_sync">Mediensynchronisierung</string>
+    <string name="settings_media_sync_description">WLAN-Synchronisierungsablauf der Brille: %1$s</string>
+    <string name="settings_media_sync_ask">Jedes Mal fragen</string>
+    <string name="settings_media_sync_hint">Gilt für jedes Tippen auf Synchronisieren und für Bildfragen in voller Auflösung.</string>
     <string name="ota_target_wifi">Wi-Fi-Chip (.swu)</string>
     <string name="ota_target_ble">BLE-Chip (.bin)</string>
     <string name="ota_source_personal">Persönliche Firmwaredateien</string>

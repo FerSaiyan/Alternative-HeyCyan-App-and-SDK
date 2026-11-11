@@ -15,6 +15,10 @@ class GlassesWifiErrorPolicyTest {
             GlassesWifiErrorPolicy.decide(GlassesWifiErrorContext.ADAPTIVE_MEDIA_SYNC, 255, sessionActive = true),
         )
         assertEquals(
+            GlassesWifiErrorAction.RESET_DEVICE_P2P_WHILE_RESOLVING,
+            GlassesWifiErrorPolicy.decide(GlassesWifiErrorContext.CUSTOM_MEDIA_SYNC, 255, sessionActive = true),
+        )
+        assertEquals(
             GlassesWifiErrorAction.IGNORE_OUTSIDE_SESSION,
             GlassesWifiErrorPolicy.decide(GlassesWifiErrorContext.OFFICIAL_MEDIA_SYNC, 255, sessionActive = false),
         )

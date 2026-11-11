@@ -1,6 +1,8 @@
 package com.fersaiyan.cyanbridge.media
 
 import android.content.Context
+import android.util.Log
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
 import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs.AdaptiveP2pProfiles as Profiles
 import com.fersaiyan.cyanbridge.shared.prefs.edit
 import com.fersaiyan.cyanbridge.shared.prefs.get
@@ -252,5 +254,57 @@ internal object AdaptiveP2pProfileStore {
             this[Profiles.completedSyncs[key]] = profile.completedSyncs
             this[Profiles.consecutiveFailures[key]] = profile.consecutiveFailures
         }
+    }
+}
+
+/**
+ * The only writer of learned routes for a finished media sync. Only the Adaptive flow learns:
+ * the HeyCyan and Custom flows never touch the `adaptive_p2p_sync_profiles` file, so their logs
+ * stay comparable with the vendor app and v2.3.0.
+ */
+internal object AdaptiveProfileLearning {
+    private const val TAG = "DataDownload"
+
+    /** Records a successful sync; returns the updated profile, or null when nothing was written. */
+    fun recordSuccess(
+        context: Context,
+        flow: GlassesSyncFlow,
+        session: AdaptiveP2pSyncSession?,
+        activeRoute: AdaptiveHttpRoute?,
+        activeWarmupMs: Long?,
+    ): AdaptiveP2pProfile? {
+        if (flow != GlassesSyncFlow.ADAPTIVE || session == null) return null
+        val route = session.successfulRoute ?: activeRoute ?: return null
+        val warmupMs = session.successfulWarmupMs ?: activeWarmupMs ?: 1_000L
+        session.mark(AdaptiveSyncCheckpoint.COMPLETE, "route=${route.name},warmup_ms=$warmupMs")
+        val updated = AdaptiveP2pProfileStore.recordSuccess(context, session.profileKey, route, warmupMs)
+        Log.i(
+            TAG,
+            "Adaptive profile learned success: route=$route warmupMs=$warmupMs " +
+                "candidateSuccesses=${updated.candidateSuccesses} preferred=${updated.preferredRoute}",
+        )
+        return updated
+    }
+
+    /** Records a failed sync; returns the updated profile, or null when nothing was written. */
+    fun recordFailure(
+        context: Context,
+        flow: GlassesSyncFlow,
+        session: AdaptiveP2pSyncSession?,
+        message: String,
+    ): AdaptiveP2pProfile? {
+        if (flow != GlassesSyncFlow.ADAPTIVE || session == null) return null
+        val failedAfter = session.lastCheckpoint
+        session.mark(
+            AdaptiveSyncCheckpoint.FAILED,
+            "after=${failedAfter?.name ?: "NONE"},reason=${message.take(120)}",
+        )
+        val updated = AdaptiveP2pProfileStore.recordFailure(context, session.profileKey)
+        Log.i(
+            TAG,
+            "Adaptive profile recorded failure: checkpoint=$failedAfter " +
+                "consecutiveFailures=${updated.consecutiveFailures}",
+        )
+        return updated
     }
 }

@@ -409,7 +409,14 @@
     <string name="sync_flow_official_title">Fluxo do app HeyCyan</string>
     <string name="sync_flow_official_description">Sincronização BLE + P2P rigorosa como a do fornecedor</string>
     <string name="sync_flow_custom_title">Fluxo personalizado</string>
-    <string name="sync_flow_custom_description">Resolvedor CyanBridge com busca alternativa</string>
+    <string name="sync_flow_custom_description">Resolvedor CyanBridge: primeiro o IP informado pelos óculos, depois uma busca na sub-rede local</string>
+    <string name="sync_flow_adaptive_title">Fluxo adaptativo</string>
+    <string name="sync_flow_adaptive_description">Recuperação por pontos de controle que aprende a rota confiável para este celular e estes óculos</string>
+    <string name="sync_flow_experimental">Experimental</string>
+    <string name="settings_media_sync">Sincronização de mídia</string>
+    <string name="settings_media_sync_description">Fluxo de sincronização Wi-Fi dos óculos: %1$s</string>
+    <string name="settings_media_sync_ask">Perguntar sempre</string>
+    <string name="settings_media_sync_hint">Usado em cada toque em Sincronizar e nas perguntas sobre imagens em resolução total.</string>
     <string name="ota_target_wifi">Chip Wi-Fi (.swu)</string>
     <string name="ota_target_ble">Chip BLE (.bin)</string>
     <string name="ota_source_personal">Arquivos de firmware pessoais</string>

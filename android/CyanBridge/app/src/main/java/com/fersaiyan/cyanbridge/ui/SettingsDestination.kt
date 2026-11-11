@@ -60,6 +60,10 @@ import com.fersaiyan.cyanbridge.ai.speaker.VoiceProfile
 import com.fersaiyan.cyanbridge.ui.voiceprofile.VoiceEnrollmentDestination
 import com.fersaiyan.cyanbridge.shared.accessibility.VisionAssistancePreferences
 import com.fersaiyan.cyanbridge.ui.accessibility.visionAssistancePreferences
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsScreen
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsScreenActions
 import com.fersaiyan.cyanbridge.shared.ui.settings.SettingsUiState
@@ -235,7 +239,14 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
             voiceProfileEnrolled = VoiceProfile.isEnrolled(this),
             voiceProfileStatus = voiceProfileStatus(),
             visionAssistanceEnabled = VisionAssistancePreferences.isEnabled(visionAssistancePreferences()),
+            mediaSyncFlowAvailable = true,
+            mediaSyncFlow = AppPrefs.Main.mediaSyncFlow[this],
         )
+    }
+
+    override fun setMediaSyncFlow(flow: GlassesSyncFlow?) {
+        AppPrefs.Main.mediaSyncFlow[this] = flow
+        settingsUiState = settingsUiState.copy(mediaSyncFlow = flow)
     }
 
     override fun setVisionAssistanceEnabled(enabled: Boolean) {

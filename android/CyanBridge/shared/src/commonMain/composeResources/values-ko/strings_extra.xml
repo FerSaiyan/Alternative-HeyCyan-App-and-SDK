@@ -409,7 +409,14 @@
     <string name="sync_flow_official_title">HeyCyan 앱 흐름</string>
     <string name="sync_flow_official_description">공급업체와 유사한 엄격한 BLE + P2P 동기화</string>
     <string name="sync_flow_custom_title">맞춤 흐름</string>
-    <string name="sync_flow_custom_description">대체 검색을 사용하는 CyanBridge 해결기</string>
+    <string name="sync_flow_custom_description">CyanBridge 해결기: 안경이 보고한 IP를 먼저 사용하고, 그다음 로컬 서브넷을 검색</string>
+    <string name="sync_flow_adaptive_title">적응형 흐름</string>
+    <string name="sync_flow_adaptive_description">이 휴대폰과 안경에 맞는 안정적인 경로를 학습하는 체크포인트 복구</string>
+    <string name="sync_flow_experimental">실험적</string>
+    <string name="settings_media_sync">미디어 동기화</string>
+    <string name="settings_media_sync_description">안경 Wi-Fi 동기화 흐름: %1$s</string>
+    <string name="settings_media_sync_ask">매번 묻기</string>
+    <string name="settings_media_sync_hint">동기화를 누를 때마다, 그리고 원본 해상도 이미지 질문에 사용됩니다.</string>
     <string name="ota_target_wifi">Wi-Fi 칩(.swu)</string>
     <string name="ota_target_ble">BLE 칩(.bin)</string>
     <string name="ota_source_personal">개인 펌웨어 파일</string>

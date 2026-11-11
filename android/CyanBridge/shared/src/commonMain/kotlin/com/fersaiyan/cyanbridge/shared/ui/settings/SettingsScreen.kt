@@ -52,6 +52,10 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -62,6 +66,7 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.navigation.icon
 import com.fersaiyan.cyanbridge.shared.icons.imageVector
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
 import com.fersaiyan.cyanbridge.shared.ai.AgentProviderAvailability
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
@@ -108,6 +113,10 @@ data class SettingsUiState(
     val voiceProfileEnrolled: Boolean = false,
     val voiceProfileStatus: String = "",
     val visionAssistanceEnabled: Boolean = false,
+    /** HeyCyan Wi-Fi media sync is Android-only; hosts without it leave this false. */
+    val mediaSyncFlowAvailable: Boolean = false,
+    /** The remembered media sync flow; null asks on every Sync tap. */
+    val mediaSyncFlow: GlassesSyncFlow? = null,
 )
 
 /** Platform-owned effects stay in the platform layer; this composable only renders state and dispatches intent. */
@@ -143,6 +152,7 @@ interface SettingsScreenActions {
     fun openVoiceEnrollment() = Unit
     fun deleteVoiceProfile() = Unit
     fun setVisionAssistanceEnabled(enabled: Boolean) = Unit
+    fun setMediaSyncFlow(flow: GlassesSyncFlow?) = Unit
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalResourceApi::class)
@@ -244,6 +254,31 @@ fun SettingsScreen(
                     onClick = actions::openAppLanguageSelection,
                     testTag = "settings_language",
                 )
+            }
+            if (state.mediaSyncFlowAvailable) {
+                item {
+                    var choosing by rememberSaveable { mutableStateOf(false) }
+                    QuickActionCard(
+                        title = stringResource(Res.string.settings_media_sync),
+                        subtitle = stringResource(
+                            Res.string.settings_media_sync_description,
+                            mediaSyncFlowChoiceLabel(state.mediaSyncFlow),
+                        ),
+                        actionLabel = stringResource(Res.string.action_change),
+                        onClick = { choosing = true },
+                        testTag = "settings_media_sync",
+                    )
+                    if (choosing) {
+                        MediaSyncFlowDialog(
+                            selected = state.mediaSyncFlow,
+                            onSelect = { flow ->
+                                choosing = false
+                                actions.setMediaSyncFlow(flow)
+                            },
+                            onDismissRequest = { choosing = false },
+                        )
+                    }
+                }
             }
             item {
                 ExpandableSectionCard(

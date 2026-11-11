@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.shared.prefs
 
 import com.fersaiyan.cyanbridge.shared.appearance.AccentProfiles
 import com.fersaiyan.cyanbridge.shared.appearance.ThemeMode
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
 
@@ -13,6 +14,14 @@ object AppPrefs {
         val batteryGuideCompleted = boolean("battery_opt_guide_completed", false)
         val batteryGuideSuppressed = boolean("battery_opt_guide_suppress", false)
         val batteryGuideRemindAfter = long("battery_opt_guide_remind_after", 0L)
+
+        /**
+         * Settings → Media sync: the HeyCyan sync flow to use without asking. Null (the default,
+         * and any unknown stored name) shows the flow picker on every Sync tap. Read lazily at
+         * sync time; nothing migrates or rewrites it.
+         */
+        val mediaSyncFlow: PrefValue<GlassesSyncFlow?> = optionalString("media_sync_flow")
+            .map(GlassesSyncFlow::fromStoredName) { it?.name }
     }
 
     /**

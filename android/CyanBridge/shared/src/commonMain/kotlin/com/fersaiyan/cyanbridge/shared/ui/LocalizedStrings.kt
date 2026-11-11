@@ -43,6 +43,8 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.plugin_category_produ
 import com.fersaiyan.cyanbridge.shared.generated.resources.provider_local
 import com.fersaiyan.cyanbridge.shared.generated.resources.provider_pro
 import com.fersaiyan.cyanbridge.shared.generated.resources.provider_tasker
+import com.fersaiyan.cyanbridge.shared.generated.resources.sync_flow_adaptive_description
+import com.fersaiyan.cyanbridge.shared.generated.resources.sync_flow_adaptive_title
 import com.fersaiyan.cyanbridge.shared.generated.resources.sync_flow_custom_description
 import com.fersaiyan.cyanbridge.shared.generated.resources.sync_flow_custom_title
 import com.fersaiyan.cyanbridge.shared.generated.resources.sync_flow_official_description
@@ -138,6 +140,7 @@ fun localizedSyncFlowLabel(flow: GlassesSyncFlow): String = stringResource(
     when (flow) {
         GlassesSyncFlow.OFFICIAL_HEYCYAN -> Res.string.sync_flow_official_title
         GlassesSyncFlow.CUSTOM -> Res.string.sync_flow_custom_title
+        GlassesSyncFlow.ADAPTIVE -> Res.string.sync_flow_adaptive_title
     },
 )
 
@@ -147,6 +150,7 @@ fun localizedSyncFlowDescription(flow: GlassesSyncFlow): String = stringResource
     when (flow) {
         GlassesSyncFlow.OFFICIAL_HEYCYAN -> Res.string.sync_flow_official_description
         GlassesSyncFlow.CUSTOM -> Res.string.sync_flow_custom_description
+        GlassesSyncFlow.ADAPTIVE -> Res.string.sync_flow_adaptive_description
     },
 )
 

@@ -44,6 +44,7 @@ class PrefsInventoryTest {
         cyanbridge_prefs/battery_opt_guide_completed BOOLEAN false
         cyanbridge_prefs/battery_opt_guide_suppress BOOLEAN false
         cyanbridge_prefs/battery_opt_guide_remind_after LONG 0
+        cyanbridge_prefs/media_sync_flow STRING null
         cyanbridge_onboarding/welcome_done BOOLEAN false
         appearance_settings/theme_mode STRING "SYSTEM" ios=cyanbridge_appearance/theme_mode
         appearance_settings/accent_profile STRING "cyan" ios=cyanbridge_appearance/accent_profile

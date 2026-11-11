@@ -16,8 +16,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Media-sync HTTP over the glasses link: the official (system-routed) and adaptive route
- * variants. Network lookup, process binding and VPN-safe sockets come from
+ * Media-sync HTTP over the glasses link: the official (system-routed), custom (P2P network,
+ * then VPN-safe sockets) and adaptive route variants. Network lookup, process binding and VPN-safe sockets come from
  * [GlassesNetworkSessionCoordinator], which owns them for every glasses workflow.
  */
 internal class GlassesP2pNetwork(
@@ -201,7 +201,7 @@ internal class GlassesP2pNetwork(
         readTimeoutMs: Int,
         onStream: ((InputStream, Long) -> Unit)? = null
     ): Boolean {
-        if (downloadFlowMode() == GlassesSyncFlow.CUSTOM) {
+        if (downloadFlowMode() == GlassesSyncFlow.ADAPTIVE) {
             adaptiveActiveRoute()?.let { route ->
                 return httpGetViaAdaptiveRoute(url, route, connectTimeoutMs, readTimeoutMs, onStream)
             }
@@ -313,6 +313,17 @@ internal class GlassesP2pNetwork(
             Log.w("DataDownload", "Adaptive $route GET failed for $url: ${e.message}")
             false
         }
+    }
+
+    /** TCP reachability over the P2P network, retried from its local address (VPN-safe). */
+    fun isPortOpen(ip: String, port: Int, timeoutMs: Int): Boolean =
+        routes.isPortOpen(ip, port, timeoutMs, downloadP2pNetwork)
+
+    /** The phone's IPv4 address on the Wi-Fi Direct interface, for the Custom flow's subnet hint. */
+    fun p2pInterfaceIpv4(): String? {
+        val network = downloadP2pNetwork ?: findLikelyP2pNetwork() ?: return null
+        return runCatching { routes.linkAddresses(network) }.getOrNull()
+            ?.firstOrNull(GlassesNetworkAddressing::isIpv4)
     }
 
     fun findLikelyP2pNetwork(): Network? {

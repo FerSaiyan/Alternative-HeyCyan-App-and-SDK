@@ -16,6 +16,12 @@ enum class GlassesWifiErrorAction {
     /** Adaptive flow: record it and let its bounded checkpoint recovery decide on a reset. */
     DEFER_TO_ADAPTIVE_RECOVERY,
 
+    /**
+     * Custom flow (v2.3.0): reset the glasses Wi-Fi Direct state, rate-limited, until the HTTP
+     * server is resolved; after that a reset could kill a healthy transfer, so it is skipped.
+     */
+    RESET_DEVICE_P2P_WHILE_RESOLVING,
+
     /** Firmware update: any error other than the noisy 255 fails the Wi-Fi stage. */
     FAIL_OTA,
 }
@@ -24,6 +30,7 @@ enum class GlassesWifiErrorAction {
 enum class GlassesWifiErrorContext {
     OFFICIAL_MEDIA_SYNC,
     ADAPTIVE_MEDIA_SYNC,
+    CUSTOM_MEDIA_SYNC,
     OTA,
     LIVE_PREVIEW,
 }
@@ -52,6 +59,11 @@ object GlassesWifiErrorPolicy {
                 !noisy -> GlassesWifiErrorAction.IGNORE
                 !sessionActive -> GlassesWifiErrorAction.IGNORE_OUTSIDE_SESSION
                 else -> GlassesWifiErrorAction.DEFER_TO_ADAPTIVE_RECOVERY
+            }
+            GlassesWifiErrorContext.CUSTOM_MEDIA_SYNC -> when {
+                !noisy -> GlassesWifiErrorAction.IGNORE
+                !sessionActive -> GlassesWifiErrorAction.IGNORE_OUTSIDE_SESSION
+                else -> GlassesWifiErrorAction.RESET_DEVICE_P2P_WHILE_RESOLVING
             }
         }
     }
