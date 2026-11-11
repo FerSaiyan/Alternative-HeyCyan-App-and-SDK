@@ -84,7 +84,8 @@ nohup "$emulator_bin" \
   -gpu swiftshader_indirect \
   >"$log" 2>&1 &
 
-deadline=$((SECONDS + 300))
+# A cold API 37 boot on a busy host has taken almost 9 minutes.
+deadline=$((SECONDS + 600))
 booted=""
 while (( SECONDS < deadline )); do
   if [[ "$(adb_for "$serial" get-state 2>/dev/null || true)" == "device" ]]; then
