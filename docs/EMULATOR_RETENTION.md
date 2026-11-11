@@ -136,3 +136,35 @@ Script changes:
 
 Alternative that keeps the app data: give the self-hosted runner the machine's
 `keystore.properties`, so CI builds carry the release key like local builds.
+
+## Consolidation on Pixel_9a (2026-11-11, branch `cyan-refactor-emulator-ci`)
+
+The owner approved the proposal above without rooting Pixel_9a; `HeyCyan_Frida` stays the rooted
+Frida emulator.
+
+- Scripts: `start_emulator.sh` requires `CYANBRIDGE_HIL_EMULATOR_AVD`, boots a `-read-only -no-snapshot
+  -memory 3072` instance on `CYANBRIDGE_HIL_EMULATOR_PORT` (default 5584, boot deadline 600 s) and
+  reuses only that serial when it is a read-only instance of the same AVD (checked through the
+  emulator's command line). `install.sh` uninstalls and reinstalls on `INSTALL_FAILED_UPDATE_INCOMPATIBLE`
+  or `INSTALL_FAILED_INSUFFICIENT_STORAGE`, only with `CYANBRIDGE_HIL_UNINSTALL_ON_SIGNATURE_MISMATCH=true`
+  and only inside a local read-only instance. `start_walking_aid_emulator.sh` no longer creates an AVD
+  or stops other emulators. The self-hosted workflow runs every emulator step, Walking Aid included,
+  on one read-only Pixel_9a at 5584 and stops it in an `always()` step.
+- Pixel_9a's /data is 95% full (about 0.8 to 1 GB free). That is under Android's low-storage
+  threshold, so a replacing install fails with `INSUFFICIENT_STORAGE` before the signature check;
+  hence the second case in `install.sh`. A cold boot took 530 s on a loaded host.
+- Local run of the workflow's steps (all green): `:app:testDebugUnitTest` and `:shared:portabilityTest`
+  (410), both APKs; then on the read-only Pixel_9a the 6 instrumentation classes (31 tests), the 4 audio
+  harness tests and the 5 Walking Aid real-model phases. They passed twice: with the local
+  release-key build installed over the persistent app (`install -r`), and after a debug-key re-signed
+  copy replaced it through `install.sh` (the CI case). Pixel_9a's userdata files were not modified.
+- `WalkingAidVideoCaptureLifecycleTest` and the eyevue-video real-model test passed their Eyevue
+  transport as a trailing lambda, which bound to `mentraFactory` (added last by bb3a6be0); they now
+  pass `eyevueFactory =` by name.
+- Archive not done. `tar --sparse` of `CyanBridge_LiteRT_CI` to `/mnt/seagate/avd-archive/2026-11-11/`
+  ran at 0.6 MB/s, then about 25 KB/s, because other sessions' rsync and LTFS jobs were loading the
+  drive. It was stopped after 525 MB, and the partial tar and folder were deleted. Both retired AVDs
+  (28.1 GB) and the android-36 `google_apis_playstore` image (2.3 GB, used only by Walking_Aid_CI) are
+  still on the NVMe, and nothing in CI names them any more. Run the archive when the Seagate is idle:
+  per item, `find -printf '%y %s %p'` manifest, then `tar --sparse --totals -cvf`, then compare the
+  entry count and the first member (`tar --occurrence=1 -xOf`), then remove the source.
