@@ -1,5 +1,30 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-11 — HeyCyan media sync: three selectable flows (HeyCyan / Custom v2.3.0 / Adaptive)
+
+- Branch `cyan-refactor-sync-modes` (worktree `cyan-refactor-wt/sync-modes`, from `8827519f`), not pushed or
+  merged. Owner decision 2026-11-11.
+- `GlassesSyncFlow` has `OFFICIAL_HEYCYAN`, `CUSTOM` and a new `ADAPTIVE` (experimental). Since eac40aee the
+  `CUSTOM` value had silently run the adaptive flow, while the picker still said "Custom flow, resolver with
+  fallback scanning". `CUSTOM` is the v2.3.0 resolver again (`media/sync/CustomHttpResolver.kt`, ported onto
+  `GlassesP2pNetwork`). It tries the BLE IP 3 times 2 s apart, then the bridge IP, the group-owner IP and
+  .1/.79/.2/.3; it never probes the phone's own group-owner address; it gives up after 45 s. It binds the
+  process to the P2P network as soon as the group forms. It also brings back v2.3.0's reset before each command
+  retry, discovery restarts with the peer-conflict dialog, peer scoring and the error-255 reset before resolution.
+  The adaptive checkpoints and route learning run only for `ADAPTIVE`; `AdaptiveProfileLearning` refuses to
+  write `adaptive_p2p_sync_profiles` for any other flow.
+- The picker on every Sync tap is still the default, now with 3 entries and an "Experimental" tag; the copy is
+  updated in all 9 locales. Settings → Media sync can remember a flow (`AppPrefs.Main.mediaSyncFlow`, null =
+  ask, unknown = ask, read lazily, no migration). Image questions use the remembered flow, otherwise Custom.
+- The /24 scan keeps the v2.3.0 condition (no glasses IP known). The resolver starts only after an IP was
+  reported and neither IP is cleared during a session, so the scan did not run in v2.3.0 and does not run now.
+  The owner is deciding whether to make it a real fallback.
+- **Not verified yet.** The first build run stalled on the ntfs-3g Seagate (and llama-runtime's FetchContent
+  download from codeload.github.com reset), and was stopped for the drive remount. The rerun waited 2 h on
+  `/tmp/cyan-refactor-gradle.lock` (emulator-ci hold) and timed out before Gradle started. Still to run:
+  `:app:testDebugUnitTest :shared:portabilityTest :app:assembleDebug` and
+  `-PenableAppleTargets=true :shared:iosCompileCheck`. Hardware rows: docs/refactor/HARDWARE_TEST_CHECKLIST.md.
+
 ## 2026-11-11 — Live idle stop 60 s, second-photo Live fix, AVD audit, crash sweep of new screens
 
 - Branch `cyan-refactor-pro-questions` (worktree `cyan-refactor-wt/pro-questions`, from `b76eba7d`), not
