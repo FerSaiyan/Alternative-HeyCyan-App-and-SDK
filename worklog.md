@@ -1930,3 +1930,28 @@ model, never transcribes). 99% of users are offline local-model users.
   `android/CyanBridge/docs/WalkingAid_mvp.md`, `tools/hil/README.md`, and video asset
   provenance under `app/src/androidTest/assets/walkingaid/README.md`.
 - No physical EyeVue or Meta glasses are attached. Changes remain uncommitted.
+
+## 2026-11-11 — Oral Lesion Bench (experimental), branch `cyan-refactor-oral-lesions` (not merged, not pushed)
+
+Owner-approved 2026-11-10. Research benchmark of the oral-lesion Gemma 4 models with dentists; "Uso em
+pesquisa, não é diagnóstico" on screen and in the first spoken reply of each case.
+- Plugin: Android only, off by default (`oral_lesion_bench`, `PluginPrefs.OralLesionBench`), card on the
+  Plugins page (phone camera works without glasses), route `AppRoute.ORAL_LESION_BENCH`, Android-only card on
+  the shared (iOS) Plugins page. Shared code in `shared/plugins/orallesion/` (prompts, guardrail, speech,
+  models, ViewModel, Compose screen, strings in 9 locales); Android side in `app/.../plugins/orallesion/`.
+- Flow: photo from glasses (HeyCyan/EyeVue/TuneBuds/Mentra AI photo, Meta DAT), phone camera or gallery;
+  age/sex/site typed or dictated. Turn 1, the dentist's spoken answers (one question at a time) as turn 2 in
+  the same LiteRT conversation, then the clinical record, with the exact training prompts (byte-pinned test).
+  The site goes only into the record's facts (training turn 1 has age and sex only).
+- Own LiteRT-LM engine (not `LocalModelsProvider.streamChat`, which picks the chat model and prepends the
+  app system prompt): GPU text+vision, CPU fallback recorded, thinking off, greedy, benchmark counters on;
+  the chat model is unloaded first.
+- Guardrail (2026-11-05 rule) outside the model; red flags from checkboxes or spoken answers (negation-aware).
+  JSONL bench log + photos in `files/oral_lesion_bench/`, delete per case, zip export via share sheet.
+- Models: pinned revision + mandatory SHA-256; stock Gemma 4 E4B/E2B baselines (an installed app copy is
+  reused once its SHA-256 matches). The fine-tuned E4B v3p export failed its host parity gate (acc 0.620 /
+  macro-F1 0.333 vs 0.708 / 0.558 PyTorch, 192 public rows), so it was not uploaded and is not in the catalog;
+  401/403 handling ("Solicite acesso" → the gated repo URL) is in place for when it is.
+- Verified: `:app:assembleDebug`, shared tests (prompt pin, guardrail table, prefs inventory) and
+  `ArchitectureGuardrailSourceTest` green. `OralLesionBenchHilTest` is written but was neither compiled
+  (`assembleDebugAndroidTest` not run) nor run (no phone in this session). Hardware checks are in the hand-back.
