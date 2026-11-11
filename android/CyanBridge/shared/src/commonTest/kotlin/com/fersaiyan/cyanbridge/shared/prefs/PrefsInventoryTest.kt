@@ -362,6 +362,10 @@ class PrefsInventoryTest {
         live_caption_relay_store/captions_json STRING "[]"
         meeting_spark_notes_store/summaries_json STRING "[]"
         walking_aid_image_store/history_json STRING "[]"
+        oral_lesion_bench_prefs/enabled BOOLEAN false
+        oral_lesion_bench_prefs/selected_model_id STRING null
+        oral_lesion_bench_prefs/speak_replies BOOLEAN true
+        oral_lesion_bench_prefs/verified_files_json STRING "{}"
         """.trimIndent()
     }
 }

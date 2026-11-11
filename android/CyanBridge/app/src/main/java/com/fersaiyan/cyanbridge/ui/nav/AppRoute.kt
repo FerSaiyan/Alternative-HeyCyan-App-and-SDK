@@ -8,6 +8,7 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalModelTestDestination
 import com.fersaiyan.cyanbridge.integrations.knowledge.KnowledgeIntegrationsDestination
 import com.fersaiyan.cyanbridge.plugins.mentra.MentraMiniappsDestination
+import com.fersaiyan.cyanbridge.plugins.orallesion.OralLesionBenchDestination
 import com.fersaiyan.cyanbridge.plugins.walkingaid.WalkingAidSettingsDestination
 import com.fersaiyan.cyanbridge.plugins.meetingsparknotes.MeetingSparkNotesSettingsDestination
 import com.fersaiyan.cyanbridge.plugins.livecaptionrelay.LiveCaptionRelaySettingsDestination
@@ -81,6 +82,7 @@ enum class AppRoute(
     AUTO_AUDIO_SETTINGS(labelText = "Auto Audio Settings"),
     VISUAL_DIARY_SETTINGS(labelText = "Visual Diary Settings"),
     WALKING_AID_CHAT(labelText = "Walking Aid Chat", softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE),
+    ORAL_LESION_BENCH(labelText = "Oral Lesion Bench", softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE),
     EXTERNAL_ASSISTANT_SETUP(labelText = "Gemini / ChatGPT automation setup"),
     SETTINGS(labelText = "Settings", tab = AppDestination.SETTINGS),
     COMMUNITY_PLUGINS(labelText = "Community Plugins", tab = AppDestination.PLUGINS),
@@ -131,6 +133,7 @@ enum class AppRoute(
         AUTO_AUDIO_SETTINGS -> AutoAudioSettingsDestination()
         VISUAL_DIARY_SETTINGS -> VisualDiarySettingsDestination()
         WALKING_AID_CHAT -> WalkingAidChatDestination()
+        ORAL_LESION_BENCH -> OralLesionBenchDestination()
         EXTERNAL_ASSISTANT_SETUP -> ExternalAssistantAutomationSetupDestination()
         SETTINGS -> SettingsDestination()
         COMMUNITY_PLUGINS -> CommunityPluginsDestination()
