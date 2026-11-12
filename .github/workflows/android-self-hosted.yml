@@ -136,8 +136,11 @@ jobs:
             "$adb" -s emulator-5584 emu kill || true
           fi
 
+      # Artifact uploads are copies for people, not checks: a full artifact quota (as on 2026-11-12,
+      # "Artifact storage quota has been hit") must not turn a green build and emulator run red.
       - name: Upload Walking Aid model diagnostics
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: walking-aid-model-results-${{ github.sha }}
@@ -146,8 +149,11 @@ jobs:
           retention-days: 7
 
       - name: Upload debug APK
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: cyanbridge-debug-apk
           path: android/CyanBridge/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          # ~220 MB per run; the default 90 days filled the account's artifact storage.
+          retention-days: 7
