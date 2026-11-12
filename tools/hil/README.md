@@ -160,6 +160,33 @@ proof that Gmail sent or delivered the message.
    - Pass condition is a new usable `AUTO_LOOP_THUMB_*.jpg` created by the real glasses thumbnail path.
    - Optionally waits for a new `Glasses scene ...` candidate fact when the phone has a compatible Gemma 4 visual model configured.
 
+## Root and Frida on Pixel_9a (since 2026-11-12)
+
+`Pixel_9a` is rooted with Magisk v31.1 in the system image's ramdisk
+(`system-images/android-37.2-beta3/google_apis_playstore_ps16k/x86_64/ramdisk.img`; the stock
+ramdisk is kept next to it as `ramdisk.img.bak_20261112`). The image is `user`, so `adb root`
+does not work; use `adb shell su -c ...`. Only `Shell` has a superuser grant (Magisk v31 has no
+interactive prompt: grants are made in Magisk's Superuser tab). Read-only CI instances boot rooted
+too, and CI's install path is unchanged.
+
+Frida: `/data/local/tmp/frida-server-17.15.5` (matches the host's frida 17.15.5):
+
+```bash
+adb -s emulator-5614 shell "su -c '/data/local/tmp/frida-server-17.15.5 -D >/dev/null 2>&1 </dev/null'"
+frida -D emulator-5614 -f <package> -l script.js     # or -p <pid> of a foreground app
+```
+
+- Redirect frida-server's output, or `adb shell` never returns.
+- Attach only to a foreground app, or spawn with `-f`: background apps are frozen by the cached-app
+  freezer and the attach times out.
+- Java method hooks are not stable on this API 37 ART: a GC that walks a hooked frame crashes the app
+  (SIGSEGV in `art::CodeInfo::DecodeGcMasksOnly`, MarkCompact). Native `Interceptor` hooks are fine.
+  Attaching while the app is still in `bindApplication` also broke dex verification ("Bad checksum").
+- The official HeyCyan app (`com.glasssutdio.wear`) cannot run here as a sideload: Google Play's
+  install protection shows "Get this app from Play" and the app exits. `HeyCyan_Frida` (android-36
+  `google_apis` `userdebug`, no Play) stays for HeyCyan-app Frida work and as the Wi-Fi Direct GO of
+  `firmware_dump/sim/e2e_bt_p2p` (it needs `adb root` and toybox `su 1000`).
+
 ## Persistent automation emulator setup
 
 Recommended state once you create the dedicated Google Play AVD:

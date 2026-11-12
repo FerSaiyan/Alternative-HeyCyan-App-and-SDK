@@ -1,5 +1,39 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-12 — Rooted Pixel_9a, Frida on it, Pro question tests on the production CI account
+
+- Branch `cyan-refactor-rooted-pixel9a` (worktree `cyan-refactor-wt/rooted-pixel9a`, from `origin/cyan-refactor`
+  eded476e, plus `cyan-refactor-ci-pro-account` 5a516d6d), not pushed.
+- **Root** (owner-approved): Magisk v31.1 in the Pixel_9a system image's ramdisk via rootAVD@c8638d0e
+  (FAKEBOOTIMG path; one local banner fix). Backups, checks and the undo steps are in
+  `docs/EMULATOR_RETENTION.md` (2026-11-12). Play (account), Tasker/AutoInput (accessibility, a Tasker task) and
+  CyanBridge all work; read-only CI instances boot rooted and CI's install path works.
+- **Frida 17.15.5** runs on Pixel_9a (`/data/local/tmp/frida-server-17.15.5`). Java method hooks crash ART's
+  MarkCompact GC on API 37, so the Pro evidence used native BoringSSL hooks. **HeyCyan_Frida kept**: the
+  sideloaded HeyCyan app is blocked by Play's install protection on Pixel_9a, and the e2e BLE/P2P rig needs
+  `adb root` on a second AVD (`tools/hil/README.md`).
+- **CI Pro account** linked non-interactively (`#linkApiToken`); the token now goes through a mode-600
+  device file, never argv (3cd8b46f). `ProPlannerReadinessHilTest` no longer exists (9a27fedf); its check
+  (`requireVerifiedProPlanner`, strict server verify) is `ProQuestionsHilTest`'s setUp: standard, active.
+- **ProQuestionsHilTest** (read-only Pixel_9a, distinct red/blue/green photos, logcat and redacted TLS
+  evidence in `cyan-refactor-wt/pro-hil-evidence-20261112/`):
+  - every picker model (14 non-Live): 39/42. Misses are model answers: minimax-m3.1-flash called the yellow
+    socks "lime green", mimo-v2.6-flash called the square "rectangular"; `cyanbridge/walking-aid-vision`
+    got a server 502 `walking_aid_space_missing_result` for the photo, and "No local model selected" for
+    photo + speech. Left as is (server/catalog).
+  - Gemini Live: pass. Economy photos 1-3 in one session (b695e3ca), Live -> non-Live -> Live, a photo after
+    a voice question, Private photos 1-2; the "Initializing Live" cue only on the 2 new sessions; still open
+    at 59 s, closed at 60.006 s.
+  - notifications-denied preview route: pass (3 photos, one preview session each).
+- Fixes: the first Live photo was answered "I cannot see the photo" (realtime frame and text turn race;
+  8be26e66 waits 1.5 s; an image part in clientContent was rejected by the production proxy, 1008);
+  the stop-Live Snackbar threw and was reported as "Could not start Gemini Live", then the Toast threw on
+  the TTS binder thread (c95c13e9); the image flow never emitted the test `reply` hook; revoking
+  POST_NOTIFICATIONS inside the test killed it (d8e3aea8); the 16 KB compatibility dialog failed the first
+  test after CI's reinstall (0f9055aa).
+- Server findings for the owner: after an Economy session ends, a Private token is refused for about 5 min
+  (`live_concurrent_session`); the Live proxy accepts text-only clientContent.
+
 ## 2026-11-12 — Integration: three sync flows + P2P sync fixes + emulator CI (add.224)
 
 - Branch `cyan-refactor-integration` (worktree `cyan-refactor-wt/integration`, from `8827519f`), not pushed.

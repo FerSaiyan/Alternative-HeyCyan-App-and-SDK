@@ -168,3 +168,41 @@ Frida emulator.
   still on the NVMe, and nothing in CI names them any more. Run the archive when the Seagate is idle:
   per item, `find -printf '%y %s %p'` manifest, then `tar --sparse --totals -cvf`, then compare the
   entry count and the first member (`tar --occurrence=1 -xOf`), then remove the source.
+
+## Pixel_9a rooted; HeyCyan_Frida kept (2026-11-12, branch `cyan-refactor-rooted-pixel9a`)
+
+Owner-approved root with rootAVD + Magisk. Backups first, in `/mnt/seagate/avd-archive/2026-11-12-pixel9a-preroot/`:
+`Pixel_9a-avd.tar` (`tar --sparse` of `Pixel_9a.avd` + `Pixel_9a.ini`, 17.8 GB, 48 entries; types, sizes
+and paths match `manifest.txt`; `config.ini` sample-extracted and compared) and the stock `ramdisk.img`
+(sha256 `0a5dae3d…`). The stock ramdisk is also kept as `ramdisk.img.bak_20261112` (and rootAVD's own
+`ramdisk.img.backup`) in `system-images/android-37.2-beta3/google_apis_playstore_ps16k/x86_64/`.
+
+- Tools, each downloaded into its own scratch directory, pinned and hashed: rootAVD
+  `newbit1/rootAVD@c8638d0e` (the GitHub repo is archived; last commit 2023-10-19), Magisk
+  `v31.1` (`Magisk-v31.1.apk` sha256 `89cefac0…`, matches GitHub's digest). The 2023 script needed one
+  local change: its busybox check wanted "Magisk" in the banner, and v31's says "topjohnwu". Its own
+  patch path expects `magisk32/64`, which v31 no longer ships, so the `FAKEBOOTIMG` path was used:
+  rootAVD builds a fake boot image, the Magisk app patches it with its own `boot_patch.sh`, and
+  rootAVD repacks the ramdisk (`lz4_legacy`). The patched ramdisk sha256 is `87e107a9…`.
+- Magisk 31.1 runs as `magiskd` (Zygisk on, by default). v31 has no su prompt; only `Shell` is granted in the
+  Superuser tab, so `adb shell su -c id` gives `uid=0 … u:r:magisk:s0`. The build stays `user`, so `adb root`
+  does not work.
+- Checked after the cold boot: Play Store opens with the account signed in; Tasker 6.6.20 and AutoInput
+  3.0.12 open with both accessibility services on; CyanBridge launches. In a `-read-only` instance (through
+  `start_emulator.sh`): root works, a Tasker task ran (the HIL profile's intent set `%CB_AutoDiaryExcluded`),
+  and CI's install path (signature mismatch → uninstall → install) works.
+- `/data/local/tmp/frida-server-17.15.5` (sha256 `c6de0d23…`) is on Pixel_9a and works (spawn or
+  foreground attach, Java bridge). Limits are listed in `tools/hil/README.md` (background apps are frozen;
+  Java method hooks crash ART's MarkCompact GC on API 37; native hooks are fine).
+- **HeyCyan_Frida stays.** The official HeyCyan app (1.0.173, splits pulled from a read-only HeyCyan_Frida
+  boot) installs on Pixel_9a, but Google Play's install protection shows "Get this app from Play" and the
+  app exits (Frida showed the process start, then end). It was uninstalled again. HeyCyan_Frida also serves
+  as the Wi-Fi Direct GO in `firmware_dump/sim/e2e_bt_p2p`, which uses `adb root` and toybox `su 1000`
+  (neither works the same on a `user` image with Magisk) plus a second AVD running at the same time.
+  References to change if it is ever retired: `~/unbound-emu-harness/{run,sim_connect,hands_session,hands_retry,motion_test}.sh`,
+  `ui.py`, `setup_app.py`, `toggle_ui.py` (emulator-5600 / HeyCyan_Frida); `firmware_dump/sim/e2e_bt_p2p/{run_e2e.sh,README.md}`,
+  `docs/AVD_BLE_P2P_HOWTO.md`, `scripts/frida/README.md`; `~/the-unbound-launcher/reports/rayneo-air3s-port.md`;
+  memory notes. The e2e rig's `APP_AVD` default (`CyanBridge_Walking_Aid_CI`) no longer exists.
+- Undo the root: copy `ramdisk.img.bak_20261112` over `ramdisk.img` and cold-boot. Magisk's data in
+  `/data/adb` and the Magisk app then remain; uninstall the app if needed.
+
