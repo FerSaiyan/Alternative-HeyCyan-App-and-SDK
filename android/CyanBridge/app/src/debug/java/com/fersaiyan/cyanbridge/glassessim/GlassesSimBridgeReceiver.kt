@@ -40,6 +40,25 @@ class GlassesSimBridgeReceiver : BroadcastReceiver() {
                 active?.stop()
                 active = null
             }
+            // add.221 media-sync lifecycle harness commands (debug-only).
+            "connect" -> {
+                val mac = intent.getStringExtra("mac") ?: GlassesSimBridge.DEFAULT_ADDRESS
+                GlassesSimHarness.markConnected(mac)
+            }
+            "sync" -> {
+                val flow = intent.getStringExtra("flow") ?: "custom"
+                GlassesSimHarness.startSync(flow)
+            }
+            "bleip" -> {
+                val ip = intent.getStringExtra("ip")
+                if (ip.isNullOrBlank()) Log.w(TAG, "bleip ignored: missing ip")
+                else GlassesSimHarness.deliverBleIp(ip)
+            }
+            "p2p" -> {
+                val ip = intent.getStringExtra("ip") ?: "127.0.0.1"
+                val owner = intent.getBooleanExtra("owner", false)
+                GlassesSimHarness.injectP2pGroup(app, ip, owner)
+            }
             else -> Log.w(TAG, "unknown cmd")
         }
     }
