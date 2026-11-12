@@ -180,7 +180,7 @@ private class AndroidGeminiLiveSession(
             scope.launch(Dispatchers.IO) {
                 val image = runCatching { File(path).readBytes() }.getOrNull()
                 if (image != null && image.isNotEmpty()) {
-                    // Image and prompt in one ordered turn (see GeminiLiveClient.sendImageQuestion).
+                    // The frame first, the prompt once it has landed (see GeminiLiveClient.sendImageQuestion).
                     if (client.sendImageQuestion(image, initialPrompt)) visionController.onVisualContextSent()
                 } else {
                     initialPrompt?.let(client::sendTextTurn)

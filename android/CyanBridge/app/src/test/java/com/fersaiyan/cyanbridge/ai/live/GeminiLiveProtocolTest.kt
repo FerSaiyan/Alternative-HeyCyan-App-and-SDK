@@ -42,15 +42,6 @@ class GeminiLiveProtocolTest {
     }
 
     @Test
-    fun `photo question is one ordered client turn, image before text`() {
-        assertEquals(
-            """{"clientContent":{"turns":[{"role":"user","parts":[{"inlineData":{"mimeType":"image\/jpeg","data":"AAH\/"}},""" +
-                """{"text":"what is this?"}]}],"turnComplete":true}}""",
-            GeminiLiveProtocol.buildClientImageTurn(GeminiLiveProtocol.IMAGE_MIME_TYPE, byteArrayOf(0, 1, -1), "what is this?"),
-        )
-    }
-
-    @Test
     fun `stored system prompt is only read when the session prompt is blank`() {
         var reads = 0
         val stored = { reads++; "Stored." }

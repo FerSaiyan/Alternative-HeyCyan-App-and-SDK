@@ -483,7 +483,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 Log.i(TAG, "Sending Live question turn image=${turn.hasImage} prompt=${turn.prompt != null}")
                 val image = turn.imagePath?.let { path -> runCatching { File(path).readBytes() }.getOrNull() }
                 if (image != null && image.isNotEmpty()) {
-                    // Image and prompt in one ordered turn (see GeminiLiveClient.sendImageQuestion).
+                    // The frame first, the prompt once it has landed (see GeminiLiveClient.sendImageQuestion).
                     if (client?.sendImageQuestion(image, turn.prompt) == true) visionController?.onVisualContextSent()
                 } else {
                     if (turn.imagePath != null) Log.w(TAG, "Live question image could not be read")

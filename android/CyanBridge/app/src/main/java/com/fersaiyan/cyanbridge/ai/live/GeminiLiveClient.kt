@@ -218,27 +218,22 @@ class GeminiLiveClient(
     }
 
     /**
-     * A photo question: the JPEG and its [prompt] as one ordered `clientContent` turn, so the model
-     * never answers the text before it has the image. Without a prompt the photo stays a realtime
-     * frame. If the image is refused (not ready, visual limit), the prompt is still sent as text.
+     * A photo question: the JPEG as a realtime video frame, then its [prompt] as a text turn.
+     * The Live API handles realtime video and text as concurrent streams with no ordering
+     * guarantee, and video is sampled at up to 1 frame/s, so a question sent right after the
+     * frame was answered before the model had it ("I cannot see the photo"). Waiting
+     * [IMAGE_INGEST_WAIT_MS] lets the frame land first. (One ordered clientContent turn with an
+     * inlineData part would be deterministic, but CyanBridge's Live proxy accepts text-only
+     * clientContent.) The prompt is sent even when the frame is refused. Returns whether the
+     * frame was queued.
      */
-    fun sendImageQuestion(jpegBytes: ByteArray, prompt: String?): Boolean {
-        val text = prompt?.takeIf { it.isNotBlank() } ?: return sendVideoFrame(jpegBytes)
-        val limit = if (session.tokenConfig?.let { it.freeTier || it.economy } == true) 10 else MAX_VISUAL_INPUTS_PER_SESSION
-        if (session.visualInputCount >= limit) {
-            setState(GeminiLiveState.LISTENING, "Live visual-input safety limit reached")
-        }
-        val accepted = session.visionDiagnostics.send(
-            ready = session.active.get() && session.setupComplete.get(),
-            bytes = jpegBytes,
-            limit = limit,
-        ) {
-            socket?.send(GeminiLiveProtocol.buildClientImageTurn(GeminiLiveProtocol.IMAGE_MIME_TYPE, jpegBytes, text)) == true
-        }
-        Log.i(TAG, "Live image question sent as one client turn=$accepted diagnostics=${session.visionDiagnostics.snapshot()}")
-        scheduleVisionDiagnosticsReport()
-        if (!accepted) sendTextTurn(text)
-        return accepted
+    suspend fun sendImageQuestion(jpegBytes: ByteArray, prompt: String?): Boolean {
+        val queued = sendVideoFrame(jpegBytes)
+        val text = prompt?.takeIf { it.isNotBlank() } ?: return queued
+        if (queued) delay(IMAGE_INGEST_WAIT_MS)
+        Log.i(TAG, "Live image question: text turn after frameQueued=$queued")
+        sendTextTurn(text)
+        return queued
     }
 
     /** Sends one JPEG frame through the current realtimeInput.video field. */
@@ -719,5 +714,7 @@ class GeminiLiveClient(
         const val TAG = "GeminiLiveClient"
         const val SESSION_RESUMPTION_RECONNECT_MS = 9 * 60 * 1000L
         const val MAX_VISUAL_INPUTS_PER_SESSION = 540 // At most 1 FPS over the 9-minute resumption window.
+        /** Time for a realtime photo frame to reach the model before its question (video is sampled at <= 1 frame/s). */
+        const val IMAGE_INGEST_WAIT_MS = 1_500L
     }
 }
