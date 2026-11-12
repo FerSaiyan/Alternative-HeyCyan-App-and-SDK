@@ -103,3 +103,53 @@ is_read_only_emulator() {
   [[ -n "$pid" && -r "/proc/$pid/cmdline" ]] || return 1
   tr '\0' '\n' < "/proc/$pid/cmdline" | grep -Fxq -- '-read-only'
 }
+
+# A cold boot of the API 37 Play image reports sys.boot_completed=1 while its boot broadcasts are
+# still starting Google apps. For about a minute after that, MemFree in the 4 GB guest sits near
+# 75 MB, and lmkd ("min watermark is breached even after kill") kills even a test target that was
+# started 0.2 s earlier: am instrument then reports "Process crashed" before any test runs
+# (CI run 43218835150). Before starting a test process on an emulator, wait until the broadcast
+# queues are idle and, while the guest is in that post-boot window (uptime under
+# CYANBRIDGE_HIL_SETTLE_BOOT_WINDOW_S), until MemFree has stayed above the floor for three samples
+# in a row. Later, cached apps keep MemFree lower without any risk, so it is not checked. A device
+# that never settles is reported and the run continues, so a real failure is still seen.
+settle_emulator() {
+  local serial="$1"
+  [[ "$serial" == emulator-* ]] || return 0
+  local timeout_s="${CYANBRIDGE_HIL_SETTLE_TIMEOUT_S:-180}"
+  local min_free_kb="${CYANBRIDGE_HIL_SETTLE_MIN_FREE_KB:-350000}"
+  local boot_window_s="${CYANBRIDGE_HIL_SETTLE_BOOT_WINDOW_S:-300}"
+  local deadline=$((SECONDS + timeout_s)) good=0 free_kb="" uptime_s="" started=$SECONDS
+  while (( SECONDS < deadline )); do
+    timeout 60 "$ADB_BIN" -s "$serial" shell am wait-for-broadcast-idle >/dev/null 2>&1 || true
+    read -r uptime_s free_kb < <(adb_for "$serial" shell \
+      "echo \$(cut -d. -f1 /proc/uptime) \$(awk '/^MemFree:/ {print \$2}' /proc/meminfo)" 2>/dev/null | tr -d '\r') || true
+    if [[ "$uptime_s" =~ ^[0-9]+$ ]] && (( uptime_s >= boot_window_s )); then
+      return 0
+    fi
+    if [[ "$free_kb" =~ ^[0-9]+$ ]] && (( free_kb >= min_free_kb )); then
+      good=$((good + 1))
+      if (( good >= 3 )); then
+        (( SECONDS - started > 6 )) && echo "$serial settled after $((SECONDS - started)) s (MemFree ${free_kb} kB)" >&2
+        return 0
+      fi
+    else
+      good=0
+    fi
+    sleep 2
+  done
+  echo "Warning: $serial did not settle within ${timeout_s} s (MemFree ${free_kb:-unknown} kB); continuing" >&2
+  return 0
+}
+
+# After "Process crashed", say whether lmkd killed the app or test process (an environment fault
+# on a memory-starved emulator, not an app crash), and show the last fatal exception otherwise.
+explain_instrumentation_crash() {
+  local serial="$1" log
+  log="$(adb_for "$serial" logcat -d -t 3000 2>/dev/null | tr -d '\r' || true)"
+  if grep -E "lowmemorykiller: Kill '($CYANBRIDGE_PACKAGE|$CYANBRIDGE_TEST_PACKAGE)'" <<<"$log" | tail -n 2 | grep . >&2; then
+    echo "lmkd killed the instrumentation target: the emulator ran out of free memory (environment)" >&2
+    return 0
+  fi
+  grep -A 12 'FATAL EXCEPTION' <<<"$log" | tail -n 13 >&2 || true
+}

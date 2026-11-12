@@ -207,6 +207,12 @@ instance are discarded on exit, so `install.sh` may uninstall a differently sign
 `CYANBRIDGE_HIL_UNINSTALL_ON_SIGNATURE_MISMATCH=true`; on a phone or writable emulator it fails
 with a hint instead.
 
+The emulator asks for 3072 MB, but this image raises it to 4096 MB, and a cold boot is still busy
+after `sys.boot_completed`: for about a minute MemFree stays near 75 MB and lmkd kills a freshly
+started test process ("Process crashed", CI run 43218835150). `settle_emulator` (common.sh) waits
+for idle broadcast queues and, in the first 300 s of uptime, for MemFree >= 350 MB. It runs after
+boot and before each class. After a "Process crashed", the runner says whether lmkd killed the target.
+
 ## Opt-in Artemis black-box fixture (separate AVD)
 
 `jev-like-local-agent.yml` has an optional manual `artemis_serial` input. Use

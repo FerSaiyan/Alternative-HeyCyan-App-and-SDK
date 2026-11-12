@@ -148,6 +148,7 @@ run_one_class() {
 
   while (( attempt <= 2 )); do
     serial="$(recover_target "$serial")" || return 3
+    settle_emulator "$serial"
     dismiss_16kb_compat_dialog "$serial"
 
     mkdir -p "$HIL_BUILD_DIR/results"
@@ -195,6 +196,7 @@ run_one_class() {
 
     if (( status == 0 )); then
       if grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|shortMsg=Process crashed' "$out"; then
+        grep -q 'Process crashed' "$out" && explain_instrumentation_crash "$serial"
         echo "Instrumentation reported test failures in $class_name" >&2
         return 10
       fi
@@ -256,6 +258,7 @@ if [[ -n "$classes" ]]; then
 fi
 
 serial="$(recover_target "$serial")" || exit 3
+settle_emulator "$serial"
 dismiss_16kb_compat_dialog "$serial"
 mkdir -p "$HIL_BUILD_DIR/results"
 out="$HIL_BUILD_DIR/results/instrumentation-${mode}-${serial//[:\/]/_}.txt"
@@ -277,6 +280,7 @@ if (( status != 0 )); then
   exit "$status"
 fi
 if grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|shortMsg=Process crashed' "$out"; then
+  grep -q 'Process crashed' "$out" && explain_instrumentation_crash "$serial"
   echo "Instrumentation reported test failures" >&2
   exit 10
 fi

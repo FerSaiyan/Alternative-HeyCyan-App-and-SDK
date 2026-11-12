@@ -34,6 +34,8 @@ prepare() {
   if [[ "${CYANBRIDGE_HIL_DISABLE_PLAY_STORE:-false}" == "true" ]]; then
     adb_for "$serial" shell pm disable-user --user 0 com.android.vending >/dev/null 2>&1 || true
   fi
+  # boot_completed is not the end of the boot: see settle_emulator in common.sh.
+  settle_emulator "$serial"
 }
 
 if [[ "$(adb_for "$serial" get-state 2>/dev/null || true)" == "device" ]]; then
