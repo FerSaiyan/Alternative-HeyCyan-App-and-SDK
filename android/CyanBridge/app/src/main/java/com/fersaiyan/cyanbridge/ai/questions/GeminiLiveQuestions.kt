@@ -85,13 +85,18 @@ internal class GeminiLiveQuestions(
                 )
                 // Keep a visible in-app stop action when MainActivity is open; the
                 // foreground service notification remains the background Stop control.
+                // Best effort and outside the start's failure path: binding.root has no
+                // Snackbar-suitable parent in the single-Activity layout, and that
+                // IllegalArgumentException used to be reported as "Could not start Gemini Live".
                 if (screen != null) {
-                    Snackbar
-                        .make(screen.rootView, "Gemini Live: microphone may be active", Snackbar.LENGTH_INDEFINITE)
-                        .setAction("Stop Live") {
-                            GeminiLiveForegroundService.stop(launchContext)
-                        }
-                        .show()
+                    runCatching {
+                        Snackbar
+                            .make(screen.activity.findViewById(android.R.id.content), "Gemini Live: microphone may be active", Snackbar.LENGTH_INDEFINITE)
+                            .setAction("Stop Live") {
+                                GeminiLiveForegroundService.stop(launchContext)
+                            }
+                            .show()
+                    }.onFailure { Log.w("GeminiLive", "Live stop snackbar unavailable", it) }
                 }
             } catch (error: Exception) {
                 Log.e("GeminiLive", "Could not start Live foreground service", error)
@@ -126,7 +131,8 @@ internal class GeminiLiveQuestions(
                 languageTag = languageTag,
                 utteranceId = "initializing_live_${System.nanoTime()}",
                 streamType = null,
-                onDone = launch,
+                // TTS reports completion on a binder thread; the launch touches UI (Snackbar, Toast).
+                onDone = { env.runOnUiThread(launch) },
             )
         }
     }

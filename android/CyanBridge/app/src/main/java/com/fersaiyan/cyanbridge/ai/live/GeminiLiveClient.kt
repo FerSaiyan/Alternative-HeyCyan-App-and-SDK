@@ -217,6 +217,30 @@ class GeminiLiveClient(
         socket?.send(GeminiLiveProtocol.buildClientTextTurn(text))
     }
 
+    /**
+     * A photo question: the JPEG and its [prompt] as one ordered `clientContent` turn, so the model
+     * never answers the text before it has the image. Without a prompt the photo stays a realtime
+     * frame. If the image is refused (not ready, visual limit), the prompt is still sent as text.
+     */
+    fun sendImageQuestion(jpegBytes: ByteArray, prompt: String?): Boolean {
+        val text = prompt?.takeIf { it.isNotBlank() } ?: return sendVideoFrame(jpegBytes)
+        val limit = if (session.tokenConfig?.let { it.freeTier || it.economy } == true) 10 else MAX_VISUAL_INPUTS_PER_SESSION
+        if (session.visualInputCount >= limit) {
+            setState(GeminiLiveState.LISTENING, "Live visual-input safety limit reached")
+        }
+        val accepted = session.visionDiagnostics.send(
+            ready = session.active.get() && session.setupComplete.get(),
+            bytes = jpegBytes,
+            limit = limit,
+        ) {
+            socket?.send(GeminiLiveProtocol.buildClientImageTurn(GeminiLiveProtocol.IMAGE_MIME_TYPE, jpegBytes, text)) == true
+        }
+        Log.i(TAG, "Live image question sent as one client turn=$accepted diagnostics=${session.visionDiagnostics.snapshot()}")
+        scheduleVisionDiagnosticsReport()
+        if (!accepted) sendTextTurn(text)
+        return accepted
+    }
+
     /** Sends one JPEG frame through the current realtimeInput.video field. */
     fun sendVideoFrame(jpegBytes: ByteArray): Boolean {
         val limit = if (session.tokenConfig?.let { it.freeTier || it.economy } == true) 10 else MAX_VISUAL_INPUTS_PER_SESSION

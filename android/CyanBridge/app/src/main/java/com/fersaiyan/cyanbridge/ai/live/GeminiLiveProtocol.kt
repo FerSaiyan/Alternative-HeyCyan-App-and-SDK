@@ -140,6 +140,27 @@ internal object GeminiLiveProtocol {
         return JSONObject().put("clientContent", content).toString()
     }
 
+    /**
+     * A photo question as one completed user turn: the image (`inlineData`) and then its text, both in
+     * `clientContent`. `clientContent` is added to the model context in order, whereas `realtimeInput`
+     * trades ordering for latency, so a `realtimeInput.video` frame followed by a text turn could be
+     * answered before the model saw the frame ("I cannot see the photo").
+     */
+    fun buildClientImageTurn(mimeType: String, bytes: ByteArray, text: String): String {
+        val parts = JSONArray()
+            .put(
+                JSONObject().put(
+                    "inlineData",
+                    JSONObject().put("mimeType", mimeType).put("data", Base64.encodeToString(bytes, Base64.NO_WRAP)),
+                ),
+            )
+            .put(JSONObject().put("text", text.take(2_000)))
+        val content = JSONObject()
+            .put("turns", JSONArray().put(JSONObject().put("role", "user").put("parts", parts)))
+            .put("turnComplete", true)
+        return JSONObject().put("clientContent", content).toString()
+    }
+
     /** A `realtimeInput` media blob; [field] is the current `audio` / `video` field name. */
     fun buildRealtimeBlob(field: String, mimeType: String, bytes: ByteArray): String {
         val realtimeInput = JSONObject().put(

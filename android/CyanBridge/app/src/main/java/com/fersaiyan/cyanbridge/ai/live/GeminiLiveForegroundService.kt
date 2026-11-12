@@ -481,15 +481,14 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         serviceScope.launch(questionTurnDispatcher) {
             for (turn in turns) {
                 Log.i(TAG, "Sending Live question turn image=${turn.hasImage} prompt=${turn.prompt != null}")
-                turn.imagePath?.let { path ->
-                    val image = runCatching { File(path).readBytes() }.getOrNull()
-                    if (image != null && image.isNotEmpty()) {
-                        if (client?.sendImage(image) == true) visionController?.onVisualContextSent()
-                    } else {
-                        Log.w(TAG, "Live question image could not be read")
-                    }
+                val image = turn.imagePath?.let { path -> runCatching { File(path).readBytes() }.getOrNull() }
+                if (image != null && image.isNotEmpty()) {
+                    // Image and prompt in one ordered turn (see GeminiLiveClient.sendImageQuestion).
+                    if (client?.sendImageQuestion(image, turn.prompt) == true) visionController?.onVisualContextSent()
+                } else {
+                    if (turn.imagePath != null) Log.w(TAG, "Live question image could not be read")
+                    turn.prompt?.let { client?.sendTextTurn(it) }
                 }
-                turn.prompt?.let { client?.sendTextTurn(it) }
             }
         }
     }
