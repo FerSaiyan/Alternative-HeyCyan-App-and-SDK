@@ -51,8 +51,12 @@ and androidTest APKs first:
    com.fersaiyan.cyanbridge.hil.audio.ProAccountSetupHilTest#linkApiToken)
 ```
 
-`run_instrumentation.sh` adds `-e proApiToken` only when `CYANBRIDGE_HIL_PRO_API_TOKEN`
-is set. The token is visible in the host's process list for the duration of the call.
+When `CYANBRIDGE_HIL_PRO_API_TOKEN` is set, `run_instrumentation.sh` writes it with a shell
+builtin to a mode-600 temp file, `adb push`es it to `/data/local/tmp/.cb-pro-api-token` (mode
+600, readable only by the shell), deletes the host copy, and passes `-e proApiTokenFile`; the
+test reads and deletes the device file through the shell, and the script deletes it again after
+the run. The token never appears in a host or device command line. (`-e proApiToken` still works
+by hand, but then it is visible in the process list.)
 The test stores it in the app's encrypted prefs and fails unless `/api/pro/verify`
 reports an active entitlement. Afterwards, run the Pro HIL without the token in the
 environment, for example `CYANBRIDGE_HIL_PRO_PLANNER=true`, `run_pro_live_audio.sh` or

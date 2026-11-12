@@ -146,9 +146,20 @@ run_one_class() {
       -e hil_artemis_parity "$artemis_parity"
       -e class "$class_name"
     )
-    # Opt-in Pro account link (ProAccountSetupHilTest#linkApiToken). Secret: never echoed.
+    # Opt-in Pro account link (ProAccountSetupHilTest#linkApiToken). Secret: never echoed and never
+    # on a command line. printf is a shell builtin, so the token reaches a mode-600 host file without
+    # appearing in any argv; adb push copies it to a shell-owned mode-600 device file that only the
+    # shell (the test's UiAutomation) can read; the test reads and deletes it, and so does this script.
+    local token_device_file=""
     if [[ -n "${CYANBRIDGE_HIL_PRO_API_TOKEN:-}" ]]; then
-      cmd+=(-e proApiToken "$CYANBRIDGE_HIL_PRO_API_TOKEN")
+      token_device_file="/data/local/tmp/.cb-pro-api-token"
+      local token_host_file
+      token_host_file="$(umask 077; mktemp)"
+      printf '%s' "$CYANBRIDGE_HIL_PRO_API_TOKEN" >"$token_host_file"
+      adb_for "$serial" push "$token_host_file" "$token_device_file" >/dev/null
+      rm -f "$token_host_file"
+      adb_for "$serial" shell chmod 600 "$token_device_file"
+      cmd+=(-e proApiTokenFile "$token_device_file")
     fi
     cmd+=("$CYANBRIDGE_TEST_PACKAGE/$CYANBRIDGE_TEST_RUNNER")
 
@@ -156,6 +167,9 @@ run_one_class() {
     set +e
     adb_for "$serial" "${cmd[@]}" | tee "$out"
     local status=${PIPESTATUS[0]}
+    if [[ -n "$token_device_file" ]]; then
+      adb_for "$serial" shell rm -f "$token_device_file" >/dev/null 2>&1
+    fi
     set -e
 
     assert_expected_avd "$serial" || return 12
