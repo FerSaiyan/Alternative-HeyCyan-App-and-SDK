@@ -748,6 +748,11 @@ internal class GlassesMediaSyncCoordinator(
 
     private suspend fun resetTransferP2pForRetry(sessionId: Long): Boolean {
         if (!isDownloadControlActive(sessionId)) return false
+        if (downloadWifiP2pManager?.isJoinInFlight() == true) {
+            // [0x02,0x01,0x0F] makes the glasses drop the group we are joining (add.223).
+            Log.i("DataDownload", "Skipping pre-retry P2P reset: P2P join in flight")
+            return false
+        }
         val resetAccepted = withTimeoutOrNull(5_000) {
             suspendCancellableCoroutine<Boolean> { continuation ->
                 try {
@@ -2699,10 +2704,16 @@ internal class GlassesMediaSyncCoordinator(
                     Log.i("DataDownload", "Suppressing resetDeviceP2p on error=255 (source=$source) after HTTP/media resolution")
                     return
                 }
+                val p2p = WifiP2pManagerSingleton.getInstance(activity)
+                if (p2p.isJoinInFlight()) {
+                    // The reset would tear down the join that is about to deliver the group (add.223).
+                    Log.i("DataDownload", "Skipping resetDeviceP2p on error=255 (source=$source): P2P join in flight")
+                    return
+                }
                 val now = System.currentTimeMillis()
                 if (now - lastP2pResetAtMs < 10_000) return
                 lastP2pResetAtMs = now
-                WifiP2pManagerSingleton.getInstance(activity).resetDeviceP2p()
+                p2p.resetDeviceP2p()
             }
             else -> Log.i("DataDownload", "Ignoring error=255 reset (source=$source) outside download session")
         }

@@ -300,6 +300,17 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     fun isConnecting(): Boolean = connectionState.isConnecting()
     fun isConnected(): Boolean = connectionState.isConnected()
 
+    /**
+     * True while our own connect() is still forming the group (bounded by
+     * [groupFormationWindowMs]). [isConnecting] cannot tell: the framework's "disconnected"
+     * broadcast at the start of a join clears it. Resets and discovery restarts wait for this.
+     */
+    fun isJoinInFlight(): Boolean = joinInFlightRemainingMs() > 0L
+
+    private fun joinInFlightRemainingMs(): Long = connectInFlightSinceMs.let {
+        if (it == 0L) 0L else it + groupFormationWindowMs - SystemClock.elapsedRealtime()
+    }
+
     fun resetPeerDiscovery() {
         handler.removeCallbacks(discoveryTimeOut)
     }
@@ -307,6 +318,11 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     fun restartPeerDiscovery() {
         if (!p2pOperationsEnabled) {
             Log.d(TAG, "Ignoring peer-discovery restart while operations are stopped")
+            return
+        }
+        if (isJoinInFlight()) {
+            // Re-initializing the channel here would abort our own join (add.223).
+            Log.d(TAG, "restartPeerDiscovery skipped: P2P join in flight")
             return
         }
         Log.d(TAG, "restartPeerDiscovery: stopping current discovery and reinitializing")
@@ -446,9 +462,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
             if (!p2pOperationsEnabled) return
             // A join in flight makes discoverPeers answer BUSY; resetting here would tear down
             // our own join (glasses 02 01 0F + channel re-init). Wait for it to finish instead.
-            val joinLeftMs = connectInFlightSinceMs.let {
-                if (it == 0L) 0L else it + groupFormationWindowMs - SystemClock.elapsedRealtime()
-            }
+            val joinLeftMs = joinInFlightRemainingMs()
             if (joinLeftMs > 0L) {
                 Log.d(TAG, "Discovery timeout deferred ${joinLeftMs}ms: P2P join in flight")
                 handler.postDelayed(this, joinLeftMs)
