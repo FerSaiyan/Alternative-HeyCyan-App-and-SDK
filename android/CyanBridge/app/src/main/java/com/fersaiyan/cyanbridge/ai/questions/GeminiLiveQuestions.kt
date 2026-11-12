@@ -9,6 +9,8 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveDestination
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveForegroundService
 import com.fersaiyan.cyanbridge.ai.live.GeminiLivePermissionGateActivity
+import com.fersaiyan.cyanbridge.ai.live.LiveQuestionTurn
+import com.fersaiyan.cyanbridge.ai.live.speaksInitializingCue
 import com.fersaiyan.cyanbridge.ai.router.MediaInferenceRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
@@ -113,6 +115,12 @@ internal class GeminiLiveQuestions(
             }
         }
         env.runOnUiThread {
+            val turn = LiveQuestionTurn(imagePath?.takeIf { it.isNotBlank() }, initialPrompt)
+            if (!turn.speaksInitializingCue(GeminiLiveForegroundService.sessionRunning)) {
+                Log.i("GeminiLive", "Live session running: question goes in without the Initializing Live cue")
+                launch()
+                return@runOnUiThread
+            }
             speaker.speak(
                 text = ImageQuestionDefaults.initializingLiveCueForLanguage(languageTag),
                 languageTag = languageTag,

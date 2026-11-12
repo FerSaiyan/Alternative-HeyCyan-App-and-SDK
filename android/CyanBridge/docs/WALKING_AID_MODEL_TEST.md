@@ -50,22 +50,17 @@ It never clears CyanBridge app data, preserving any Pro/HIL account configuratio
 
 ## Emulator storage
 
-The debug APK is currently about 157 MiB and the three models occupy about 126 MiB. The dedicated
-emulator launcher creates `CyanBridge_Walking_Aid_CI` with an 8 GiB data partition and 4 GiB RAM,
-using the locally installed API 36 x86_64 Google Play system image. This avoids replacement-install
-failures on a nearly full general automation AVD. The model wrapper requires the model bytes plus
-256 MiB free for app and LiteRT working data. It removes stale Walking Aid CI fixtures and asks
-Android to trim caches. If `/data` remains too small, it fails before copying a partial model.
+The debug APK is currently about 157 MiB and the three models occupy about 126 MiB. The
+self-hosted workflow runs this test on its main CI emulator: a `-read-only` instance of `Pixel_9a`
+on port 5584 (16 GiB `/data`, about 1.9 GiB free). For a local run, `start_walking_aid_emulator.sh`
+starts the same kind of read-only instance on port 5580 (`CYANBRIDGE_WALKING_AID_AVD`,
+`CYANBRIDGE_WALKING_AID_EMULATOR_PORT`). It never creates an AVD and never stops another emulator.
+The model wrapper requires the model bytes plus 256 MiB free for app and LiteRT working data. It
+removes stale Walking Aid CI fixtures and asks Android to trim caches. If `/data` remains too
+small, it fails before copying a partial model.
 
-For a manually created model-test AVD, `config.ini` should contain this before its first boot:
-
-```ini
-disk.dataPartition.size=8G
-```
-
-Do not use `-wipe-data` on the licensed Tasker/AutoInput automation AVD. The launcher never modifies
-that AVD and can stop it gracefully before the memory-intensive model test when
-`CYANBRIDGE_WALKING_AID_STOP_OTHER_EMULATORS=true`.
+Do not use `-wipe-data` on the licensed Tasker/AutoInput automation AVD. Every change inside a
+read-only instance, including a replaced app, is discarded when the instance exits.
 
 The test fails on checksum drift, model initialization errors, unsupported tensor layouts, empty
 detections, malformed boxes, missing expected COCO classes, or invalid depth output. Timing and

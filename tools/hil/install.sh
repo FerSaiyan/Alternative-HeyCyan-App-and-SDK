@@ -17,9 +17,48 @@ test_apk="${CYANBRIDGE_HIL_TEST_APK:-$HIL_REPO_ROOT/android/CyanBridge/app/build
 [[ -f "$app_apk" ]] || { echo "Missing debug APK: $app_apk" >&2; exit 4; }
 [[ -f "$test_apk" ]] || { echo "Missing androidTest APK: $test_apk" >&2; exit 4; }
 
+# Installs with -r (keeping data). Two failures need the installed package removed first:
+# - INSTALL_FAILED_UPDATE_INCOMPATIBLE: local builds carry the release key when keystore.properties
+#   exists, CI builds the debug key;
+# - INSTALL_FAILED_INSUFFICIENT_STORAGE: the persistent Pixel_9a's /data is about 95% full, under
+#   Android's low-storage threshold, so a replacing install fails before the signature check.
+# With CYANBRIDGE_HIL_UNINSTALL_ON_SIGNATURE_MISMATCH=true, and only on a local emulator started with
+# -read-only (whose data is discarded on exit), the old package is uninstalled and installed again.
+install_package() {
+  local package_name="$1"
+  shift
+  local output status reason
+  set +e
+  output="$(adb_for "$serial" install "$@" 2>&1)"
+  status=$?
+  set -e
+  printf '%s\n' "$output"
+  (( status == 0 )) && ! grep -q 'Failure \[' <<<"$output" && return 0
+  if grep -q 'INSTALL_FAILED_UPDATE_INCOMPATIBLE' <<<"$output"; then
+    reason="is signed with a different key"
+  elif grep -q 'INSTALL_FAILED_INSUFFICIENT_STORAGE' <<<"$output" && package_installed "$serial" "$package_name"; then
+    reason="cannot be replaced: /data is below the low-storage threshold"
+  else
+    return 1
+  fi
+  if [[ "${CYANBRIDGE_HIL_UNINSTALL_ON_SIGNATURE_MISMATCH:-false}" != "true" ]]; then
+    echo "$package_name on $serial $reason. Use a read-only emulator instance" >&2
+    echo "and set CYANBRIDGE_HIL_UNINSTALL_ON_SIGNATURE_MISMATCH=true, or uninstall it by hand." >&2
+    return 1
+  fi
+  if ! is_read_only_emulator "$serial"; then
+    echo "$package_name on $serial $reason, and $serial is not a local -read-only emulator;" >&2
+    echo "refusing to uninstall (it would delete persistent app data)." >&2
+    return 1
+  fi
+  echo "$package_name on read-only $serial $reason: uninstalling it and installing again" >&2
+  adb_for "$serial" uninstall "$package_name" >/dev/null 2>&1 || true
+  adb_for "$serial" install "$@"
+}
+
 echo "Installing CyanBridge debug APK on $serial without clearing app data"
-adb_for "$serial" install -r -d "$app_apk"
-adb_for "$serial" install -r -d -t "$test_apk"
+install_package "$CYANBRIDGE_PACKAGE" -r -d "$app_apk"
+install_package "$CYANBRIDGE_TEST_PACKAGE" -r -d -t "$test_apk"
 
 wait_for_package "$serial" "$CYANBRIDGE_PACKAGE" 15 || {
   echo "CyanBridge package was not visible after install" >&2

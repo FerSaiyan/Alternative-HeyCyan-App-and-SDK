@@ -1,5 +1,26 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-11 (evening) — Emulator consolidation on Pixel_9a, Pro question tests
+
+- Branch `cyan-refactor-emulator-ci` (worktree `cyan-refactor-wt/emulator-ci`, from `8827519f`), not pushed or merged.
+- CI emulator steps now run on a `-read-only` Pixel_9a instance on port 5584 (details:
+  `docs/EMULATOR_RETENTION.md`, 2026-11-11 consolidation). The workflow's steps ran green locally, both with
+  the persistent release-key app and with a debug-key build replacing it (the CI case).
+- Fixed the Walking Aid tests whose trailing lambda bound to `mentraFactory`.
+- **Pro account:** the persistent Pixel_9a is signed in as `e2e-standard@cyanbridgelabs.test` with an
+  encrypted API token (yesterday's "no API token" read only the plaintext prefs). Its relay is
+  `http://10.0.2.2:3100`, the website's local E2E stack, which was not running and blanks the model keys.
+  Production (`fix/billing-metrics-reconciliation`, deployed 2026-11-08) has no code bypass, and Vercel env
+  names show no review/demo account. So the Pro model, Gemini Live and idle-close tests could not get real
+  answers. `ProQuestionsHilTest` (opt-in, `-e pro_questions true`, distinct red/blue/green photos) is ready
+  for a verified production Pro account; it is compiled but has not been run.
+- Live follow-ups: the "Initializing Live" cue is now spoken only when the question starts a session (it
+  follows `LiveStartDecision`), with a unit test. The notifications-denied preview route does not drop
+  images: each photo question opens a new `GeminiLiveDestination` whose own initial turn carries the
+  image, and the earlier preview's session stops in `onPause` (no notifications). It loses the earlier
+  context and stacks stopped preview screens; not changed.
+- AVD archive not done (Seagate writing at ~25 KB/s under other jobs); the partial output was deleted.
+
 ## 2026-11-11 — HeyCyan media sync: three selectable flows (HeyCyan / Custom v2.3.0 / Adaptive)
 
 - Branch `cyan-refactor-sync-modes` (worktree `cyan-refactor-wt/sync-modes`, from `8827519f`), not pushed or
