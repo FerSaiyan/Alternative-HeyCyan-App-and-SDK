@@ -1,5 +1,36 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-12 — Integration: three sync flows + P2P sync fixes + emulator CI (add.224)
+
+- Branch `cyan-refactor-integration` (worktree `cyan-refactor-wt/integration`, from `8827519f`), not pushed.
+  No-ff merges, in order: `cyan-refactor-sync-modes` (1bed8caf), `cyan-refactor-ble-notify-guard` (cfb11b71),
+  join-guard follow-up (56417378), `cyan-refactor-emulator-ci` (3d426068). Patched vendor `.aar` sha256
+  `ba7513ed…` in both copies (owner approved shipping it with cyan-refactor).
+- Conflict `GlassesP2pNetwork.httpGet`: add.210 gated VPN-safe route + Range-resume on CUSTOM back when the adaptive
+  engine lived inside CUSTOM. Now: ADAPTIVE keeps add.210 as written (learned route, forced to `LOCAL_ADDRESS`
+  under a VPN, resumable stream); CUSTOM transfers open on the first route that answers in v2.3.0 order
+  (`P2P_NETWORK`, `SYSTEM`, `LOCAL_ADDRESS`; `LOCAL_ADDRESS` first under a VPN) and stream with Range-resume; the
+  v2.3.0 resolver probes keep the default path; HeyCyan app flow unchanged (system routing like the stock app).
+- Semantic checks: sync-modes added three ways to reset during our own P2P join that the add.223 guard did not
+  cover (Custom error-255 `resetDeviceP2p`, Custom no-match `restartPeerDiscovery` + command retry, any refused
+  transfer command's `[0x02,0x01,0x0F]`; Adaptive's 20 s discovery restart and bounded reset use the same calls).
+  `WifiP2pManagerSingleton.isJoinInFlight()` (the add.223 15 s window) now also gates `restartPeerDiscovery`,
+  `resetTransferP2pForRetry` and the Custom error-255 reset. The cmd-65 guards are flow-agnostic (vendor `.aar` +
+  `MyBluetoothReceiver`); verified live in all three flows. Debug `GlassesSimHarness` mapped "adaptive" to CUSTOM
+  (pre-ADAPTIVE); now ADAPTIVE. worklog conflict: both entries kept, newest first.
+- Build/tests (JDK 21, under the Gradle lock, no emulator): `:app:assembleDebug :app:testDebugUnitTest
+  :shared:portabilityTest` BUILD SUCCESSFUL; app unit tests 736/736, shared portability 412/412 (incl.
+  GlassesSyncFlowTest, CustomHttpResolverTest, AdaptiveProfileLearningTest, GlassesWifiErrorPolicyTest,
+  PrefsInventoryTest, GlassModelControlFrameGuardTest, GlassesHttpResumeTest 9 incl. one new route-order case).
+  sync-modes compiled with no fixes. The new worktree needed the `myvu-upstream` submodule at `7eb62d7`
+  (fetched from the ble-notify-guard worktree; the configured local URL lacks that commit).
+- Live E2E on the add.222 real-BLE + real-Wi-Fi-Direct AVD rig (firmware_dump add.224): HeyCyan app flow 5/5,
+  Custom 3/3, Adaptive 3/3, Settings → Media sync remembered Adaptive 1/1 (no picker). 12/12 photos sha256
+  `1606b2ce…` = firmware side; `resetDeviceP2p` 0, AIOOBE 0, cmd-65 short frame dropped in every run, battery guard
+  logged. Not exercised on the rig: a VPN (no VPN on the AVD; the emulator exposes no verified P2P network, so
+  Custom/Adaptive transfers used `SYSTEM`), Range-resume on a real truncation, the new join-in-flight skips (never
+  triggered). Hardware rows: docs/refactor/HARDWARE_TEST_CHECKLIST.md (three flows section, "Added by the integration").
+
 ## 2026-11-11 (evening) — Emulator consolidation on Pixel_9a, Pro question tests
 
 - Branch `cyan-refactor-emulator-ci` (worktree `cyan-refactor-wt/emulator-ci`, from `8827519f`), not pushed or merged.
