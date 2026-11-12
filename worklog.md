@@ -1,5 +1,31 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-12 — Integration for push: rooted Pixel_9a branch, iOS runner image, Android CI root causes
+
+- Branch `cyan-refactor-integrate-1112` (worktree `cyan-refactor-wt/integrate-1112`, from `origin/cyan-refactor`
+  eded476e). `cyan-refactor-rooted-pixel9a` (which contains `cyan-refactor-ci-pro-account`) merged as a fast-forward
+  (e6d55417): no conflicts. Local checks under the Gradle lock: app unit 736/736, shared portability 412/412,
+  shared unit 389/389, assembleDebug + assembleDebugAndroidTest, `-PenableAppleTargets=true :shared:iosCompileCheck`.
+- **iOS CI**: GitHub retired every macOS 14 image on 2026-11-02 ("macos-14-arm64-us-default is not supported").
+  Now `macos-15` (arm64) with its default Xcode 16.4; that image has no iOS 18.2 simulator runtime, so the host
+  builds for iPhone 16 / iOS 18.5. A step prints the Xcode version and runtimes.
+- **Android CI run 43218835150** ("Process crashed" in MetaDatLifecycleTest, 1 s in): reproduced on a fresh read-only
+  Pixel_9a. Not the app: lmkd killed the instrumentation target 0.16 s after start ("min watermark is breached even
+  after kill"). A cold API 37 Play boot reports boot_completed while Google apps are still starting; MemFree in the
+  4 GB guest sits near 75 MB for about a minute. Fix: `settle_emulator` (tools/hil/common.sh) waits for
+  `am wait-for-broadcast-idle` and, within the first 300 s of uptime, for MemFree >= 350 MB in 3 samples; it runs
+  after boot (start_emulator.sh) and before each class. After "Process crashed" the runner now says whether lmkd
+  killed the target or prints the fatal exception.
+- **Second failure behind it**: `MetaDatSdkMockTest#emailInviteChoiceRegistersStreamsAndCaptures` ANR
+  (keyDispatchingTimedOut). ANR trace: ABBA deadlock inside Meta DAT 0.8.0. The main thread in
+  `Wearables.startRegistration` holds the registration lock, and `setRegistration` then waits for the analytics lock in
+  `Analytics.logEvent`. A mock-device service thread inside `logEvent` holds that lock, and serializing its event calls
+  `RegistrationManagerImpl.isDevMode`, which waits for the registration lock. The same inversion exists on the
+  production registration path. Fix: `com.meta.wearable.mwdat.ANALYTICS_OPT_OUT=true` in the app manifest
+  (`logEvent` returns before taking its lock; the Mentra SDK's analytics are already disabled the same way). The
+  Meta DAT test asserts the opt-out stays in place. **Owner: this stops DAT usage analytics to Meta.**
+- Whole `android-self-hosted.yml` emulator sequence locally on a fresh read-only Pixel_9a (port 5610): green.
+
 ## 2026-11-12 — Rooted Pixel_9a, Frida on it, Pro question tests on the production CI account
 
 - Branch `cyan-refactor-rooted-pixel9a` (worktree `cyan-refactor-wt/rooted-pixel9a`, from `origin/cyan-refactor`
