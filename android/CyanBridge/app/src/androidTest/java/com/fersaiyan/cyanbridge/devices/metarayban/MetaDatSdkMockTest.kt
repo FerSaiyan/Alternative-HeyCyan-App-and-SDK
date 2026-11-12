@@ -71,6 +71,11 @@ class MetaDatSdkMockTest {
     @Test fun emailInviteChoiceRegistersStreamsAndCaptures() = registerStreamAndCapture(MetaSetupChoice.EMAIL_INVITE)
 
     private fun registerStreamAndCapture(choice: MetaSetupChoice) = runBlocking {
+        // DAT 0.8.0 deadlocks (analytics lock vs registration lock) when registration races another
+        // analytics event; the app opts out of DAT analytics so that path never takes the lock.
+        val metaData = context.packageManager
+            .getApplicationInfo(context.packageName, android.content.pm.PackageManager.GET_META_DATA).metaData
+        assertTrue("DAT analytics must stay opted out", metaData?.getBoolean("com.meta.wearable.mwdat.ANALYTICS_OPT_OUT") == true)
         withTimeout(60_000) {
             store.choice = choice
             store.path = MetaRegistrationPath.UNKNOWN

@@ -69,6 +69,12 @@
         <meta-data android:name="com.meta.wearable.mwdat.APPLICATION_ID" android:value="${mwdat_application_id}" />
         <meta-data android:name="com.meta.wearable.mwdat.CLIENT_TOKEN" android:value="${mwdat_client_token}" />
         <meta-data android:name="com.meta.wearable.mwdat.DAM_ENABLED" android:value="true" />
+        <!-- Meta DAT 0.8.0 analytics deadlock: Analytics.logEvent holds its lock while serializing an event,
+             which calls RegistrationManagerImpl.isDevMode (registration lock), and setRegistration logs an
+             event while holding the registration lock. A registration change racing any other event hangs
+             the main thread (ANR in MetaDatSdkMockTest, 2026-11-12). With the opt-out, logEvent returns
+             before taking its lock. Same policy as the Mentra SDK below. -->
+        <meta-data android:name="com.meta.wearable.mwdat.ANALYTICS_OPT_OUT" android:value="true" />
         <meta-data android:name="com.mentra.bluetoothsdk.analytics.disabled" android:value="true" />
 
         <!-- The only screen host: every in-app screen is a destination of its back stack. singleTask keeps
