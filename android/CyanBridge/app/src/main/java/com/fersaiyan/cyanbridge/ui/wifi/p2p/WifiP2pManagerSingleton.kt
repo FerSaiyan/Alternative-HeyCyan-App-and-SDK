@@ -14,6 +14,7 @@ import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.heycyan.core.connectivity.p2p.WifiP2pConnectionState
@@ -47,6 +48,11 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
 
     private val discoveryTimeoutMs = 16_000L
     private val connectTimeoutMs = 5_000L
+    // Upper bound for one join (provision discovery + WPS + 4-way + DHCP). The framework's
+    // "disconnected" broadcast at the start of a join clears connectionState, so the join is
+    // tracked here instead; a join that never completes stops blocking the timeout after this.
+    private val groupFormationWindowMs = 15_000L
+    @Volatile private var connectInFlightSinceMs = 0L
     private val delayedPeerDiscoveryRestart = Runnable {
         startPeerDiscovery(allowDeviceResetOnTimeout = allowDeviceResetOnDiscoveryTimeout)
     }
@@ -209,6 +215,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         }
 
         connectionState.setConnecting(true)
+        connectInFlightSinceMs = SystemClock.elapsedRealtime()
         Log.d(TAG, "Already connecting device: ${device.deviceName}---${device.deviceAddress}")
 
         wifiP2pManager.connect(wifiP2pChannel, config, object : WifiP2pManager.ActionListener {
@@ -219,6 +226,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
 
             override fun onFailure(reason: Int) {
                 Log.e(TAG, "Connect request failed: $reason")
+                connectInFlightSinceMs = 0L
                 connectionState.markConnectRequestFailed()
                 callbacks.forEach { it.onConnectRequestFailed(reason) }
             }
@@ -269,6 +277,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
 
     fun resetFailCount() {
         p2pOperationsEnabled = true
+        connectInFlightSinceMs = 0L
         retryState.reset()
         connectionState.reset()
         cancelPendingRetries()
@@ -416,6 +425,10 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     internal fun onConnectionInfoAvailable(info: WifiP2pInfo) {
         connectionState.markConnectionInfoAvailable(info.groupFormed)
         handler.removeCallbacks(connectTimeOut)
+        if (info.groupFormed) {
+            connectInFlightSinceMs = 0L
+            handler.removeCallbacks(discoveryTimeOut)
+        }
         lastGroupOwnerIp = info.groupOwnerAddress?.hostAddress
         callbacks.forEach { it.onConnected(info) }
     }
@@ -431,6 +444,16 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     private val discoveryTimeOut = object : Runnable {
         override fun run() {
             if (!p2pOperationsEnabled) return
+            // A join in flight makes discoverPeers answer BUSY; resetting here would tear down
+            // our own join (glasses 02 01 0F + channel re-init). Wait for it to finish instead.
+            val joinLeftMs = connectInFlightSinceMs.let {
+                if (it == 0L) 0L else it + groupFormationWindowMs - SystemClock.elapsedRealtime()
+            }
+            if (joinLeftMs > 0L) {
+                Log.d(TAG, "Discovery timeout deferred ${joinLeftMs}ms: P2P join in flight")
+                handler.postDelayed(this, joinLeftMs)
+                return
+            }
             Log.d(TAG, "Internal scan retry connection: ${retryState.discoveryRetryCount()}")
             if (!allowDeviceResetOnDiscoveryTimeout) {
                 Log.d(TAG, "Discovery timeout reached with device reset disabled")
