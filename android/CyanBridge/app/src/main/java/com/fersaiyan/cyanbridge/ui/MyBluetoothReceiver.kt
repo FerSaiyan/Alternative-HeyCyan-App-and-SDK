@@ -7,6 +7,7 @@ import com.oudmon.ble.base.bluetooth.QCBluetoothCallbackCloneReceiver
 import com.oudmon.ble.base.communication.Constants
 import com.oudmon.ble.base.communication.LargeDataHandler
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.glasses.GlassModelControlFrameGuard
 import org.greenrobot.eventbus.EventBus
 
 /**
@@ -47,6 +48,18 @@ class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
 
     override fun onCharacteristicChange(address: String?, uuid: String?, data: ByteArray?) {
         if (data != null) {
+            // Drop short/truncated vendor cmd-65 (GlassModelControl) status frames before any app
+            // consumer touches them. A frame too short for its declared dataType is an INCOMPLETE,
+            // RETRIABLE status under flaky P2P Wi-Fi, not a valid notify; passing it on makes the
+            // app's offset-indexing consumers (and the vendor parser) read off the end and throw
+            // ArrayIndexOutOfBoundsException. A well-formed notify that follows proceeds normally.
+            if (GlassModelControlFrameGuard.shouldDropIncompleteFrame(data)) {
+                Log.w(
+                    "MyBluetoothReceiver",
+                    "Dropping incomplete cmd-65 status frame (len=${data.size}); treating as retriable",
+                )
+                return
+            }
             // Feed all notifications into BleIpBridge so it can try to
             // detect any IP information broadcast over BLE.
             bleIpBridge.onCharacteristicChanged("notify:$uuid", data)
