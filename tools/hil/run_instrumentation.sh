@@ -31,9 +31,28 @@ fi
 # The dialog steals window focus, so Tasker's %WIN reports "android", AutoInput queries
 # the wrong window, and Compose tests lose taps. Dismiss it permanently per package
 # before running anything.
+#
+# The dialog only appears when the app process starts, so after a fresh install (CI's
+# uninstall + reinstall on the read-only Pixel_9a) it first appeared inside the first test and
+# failed it (Espresso RootViewWithoutFocusException). Once per run, on a 16 KB-page target,
+# launch the app so the dialog shows now, dismiss it, and stop the app again.
+compat_dialog_primed=false
+prime_16kb_compat_dialog() {
+  local s="$1"
+  [[ "$compat_dialog_primed" == true ]] && return 0
+  compat_dialog_primed=true
+  [[ "$(adb_for "$s" shell getconf PAGE_SIZE 2>/dev/null | tr -d '\r')" == "16384" ]] || return 0
+  package_installed "$s" "$CYANBRIDGE_PACKAGE" || return 0
+  adb_for "$s" shell monkey -p "$CYANBRIDGE_PACKAGE" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+  sleep 6
+  dismiss_16kb_compat_dialog "$s"
+  adb_for "$s" shell am force-stop "$CYANBRIDGE_PACKAGE" >/dev/null 2>&1 || true
+}
+
 dismiss_16kb_compat_dialog() {
   local s="$1"
   adb_for "$s" shell true >/dev/null 2>&1 || return 0
+  prime_16kb_compat_dialog "$s"
   local xml
   xml="$(adb_for "$s" exec-out uiautomator dump /dev/tty 2>/dev/null | tr -d '\r' || true)"
   if ! grep -q 'Android App Compatibility\|16 KB compatible' <<<"$xml"; then
