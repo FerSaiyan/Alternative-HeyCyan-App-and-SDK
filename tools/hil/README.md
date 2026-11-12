@@ -33,6 +33,33 @@ client/network and PCM input path, not physical Bluetooth capture or the
 foreground service's lock-screen lifecycle. Keep it opt-in on the persistent
 runner; a fresh CI emulator must complete normal account verification first.
 
+### CI Pro test account
+
+A dedicated production account with unbilled Standard Pro exists for CI and HIL:
+`akio+ci-pro@cyanbridgelabs.com`, marked `isTestAccount`, active until 2027-11-12.
+Its credentials live outside git, on the lab machine, in
+`~/.config/cyanbridge-ci/pro-test-account.env` (mode 600). The `README.md` next to it
+explains how to extend, revoke and rotate the account. Never copy the token into
+source, workflow files, logs or artifacts.
+
+Link an emulator (for example Pixel_9a) in one non-interactive step. Install the debug
+and androidTest APKs first:
+
+```bash
+(set -a; source ~/.config/cyanbridge-ci/pro-test-account.env; set +a
+ bash tools/hil/run_instrumentation.sh emulator-5554 emulator \
+   com.fersaiyan.cyanbridge.hil.audio.ProAccountSetupHilTest#linkApiToken)
+```
+
+`run_instrumentation.sh` adds `-e proApiToken` only when `CYANBRIDGE_HIL_PRO_API_TOKEN`
+is set. The token is visible in the host's process list for the duration of the call.
+The test stores it in the app's encrypted prefs and fails unless `/api/pro/verify`
+reports an active entitlement. Afterwards, run the Pro HIL without the token in the
+environment, for example `CYANBRIDGE_HIL_PRO_PLANNER=true`, `run_pro_live_audio.sh` or
+`ProQuestionsHilTest` with `-e pro_questions true`. The email route
+(`#requestVerification` with `proEmail`, then `#verifyAccount` with `proCode`) also
+works with this address; the code is delivered to the owner's inbox.
+
 The workflow intentionally treats the lab as two different kinds of instruments:
 
 - **Persistent licensed automation emulator**: Tasker, AutoInput/AutoApps entitlement, Google account, Chrome, Gmail, and optionally a CyanBridge local model or Pro Subscription configuration. AI/browser/email automation HIL is pinned here even after a physical phone is connected.

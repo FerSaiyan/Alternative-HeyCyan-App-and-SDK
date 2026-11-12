@@ -145,8 +145,12 @@ run_one_class() {
       -e hil_shadow "$shadow"
       -e hil_artemis_parity "$artemis_parity"
       -e class "$class_name"
-      "$CYANBRIDGE_TEST_PACKAGE/$CYANBRIDGE_TEST_RUNNER"
     )
+    # Opt-in Pro account link (ProAccountSetupHilTest#linkApiToken). Secret: never echoed.
+    if [[ -n "${CYANBRIDGE_HIL_PRO_API_TOKEN:-}" ]]; then
+      cmd+=(-e proApiToken "$CYANBRIDGE_HIL_PRO_API_TOKEN")
+    fi
+    cmd+=("$CYANBRIDGE_TEST_PACKAGE/$CYANBRIDGE_TEST_RUNNER")
 
     echo "Running HIL class $class_name on $serial (attempt $attempt/2)" >&2
     set +e
