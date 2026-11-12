@@ -30,10 +30,13 @@ concurrency:
 jobs:
   build-simulator-host:
     name: Build KMP framework and iOS simulator host
-    runs-on: macos-14
+    # GitHub retired every macOS 14 image on 2026-11-02 ("macos-14-arm64-us-default is not supported").
+    # macos-15 (arm64) defaults to Xcode 16.4, whose simulator runtime is iOS 18.5; the image no longer
+    # installs an iOS 18.2 simulator runtime, so the destination below follows the selected Xcode.
+    runs-on: macos-15
     timeout-minutes: 45
     env:
-      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Check out source
@@ -49,6 +52,11 @@ jobs:
           java-version: "17"
           cache: gradle
           cache-dependency-path: android/CyanBridge/**/*.gradle*
+
+      - name: Show the selected Xcode and simulators
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
 
       - name: Verify the isolated iOS host structure
         run: python3 ios/scripts/verify_kmp_host.py
@@ -90,7 +98,7 @@ jobs:
           -scheme CyanBridgeKMPHost
           -configuration Debug
           -sdk iphonesimulator
-          -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.2'
+          -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5'
           -derivedDataPath "$RUNNER_TEMP/CyanBridgeDerivedData"
           CODE_SIGNING_ALLOWED=NO
           ENABLE_USER_SCRIPT_SANDBOXING=NO
