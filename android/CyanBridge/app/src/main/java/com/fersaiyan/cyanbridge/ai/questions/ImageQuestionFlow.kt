@@ -488,6 +488,11 @@ internal class ImageQuestionFlow(
                     "AIHijack",
                     "Image query completed provider=$providerType replyLength=${replyToSpeak.length}",
                 )
+                // Same debug seam as AssistantProviderQueries: emulator tests wait for the answer here.
+                GlassesQuestionTestHooks.emit(
+                    "reply",
+                    "provider=$providerType images=1 audio=${audioPath != null} text=$replyToSpeak",
+                )
                 env.runOnUiThread {
                     if (providerType == AgentProviderType.LOCAL_AGENT) {
                         speaker.answerShown(replyToSpeak)

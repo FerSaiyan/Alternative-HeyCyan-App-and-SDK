@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.hil
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
@@ -31,6 +32,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -46,7 +48,11 @@ import org.junit.runner.RunWith
  * - [liveSessionAnswersEveryPhoto]: Gemini Live (Economy, then Private) through the foreground
  *   service: the second and third photo in one session, Live ↔ non-Live switching, a photo after a
  *   voice question, the "Initializing Live" cue, and the 60 s idle close.
- * - [livePreviewWithoutNotificationsAnswersEachPhoto]: the notifications-denied preview route.
+ * - [livePreviewWithoutNotificationsAnswersEachPhoto]: the notifications-denied preview route. Revoking
+ *   POST_NOTIFICATIONS kills the app process (and this instrumentation with it), so the host denies it
+ *   before `am instrument` and passes `-e pro_notifications_denied true`; in that mode only this test runs:
+ *   `pm revoke <pkg> android.permission.POST_NOTIFICATIONS` and `pm set-permission-flags <pkg>
+ *   android.permission.POST_NOTIFICATIONS user-fixed` (no prompt), then clear-permission-flags and grant.
  *
  * Prints PRO_Q lines (model, question, reply). Logs never contain the account token.
  */
@@ -60,6 +66,7 @@ class ProQuestionsHilTest {
     private var scenario: ActivityScenario<MainActivity>? = null
     private lateinit var fixtures: File
     private lateinit var images: File
+    private val notificationsDenied = args.getString("pro_notifications_denied") == "true"
 
     @Before
     fun setUp() {
@@ -74,7 +81,7 @@ class ProQuestionsHilTest {
 
         saved = PREFS.associateWith { name -> context.getSharedPreferences(name, Context.MODE_PRIVATE).all.toMap() }
         shell("pm grant ${context.packageName} android.permission.RECORD_AUDIO")
-        shell("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
+        if (!notificationsDenied) shell("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
         shell("appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow")
         fixtures = File(context.cacheDir, "pro-q-fixtures").apply { deleteRecursively(); mkdirs() }
         listOf(VOICE_COLOR, VOICE_CAPITAL, PHOTO_SOCKS).forEach { name ->
@@ -108,6 +115,7 @@ class ProQuestionsHilTest {
 
     @Test
     fun everyPickerModelAnswersPhotoAndVoiceQuestions() {
+        assumeFalse("notifications-denied run: only the preview test", notificationsDenied)
         val catalog = ProSubscriptionRelayClient.fetchModelCatalog(context).getOrThrow()
         catalog.models.forEach { println("PRO_Q catalog id=${it.id} vision=${it.supportsVision} audio=${it.supportsAudio} label=${it.label}") }
         catalog.liveModes.forEach { println("PRO_Q catalog live_mode=${it.id} label=${it.label}") }
@@ -132,6 +140,7 @@ class ProQuestionsHilTest {
 
     @Test
     fun liveSessionAnswersEveryPhoto() {
+        assumeFalse("notifications-denied run: only the preview test", notificationsDenied)
         val catalog = ProSubscriptionRelayClient.fetchModelCatalog(context).getOrThrow()
         val liveId = catalog.models.map { it.id }.firstOrNull(ProLiveModelChoice::isLiveModel) ?: LIVE_FALLBACK
         val nonLive = catalog.models.firstOrNull { it.supportsVision && !ProLiveModelChoice.isLiveModel(it.id) }
@@ -197,29 +206,27 @@ class ProQuestionsHilTest {
 
     @Test
     fun livePreviewWithoutNotificationsAnswersEachPhoto() {
+        assumeTrue("pass -e pro_notifications_denied true after revoking POST_NOTIFICATIONS on the host", notificationsDenied)
+        assertEquals("POST_NOTIFICATIONS must be denied before the app starts", PackageManager.PERMISSION_DENIED,
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS))
         val catalog = ProSubscriptionRelayClient.fetchModelCatalog(context).getOrThrow()
         val liveId = catalog.models.map { it.id }.firstOrNull(ProLiveModelChoice::isLiveModel) ?: LIVE_FALLBACK
         stopLiveAndWait()
-        shell("pm revoke ${context.packageName} android.permission.POST_NOTIFICATIONS")
         ProSubscriptionAiPrefs.setQuestionsModel(context, liveId)
         AssistantPrefs.GeminiLive.proEconomy[context] = true
-        try {
-            val answers = listOf(RED, BLUE, GREEN).mapIndexed { i, image ->
-                val since = System.currentTimeMillis()
-                GlassesQuestionTestHooks.questionAudio = { null }
-                GlassesQuestionTestHooks.photo = { File(images, image.file) }
-                scenario!!.onActivity { it.debugGlassesEvent(MainActivity.DEBUG_EVENT_PHOTO_BUTTON) }
-                val answer = awaitLiveAnswer(since, image.words, tag = PREVIEW_TAG)
-                val sessions = liveLog(since).count { it.tag == PREVIEW_TAG && "Sending initial Live turn image=true" in it.message }
-                println("PRO_Q preview photo=${i + 1} image=${image.file} newPreviewSessions=$sessions reply=${answer.text.take(200)}")
-                image to answer
-            }
-            answers.forEach { (image, answer) ->
-                assertTrue("preview answer for ${image.file} lacks ${image.words}: ${answer.text}",
-                    image.words.all { answer.text.contains(it, ignoreCase = true) })
-            }
-        } finally {
-            shell("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
+        val answers = listOf(RED, BLUE, GREEN).mapIndexed { i, image ->
+            val since = System.currentTimeMillis()
+            GlassesQuestionTestHooks.questionAudio = { null }
+            GlassesQuestionTestHooks.photo = { File(images, image.file) }
+            scenario!!.onActivity { it.debugGlassesEvent(MainActivity.DEBUG_EVENT_PHOTO_BUTTON) }
+            val answer = awaitLiveAnswer(since, image.words, tag = PREVIEW_TAG)
+            val sessions = liveLog(since).count { it.tag == PREVIEW_TAG && "Sending initial Live turn image=true" in it.message }
+            println("PRO_Q preview photo=${i + 1} image=${image.file} newPreviewSessions=$sessions reply=${answer.text.take(200)}")
+            image to answer
+        }
+        answers.forEach { (image, answer) ->
+            assertTrue("preview answer for ${image.file} lacks ${image.words}: ${answer.text}",
+                image.words.all { answer.text.contains(it, ignoreCase = true) })
         }
     }
 
