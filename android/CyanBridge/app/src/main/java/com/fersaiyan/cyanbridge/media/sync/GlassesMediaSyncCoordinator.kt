@@ -17,6 +17,7 @@ import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.media.AdaptiveHttpRoute
 import com.fersaiyan.cyanbridge.media.AdaptiveP2pProfileStore
+import com.fersaiyan.cyanbridge.media.AdaptiveProfileLearning
 import com.fersaiyan.cyanbridge.media.AdaptiveP2pSyncSession
 import com.fersaiyan.cyanbridge.media.AdaptiveSyncCheckpoint
 import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
@@ -33,6 +34,8 @@ import com.fersaiyan.cyanbridge.shared.network.session.GlassesWifiErrorAction
 import com.fersaiyan.cyanbridge.shared.network.session.GlassesWifiErrorContext
 import com.fersaiyan.cyanbridge.shared.network.session.GlassesWifiErrorPolicy
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
+import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
+import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.bleIpBridge
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
@@ -64,8 +67,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * HeyCyan Wi-Fi media sync: the BLE transfer-mode handshake, Wi-Fi Direct peer selection and
- * group teardown, the official (HeyCyan-parity) and adaptive HTTP download flows, and the
- * full-resolution image transfer used by image questions.
+ * group teardown, the three user-selectable HTTP download flows ([GlassesSyncFlow]: HeyCyan
+ * parity, the v2.3.0 Custom resolver and the experimental Adaptive flow), and the
+ * full-resolution image transfer used by image questions. Only the Adaptive flow keeps
+ * checkpoints and learns per-device routes.
  */
 internal class GlassesMediaSyncCoordinator(
     private val activity: AppCompatActivity,
@@ -105,6 +110,7 @@ internal class GlassesMediaSyncCoordinator(
     private var downloadStartedAtMs: Long = 0L
     private var noMatchPeerCount = 0
     private var downloadP2pRestartCount = 0
+    private var lastP2pResetAtMs = 0L
     private val seenP2pPeers = mutableSetOf<String>()
     private var lastPeerSetHash: Int = 0
     private var officialSystemSuccess = false
@@ -150,6 +156,12 @@ internal class GlassesMediaSyncCoordinator(
         downloadWifiIp = { downloadWifiIp },
     )
 
+    private val customResolver = CustomHttpResolver(
+        portOpen = { ip, timeoutMs -> p2pNetwork.isPortOpen(ip, 80, timeoutMs) },
+        mediaConfigReachable = { ip, timeoutMs ->
+            p2pNetwork.httpGet(URL("http://$ip/files/media.config"), timeoutMs, timeoutMs)
+        },
+    )
 
     enum class MediaDownloadPurpose {
         FULL_SYNC,
@@ -164,6 +176,16 @@ internal class GlassesMediaSyncCoordinator(
     private fun isHighQualityImageTransfer(): Boolean =
         mediaDownloadPurpose == MediaDownloadPurpose.IMAGE_QUESTION && highQualityImageRequest != null
 
+    /** Settings → Media sync, read at each sync; null (or an unknown value) asks every time. */
+    private fun savedSyncFlow(): GlassesSyncFlow? = AppPrefs.Main.mediaSyncFlow[activity]
+
+    /** A Sync tap: the remembered flow starts at once; without one, [ask] shows the picker. */
+    fun startSavedFlowOr(ask: () -> Unit) {
+        val saved = savedSyncFlow() ?: return ask()
+        Log.i("DataDownload", "Using the sync flow remembered in Settings: ${saved.label}")
+        startDataDownload(saved)
+    }
+
     fun requestHighQualityImageForQuestion(sourceTag: String) {
         if (highQualityImageRequest == null) {
             highQualityImageRequest = HighQualityImageRequest(
@@ -177,8 +199,9 @@ internal class GlassesMediaSyncCoordinator(
             // The camera command owns the vendor SDK response slot until its callback returns.
             delay(300)
             if (!isHighQualityImageTransfer()) return@launch
+            // The remembered flow when there is one; otherwise Custom, as in v2.3.0.
             startDataDownload(
-                mode = GlassesSyncFlow.CUSTOM,
+                mode = savedSyncFlow() ?: GlassesSyncFlow.CUSTOM,
                 purpose = MediaDownloadPurpose.IMAGE_QUESTION,
             )
         }
@@ -299,7 +322,7 @@ internal class GlassesMediaSyncCoordinator(
         resetDownloadSupportState()
         resetOfficialFlowState()
         createDownloadSession()
-        if (mode == GlassesSyncFlow.CUSTOM) {
+        if (mode == GlassesSyncFlow.ADAPTIVE) {
             startAdaptiveSyncSession()
         } else {
             adaptiveSyncSession = null
@@ -371,7 +394,10 @@ internal class GlassesMediaSyncCoordinator(
                     return
                 }
 
-                val target = GlassesP2pPeerSelector.selectBestLikelyGlassesPeer(peers)
+                val target = GlassesP2pPeerSelector.selectBestLikelyGlassesPeer(
+                    peers,
+                    customFlow = downloadFlowMode == GlassesSyncFlow.CUSTOM,
+                )
                 if (target == null) {
                     noMatchPeerCount++
                     val pairedName = try { DeviceManager.getInstance().deviceName } catch (_: Exception) { "?" }
@@ -382,6 +408,9 @@ internal class GlassesMediaSyncCoordinator(
                         "No likely glasses peer yet (x$noMatchPeerCount); paired=$pairedName/$pairedMac; ignoring discovered peers: ${peers.map { "${it.deviceName}/${it.deviceAddress}" }}"
                     )
                     transferUi.setTransferDetail("Waiting for glasses P2P peer...")
+                    if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+                        restartCustomDiscoveryAfterNoMatch(pairedDevice = "$pairedName/$pairedMac")
+                    }
                     return
                 }
 
@@ -428,6 +457,11 @@ internal class GlassesMediaSyncCoordinator(
 
                     GlassesSyncFlow.CUSTOM -> {
                         !downloadCancelledByUser &&
+                            (downloadAttemptJob?.isActive == true || downloadInProgress)
+                    }
+
+                    GlassesSyncFlow.ADAPTIVE -> {
+                        !downloadCancelledByUser &&
                             (isDownloadInitialPhaseActive() || downloadAttemptJob?.isActive == true || downloadInProgress)
                     }
                 }
@@ -454,7 +488,7 @@ internal class GlassesMediaSyncCoordinator(
 
             override fun onPeerDiscoveryStarted() {
                 Log.i("DataDownload", "Peer discovery started")
-                if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+                if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
                     // Process one copy of an unchanged peer set in every completed discovery
                     // round. The old cross-round hash suppressed recovery when the same TVs or
                     // printers remained visible.
@@ -498,11 +532,13 @@ internal class GlassesMediaSyncCoordinator(
                     restartOfficialWholeFlow("P2P connection retry failed")
                     return
                 }
-                adaptiveSyncSession?.mark(
-                    AdaptiveSyncCheckpoint.P2P_CONNECT_FAILED,
-                    "connect_retry_exhausted",
-                )
-                setTransferDetailForSession(downloadSessionId, "P2P connect failed; adaptive discovery is continuing...")
+                if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
+                    adaptiveSyncSession?.mark(
+                        AdaptiveSyncCheckpoint.P2P_CONNECT_FAILED,
+                        "connect_retry_exhausted",
+                    )
+                    setTransferDetailForSession(downloadSessionId, "P2P connect failed; adaptive discovery is continuing...")
+                }
                 Log.e("DataDownload", "P2P connection retry failed")
             }
         }
@@ -530,27 +566,31 @@ internal class GlassesMediaSyncCoordinator(
 
             // Start scanning for the glasses over WiFi Direct
             link.manager.startPeerDiscovery(
-                allowDeviceResetOnTimeout = mode == GlassesSyncFlow.OFFICIAL_HEYCYAN,
+                // Only the Adaptive flow keeps the glasses state when discovery times out.
+                allowDeviceResetOnTimeout = mode != GlassesSyncFlow.ADAPTIVE,
             )
 
             transferUi.setTransferDetail(
                 when (mode) {
                     GlassesSyncFlow.OFFICIAL_HEYCYAN -> "Waiting for P2P + BLE IP (HeyCyan flow)..."
-                    GlassesSyncFlow.CUSTOM -> "Waiting for glasses IP and HTTP server..."
+                    GlassesSyncFlow.CUSTOM,
+                    GlassesSyncFlow.ADAPTIVE,
+                    -> "Waiting for glasses IP and HTTP server..."
                 }
             )
 
             // Ask the glasses (over BLE) to bring up WiFi/P2P and report their IP,
             // mirroring the official app's importAlbum() flow.
             sendTransferModeCommandWithRetry(sessionId = sessionId)
-            if (mode == GlassesSyncFlow.CUSTOM) {
+            if (mode == GlassesSyncFlow.ADAPTIVE) {
                 startAdaptiveCheckpointRecovery(sessionId)
             }
         }
     }
 
     /**
-     * Send transfer mode [0x02,0x01,0x04]. The adaptive flow retries once without
+     * Send transfer mode [0x02,0x01,0x04] with retry on error=-1. The HeyCyan and Custom flows
+     * send the reset [0x02,0x01,0x0F] before each retry; the adaptive flow retries once without
      * reset and permits a single reset only after a repeated refusal with no progress.
      */
     private fun sendTransferModeCommandWithRetry(
@@ -563,7 +603,7 @@ internal class GlassesMediaSyncCoordinator(
             Log.i("DataDownload", "Skipping transfer-mode command for inactive session=$sessionId")
             return
         }
-        if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+        if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
             val commandReserved = adaptiveSyncSession?.noteTransferCommand(attempt, maxSends = 3) == true
             if (!commandReserved) {
                 Log.w("DataDownload", "Adaptive transfer-command budget exhausted; preserving current checkpoint state")
@@ -609,7 +649,7 @@ internal class GlassesMediaSyncCoordinator(
                         "The glasses did not acknowledge transfer mode within 10 seconds.",
                         resetDeviceP2p = false,
                     )
-                } else {
+                } else if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
                     transferUi.setTransferDetail("No transfer response yet; adaptive recovery is continuing...")
                 }
             }
@@ -633,7 +673,7 @@ internal class GlassesMediaSyncCoordinator(
                     "dataType=${resp.dataType}, error=${resp.errorCode}, latency=${callbackLatencyMs}ms, " +
                     "sequence=$commandSequence,latest=$isLatestCommand"
             )
-            if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+            if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
                 adaptiveSyncSession?.mark(
                     AdaptiveSyncCheckpoint.TRANSFER_CALLBACK,
                     "attempt=$attempt,sequence=$commandSequence,latest=$isLatestCommand," +
@@ -646,7 +686,7 @@ internal class GlassesMediaSyncCoordinator(
                 Log.i("DataDownload", "Ignoring transfer-mode response for inactive session=$sessionId")
             } else if (resp.errorCode == -1 && attempt < maxAttempts) {
                 if (
-                    downloadFlowMode == GlassesSyncFlow.CUSTOM &&
+                    downloadFlowMode == GlassesSyncFlow.ADAPTIVE &&
                     (transferModeCommandEvidenceReceived || downloadP2pConnected || downloadInProgress)
                 ) {
                     Log.i(
@@ -665,14 +705,14 @@ internal class GlassesMediaSyncCoordinator(
                         return@launchDownloadSession
                     }
                     if (
-                        downloadFlowMode == GlassesSyncFlow.CUSTOM &&
+                        downloadFlowMode == GlassesSyncFlow.ADAPTIVE &&
                         (transferModeCommandEvidenceReceived || downloadP2pConnected || downloadInProgress)
                     ) {
                         Log.i("DataDownload", "Skipping adaptive command retry because transport progressed during backoff")
                         return@launchDownloadSession
                     }
                     if (
-                        downloadFlowMode == GlassesSyncFlow.CUSTOM &&
+                        downloadFlowMode == GlassesSyncFlow.ADAPTIVE &&
                         (adaptiveSyncSession?.transferCommandSends ?: 0) >= 3
                     ) {
                         Log.i("DataDownload", "Skipping adaptive reset because no transfer-command budget remains")
@@ -680,14 +720,14 @@ internal class GlassesMediaSyncCoordinator(
                     }
                     // Adaptive flow first retries the command while preserving the current
                     // discovery state. It spends its one glasses reset only after a repeated
-                    // refusal; the strict HeyCyan flow keeps the vendor reset behavior.
-                    val shouldReset = downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN || attempt > 1
+                    // refusal; the HeyCyan and Custom flows keep the vendor reset behavior.
+                    val shouldReset = downloadFlowMode != GlassesSyncFlow.ADAPTIVE || attempt > 1
                     if (shouldReset) {
                         if (!resetTransferP2pForRetry(sessionId)) {
                             Log.w("DataDownload", "Pre-retry P2P reset did not complete; not sending another transfer command")
                             return@launchDownloadSession
                         }
-                        if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+                        if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
                             adaptiveSyncSession?.noteDeviceReset()
                             transferModeCommandEvidenceReceived = false
                         }
@@ -839,7 +879,7 @@ internal class GlassesMediaSyncCoordinator(
             "DataDownload",
             "Media progress: type=$mediaType, file=$fileName, bytes=$bytesCopied/$totalBytes, speed=${speedBps}B/s, flow=${downloadFlowMode.label}"
         )
-        if (downloadFlowMode == GlassesSyncFlow.CUSTOM && bytesCopied > 0L) {
+        if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE && bytesCopied > 0L) {
             adaptiveSyncSession?.mark(
                 AdaptiveSyncCheckpoint.MEDIA_FILE_PROGRESS,
                 "type=$mediaType,bytes=$bytesCopied,total=$totalBytes",
@@ -850,7 +890,7 @@ internal class GlassesMediaSyncCoordinator(
     private fun startDownloadInitialPhaseWatchdog() {
         downloadInitialPhaseTimeoutJob?.cancel()
         downloadInitialPhaseTimeoutJob = CoroutineScope(Dispatchers.Main).launch {
-            val timeoutMs = if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+            val timeoutMs = if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
                 ADAPTIVE_INITIAL_PHASE_TIMEOUT_MS
             } else {
                 downloadInitialPhaseTimeoutMs
@@ -878,7 +918,7 @@ internal class GlassesMediaSyncCoordinator(
                 return@launch
             }
 
-            if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+            if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
                 val checkpoint = adaptiveSyncSession?.lastCheckpoint?.name ?: "NONE"
                 showDownloadError(
                     "Adaptive sync exhausted its bounded recovery budget at checkpoint $checkpoint after ${waitedSeconds}s.",
@@ -1075,42 +1115,45 @@ internal class GlassesMediaSyncCoordinator(
             title = "$title (${downloadFlowMode.label})",
             issueType = "P2P/WiFi sync issue",
             description = "Flow: ${downloadFlowMode.label}\n\n$reason",
-            extraInfo = linkedMapOf(
-                "transfer_detail" to host.dashboardTransferState().detail,
-                "transfer_counts" to host.dashboardTransferState().countsLabel,
-                "download_flow_mode" to downloadFlowMode.label,
-                "download_ble_ip" to (downloadBleIp ?: ""),
-                "download_wifi_ip" to (downloadWifiIp ?: ""),
-                "download_http_ip" to (downloadResolvedHttpIp ?: ""),
-                "download_p2p_connected" to downloadP2pConnected.toString(),
-                "download_in_progress" to downloadInProgress.toString(),
-                "download_phone_is_group_owner" to (downloadPhoneIsGroupOwner?.toString() ?: "unknown"),
-                "transfer_mode_command_attempt" to transferModeCommandAttempt.toString(),
-                "transfer_mode_command_sequence" to transferModeCommandSequence.toString(),
-                "transfer_mode_callback_received" to transferModeCommandCallbackReceived.toString(),
-                "transfer_mode_callback_latency_ms" to (transferModeCommandCallbackLatencyMs?.toString() ?: ""),
-                "transfer_mode_callback_data_type" to (transferModeCommandCallbackDataType?.toString() ?: ""),
-                "transfer_mode_callback_error" to (transferModeCommandCallbackError?.toString() ?: ""),
-                "transfer_mode_evidence_received" to transferModeCommandEvidenceReceived.toString(),
-                "expected_official_p2p_name" to GlassesP2pPeerSelector.expectedOfficialP2pName(),
-                "selected_download_network" to p2pNetwork.selectedDownloadNetworkSummary,
-                "seen_p2p_peers" to seenP2pPeers.joinToString(", "),
-                "active_glasses_session" to (GlassesSessionCoordinator.currentSession()?.name ?: "none"),
-                "ota_active" to host.isOtaActive().toString(),
-                "adaptive_route" to (adaptiveActiveRoute?.name ?: ""),
-                "adaptive_warmup_ms" to (adaptiveSuccessfulWarmupMs?.toString() ?: ""),
-                "adaptive_profile_key" to (adaptiveSyncSession?.profileKey ?: ""),
-                "adaptive_command_sends" to (adaptiveSyncSession?.transferCommandSends?.toString() ?: "0"),
-                "adaptive_discovery_restarts" to (adaptiveSyncSession?.discoveryRestarts?.toString() ?: "0"),
-                "adaptive_device_resets" to (adaptiveSyncSession?.deviceResets?.toString() ?: "0"),
-                "vpn_active" to p2pNetwork.isVpnActive().toString(),
-                "official_heycyan_installed" to OfficialHeyCyanApp.isInstalled(activity).toString(),
-                "adaptive_trace" to (adaptiveSyncSession?.traceSummary() ?: ""),
-            ),
+            extraInfo = syncSupportExtraInfo(),
             dismissButtonLabel = dismissButtonLabel,
         )
     }
-    
+
+    /** Sync state attached to support reports; the adaptive keys stay empty for other flows. */
+    private fun syncSupportExtraInfo(): LinkedHashMap<String, String> = linkedMapOf(
+        "transfer_detail" to host.dashboardTransferState().detail,
+        "transfer_counts" to host.dashboardTransferState().countsLabel,
+        "download_flow_mode" to downloadFlowMode.label,
+        "download_ble_ip" to (downloadBleIp ?: ""),
+        "download_wifi_ip" to (downloadWifiIp ?: ""),
+        "download_http_ip" to (downloadResolvedHttpIp ?: ""),
+        "download_p2p_connected" to downloadP2pConnected.toString(),
+        "download_in_progress" to downloadInProgress.toString(),
+        "download_phone_is_group_owner" to (downloadPhoneIsGroupOwner?.toString() ?: "unknown"),
+        "transfer_mode_command_attempt" to transferModeCommandAttempt.toString(),
+        "transfer_mode_command_sequence" to transferModeCommandSequence.toString(),
+        "transfer_mode_callback_received" to transferModeCommandCallbackReceived.toString(),
+        "transfer_mode_callback_latency_ms" to (transferModeCommandCallbackLatencyMs?.toString() ?: ""),
+        "transfer_mode_callback_data_type" to (transferModeCommandCallbackDataType?.toString() ?: ""),
+        "transfer_mode_callback_error" to (transferModeCommandCallbackError?.toString() ?: ""),
+        "transfer_mode_evidence_received" to transferModeCommandEvidenceReceived.toString(),
+        "expected_official_p2p_name" to GlassesP2pPeerSelector.expectedOfficialP2pName(),
+        "selected_download_network" to p2pNetwork.selectedDownloadNetworkSummary,
+        "seen_p2p_peers" to seenP2pPeers.joinToString(", "),
+        "active_glasses_session" to (GlassesSessionCoordinator.currentSession()?.name ?: "none"),
+        "ota_active" to host.isOtaActive().toString(),
+        "adaptive_route" to (adaptiveActiveRoute?.name ?: ""),
+        "adaptive_warmup_ms" to (adaptiveSuccessfulWarmupMs?.toString() ?: ""),
+        "adaptive_profile_key" to (adaptiveSyncSession?.profileKey ?: ""),
+        "adaptive_command_sends" to (adaptiveSyncSession?.transferCommandSends?.toString() ?: "0"),
+        "adaptive_discovery_restarts" to (adaptiveSyncSession?.discoveryRestarts?.toString() ?: "0"),
+        "adaptive_device_resets" to (adaptiveSyncSession?.deviceResets?.toString() ?: "0"),
+        "vpn_active" to p2pNetwork.isVpnActive().toString(),
+        "official_heycyan_installed" to OfficialHeyCyanApp.isInstalled(activity).toString(),
+        "adaptive_trace" to (adaptiveSyncSession?.traceSummary() ?: ""),
+    )
+
     private suspend fun downloadMediaList(deviceIp: String, sessionId: Long) {
         if (!isDownloadSessionActive(sessionId)) return
         if (downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN) {
@@ -1954,7 +1997,7 @@ internal class GlassesMediaSyncCoordinator(
         fileName: String,
         transfer: suspend () -> Boolean,
     ): Boolean {
-        if (downloadFlowMode != GlassesSyncFlow.CUSTOM) return transfer()
+        if (downloadFlowMode != GlassesSyncFlow.ADAPTIVE) return transfer()
 
         val retryDelaysMs = longArrayOf(0L, 1_000L, 2_000L, 4_000L)
         for ((index, delayMs) in retryDelaysMs.withIndex()) {
@@ -2187,35 +2230,21 @@ internal class GlassesMediaSyncCoordinator(
     }
 
     private fun recordAdaptiveSyncSuccess() {
-        if (downloadFlowMode != GlassesSyncFlow.CUSTOM || adaptiveProfileResultRecorded) return
-        val session = adaptiveSyncSession ?: return
-        val route = session.successfulRoute ?: adaptiveActiveRoute ?: return
-        val warmupMs = session.successfulWarmupMs ?: adaptiveSuccessfulWarmupMs ?: 1_000L
+        if (adaptiveProfileResultRecorded) return
+        AdaptiveProfileLearning.recordSuccess(
+            activity,
+            downloadFlowMode,
+            adaptiveSyncSession,
+            activeRoute = adaptiveActiveRoute,
+            activeWarmupMs = adaptiveSuccessfulWarmupMs,
+        ) ?: return
         adaptiveProfileResultRecorded = true
-        session.mark(AdaptiveSyncCheckpoint.COMPLETE, "route=${route.name},warmup_ms=$warmupMs")
-        val updated = AdaptiveP2pProfileStore.recordSuccess(activity, session.profileKey, route, warmupMs)
-        Log.i(
-            "DataDownload",
-            "Adaptive profile learned success: route=$route warmupMs=$warmupMs " +
-                "candidateSuccesses=${updated.candidateSuccesses} preferred=${updated.preferredRoute}",
-        )
     }
 
     private fun recordAdaptiveSyncFailure(message: String) {
-        if (downloadFlowMode != GlassesSyncFlow.CUSTOM || adaptiveProfileResultRecorded) return
-        val session = adaptiveSyncSession ?: return
-        val failedAfter = session.lastCheckpoint
+        if (adaptiveProfileResultRecorded) return
+        AdaptiveProfileLearning.recordFailure(activity, downloadFlowMode, adaptiveSyncSession, message) ?: return
         adaptiveProfileResultRecorded = true
-        session.mark(
-            AdaptiveSyncCheckpoint.FAILED,
-            "after=${failedAfter?.name ?: "NONE"},reason=${message.take(120)}",
-        )
-        val updated = AdaptiveP2pProfileStore.recordFailure(activity, session.profileKey)
-        Log.i(
-            "DataDownload",
-            "Adaptive profile recorded failure: checkpoint=$failedAfter " +
-                "consecutiveFailures=${updated.consecutiveFailures}",
-        )
     }
 
     fun onDownloadBleIp(ip: String) {
@@ -2229,7 +2258,7 @@ internal class GlassesMediaSyncCoordinator(
         Log.i("DataDownload", "BLE reported device WiFi IP: $ip")
         markTransferModeEvidence("BLE 0x08 IP")
         downloadBleIp = ip
-        if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+        if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
             adaptiveSyncSession?.mark(AdaptiveSyncCheckpoint.BLE_IP_RECEIVED, "ip=$ip")
         }
         if (downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN) {
@@ -2238,8 +2267,10 @@ internal class GlassesMediaSyncCoordinator(
         }
 
         // If we're stuck scanning/probing without a good route, restart the resolver now that
-        // we have the authoritative device IP from BLE.
-        if (ipChanged && downloadAttemptJob?.isActive == true && !downloadInProgress) {
+        // we have the authoritative device IP from BLE. The Custom flow restarts on any repeated
+        // report, as in v2.3.0.
+        val restartResolver = ipChanged || downloadFlowMode == GlassesSyncFlow.CUSTOM
+        if (restartResolver && downloadAttemptJob?.isActive == true && !downloadInProgress) {
             Log.i("DataDownload", "New BLE IP arrived; restarting HTTP resolver")
             downloadAttemptJob?.cancel()
             downloadAttemptJob = null
@@ -2267,6 +2298,10 @@ internal class GlassesMediaSyncCoordinator(
             Log.i("DataDownload", "Official flow: skipping explicit P2P network binding to mirror vendor app")
         } else {
             p2pNetwork.downloadP2pNetwork = p2pNetwork.findLikelyP2pNetwork()
+            if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+                // v2.3.0: bind the process to the verified P2P network as soon as it forms.
+                p2pNetwork.bindProcessToNetwork(p2pNetwork.downloadP2pNetwork)
+            }
             adaptiveSyncSession?.mark(
                 AdaptiveSyncCheckpoint.P2P_GROUP_FORMED,
                 "phone_group_owner=${info.isGroupOwner},group_owner_ip=${downloadWifiIp.orEmpty()}",
@@ -2291,7 +2326,7 @@ internal class GlassesMediaSyncCoordinator(
         transferModeCommandTimeoutJob?.cancel()
         transferModeCommandTimeoutJob = null
         Log.i("DataDownload", "Transfer mode independently confirmed by $source")
-        if (downloadFlowMode == GlassesSyncFlow.CUSTOM) {
+        if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
             adaptiveSyncSession?.mark(AdaptiveSyncCheckpoint.TRANSFER_EVIDENCE, source)
         }
     }
@@ -2314,6 +2349,7 @@ internal class GlassesMediaSyncCoordinator(
         when (downloadFlowMode) {
             GlassesSyncFlow.OFFICIAL_HEYCYAN -> maybeStartOfficialHttpDownload(source)
             GlassesSyncFlow.CUSTOM -> maybeStartCustomHttpDownload(source)
+            GlassesSyncFlow.ADAPTIVE -> maybeStartAdaptiveHttpDownload(source)
         }
     }
 
@@ -2362,7 +2398,125 @@ internal class GlassesMediaSyncCoordinator(
         }
     }
 
+    /** v2.3.0 Custom flow: [CustomHttpResolver] once P2P is up and the glasses reported an IP. */
     private fun maybeStartCustomHttpDownload(source: String) {
+        val hasDeviceIp = !downloadBleIp.isNullOrBlank() || !bleIpBridge.ip.value.isNullOrBlank()
+        if (!hasDeviceIp) {
+            transferUi.setTransferDetail("Waiting for BLE-reported glasses IP...")
+            Log.i("DataDownload", "Ignoring HTTP start trigger from $source; waiting for device IP notify")
+            return
+        }
+
+        val bridgeIp = bleIpBridge.ip.value
+        Log.i(
+            "DataDownload",
+            "HTTP start trigger from $source. flow=${downloadFlowMode.label}, p2p=$downloadP2pConnected, bleIp=$downloadBleIp, groupOwnerIp=$downloadWifiIp, bleBridgeIp=$bridgeIp"
+        )
+
+        downloadAttemptJob = launchDownloadSession { sessionId ->
+            // Official app waits briefly after both P2P+BLE-IP signals before fetching media.config.
+            delay(CustomHttpResolver.START_DELAY_MS)
+            val result = customResolver.resolve(
+                inputs = {
+                    CustomResolverInputs(
+                        bleIp = downloadBleIp,
+                        bridgeIp = bleIpBridge.ip.value,
+                        groupOwnerIp = downloadWifiIp,
+                        phoneIsGroupOwner = downloadPhoneIsGroupOwner,
+                        p2pConnected = downloadP2pConnected,
+                    )
+                },
+                interfaceIpv4 = p2pNetwork::p2pInterfaceIpv4,
+                stillWanted = { isDownloadSessionActive(sessionId) },
+            ) ?: return@launchDownloadSession
+            when (result) {
+                is CustomHttpResolver.Result.Resolved -> {
+                    downloadResolvedHttpIp = result.ip
+                    downloadInProgress = true
+                    downloadMediaList(result.ip, sessionId)
+                }
+                CustomHttpResolver.Result.TimedOut -> withContext(Dispatchers.Main) {
+                    val hint = " If the official HeyCyan app is installed, force-stop it (Settings → Apps → HeyCyan → Force Stop) and try again."
+                    showDownloadError(
+                        "Could not resolve glasses HTTP IP (bleIp=$downloadBleIp, groupOwnerIp=$downloadWifiIp, p2p=$downloadP2pConnected).$hint",
+                        cleanup = true,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * v2.3.0 Custom flow: after two discovery batches without the glasses, restart discovery
+     * and resend the transfer command; after three restarts, explain the peer conflict.
+     */
+    private fun restartCustomDiscoveryAfterNoMatch(pairedDevice: String) {
+        if (noMatchPeerCount < 2) return
+        noMatchPeerCount = 0
+        downloadP2pRestartCount++
+        Log.i("DataDownload", "P2P restart attempt $downloadP2pRestartCount/$CUSTOM_MAX_P2P_RESTARTS")
+        transferUi.setTransferDetail("Retrying P2P discovery ($downloadP2pRestartCount/$CUSTOM_MAX_P2P_RESTARTS)...")
+        if (downloadP2pRestartCount >= CUSTOM_MAX_P2P_RESTARTS) {
+            Log.w("DataDownload", "P2P sync failed after $CUSTOM_MAX_P2P_RESTARTS restart attempts")
+            finishDownloadInitialPhase("retries exhausted")
+            showP2pPeerConflictDialog(seenPeers = seenP2pPeers.toList(), pairedDevice = pairedDevice)
+            return
+        }
+        downloadWifiP2pManager?.restartPeerDiscovery()
+        sendTransferModeCommandWithRetry(
+            sessionId = downloadSessionId,
+            attempt = 1,
+            maxAttempts = 2,
+            delayMs = 1500L,
+        )
+    }
+
+    private fun showP2pPeerConflictDialog(seenPeers: List<String>, pairedDevice: String) {
+        if (isHighQualityImageTransfer()) {
+            finishHighQualityImageFailure(
+                "Could not find the glasses Wi-Fi Direct peer for the full-resolution image.",
+            )
+            return
+        }
+        if (downloadSupportDialogShown || activity.isFinishing || activity.isDestroyed) return
+        downloadSupportDialogShown = true
+
+        val reason = buildString {
+            appendLine("CyanBridge found other Wi‑Fi Direct devices but could not find the glasses ($pairedDevice) among them.")
+            appendLine()
+            appendLine("IMPORTANT: If the official HeyCyan app is installed, force-stop it now (Settings → Apps → HeyCyan → Force Stop). It may be holding the P2P connection and preventing CyanBridge from discovering the glasses.")
+            appendLine()
+            appendLine("Also try turning OFF the following devices or moving away from them, then tap Try Again:")
+            appendLine()
+            for (peer in seenPeers) {
+                appendLine("  • $peer")
+            }
+            appendLine()
+            appendLine("If the problem persists, send the logs to the CyanBridge server.")
+        }
+
+        AlertDialog.Builder(activity)
+            .setTitle("P2P sync failed")
+            .setMessage(reason)
+            .setNegativeButton("Later", null)
+            .setNeutralButton("Send to server") { _, _ ->
+                DebugLogSupport.showSupportOptionsDialog(
+                    activity = activity,
+                    title = "P2P sync failed (${downloadFlowMode.label})",
+                    issueType = "P2P/WiFi sync issue",
+                    description = "Flow: ${downloadFlowMode.label}\n\nP2P sync could not find glasses after $CUSTOM_MAX_P2P_RESTARTS attempts. Bluetooth is connected but glasses did not appear as a Wi‑Fi Direct peer. Seen P2P peers: ${seenPeers.joinToString(", ")}",
+                    extraInfo = syncSupportExtraInfo(),
+                )
+            }
+            .setPositiveButton("Try Again") { _, _ ->
+                downloadSupportDialogShown = false
+                // The media session is still held: retry through the confirmed P2P teardown.
+                startDataDownload(mode = GlassesSyncFlow.CUSTOM, isRetry = true)
+            }
+            .show()
+    }
+
+    private fun maybeStartAdaptiveHttpDownload(source: String) {
         val deviceIps = GlassesNetworkAddressing.glassesHttpTargets(
             listOf(downloadBleIp, bleIpBridge.ip.value),
             phoneIsGroupOwner = downloadPhoneIsGroupOwner,
@@ -2473,7 +2627,7 @@ internal class GlassesMediaSyncCoordinator(
             AdaptiveHttpRoute.SYSTEM,
             -> p2pNetwork.unbindProcessFromNetwork()
         }
-        p2pNetwork.selectedDownloadNetworkSummary = "adaptive_route=${route.name}; $p2pNetwork.selectedDownloadNetworkSummary"
+        p2pNetwork.selectedDownloadNetworkSummary = "adaptive_route=${route.name}; ${p2pNetwork.selectedDownloadNetworkSummary}"
     }
 
     private fun isDownloadInitialPhaseActive(): Boolean {
@@ -2508,11 +2662,18 @@ internal class GlassesMediaSyncCoordinator(
     fun maybeResetP2pAfterError255(source: String) {
         // Only react while we're actually in (or attempting) a download session. Otherwise
         // resets can interfere with normal camera/recording usage.
-        val official = downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN
         val sessionActive = downloadP2pConnected || downloadInProgress || downloadAttemptJob?.isActive == true ||
-            if (official) isOfficialSyncActive() else isDownloadInitialPhaseActive()
+            when (downloadFlowMode) {
+                GlassesSyncFlow.OFFICIAL_HEYCYAN -> isOfficialSyncActive()
+                GlassesSyncFlow.CUSTOM -> false
+                GlassesSyncFlow.ADAPTIVE -> isDownloadInitialPhaseActive()
+            }
         val action = GlassesWifiErrorPolicy.decide(
-            context = if (official) GlassesWifiErrorContext.OFFICIAL_MEDIA_SYNC else GlassesWifiErrorContext.ADAPTIVE_MEDIA_SYNC,
+            context = when (downloadFlowMode) {
+                GlassesSyncFlow.OFFICIAL_HEYCYAN -> GlassesWifiErrorContext.OFFICIAL_MEDIA_SYNC
+                GlassesSyncFlow.CUSTOM -> GlassesWifiErrorContext.CUSTOM_MEDIA_SYNC
+                GlassesSyncFlow.ADAPTIVE -> GlassesWifiErrorContext.ADAPTIVE_MEDIA_SYNC
+            },
             errorCode = GlassesWifiNotify.NOISY_WIFI_ERROR_CODE,
             sessionActive = sessionActive,
         )
@@ -2529,6 +2690,19 @@ internal class GlassesMediaSyncCoordinator(
                     "device_error_255_source=$source",
                 )
                 Log.i("DataDownload", "Adaptive flow observed error=255; deferring reset to checkpoint recovery")
+            }
+            GlassesWifiErrorAction.RESET_DEVICE_P2P_WHILE_RESOLVING -> {
+                // Once the media list has been resolved, suppress resets because they can kill an
+                // otherwise healthy HTTP transfer on some devices. During the initial unresolved
+                // phase, the vendor app recovers by resetting P2P and waiting for the glasses peer.
+                if (downloadInProgress || downloadInitialPhaseCompleted || !downloadResolvedHttpIp.isNullOrBlank()) {
+                    Log.i("DataDownload", "Suppressing resetDeviceP2p on error=255 (source=$source) after HTTP/media resolution")
+                    return
+                }
+                val now = System.currentTimeMillis()
+                if (now - lastP2pResetAtMs < 10_000) return
+                lastP2pResetAtMs = now
+                WifiP2pManagerSingleton.getInstance(activity).resetDeviceP2p()
             }
             else -> Log.i("DataDownload", "Ignoring error=255 reset (source=$source) outside download session")
         }
@@ -2567,6 +2741,7 @@ internal class GlassesMediaSyncCoordinator(
 
     companion object {
         private const val TRANSFER_MODE_COMMAND_TIMEOUT_MS = 10_000L
+        private const val CUSTOM_MAX_P2P_RESTARTS = 3
         private const val ADAPTIVE_INITIAL_PHASE_TIMEOUT_MS = 85_000L
         private const val ADAPTIVE_COMMAND_RETRY_AT_MS = 12_000L
         private const val ADAPTIVE_DISCOVERY_RESTART_AT_MS = 20_000L

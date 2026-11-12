@@ -85,21 +85,38 @@ data class GlassesTransferUiState(
 )
 
 /**
- * Presentation-only choices for a glasses media sync. Platform adapters retain
- * the BLE, Wi-Fi Direct, and HTTP implementation for each selection.
+ * The HeyCyan media sync flows a user can pick. Platform adapters retain the BLE, Wi-Fi Direct
+ * and HTTP implementation for each. Settings stores the remembered choice by [name], so entries
+ * must never be renamed.
  */
 enum class GlassesSyncFlow(
     val label: String,
     val description: String,
+    val experimental: Boolean = false,
 ) {
     OFFICIAL_HEYCYAN(
         label = "HeyCyan app flow",
         description = "Vendor-like strict BLE + P2P sync",
     ),
+
+    /** The v2.3.0 resolver: glasses-reported IPs with retry, then a /24 scan, within 45 s. */
     CUSTOM(
+        label = "Custom flow",
+        description = "CyanBridge resolver: the glasses-reported IP first, then a local subnet scan",
+    ),
+
+    /** Checkpoint recovery that learns the working route per phone and glasses. */
+    ADAPTIVE(
         label = "Adaptive flow",
         description = "Checkpoint recovery that learns the reliable route for this phone and glasses",
+        experimental = true,
     ),
+    ;
+
+    companion object {
+        /** The remembered choice; null (ask every time) for a missing or unknown value. */
+        fun fromStoredName(name: String?): GlassesSyncFlow? = entries.firstOrNull { it.name == name }
+    }
 }
 
 data class GlassesMeetingUiState(

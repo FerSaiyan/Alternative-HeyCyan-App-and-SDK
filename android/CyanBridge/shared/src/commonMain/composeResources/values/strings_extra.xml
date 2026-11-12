@@ -455,7 +455,14 @@
     <string name="sync_flow_official_title">HeyCyan app flow</string>
     <string name="sync_flow_official_description">Vendor-like strict BLE + P2P sync</string>
     <string name="sync_flow_custom_title">Custom flow</string>
-    <string name="sync_flow_custom_description">CyanBridge resolver with fallback scanning</string>
+    <string name="sync_flow_custom_description">CyanBridge resolver: the glasses-reported IP first, then a local subnet scan</string>
+    <string name="sync_flow_adaptive_title">Adaptive flow</string>
+    <string name="sync_flow_adaptive_description">Checkpoint recovery that learns the reliable route for this phone and glasses</string>
+    <string name="sync_flow_experimental">Experimental</string>
+    <string name="settings_media_sync">Media sync</string>
+    <string name="settings_media_sync_description">Glasses Wi-Fi sync flow: %1$s</string>
+    <string name="settings_media_sync_ask">Ask every time</string>
+    <string name="settings_media_sync_hint">Used for every Sync tap and for full-resolution image questions.</string>
     <string name="ota_target_wifi">Wi-Fi chip (.swu)</string>
     <string name="ota_target_ble">BLE chip (.bin)</string>
     <string name="ota_source_personal">Personal firmware files</string>
