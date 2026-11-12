@@ -180,7 +180,7 @@ class ProQuestionsHilTest {
         // Private: a fresh session with two photos.
         stopLiveAndWait()
         useLive(economy = false)
-        livePhoto(RED, "private photo 1 (starts the session)", cueChecks)
+        privatePhotoAfterEconomy(RED, "private photo 1 (starts the session)", cueChecks)
         val last = livePhoto(BLUE, "private photo 2 (same session)", cueChecks)
 
         // Idle close: armed after the last answer, still open at 59 s, closed just after 60 s.
@@ -236,7 +236,25 @@ class ProQuestionsHilTest {
     private data class LiveAnswer(val text: String, val since: Long, val idleArmedAtMs: Long?)
     private data class LogLine(val epochMs: Long, val tag: String, val message: String)
 
-    private fun livePhoto(image: Image, label: String, cueChecks: MutableList<Pair<Boolean, Boolean>>): LiveAnswer {
+    /**
+     * The relay keeps the Economy reservation for a few minutes after that session closed and refuses
+     * a Private token meanwhile ("Another economy session is still active ... reservation expires in
+     * approximately N seconds", seen 2026-11-12). Wait it out once, then ask again.
+     */
+    private fun privatePhotoAfterEconomy(image: Image, label: String, cueChecks: MutableList<Pair<Boolean, Boolean>>): LiveAnswer {
+        val first = livePhoto(image, label, cueChecks, check = false)
+        if (image.words.all { first.text.contains(it, ignoreCase = true) }) return first
+        val waitSeconds = Regex("""reservation expires in approximately (\d+) seconds""")
+            .findAll(shell("logcat -d -s GeminiLiveClient:E")).lastOrNull()?.groupValues?.get(1)?.toLongOrNull()
+        assertTrue("$label: Live answer lacks ${image.words}: ${first.text}", waitSeconds != null)
+        println("PRO_Q live private refused while the Economy reservation lasts; waiting ${waitSeconds}s")
+        cueChecks.removeAt(cueChecks.lastIndex)
+        stopLiveAndWait()
+        SystemClock.sleep((waitSeconds!! + 5) * 1_000)
+        return livePhoto(image, "$label (after the Economy reservation expired)", cueChecks)
+    }
+
+    private fun livePhoto(image: Image, label: String, cueChecks: MutableList<Pair<Boolean, Boolean>>, check: Boolean = true): LiveAnswer {
         val wasRunning = GeminiLiveForegroundService.isRunning(context)
         events.clear()
         val since = System.currentTimeMillis()
@@ -249,8 +267,10 @@ class ProQuestionsHilTest {
         cueChecks += wasRunning to cueSpoken
         val joined = liveLog(since).any { "Adding a photo question to the running Live session" in it.message }
         println("PRO_Q live $label image=${image.file} sessionWasRunning=$wasRunning joinedRunningSession=$joined cue=$cueSpoken reply=${answer.text.take(200)}")
-        assertTrue("$label: Live answer lacks ${image.words}: ${answer.text}",
-            image.words.all { answer.text.contains(it, ignoreCase = true) })
+        if (check) {
+            assertTrue("$label: Live answer lacks ${image.words}: ${answer.text}",
+                image.words.all { answer.text.contains(it, ignoreCase = true) })
+        }
         return answer
     }
 
