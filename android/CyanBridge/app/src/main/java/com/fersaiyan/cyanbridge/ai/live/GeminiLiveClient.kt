@@ -67,6 +67,7 @@ class GeminiLiveClient(
     private val relay = GeminiLiveRelayReporter(appContext, http, scope)
     private val connectivity = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val visualAudioHold = GeminiLiveVisualAudioHold()
+    private val imageTurns = GeminiLiveImageTurns()
     private val speechDetector = GeminiLiveSpeechActivityDetector { speaking ->
         // Always retain the local energy state. During Gemini playback we suppress the
         // vision callback to avoid speaker echo triggering a picture, but the state is
@@ -218,18 +219,29 @@ class GeminiLiveClient(
     }
 
     /**
-     * A photo question: the JPEG as a realtime video frame, then its [prompt] as a text turn.
-     * The Live API handles realtime video and text as concurrent streams with no ordering
-     * guarantee, and video is sampled at up to 1 frame/s, so a question sent right after the
-     * frame was answered before the model had it ("I cannot see the photo"). Waiting
-     * [IMAGE_INGEST_WAIT_MS] lets the frame land first. (One ordered clientContent turn with an
-     * inlineData part would be deterministic, but CyanBridge's Live proxy accepts text-only
-     * clientContent.) The prompt is sent even when the frame is refused. Returns whether the
-     * frame was queued.
+     * A photo question. When the connected server announced that it accepts it
+     * ([GeminiLiveImageTurns]: CyanBridge's Free/Economy proxy), the JPEG and its [prompt] go as
+     * one ordered `clientContent` turn, so the model always has the image before the question.
+     *
+     * Otherwise (Private direct sessions, older proxies, or after a refusal) the JPEG goes as a
+     * realtime video frame, then the prompt as a text turn after [IMAGE_INGEST_WAIT_MS]: the Live
+     * API handles realtime video and text as concurrent streams with no ordering guarantee and
+     * samples video at up to 1 frame/s, so a question sent right after the frame was answered
+     * before the model had it. The prompt is sent even when the image is refused. Returns whether
+     * the image was queued.
      */
     suspend fun sendImageQuestion(jpegBytes: ByteArray, prompt: String?): Boolean {
+        val text = prompt?.takeIf { it.isNotBlank() }
+        if (imageTurns.useSingleTurn(jpegBytes.size, hasPrompt = text != null) && text != null) {
+            val accepted = queueImage(jpegBytes) {
+                socket?.send(GeminiLiveProtocol.buildClientImageTurn(GeminiLiveProtocol.IMAGE_MIME_TYPE, jpegBytes, text)) == true
+            }
+            Log.i(TAG, "Live image question sent as one client turn=$accepted")
+            if (accepted) imageTurns.onSingleTurnSent() else sendTextTurn(text)
+            return accepted
+        }
         val queued = sendVideoFrame(jpegBytes)
-        val text = prompt?.takeIf { it.isNotBlank() } ?: return queued
+        text ?: return queued
         if (queued) delay(IMAGE_INGEST_WAIT_MS)
         Log.i(TAG, "Live image question: text turn after frameQueued=$queued")
         sendTextTurn(text)
@@ -237,7 +249,12 @@ class GeminiLiveClient(
     }
 
     /** Sends one JPEG frame through the current realtimeInput.video field. */
-    fun sendVideoFrame(jpegBytes: ByteArray): Boolean {
+    fun sendVideoFrame(jpegBytes: ByteArray): Boolean = queueImage(jpegBytes) {
+        sendRealtimeBlob(GeminiLiveProtocol.REALTIME_VIDEO_FIELD, GeminiLiveProtocol.IMAGE_MIME_TYPE, jpegBytes)
+    }
+
+    /** Applies the per-session visual-input limit and diagnostics to one image send. */
+    private fun queueImage(jpegBytes: ByteArray, enqueue: () -> Boolean): Boolean {
         val limit = if (session.tokenConfig?.let { it.freeTier || it.economy } == true) 10 else MAX_VISUAL_INPUTS_PER_SESSION
         if (session.visualInputCount >= limit) {
             setState(GeminiLiveState.LISTENING, "Live visual-input safety limit reached")
@@ -246,9 +263,8 @@ class GeminiLiveClient(
             ready = session.active.get() && session.setupComplete.get(),
             bytes = jpegBytes,
             limit = limit,
-        ) {
-            sendRealtimeBlob(GeminiLiveProtocol.REALTIME_VIDEO_FIELD, GeminiLiveProtocol.IMAGE_MIME_TYPE, jpegBytes)
-        }
+            enqueue = enqueue,
+        )
         Log.i(TAG, "Live image queued=$accepted diagnostics=${session.visionDiagnostics.snapshot()}")
         scheduleVisionDiagnosticsReport()
         return accepted
@@ -325,7 +341,12 @@ class GeminiLiveClient(
             if (session.reconnectAttempt == 0) GeminiLiveState.CONNECTING else GeminiLiveState.RECONNECTING,
             "Connecting to Google",
         )
-        val request = GeminiLiveProtocol.buildConnectRequest(config, session.visionReportId) {
+        imageTurns.onConnecting()
+        val request = GeminiLiveProtocol.buildConnectRequest(
+            config,
+            session.visionReportId,
+            requestImageTurns = imageTurns.requestCapabilities,
+        ) {
             com.fersaiyan.cyanbridge.ui.localization.AppLanguagePreferences.selected(appContext).languageTag
                 .ifBlank { java.util.Locale.getDefault().toLanguageTag() }
         }
@@ -370,6 +391,10 @@ class GeminiLiveClient(
             val wasSetupComplete = session.setupComplete.get()
             val listeningDurationMs = session.listeningDurationMs(System.currentTimeMillis())
             Log.w(TAG, "Gemini Live socket closed code=$code reason=$reason active=${session.active.get()} setupComplete=$wasSetupComplete")
+            // A late close of a replaced socket must not reset the new connection's capabilities.
+            if ((socket === webSocket || socket == null) && imageTurns.onSocketClosed(code, reason)) {
+                Log.w(TAG, "Live server refused a photo+question turn; using frame + wait + text from now on")
+            }
             if (socket === webSocket) socket = null
             session.setupComplete.set(false)
             if (failedBeforeSetup(config, wasSetupComplete, "Gemini Live connection failed ($code). Please try again.")) return
@@ -384,9 +409,11 @@ class GeminiLiveClient(
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             val wasSetupComplete = session.setupComplete.get()
             val listeningDurationMs = session.listeningDurationMs(System.currentTimeMillis())
+            val currentSocket = socket === webSocket || socket == null
             if (socket === webSocket) socket = null
             session.setupComplete.set(false)
             Log.w(TAG, "Gemini Live socket failed code=${response?.code} msg=${response?.message} err=${t.message}", t)
+            if (currentSocket) imageTurns.onSocketClosed(null, t.message)
             val responseBody = if (GeminiLiveSocketFailurePolicy.shouldReadBody(response?.code)) {
                 try { response?.body?.string().orEmpty() } catch (_: Exception) { "" }
             } else ""
@@ -501,9 +528,19 @@ class GeminiLiveClient(
                 // Google-recommended metering: usageMetadata is the billed tokens for this turn
                 // (includes re-billed sliding window). Forward it for server-side quota debit.
                 is GeminiLiveServerEvent.UsageMetadata -> handleUsageMetadata(event.usage)
-                is GeminiLiveServerEvent.Transcription -> listener.onTranscription(event.input, event.text)
+                is GeminiLiveServerEvent.Transcription -> {
+                    if (!event.input) imageTurns.onModelResponse()
+                    listener.onTranscription(event.input, event.text)
+                }
                 GeminiLiveServerEvent.Interrupted -> onServerInterrupted()
-                is GeminiLiveServerEvent.ModelAudio -> playPcm(event.pcm)
+                is GeminiLiveServerEvent.ModelAudio -> {
+                    imageTurns.onModelResponse()
+                    playPcm(event.pcm)
+                }
+                is GeminiLiveServerEvent.ProxyCapabilities -> {
+                    imageTurns.onCapabilities(event)
+                    Log.i(TAG, "Live proxy accepts photo+question turns=${event.clientImageTurns} maxImageBytes=${event.maxImageBytes}")
+                }
                 GeminiLiveServerEvent.TurnComplete -> if (session.active.get()) {
                     finishModelPlayback()
                     listener.onModelTurnComplete()

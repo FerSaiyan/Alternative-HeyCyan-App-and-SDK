@@ -33,6 +33,15 @@ class GeminiLiveProtocolTest {
     }
 
     @Test
+    fun `photo question turn puts the image before its text in one client turn`() {
+        assertEquals(
+            """{"clientContent":{"turns":[{"role":"user","parts":[{"inlineData":{"mimeType":"image\/jpeg","data":"\/9j\/"}},""" +
+                """{"text":"What colour?"}]}],"turnComplete":true}}""",
+            GeminiLiveProtocol.buildClientImageTurn(GeminiLiveProtocol.IMAGE_MIME_TYPE, byteArrayOf(-1, -40, -1), "What colour?"),
+        )
+    }
+
+    @Test
     fun `audio stream end and text turn frames`() {
         assertEquals("""{"realtimeInput":{"audioStreamEnd":true}}""", GeminiLiveProtocol.buildAudioStreamEnd())
         assertEquals(
@@ -109,9 +118,28 @@ class GeminiLiveProtocolTest {
         }
     }
 
+    @Test
+    fun `metered sessions ask the proxy for photo question turns only when requested`() {
+        val request = GeminiLiveProtocol.buildConnectRequest(config(economy = true), "vid-1", requestImageTurns = true) { "en" }
+        assertEquals("https://live.example/ws?key=1&vision_session_id=vid-1&client_turns=image", request.url.toString())
+        // A direct Private URL is never rewritten.
+        val direct = GeminiLiveProtocol.buildConnectRequest(config(token = "tok"), "vid-1", requestImageTurns = true) { "en" }
+        assertEquals("https://live.example/ws?key=1", direct.url.toString())
+    }
+
     // endregion
 
     // region incoming frames
+
+    @Test
+    fun `proxy capability message is decoded and nothing else is read from it`() {
+        assertEquals(
+            listOf(GeminiLiveServerEvent.ProxyCapabilities(clientImageTurns = true, maxImageBytes = 1_572_864, maxImagesPerTurn = 4)),
+            GeminiLiveProtocol.parseServerMessage(
+                """{"cyanbridgeProxy":{"clientImageTurns":true,"maxImagesPerTurn":4,"maxImageBytes":1572864,"imageMimeTypes":["image/jpeg"]}}""",
+            ),
+        )
+    }
 
     @Test
     fun `server message events are decoded in handling order`() {
@@ -185,6 +213,7 @@ class GeminiLiveProtocolTest {
         GeminiLiveServerEvent.Interrupted -> "Interrupted"
         is GeminiLiveServerEvent.ModelAudio -> "Audio:${event.pcm.toList()}"
         GeminiLiveServerEvent.TurnComplete -> "TurnComplete"
+        is GeminiLiveServerEvent.ProxyCapabilities -> "Capabilities:${event.clientImageTurns}"
     }
 
     private fun config(

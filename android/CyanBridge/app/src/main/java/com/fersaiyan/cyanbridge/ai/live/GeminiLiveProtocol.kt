@@ -28,6 +28,12 @@ internal sealed interface GeminiLiveServerEvent {
     class ModelAudio(val pcm: ByteArray) : GeminiLiveServerEvent
 
     object TurnComplete : GeminiLiveServerEvent
+
+    /**
+     * CyanBridge's Free/Economy proxy, when asked with `client_turns=image`, says it accepts a
+     * photo and its question in one `clientContent` turn. Never sent by Google or older proxies.
+     */
+    data class ProxyCapabilities(val clientImageTurns: Boolean, val maxImageBytes: Int, val maxImagesPerTurn: Int) : GeminiLiveServerEvent
 }
 
 /**
@@ -140,6 +146,30 @@ internal object GeminiLiveProtocol {
         return JSONObject().put("clientContent", content).toString()
     }
 
+    /**
+     * A photo question as one completed user turn: the image (`inlineData`) and then its text, both in
+     * `clientContent`. `clientContent` is added to the model context in order, whereas `realtimeInput`
+     * video and text are separate streams, so a frame followed by a text turn could be answered
+     * before the model saw the frame. Only sent to a proxy that advertised [GeminiLiveServerEvent.ProxyCapabilities].
+     */
+    fun buildClientImageTurn(mimeType: String, bytes: ByteArray, text: String): String {
+        val parts = JSONArray()
+            .put(
+                JSONObject().put(
+                    "inlineData",
+                    JSONObject().put("mimeType", mimeType).put("data", Base64.encodeToString(bytes, Base64.NO_WRAP)),
+                ),
+            )
+            .put(JSONObject().put("text", text.take(2_000)))
+        val content = JSONObject()
+            .put("turns", JSONArray().put(JSONObject().put("role", "user").put("parts", parts)))
+            .put("turnComplete", true)
+        return JSONObject().put("clientContent", content).toString()
+    }
+
+    /** Query parameter asking the Free/Economy proxy to announce its client-turn capabilities. */
+    const val PROXY_CAPABILITIES_QUERY = "client_turns"
+
     /** A `realtimeInput` media blob; [field] is the current `audio` / `video` field name. */
     fun buildRealtimeBlob(field: String, mimeType: String, bytes: ByteArray): String {
         val realtimeInput = JSONObject().put(
@@ -164,11 +194,14 @@ internal object GeminiLiveProtocol {
     fun buildConnectRequest(
         config: LiveTokenConfig,
         visionReportId: String,
+        requestImageTurns: Boolean = false,
         languageTag: () -> String,
     ): Request {
         val liveUrl = if (config.freeTier || config.economy) {
             config.websocketUrl.replaceFirst("wss://", "https://").toHttpUrl().newBuilder()
-                .addQueryParameter("vision_session_id", visionReportId).build().toString()
+                .addQueryParameter("vision_session_id", visionReportId)
+                .apply { if (requestImageTurns) addQueryParameter(PROXY_CAPABILITIES_QUERY, "image") }
+                .build().toString()
                 .replaceFirst("https://", "wss://")
         } else config.websocketUrl
         val builder = Request.Builder().url(liveUrl)
@@ -196,6 +229,15 @@ internal object GeminiLiveProtocol {
         val message = runCatching { JSONObject(raw) }.getOrElse { return null }
         message.optJSONObject("error")?.let { error ->
             return listOf(GeminiLiveServerEvent.Error(quotaExhausted = error.optString("message") == "live_quota_exhausted"))
+        }
+        message.optJSONObject("cyanbridgeProxy")?.let { proxy ->
+            return listOf(
+                GeminiLiveServerEvent.ProxyCapabilities(
+                    clientImageTurns = proxy.optBoolean("clientImageTurns", false),
+                    maxImageBytes = proxy.optInt("maxImageBytes", 0),
+                    maxImagesPerTurn = proxy.optInt("maxImagesPerTurn", 0),
+                ),
+            )
         }
         val events = mutableListOf<GeminiLiveServerEvent>()
         if (message.has("setupComplete")) events += GeminiLiveServerEvent.SetupComplete
