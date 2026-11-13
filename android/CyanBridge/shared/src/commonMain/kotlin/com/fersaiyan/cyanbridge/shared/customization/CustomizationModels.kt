@@ -149,6 +149,8 @@ data class CustomizationJobRequest(
 )
 
 object CustomizationJson {
+    const val SERVICE_NOT_OPEN = "The customization service is not open yet."
+
     private val json = Json { ignoreUnknownKeys = true }
 
     fun parseObject(text: String): JsonObject? = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
@@ -249,10 +251,12 @@ object CustomizationJson {
 
     fun parseError(httpStatus: Int, text: String): CustomizationApiError {
         val o = parseObject(text)
+        // A relay without the customization API (not deployed yet) answers a bare 404, not a JSON error.
+        val noService = httpStatus == 404 && o?.str("error") == null
         return CustomizationApiError(
             httpStatus = httpStatus,
-            code = o?.str("error") ?: "http_$httpStatus",
-            message = o?.str("message") ?: "Server answered HTTP $httpStatus",
+            code = o?.str("error") ?: if (noService) "customization_disabled" else "http_$httpStatus",
+            message = o?.str("message") ?: if (noService) SERVICE_NOT_OPEN else "Server answered HTTP $httpStatus",
             currentPlan = o?.str("currentPlan"),
             jobId = o?.str("job_id"),
             problemSlots = o?.array("problems")?.mapNotNull { (it as? JsonObject)?.str("slot") }.orEmpty(),

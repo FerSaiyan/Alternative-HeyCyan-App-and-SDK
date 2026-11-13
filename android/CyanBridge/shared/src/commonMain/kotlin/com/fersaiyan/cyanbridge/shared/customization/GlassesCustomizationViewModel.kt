@@ -186,7 +186,7 @@ class GlassesCustomizationViewModel(
         val status = when {
             phase == CustomizationPhase.LOCKED -> "The server reports that your plan does not include glasses customization."
             !cfg.eligible && cfg.ineligibleReason == "verified_email_required" -> "Verify your account email (Account card) before sending a customization."
-            phase == CustomizationPhase.DISABLED -> "The customization service is not open yet."
+            phase == CustomizationPhase.DISABLED -> CustomizationJson.SERVICE_NOT_OPEN
             phase == CustomizationPhase.UNSUPPORTED -> "We do not have the base firmware of these glasses yet (${found.label}). Update them to the latest official firmware and try again."
             else -> "Choose what to change, then send it. We build and test the firmware and email it to you."
         }
@@ -627,7 +627,7 @@ class GlassesCustomizationViewModel(
                 _state.update { it.copy(consentChecked = false, progress = "The consent text changed. Read it again and accept it.") }
                 glasses?.let { found -> viewModelScope.launch { runCatching { loadConfig(found) } } }
             }
-            "customization_disabled" -> progress("The customization service is not open yet.")
+            "customization_disabled" -> progress(CustomizationJson.SERVICE_NOT_OPEN)
             "rate_limited" -> progress("You reached today's limit of build requests. Try again tomorrow.")
             "missing_token", "invalid_token" -> progress("Sign in to your CyanBridge account first.")
             else -> progress("${error.message} (${error.code})")

@@ -42,6 +42,7 @@ class GlassesCustomizationViewModelTest {
         var createStatus = 201
         var glasses: GlassesFirmwareInfo? = null
         var jobStatus = "draft"
+        var apiDeployed = true
 
         override fun plan() = plan
         override suspend fun detectGlasses() = glasses?.let { GlassesDetection.Found(it) } ?: GlassesDetection.Missing("none")
@@ -50,6 +51,7 @@ class GlassesCustomizationViewModelTest {
             calls += "$method ${path.substringBefore('?')}"
             body?.let { bodies["$method ${path.substringBefore('?')}"] = it }
             return when {
+                !apiDeployed -> HttpResult(404, "<!DOCTYPE html><title>404: This page could not be found.</title>")
                 path.startsWith("/api/customization/config") -> HttpResult(200, CONFIG)
                 method == "GET" && path == "/api/customization/jobs" -> HttpResult(200, """{"jobs":[${job()}]}""")
                 method == "POST" && path == "/api/customization/jobs" -> if (createStatus == 201) {
@@ -187,5 +189,13 @@ class GlassesCustomizationViewModelTest {
         assertEquals("Glasses customization: Standard or Max Required", dialog.title)
         dialog.positive!!.onClick!!.invoke()
         assertEquals(OpenCustomizationUpgrade, effects.last())
+    }
+
+    @Test
+    fun aRelayWithoutTheCustomizationApiSaysTheServiceIsNotOpen() = runTest(dispatcher) {
+        val vm = GlassesCustomizationViewModel(FakePlatform().apply { apiDeployed = false }, dispatcher)
+        vm.toggleExpanded()
+
+        assertEquals(CustomizationJson.SERVICE_NOT_OPEN, vm.state.value.statusText)
     }
 }
