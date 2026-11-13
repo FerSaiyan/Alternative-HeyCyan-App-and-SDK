@@ -207,6 +207,8 @@ class MainActivity : AppCompatActivity() {
         /** The launcher icon: an alias of this Activity under the old launcher Activity's name, so pinned shortcuts keep working. */
         private const val LAUNCHER_ALIAS = "com.fersaiyan.cyanbridge.ui.WelcomeActivity"
         private var loggedLargeDataHandlerMethods = false
+        /** Set once Settings were opened for a denied Bluetooth permission: coming back must not reopen them. */
+        private var bluetoothSettingsOpened = false
 
         fun actionTaskerCommand(appPackageName: String): String =
             "$appPackageName.ACTION_TASKER_COMMAND"
@@ -1043,7 +1045,7 @@ class MainActivity : AppCompatActivity() {
                 }
         } catch (e: Exception) {
         }
-        if (!hasBluetooth(this)) {
+        if (!hasBluetooth(this) && !bluetoothSettingsOpened) {
             requestBluetoothPermission(this, BluetoothPermissionCallback())
         }
 
@@ -1283,11 +1285,11 @@ class MainActivity : AppCompatActivity() {
                 "Bluetooth permission is required to reconnect to glasses",
                 Toast.LENGTH_LONG,
             ).show()
-            if (never) {
+            if (never && !bluetoothSettingsOpened) {
+                bluetoothSettingsOpened = true
                 XXPermissions.startPermissionActivity(this@MainActivity, permissions)
             }
         }
-
     }
 
     private fun ensureGlassesTransportPermissions(feature: String, onGranted: () -> Unit) {
@@ -1521,8 +1523,6 @@ class MainActivity : AppCompatActivity() {
     // --- end Chapter 5 meeting capture ---
 
     // --- Transcription UI moved to the Media screen (RecordingsListDestination, per item) ---
-
-
 
     private fun updateBatteryText(battery: Int?) {
         deviceConnection.updateBatteryText(battery)
