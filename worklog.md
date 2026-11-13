@@ -1,5 +1,24 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-12 — Feature diff since v2.3.0 and a functional emulator sweep (`cyan-refactor-v230-sweep`)
+
+- Branch `cyan-refactor-v230-sweep` (worktree `cyan-refactor-wt/v230-feature-sweep`, from `origin/cyan-refactor`
+  420e07b3), not pushed or merged. `docs/refactor/CHANGES_SINCE_v2.3.0.md`: user-visible changes v2.3.0..420e07b3
+  (513 commits) by area, each with CI / HIL / this sweep / needs hardware.
+- Emulator: read-only Pixel_9a, port 5610, CI Pro account linked. Evidence: `cyan-refactor-wt/v230-sweep-evidence-20261112/`.
+  Summary in docs/refactor/CRASH_SWEEP.md (2026-11-12).
+- **Smart routing on Pro** (first time; earlier Pro runs used Classic): `GlassesQuestionFlowTest -e gq_provider pro`
+  (new option, 7992ae91) with google/gemini-3.7-flash: ANSWER, CAMERA (1 photo), SEARCH (Google AI answer),
+  PHONE (Local Agent gate) and IGNORE all right, decisions 3.2–3.6 s; Classic wake routes pass too.
+- Fixed: launcher icon on the running app dropped the back stack (722b083e, a single-Activity regression); a chat
+  started from New Chat came back empty after process death (845ae035); denying Bluetooth twice reopened system
+  Settings on every return (28fed707); customization card "Server answered HTTP 404" (b8c99e6b); `\'` shown
+  literally in Compose strings (d7170a34). App unit 743/743, shared portability 413/413.
+- For the owner: the Mentra store feed `api.apps.mentraglass.com/api/store/apps` now answers 404 (store browser
+  broken, URL installs fine); production has no `/api/customization/*` yet; voice enrollment, LiteRT follow-ups,
+  memory and the cold-load cue still need a phone (no AVD microphone on emulator 37.1.11 headless; the 2.6 GB
+  Gemma 4 does not fit the AVD).
+
 ## 2026-11-12 — Integration for push: rooted Pixel_9a branch, iOS runner image, Android CI root causes
 
 - Branch `cyan-refactor-integrate-1112` (worktree `cyan-refactor-wt/integrate-1112`, from `origin/cyan-refactor`

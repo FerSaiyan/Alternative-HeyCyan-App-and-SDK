@@ -118,3 +118,31 @@ Pro model answers (no test Pro account, see worklog 2026-11-11).
 
 Side effect: each `pm clear` launch registers an anonymous relay account in production, as in earlier
 sweeps.
+
+## 2026-11-12: functional sweep of the changes since v2.3.0 (`cyan-refactor-v230-sweep`, from 420e07b3)
+
+Earlier sweeps only looked for crashes. This one checked that the new and changed screens work.
+The feature list and per-item results are in [CHANGES_SINCE_v2.3.0.md](CHANGES_SINCE_v2.3.0.md);
+evidence (screenshots `shots/NN-*.png`, logcat, instrumentation output) is in
+`cyan-refactor-wt/v230-sweep-evidence-20261112/`.
+
+Setup: read-only Pixel_9a (API 37, rooted, Play, Tasker) on port 5610 through `tools/hil/start_emulator.sh`,
+`-memory 3072`, 3-button navigation, Play Store disabled, CI Pro account linked with
+`ProAccountSetupHilTest#linkApiToken`. The debug build is release-key signed (keystore.properties), so it
+replaced the persistent app keeping its data. Emulator host audio was enabled through an `EMULATOR_BIN`
+wrapper and a PulseAudio null sink, but emulator 37.1.11 (headless) logs "Could not init `pa` audio driver":
+no microphone input reaches the AVD, so voice enrollment could not complete.
+
+Covered: onboarding from a cleared install (full path, Skip all, TalkBack vision offer both ways, not shown
+again), Settings (media sync flow, question routing, voice profile status, vision switch, Pro settings,
+customization card, Local models download/backend/test), Smart and Classic question routing on the Pro relay
+(`GlassesQuestionFlowTest -e gq_provider pro`), Plugins per family, Mentra miniapps, MemoMind Web plugins,
+Oral Lesion Bench up to the model download, Device Bind empty state, chats and notes, deep link, back stack,
+launcher re-entry, rotation and process death.
+
+Bugs fixed on the branch: launcher re-entry dropping the back stack (722b083e), a new chat lost after process
+death (845ae035), the Settings loop after a twice-denied Bluetooth permission (28fed707), the customization
+card's raw "HTTP 404" (b8c99e6b), backslashes before apostrophes in Compose strings (d7170a34).
+Unit tests after the fixes: app 743/743, shared portability 413/413.
+
+No FATAL EXCEPTION or ANR in the session logcat or the crash buffer.
