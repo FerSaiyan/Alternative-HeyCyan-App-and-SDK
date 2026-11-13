@@ -120,6 +120,15 @@ class ChatThreadDestination : NavScreen() {
         viewModel.onResume()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // A thread this screen created (a new chat) must reopen after process death, not an empty new chat.
+        val created = viewModel.chatId
+        if (created != null && !intent.hasExtra(EXTRA_CHAT_ID) && !intent.getBooleanExtra(EXTRA_DAILY_FACTS_REVIEW, false)) {
+            intent.putExtra(EXTRA_CHAT_ID, created).removeExtra(EXTRA_CREATE_THREAD_TITLE)
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
