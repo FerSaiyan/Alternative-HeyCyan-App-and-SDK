@@ -131,11 +131,11 @@
     <string name="recordings_select_all">Tout sélectionner</string>
     <string name="recordings_deselect_all">Tout désélectionner</string>
     <string name="recordings_delete_selected">Supprimer les captures de réunion sélectionnées</string>
-    <string name="recordings_more_actions">Plus d\'actions pour %1$s</string>
+    <string name="recordings_more_actions">Plus d'actions pour %1$s</string>
     <string name="recordings_delete_capture">Supprimer la capture de réunion</string>
     <string name="recordings_delete_title">Supprimer la capture de réunion ?</string>
     <string name="recordings_delete_multiple_title">Supprimer les captures de réunion ?</string>
-    <string name="recordings_delete_message">L\'enregistrement audio et toute transcription enregistrée seront supprimés de cet appareil. Les souvenirs enregistrés ne seront pas supprimés. Cette action est irréversible.</string>
+    <string name="recordings_delete_message">L'enregistrement audio et toute transcription enregistrée seront supprimés de cet appareil. Les souvenirs enregistrés ne seront pas supprimés. Cette action est irréversible.</string>
     <string name="recordings_delete_multiple_message">Les enregistrements audio sélectionnés et leurs transcriptions enregistrées seront supprimés de cet appareil. Les souvenirs enregistrés ne seront pas supprimés. Cette action est irréversible.</string>
     <string name="recordings_deleted">Capture de réunion supprimée</string>
     <string name="recordings_deleted_multiple">%1$d captures de réunion supprimées</string>

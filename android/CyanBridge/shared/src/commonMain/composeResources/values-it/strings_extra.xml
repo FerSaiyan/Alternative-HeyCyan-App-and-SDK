@@ -133,7 +133,7 @@
     <string name="recordings_delete_selected">Elimina acquisizioni riunione selezionate</string>
     <string name="recordings_more_actions">Altre azioni per %1$s</string>
     <string name="recordings_delete_capture">Elimina acquisizione riunione</string>
-    <string name="recordings_delete_title">Eliminare l\'acquisizione della riunione?</string>
+    <string name="recordings_delete_title">Eliminare l'acquisizione della riunione?</string>
     <string name="recordings_delete_multiple_title">Eliminare le acquisizioni delle riunioni?</string>
     <string name="recordings_delete_message">La registrazione audio e ogni trascrizione salvata verranno eliminate da questo dispositivo. I ricordi salvati non saranno interessati. Questa operazione non può essere annullata.</string>
     <string name="recordings_delete_multiple_message">Le registrazioni audio selezionate e le relative trascrizioni salvate verranno eliminate da questo dispositivo. I ricordi salvati non saranno interessati. Questa operazione non può essere annullata.</string>
