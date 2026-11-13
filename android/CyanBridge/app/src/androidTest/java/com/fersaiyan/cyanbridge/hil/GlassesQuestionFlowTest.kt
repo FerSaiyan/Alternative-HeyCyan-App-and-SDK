@@ -7,6 +7,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ai.image.GlassesQuestionTestHooks
@@ -50,7 +53,8 @@ import java.util.concurrent.TimeUnit
  * with fixture question audio and photos through [GlassesQuestionTestHooks] (debug builds only).
  *
  * Required: -e gq_model <device path to a .litertlm with image+audio (gemma-4-E2B-it.litertlm), or a
- *   multimodal .gguf with -e gq_projector <mmproj .gguf>>
+ *   multimodal .gguf with -e gq_projector <mmproj .gguf>>, or -e gq_provider pro on a linked Pro account
+ *   (ProAccountSetupHilTest#linkApiToken) whose questions model hears audio (-e gq_pro_model <id>)
  * Fixtures default to the hermetic androidTest assets in glasses_questions/; override with
  *   -e gq_visual_audio <wav> -e gq_visual_image <jpg> -e gq_visual_expect <word,word>
  *   -e gq_plain_audio <wav> -e gq_plain_expect <word,word>
@@ -73,8 +77,14 @@ class GlassesQuestionFlowTest {
 
     @Before
     fun setUp() {
+        // -e gq_provider pro: the linked Pro account's questions model instead of a local model.
+        val pro = args.getString("gq_provider").equals("pro", ignoreCase = true)
         val modelPath = args.getString("gq_model").orEmpty()
-        assumeTrue("pass -e gq_model", modelPath.isNotBlank() && File(modelPath).isFile)
+        if (pro) {
+            assumeTrue("No Pro API token on this device", ProSubscriptionServerPrefs.getApiToken(context).isNotBlank())
+        } else {
+            assumeTrue("pass -e gq_model", modelPath.isNotBlank() && File(modelPath).isFile)
+        }
         assumeFalse("a remote OpenAI server is active", RemoteOpenAiPrefs.isActive(context))
         saved = PREFS.associateWith { name -> context.getSharedPreferences(name, Context.MODE_PRIVATE).all.toMap() }
         listOf("android.permission.RECORD_AUDIO", "android.permission.POST_NOTIFICATIONS").forEach {
@@ -90,27 +100,35 @@ class GlassesQuestionFlowTest {
             .putBoolean("battery_opt_guide_suppress", true)
             .commit()
         LocalAgentPrefs.setGlassesAssistantMode(context, GlassesAssistantMode.CUSTOM_AI_PROVIDER)
-        LocalAgentPrefs.setProviderType(context, AgentProviderType.LOCAL_AGENT)
-        AiProviderPrefs.setProvider(context, AiProviderType.LOCAL_MODELS)
-        listOf("local_models_registry", "local_model_projectors", "local_model_settings").forEach {
-            context.getSharedPreferences(it, Context.MODE_PRIVATE).edit().clear().commit()
+        if (pro) {
+            LocalAgentPrefs.setProviderType(context, AgentProviderType.PRO_SUBSCRIPTION)
+            // Refreshes the relay's audio-capable list; -e gq_pro_model <id> picks a non-Live questions model.
+            ProSubscriptionRelayClient.fetchModelCatalog(context).getOrThrow()
+            args.getString("gq_pro_model")?.let { ProSubscriptionAiPrefs.setQuestionsModel(context, it) }
+            assumeTrue("the Pro questions model must hear audio", ProSubscriptionAiPrefs.questionsModelHearsAudio(context))
+        } else {
+            LocalAgentPrefs.setProviderType(context, AgentProviderType.LOCAL_AGENT)
+            AiProviderPrefs.setProvider(context, AiProviderType.LOCAL_MODELS)
+            listOf("local_models_registry", "local_model_projectors", "local_model_settings").forEach {
+                context.getSharedPreferences(it, Context.MODE_PRIVATE).edit().clear().commit()
+            }
+            val model = LocalModelStorageRepository.registerImportedModel(context, File(modelPath).nameWithoutExtension, File(modelPath))
+            args.getString("gq_projector")?.let { LocalModelProjectorStore.attach(context, model, File(it)) }
+            LocalModelStorageRepository.setSelectedModelId(context, model.id)
+            LocalModelSettingsRepository.saveForModel(
+                context,
+                model.id,
+                LocalGenerationSettings.defaultsFor(LocalModelCatalogRepository.findById(model.catalogId)).copy(
+                    modelRuntime = if (modelPath.endsWith(".gguf", true)) LocalModelRuntime.LLAMA_CPP else LocalModelRuntime.LITERT,
+                    computeBackend = if (args.getString("gq_backend") == "GPU") LocalComputeBackend.GPU else LocalComputeBackend.CPU,
+                    contextSize = 4096,
+                    temperature = 0.0,
+                    topK = 1,
+                    seed = 0,
+                    maxTokens = 48,
+                ),
+            )
         }
-        val model = LocalModelStorageRepository.registerImportedModel(context, File(modelPath).nameWithoutExtension, File(modelPath))
-        args.getString("gq_projector")?.let { LocalModelProjectorStore.attach(context, model, File(it)) }
-        LocalModelStorageRepository.setSelectedModelId(context, model.id)
-        LocalModelSettingsRepository.saveForModel(
-            context,
-            model.id,
-            LocalGenerationSettings.defaultsFor(LocalModelCatalogRepository.findById(model.catalogId)).copy(
-                modelRuntime = if (modelPath.endsWith(".gguf", true)) LocalModelRuntime.LLAMA_CPP else LocalModelRuntime.LITERT,
-                computeBackend = if (args.getString("gq_backend") == "GPU") LocalComputeBackend.GPU else LocalComputeBackend.CPU,
-                contextSize = 4096,
-                temperature = 0.0,
-                topK = 1,
-                seed = 0,
-                maxTokens = 48,
-            ),
-        )
         SpokenConversation.reset()
         // Through the store (Memory Vault), as the app reads it.
         userFactsBackup = LocalAgentMemoryStore.readText(LocalAgentMemoryStore.userFactsFile(context))
@@ -509,6 +527,7 @@ class GlassesQuestionFlowTest {
         val PREFS = listOf(
             "local_models_registry", "local_model_projectors", "local_model_settings",
             "question_routing", "ai_wake_word", "local_agent_prefs", "ai_provider_prefs", "cyanbridge_prefs", "app_language",
+            "pro_subscription_ai_prefs",
         )
         // Hermetic fixtures (app/src/androidTest/assets/glasses_questions, see its manifest.json):
         // "What color are these socks?" + a photo of yellow socks; "What's the capital of Australia?".
