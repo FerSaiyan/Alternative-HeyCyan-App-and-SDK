@@ -1150,7 +1150,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handleOwnIntent(intent)
+        if (!AppRoute.isLauncherReentry(intent)) handleOwnIntent(intent)
     }
 
     /** In-app navigation to this Activity stays in it: a route opens its screen, anything else the glasses screen. */

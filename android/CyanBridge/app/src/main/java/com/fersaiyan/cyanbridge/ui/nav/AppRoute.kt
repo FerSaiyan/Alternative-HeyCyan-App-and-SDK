@@ -160,5 +160,12 @@ enum class AppRoute(
 
         fun from(intent: Intent?): AppRoute? =
             intent?.getStringExtra(EXTRA_ROUTE)?.let { name -> entries.firstOrNull { it.name == name } }
+
+        /**
+         * The launcher icon or a pinned shortcut reaching the running (singleTask) Activity. It brings the
+         * app back as it was, as when every screen was its own Activity, instead of the glasses screen.
+         */
+        fun isLauncherReentry(intent: Intent): Boolean =
+            intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER) && from(intent) == null
     }
 }

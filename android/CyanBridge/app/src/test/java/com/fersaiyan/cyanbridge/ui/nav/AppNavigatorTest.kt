@@ -199,4 +199,15 @@ class AppNavigatorTest {
         assertTrue(controller.navigator.isRootVisible)
         assertEquals(true, controller.navigator.hasRoot)
     }
+
+    @Test
+    fun launcherIconOnTheRunningAppKeepsTheOpenScreen() {
+        val controller = launch(AppRoute.APPEARANCE)
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            .setClassName(context, "com.fersaiyan.cyanbridge.ui.WelcomeActivity")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        controller.newIntent(launcher)
+
+        assertEquals(listOf(AppRoute.APPEARANCE), controller.routes())
+    }
 }
