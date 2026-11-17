@@ -1,5 +1,37 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-17 — v2.3.0 sweep follow-ups and useful support reports (`cyan-refactor-fixes-logs`)
+
+- Branch `cyan-refactor-fixes-logs` (worktree `cyan-refactor-wt/fixes-logs`, from `cyan-refactor-v230-sweep` b129a4c0),
+  not pushed or merged. Evidence: `cyan-refactor-wt/fixes-logs-evidence-20261117/` (`shots/`, `logs/`).
+- Sweep items fixed: voice-profile step keeps "Allow microphone" as the pinned primary action (1080×2424, 720×1280
+  at font 1.3); "Test model now" shows measured prompt/decode rates (qwen2.5 0.5B on the AVD: 13.99 / 12.14 tok/s)
+  or "Not measured" (Qwen3.5 still skips its warm-up generation); Custom sync flow subtitle no longer promises a
+  subnet scan (9 languages); Mentra store uses the new directory `api/directory/search` (cursor pages) and, while it
+  lists nothing, a labelled "Mentra first-party apps" section (Captions installed from it on the AVD).
+- **Why reports were useless (owner issue a):** v2.3.0 builds `logcat -d -t 1200 -s <tag>:* …`; 1ad4ca49 (2026-08-13)
+  added the Meta DAT tags `DAT:CORE:RegistrationManager` and `DAT:CORE:BluetoothDeviceDetection`. Logcat rejects the
+  whole spec ("Invalid filter expression 'DAT:CORE:RegistrationManager:*'", exit 1, reproduced on the AVD,
+  `logs/v230-logcat-filter-repro.txt`), the error went to unread stderr, and every report of every issue type since
+  then had no log lines (the server substituted "No matching Android logcat entries…"). cyan-refactor already reads
+  by PID (eac40aee, never released). Issue b: a voluntary report only had the current process's last 1200 logcat
+  lines and a short device text, no history, no crash.
+- **New report (version 2):** header (app/build/installer, device, Android, SoC, glasses family/model/firmware/
+  connection, provider and models, Pro plan, routing, sync flow, storage, RAM, battery, permissions), a ring buffer of
+  500 structured events with 150 per subsystem, last crash/ANR from ApplicationExitInfo plus the crash handler's stack
+  and events, PID-filtered logcat capped per tag (all DAT:* = one tag), redaction, a preview of exactly what is sent.
+  Legacy text fields stay filled, so the production server (no v2 columns yet) still gets everything as text.
+- Website branch `feat/better-app-logs` (worktree `Cyanbridge_website-wt/better-app-logs`, from origin/main 3a1bf7e):
+  nullable DebugLog columns (migration `20261117120000_add_debug_log_structured_report`), parser with caps and
+  defense-in-depth redaction, email rendering, admin page `/admin/debug-logs`. Verified end to end against a local
+  Postgres + `next dev` on :3110 from the AVD (3 reports: voluntary, error prompt after a crash, crash with Meta DAT
+  initialised). A Vercel preview would use the production database, so it was not used.
+- Tests: app unit 741/741, shared portability 417/417 (new: redaction table, subsystem caps under a DAT flood,
+  payload shape/bounds, logcat per-tag caps, baseline rate table, directory parsing).
+- For the owner: deploy the website branch only after `npm run db:migrate:deploy`; decide whether Qwen3.5 may run its
+  warm-up generation again (the skip dates from April's llama.cpp fork); the Custom flow's subnet scan decision is
+  still open; Meta DAT did not log on the AVD without Meta AI, so DAT log volume was checked with a unit flood test.
+
 ## 2026-11-12 — Feature diff since v2.3.0 and a functional emulator sweep (`cyan-refactor-v230-sweep`)
 
 - Branch `cyan-refactor-v230-sweep` (worktree `cyan-refactor-wt/v230-feature-sweep`, from `origin/cyan-refactor`

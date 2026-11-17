@@ -179,6 +179,10 @@ CI steps in `android-self-hosted.yml`, used as names below:
 | Customization card shows "Server answered HTTP 404" (production relay has no customization API). | 7aadfd1f | b8c99e6b + GlassesCustomizationViewModelTest case |
 | Backslash before apostrophes in Compose strings (Mentra miniapps text; fr/it recordings strings). | a924209e and earlier | d7170a34 |
 
+Fixed on `cyan-refactor-fixes-logs` (2026-11-17): the onboarding voice step (the pinned button asks for the
+microphone), "Test model now" (measured prompt/decode rates or "Not measured"), the Custom flow subtitle, the Mentra
+store (new directory API, first-party fallback), and support reports (see worklog 2026-11-17).
+
 Not fixed, for the owner:
 - The Mentra Miniapp Store feed (`https://api.apps.mentraglass.com/api/store/apps`) answers 404, and the store screen says "No miniapp was found at this URL". The endpoint has to be found again; installs from a miniapp URL still work.
 - The production website has no `/api/customization/*` yet, so the card cannot leave "not open yet" until it is deployed.
