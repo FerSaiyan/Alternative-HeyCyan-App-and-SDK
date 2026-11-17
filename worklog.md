@@ -1,5 +1,32 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-17 — EyeVue and TuneBuds firmware updates from the dashboard (`cyan-refactor-family-ota`)
+
+Owner request 2026-11-17. Worktree `cyan-refactor-wt/family-ota` from origin/cyan-refactor b7f1ce1d.
+- **Section:** Advanced → "Firmware update" is family-aware. HeyCyan keeps its section (OtaCoordinator untouched;
+  only `cancelOta` first asks the family coordinator, which declines when idle). EyeVue/TuneBuds: shared
+  `FamilyOtaUiState`/`FamilyOtaMachine`/`FamilyFirmwareRules`/`FamilyOtaSection` (9 locales), Android
+  `ota/family/FamilyOtaCoordinator` + `EyevueFirmwareInstaller` (RCSP) + `TuneBudsFirmwareInstaller` (AB Mate).
+  TuneBuds gains `FIRMWARE_UPDATE`; the HeyCyan-only OTA/patch-request actions now require the HeyCyan panel.
+- **Checks before sending:** UFW header/list/flash/app CRCs + chip AC701N, model code from the app (`40 E0 'S3' C1 FF
+  <4 chars>`, or the pinned sha256 of the 4 mirrored vendor images) vs the glasses' cmd-100 code; POT header CRC16 /
+  QUEN / CRC32s; bundle base version (`CustomFirmwareBundleReader.mismatch`). A bare TuneBuds `.fot` is refused (no
+  model in the file). Battery ≥ 50% (EyeVue app limit). Blocked during sync/live/other update (OTA lease) and during a
+  question/Gemini Live/recording (AudioSessionCoordinator). Cancel only where the firmware survives (EyeVue dual-bank
+  E4, TuneBuds resume).
+- **Official updates:** EyeVue vendor server `platform.eyevue-glass.com/api/app/ota/getNewOtaPackage` is anonymous;
+  only a newer BLE package on `*.aliyuncs.com` is offered; size + Content-MD5 + pinned sha256 verified. The owner's
+  S3CY02 at 1.4.3 is newer than anything published (1.3.6), so it reads "latest". TuneBuds (`api.hetangsmart.com`
+  checkVersionV2) is public but keyed by an advert project number never captured from real glasses: not offered.
+- **Pre-existing bug fixed:** with EyeVue/TuneBuds selected, every legacy-guarded click (the Advanced toggle too)
+  sent the HeyCyan SDK audio-stop; the SDK never answers, so the one-shot permit leaked and blocked media sync, live
+  preview and OTA ("a one-shot glasses command is still active"). Now skipped for those two families.
+- **Sim run** (read-only Pixel_9a :5610, `sim/e2e` server + Bumble bridges; evidence
+  `/mnt/seagate/ML/cyan-refactor-wt/family-ota-evidence-20261117/`): EyeVue official 1.3.5 → real server offer 1.3.6 →
+  download verified → RCSP applied (sim sha 08ae9518…); EyeVue file install applied; S3S100 file on S3CY02 refused;
+  TuneBuds bundle applied over SPP (sim sha = `.fot` 4d71ddb2…); bare `.fot` refused; HeyCyan personal OTA unchanged up
+  to the Wi-Fi Direct stage (one AVD). CI emulator sequence green on the same read-only Pixel_9a.
+
 ## 2026-11-17 — integrate-1117: sweep + fixes merged, Adaptive subnet-scan fallback, Qwen3.5 test generation
 
 - Worktree `cyan-refactor-wt/integrate-1117` (branch `cyan-refactor-integrate-1117`) from origin/cyan-refactor 420e07b3:
