@@ -2244,3 +2244,15 @@ pesquisa, não é diagnóstico" on screen and in the first spoken reply of each 
 - Verified: `:app:assembleDebug`, shared tests (prompt pin, guardrail table, prefs inventory) and
   `ArchitectureGuardrailSourceTest` green. `OralLesionBenchHilTest` is written but was neither compiled
   (`assembleDebugAndroidTest` not run) nor run (no phone in this session). Hardware checks are in the hand-back.
+
+## 2026-11-17 — TuneBuds sync: Wi-Fi Direct when the V821 coprocessor reports no 0xA3 mask (branch `cyan-refactor-integrate-sims`)
+
+Found by running the real TuneBuds firmware (QUEN 5621 + V821B userland) against the app on AVDs
+(firmware_dump add.228, `sim/tunebuds_e2e/`). Firmware 5621 sends no 0xA3 Wi-Fi mask, so the app took the
+phone-hotspot path (E6 mode 0); the V821B `ai_glass_download` has no STA mode (glasses AP and Wi-Fi Direct only)
+and answers E7 = 2, so that sync could never work on this firmware.
+- `TuneBudsMediaSync.openTransport`: also use Wi-Fi Direct when the mask is unknown and E0 reports a V821 camera
+  coprocessor (`cameraCoprocessorType == 1`); a P2P failure still falls back to the hotspot (aefe8781).
+- Verified: AVD Wi-Fi Direct sync against the real firmware (photo md5 matched, add.228 evidence);
+  `:app:assembleDebug` and the 27 `devices.tunebuds` unit tests green on this merge.
+- Not verified on a real TuneBuds unit; check a sync on owner hardware before release.
