@@ -2,18 +2,9 @@ package com.fersaiyan.cyanbridge.media.sync
 
 import android.util.Log
 import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withTimeoutOrNull
 
 /** What the Custom resolver knows about the glasses link at one moment. */
 internal data class CustomResolverInputs(
@@ -128,26 +119,14 @@ internal class CustomHttpResolver(
         return false
     }
 
+    private val scanner = HttpSubnetScanner(
+        portOpen = portOpen,
+        mediaConfigOk = { ip, timeoutMs -> mediaConfigOk(ip, timeoutMs, logFailures = false) },
+    )
+
     /** Port-80 scan of the /24 (32 at a time); prefers a host that serves media.config. */
-    private suspend fun discoverByScan(prefix: String, phoneIsGroupOwner: Boolean?): String? = supervisorScope {
-        val permits = Semaphore(SCAN_CONCURRENCY)
-        val found = CompletableDeferred<String?>()
-        val firstOpenPortIp = AtomicReference<String?>(null)
-        for (ip in scanHosts(prefix, phoneIsGroupOwner)) {
-            launch(Dispatchers.IO) {
-                permits.withPermit {
-                    if (found.isCompleted) return@withPermit
-                    if (portOpen(ip, SCAN_CONNECT_TIMEOUT_MS)) {
-                        firstOpenPortIp.compareAndSet(null, ip)
-                        if (mediaConfigOk(ip, SCAN_VERIFY_TIMEOUT_MS, logFailures = false)) found.complete(ip)
-                    }
-                }
-            }
-        }
-        val result = withTimeoutOrNull(SCAN_TIMEOUT_MS) { found.await() } ?: firstOpenPortIp.get()
-        coroutineContext.cancelChildren()
-        result
-    }
+    private suspend fun discoverByScan(prefix: String, phoneIsGroupOwner: Boolean?): String? =
+        scanner.scan(scanHosts(prefix, phoneIsGroupOwner), SCAN_LIMITS)
 
     companion object {
         private const val TAG = "DataDownload"
@@ -164,6 +143,13 @@ internal class CustomHttpResolver(
         private const val SCAN_CONNECT_TIMEOUT_MS = 300
         private const val SCAN_VERIFY_TIMEOUT_MS = 1_200
         private const val SCAN_TIMEOUT_MS = 20_000L
+        private val SCAN_LIMITS = HttpSubnetScanner.Limits(
+            concurrency = SCAN_CONCURRENCY,
+            connectTimeoutMs = SCAN_CONNECT_TIMEOUT_MS,
+            verifyTimeoutMs = SCAN_VERIFY_TIMEOUT_MS,
+            overallTimeoutMs = SCAN_TIMEOUT_MS,
+            acceptOpenPortOnly = true,
+        )
 
         /** Last octets probed on the guessed subnet: the glasses may be the group owner (.1). */
         private val SUBNET_GUESSES = listOf(1, 79, 2, 3)
@@ -207,7 +193,7 @@ internal class CustomHttpResolver(
                 inputs.bridgeIp == null
 
         fun scanHosts(prefix: String, phoneIsGroupOwner: Boolean?): List<String> =
-            (1..254).map { "$prefix$it" }
+            HttpSubnetScanner.hostsOf(prefix)
                 .filterNot { GlassesNetworkAddressing.isPhoneGroupOwnerAddress(it, phoneIsGroupOwner) }
     }
 }
