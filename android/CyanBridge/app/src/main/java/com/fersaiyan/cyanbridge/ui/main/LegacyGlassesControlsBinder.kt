@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main
 
+import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.util.Log
 import android.view.View
@@ -143,10 +144,14 @@ internal class LegacyGlassesControlsBinder(
             view == binding.btnTestHijackVoice ||
             view == binding.btnTestHijackImage ||
             view == binding.btnPullOtaTest
+        // The stop is a HeyCyan SDK command: with EyeVue or TuneBuds selected the SDK never answers,
+        // and its one-shot permit would block media sync, live preview and firmware updates.
+        val heyCyanSdkFamily = glasses.selectedProfile().deviceClass !in setOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS)
         val shouldStopGlassesAudio = view != binding.btnScan &&
             view != binding.btnConnect &&
             view != binding.btnTransferStop &&
-            !actionSendsGlassesControl
+            !actionSendsGlassesControl &&
+            heyCyanSdkFamily
         if (shouldStopGlassesAudio) {
             controls.controlAudioRecording(false)
             // If auto audio capture is enabled, give the user a short window to operate other controls.

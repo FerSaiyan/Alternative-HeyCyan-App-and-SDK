@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.shared.ui.glasses
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -228,13 +230,17 @@ internal fun FamilyOtaSection(
                         },
                     )
                     Text(stringResource(Res.string.family_ota_warning, minBattery))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = acknowledged,
-                            onCheckedChange = { acknowledged = it },
-                            modifier = Modifier.testTag("family_ota_acknowledge"),
-                        )
-                        Text(stringResource(Res.string.family_ota_acknowledge))
+                    // The whole row toggles, so the label is a large touch target and TalkBack reads one checkbox.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .toggleable(value = acknowledged, role = Role.Checkbox, onValueChange = { acknowledged = it })
+                            .testTag("family_ota_acknowledge"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = acknowledged, onCheckedChange = null)
+                        Text(stringResource(Res.string.family_ota_acknowledge), modifier = Modifier.padding(start = 12.dp))
                     }
                 }
             },

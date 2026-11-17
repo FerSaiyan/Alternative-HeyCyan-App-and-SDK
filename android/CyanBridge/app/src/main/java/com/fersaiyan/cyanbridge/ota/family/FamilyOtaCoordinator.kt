@@ -82,7 +82,8 @@ internal class FamilyOtaCoordinator(
     private var readLease: GlassesSessionLease? = null
     private var lastOffer: EyevueOtaOffer? = null
     private var pendingPickFamily: CustomizationFamily? = null
-    private var autoReadDone: Boolean = false
+    private var autoReadAttempts = 0
+    private var nextAutoReadAtMs = 0L
     private var picker: ActivityResultLauncher<Array<String>>? = null
 
     val isActive: Boolean get() = job?.isActive == true
@@ -322,11 +323,16 @@ internal class FamilyOtaCoordinator(
             ota.family,
             FamilyOtaEvent.Refreshed(known.firmwareVersion, known.modelCode, known.batteryPercent, blockers),
         )
+        val now = android.os.SystemClock.elapsedRealtime()
         if (!installer.isConnected()) {
-            autoReadDone = false
-        } else if (!autoReadDone && known.firmwareVersion == null && !isActive && blockers.isEmpty()) {
-            // EyeVue reports its version only over RCSP; read it once per connection, quietly.
-            autoReadDone = true
+            autoReadAttempts = 0
+            nextAutoReadAtMs = now + AUTO_READ_SETTLE_MS
+        } else if (autoReadAttempts < AUTO_READ_ATTEMPTS && now >= nextAutoReadAtMs &&
+            known.firmwareVersion == null && !isActive && readLease == null && blockers.isEmpty()
+        ) {
+            // EyeVue reports its version only over RCSP; read it quietly after connecting (a few tries).
+            autoReadAttempts++
+            nextAutoReadAtMs = now + AUTO_READ_SETTLE_MS
             val quietLease = GlassesSessionCoordinator.tryAcquireLease(GlassesSession.OTA) ?: return
             readLease = quietLease
             host.glassesTeardownScope.launch(Dispatchers.IO) {
@@ -418,6 +424,8 @@ internal class FamilyOtaCoordinator(
         const val TAG = "FamilyOta"
         const val PICKER_KEY = "family_ota_firmware_file"
         const val REFRESH_MS = 2_000L
+        const val AUTO_READ_ATTEMPTS = 3
+        const val AUTO_READ_SETTLE_MS = 5_000L
         val AUDIO_BUSY_KINDS = setOf(AudioSessionKind.VOICE_COMMAND, AudioSessionKind.CONVERSATION, AudioSessionKind.RECORDING)
     }
 }
