@@ -78,6 +78,23 @@
   memory and the cold-load cue still need a phone (no AVD microphone on emulator 37.1.11 headless; the 2.6 GB
   Gemma 4 does not fit the AVD).
 
+## 2026-11-17 — Glasses customization: client for the reworked server API (review flow, direct uploads)
+
+- Branch `cyan-refactor-customization-pending` (worktree `cyan-refactor-wt/customization-pending`, from
+  `origin/cyan-refactor` 420e07b3). Owner-approved API change; the feature was never released, so no compatibility.
+- **Unknown base firmware is a request**: `/config` `supported` / `review_required` / `review_max_days`. Not supported
+  but reviewable → READY with a notice (`customization_review_notice`); only `!supported && !review_required` is
+  UNSUPPORTED. Submit may return `awaiting_base_firmware` (active, polled at POLL_MS, cancellable) instead of `queued`.
+- **Job fields/statuses**: `awaiting_base_firmware` ("Waiting for firmware review"), `declined` (terminal, reason
+  shown), `base_firmware_status`, `base_{ble,wifi}_firmware_version`, `decline_reason`, `review_expires_at`. A
+  `mapped` base shows "Built on firmware X (an update from your Y)" (`customization_job_base_N`).
+- **Uploads**: `upload-urls` + signed URLs removed. Each asset is `PUT /api/customization/jobs/{id}/assets/{slot}` with
+  the bearer token, raw bytes, `Content-Type`, `X-Content-SHA256`, `X-Duration-Ms` (wake samples).
+  `CustomizationPlatform.upload` → `apiBytes`. Limits checked before the job is created: `wake_samples.max_bytes`
+  (384 KiB), `tones.max_bytes` (1 MiB), `uploads.job_max_bytes` (8 MiB); 413 `asset_too_large`/`job_upload_limit`
+  messages use `max_bytes`.
+- Consent text covers review, newer-base builds and the 30-day review retention (server version `2026-11-17`).
+
 ## 2026-11-12 — Integration for push: rooted Pixel_9a branch, iOS runner image, Android CI root causes
 
 - Branch `cyan-refactor-integrate-1112` (worktree `cyan-refactor-wt/integrate-1112`, from `origin/cyan-refactor`

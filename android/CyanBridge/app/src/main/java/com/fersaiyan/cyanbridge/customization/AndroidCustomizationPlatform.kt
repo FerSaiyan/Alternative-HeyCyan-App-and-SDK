@@ -22,7 +22,6 @@ import com.fersaiyan.cyanbridge.shared.customization.GlassesFirmwareInfo
 import com.fersaiyan.cyanbridge.shared.customization.GlassesMicCapture
 import com.fersaiyan.cyanbridge.shared.customization.HttpResult
 import com.fersaiyan.cyanbridge.shared.customization.PickedDocument
-import com.fersaiyan.cyanbridge.shared.customization.UploadTicket
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.tunebuds.TuneBudsFota
 import com.oudmon.ble.base.bluetooth.BleOperateManager
@@ -105,7 +104,26 @@ class AndroidCustomizationPlatform(context: Context) : CustomizationPlatform {
 
     // ── Relay HTTP ──
 
-    override suspend fun api(method: String, path: String, body: String?): HttpResult {
+    override suspend fun api(method: String, path: String, body: String?): HttpResult =
+        relay(method, path, body?.toByteArray(), "application/json", emptyMap(), readTimeoutMs = 60_000)
+
+    override suspend fun apiBytes(
+        method: String,
+        path: String,
+        contentType: String,
+        headers: Map<String, String>,
+        bytes: ByteArray,
+    ): HttpResult = relay(method, path, bytes, contentType, headers, readTimeoutMs = 120_000)
+
+    /** One relay request with the account token; a body is streamed with a fixed length. */
+    private fun relay(
+        method: String,
+        path: String,
+        body: ByteArray?,
+        contentType: String,
+        headers: Map<String, String>,
+        readTimeoutMs: Int,
+    ): HttpResult {
         val base = AiProviderPrefs.getRelayBaseUrl(context).trim().trimEnd('/')
         require(isAllowedEndpoint(base)) { "The relay URL must use HTTPS" }
         val token = ProSubscriptionServerPrefs.getApiToken(context)
@@ -114,36 +132,19 @@ class AndroidCustomizationPlatform(context: Context) : CustomizationPlatform {
         try {
             conn.requestMethod = method
             conn.connectTimeout = 20_000
-            conn.readTimeout = 60_000
+            conn.readTimeout = readTimeoutMs
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Accept", "application/json")
+            headers.forEach { (key, value) -> conn.setRequestProperty(key, value) }
             if (body != null) {
                 conn.doOutput = true
-                conn.setRequestProperty("Content-Type", "application/json")
-                conn.outputStream.use { it.write(body.toByteArray()) }
+                conn.setFixedLengthStreamingMode(body.size)
+                conn.setRequestProperty("Content-Type", contentType)
+                conn.outputStream.use { it.write(body) }
             }
             val status = conn.responseCode
             val stream = if (status in 200..299) conn.inputStream else conn.errorStream
             return HttpResult(status, stream?.use { it.readBytes().decodeToString() }.orEmpty())
-        } finally {
-            conn.disconnect()
-        }
-    }
-
-    override suspend fun upload(ticket: UploadTicket, bytes: ByteArray): Int {
-        require(isAllowedEndpoint(ticket.url)) { "Upload URLs must use HTTPS" }
-        val conn = URL(ticket.url).openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = ticket.method.ifBlank { "PUT" }
-            conn.connectTimeout = 20_000
-            conn.readTimeout = 120_000
-            conn.doOutput = true
-            conn.setFixedLengthStreamingMode(bytes.size)
-            ticket.headers.forEach { (key, value) -> conn.setRequestProperty(key, value) }
-            conn.outputStream.use { it.write(bytes) }
-            val status = conn.responseCode
-            (if (status in 200..299) conn.inputStream else conn.errorStream)?.use { it.readBytes() }
-            return status
         } finally {
             conn.disconnect()
         }

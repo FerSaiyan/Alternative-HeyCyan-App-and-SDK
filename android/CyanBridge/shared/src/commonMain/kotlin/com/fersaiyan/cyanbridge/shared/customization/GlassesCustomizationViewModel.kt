@@ -33,6 +33,7 @@ data class ToneChoiceUi(
 
 data class WakeSampleUi(val index: Int, val durationMs: Long, val peakDbfs: Int, val warning: String? = null)
 
+/** [baseNote]: set when the build uses a newer official base than the glasses reported. */
 data class CustomizationJobUi(
     val id: String,
     val title: String,
@@ -40,12 +41,15 @@ data class CustomizationJobUi(
     val statusLabel: String,
     val message: String,
     val active: Boolean,
+    val baseNote: String? = null,
 )
 
 data class GlassesCustomizationUiState(
     val expanded: Boolean = false,
     val phase: CustomizationPhase = CustomizationPhase.IDLE,
     val statusText: String = "",
+    /** Shown while READY when the server does not hold this base firmware yet (the request goes to review). */
+    val reviewNotice: String? = null,
     val glassesLabel: String? = null,
     val tones: List<ToneChoiceUi> = emptyList(),
     val showDisableLed: Boolean = false,
@@ -180,8 +184,14 @@ class GlassesCustomizationViewModel(
         val phase = when {
             !cfg.eligible && cfg.ineligibleReason == "subscription_required" -> CustomizationPhase.LOCKED
             !cfg.enabled -> CustomizationPhase.DISABLED
-            !cfg.supported -> CustomizationPhase.UNSUPPORTED
+            !cfg.supported && !cfg.reviewRequired -> CustomizationPhase.UNSUPPORTED
             else -> CustomizationPhase.READY
+        }
+        val reviewNotice = if (phase == CustomizationPhase.READY && !cfg.supported) {
+            "We don't have your firmware version (${found.label}) yet. You can still send your request: we will review the version " +
+                "and email you, usually within a few days. Your recordings are kept for at most ${cfg.reviewMaxDays} days while we review."
+        } else {
+            null
         }
         val status = when {
             phase == CustomizationPhase.LOCKED -> "The server reports that your plan does not include glasses customization."
@@ -195,6 +205,7 @@ class GlassesCustomizationViewModel(
             current.copy(
                 phase = phase,
                 statusText = status,
+                reviewNotice = reviewNotice,
                 glassesLabel = found.label,
                 tones = cfg.toneSlots.map { slot ->
                     val picked = current.tones.firstOrNull { it.id == slot.id }
@@ -262,8 +273,11 @@ class GlassesCustomizationViewModel(
         "Plays up to about ${tenths / 10}.${tenths % 10} s; longer sounds are shortened to fit."
     }
 
-    private fun sizeLabel(bytes: Long): String =
-        if (bytes >= 1_048_576) "${bytes / 1_048_576} MB" else "${(bytes / 1024).coerceAtLeast(1)} KB"
+    private fun sizeLabel(bytes: Long): String {
+        if (bytes < 1_048_576) return "${(bytes / 1024).coerceAtLeast(1)} KB"
+        val tenths = bytes * 10 / 1_048_576
+        return if (tenths % 10 == 0L) "${tenths / 10} MB" else "${tenths / 10}.${tenths % 10} MB"
+    }
 
     private fun setToneError(slotId: String, message: String) =
         _state.update { s -> s.copy(tones = s.tones.map { if (it.id == slotId) it.copy(fileName = null, error = message) else it }) }
@@ -415,15 +429,17 @@ class GlassesCustomizationViewModel(
         _state.update { it.copy(busy = true, progress = "Creating the build request…") }
         viewModelScope.launch {
             try {
+                // Size checks first, so an oversized file never leaves a draft on the server.
+                val uploads = withContext(io) { buildUploads(request, cfg) }
                 val job = createOrReuseJob(request)
                 draftJobId = job.id
-                val uploads = withContext(io) { buildUploads(request) }
                 uploadAll(job.id, uploads)
                 progress("Submitting…")
                 val queued = submitWithRetry(job.id, uploads)
                 draftJobId = null
                 takes.clear()
                 toneRefs.clear()
+                val sent = "Sent (build ${queued.id.takeLast(8)})."
                 _state.update { st ->
                     st.copy(
                         samples = emptyList(),
@@ -431,7 +447,12 @@ class GlassesCustomizationViewModel(
                         consentChecked = false,
                         disableLed = false,
                         muteShutter = false,
-                        progress = "Sent (build ${queued.id.takeLast(8)}). We will email the firmware to your account address when it is ready.",
+                        progress = if (queued.status == "awaiting_base_firmware") {
+                            "$sent We don't have your firmware version yet, so we will review it and email you, usually within a few days. " +
+                                "Your recordings are kept for at most ${cfg.reviewMaxDays} days while we review."
+                        } else {
+                            "$sent We will email the firmware to your account address when it is ready."
+                        },
                     )
                 }
                 refreshJobs()
@@ -439,6 +460,8 @@ class GlassesCustomizationViewModel(
                 throw error
             } catch (error: CustomizationApiError) {
                 handleApiError(error)
+            } catch (error: UploadTooLarge) {
+                progress(error.message)
             } catch (error: Throwable) {
                 progress("Sending failed: ${error.message ?: "unknown error"}. Try again.")
             } finally {
@@ -478,34 +501,49 @@ class GlassesCustomizationViewModel(
         (1..(request.wakeSampleCount ?: 0)).map { "wake_sample" to wakeSlot(it) }.toSet() +
             request.toneSlots.map { "tone" to it }
 
-    private suspend fun buildUploads(request: CustomizationJobRequest): List<CustomizationUpload> {
+    /** Reads every asset and checks the server's size limits (per kind and per job) before anything is sent. */
+    private suspend fun buildUploads(request: CustomizationJobRequest, cfg: CustomizationConfig): List<CustomizationUpload> {
         val uploads = mutableListOf<CustomizationUpload>()
         if (request.wakePhrase != null) {
             takes.forEachIndexed { i, pcm ->
                 val wav = WakeSampleAudio.toWav(pcm)
+                if (wav.size > cfg.sampleMaxBytes) {
+                    throw UploadTooLarge("Sample ${i + 1} is too large to send (max ${sizeLabel(cfg.sampleMaxBytes)}). Delete it and record it again.")
+                }
                 uploads += CustomizationUpload("wake_sample", wakeSlot(i + 1), "audio/wav", wav, platform.sha256Hex(wav), WakeSampleAudio.durationMs(pcm))
             }
         }
         request.toneSlots.forEach { slot ->
             val (ref, contentType) = toneRefs.getValue(slot)
             val bytes = platform.readDocument(ref).bytes
+            if (bytes.size > cfg.toneMaxBytes) {
+                val label = cfg.toneSlots.firstOrNull { it.id == slot }?.label ?: CustomizationJson.slotLabel(slot)
+                throw UploadTooLarge("The file for “$label” is too large (max ${sizeLabel(cfg.toneMaxBytes)}). Choose a smaller file.")
+            }
             uploads += CustomizationUpload("tone", slot, contentType ?: "audio/wav", bytes, platform.sha256Hex(bytes))
+        }
+        val total = uploads.sumOf { it.bytes.size.toLong() }
+        if (total > cfg.jobMaxBytes) {
+            throw UploadTooLarge(
+                "Your recordings and files add up to ${sizeLabel(total)}, more than the ${sizeLabel(cfg.jobMaxBytes)} one request can send. " +
+                    "Use shorter tone files.",
+            )
         }
         return uploads
     }
 
+    /** Sends each asset straight to the relay; re-sending a slot replaces it. */
     private suspend fun uploadAll(jobId: String, uploads: List<CustomizationUpload>) {
-        if (uploads.isEmpty()) return
-        progress("Preparing ${uploads.size} uploads…")
-        val tickets = CustomizationJson.parseUploads(
-            call("POST", "/api/customization/jobs/$jobId/upload-urls", CustomizationJson.uploadRequestBody(uploads)),
-        )
         uploads.forEachIndexed { index, upload ->
             progress("Uploading ${index + 1} of ${uploads.size}…")
-            val ticket = tickets.firstOrNull { it.kind == upload.kind && it.slot == upload.slot }
-                ?: error("The server sent no upload URL for ${upload.slot}")
-            val status = withContext(io) { platform.upload(ticket, upload.bytes) }
-            if (status !in 200..299) error("Upload of ${upload.slot} failed (HTTP $status)")
+            val headers = buildMap {
+                put(SHA256_HEADER, upload.sha256)
+                upload.durationMs?.let { put(DURATION_HEADER, it.toString()) }
+            }
+            val result = withContext(io) {
+                platform.apiBytes("PUT", "/api/customization/jobs/$jobId/assets/${upload.slot}", upload.contentType, headers, upload.bytes)
+            }
+            if (!result.ok) throw CustomizationJson.parseError(result.status, result.body)
         }
     }
 
@@ -628,6 +666,15 @@ class GlassesCustomizationViewModel(
                 glasses?.let { found -> viewModelScope.launch { runCatching { loadConfig(found) } } }
             }
             "customization_disabled" -> progress(CustomizationJson.SERVICE_NOT_OPEN)
+                        "asset_too_large" -> progress("A file is too large for the server${error.maxBytes?.let { " (max ${sizeLabel(it)})" }.orEmpty()}. Choose a smaller file.")
+            "job_upload_limit" -> progress(
+                "Your recordings and files are over the server's limit for one request${error.maxBytes?.let { " (${sizeLabel(it)})" }.orEmpty()}. Use shorter tone files.",
+            )
+            "sha256_mismatch" -> progress("A file was damaged while sending. Send the customization again.")
+            "job_not_found", "invalid_job_status", "no_uploads_expected" -> {
+                draftJobId = null
+                progress("This build request can no longer take files. Send the customization again.")
+            }
             "rate_limited" -> progress("You reached today's limit of build requests. Try again tomorrow.")
             "missing_token", "invalid_token" -> progress("Sign in to your CyanBridge account first.")
             else -> progress("${error.message} (${error.code})")
@@ -642,6 +689,8 @@ class GlassesCustomizationViewModel(
         const val QUIET_DBFS = -45.0
         const val POLL_MS = 30_000L
         const val MAX_LISTED_JOBS = 5
+        const val SHA256_HEADER = "X-Content-SHA256"
+        const val DURATION_HEADER = "X-Duration-Ms"
 
         fun wakeSlot(index: Int) = "wake_" + index.toString().padStart(2, '0')
 
@@ -656,6 +705,8 @@ class GlassesCustomizationViewModel(
             statusLabel = when (job.status) {
                 "draft" -> "Draft"
                 "uploading" -> "Uploading"
+                "awaiting_base_firmware" -> "Waiting for firmware review"
+                "declined" -> "Declined"
                 "queued" -> "Queued"
                 "building" -> "Building and testing"
                 "built" -> "Built, sending the email"
@@ -665,8 +716,18 @@ class GlassesCustomizationViewModel(
                 "cancelled" -> "Cancelled"
                 else -> job.status
             },
-            message = job.statusMessage,
+            message = job.statusMessage.ifBlank {
+                when (job.status) {
+                    "awaiting_base_firmware" -> "We are reviewing your firmware version and will email you."
+                    "declined" -> listOfNotNull(job.declineReason?.let { "Reason: ${it.trimEnd('.')}." }, "Your recordings were deleted.").joinToString(" ")
+                    else -> ""
+                }
+            },
             active = job.isActive,
+            baseNote = job.baseBleFirmwareVersion?.takeIf { job.baseFirmwareStatus == "mapped" }?.let { base ->
+                val from = job.bleFirmwareVersion?.let { " (an update from your $it)" }.orEmpty()
+                "Built on firmware $base$from. Installing it updates your glasses to that version."
+            },
         )
 
         /** Percent-encodes a query value (versions are `[A-Za-z0-9._-]`, so this is mostly a guard). */
@@ -679,3 +740,6 @@ class GlassesCustomizationViewModel(
         }
     }
 }
+
+/** A client-side size check failed; the message is shown as is. */
+private class UploadTooLarge(override val message: String) : Exception(message)

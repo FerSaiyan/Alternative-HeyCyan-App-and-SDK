@@ -20,7 +20,7 @@
     <string name="customization_samples">Samples: %1$d (need %2$d to %3$d)</string>
     <string name="customization_sample_row">Sample %1$d · %2$s s · peak %3$d dBFS</string>
     <string name="customization_delete">Delete</string>
-    <string name="customization_consent">I agree that my recordings and files are uploaded to build this firmware, and are deleted after the build is emailed (consent version %1$s). I install the firmware at my own risk.</string>
+    <string name="customization_consent">I agree that my recordings and files are uploaded to build this firmware and are deleted after the build is emailed or the request is declined. If CyanBridge does not yet hold my glasses\' firmware version, I agree that it may review the request and build on the same or a newer official firmware version for my model; installing the custom firmware then updates my glasses to that version. While a version is reviewed my recordings are kept for at most 30 days (consent version %1$s). I install the firmware at my own risk.</string>
     <string name="customization_submit">Send customization</string>
     <string name="customization_builds">Your builds</string>
     <string name="customization_no_builds">No builds yet.</string>

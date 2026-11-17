@@ -60,14 +60,21 @@ data class ToneSlot(
 
 data class WakeLanguage(val code: String, val maxChars: Int, val maxWords: Int, val minLetters: Int)
 
-/** `/api/customization/config` for one exact base firmware (generic limits when the server has no catalog yet). */
+/**
+ * `/api/customization/config` for one exact base firmware. When the server does not hold that base
+ * but [reviewRequired] is set, the tone slots and options describe what the family's catalog can do,
+ * and a request is still accepted: the owner reviews the version within [reviewMaxDays] days.
+ */
 data class CustomizationConfig(
     val enabled: Boolean,
     val eligible: Boolean,
     val ineligibleReason: String?,
     val consentVersion: String,
-    /** The server holds this base firmware (absent from older servers: assumed true). */
+    /** The server holds this exact base firmware. */
     val supported: Boolean,
+    /** Not [supported], but a request can still be sent and waits for the owner's review. */
+    val reviewRequired: Boolean,
+    val reviewMaxDays: Int,
     val toneSlots: List<ToneSlot>,
     val toneMaxBytes: Long,
     val toneContentTypes: List<String>,
@@ -81,17 +88,31 @@ data class CustomizationConfig(
     val sampleMaxBytes: Long,
     val sampleMinMs: Long,
     val sampleMaxMs: Long,
+    /** Total bytes one job may upload (`uploads.job_max_bytes`). */
+    val jobMaxBytes: Long,
 )
 
 data class CustomizationAssetRef(val kind: String, val slot: String)
 
 data class CustomizationGate(val name: String, val passed: Boolean)
 
+/**
+ * One build request. [bleFirmwareVersion]/[wifiFirmwareVersion] are what the glasses reported;
+ * [baseBleFirmwareVersion]/[baseWifiFirmwareVersion] the base the build uses (null while in review).
+ * [baseFirmwareStatus]: `catalog`, `review`, `added`, `mapped` (built on a newer official version) or `declined`.
+ */
 data class CustomizationJob(
     val id: String,
     val status: String,
     val statusMessage: String,
     val deviceFamily: String,
+    val bleFirmwareVersion: String? = null,
+    val wifiFirmwareVersion: String? = null,
+    val baseFirmwareStatus: String? = null,
+    val baseBleFirmwareVersion: String? = null,
+    val baseWifiFirmwareVersion: String? = null,
+    val declineReason: String? = null,
+    val reviewExpiresAt: String? = null,
     val wakePhrase: String?,
     val toneSlots: List<String>,
     val disableLedFlash: Boolean,
@@ -104,19 +125,12 @@ data class CustomizationJob(
     val isActive: Boolean get() = status in ACTIVE_STATUSES
 
     companion object {
-        val ACTIVE_STATUSES = setOf("draft", "uploading", "queued", "building", "built")
+        /** `built` stays active only for jobs created before the review flow. */
+        val ACTIVE_STATUSES = setOf("draft", "uploading", "awaiting_base_firmware", "queued", "building", "built")
     }
 }
 
-data class UploadTicket(
-    val kind: String,
-    val slot: String,
-    val method: String,
-    val url: String,
-    val headers: Map<String, String>,
-)
-
-/** A declared upload: the bytes plus the metadata the server checks on submit. */
+/** One asset upload: the bytes plus the metadata the server checks (`PUT /jobs/{id}/assets/{slot}`). */
 data class CustomizationUpload(
     val kind: String,
     val slot: String,
@@ -134,6 +148,8 @@ data class CustomizationApiError(
     val currentPlan: String? = null,
     val jobId: String? = null,
     val problemSlots: List<String> = emptyList(),
+    /** The limit a 413 (`asset_too_large`, `job_upload_limit`) refers to. */
+    val maxBytes: Long? = null,
 ) : Exception(message)
 
 /** The job-create request body (one place, so the ViewModel test can read it back). */
@@ -166,7 +182,7 @@ object CustomizationJson {
             val code = o.str("code") ?: return@mapNotNull null
             WakeLanguage(code, o.int("max_chars") ?: 32, o.int("max_words") ?: 4, o.int("min_letters") ?: 4)
         }
-        val toneMaxBytes = tones?.long("max_bytes") ?: 5_242_880L
+        val toneMaxBytes = tones?.long("max_bytes") ?: 1_048_576L
         val perFirmwareSlots = root["tone_slots"]?.let { it as? JsonArray }?.mapNotNull { element ->
             val o = element as? JsonObject ?: return@mapNotNull null
             val id = o.str("id") ?: return@mapNotNull null
@@ -190,7 +206,9 @@ object CustomizationJson {
             eligible = root.bool("eligible") ?: false,
             ineligibleReason = root.str("ineligible_reason"),
             consentVersion = root.str("consent_version").orEmpty(),
-            supported = root.bool("supported") ?: true,
+            supported = root.bool("supported") ?: false,
+            reviewRequired = root.bool("review_required") ?: false,
+            reviewMaxDays = root.int("review_max_days") ?: 30,
             toneSlots = perFirmwareSlots ?: genericSlots,
             toneMaxBytes = toneMaxBytes,
             toneContentTypes = tones?.array("content_types")?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty(),
@@ -201,9 +219,10 @@ object CustomizationJson {
             phonemesNote = wake?.str("phonemes_note")?.takeIf { it.isNotBlank() },
             sampleMin = samples?.int("min") ?: 8,
             sampleMax = samples?.int("max") ?: 12,
-            sampleMaxBytes = samples?.long("max_bytes") ?: 2_097_152L,
+            sampleMaxBytes = samples?.long("max_bytes") ?: 393_216L,
             sampleMinMs = sampleDuration?.long("min") ?: 300L,
             sampleMaxMs = sampleDuration?.long("max") ?: 10_000L,
+            jobMaxBytes = root.obj("uploads")?.long("job_max_bytes") ?: 8_388_608L,
         )
     }
 
@@ -217,6 +236,13 @@ object CustomizationJson {
             status = obj.str("status").orEmpty(),
             statusMessage = obj.str("status_message").orEmpty(),
             deviceFamily = obj.str("device_family").orEmpty(),
+            bleFirmwareVersion = obj.str("ble_firmware_version"),
+            wifiFirmwareVersion = obj.str("wifi_firmware_version"),
+            baseFirmwareStatus = obj.str("base_firmware_status"),
+            baseBleFirmwareVersion = obj.str("base_ble_firmware_version"),
+            baseWifiFirmwareVersion = obj.str("base_wifi_firmware_version"),
+            declineReason = obj.str("decline_reason")?.takeIf { it.isNotBlank() },
+            reviewExpiresAt = obj.str("review_expires_at"),
             wakePhrase = obj.str("wake_phrase"),
             toneSlots = obj.array("tone_slots").mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
             disableLedFlash = options?.bool("disable_led_flash") ?: false,
@@ -237,18 +263,6 @@ object CustomizationJson {
     fun parseJobList(text: String): List<CustomizationJob> =
         parseObject(text)?.array("jobs")?.mapNotNull { (it as? JsonObject)?.let(::parseJob) }.orEmpty()
 
-    fun parseUploads(text: String): List<UploadTicket> =
-        parseObject(text)?.array("uploads")?.mapNotNull { element ->
-            val o = element as? JsonObject ?: return@mapNotNull null
-            UploadTicket(
-                kind = o.str("kind") ?: return@mapNotNull null,
-                slot = o.str("slot") ?: return@mapNotNull null,
-                method = o.str("method") ?: "PUT",
-                url = o.str("upload_url") ?: return@mapNotNull null,
-                headers = o.obj("headers")?.mapValues { (_, v) -> (v as? JsonPrimitive)?.contentOrNull.orEmpty() }.orEmpty(),
-            )
-        }.orEmpty()
-
     fun parseError(httpStatus: Int, text: String): CustomizationApiError {
         val o = parseObject(text)
         // A relay without the customization API (not deployed yet) answers a bare 404, not a JSON error.
@@ -260,6 +274,7 @@ object CustomizationJson {
             currentPlan = o?.str("currentPlan"),
             jobId = o?.str("job_id"),
             problemSlots = o?.array("problems")?.mapNotNull { (it as? JsonObject)?.str("slot") }.orEmpty(),
+            maxBytes = o?.long("max_bytes"),
         )
     }
 
@@ -284,21 +299,6 @@ object CustomizationJson {
         put("consent", buildJsonObject {
             put("version", request.consentVersion)
             put("accepted", true)
-        })
-    }.toString()
-
-    fun uploadRequestBody(uploads: List<CustomizationUpload>): String = buildJsonObject {
-        put("assets", buildJsonArray {
-            uploads.forEach { upload ->
-                add(buildJsonObject {
-                    put("kind", upload.kind)
-                    put("slot", upload.slot)
-                    put("content_type", upload.contentType)
-                    put("size_bytes", upload.bytes.size)
-                    put("sha256", upload.sha256)
-                    upload.durationMs?.let { put("duration_ms", it) }
-                })
-            }
         })
     }.toString()
 
