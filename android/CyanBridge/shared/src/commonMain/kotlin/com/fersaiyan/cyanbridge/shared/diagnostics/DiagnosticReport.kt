@@ -170,7 +170,7 @@ object DiagnosticReportComposer {
             append("Sent to CyanBridge support (${input.destination}), ${formatLocalDateTime(input.createdAtMs)}\n")
             append("Issue: ${input.issueType}\n")
             if (description.isNotEmpty()) append("Description: $description\n")
-            userNote?.let { append("Your note: $it\n") }
+            userNote?.takeIf { it != description }?.let { append("Your note: $it\n") }
             input.contactEmail?.takeIf { it.isNotBlank() }?.let { append("Contact email (for a reply): $it\n") }
             append("\n").append(deviceInfo).append("\n\n").append(logs)
         }
@@ -231,7 +231,7 @@ object DiagnosticReportComposer {
         append("reason: ${exit.reason}\n")
         append("time: ${formatLocalDateTime(exit.timeMs)}\n")
         exit.description?.let { append("description: $it\n") }
-        exit.stack?.lineSequence()?.firstOrNull()?.let { append("exception: $it\n") }
+        exit.stack?.lineSequence()?.firstOrNull { it.isNotBlank() }?.let { append("exception: $it\n") }
     }
 
     private fun renderExitDetail(exit: DiagnosticLastExit) = buildString {
@@ -248,7 +248,7 @@ object DiagnosticReportComposer {
             append(timeOfDay(event.timeMs)).append(' ').append(event.level.code).append(' ')
             append(event.subsystem.code.padEnd(8)).append(' ').append(event.message)
             event.fields.forEach { (key, value) -> append(' ').append(key).append('=').append(value) }
-            if (event.repeats > 0) append(" (x").append(event.repeats + 1).append(')')
+            if (event.repeats > 0) append(" (x").append(event.repeats + 1).append(", last ").append(timeOfDay(event.lastTimeMs)).append(')')
             append('\n')
             event.stack?.let { stack -> stack.lineSequence().take(12).forEach { append("    ").append(it).append('\n') } }
         }

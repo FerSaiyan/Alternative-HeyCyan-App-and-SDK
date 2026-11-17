@@ -128,6 +128,7 @@ class MentraMiniappsDestination : NavScreen() {
     private fun failed(error: Throwable) {
         if (error is CancellationException) throw error
         Log.w(TAG, "Miniapp action failed", error)
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.warn(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.MENTRA, "miniapp action failed", throwable = error)
         toast(if (error is MiniappException) error.message.orEmpty() else error.message ?: error.javaClass.simpleName)
     }
 
@@ -155,6 +156,10 @@ class MentraMiniappsDestination : NavScreen() {
         work {
             val app = installer.install(target)
             toast(getString(R.string.mentra_miniapps_installed_toast, app.manifest.name))
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
+                com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.MENTRA, "miniapp installed",
+                mapOf("package" to app.manifest.packageName, "version" to app.manifest.version.toString()),
+            )
             // A running copy keeps the old code until it restarts.
             if (MentraMiniappHost.running.value.containsKey(app.manifest.packageName)) MentraMiniappHost.stop(this, app.manifest.packageName)
             installed = withContext(Dispatchers.IO) { store.list() }
@@ -183,6 +188,7 @@ class MentraMiniappsDestination : NavScreen() {
             storeCursor = result.nextCursor?.takeIf { pages < MiniappStoreCatalog.MAX_PAGES }
             storePagesLoaded = pages
             storeLoaded = true
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.MENTRA, "store page", mapOf("entries" to result.apps.size.toString(), "page" to pages.toString(), "query" to query.isNotBlank().toString()))
             result.apps.forEach { listing ->
                 val url = listing.iconUrl ?: return@forEach
                 if (listing.packageName in icons) return@forEach
@@ -193,6 +199,7 @@ class MentraMiniappsDestination : NavScreen() {
                 }
             }
         } catch (error: MiniappException) {
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.warn(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.MENTRA, "store unavailable: ${error.message}")
             storeError = if (error.message == MiniappInstaller.TOO_MANY_REQUESTS) {
                 getString(R.string.mentra_miniapps_store_rate_limited)
             } else {

@@ -35,6 +35,8 @@ data class DiagnosticEvent(
     val fields: Map<String, String> = emptyMap(),
     val stack: String? = null,
     val repeats: Int = 0,
+    /** When the last folded repeat happened; [timeMs] stays the first occurrence. */
+    val lastTimeMs: Long = timeMs,
 )
 
 /**
@@ -74,9 +76,9 @@ class DiagnosticEventLog(
             val lane = lanes.getOrPut(subsystem) { ArrayDeque() }
             val last = lane.lastOrNull()
             if (last != null && stack == null && last.level == level && last.message == cleanMessage &&
-                last.fields == cleanFields && now - last.timeMs <= foldWindowMs
+                last.fields == cleanFields && now - last.lastTimeMs <= foldWindowMs
             ) {
-                lane[lane.lastIndex] = last.copy(repeats = last.repeats + 1, timeMs = now)
+                lane[lane.lastIndex] = last.copy(repeats = last.repeats + 1, lastTimeMs = now)
                 return
             }
             lane.addLast(DiagnosticEvent(nextSeq++, now, subsystem, level, cleanMessage, cleanFields, stack))
@@ -96,7 +98,7 @@ class DiagnosticEventLog(
 
     /** Events newer than [sinceMs], plus every buffered error (errors are kept regardless of age). */
     fun recent(sinceMs: Long): List<DiagnosticEvent> =
-        snapshot().filter { it.timeMs >= sinceMs || it.level == DiagnosticLevel.ERROR }
+        snapshot().filter { it.lastTimeMs >= sinceMs || it.level == DiagnosticLevel.ERROR }
 
     fun clear() = synchronized(lock) {
         lanes.clear()

@@ -56,7 +56,7 @@ object CrashRecorder {
         SavedCrash(
             timeMs = json.getLong("t"),
             pid = json.optInt("pid"),
-            stack = "Thread ${json.optString("thread")}\n" + json.optString("stack"),
+            stack = json.optString("stack"),
             events = decode(json.optJSONArray("events") ?: JSONArray()),
         )
     }.getOrNull()
@@ -67,7 +67,7 @@ object CrashRecorder {
                 JSONObject()
                     .put("seq", e.seq).put("t", e.timeMs).put("s", e.subsystem.name).put("l", e.level.name)
                     .put("m", e.message).put("f", JSONObject(e.fields)).put("x", e.stack ?: JSONObject.NULL)
-                    .put("r", e.repeats),
+                    .put("r", e.repeats).put("lt", e.lastTimeMs),
             )
         }
     }
@@ -85,6 +85,7 @@ object CrashRecorder {
                 fields = fields,
                 stack = if (o.isNull("x")) null else o.optString("x"),
                 repeats = o.optInt("r"),
+                lastTimeMs = o.optLong("lt", o.getLong("t")),
             )
         }.getOrNull()
     }
