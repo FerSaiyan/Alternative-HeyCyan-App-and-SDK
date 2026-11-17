@@ -411,7 +411,7 @@
     <string name="sync_flow_custom_title">自定义流程</string>
     <string name="sync_flow_custom_description">CyanBridge 解析器：先使用眼镜上报的 IP，再尝试常用的 Wi-Fi Direct 地址</string>
     <string name="sync_flow_adaptive_title">自适应流程</string>
-    <string name="sync_flow_adaptive_description">按检查点恢复，并学习此手机与眼镜的可靠路由</string>
+    <string name="sync_flow_adaptive_description">按检查点恢复，并学习此手机与眼镜的可靠路由；若上报的 IP 无响应，则扫描 Wi-Fi Direct 网络并记住该地址</string>
     <string name="sync_flow_experimental">实验性</string>
     <string name="settings_media_sync">媒体同步</string>
     <string name="settings_media_sync_description">眼镜 Wi-Fi 同步流程：%1$s</string>

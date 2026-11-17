@@ -265,6 +265,7 @@ class PrefsInventoryTest {
         adaptive_p2p_sync_profiles/*.candidate_successes INT 0
         adaptive_p2p_sync_profiles/*.completed_syncs INT 0
         adaptive_p2p_sync_profiles/*.consecutive_failures INT 0
+        adaptive_p2p_sync_profiles/*.learned_http_ip STRING null
         moyoung_w620/file_wifi_ssid STRING "Glass-01"
         moyoung_w620/file_wifi_password STRING "12345678"
         external_image_automation/session STRING null

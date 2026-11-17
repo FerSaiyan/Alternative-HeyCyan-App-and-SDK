@@ -16,12 +16,16 @@ import com.fersaiyan.cyanbridge.ai.image.ImageQuestionSourcePolicy
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
 import com.fersaiyan.cyanbridge.media.AdaptiveHttpRoute
+import com.fersaiyan.cyanbridge.media.AdaptiveIpSource
+import com.fersaiyan.cyanbridge.media.AdaptiveSubnetScan
 import com.fersaiyan.cyanbridge.media.AdaptiveP2pProfileStore
 import com.fersaiyan.cyanbridge.media.AdaptiveProfileLearning
 import com.fersaiyan.cyanbridge.media.AdaptiveP2pSyncSession
 import com.fersaiyan.cyanbridge.media.AdaptiveSyncCheckpoint
 import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
 import com.fersaiyan.cyanbridge.media.OfficialHeyCyanApp
+import com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents
+import com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem
 import com.fersaiyan.cyanbridge.shared.media.OggOpusWrapper
 import com.fersaiyan.cyanbridge.media.VendorAlbumDownloader
 import com.fersaiyan.cyanbridge.media.autocapture.GlassesSyncedAudioIngestor
@@ -154,6 +158,15 @@ internal class GlassesMediaSyncCoordinator(
         adaptiveSyncSession = { adaptiveSyncSession },
         downloadBleIp = { downloadBleIp },
         downloadWifiIp = { downloadWifiIp },
+    )
+
+    /** The Adaptive flow's wrong-IP fallback scan (the same port-80 scan as Custom's). */
+    private val adaptiveScanner = HttpSubnetScanner(
+        portOpen = { ip, timeoutMs -> p2pNetwork.isPortOpen(ip, 80, timeoutMs) },
+        mediaConfigOk = { ip, timeoutMs ->
+            p2pNetwork.isPortOpen(ip, 80, (timeoutMs / 2).coerceAtLeast(400)) &&
+                p2pNetwork.httpGet(URL("http://$ip/files/media.config"), timeoutMs, timeoutMs)
+        },
     )
 
     private val customResolver = CustomHttpResolver(
@@ -2554,27 +2567,30 @@ internal class GlassesMediaSyncCoordinator(
             val routeOrder = adaptive.profile.routeOrder()
             val warmups = adaptive.profile.warmupScheduleMs()
             val httpRecoveryStartedAt = android.os.SystemClock.elapsedRealtime()
+            val phoneIp = p2pNetwork.p2pInterfaceIpv4()
+            val learnedIp = adaptive.profile.learnedHttpIp
+            val roundIps = AdaptiveSubnetScan.endpointIps(learnedIp, deviceIps, phoneIp, downloadPhoneIsGroupOwner)
+            if (learnedIp != null) {
+                Log.i("DataDownload", "Adaptive learned glasses IP $learnedIp; round order=$roundIps (phoneIp=$phoneIp)")
+            }
             var stickyEndpoint: Pair<String, AdaptiveHttpRoute>? = null
+            var scanFoundIp: String? = null
+            var scansDone = 0
+            var lastScanEndedAt: Long? = null
+            val triedIps = LinkedHashSet<String>()
             var lastFailure = "HTTP endpoint was unreachable"
 
-            for (warmupMs in warmups) {
-                if (!isActive || !isDownloadSessionActive(sessionId) || !downloadP2pConnected) {
-                    return@launchDownloadSession
-                }
-                setTransferDetailForSession(
-                    sessionId,
-                    "Adaptive HTTP check in ${warmupMs / 1000.0}s...",
-                )
-                val remainingWarmup = httpRecoveryStartedAt + warmupMs - android.os.SystemClock.elapsedRealtime()
-                if (remainingWarmup > 0L) delay(remainingWarmup)
+            fun ipSource(ip: String): AdaptiveIpSource = when {
+                ip == scanFoundIp -> AdaptiveIpSource.SCAN
+                ip in deviceIps -> AdaptiveIpSource.REPORTED
+                else -> AdaptiveIpSource.LEARNED
+            }
 
-                val endpoints = stickyEndpoint?.let(::listOf) ?: deviceIps.flatMap { ip ->
-                    routeOrder.map { route -> ip to route }
-                }
+            /** One pass over [endpoints]: true when media.config was fetched or the session ended. */
+            suspend fun attemptRound(endpoints: List<Pair<String, AdaptiveHttpRoute>>, warmupMs: Long): Boolean? {
                 for ((candidateIp, route) in endpoints) {
-                    if (!isActive || !isDownloadSessionActive(sessionId) || !downloadP2pConnected) {
-                        return@launchDownloadSession
-                    }
+                    if (!isActive || !isDownloadSessionActive(sessionId) || !downloadP2pConnected) return true
+                    triedIps += candidateIp
                     setTransferDetailForSession(
                         sessionId,
                         "Trying ${adaptiveRouteLabel(route)} to the glasses HTTP server...",
@@ -2594,24 +2610,117 @@ internal class GlassesMediaSyncCoordinator(
                     }
                     val content = result.content
                     if (content != null) {
+                        val source = ipSource(candidateIp)
                         adaptiveRecoveryJob?.cancel()
                         adaptiveRecoveryJob = null
                         adaptiveActiveRoute = route
                         adaptiveSuccessfulWarmupMs = warmupMs
-                        adaptive.noteHttpSuccess(route, warmupMs)
+                        adaptive.noteHttpSuccess(route, warmupMs, candidateIp, source)
                         applyAdaptiveHttpRoute(route)
                         downloadResolvedHttpIp = candidateIp
                         downloadInProgress = true
                         Log.i(
                             "DataDownload",
-                            "Adaptive flow resolved media.config: ip=$candidateIp route=$route warmupMs=$warmupMs",
+                            "Adaptive flow resolved media.config: ip=$candidateIp route=$route warmupMs=$warmupMs source=$source",
                         )
+                        if (source != AdaptiveIpSource.REPORTED) {
+                            DiagnosticEvents.info(
+                                DiagnosticSubsystem.SYNC,
+                                "adaptive media.config from an unreported glasses address",
+                                mapOf("ip" to candidateIp, "source" to source.name, "route" to route.name, "reported" to deviceIps.joinToString(",")),
+                            )
+                        }
                         parseMediaList(content, candidateIp, sessionId)
-                        return@launchDownloadSession
+                        return true
                     }
                     // A response code or response-body failure proves the route. Preserve the
                     // group and retry only this endpoint after the next firmware warm-up delay.
-                    if (result.serverReached) break
+                    if (result.serverReached) return false
+                }
+                return null
+            }
+
+            /** The wrong-IP fallback: scan the group's /24 for the HTTP server. */
+            suspend fun scanForServer(): String? {
+                val now = android.os.SystemClock.elapsedRealtime()
+                val remainingMs = downloadStartedAtMs + ADAPTIVE_INITIAL_PHASE_TIMEOUT_MS - System.currentTimeMillis()
+                if (!AdaptiveSubnetScan.shouldScan(
+                        flow = downloadFlowMode,
+                        p2pConnected = downloadP2pConnected,
+                        roundReachedServer = stickyEndpoint != null,
+                        scansDone = scansDone,
+                        msSinceLastScan = lastScanEndedAt?.let { now - it },
+                        remainingMs = remainingMs,
+                    )
+                ) return null
+                scansDone++
+                val interfaceIp = p2pNetwork.p2pInterfaceIpv4() ?: phoneIp
+                val hosts = AdaptiveSubnetScan.hosts(
+                    phoneInterfaceIp = interfaceIp,
+                    groupOwnerIp = downloadWifiIp,
+                    reportedIps = deviceIps,
+                    phoneIsGroupOwner = downloadPhoneIsGroupOwner,
+                    tried = triedIps,
+                )
+                val limits = AdaptiveSubnetScan.limits(AdaptiveSubnetScan.scanBudgetMs(remainingMs))
+                val fields = mapOf(
+                    "scan" to "$scansDone/${AdaptiveSubnetScan.MAX_SCANS_PER_ATTEMPT}",
+                    "reported" to deviceIps.joinToString(","),
+                    "phone_ip" to interfaceIp.orEmpty(),
+                    "group_owner_ip" to downloadWifiIp.orEmpty(),
+                    "hosts" to hosts.size.toString(),
+                    "first_host" to hosts.firstOrNull().orEmpty(),
+                    "budget_ms" to limits.overallTimeoutMs.toString(),
+                    "last_failure" to lastFailure.take(80),
+                )
+                if (hosts.isEmpty()) {
+                    lastScanEndedAt = android.os.SystemClock.elapsedRealtime()
+                    return null
+                }
+                Log.i("DataDownload", "Adaptive subnet scan started: $fields")
+                DiagnosticEvents.info(DiagnosticSubsystem.SYNC, "adaptive subnet scan started", fields)
+                adaptive.mark(AdaptiveSyncCheckpoint.SUBNET_SCAN, "start=$scansDone,hosts=${hosts.size},budget_ms=${limits.overallTimeoutMs}")
+                setTransferDetailForSession(sessionId, "The glasses address did not answer; searching the Wi-Fi Direct network...")
+                val scanStartedAt = android.os.SystemClock.elapsedRealtime()
+                val found = adaptiveScanner.scan(hosts, limits)
+                lastScanEndedAt = android.os.SystemClock.elapsedRealtime()
+                val elapsed = (lastScanEndedAt!! - scanStartedAt).toString()
+                if (found != null) {
+                    Log.i("DataDownload", "Adaptive subnet scan found the glasses HTTP server at $found in ${elapsed}ms")
+                    DiagnosticEvents.info(DiagnosticSubsystem.SYNC, "adaptive subnet scan found server", mapOf("ip" to found, "elapsed_ms" to elapsed, "reported" to deviceIps.joinToString(",")))
+                    adaptive.mark(AdaptiveSyncCheckpoint.SUBNET_SCAN, "found=$found,ms=$elapsed")
+                } else {
+                    Log.w("DataDownload", "Adaptive subnet scan found no HTTP server in ${elapsed}ms")
+                    DiagnosticEvents.warn(DiagnosticSubsystem.SYNC, "adaptive subnet scan found nothing", mapOf("elapsed_ms" to elapsed, "hosts" to hosts.size.toString()))
+                    adaptive.mark(AdaptiveSyncCheckpoint.SUBNET_SCAN, "found=none,ms=$elapsed")
+                }
+                return found
+            }
+
+            for (warmupMs in warmups) {
+                if (!isActive || !isDownloadSessionActive(sessionId) || !downloadP2pConnected) {
+                    return@launchDownloadSession
+                }
+                setTransferDetailForSession(
+                    sessionId,
+                    "Adaptive HTTP check in ${warmupMs / 1000.0}s...",
+                )
+                val remainingWarmup = httpRecoveryStartedAt + warmupMs - android.os.SystemClock.elapsedRealtime()
+                if (remainingWarmup > 0L) delay(remainingWarmup)
+
+                val ips = listOfNotNull(scanFoundIp) + roundIps.filter { it != scanFoundIp }
+                val endpoints = stickyEndpoint?.let(::listOf) ?: ips.flatMap { ip ->
+                    routeOrder.map { route -> ip to route }
+                }
+                if (attemptRound(endpoints, warmupMs) == true) return@launchDownloadSession
+                if (stickyEndpoint != null || scanFoundIp != null) continue
+
+                // Neither the learned address nor the reported ones answered at all: the
+                // glasses may have reported a wrong or stale IP.
+                val found = scanForServer() ?: continue
+                scanFoundIp = found
+                if (attemptRound(routeOrder.map { route -> found to route }, warmupMs) == true) {
+                    return@launchDownloadSession
                 }
             }
 

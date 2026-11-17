@@ -411,7 +411,7 @@
     <string name="sync_flow_custom_title">Свой сценарий</string>
     <string name="sync_flow_custom_description">Разрешение CyanBridge: сначала IP, сообщённый очками, затем обычные адреса Wi-Fi Direct</string>
     <string name="sync_flow_adaptive_title">Адаптивный сценарий</string>
-    <string name="sync_flow_adaptive_description">Восстановление по контрольным точкам, которое запоминает надёжный маршрут для этого телефона и очков</string>
+    <string name="sync_flow_adaptive_description">Восстановление по контрольным точкам, которое запоминает надёжный маршрут для этого телефона и очков; если сообщённый IP не отвечает, сканирует сеть Wi-Fi Direct и запоминает адрес</string>
     <string name="sync_flow_experimental">Экспериментально</string>
     <string name="settings_media_sync">Синхронизация медиа</string>
     <string name="settings_media_sync_description">Способ синхронизации очков по Wi-Fi: %1$s</string>

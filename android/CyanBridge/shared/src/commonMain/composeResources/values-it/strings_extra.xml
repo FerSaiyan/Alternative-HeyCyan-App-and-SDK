@@ -411,7 +411,7 @@
     <string name="sync_flow_custom_title">Flusso personalizzato</string>
     <string name="sync_flow_custom_description">Resolver CyanBridge: prima l'IP segnalato dagli occhiali, poi gli indirizzi Wi-Fi Direct abituali</string>
     <string name="sync_flow_adaptive_title">Flusso adattivo</string>
-    <string name="sync_flow_adaptive_description">Ripristino a checkpoint che impara il percorso affidabile per questo telefono e questi occhiali</string>
+    <string name="sync_flow_adaptive_description">Ripristino a checkpoint che impara il percorso affidabile per questo telefono e questi occhiali; se l'IP segnalato non risponde, scansiona la rete Wi-Fi Direct e ricorda l'indirizzo</string>
     <string name="sync_flow_experimental">Sperimentale</string>
     <string name="settings_media_sync">Sincronizzazione media</string>
     <string name="settings_media_sync_description">Flusso di sincronizzazione Wi-Fi degli occhiali: %1$s</string>

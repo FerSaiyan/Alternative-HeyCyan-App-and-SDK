@@ -105,10 +105,14 @@ enum class GlassesSyncFlow(
         description = "CyanBridge resolver: the glasses-reported IP first, then a local subnet scan",
     ),
 
-    /** Checkpoint recovery that learns the working route per phone and glasses. */
+    /**
+     * Checkpoint recovery that learns the working route per phone and glasses; when the reported
+     * IP does not answer it scans the group's /24 and remembers the address it found.
+     */
     ADAPTIVE(
         label = "Adaptive flow",
-        description = "Checkpoint recovery that learns the reliable route for this phone and glasses",
+        description = "Checkpoint recovery that learns the reliable route for this phone and glasses; " +
+            "if the reported IP does not answer, it scans the Wi-Fi Direct network and remembers the address",
         experimental = true,
     ),
     ;

@@ -40,6 +40,7 @@ object MediaPrefs {
         val candidateSuccesses = intFamily("*.candidate_successes", 0)
         val completedSyncs = intFamily("*.completed_syncs", 0)
         val consecutiveFailures = intFamily("*.consecutive_failures", 0)
+        val learnedHttpIp = optionalStringFamily("*.learned_http_ip")
     }
 
     /** MoYoung W620 file-transfer hotspot credentials. */

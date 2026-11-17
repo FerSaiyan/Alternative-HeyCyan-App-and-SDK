@@ -411,7 +411,7 @@
     <string name="sync_flow_custom_title">Flujo personalizado</string>
     <string name="sync_flow_custom_description">Resolución de CyanBridge: primero la IP que informan las gafas y luego las direcciones Wi-Fi Direct habituales</string>
     <string name="sync_flow_adaptive_title">Flujo adaptativo</string>
-    <string name="sync_flow_adaptive_description">Recuperación por puntos de control que aprende la ruta fiable para este teléfono y estas gafas</string>
+    <string name="sync_flow_adaptive_description">Recuperación por puntos de control que aprende la ruta fiable para este teléfono y estas gafas; si la IP informada no responde, busca en la red Wi-Fi Direct y recuerda la dirección</string>
     <string name="sync_flow_experimental">Experimental</string>
     <string name="settings_media_sync">Sincronización de medios</string>
     <string name="settings_media_sync_description">Flujo de sincronización Wi-Fi de las gafas: %1$s</string>

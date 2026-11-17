@@ -166,7 +166,7 @@
     <string name="sync_flow_custom_title">Benutzerdefinierter Ablauf</string>
     <string name="sync_flow_custom_description">CyanBridge-Auflösung: zuerst die von der Brille gemeldete IP, dann die üblichen Wi-Fi-Direct-Adressen</string>
     <string name="sync_flow_adaptive_title">Adaptiver Ablauf</string>
-    <string name="sync_flow_adaptive_description">Wiederherstellung über Kontrollpunkte, die den zuverlässigen Weg für dieses Telefon und diese Brille lernt</string>
+    <string name="sync_flow_adaptive_description">Wiederherstellung über Kontrollpunkte, die den zuverlässigen Weg für dieses Telefon und diese Brille lernt; antwortet die gemeldete IP nicht, durchsucht sie das Wi-Fi-Direct-Netz und merkt sich die Adresse</string>
     <string name="sync_flow_experimental">Experimentell</string>
     <string name="settings_media_sync">Mediensynchronisierung</string>
     <string name="settings_media_sync_description">WLAN-Synchronisierungsablauf der Brille: %1$s</string>

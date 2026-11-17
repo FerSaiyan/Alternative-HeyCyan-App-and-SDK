@@ -37,4 +37,19 @@ class AdaptiveProfileLearningTest {
         assertEquals(AdaptiveHttpRoute.LOCAL_ADDRESS, AdaptiveP2pProfileStore.load(context, "phone-and-glasses").candidateRoute)
         profiles.edit().clear().commit()
     }
+
+    @Test
+    fun `an address found by the scan is learned and dropped once the reported one answers`() {
+        profiles.edit().clear().commit()
+        fun session(ip: String, source: AdaptiveIpSource) = AdaptiveP2pSyncSession("k", AdaptiveP2pProfile(), { 0L })
+            .apply { noteHttpSuccess(AdaptiveHttpRoute.P2P_NETWORK, 1_000L, ip, source) }
+
+        AdaptiveProfileLearning.recordSuccess(context, GlassesSyncFlow.ADAPTIVE, session("192.168.49.77", AdaptiveIpSource.SCAN), null, null)
+        assertEquals("192.168.49.77", AdaptiveP2pProfileStore.load(context, "k").learnedHttpIp)
+        AdaptiveProfileLearning.recordSuccess(context, GlassesSyncFlow.ADAPTIVE, session("192.168.49.77", AdaptiveIpSource.LEARNED), null, null)
+        assertEquals("192.168.49.77", AdaptiveP2pProfileStore.load(context, "k").learnedHttpIp)
+        AdaptiveProfileLearning.recordSuccess(context, GlassesSyncFlow.ADAPTIVE, session("192.168.49.79", AdaptiveIpSource.REPORTED), null, null)
+        assertNull(AdaptiveP2pProfileStore.load(context, "k").learnedHttpIp)
+        profiles.edit().clear().commit()
+    }
 }

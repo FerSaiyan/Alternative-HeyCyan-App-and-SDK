@@ -411,7 +411,7 @@
     <string name="sync_flow_custom_title">맞춤 흐름</string>
     <string name="sync_flow_custom_description">CyanBridge 해결기: 안경이 보고한 IP를 먼저 사용하고, 그다음 일반적인 Wi-Fi Direct 주소를 시도</string>
     <string name="sync_flow_adaptive_title">적응형 흐름</string>
-    <string name="sync_flow_adaptive_description">이 휴대폰과 안경에 맞는 안정적인 경로를 학습하는 체크포인트 복구</string>
+    <string name="sync_flow_adaptive_description">이 휴대폰과 안경에 맞는 안정적인 경로를 학습하는 체크포인트 복구. 보고된 IP가 응답하지 않으면 Wi-Fi Direct 네트워크를 검색하고 주소를 기억합니다</string>
     <string name="sync_flow_experimental">실험적</string>
     <string name="settings_media_sync">미디어 동기화</string>
     <string name="settings_media_sync_description">안경 Wi-Fi 동기화 흐름: %1$s</string>
