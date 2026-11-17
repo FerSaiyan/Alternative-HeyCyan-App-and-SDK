@@ -271,8 +271,14 @@ class TuneBudsMediaSync(
     }
 
     private suspend fun openTransport(onStatus: suspend (String) -> Unit): String {
-        // Unknown capabilities preserve the already validated local-hotspot path.
-        if (context != null && manager.state.value.wifiSupportMask?.and(4) == 4) {
+        // Unknown capabilities preserve the already validated local-hotspot path, EXCEPT for an Allwinner V821
+        // camera coprocessor (E0 = 1) that reports no 0xA3 mask: firmware 5621 (V821B ai_glass_download) implements
+        // only glasses-AP and Wi-Fi Direct and answers E7 = 2 after E6 mode 0, so the hotspot path cannot work there
+        // (found by running the real firmware, firmware_dump add.228). P2P failure still falls back to the hotspot.
+        val state = manager.state.value
+        val p2pCapable = state.wifiSupportMask?.and(4) == 4 ||
+            (state.wifiSupportMask == null && state.device.cameraCoprocessorType == 1)
+        if (context != null && p2pCapable) {
             val transport = TuneBudsP2pTransport(context)
             p2p = transport
             val ssid = "AiGlassDb_${Random.nextInt(10_000)}"
