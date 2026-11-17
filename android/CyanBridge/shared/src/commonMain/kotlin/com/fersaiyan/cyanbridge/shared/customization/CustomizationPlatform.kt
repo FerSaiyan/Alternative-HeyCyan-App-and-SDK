@@ -34,8 +34,11 @@ interface CustomizationPlatform {
     /** A relay API call with the account token; [path] starts with `/api/`. */
     suspend fun api(method: String, path: String, body: String? = null): HttpResult
 
-    /** Uploads [bytes] to a signed URL (no account token); returns the HTTP status. */
-    suspend fun upload(ticket: UploadTicket, bytes: ByteArray): Int
+    /**
+     * A relay API call with the account token and a raw byte body ([bytes], sent with a fixed
+     * length as [contentType], plus [headers]); used for the asset uploads.
+     */
+    suspend fun apiBytes(method: String, path: String, contentType: String, headers: Map<String, String>, bytes: ByteArray): HttpResult
 
     fun sha256Hex(bytes: ByteArray): String
 

@@ -83,6 +83,14 @@ fun GlassesCustomizationCard(state: GlassesCustomizationUiState, actions: Glasse
 @OptIn(ExperimentalResourceApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ReadyContent(state: GlassesCustomizationUiState, actions: GlassesCustomizationActions) {
+    state.reviewNotice?.let {
+        Text(
+            it,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.testTag("customization_review_notice"),
+        )
+    }
     if (state.tones.isNotEmpty()) {
         SectionTitle(stringResource(Res.string.customization_tones))
         Text(stringResource(Res.string.customization_tones_hint), style = MaterialTheme.typography.bodySmall)
@@ -230,6 +238,9 @@ private fun BuildsAndInstall(state: GlassesCustomizationUiState, actions: Glasse
                 Text(job.title, style = MaterialTheme.typography.bodyMedium)
                 Text(job.statusLabel, style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("customization_job_status_$index"))
                 if (job.message.isNotBlank()) Text(job.message, style = MaterialTheme.typography.bodySmall)
+                job.baseNote?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("customization_job_base_$index"))
+                }
             }
             if (job.active) {
                 TextButton(onClick = { actions.cancelJob(job.id) }, modifier = Modifier.testTag("customization_job_cancel_$index")) {
