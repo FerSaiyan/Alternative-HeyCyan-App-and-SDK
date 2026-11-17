@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import com.fersaiyan.cyanbridge.shared.icons.AppIcon
@@ -113,11 +114,15 @@ fun VoiceEnrollmentScreen(
                     )
                 }
             }
+            BoxWithConstraints(Modifier.weight(1f)) {
+            // Small screens or large fonts leave little room above the pinned action: a smaller shape
+            // keeps the consent switch closer to view.
+            val shapeSize = if (maxHeight < 480.dp) 104.dp else 168.dp
             Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                VoiceShape(phase = state.phase, level = level, modifier = Modifier.padding(top = 8.dp))
+                VoiceShape(phase = state.phase, level = level, size = shapeSize, modifier = Modifier.padding(top = 8.dp))
                 Spacer(Modifier.height(20.dp))
                 Text(stringResource(Res.string.voice_enroll_title), style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
@@ -137,6 +142,7 @@ fun VoiceEnrollmentScreen(
                     MessageCard(message, state.errorDetail)
                 }
                 Spacer(Modifier.height(24.dp))
+            }
             }
             // The primary action stays pinned above the navigation row instead of scrolling away. Without
             // microphone access it asks for it; without consent a hint says what is missing.
@@ -192,7 +198,8 @@ fun VoiceEnrollmentScreen(
 
 /** A rounded shape whose corners, scale and colour spring between idle, listening and done. */
 @Composable
-private fun VoiceShape(phase: VoiceEnrollmentPhase, level: Float, modifier: Modifier = Modifier) {
+private fun VoiceShape(phase: VoiceEnrollmentPhase, level: Float, size: Dp = 168.dp, modifier: Modifier = Modifier) {
+    val k = size / 168.dp
     val listening = phase == VoiceEnrollmentPhase.LISTENING
     val done = phase == VoiceEnrollmentPhase.DONE
     val breathing = rememberInfiniteTransition()
@@ -207,9 +214,9 @@ private fun VoiceShape(phase: VoiceEnrollmentPhase, level: Float, modifier: Modi
     // Squircle while idle, softer while listening, circle when done.
     val corner by animateDpAsState(
         when {
-            done -> 80.dp
-            listening -> 52.dp
-            else -> 44.dp
+            done -> 80.dp * k
+            listening -> 52.dp * k
+            else -> 44.dp * k
         },
         spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
     )
@@ -227,11 +234,11 @@ private fun VoiceShape(phase: VoiceEnrollmentPhase, level: Float, modifier: Modi
             else -> MaterialTheme.colorScheme.primary
         },
     )
-    Box(modifier.size(168.dp), contentAlignment = Alignment.Center) {
+    Box(modifier.size(size), contentAlignment = Alignment.Center) {
         // Halo: grows with the voice, breathes gently otherwise.
         Box(
             Modifier
-                .size(148.dp)
+                .size(148.dp * k)
                 .graphicsLayer {
                     val s = 1f + 0.06f * breath + 0.22f * voice
                     scaleX = s; scaleY = s; rotationZ = -rotation / 2
@@ -242,7 +249,7 @@ private fun VoiceShape(phase: VoiceEnrollmentPhase, level: Float, modifier: Modi
         )
         Box(
             Modifier
-                .size(120.dp)
+                .size(120.dp * k)
                 .graphicsLayer {
                     val s = scale * (1f + 0.12f * voice)
                     scaleX = s; scaleY = s; rotationZ = rotation
@@ -257,7 +264,7 @@ private fun VoiceShape(phase: VoiceEnrollmentPhase, level: Float, modifier: Modi
             ) { finished ->
                 Icon(
                     (if (finished) AppIcon.Check else AppIcon.Microphone).imageVector(), null,
-                    Modifier.size(56.dp).graphicsLayer { rotationZ = -rotation },
+                    Modifier.size(56.dp * k).graphicsLayer { rotationZ = -rotation },
                     tint = content,
                 )
             }
