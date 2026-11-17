@@ -187,7 +187,7 @@ Not fixed, for the owner:
 - The Mentra Miniapp Store feed (`https://api.apps.mentraglass.com/api/store/apps`) answers 404, and the store screen says "No miniapp was found at this URL". The endpoint has to be found again; installs from a miniapp URL still work.
 - The production website has no `/api/customization/*` yet, so the card cannot leave "not open yet" until it is deployed.
 - Onboarding voice step on a 1080×2424 screen: "Allow microphone" is below the fold while the record button is disabled.
-- Local models: "Test model now" shows a placeholder 1000 tok/s / 1 ms for Qwen3.5 (warm-up skipped since b7c048f5).
+- ~~Local models: "Test model now" shows a placeholder 1000 tok/s / 1 ms for Qwen3.5 (warm-up skipped since b7c048f5).~~ Fixed 2026-11-17: the skip is gone; Qwen3.5 0.8B runs the test generation on the current upstream llama.cpp (AVD: ~38 tok/s prompt, ~19.5 tok/s decode).
 - The Custom sync flow subtitle mentions a subnet scan that the resolver never reaches.
 - Emulator limits met here: no microphone input on emulator 37.1.11 headless ("Could not init `pa` audio driver"), and miniapp WebView pages render blank on the swiftshader screen although their DOM is complete.
 

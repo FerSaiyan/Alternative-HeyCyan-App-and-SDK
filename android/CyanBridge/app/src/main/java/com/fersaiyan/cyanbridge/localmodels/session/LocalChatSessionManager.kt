@@ -520,37 +520,6 @@ object LocalChatSessionManager {
         onToken: (String) -> Unit,
     ): LocalWarmupProbeResult {
         val backend = mutex.withLock { activeBackend ?: settings.computeBackend }
-        val modelPathSnapshot = mutex.withLock { loadedModelPath }
-        val skipGenerationForStability = shouldSkipWarmupGeneration(modelPathSnapshot)
-
-        if (skipGenerationForStability) {
-            val benchmarkPrompt = "Reply with only: OK"
-            val start = System.currentTimeMillis()
-            val llm = mutex.withLock { engine }
-            val promptTokens = try {
-                llm?.tokenizeCount(benchmarkPrompt)?.coerceAtLeast(1) ?: 1
-            } catch (_: Throwable) {
-                1
-            }
-            val elapsed = (System.currentTimeMillis() - start).coerceAtLeast(1L)
-            val fallback = mutex.withLock { gpuFallbackMessage }
-            val stabilityNote = "Qwen3.5 warm-up generation skipped due upstream llama.cpp instability"
-            val mergedFallback = listOfNotNull(fallback, stabilityNote)
-                .filter { it.isNotBlank() }
-                .joinToString(" | ")
-                .ifBlank { null }
-
-            // No generation ran: report zero tokens so the test shows "not measured" instead of a
-            // rate computed from the tokenizer call's ~1 ms (it used to read "1000 tok/s").
-            return LocalWarmupProbeResult(
-                promptTokens = promptTokens,
-                generatedTokens = 0,
-                elapsedMs = elapsed,
-                backend = backend,
-                fallbackReason = mergedFallback,
-            )
-        }
-
         val isAccel = backend == LocalComputeBackend.GPU || backend == LocalComputeBackend.NPU_EXPERIMENTAL
         val benchmarkPrompt = if (isAccel) {
             "Reply with only: OK"
@@ -623,12 +592,6 @@ object LocalChatSessionManager {
                 "REMOTE_OPENAI does not use a local engine. Requests go through RemoteOpenAiClient."
             )
         }
-    }
-
-    private fun shouldSkipWarmupGeneration(modelPath: String?): Boolean {
-        val normalized = modelPath.orEmpty().lowercase()
-        if (normalized.isBlank()) return false
-        return normalized.contains("qwen3.5") || normalized.contains("qwen35")
     }
 
     private const val TAG = "LocalChatSession"
