@@ -455,7 +455,7 @@
     <string name="sync_flow_official_title">HeyCyan app flow</string>
     <string name="sync_flow_official_description">Vendor-like strict BLE + P2P sync</string>
     <string name="sync_flow_custom_title">Custom flow</string>
-    <string name="sync_flow_custom_description">CyanBridge resolver: the glasses-reported IP first, then a local subnet scan</string>
+    <string name="sync_flow_custom_description">CyanBridge resolver: the glasses-reported IP first, then the usual Wi-Fi Direct addresses</string>
     <string name="sync_flow_adaptive_title">Adaptive flow</string>
     <string name="sync_flow_adaptive_description">Checkpoint recovery that learns the reliable route for this phone and glasses</string>
     <string name="sync_flow_experimental">Experimental</string>

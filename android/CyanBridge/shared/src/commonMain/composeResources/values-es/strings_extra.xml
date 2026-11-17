@@ -409,7 +409,7 @@
     <string name="sync_flow_official_title">Flujo de la aplicacion HeyCyan</string>
     <string name="sync_flow_official_description">Sincronizacion BLE + P2P estricta como la del proveedor</string>
     <string name="sync_flow_custom_title">Flujo personalizado</string>
-    <string name="sync_flow_custom_description">Resolución de CyanBridge: primero la IP que informan las gafas y luego una búsqueda en la subred local</string>
+    <string name="sync_flow_custom_description">Resolución de CyanBridge: primero la IP que informan las gafas y luego las direcciones Wi-Fi Direct habituales</string>
     <string name="sync_flow_adaptive_title">Flujo adaptativo</string>
     <string name="sync_flow_adaptive_description">Recuperación por puntos de control que aprende la ruta fiable para este teléfono y estas gafas</string>
     <string name="sync_flow_experimental">Experimental</string>

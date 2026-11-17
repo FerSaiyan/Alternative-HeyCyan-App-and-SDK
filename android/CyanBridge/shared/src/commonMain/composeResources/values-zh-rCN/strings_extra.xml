@@ -409,7 +409,7 @@
     <string name="sync_flow_official_title">HeyCyan 应用流程</string>
     <string name="sync_flow_official_description">类似供应商的严格 BLE + P2P 同步</string>
     <string name="sync_flow_custom_title">自定义流程</string>
-    <string name="sync_flow_custom_description">CyanBridge 解析器：先使用眼镜上报的 IP，再扫描本地子网</string>
+    <string name="sync_flow_custom_description">CyanBridge 解析器：先使用眼镜上报的 IP，再尝试常用的 Wi-Fi Direct 地址</string>
     <string name="sync_flow_adaptive_title">自适应流程</string>
     <string name="sync_flow_adaptive_description">按检查点恢复，并学习此手机与眼镜的可靠路由</string>
     <string name="sync_flow_experimental">实验性</string>

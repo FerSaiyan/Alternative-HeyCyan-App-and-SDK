@@ -409,7 +409,7 @@
     <string name="sync_flow_official_title">Flux de l'application HeyCyan</string>
     <string name="sync_flow_official_description">Synchronisation BLE + P2P stricte comme le fournisseur</string>
     <string name="sync_flow_custom_title">Flux personnalise</string>
-    <string name="sync_flow_custom_description">Résolution CyanBridge : d'abord l'IP signalée par les lunettes, puis une analyse du sous-réseau local</string>
+    <string name="sync_flow_custom_description">Résolution CyanBridge : d'abord l'IP signalée par les lunettes, puis les adresses Wi-Fi Direct habituelles</string>
     <string name="sync_flow_adaptive_title">Flux adaptatif</string>
     <string name="sync_flow_adaptive_description">Reprise par points de contrôle qui apprend la route fiable pour ce téléphone et ces lunettes</string>
     <string name="sync_flow_experimental">Expérimental</string>

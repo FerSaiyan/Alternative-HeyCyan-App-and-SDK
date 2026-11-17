@@ -409,7 +409,7 @@
     <string name="sync_flow_official_title">Flusso app HeyCyan</string>
     <string name="sync_flow_official_description">Sincronizzazione BLE + P2P rigorosa come il provider</string>
     <string name="sync_flow_custom_title">Flusso personalizzato</string>
-    <string name="sync_flow_custom_description">Resolver CyanBridge: prima l'IP segnalato dagli occhiali, poi una scansione della sottorete locale</string>
+    <string name="sync_flow_custom_description">Resolver CyanBridge: prima l'IP segnalato dagli occhiali, poi gli indirizzi Wi-Fi Direct abituali</string>
     <string name="sync_flow_adaptive_title">Flusso adattivo</string>
     <string name="sync_flow_adaptive_description">Ripristino a checkpoint che impara il percorso affidabile per questo telefono e questi occhiali</string>
     <string name="sync_flow_experimental">Sperimentale</string>

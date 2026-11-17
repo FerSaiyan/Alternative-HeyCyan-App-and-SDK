@@ -409,7 +409,7 @@
     <string name="sync_flow_official_title">HeyCyan 앱 흐름</string>
     <string name="sync_flow_official_description">공급업체와 유사한 엄격한 BLE + P2P 동기화</string>
     <string name="sync_flow_custom_title">맞춤 흐름</string>
-    <string name="sync_flow_custom_description">CyanBridge 해결기: 안경이 보고한 IP를 먼저 사용하고, 그다음 로컬 서브넷을 검색</string>
+    <string name="sync_flow_custom_description">CyanBridge 해결기: 안경이 보고한 IP를 먼저 사용하고, 그다음 일반적인 Wi-Fi Direct 주소를 시도</string>
     <string name="sync_flow_adaptive_title">적응형 흐름</string>
     <string name="sync_flow_adaptive_description">이 휴대폰과 안경에 맞는 안정적인 경로를 학습하는 체크포인트 복구</string>
     <string name="sync_flow_experimental">실험적</string>
