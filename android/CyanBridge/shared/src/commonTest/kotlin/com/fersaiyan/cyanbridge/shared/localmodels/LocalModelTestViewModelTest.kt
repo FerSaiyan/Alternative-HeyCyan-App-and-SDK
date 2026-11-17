@@ -33,6 +33,21 @@ class LocalModelTestViewModelTest {
     }
 
     @Test
+    fun baselineRatesAreMeasuredOrHidden() {
+        // (generated, elapsed, prompt, firstToken) -> (prefill, decode)
+        val cases = listOf(
+            LocalModelBaseline(11, 1_100, null, promptTokens = 20, firstTokenMs = 100) to (200.0 to 10.0),
+            LocalModelBaseline(0, 1, "skipped", promptTokens = 8) to (null to null), // no generation ran
+            LocalModelBaseline(1, 1, null, promptTokens = 8, firstTokenMs = 1) to (null to null), // a 1 ms span is not a rate
+            LocalModelBaseline(10, 1000, null) to (null to null), // no streamed token
+        )
+        cases.forEach { (run, expected) ->
+            assertEquals(expected.first, run.prefillTokensPerSecond, "prefill $run")
+            assertEquals(expected.second, run.decodeTokensPerSecond, "decode $run")
+        }
+    }
+
+    @Test
     fun liteRtComparisonEndsWithARecommendation() = runTest(dispatcher) {
         val runner = FakeRunner(LocalModelTestTarget("Gemma", "LiteRT", "GPU", liteRt = true))
         val vm = LocalModelTestViewModel(runner)

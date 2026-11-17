@@ -86,7 +86,13 @@ private class AndroidLocalModelTestRunner(private val context: Context, requeste
             settings = settings,
         )
         val probe = LocalChatSessionManager.runWarmupProbe(settings) { }
-        LocalModelBaseline(probe.generatedTokens, probe.elapsedMs, probe.fallbackReason)
+        LocalModelBaseline(
+            generatedTokens = probe.generatedTokens,
+            elapsedMs = probe.elapsedMs,
+            fallbackReason = probe.fallbackReason,
+            promptTokens = probe.promptTokens,
+            firstTokenMs = probe.firstTokenMs,
+        )
     }
 
     override fun saveSummary(summary: String) {

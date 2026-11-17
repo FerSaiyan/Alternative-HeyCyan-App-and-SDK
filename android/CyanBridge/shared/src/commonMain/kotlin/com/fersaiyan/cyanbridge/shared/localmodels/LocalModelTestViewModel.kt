@@ -24,8 +24,14 @@ data class LocalModelTestUiState(
     val speedDeltaPercent: Double? = null,
     val note: String = "",
     val error: String = "",
-    val legacyOutputTokensPerSecond: Double? = null,
-    val legacyElapsedMs: Long? = null,
+    /** Prompt processing rate of the baseline run (prompt tokens / time to first token); null when not measured. */
+    val baselinePrefillTokensPerSecond: Double? = null,
+    /** Generation rate after the first token; null when not measured. */
+    val baselineDecodeTokensPerSecond: Double? = null,
+    val baselineFirstTokenMs: Long? = null,
+    val baselineElapsedMs: Long? = null,
+    /** True once a baseline run finished, measured or not. */
+    val baselineDone: Boolean = false,
 )
 
 /** The installed model a performance test runs on, with its saved runtime and backend labels. */
@@ -37,7 +43,39 @@ data class LocalModelTestTarget(
     val liteRt: Boolean,
 )
 
-data class LocalModelBaseline(val generatedTokens: Int, val elapsedMs: Long, val fallbackReason: String?)
+/**
+ * One baseline generation. [generatedTokens] is 0 when no generation ran (nothing to measure);
+ * [firstTokenMs] is the time from the request to the first streamed token, null when none streamed.
+ */
+data class LocalModelBaseline(
+    val generatedTokens: Int,
+    val elapsedMs: Long,
+    val fallbackReason: String?,
+    val promptTokens: Int = 0,
+    val firstTokenMs: Long? = null,
+) {
+    /** Prompt tokens per second up to the first token, or null when the run is too short to time. */
+    val prefillTokensPerSecond: Double?
+        get() {
+            val ttft = firstTokenMs ?: return null
+            if (promptTokens <= 0 || generatedTokens <= 0 || ttft < MIN_MEASURED_MS) return null
+            return promptTokens * 1000.0 / ttft
+        }
+
+    /** Tokens per second after the first one, or null when fewer than two tokens or too short to time. */
+    val decodeTokensPerSecond: Double?
+        get() {
+            val ttft = firstTokenMs ?: return null
+            val decodeMs = elapsedMs - ttft
+            if (generatedTokens < 2 || decodeMs < MIN_MEASURED_MS) return null
+            return (generatedTokens - 1) * 1000.0 / decodeMs
+        }
+
+    companion object {
+        /** Shorter spans are timer noise, not a rate (a 1 ms span once showed as "1000 tok/s"). */
+        const val MIN_MEASURED_MS = 20L
+    }
+}
 
 /** The device runtimes behind the model performance test. */
 interface LocalModelTestRunner {
@@ -147,14 +185,21 @@ class LocalModelTestViewModel(private val runner: LocalModelTestRunner) : ViewMo
             )
         }
         val result = runner.runBaseline()
-        val outputTps = if (result.elapsedMs > 0L) result.generatedTokens * 1000.0 / result.elapsedMs else 0.0
+        val prefill = result.prefillTokensPerSecond
+        val decode = result.decodeTokensPerSecond
+        val unmeasured = if (prefill == null && decode == null) "Speed was not measured for this run." else null
         _state.update {
             it.copy(
                 running = false,
                 phase = "Test complete",
-                note = result.fallbackReason ?: "This runtime does not expose LiteRT's exact prefill benchmark counters.",
-                legacyOutputTokensPerSecond = outputTps,
-                legacyElapsedMs = result.elapsedMs,
+                note = listOfNotNull(result.fallbackReason, unmeasured).joinToString(" ").ifBlank {
+                    "Prompt speed is timed up to the first token; decode speed covers the tokens after it."
+                },
+                baselinePrefillTokensPerSecond = prefill,
+                baselineDecodeTokensPerSecond = decode,
+                baselineFirstTokenMs = result.firstTokenMs?.takeIf { result.generatedTokens > 0 },
+                baselineElapsedMs = result.elapsedMs.takeIf { result.generatedTokens > 0 },
+                baselineDone = true,
             )
         }
     }

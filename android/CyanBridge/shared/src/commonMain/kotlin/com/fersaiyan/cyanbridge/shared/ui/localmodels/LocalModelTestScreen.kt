@@ -85,12 +85,20 @@ fun LocalModelTestScreen(
             state.mtpOff?.let { MeasurementCard(title = "MTP off", measurement = it) }
             state.mtpOn?.let { MeasurementCard(title = "MTP on", measurement = it) }
 
-            if (state.legacyOutputTokensPerSecond != null) {
+            if (state.baselineDone) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Baseline", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        MetricRow("Output speed", "${format2(state.legacyOutputTokensPerSecond)} tok/s")
-                        state.legacyElapsedMs?.let { MetricRow("Elapsed", "${it} ms") }
+                        val prefill = state.baselinePrefillTokensPerSecond
+                        val decode = state.baselineDecodeTokensPerSecond
+                        if (prefill == null && decode == null) {
+                            MetricRow("Speed", "Not measured")
+                        } else {
+                            prefill?.let { MetricRow("Prompt speed", "${format2(it)} tok/s") }
+                            decode?.let { MetricRow("Decode speed", "${format2(it)} tok/s") }
+                        }
+                        state.baselineFirstTokenMs?.let { MetricRow("First token", "${it} ms") }
+                        state.baselineElapsedMs?.let { MetricRow("Elapsed", "${it} ms") }
                     }
                 }
             }

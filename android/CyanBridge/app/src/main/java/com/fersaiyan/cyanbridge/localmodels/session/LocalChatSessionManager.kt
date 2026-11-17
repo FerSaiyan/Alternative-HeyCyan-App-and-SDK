@@ -64,6 +64,8 @@ data class LocalWarmupProbeResult(
     val elapsedMs: Long,
     val backend: LocalComputeBackend,
     val fallbackReason: String?,
+    /** Request to first streamed token; null when nothing streamed or no generation ran. */
+    val firstTokenMs: Long? = null,
 ) {
     val totalTokens: Int get() = (promptTokens + generatedTokens).coerceAtLeast(1)
 }
@@ -507,9 +509,11 @@ object LocalChatSessionManager {
                 .joinToString(" | ")
                 .ifBlank { null }
 
+            // No generation ran: report zero tokens so the test shows "not measured" instead of a
+            // rate computed from the tokenizer call's ~1 ms (it used to read "1000 tok/s").
             return LocalWarmupProbeResult(
                 promptTokens = promptTokens,
-                generatedTokens = 1,
+                generatedTokens = 0,
                 elapsedMs = elapsed,
                 backend = backend,
                 fallbackReason = mergedFallback,
@@ -529,13 +533,17 @@ object LocalChatSessionManager {
         }
 
         val start = System.currentTimeMillis()
+        var firstTokenAt = 0L
         val result = generateInternal(
             settings = settings.copy(
                 maxTokens = warmupTokens,
                 experimentalStructuredJson = false,
             ),
             prompt = benchmarkPrompt,
-            onToken = onToken,
+            onToken = { token ->
+                if (firstTokenAt == 0L && token.isNotEmpty()) firstTokenAt = System.currentTimeMillis()
+                onToken(token)
+            },
             imagePaths = emptyList(),
             audioPath = null,
             requestPriority = LocalModelRequestPriority.HIGH,
@@ -563,6 +571,7 @@ object LocalChatSessionManager {
             elapsedMs = elapsed,
             backend = backend,
             fallbackReason = fallback,
+            firstTokenMs = firstTokenAt.takeIf { it > 0L }?.let { it - start },
         )
     }
 
