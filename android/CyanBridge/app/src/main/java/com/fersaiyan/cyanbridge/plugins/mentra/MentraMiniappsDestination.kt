@@ -61,6 +61,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -99,8 +101,10 @@ class MentraMiniappsDestination : NavScreen() {
     private var removal by mutableStateOf<InstalledMiniapp?>(null)
     private var openUi by mutableStateOf<String?>(null)
     private var storeApps by mutableStateOf<List<MiniappStoreListing>>(emptyList())
-    private var storePage by mutableStateOf(0)
-    private var storeHasMore by mutableStateOf(false)
+    private var storeQuery by mutableStateOf("")
+    private var storeCursor by mutableStateOf<String?>(null)
+    private var storePagesLoaded by mutableStateOf(0)
+    private var storeLoaded by mutableStateOf(false)
     private var storeError by mutableStateOf<String?>(null)
     private val icons = mutableStateMapOf<String, ImageBitmap>()
 
@@ -167,13 +171,18 @@ class MentraMiniappsDestination : NavScreen() {
         if (update == null) toast(getString(R.string.mentra_miniapps_up_to_date, app.manifest.name)) else offer = update
     }
 
-    private fun loadStore(page: Int, query: String) = work {
+    /** Loads the first directory page for [query], or the next page of the current query when [more]. */
+    private fun loadStore(query: String, more: Boolean = false) = work {
         storeError = null
+        if (!more) storeQuery = query
         try {
-            val result = installer.storePage(page, query)
-            storeApps = if (page == 1) result.apps else storeApps + result.apps
-            storePage = result.page
-            storeHasMore = result.hasMore
+            val cursor = if (more) storeCursor else null
+            val result = installer.storePage(query, cursor)
+            val pages = if (more) storePagesLoaded + 1 else 1
+            storeApps = if (more) (storeApps + result.apps).distinctBy { it.packageName } else result.apps
+            storeCursor = result.nextCursor?.takeIf { pages < MiniappStoreCatalog.MAX_PAGES }
+            storePagesLoaded = pages
+            storeLoaded = true
             result.apps.forEach { listing ->
                 val url = listing.iconUrl ?: return@forEach
                 if (listing.packageName in icons) return@forEach
@@ -184,7 +193,11 @@ class MentraMiniappsDestination : NavScreen() {
                 }
             }
         } catch (error: MiniappException) {
-            storeError = error.message
+            storeError = if (error.message == MiniappInstaller.TOO_MANY_REQUESTS) {
+                getString(R.string.mentra_miniapps_store_rate_limited)
+            } else {
+                getString(R.string.mentra_miniapps_store_failed, error.message.orEmpty())
+            }
         }
     }
 
@@ -308,7 +321,7 @@ class MentraMiniappsDestination : NavScreen() {
                             OutlinedButton(
                                 onClick = {
                                     showStore = true
-                                    if (storeApps.isEmpty()) loadStore(1, "")
+                                    if (!storeLoaded) loadStore("")
                                 },
                                 modifier = Modifier.heightIn(min = 48.dp),
                             ) { Text(stringResource(R.string.mentra_miniapps_browse_store)) }
@@ -391,14 +404,40 @@ class MentraMiniappsDestination : NavScreen() {
                         label = { Text(stringResource(R.string.mentra_miniapps_store_search)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        trailingIcon = { TextButton(onClick = { loadStore(1, query) }, enabled = !busy) { Text("OK") } },
+                        trailingIcon = { TextButton(onClick = { loadStore(query) }, enabled = !busy) { Text("OK") } },
                     )
                 }
-                storeError?.let { item { Text(stringResource(R.string.mentra_miniapps_store_failed, it), color = MaterialTheme.colorScheme.error) } }
-                if (storeApps.isEmpty() && !busy && storeError == null) item { Text(stringResource(R.string.mentra_miniapps_store_empty)) }
+                storeError?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+                if (storeLoaded && storeApps.isEmpty() && !busy && storeError == null) {
+                    item { Text(stringResource(R.string.mentra_miniapps_store_empty)) }
+                }
                 items(storeApps, key = { it.packageName }) { listing -> StoreCard(listing) }
-                if (storeHasMore) item {
-                    OutlinedButton(onClick = { loadStore(storePage + 1, query) }, enabled = !busy) { Text(stringResource(R.string.mentra_miniapps_store_more)) }
+                if (storeCursor != null && storeError == null) item {
+                    OutlinedButton(onClick = { loadStore(storeQuery, more = true) }, enabled = !busy) { Text(stringResource(R.string.mentra_miniapps_store_more)) }
+                }
+                // The directory listed nothing (empty on 2026-11-17): offer Mentra's own miniapps from their
+                // public first-party host, clearly labelled, through the same URL installer.
+                val firstParty = if ((storeLoaded || storeError != null) && storeApps.isEmpty() && !busy) {
+                    MiniappStoreCatalog.firstPartyListings().filter {
+                        storeQuery.isBlank() || it.name.contains(storeQuery.trim(), ignoreCase = true) ||
+                            it.packageName.contains(storeQuery.trim(), ignoreCase = true)
+                    }
+                } else {
+                    emptyList()
+                }
+                if (firstParty.isNotEmpty()) {
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 8.dp)) {
+                            Text(
+                                stringResource(R.string.mentra_miniapps_first_party_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.semantics { heading() },
+                            )
+                            Text(stringResource(R.string.mentra_miniapps_first_party_note), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    items(firstParty, key = { "first-party:" + it.packageName }) { listing -> StoreCard(listing) }
                 }
             }
         }
@@ -417,13 +456,11 @@ class MentraMiniappsDestination : NavScreen() {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(listing.name, style = MaterialTheme.typography.titleMedium)
-                        listing.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                        listing.description?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                     }
                 }
-                Text(
-                    (listOfNotNull(listing.version?.let { "v$it" }, listing.reviewTier) + listing.categories).joinToString(" · "),
-                    style = MaterialTheme.typography.labelSmall,
-                )
+                val meta = listOfNotNull(listing.category, listing.ageRating).joinToString(" · ")
+                if (meta.isNotEmpty()) Text(meta, style = MaterialTheme.typography.labelSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(onClick = { installListing(listing) }, enabled = !busy) { Text(stringResource(R.string.mentra_miniapps_install)) }
                     OutlinedButton(onClick = {

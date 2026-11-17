@@ -10,11 +10,14 @@
     <string name="mentra_miniapps_install_url">Install from URL</string>
     <string name="mentra_miniapps_browse_store">Browse the Mentra Miniapp Store</string>
     <string name="mentra_miniapps_store_title">Mentra Miniapp Store</string>
-    <string name="mentra_miniapps_store_note">Listings come from apps.mentraglass.com. CyanBridge installs a listing from its public miniapp URL; listings only available through the Mentra App open in the browser.</string>
+    <string name="mentra_miniapps_store_note">Listings come from the public miniapp directory of apps.mentraglass.com. Each one installs from its miniapp URL, like a URL you paste.</string>
     <string name="mentra_miniapps_store_search">Search the store</string>
     <string name="mentra_miniapps_store_empty">No miniapps found.</string>
     <string name="mentra_miniapps_store_failed">The store is unavailable: %1$s</string>
     <string name="mentra_miniapps_store_more">Load more</string>
+    <string name="mentra_miniapps_store_rate_limited">The store is busy. Try again in a minute.</string>
+    <string name="mentra_miniapps_first_party_title">Mentra first-party apps</string>
+    <string name="mentra_miniapps_first_party_note">Mentra\'s own miniapps, from miniapps.mentraglass.com. They install from that URL, like any other miniapp.</string>
     <string name="mentra_miniapps_store_open_web">Store page</string>
     <string name="mentra_miniapps_empty">No miniapps installed yet.</string>
     <string name="mentra_miniapps_installed">Installed</string>

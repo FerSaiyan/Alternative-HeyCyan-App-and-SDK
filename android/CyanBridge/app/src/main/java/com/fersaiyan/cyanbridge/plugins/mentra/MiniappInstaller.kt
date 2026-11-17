@@ -73,31 +73,15 @@ class MiniappInstaller(private val store: MiniappStore) {
         }
     }
 
-    /** One page of the Mentra Miniapp Store's public catalog. */
-    suspend fun storePage(page: Int, query: String): MiniappStorePage = withContext(Dispatchers.IO) {
-        val body = get(MiniappStoreCatalog.pageUrl(page, query), MAX_CATALOG_BYTES, etag = null).body
+    /** One page of the Mentra miniapp directory; [cursor] is the previous page's `nextCursor`. */
+    suspend fun storePage(query: String, cursor: String?): MiniappStorePage = withContext(Dispatchers.IO) {
+        val body = get(MiniappStoreCatalog.searchUrl(query, cursor), MAX_CATALOG_BYTES, etag = null).body
             ?: throw MiniappException("The store returned nothing")
         MiniappStoreCatalog.parsePage(body.decodeToString())
     }
 
-    /**
-     * Where a store listing is published as a miniapp URL. Store bundles themselves need a Mentra
-     * store credential, so CyanBridge asks the public directory (listed URL miniapps) and falls
-     * back to Mentra's public first-party host for `com.mentra.*`.
-     */
-    suspend fun folderForListing(listing: MiniappStoreListing): String = withContext(Dispatchers.IO) {
-        val lookup = runCatching {
-            get("${MiniappStoreCatalog.API_BASE}/api/directory/miniapps/${listing.packageName}", 16 * 1024, etag = null)
-        }.getOrNull()
-        val listed = lookup?.body?.decodeToString()?.let { text ->
-            Regex("\"url\"\\s*:\\s*\"(https://[^\"]+)\"").find(text)?.groupValues?.get(1)
-        }
-        listed ?: if (listing.packageName.startsWith("com.mentra.")) {
-            "$FIRST_PARTY_HOST${listing.packageName}/"
-        } else {
-            throw MiniappException("${listing.name} is not published at a public miniapp URL. Install it from the Mentra App instead.")
-        }
-    }
+    /** The miniapp folder of a directory listing, checked against the same URL and domain rules as a pasted URL. */
+    fun folderForListing(listing: MiniappStoreListing): String = MiniappSource.parseFolderUrl(listing.url).url
 
     /** A store icon (public PNG), capped. */
     suspend fun icon(url: String): ByteArray? = withContext(Dispatchers.IO) {
@@ -138,6 +122,7 @@ class MiniappInstaller(private val store: MiniappStore) {
                         return@repeat
                     }
                     401, 403 -> throw MiniappException("This miniapp is private (it needs a Mentra sign-in)")
+                    429 -> throw MiniappException(TOO_MANY_REQUESTS)
                     404 -> throw MiniappException("No miniapp was found at this URL")
                     410 -> throw MiniappException("This miniapp was archived by its publisher")
                     !in 200..299 -> throw MiniappException("The server answered HTTP $status")
@@ -165,8 +150,8 @@ class MiniappInstaller(private val store: MiniappStore) {
     }
 
     companion object {
-        /** Mentra's public host for its own miniapps (the Mentra App updates them from here). */
-        const val FIRST_PARTY_HOST = "https://miniapps.mentraglass.com/"
+        /** Message of the [MiniappException] for an HTTP 429 answer. */
+        const val TOO_MANY_REQUESTS = "Too many requests"
         private const val MAX_REDIRECTS = 3
         private const val MAX_CATALOG_BYTES = 2 * 1024 * 1024
         private const val MAX_ICON_BYTES = 512 * 1024

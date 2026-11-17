@@ -106,21 +106,27 @@ class MiniappInstallTest {
     fun theStoreFeedIsParsed() {
         val page = MiniappStoreCatalog.parsePage(
             """
-            {"apps":[{"packageName":"com.mentra.captions","name":"Captions","subtitle":"Live captions","description":"d",
-              "categories":["accessibility","communication"],"reviewTier":"community",
-              "iconUrl":"https://api.apps.mentraglass.com/api/store/assets/6ac5","release":{"version":"1.0.23","installable":true,
-              "bundleUrl":"https://api.apps.mentraglass.com/api/store/bundles/6ac/download",
-              "bundleSha256":"68906f738fba30621b138ed4e2400e2baaddcc440cef0cdd2619dcf1948058fc",
-              "permissions":[{"type":"MICROPHONE"}],"hardwareRequirements":[{"type":"DISPLAY","level":"OPTIONAL"}]}},
-             {"packageName":"bad name","name":"x"}],
-             "page":1,"limit":24,"total":2,"hasMore":false}
+            {"miniapps":[{"url":"https://miniapps.dev.mentraglass.com/com.mentra.captions/","packageName":"com.mentra.captions",
+               "name":"Captions","description":"d","iconUrl":null,"ageRating":"4+","category":"accessibility"},
+             {"url":"http://example.com/x/","packageName":"com.example.plain","name":"plain http"},
+             {"url":"https://user@example.com/x/","packageName":"com.example.userinfo","name":"userinfo"},
+             {"url":"https://example.com/y/","packageName":"bad name","name":"x"}],
+             "nextCursor":"abc=="}
             """.trimIndent(),
         )
         val app = page.apps.single()
-        assertEquals(listOf("accessibility", "communication"), app.categories)
-        assertEquals("1.0.23", app.version)
-        assertEquals(listOf(MiniappPermissionType.MICROPHONE), app.permissions)
-        assertFalse(page.hasMore)
-        assertEquals("https://api.apps.mentraglass.com/api/store/apps?limit=24&page=2&q=live%20captions", MiniappStoreCatalog.pageUrl(2, " live captions "))
+        assertEquals("https://miniapps.dev.mentraglass.com/com.mentra.captions/", app.url)
+        assertEquals("accessibility", app.category)
+        assertEquals("4+", app.ageRating)
+        assertEquals(null, app.iconUrl)
+        assertEquals("abc==", page.nextCursor)
+        assertEquals(null, MiniappStoreCatalog.parsePage("""{"miniapps":[],"nextCursor":null}""").nextCursor)
+        assertEquals(
+            "https://api.apps.mentraglass.com/api/directory/search?limit=50&q=live%20captions&cursor=abc%3D%3D",
+            MiniappStoreCatalog.searchUrl(" live captions ", "abc=="),
+        )
+        assertEquals("https://apps.mentraglass.com/package/com.mentra.captions", MiniappStoreCatalog.listingWebUrl("com.mentra.captions"))
+        // The first-party fallback folders pass the same URL rule as a pasted URL.
+        MiniappStoreCatalog.firstPartyListings().forEach { MiniappSource.parseFolderUrl(it.url) }
     }
 }

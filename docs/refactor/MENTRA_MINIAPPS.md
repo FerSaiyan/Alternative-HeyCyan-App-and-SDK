@@ -112,16 +112,23 @@ Manifest `permissions[].type` is one of MICROPHONE, CAMERA, PHONE_CAMERA, CALEND
 
 ## 3. Is there a browse feed?
 
-**Yes, a public one.** It is not in the repository: the store is a separate service (`cloud-v2/docs/store-integration.md`).
-- **Feed.** `GET https://api.apps.mentraglass.com/api/store/apps?limit=24&page=1[&q=…]` is anonymous and returns `{apps:[…], page, limit, total, hasMore}`. The store's own web client calls it (`https://apps.mentraglass.com/client.js`).
-- **Listing fields:**
-  - `packageName`, `name`, `subtitle`, `description`;
-  - `categories` (for example `accessibility`, `communication`, `productivity`);
-  - `iconUrl` and `coverUrl` (anonymous PNGs under `/api/store/assets/<id>`);
-  - `reviewTier` (`community`/`verified`), `featured`;
-  - `release {version, installable, bundleUrl, bundleSha256, manifestSha256, permissions, hardwareRequirements, minHostVersion, sdkVersion}`.
-- **Single listing:** `GET …/api/store/apps/<pkg>`.
-- **Size.** On 2026-10-27 the store listed 10 apps, all `com.mentra.*`.
+**Yes, a public directory.** It is not in the repository: the store is a separate service, and its web client
+(`https://apps.mentraglass.com/client.js`) calls it.
+- **Search.** `GET https://api.apps.mentraglass.com/api/directory/search?limit=50[&q=<≤200 chars>][&cursor=<nextCursor>]`,
+  anonymous, no headers. Answers `{miniapps:[{url, packageName, name, description, iconUrl, ageRating, category}], nextCursor}`.
+  Cursor pagination; the web client follows at most 100 pages. A bad cursor answers `400 {"error":"invalid_request"}`;
+  429 is possible.
+- **Single entry.** `GET …/api/directory/miniapps/<pkg>`, or 404.
+- **`url`** is the miniapp folder (`miniapp.json` + ZIP + sha256), so the URL installer handles it directly.
+  CyanBridge accepts only HTTPS URLs without userinfo and applies the same domain rule as a pasted URL.
+- **Listing web page:** `https://apps.mentraglass.com/package/<pkg>` (the old `/app/<pkg>` redirects there).
+- **Gone:** the older feed `/api/store/apps` and `/api/store/assets` answer 404 (found 2026-11-12; the store browser
+  showed "No miniapp was found at this URL" until 2026-11-17).
+- **Size.** On 2026-11-17 production (and staging) listed 0 miniapps. All 10 first-party apps are installable from
+  `https://miniapps.mentraglass.com/com.mentra.<x>/`: captions, livestreamer, ai, call, navigation, notes, merge,
+  recorder, teleprompter, translation. While the directory is empty (or unreachable) the store screen shows them as a
+  separate, labelled "Mentra first-party apps" section (`MiniappStoreCatalog.FIRST_PARTY_APPS`), filtered by the
+  search text, installed through the same URL installer. The section is hidden once the directory returns entries.
 
 ## 4. JS engine
 

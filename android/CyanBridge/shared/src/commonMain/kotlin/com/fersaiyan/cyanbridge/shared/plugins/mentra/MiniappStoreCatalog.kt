@@ -4,93 +4,107 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.intOrNull
 
-/** One listing of the Mentra Miniapp Store (`GET /api/store/apps`), as far as CyanBridge shows it. */
+/** One entry of the Mentra miniapp directory (`GET /api/directory/search`). [url] is the miniapp folder. */
 data class MiniappStoreListing(
+    val url: String,
     val packageName: String,
     val name: String,
-    val subtitle: String?,
-    val description: String,
-    val categories: List<String>,
+    val description: String?,
     val iconUrl: String?,
-    /** `verified` or `community` (the store's review tier). */
-    val reviewTier: String?,
-    val version: String?,
-    val bundleUrl: String?,
-    val bundleSha256: String?,
-    val manifestSha256: String?,
-    val installable: Boolean,
-    val permissions: List<MiniappPermissionType>,
-    val hardware: List<MiniappHardwareRequirement>,
+    val ageRating: String?,
+    val category: String?,
 )
 
-data class MiniappStorePage(val apps: List<MiniappStoreListing>, val page: Int, val hasMore: Boolean)
+/** One page of directory results; [nextCursor] is null on the last page. */
+data class MiniappStorePage(val apps: List<MiniappStoreListing>, val nextCursor: String?)
 
 /**
- * The public catalog of apps.mentraglass.com. Browsing (`/api/store/apps?limit&page&q`) and the
- * artwork are anonymous; bundle downloads answer 401 without a Mentra store credential, so
- * CyanBridge lists the store and installs from a developer's HTTPS URL instead (see
- * docs/refactor/MENTRA_MINIAPPS.md).
+ * The public miniapp directory of apps.mentraglass.com (the store's own web client calls it).
+ * Anonymous, cursor-paginated: `GET /api/directory/search?limit=50[&q=…][&cursor=…]` answers
+ * `{miniapps:[{url, packageName, name, description, iconUrl, ageRating, category}], nextCursor}`.
+ * Each `url` is a miniapp folder that the URL installer handles directly (see
+ * docs/refactor/MENTRA_MINIAPPS.md §3). The older `/api/store/apps` feed is gone (404).
  */
 object MiniappStoreCatalog {
     const val API_BASE = "https://api.apps.mentraglass.com"
     const val WEB_BASE = "https://apps.mentraglass.com"
-    const val PAGE_SIZE = 24
+    const val PAGE_SIZE = 50
+    /** The store's web client follows at most this many pages. */
+    const val MAX_PAGES = 100
+    private const val MAX_QUERY_LENGTH = 200
+    private const val MAX_CURSOR_LENGTH = 512
     private val json = Json { ignoreUnknownKeys = true }
-    private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
 
-    fun pageUrl(page: Int, query: String = ""): String {
-        val q = query.trim().takeIf { it.isNotEmpty() }?.let { "&q=" + percentEncode(it) }.orEmpty()
-        return "$API_BASE/api/store/apps?limit=$PAGE_SIZE&page=$page$q"
+    /**
+     * Mentra's own miniapps, served from its public first-party host. Shown as a separate
+     * "Mentra first-party apps" section while the directory lists nothing (it was empty on
+     * 2026-11-17); each installs through the same URL installer as any other miniapp.
+     */
+    const val FIRST_PARTY_HOST = "https://miniapps.mentraglass.com/"
+    val FIRST_PARTY_APPS: List<Pair<String, String>> = listOf(
+        "com.mentra.captions" to "Captions",
+        "com.mentra.livestreamer" to "Livestreamer",
+        "com.mentra.ai" to "AI",
+        "com.mentra.call" to "Call",
+        "com.mentra.navigation" to "Navigation",
+        "com.mentra.notes" to "Notes",
+        "com.mentra.merge" to "Merge",
+        "com.mentra.recorder" to "Recorder",
+        "com.mentra.teleprompter" to "Teleprompter",
+        "com.mentra.translation" to "Translation",
+    )
+
+    fun firstPartyListings(): List<MiniappStoreListing> = FIRST_PARTY_APPS.map { (packageName, name) ->
+        MiniappStoreListing(
+            url = "$FIRST_PARTY_HOST$packageName/",
+            packageName = packageName,
+            name = name,
+            description = null,
+            iconUrl = null,
+            ageRating = null,
+            category = null,
+        )
+    }
+
+    fun searchUrl(query: String = "", cursor: String? = null): String {
+        val q = query.trim().take(MAX_QUERY_LENGTH).takeIf { it.isNotEmpty() }?.let { "&q=" + percentEncode(it) }.orEmpty()
+        val c = cursor?.takeIf { it.isNotEmpty() }?.let { "&cursor=" + percentEncode(it) }.orEmpty()
+        return "$API_BASE/api/directory/search?limit=$PAGE_SIZE$q$c"
     }
 
     /** The public web page of a listing, for "open in browser". */
-    fun listingWebUrl(packageName: String) = "$WEB_BASE/app/$packageName"
+    fun listingWebUrl(packageName: String) = "$WEB_BASE/package/$packageName"
 
-    /** Parses one catalog page; listings with an invalid package name or icon URL are dropped. */
+    /** Parses one directory page; entries with an invalid package name or a non-HTTPS URL are dropped. */
     fun parsePage(text: String): MiniappStorePage {
         val root = runCatching { json.parseToJsonElement(text) }.getOrNull() as? JsonObject
             ?: throw MiniappException("The store answered with something other than a catalog")
-        val apps = (root["apps"] as? JsonArray)?.mapNotNull { (it as? JsonObject)?.let(::listing) }.orEmpty()
-        return MiniappStorePage(
-            apps = apps,
-            page = (root["page"] as? JsonPrimitive)?.intOrNull ?: 1,
-            hasMore = (root["hasMore"] as? JsonPrimitive)?.booleanOrNull ?: false,
-        )
+        val apps = (root["miniapps"] as? JsonArray)?.mapNotNull { (it as? JsonObject)?.let(::listing) }.orEmpty()
+        val cursor = root.string("nextCursor")?.takeIf { it.length <= MAX_CURSOR_LENGTH }
+        return MiniappStorePage(apps = apps, nextCursor = cursor)
     }
 
     private fun listing(obj: JsonObject): MiniappStoreListing? {
         val packageName = obj.string("packageName")?.takeIf { MiniappManifest.PACKAGE_NAME.matches(it) } ?: return null
-        val release = obj["release"] as? JsonObject
+        val url = obj.string("url")?.takeIf(::isPublicHttps) ?: return null
         return MiniappStoreListing(
+            url = url,
             packageName = packageName,
             name = obj.string("name")?.take(80) ?: packageName,
-            subtitle = obj.string("subtitle")?.take(200),
-            description = obj.string("description")?.take(4_000).orEmpty(),
-            categories = (obj["categories"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content?.take(40) }
-                ?.take(8).orEmpty(),
-            iconUrl = obj.string("iconUrl")?.takeIf(::isHttps),
-            reviewTier = obj.string("reviewTier"),
-            version = release?.string("version"),
-            bundleUrl = release?.string("bundleUrl")?.takeIf(::isHttps),
-            bundleSha256 = release?.string("bundleSha256")?.lowercase()?.takeIf(SHA256_HEX::matches),
-            manifestSha256 = release?.string("manifestSha256")?.lowercase()?.takeIf(SHA256_HEX::matches),
-            installable = (release?.get("installable") as? JsonPrimitive)?.booleanOrNull == true,
-            permissions = (release?.get("permissions") as? JsonArray)?.mapNotNull { element ->
-                val type = (element as? JsonObject)?.string("type")
-                MiniappPermissionType.entries.firstOrNull { it.name == type }
-            }.orEmpty(),
-            hardware = (release?.get("hardwareRequirements") as? JsonArray)?.mapNotNull { element ->
-                val entry = element as? JsonObject ?: return@mapNotNull null
-                val type = MiniappHardware.entries.firstOrNull { it.name == entry.string("type") } ?: return@mapNotNull null
-                MiniappHardwareRequirement(type, entry.string("level") == "REQUIRED", entry.string("description")?.take(300))
-            }.orEmpty(),
+            description = obj.string("description")?.take(4_000),
+            iconUrl = obj.string("iconUrl")?.takeIf(::isPublicHttps),
+            ageRating = obj.string("ageRating")?.take(20),
+            category = obj.string("category")?.take(40),
         )
     }
 
-    private fun isHttps(url: String) = url.startsWith("https://") && url.length <= 2_048 && url.none { it.isWhitespace() }
+    /** HTTPS, bounded, no whitespace and no userinfo in the authority. */
+    private fun isPublicHttps(url: String): Boolean {
+        if (!url.startsWith("https://") || url.length > 2_048 || url.any { it.isWhitespace() }) return false
+        val authority = url.substring("https://".length).substringBefore('/').substringBefore('?').substringBefore('#')
+        return authority.isNotEmpty() && '@' !in authority
+    }
 
     private fun JsonObject.string(key: String): String? =
         (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
