@@ -430,7 +430,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                         Log.w(TAG, "Live control classification failed", t)
                         LiveControlAction.CONTINUE
                     }
-                    Log.i(TAG, "Live control decision=$action utterance='${utterance.take(200)}'")
+                    Log.i(TAG, "Live control decision=$action utterance_chars=${utterance.length}")
                     when (action) {
                         LiveControlAction.END_LIVE -> withContext(Dispatchers.Main) { stopLive() }
                         LiveControlAction.LOCAL_AGENT -> withContext(Dispatchers.Main) {
@@ -465,7 +465,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
             cancelResponseIdleTimeout("user transcription")
         }
         if (text.isNotBlank()) {
-            Log.d(TAG, "${if (input) "User" else "Gemini"} transcription: $text")
+            Log.d(TAG, "${if (input) "User" else "Gemini"} transcription chars=${text.length}")
             // Only user (input) speech feeds the control classifier. Never classify here:
             // fragments are incremental; classification happens at speech=false above.
             if (input) liveControlRouter.appendTranscript(text)

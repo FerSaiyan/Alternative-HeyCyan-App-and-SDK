@@ -121,7 +121,7 @@ class GeminiLiveClient(
         session.imagePrompt = imagePrompt
         session.systemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(appContext)
         setState(GeminiLiveState.REQUESTING_TOKEN, "Requesting secure Live session")
-        Log.i(TAG, "Live start requested language=$language prompt=${imagePrompt.take(80)}")
+        Log.i(TAG, "Live start requested language=$language prompt_chars=${imagePrompt.length}")
         scope.launch {
             runCatching { requestToken(language, imagePrompt) }
                 .onSuccess {
@@ -391,6 +391,11 @@ class GeminiLiveClient(
             val wasSetupComplete = session.setupComplete.get()
             val listeningDurationMs = session.listeningDurationMs(System.currentTimeMillis())
             Log.w(TAG, "Gemini Live socket closed code=$code reason=$reason active=${session.active.get()} setupComplete=$wasSetupComplete")
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.warn(
+                com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.LIVE, "socket closed",
+                mapOf("code" to code.toString(), "reason" to reason.take(120), "setup_complete" to wasSetupComplete.toString(),
+                    "listening_ms" to listeningDurationMs.toString()),
+            )
             // A late close of a replaced socket must not reset the new connection's capabilities.
             if ((socket === webSocket || socket == null) && imageTurns.onSocketClosed(code, reason)) {
                 Log.w(TAG, "Live server refused a photo+question turn; using frame + wait + text from now on")
@@ -413,6 +418,10 @@ class GeminiLiveClient(
             if (socket === webSocket) socket = null
             session.setupComplete.set(false)
             Log.w(TAG, "Gemini Live socket failed code=${response?.code} msg=${response?.message} err=${t.message}", t)
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.warn(
+                com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.LIVE, "socket failed",
+                mapOf("http" to (response?.code?.toString() ?: "none"), "setup_complete" to wasSetupComplete.toString()), t,
+            )
             if (currentSocket) imageTurns.onSocketClosed(null, t.message)
             val responseBody = if (GeminiLiveSocketFailurePolicy.shouldReadBody(response?.code)) {
                 try { response?.body?.string().orEmpty() } catch (_: Exception) { "" }
@@ -506,10 +515,10 @@ class GeminiLiveClient(
     }
 
     private fun handleServerMessage(raw: String) {
-        // Verbose log for diagnosing why Live never reaches setupComplete (user reported no listening cue / notification)
-        Log.d(TAG, "Live server message raw=${raw.take(2000)}")
+        // Server messages carry transcripts and answers: log their size and top-level keys only.
+        Log.d(TAG, "Live server message chars=${raw.length}")
         val events = GeminiLiveProtocol.parseServerMessage(raw) ?: run {
-            Log.w(TAG, "Ignoring malformed Gemini Live message raw=${raw.take(500)}")
+            Log.w(TAG, "Ignoring malformed Gemini Live message chars=${raw.length}")
             return
         }
         for (event in events) {
@@ -744,6 +753,11 @@ class GeminiLiveClient(
     private fun setState(next: GeminiLiveState, detail: String) {
         session.state = next
         Log.i(TAG, "state=$next detail=$detail")
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.record(
+            if (next == GeminiLiveState.ERROR) com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticLevel.ERROR
+            else com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticLevel.INFO,
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.LIVE, "state $next", mapOf("detail" to detail.take(160)),
+        )
         listener.onStateChanged(next, detail)
     }
 

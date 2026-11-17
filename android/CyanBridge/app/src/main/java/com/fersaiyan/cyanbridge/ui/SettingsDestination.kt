@@ -587,88 +587,17 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     }
 
     private fun showLogSubmissionDialog() {
-        val issueTypes = arrayOf(
-            "P2P/WiFi sync issue",
-            "Image query failed",
-            "Voice command not working",
-            "BLE connection issue",
-            "App crash/ANR",
-            "Other/General",
+        DebugLogSupport.showVoluntaryReportDialog(
+            activity = activity,
+            issueTypes = listOf(
+                "P2P/WiFi sync issue",
+                "Image query failed",
+                "Voice command not working",
+                "BLE connection issue",
+                "App crash/ANR",
+                "Other/General",
+            ),
         )
-        var selectedType = issueTypes.first()
-        val descriptionInput = EditText(this).apply {
-            hint = "Describe what happened (optional)"
-            minLines = 3
-        }
-        val contactEmailInput = EditText(this).apply {
-            hint = "Contact email (optional)"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-            filters = arrayOf(InputFilter.LengthFilter(DebugLogSupport.MAX_CONTACT_EMAIL_LENGTH))
-            setText(ProSubscriptionServerPrefs.getAccountEmail(this@SettingsDestination))
-            contentDescription = "Contact email for log follow-up"
-        }
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            val padding = (24 * resources.displayMetrics.density).toInt()
-            setPadding(padding, 0, padding, 0)
-            addView(descriptionInput)
-            addView(contactEmailInput)
-            addView(TextView(this@SettingsDestination).apply {
-                text = "Optional. This lets CyanBridge support reply to you about these logs."
-            })
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Send Debug Logs")
-            .setSingleChoiceItems(issueTypes, 0) { _, which -> selectedType = issueTypes[which] }
-            .setView(content)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Send", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val contactEmail = contactEmailInput.text?.toString().orEmpty().trim()
-                if (!DebugLogSupport.isValidOptionalContactEmail(contactEmail)) {
-                    contactEmailInput.error = "Enter a valid email or leave this blank"
-                    return@setOnClickListener
-                }
-                dialog.dismiss()
-                submitDebugLogs(
-                    issueType = selectedType,
-                    description = descriptionInput.text?.toString()?.trim()?.take(2_000).orEmpty(),
-                    contactEmail = contactEmail,
-                )
-            }
-        }
-        dialog.show()
-    }
-
-    private fun submitDebugLogs(issueType: String, description: String, contactEmail: String) {
-        Toast.makeText(this, "Collecting logs...", Toast.LENGTH_SHORT).show()
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching {
-                DebugLogSupport.sendLogsToServer(
-                    context = this@SettingsDestination,
-                    issueType = issueType,
-                    description = description,
-                    logs = DebugLogSupport.collectLogcat(),
-                    deviceInfo = DebugLogSupport.buildDeviceInfo(this@SettingsDestination),
-                    contactEmail = contactEmail.ifBlank { null },
-                )
-            }.onSuccess { result ->
-                withContext(Dispatchers.Main) {
-                    val message = if (result.isSuccess) {
-                        "Logs sent successfully. Thank you for helping debug."
-                    } else {
-                        "Failed to send logs: ${result.exceptionOrNull()?.message}"
-                    }
-                    Toast.makeText(this@SettingsDestination, message, Toast.LENGTH_LONG).show()
-                }
-            }.onFailure { error ->
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@SettingsDestination, "Error collecting logs: ${error.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
     }
 
     private fun showPassphraseDialog(title: String, onSubmit: (String) -> Unit) {

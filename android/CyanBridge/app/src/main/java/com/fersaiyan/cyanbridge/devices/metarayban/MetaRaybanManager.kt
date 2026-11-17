@@ -1292,6 +1292,17 @@ class MetaRaybanManager private constructor(context: Context) {
     }
 
     private fun recordDiagnostic(level: String, operation: String, message: String) {
+        // Support-report buffer (its META_DAT share is capped, so DAT cannot evict other subsystems).
+        // Device selection messages carry the glasses' name: keep the operation only.
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.record(
+            when (level) {
+                "ERROR" -> com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticLevel.ERROR
+                "WARN" -> com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticLevel.WARN
+                else -> com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticLevel.INFO
+            },
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.META_DAT,
+            if (operation == "deviceSelection") operation else "$operation: $message",
+        )
         val line = "${System.currentTimeMillis()} [$level] $operation: $message"
         synchronized(diagnosticsLock) {
             diagnosticEvents.addLast(line)

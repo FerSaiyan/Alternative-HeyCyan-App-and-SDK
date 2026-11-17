@@ -525,7 +525,7 @@ internal class ImageQuestionFlow(
         } else {
             VisionReplyPolicy.relayReply(result.getOrNull(), detectVisionFailure).also {
                 if (it.toast != null) {
-                    Log.w("AIHijack", "Vision relay couldn't process image. Reply: ${result.getOrNull()?.trim()?.take(100)}")
+                    Log.w("AIHijack", "Vision relay couldn't process image. Reply chars=${result.getOrNull()?.trim()?.length ?: 0}")
                 }
             }
         }

@@ -210,7 +210,7 @@ private class AndroidGeminiLiveSession(
     override fun onTranscription(input: Boolean, text: String) {
         // Transcription is parallel metadata, never on the audio -> Gemini -> native-audio path.
         if (input && text.isNotBlank()) onMain { viewModel.onActivity() }
-        if (text.isNotBlank()) android.util.Log.d(TAG, "${if (input) "User" else "Gemini"} transcription: $text")
+        if (text.isNotBlank()) android.util.Log.d(TAG, "${if (input) "User" else "Gemini"} transcription chars=${text.length}")
     }
 
     private inner class ImageRequest(private val photo: ManualGlassesPhoto) : LiveImageRequest {

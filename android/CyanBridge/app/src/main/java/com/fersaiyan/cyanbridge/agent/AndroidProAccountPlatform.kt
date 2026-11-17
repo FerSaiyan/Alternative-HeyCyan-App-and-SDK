@@ -167,23 +167,19 @@ class AndroidProAccountPlatform(context: Context) : ProAccountPlatform {
 
     override suspend fun sendRestoreFailureLogs(email: String): Result<String> {
         val localStatus = ProSubscriptionVerifier.localStatus(context)
-        return DebugLogSupport.sendLogsToServer(
+        return DebugLogSupport.submitReport(
             context = context,
+            trigger = com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticTrigger.PRO_RESTORE,
             issueType = "pro_subscription_restore_failed",
-            description = "User tried to recover an existing Pro subscription for $email, but no active subscription was found after email verification.",
-            logs = DebugLogSupport.collectLogcat(),
-            deviceInfo = DebugLogSupport.buildDeviceInfo(
-                context = context,
-                extraInfo = linkedMapOf(
-                    "Pro recovery email" to email,
-                    "Recovery result" to "No active subscription found",
-                    "Local subscription active" to localStatus.active.toString(),
-                    "Local subscription plan" to localStatus.plan,
-                    "Local subscription provider" to ProSubscriptionPrefs.getProvider(context),
-                ),
-            ),
+            description = "User tried to recover an existing Pro subscription, but no active subscription was found after email verification.",
             contactEmail = email,
-            requestMetadata = "Pro recovery failed for verified email: $email",
+            extraInfo = linkedMapOf(
+                "Recovery result" to "No active subscription found",
+                "Local subscription active" to localStatus.active.toString(),
+                "Local subscription plan" to localStatus.plan,
+                "Local subscription provider" to ProSubscriptionPrefs.getProvider(context),
+            ),
+            requestMetadata = "Pro recovery failed for the verified contact email",
         )
     }
 

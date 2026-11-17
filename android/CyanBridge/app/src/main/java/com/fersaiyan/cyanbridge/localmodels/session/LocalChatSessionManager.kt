@@ -1,5 +1,8 @@
 package com.fersaiyan.cyanbridge.localmodels.session
 
+import com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents
+import com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticLevel
+import com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem
 import android.content.Context
 import android.util.Log
 import com.fersaiyan.cyanbridge.BuildConfig
@@ -89,6 +92,13 @@ object LocalChatSessionManager {
     private var activeRequestPriority: LocalModelRequestPriority? = null
     private var lastGenerationCappedByMaxTokens: Boolean = false
     private var state: LocalSessionState = LocalSessionState.ModelNotLoaded
+
+    /** One line for support reports; reads without the lock, so it never waits on a running generation. */
+    fun diagnosticsSummary(): String {
+        val model = loadedModelPath?.substringAfterLast('/') ?: return "no model loaded (${state::class.simpleName})"
+        return "$model on ${activeBackend ?: "?"}, gpu_layers=$activeGpuLayers, state=${state::class.simpleName}" +
+            (gpuFallbackMessage?.let { ", fallback: $it" } ?: "")
+    }
 
     suspend fun snapshot(): LocalSessionSnapshot = mutex.withLock {
         LocalSessionSnapshot(
@@ -201,6 +211,11 @@ object LocalChatSessionManager {
                 }
             }.onFailure {
                 Log.e(TAG, "Failed to load local model ${model.displayName}", it)
+                DiagnosticEvents.error(
+                    DiagnosticSubsystem.MODEL, "model load failed",
+                    mapOf("model" to model.displayName, "runtime" to settings.modelRuntime.name, "backend" to settings.computeBackend.name),
+                    it,
+                )
                 state = LocalSessionState.Error(it.message ?: "Failed to load local model")
                 throw it
             }.onSuccess { loadResult ->
@@ -211,6 +226,18 @@ object LocalChatSessionManager {
                 activeBackend = loadResult.activeBackend
                 activeGpuLayers = loadResult.activeGpuLayers
                 gpuFallbackMessage = loadResult.fallbackReason
+                DiagnosticEvents.record(
+                    if (loadResult.fallbackReason != null) DiagnosticLevel.WARN else DiagnosticLevel.INFO,
+                    DiagnosticSubsystem.MODEL, "model loaded",
+                    buildMap {
+                        put("model", model.displayName)
+                        put("runtime", settings.modelRuntime.name)
+                        put("requested", settings.computeBackend.name)
+                        put("active", loadResult.activeBackend.name)
+                        put("gpu_layers", loadResult.activeGpuLayers.toString())
+                        loadResult.fallbackReason?.let { put("fallback", it) }
+                    },
+                )
             }
 
             loadedModelId = model.id
@@ -425,6 +452,10 @@ object LocalChatSessionManager {
                         },
                         onFailure = { err ->
                             Log.e(TAG, "Local generation failed requestId=$reqId", err)
+                            DiagnosticEvents.error(
+                                DiagnosticSubsystem.MODEL, "generation failed",
+                                mapOf("backend" to (activeBackend?.name ?: "?")), err,
+                            )
                             lastGenerationCappedByMaxTokens = false
                             state = LocalSessionState.Error(err.message ?: "Local generation failed")
                             throw err

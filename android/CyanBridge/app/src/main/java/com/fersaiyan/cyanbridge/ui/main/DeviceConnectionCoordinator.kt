@@ -177,6 +177,9 @@ internal class DeviceConnectionCoordinator(
     }
 
     fun updateConnectionStatus(connected: Boolean) {
+        com.fersaiyan.cyanbridge.diagnostics.GlassesConnectionDiagnostics.onStatus(
+            DeviceProfileStore.selectedClass(activity).name, connected,
+        )
         glasses.selected().renderConnectionStatus(connected)
     }
 

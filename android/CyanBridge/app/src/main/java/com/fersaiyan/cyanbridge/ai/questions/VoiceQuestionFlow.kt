@@ -179,6 +179,10 @@ internal class VoiceQuestionFlow(
                         providerType = routingProvider,
                     )
                     GlassesQuestionTestHooks.emit("route", routing.intent.name)
+                    com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
+                        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.QUESTION, "classic route decided",
+                        mapOf("intent" to routing.intent.name, "provider" to routingProvider.toString()),
+                    )
                     if (QuestionRoutingPrefs.mode(context) == QuestionRoutingMode.SHADOW) {
                         env.scope.launch(Dispatchers.Default) {
                             QuestionDecisionShadow.log(prompt, flow = "voice", classic = routing.intent)

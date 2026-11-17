@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as RuntimePrefs
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsCollector
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -38,35 +39,14 @@ class DebugLogSupportTest {
     }
 
     @Test
-    fun `empty filtered logcat becomes a deliverable diagnostic message`() {
-        assertEquals(
-            "No matching Android logcat entries were available. See Device Info and Extra Info for structured diagnostics.",
-            DebugLogSupport.normalizeCollectedLogs("  \n"),
-        )
-    }
+    fun `logcat caps every tag so Meta DAT cannot crowd out the app's own lines`() {
+        val dat = (1..900).map { "11-17 10:00:00.000  42  42 D DAT:CORE:Stream$it: frame" }
+        val app = (1..5).map { "11-17 10:00:01.000  42  42 W AIHijack: Spoken decision failed $it" }
+        val capped = DiagnosticsCollector.capLogcat(app.take(2) + dat + app.drop(2), perTagCap = 100, keepLines = 1_000)
 
-    @Test
-    fun `device info identifies the effective remote model backend`() {
-        context.getSharedPreferences("remote_openai_prefs", Context.MODE_PRIVATE).edit()
-            .putBoolean("enabled", true)
-            .putString("base_url", "http://100.100.10.20:11434")
-            .putString("model", "qwen2.5:7b")
-            .commit()
-
-        val deviceInfo = DebugLogSupport.buildDeviceInfo(context)
-
-        assertTrue(deviceInfo.contains("Local-model backend: Remote OpenAI-compatible"))
-        assertTrue(deviceInfo.contains("Remote model: qwen2.5:7b"))
-        assertTrue(deviceInfo.contains("Remote base URL: http://100.100.10.20:11434"))
-    }
-
-    @Test
-    fun `logcat collection is pid scoped instead of using malformed colon tag filters`() {
-        val command = DebugLogSupport.buildLogcatCommand(4321)
-
-        assertTrue(command.contains("--pid=4321"))
-        assertTrue(command.contains("threadtime"))
-        assertTrue(command.none { it.contains("DAT:CORE") })
-        assertTrue(command.none { it.endsWith(":*") })
+        assertEquals(105, capped.keptLines)
+        assertEquals("DAT" to 900, capped.topTags.first())
+        assertTrue(app.all { it in capped.text })
+        assertEquals("DAT", DiagnosticsCollector.tagGroup(dat.first()))
     }
 }

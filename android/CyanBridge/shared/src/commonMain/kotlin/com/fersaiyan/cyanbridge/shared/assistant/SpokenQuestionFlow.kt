@@ -277,6 +277,13 @@ class SpokenQuestionFlow(
                 "Spoken decision route=${decision.route} tagged=${decision.tagged} provider=${brain.name} " +
                     "turn=$turn continued=$continued ms=$decisionMs",
             )
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
+                com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.QUESTION, "smart route decided",
+                mapOf(
+                    "route" to decision.route.toString(), "tagged" to decision.tagged.toString(), "provider" to brain.name,
+                    "turn" to turn.toString(), "continued" to continued.toString(), "ms" to decisionMs.toString(),
+                ),
+            )
             events.emit(
                 "spoken_decision",
                 "route=${decision.route} tagged=${decision.tagged} ms=$decisionMs payload=${decision.payload.take(120)}",
@@ -304,7 +311,7 @@ class SpokenQuestionFlow(
                 // Every reply starts with a route tag, so the answer may come as "[camera] Those are yellow
                 // socks."; only a bare tag (asking for the camera again) is unusable.
                 return SpokenDecisionParser.clean(answer).takeIf { it.isNotBlank() }
-                    ?: null.also { PlatformLogger.i(TAG, "Answer in the conversation not usable: ${answer.take(80)}") }
+                    ?: null.also { PlatformLogger.i(TAG, "Answer in the conversation not usable: chars=${answer.length}") }
             }
 
             val spokenReply: String? = when (decision.route) {

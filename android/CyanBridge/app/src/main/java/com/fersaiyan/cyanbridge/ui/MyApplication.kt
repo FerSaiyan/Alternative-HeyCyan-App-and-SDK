@@ -64,6 +64,12 @@ class MyApplication : Application(){
         instance = this
         CONTEXT = applicationContext
         if (isLocalModelBenchmarkWorkerProcess()) return
+        // Support reports: keep a crash's stack and recent events (chains to the existing handler).
+        com.fersaiyan.cyanbridge.diagnostics.CrashRecorder.install(this)
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.APP, "process started",
+            mapOf("family" to DeviceProfileStore.selectedClass(this).name),
+        )
         AppLanguagePreferences.applyStoredLocale(this)
         ProductAnalyticsLifecycle.register(this)
         initBle()

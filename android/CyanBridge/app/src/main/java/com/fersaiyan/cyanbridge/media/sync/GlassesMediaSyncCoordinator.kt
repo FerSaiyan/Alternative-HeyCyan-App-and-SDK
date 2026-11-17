@@ -236,6 +236,7 @@ internal class GlassesMediaSyncCoordinator(
         if (!afterP2pTeardown) {
         Log.i("DataDownload", "Starting BLE+WiFi P2P data download using ${mode.label}...")
         Log.i("DataDownload", "Sync session flow=${mode.label}")
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "sync started", mapOf("flow" to mode.name, "purpose" to purpose.name, "retry" to retryCount.toString()))
         Toast.makeText(activity, "Starting sync using ${mode.label}… Please do not exit the app during transfer.", Toast.LENGTH_LONG).show()
 
         // Check Bluetooth connection status
@@ -1822,6 +1823,13 @@ internal class GlassesMediaSyncCoordinator(
                 "DataDownload",
                 "Download completed: jpg=$jpgSuccess/${jpgFiles.size} ok, mp4=$mp4Success/${mp4Files.size} ok, opus=$opusSuccess/${opusFiles.size} ok, failed=$totalFail"
             )
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
+                com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "download counts",
+                mapOf(
+                    "jpg" to "$jpgSuccess/${jpgFiles.size}", "mp4" to "$mp4Success/${mp4Files.size}",
+                    "opus" to "$opusSuccess/${opusFiles.size}", "failed" to totalFail.toString(),
+                ),
+            )
             
             withContext(Dispatchers.Main) {
                 if (!isDownloadSessionActive(sessionId)) return@withContext
@@ -2211,10 +2219,12 @@ internal class GlassesMediaSyncCoordinator(
         finishDownloadInitialPhase("download completed")
         cleanupP2pAfterDownload()
         Log.i("DataDownload", "SUCCESS: $message (flow=${downloadFlowMode.label})")
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "sync finished", mapOf("flow" to downloadFlowMode.name))
         Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
     }
     
     private fun showDownloadError(message: String, cleanup: Boolean = true) {
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.error(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "sync failed: $message", mapOf("flow" to downloadFlowMode.name, "hq_image" to isHighQualityImageTransfer().toString()))
         if (isHighQualityImageTransfer()) {
             recordAdaptiveSyncFailure(message)
             finishHighQualityImageFailure(message)
@@ -2436,6 +2446,7 @@ internal class GlassesMediaSyncCoordinator(
             ) ?: return@launchDownloadSession
             when (result) {
                 is CustomHttpResolver.Result.Resolved -> {
+                    com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "glasses HTTP IP resolved", mapOf("ip" to result.ip, "via_scan" to result.viaScan.toString()))
                     downloadResolvedHttpIp = result.ip
                     downloadInProgress = true
                     downloadMediaList(result.ip, sessionId)

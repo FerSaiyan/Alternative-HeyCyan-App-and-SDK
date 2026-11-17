@@ -318,7 +318,20 @@ object AutoPairManager {
     /**
      * @return true if we attempted a connection.
      */
-    private fun tryConnectOnce(context: Context, reason: String): Boolean {
+    private fun tryConnectOnce(context: Context, reason: String): Boolean =
+        tryConnectOnceInner(context, reason).also { attempted ->
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
+                com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.BLE,
+                if (attempted) "auto-pair attempt" else "auto-pair skipped",
+                mapOf(
+                    "family" to DeviceProfileStore.selectedClass(context).name,
+                    "reason" to reason,
+                    "suppressed" to suppressAutoReconnect.toString(),
+                ),
+            )
+        }
+
+    private fun tryConnectOnceInner(context: Context, reason: String): Boolean {
         if (MentraSdkModel.usesMentraSdk(DeviceProfileStore.selectedClass(context))) return false
         if (suppressAutoReconnect) {
             Log.d(TAG, "Skipping auto-pair ($reason): suppressed")

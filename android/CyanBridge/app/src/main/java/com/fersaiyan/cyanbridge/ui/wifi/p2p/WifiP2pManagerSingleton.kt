@@ -148,6 +148,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
 
             override fun onFailure(reason: Int) {
                 Log.e(TAG, "Peer discovery failed: $reason")
+                com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.warn(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "P2P discovery failed", mapOf("reason" to p2pReason(reason)))
                 if (!p2pOperationsEnabled) {
                     Log.d(TAG, "Ignoring discovery failure after P2P operations stopped")
                     return
@@ -226,6 +227,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
 
             override fun onFailure(reason: Int) {
                 Log.e(TAG, "Connect request failed: $reason")
+                com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.warn(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "P2P connect request failed", mapOf("reason" to p2pReason(reason)))
                 connectInFlightSinceMs = 0L
                 connectionState.markConnectRequestFailed()
                 callbacks.forEach { it.onConnectRequestFailed(reason) }
@@ -439,6 +441,11 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     }
 
     internal fun onConnectionInfoAvailable(info: WifiP2pInfo) {
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "P2P connection info",
+            mapOf("group_formed" to info.groupFormed.toString(), "phone_is_owner" to info.isGroupOwner.toString(),
+                "owner_ip" to (info.groupOwnerAddress?.hostAddress ?: "none")),
+        )
         connectionState.markConnectionInfoAvailable(info.groupFormed)
         handler.removeCallbacks(connectTimeOut)
         if (info.groupFormed) {
@@ -450,6 +457,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
     }
 
     internal fun onDisconnected() {
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "P2P disconnected")
         connectionState.markDisconnected()
         handler.removeCallbacks(connectTimeOut)
         lastGroupOwnerIp = null
@@ -493,10 +501,20 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
                 }
             } else {
                 Log.d(TAG, "Do not reconnect, wait for external timeout")
+                com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.warn(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "P2P connect retry also failed")
                 callbacks.forEach { it.retryAlsoFailed() }
             }
         }
     }
 
     interface WifiP2pCallback : com.heycyan.core.connectivity.p2p.WifiP2pCallback
+
+    /** WifiP2pManager failure codes by name (ERROR=0, P2P_UNSUPPORTED=1, BUSY=2, NO_SERVICE_REQUESTS=3). */
+    private fun p2pReason(reason: Int): String = when (reason) {
+        0 -> "ERROR"
+        1 -> "P2P_UNSUPPORTED"
+        2 -> "BUSY"
+        3 -> "NO_SERVICE_REQUESTS"
+        else -> reason.toString()
+    }
 }

@@ -88,7 +88,7 @@ class NotificationForwarderService : NotificationListenerService() {
         // Resolve a human-readable app name
         val appName = resolveAppName(packageName)
 
-        Log.i(TAG, "Forwarding: [$appName] $title — $text")
+        Log.i(TAG, "Forwarding a notification: title_chars=${title.length} text_chars=${text.length}")
 
         scope.launch {
             try {
