@@ -457,6 +457,7 @@
     <string name="voice_enroll_desc">Pronuncia tre frasi brevi. CyanBridge impara a riconoscerti e in seguito potrà distinguere le tue domande dalle persone che parlano vicino a te.</string>
     <string name="voice_enroll_privacy">Il tuo profilo vocale è un dato biometrico. Resta solo su questo telefono: mai caricato, sincronizzato o usato per l’addestramento. Puoi eliminarlo quando vuoi nelle Impostazioni. Per ora non filtra nessuna risposta.</string>
     <string name="voice_enroll_consent">Salva il mio profilo vocale su questo telefono</string>
+    <string name="voice_enroll_consent_needed">Attiva “Salva il mio profilo vocale su questo telefono” qui sopra per registrare.</string>
     <string name="voice_enroll_mic_needed">Serve l’accesso al microfono per registrare le frasi.</string>
     <string name="voice_enroll_mic_grant">Consenti microfono</string>
     <string name="voice_enroll_phrase_progress">Frase %1$d di %2$d</string>

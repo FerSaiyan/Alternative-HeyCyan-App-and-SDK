@@ -457,6 +457,7 @@
     <string name="voice_enroll_desc">请说三句简短的话。CyanBridge 会学习识别你的声音，以后就能把你的提问和附近其他人的说话区分开。</string>
     <string name="voice_enroll_privacy">你的声纹档案属于生物特征数据。它只保存在这部手机上：不会上传、同步或用于训练。你可以随时在设置中删除。目前它不会过滤任何回答。</string>
     <string name="voice_enroll_consent">在这部手机上保存我的声纹档案</string>
+    <string name="voice_enroll_consent_needed">请先打开上方的“在这部手机上保存我的声纹档案”，再开始录音。</string>
     <string name="voice_enroll_mic_needed">录制这些句子需要麦克风权限。</string>
     <string name="voice_enroll_mic_grant">允许使用麦克风</string>
     <string name="voice_enroll_phrase_progress">第 %1$d 句，共 %2$d 句</string>

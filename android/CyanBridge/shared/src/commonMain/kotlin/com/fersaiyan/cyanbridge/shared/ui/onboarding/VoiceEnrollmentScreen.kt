@@ -128,10 +128,6 @@ fun VoiceEnrollmentScreen(
                 if (!done) {
                     ConsentCard(state.consentGiven, enabled = state.phase == VoiceEnrollmentPhase.READY, onConsentChange)
                     Spacer(Modifier.height(12.dp))
-                    if (!state.micGranted) {
-                        MicrophoneCard(onRequestMicrophone)
-                        Spacer(Modifier.height(12.dp))
-                    }
                     PhraseIndicators(state, onSelectPhrase)
                     Spacer(Modifier.height(12.dp))
                     PhraseCard(state)
@@ -142,11 +138,28 @@ fun VoiceEnrollmentScreen(
                 }
                 Spacer(Modifier.height(24.dp))
             }
-            // The record action stays pinned above the navigation row instead of scrolling away.
+            // The primary action stays pinned above the navigation row instead of scrolling away. Without
+            // microphone access it asks for it; without consent a hint says what is missing.
             if (!done) {
+                val hint = when {
+                    !state.micGranted -> Res.string.voice_enroll_mic_needed
+                    !state.consentGiven -> Res.string.voice_enroll_consent_needed
+                    else -> null
+                }
+                if (hint != null && state.phase == VoiceEnrollmentPhase.READY) {
+                    Text(
+                        stringResource(hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp),
+                    )
+                }
                 RecordButton(
                     phase = state.phase,
+                    micGranted = state.micGranted,
                     enabled = state.consentGiven && state.micGranted,
+                    onRequestMicrophone = onRequestMicrophone,
                     onRecord = onRecord,
                     onCancel = onCancelRecording,
                     modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 12.dp),
@@ -277,20 +290,6 @@ private fun ConsentCard(checked: Boolean, enabled: Boolean, onChange: (Boolean) 
     }
 }
 
-@OptIn(ExperimentalResourceApi::class)
-@Composable
-private fun MicrophoneCard(onRequest: () -> Unit) {
-    Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(stringResource(Res.string.voice_enroll_mic_needed), fontWeight = FontWeight.SemiBold)
-            FilledTonalButton(onRequest, Modifier.fillMaxWidth().testTag("voice_enroll_mic")) {
-                Text(stringResource(Res.string.voice_enroll_mic_grant))
-            }
-        }
-    }
-}
-
 /** Pills that stretch for the current phrase and fill when a phrase is accepted; tap one to redo it. */
 @Composable
 private fun PhraseIndicators(state: VoiceEnrollmentUiState, onSelect: (Int) -> Unit) {
@@ -369,12 +368,17 @@ private fun MessageCard(message: VoiceEnrollmentMessage, detail: String?) {
     }
 }
 
-/** Large pill that squishes into a squarer shape while pressed or listening, with a spring. */
+/**
+ * Large pill that squishes into a squarer shape while pressed or listening, with a spring. Without
+ * microphone access it is the "Allow microphone" action, so the step's next action is always on screen.
+ */
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 private fun RecordButton(
     phase: VoiceEnrollmentPhase,
+    micGranted: Boolean,
     enabled: Boolean,
+    onRequestMicrophone: () -> Unit,
     onRecord: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -387,9 +391,14 @@ private fun RecordButton(
         if (pressed || listening) 16.dp else 36.dp,
         spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
     )
+    val askMicrophone = !micGranted && phase == VoiceEnrollmentPhase.READY
     Button(
-        onClick = if (listening) onCancel else onRecord,
-        enabled = (enabled && phase == VoiceEnrollmentPhase.READY) || listening,
+        onClick = when {
+            listening -> onCancel
+            askMicrophone -> onRequestMicrophone
+            else -> onRecord
+        },
+        enabled = askMicrophone || (enabled && phase == VoiceEnrollmentPhase.READY) || listening,
         interactionSource = interaction,
         shape = RoundedCornerShape(corner),
         colors = if (listening) {
@@ -409,6 +418,7 @@ private fun RecordButton(
                 when {
                     checking -> Res.string.voice_enroll_checking
                     listening -> Res.string.voice_enroll_listening
+                    askMicrophone -> Res.string.voice_enroll_mic_grant
                     else -> Res.string.voice_enroll_start
                 },
             ),

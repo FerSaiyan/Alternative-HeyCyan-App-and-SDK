@@ -457,6 +457,7 @@
     <string name="voice_enroll_desc">Sprich drei kurze Sätze. CyanBridge lernt dich zu erkennen und kann deine Fragen später von Gesprächen anderer Menschen in der Nähe unterscheiden.</string>
     <string name="voice_enroll_privacy">Dein Stimmprofil ist ein biometrisches Datum. Es bleibt nur auf diesem Telefon: Es wird nie hochgeladen, synchronisiert oder zum Training verwendet. Du kannst es jederzeit in den Einstellungen löschen. Derzeit filtert es keine Antworten.</string>
     <string name="voice_enroll_consent">Mein Stimmprofil auf diesem Telefon speichern</string>
+    <string name="voice_enroll_consent_needed">Aktiviere oben „Mein Stimmprofil auf diesem Telefon speichern“, um aufzunehmen.</string>
     <string name="voice_enroll_mic_needed">Zum Aufnehmen der Sätze wird Mikrofonzugriff benötigt.</string>
     <string name="voice_enroll_mic_grant">Mikrofon erlauben</string>
     <string name="voice_enroll_phrase_progress">Satz %1$d von %2$d</string>

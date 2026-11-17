@@ -527,6 +527,7 @@
     <string name="voice_enroll_desc">Say three short phrases. CyanBridge learns to recognise you, so later it can tell your questions apart from people talking nearby.</string>
     <string name="voice_enroll_privacy">Your voice profile is biometric data. It stays only on this phone: never uploaded, synced or used for training. Delete it anytime in Settings. For now it does not filter any answers.</string>
     <string name="voice_enroll_consent">Store my voice profile on this phone</string>
+    <string name="voice_enroll_consent_needed">Turn on “Store my voice profile on this phone” above to record.</string>
     <string name="voice_enroll_mic_needed">Microphone access is needed to record the phrases.</string>
     <string name="voice_enroll_mic_grant">Allow microphone</string>
     <string name="voice_enroll_phrase_progress">Phrase %1$d of %2$d</string>
