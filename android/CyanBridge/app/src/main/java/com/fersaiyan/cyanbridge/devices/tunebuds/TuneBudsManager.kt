@@ -241,6 +241,12 @@ class TuneBudsManager private constructor(context: Context) {
         )
     }
 
+    /** Re-reads the battery level; null when unknown. */
+    suspend fun refreshBattery(): Int? = operationMutex.withLock {
+        if (client.isConnected) runCatching { session.requestBattery() }
+        session.state.value.batteryPercent
+    }
+
     /** Re-reads the firmware version, model and coprocessor version; returns the session state. */
     suspend fun refreshVersions() = operationMutex.withLock {
         if (client.isConnected) runCatching { session.requestVersion() }

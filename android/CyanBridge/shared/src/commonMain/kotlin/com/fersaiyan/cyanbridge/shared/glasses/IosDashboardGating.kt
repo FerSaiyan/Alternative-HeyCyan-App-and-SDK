@@ -53,6 +53,8 @@ internal fun GlassesDashboardUiState.withIosFamilyGating(
         showAdvancedImageQuality = imageQuality,
         showAdvancedDeveloperTools = developerTools,
         showAdvancedOta = ota,
+        // EyeVue/TuneBuds updates run through Android's Bluetooth managers only.
+        familyOta = null,
         showSdkFirmwareUpdate = false,
         showAdvancedControls = heyCyan || deviceInfo || volume || imageQuality || developerTools || ota,
     )

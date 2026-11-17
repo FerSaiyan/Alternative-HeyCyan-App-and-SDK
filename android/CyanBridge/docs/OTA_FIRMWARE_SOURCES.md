@@ -69,3 +69,29 @@ and BLE versions cannot be assumed and that review normally requires up to rough
 - Hardware model, cryptographic signature, and cross-chip compatibility cannot be
   proved from arbitrary local files. Use only recoverable lab hardware for unvetted
   firmware.
+
+## EyeVue And TuneBuds (dashboard family section)
+
+EyeVue and TuneBuds use their own section (`ota/family/FamilyOtaCoordinator`, shared `FamilyOtaMachine`
+and `FamilyFirmwareRules`); the HeyCyan section above is unchanged. Both install only the Bluetooth chip's
+firmware; the camera (Wi-Fi) chip keeps its firmware.
+
+- **Install a firmware file.** EyeVue: a `.ufw` or the Pro customization `.zip`. TuneBuds: the customization
+  `.zip` only. Before anything is sent, the file must pass the container checks the owner's builders and the
+  glasses run (EyeVue UFW header/list/flash/app CRCs and chip `AC701N`; TuneBuds POT header CRC16, `QUEN` tag,
+  payload and trailer CRC32), and it must be for these glasses: EyeVue compares the model code in the image
+  (or the pinned sha256 of a published image) with the glasses' cmd-100 code; a `.zip` must name the
+  firmware version the glasses run. A bare TuneBuds `.fot` names no model, so it is refused.
+- **Update to the latest official firmware (EyeVue).** The vendor server is public and anonymous:
+  `GET https://platform.eyevue-glass.com/api/app/ota/getNewOtaPackage?deviceVersion=<v>&code=<model>`
+  (fallback host `api.eyevueai.com`). Only a newer BLE package on an `*.aliyuncs.com` HTTPS URL is offered.
+  The download must match the server's Content-Length and Content-MD5/ETag, and the sha256 of the mirrored
+  images where the (model, version) is known (`FamilyFirmwareRules.knownEyevueImages`).
+- **TuneBuds official updates** are not offered. The vendor server (`api.hetangsmart.com`
+  `/v2/project/checkVersionV2`) is public, but it is keyed by a 4-hex project number taken from the BLE
+  advert, whose byte layout has never been captured from real glasses; a wrong number would fetch another
+  model's firmware.
+- **Battery:** at least 50% (the EyeVue app's own limit; no TuneBuds limit is known). **Busy:** no update
+  while media sync, live preview, another update (the `GlassesSession.OTA` lease) or a voice question,
+  Gemini Live or a recording (`AudioSessionCoordinator`) runs. **Cancel:** before the transfer always; during
+  it only where the glasses keep their firmware (EyeVue dual-bank via E4, TuneBuds always: it resumes).

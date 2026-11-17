@@ -46,6 +46,7 @@ class GlassesManagerGatingMatrixTest {
             Action.ADVANCED_CONTROLS,
             Action.ADVANCED_DEVICE_INFO,
             Action.ADVANCED_IMAGE_QUALITY,
+            Action.ADVANCED_OTA,
         ),
         DeviceClass.MOYOUNG_W620 to setOf(
             Action.MEETING_CAPTURE,

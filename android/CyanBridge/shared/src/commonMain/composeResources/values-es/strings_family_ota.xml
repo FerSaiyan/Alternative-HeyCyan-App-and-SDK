@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="family_ota_title">Actualización de firmware</string>
+    <string name="family_ota_description_eyevue">Actualiza el firmware Bluetooth de las gafas por Bluetooth (servicio de actualización JieLi). El firmware de la cámara (Wi-Fi) no cambia.</string>
+    <string name="family_ota_description_tunebuds">Actualiza el firmware Bluetooth de las gafas por Bluetooth (actualización AB Mate). El firmware de la cámara (Wi-Fi) no cambia.</string>
+    <string name="family_ota_installed">Modelo %1$s · firmware %2$s</string>
+    <string name="family_ota_unknown">desconocido</string>
+    <string name="family_ota_warning">Mantén las gafas encendidas, fuera del estuche y junto al teléfono hasta que termine la actualización. No las apagues ni cierres CyanBridge. La batería debe estar al menos al %1$s.</string>
+    <string name="family_ota_check">Buscar actualizaciones</string>
+    <string name="family_ota_install_official">Actualizar a %1$s</string>
+    <string name="family_ota_install_file">Instalar un archivo de firmware</string>
+    <string name="family_ota_official_unavailable_tunebuds">Las actualizaciones oficiales de TuneBuds no están disponibles en CyanBridge: el servidor del fabricante necesita un número de proyecto que las gafas no informan. Puedes instalar el archivo de firmware del correo de CyanBridge.</string>
+    <string name="family_ota_up_to_date">Estas gafas tienen el firmware oficial más reciente.</string>
+    <string name="family_ota_update_available">Hay disponible el firmware oficial %1$s.</string>
+    <string name="family_ota_wifi_part_note">El paquete del fabricante también actualiza el chip de la cámara (Wi-Fi). CyanBridge instala solo la parte Bluetooth; la cámara conserva su firmware actual.</string>
+    <string name="family_ota_stage_checking">Buscando actualizaciones…</string>
+    <string name="family_ota_stage_preparing">Preparando la actualización…</string>
+    <string name="family_ota_stage_downloading">Descargando el firmware…</string>
+    <string name="family_ota_stage_validating">Comprobando el archivo de firmware…</string>
+    <string name="family_ota_stage_installing">Instalando…</string>
+    <string name="family_ota_stage_reconnecting">Las gafas se están reiniciando…</string>
+    <string name="family_ota_stage_succeeded">Actualización terminada</string>
+    <string name="family_ota_stage_failed">La actualización falló</string>
+    <string name="family_ota_stage_cancelled">Actualización cancelada</string>
+    <string name="family_ota_blocked_not_connected">Conecta las gafas para actualizar su firmware.</string>
+    <string name="family_ota_blocked_battery">Carga primero las gafas al menos al %1$s (ahora %2$s).</string>
+    <string name="family_ota_blocked_busy">Detén primero la sincronización de medios o la vista previa en directo.</string>
+    <string name="family_ota_blocked_audio">Espera a que termine la pregunta por voz, Gemini Live o la grabación.</string>
+    <string name="family_ota_confirm_title">Antes de actualizar</string>
+    <string name="family_ota_confirm_file_eyevue">Elige un archivo .ufw o el .zip del correo de firmware de CyanBridge. CyanBridge comprueba el archivo y que corresponda a este modelo de gafas antes de enviar nada.</string>
+    <string name="family_ota_confirm_file_tunebuds">Elige el .zip del correo de firmware de CyanBridge. CyanBridge comprueba el archivo y que se creó para el firmware que tienen estas gafas antes de enviar nada.</string>
+    <string name="family_ota_confirm_official">CyanBridge descarga el firmware %1$s del servidor de actualizaciones de EyeVue, comprueba su tamaño, suma de verificación y modelo, y lo instala.</string>
+    <string name="family_ota_acknowledge">Entiendo que una actualización fallida puede dejar las gafas inutilizables hasta que se vuelva a instalar el firmware.</string>
+    <string name="family_ota_continue">Continuar</string>
+    <string name="family_ota_dismiss">Cerrar</string>
+    <string name="family_ota_recovery">Si las gafas dejan de responder: cárgalas, vuelve a conectarlas en CyanBridge e instala de nuevo el mismo firmware.</string>
+</resources>

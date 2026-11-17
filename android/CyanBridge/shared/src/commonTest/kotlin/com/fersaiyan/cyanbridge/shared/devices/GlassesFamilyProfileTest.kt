@@ -164,11 +164,11 @@ class GlassesFamilyProfileTest {
 
     @Test
     fun onlyTuneBudsDropsActionsOutsideItsCapabilities() {
-        val ota = com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction.CancelOta
+        val volume = com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction.RequestVolume
         GlassesFamilyProfiles.all.forEach { profile ->
             assertEquals(
                 profile.deviceClass != DeviceClass.TUNEBUDS,
-                GlassesManagerGating.isActionSupported(profile, ota),
+                GlassesManagerGating.isActionSupported(profile, volume),
                 "${profile.deviceClass}",
             )
         }

@@ -88,6 +88,10 @@ interface GlassesDashboardHost {
 
     fun cancelOta() = onActionUnavailable(GlassesDashboardAction.CancelOta)
 
+    /** The EyeVue/TuneBuds firmware section ([GlassesDashboardUiState.familyOta]). */
+    fun familyFirmware(command: FamilyFirmwareCommand) =
+        onActionUnavailable(GlassesDashboardAction.FamilyFirmware(command))
+
     /** Wi-Fi ADB debugging; the host checks its build type and whether [family] supports it. */
     fun startWifiAdbDebug(family: GlassesFamilyProfile) =
         onActionUnavailable(GlassesDashboardAction.RequestStartWifiAdbDebug)
@@ -186,6 +190,7 @@ class GlassesDashboardController(
                 }
             }
             GlassesDashboardAction.CancelOta -> host.cancelOta()
+            is GlassesDashboardAction.FamilyFirmware -> host.familyFirmware(action.command)
             GlassesDashboardAction.RequestStartWifiAdbDebug -> host.startWifiAdbDebug(family)
             GlassesDashboardAction.StopWifiAdbDebug -> host.stopWifiAdbDebug(family)
             GlassesDashboardAction.DismissTransportPermissionDialog -> host.dismissTransportPermissionDialog()

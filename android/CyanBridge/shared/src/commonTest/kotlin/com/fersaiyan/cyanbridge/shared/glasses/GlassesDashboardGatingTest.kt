@@ -59,8 +59,10 @@ class GlassesDashboardGatingTest {
                 showAdvancedOta = Action.ADVANCED_OTA in visible,
                 showSdkFirmwareUpdate = Action.ADVANCED_SDK_FIRMWARE_UPDATE in visible,
                 deviceInfoLabel = sample.deviceInfoLabel.takeIf { deviceClass == DeviceClass.TUNEBUDS },
-                firmwarePatchRequest = sample.firmwarePatchRequest
-                    .takeIf { deviceClass == DeviceClass.HEY_CYAN || deviceClass == DeviceClass.EYEVUE },
+                firmwarePatchRequest = sample.firmwarePatchRequest.takeIf { Action.ADVANCED_OTA in visible },
+                familyOta = FamilyOtaUiState.familyOf(deviceClass)
+                    ?.takeIf { Action.ADVANCED_OTA in visible }
+                    ?.let { FamilyOtaUiState(it) },
                 aiWakeWordRoute = AiWakeWordRoute.IMAGE_QUESTION,
                 showMetaRaybanControls = deviceClass == DeviceClass.META_RAYBAN,
                 showMeizuMyvuControls = deviceClass == DeviceClass.MEIZU_MYVU,

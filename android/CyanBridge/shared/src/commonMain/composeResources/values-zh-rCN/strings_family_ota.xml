@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="family_ota_title">固件更新</string>
+    <string name="family_ota_description_eyevue">通过蓝牙更新眼镜的蓝牙固件（杰理升级服务）。摄像头（Wi-Fi）固件不会改变。</string>
+    <string name="family_ota_description_tunebuds">通过蓝牙更新眼镜的蓝牙固件（AB Mate 升级）。摄像头（Wi-Fi）固件不会改变。</string>
+    <string name="family_ota_installed">型号 %1$s · 固件 %2$s</string>
+    <string name="family_ota_unknown">未知</string>
+    <string name="family_ota_warning">在更新完成前，请让眼镜保持开机、放在充电盒外并靠近手机。不要关闭眼镜或 CyanBridge。电量必须至少为 %1$s。</string>
+    <string name="family_ota_check">检查更新</string>
+    <string name="family_ota_install_official">更新到 %1$s</string>
+    <string name="family_ota_install_file">安装固件文件</string>
+    <string name="family_ota_official_unavailable_tunebuds">CyanBridge 暂不提供 TuneBuds 官方更新：厂商的升级服务器需要眼镜不会上报的项目编号。你可以安装 CyanBridge 邮件中的固件文件。</string>
+    <string name="family_ota_up_to_date">这副眼镜已是最新的官方固件。</string>
+    <string name="family_ota_update_available">有可用的官方固件 %1$s。</string>
+    <string name="family_ota_wifi_part_note">厂商的升级包还会更新摄像头（Wi-Fi）芯片。CyanBridge 只安装蓝牙部分，摄像头保留当前固件。</string>
+    <string name="family_ota_stage_checking">正在检查更新…</string>
+    <string name="family_ota_stage_preparing">正在准备更新…</string>
+    <string name="family_ota_stage_downloading">正在下载固件…</string>
+    <string name="family_ota_stage_validating">正在检查固件文件…</string>
+    <string name="family_ota_stage_installing">正在安装…</string>
+    <string name="family_ota_stage_reconnecting">眼镜正在重启…</string>
+    <string name="family_ota_stage_succeeded">更新完成</string>
+    <string name="family_ota_stage_failed">更新失败</string>
+    <string name="family_ota_stage_cancelled">更新已取消</string>
+    <string name="family_ota_blocked_not_connected">连接眼镜后才能更新固件。</string>
+    <string name="family_ota_blocked_battery">请先把眼镜充电到至少 %1$s（当前 %2$s）。</string>
+    <string name="family_ota_blocked_busy">请先停止媒体同步或实时预览。</string>
+    <string name="family_ota_blocked_audio">请等待语音提问、Gemini Live 或录音结束。</string>
+    <string name="family_ota_confirm_title">更新之前</string>
+    <string name="family_ota_confirm_file_eyevue">请选择 .ufw 文件或 CyanBridge 固件邮件中的 .zip。CyanBridge 会在发送前检查文件以及它是否适用于这款眼镜型号。</string>
+    <string name="family_ota_confirm_file_tunebuds">请选择 CyanBridge 固件邮件中的 .zip。CyanBridge 会在发送前检查文件以及它是否基于这副眼镜当前的固件制作。</string>
+    <string name="family_ota_confirm_official">CyanBridge 会从 EyeVue 升级服务器下载固件 %1$s，检查大小、校验和与型号后进行安装。</string>
+    <string name="family_ota_acknowledge">我了解更新失败可能导致眼镜无法使用，直到重新安装固件。</string>
+    <string name="family_ota_continue">继续</string>
+    <string name="family_ota_dismiss">关闭</string>
+    <string name="family_ota_recovery">如果眼镜没有响应：先充电，在 CyanBridge 中重新连接，然后再次安装同一固件。</string>
+</resources>

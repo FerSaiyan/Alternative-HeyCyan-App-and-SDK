@@ -354,6 +354,26 @@ class RcspOtaSender(
     val progressPercent: Int?
         get() = if (contentSize > 0) (bytesSent * 100 / contentSize).toInt().coerceIn(0, 100) else null
 
+    /**
+     * Whether stopping now leaves the installed firmware intact: before the glasses enter update
+     * mode, or during a dual-bank transfer (the vendor SDK only sends E4 exit for dual-bank
+     * devices: "single flash ota cannot be interrupted").
+     */
+    val canCancel: Boolean
+        get() = when (state) {
+            State.IDLE, State.AUTH1, State.AUTH2, State.INFO, State.E1 -> true
+            State.TRANSFER -> info.doubleBackup
+            else -> false
+        }
+
+    /** Stops the session when [canCancel]: a dual-bank transfer is ended with E4 exit; returns false otherwise. */
+    fun cancel(): Boolean {
+        if (!canCancel) return false
+        if (state == State.TRANSFER) command(JieliRcsp.OP_E4_EXIT_UPDATE, ByteArray(0), null)
+        fail("cancelled")
+        return true
+    }
+
     private fun startSession(resumeState: State?, authenticated: Boolean) {
         parser = RcspParser(mtu)
         waiting.clear()

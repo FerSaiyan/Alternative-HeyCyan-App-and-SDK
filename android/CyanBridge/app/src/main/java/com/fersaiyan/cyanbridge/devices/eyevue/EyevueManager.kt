@@ -52,6 +52,15 @@ data class EyevueState(
     val lastError: String? = null,
 )
 
+/** Progress of an EyeVue RCSP firmware install. */
+sealed interface RcspInstallProgress {
+    /** [cancelable]: stopping now keeps the installed firmware (a dual-bank transfer). */
+    data class Sending(val percent: Int, val cancelable: Boolean) : RcspInstallProgress
+
+    /** The glasses dropped the link to restart as part of the update; reconnecting. */
+    data object Restarting : RcspInstallProgress
+}
+
 /** Owns Eyevue's native BLE connection and exposes vendor commands to the app. */
 class EyevueManager private constructor(context: Context) {
     companion object {
@@ -61,6 +70,7 @@ class EyevueManager private constructor(context: Context) {
         private const val RCSP_RESTART_WAIT_MS = 4_000L
         private const val RCSP_RECONNECT_ATTEMPTS = 20
         private const val RCSP_RECONNECT_DELAY_MS = 3_000L
+        private const val RCSP_CANCEL_POLL_MS = 500L
 
         @Volatile
         private var instance: EyevueManager? = null
@@ -384,7 +394,7 @@ class EyevueManager private constructor(context: Context) {
     suspend fun readRcspTargetInfo(): RcspTargetInfo? = rcspMutex.withLock {
         if (!client.isConnected() || !client.hasRcsp()) return@withLock null
         val sender = RcspOtaSender(ByteArray(0), readInfoOnly = true)
-        val result = runRcsp(sender, reconnect = { false }, onProgress = {}, idleTimeoutMs = RCSP_INFO_TIMEOUT_MS)
+        val result = runRcsp(sender, reconnect = { false }, onProgress = {}, cancelRequested = { false }, idleTimeoutMs = RCSP_INFO_TIMEOUT_MS)
         if (result == "ok") sender.info.also { rcspInfo = it } else {
             Log.w(TAG, "RCSP target info failed: $result")
             null
@@ -395,17 +405,37 @@ class EyevueManager private constructor(context: Context) {
      * Installs a `.ufw` through JieLi RCSP. The glasses restart during the update; this reconnects
      * by address (the loader exposes only AE00). Returns "ok" or "error: ...".
      */
-    suspend fun installRcspFirmware(ufw: ByteArray, onProgress: (String) -> Unit): String = rcspMutex.withLock {
+    suspend fun installRcspFirmware(ufw: ByteArray, onProgress: (String) -> Unit): String =
+        installRcspFirmware(ufw, cancelRequested = { false }) { event ->
+            onProgress(
+                when (event) {
+                    is RcspInstallProgress.Sending -> "Sending firmware: ${event.percent}%"
+                    RcspInstallProgress.Restarting -> "The glasses are restarting; reconnecting…"
+                },
+            )
+        }
+
+    /**
+     * [installRcspFirmware] with structured progress and a cancel request: [cancelRequested] is
+     * honoured only while stopping keeps the installed firmware intact ([RcspOtaSender.canCancel]);
+     * a cancelled install returns "error: cancelled".
+     */
+    suspend fun installRcspFirmware(
+        ufw: ByteArray,
+        cancelRequested: () -> Boolean,
+        onEvent: (RcspInstallProgress) -> Unit,
+    ): String = rcspMutex.withLock {
         val address = _state.value.deviceAddress ?: return@withLock "error: no EyeVue address"
         if (!client.isConnected()) return@withLock "error: EyeVue is not connected"
         val sender = RcspOtaSender(ufw)
         val result = runRcsp(
             sender,
             reconnect = {
-                onProgress("The glasses are restarting; reconnecting…")
+                onEvent(RcspInstallProgress.Restarting)
                 reconnectForUpdate(address)
             },
-            onProgress = onProgress,
+            onProgress = onEvent,
+            cancelRequested = cancelRequested,
         )
         rcspInfo = sender.info
         if (result == "ok") {
@@ -427,7 +457,8 @@ class EyevueManager private constructor(context: Context) {
     private suspend fun runRcsp(
         sender: RcspOtaSender,
         reconnect: suspend () -> Boolean,
-        onProgress: (String) -> Unit,
+        onProgress: (RcspInstallProgress) -> Unit,
+        cancelRequested: () -> Boolean,
         idleTimeoutMs: Long = RCSP_IDLE_TIMEOUT_MS,
     ): String {
         val incoming = Channel<ByteArray>(Channel.UNLIMITED)
@@ -443,14 +474,27 @@ class EyevueManager private constructor(context: Context) {
             if (!flush()) return "error: write failed"
             var lastPercent = -1
             while (sender.state != RcspOtaSender.State.DONE) {
+                if (cancelRequested() && sender.cancel()) {
+                    flush()
+                    return "error: cancelled"
+                }
                 val restarting = sender.state == RcspOtaSender.State.RECONNECT || sender.state == RcspOtaSender.State.REBOOTING
-                val data = withTimeoutOrNull(if (restarting) RCSP_RESTART_WAIT_MS else idleTimeoutMs) { incoming.receive() }
+                // Short waits so a cancel request is seen promptly; the idle limit stays the same.
+                val wait = if (restarting) RCSP_RESTART_WAIT_MS else idleTimeoutMs
+                var data: ByteArray? = null
+                var waited = 0L
+                while (data == null && waited < wait && !(cancelRequested() && sender.canCancel)) {
+                    val slice = minOf(RCSP_CANCEL_POLL_MS, wait - waited)
+                    data = withTimeoutOrNull(slice) { incoming.receive() }
+                    waited += slice
+                }
+                if (data == null && cancelRequested() && sender.canCancel) continue
                 if (data != null) {
                     sender.onBytes(data)
                     if (!flush() && !restarting) return "error: write failed"
                     sender.progressPercent?.takeIf { it != lastPercent }?.let {
                         lastPercent = it
-                        onProgress("Sending firmware: $it%")
+                        onProgress(RcspInstallProgress.Sending(it, cancelable = sender.canCancel))
                     }
                     continue
                 }

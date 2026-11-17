@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="family_ota_title">Firmware-Update</string>
+    <string name="family_ota_description_eyevue">Aktualisiert die Bluetooth-Firmware der Brille über Bluetooth (JieLi-Updatedienst). Die Kamera-Firmware (WLAN) wird nicht geändert.</string>
+    <string name="family_ota_description_tunebuds">Aktualisiert die Bluetooth-Firmware der Brille über Bluetooth (AB-Mate-Update). Die Kamera-Firmware (WLAN) wird nicht geändert.</string>
+    <string name="family_ota_installed">Modell %1$s · Firmware %2$s</string>
+    <string name="family_ota_unknown">unbekannt</string>
+    <string name="family_ota_warning">Lass die Brille eingeschaltet, außerhalb des Etuis und neben dem Handy, bis das Update fertig ist. Schalte sie nicht aus und schließe CyanBridge nicht. Der Akku muss mindestens %1$s haben.</string>
+    <string name="family_ota_check">Nach Updates suchen</string>
+    <string name="family_ota_install_official">Auf %1$s aktualisieren</string>
+    <string name="family_ota_install_file">Firmware-Datei installieren</string>
+    <string name="family_ota_official_unavailable_tunebuds">Offizielle TuneBuds-Updates sind in CyanBridge nicht verfügbar: Der Updateserver des Herstellers braucht eine Projektnummer, die die Brille nicht meldet. Du kannst die Firmware-Datei aus der CyanBridge-E-Mail installieren.</string>
+    <string name="family_ota_up_to_date">Diese Brille hat die neueste offizielle Firmware.</string>
+    <string name="family_ota_update_available">Offizielle Firmware %1$s ist verfügbar.</string>
+    <string name="family_ota_wifi_part_note">Das Paket des Herstellers aktualisiert auch den Kamerachip (WLAN). CyanBridge installiert nur den Bluetooth-Teil; die Kamera behält ihre aktuelle Firmware.</string>
+    <string name="family_ota_stage_checking">Suche nach Updates…</string>
+    <string name="family_ota_stage_preparing">Update wird vorbereitet…</string>
+    <string name="family_ota_stage_downloading">Firmware wird heruntergeladen…</string>
+    <string name="family_ota_stage_validating">Firmware-Datei wird geprüft…</string>
+    <string name="family_ota_stage_installing">Wird installiert…</string>
+    <string name="family_ota_stage_reconnecting">Die Brille startet neu…</string>
+    <string name="family_ota_stage_succeeded">Update abgeschlossen</string>
+    <string name="family_ota_stage_failed">Update fehlgeschlagen</string>
+    <string name="family_ota_stage_cancelled">Update abgebrochen</string>
+    <string name="family_ota_blocked_not_connected">Verbinde die Brille, um ihre Firmware zu aktualisieren.</string>
+    <string name="family_ota_blocked_battery">Lade die Brille zuerst auf mindestens %1$s (jetzt %2$s).</string>
+    <string name="family_ota_blocked_busy">Beende zuerst die Mediensynchronisierung oder die Live-Vorschau.</string>
+    <string name="family_ota_blocked_audio">Warte, bis die Sprachfrage, Gemini Live oder die Aufnahme endet.</string>
+    <string name="family_ota_confirm_title">Vor dem Update</string>
+    <string name="family_ota_confirm_file_eyevue">Wähle eine .ufw-Datei oder die .zip aus der CyanBridge-Firmware-E-Mail. CyanBridge prüft die Datei und ob sie zu diesem Brillenmodell passt, bevor etwas gesendet wird.</string>
+    <string name="family_ota_confirm_file_tunebuds">Wähle die .zip aus der CyanBridge-Firmware-E-Mail. CyanBridge prüft die Datei und ob sie für die Firmware dieser Brille erstellt wurde, bevor etwas gesendet wird.</string>
+    <string name="family_ota_confirm_official">CyanBridge lädt die Firmware %1$s vom EyeVue-Updateserver herunter, prüft Größe, Prüfsumme und Modell und installiert sie.</string>
+    <string name="family_ota_acknowledge">Mir ist klar, dass ein fehlgeschlagenes Update die Brille unbrauchbar machen kann, bis die Firmware erneut installiert wird.</string>
+    <string name="family_ota_continue">Weiter</string>
+    <string name="family_ota_dismiss">Schließen</string>
+    <string name="family_ota_recovery">Wenn die Brille nicht mehr reagiert: lade sie auf, verbinde sie erneut in CyanBridge und installiere dieselbe Firmware noch einmal.</string>
+</resources>

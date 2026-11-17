@@ -1637,7 +1637,15 @@ private fun AdvancedControls(
                 ) { Text(stringResource(Res.string.dashboard_test_pull_ota)) }
             }
         }
-        if (state.showAdvancedOta) {
+        val familyOta = state.familyOta
+        if (state.showAdvancedOta && familyOta != null) {
+            HorizontalDivider()
+            FamilyOtaSection(
+                ota = familyOta,
+                onCommand = { command -> onAction(GlassesDashboardAction.FamilyFirmware(command)) },
+                onCancel = { onAction(GlassesDashboardAction.CancelOta) },
+            )
+        } else if (state.showAdvancedOta) {
             HorizontalDivider()
             Column(
                 modifier = Modifier.testTag("advanced_ota"),
@@ -1816,14 +1824,14 @@ private fun FirmwarePatchRequestDialog(
 private fun isValidContactEmail(value: String): Boolean =
     value.trim().matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))
 
-private enum class ActionButtonStyle {
+internal enum class ActionButtonStyle {
     Neutral,
     Primary,
     Destructive,
 }
 
 @Composable
-private fun ActionButton(
+internal fun ActionButton(
     label: String,
     onClick: () -> Unit,
     style: ActionButtonStyle = ActionButtonStyle.Neutral,
@@ -1874,7 +1882,7 @@ private fun ActionButton(
 }
 
 @Composable
-private fun ActionRow(
+internal fun ActionRow(
     primaryLabel: String,
     onPrimary: () -> Unit,
     secondaryLabel: String,
@@ -1910,7 +1918,7 @@ private fun ActionRow(
 }
 
 @Composable
-private fun SectionTitle(text: String, accented: Boolean = false) {
+internal fun SectionTitle(text: String, accented: Boolean = false) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelLarge,
@@ -1944,7 +1952,7 @@ private fun StatusPill(text: String, tertiary: Boolean = false) {
 }
 
 @Composable
-private fun WarningDialogIcon() {
+internal fun WarningDialogIcon() {
     Surface(
         modifier = Modifier.size(48.dp),
         color = MaterialTheme.colorScheme.errorContainer,

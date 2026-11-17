@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="family_ota_title">Aggiornamento firmware</string>
+    <string name="family_ota_description_eyevue">Aggiorna il firmware Bluetooth degli occhiali via Bluetooth (servizio di aggiornamento JieLi). Il firmware della fotocamera (Wi-Fi) non cambia.</string>
+    <string name="family_ota_description_tunebuds">Aggiorna il firmware Bluetooth degli occhiali via Bluetooth (aggiornamento AB Mate). Il firmware della fotocamera (Wi-Fi) non cambia.</string>
+    <string name="family_ota_installed">Modello %1$s · firmware %2$s</string>
+    <string name="family_ota_unknown">sconosciuto</string>
+    <string name="family_ota_warning">Tieni gli occhiali accesi, fuori dalla custodia e vicino al telefono finché l'aggiornamento non finisce. Non spegnerli e non chiudere CyanBridge. La batteria deve essere almeno al %1$s.</string>
+    <string name="family_ota_check">Cerca aggiornamenti</string>
+    <string name="family_ota_install_official">Aggiorna a %1$s</string>
+    <string name="family_ota_install_file">Installa un file firmware</string>
+    <string name="family_ota_official_unavailable_tunebuds">Gli aggiornamenti ufficiali TuneBuds non sono disponibili in CyanBridge: il server del produttore richiede un numero di progetto che gli occhiali non comunicano. Puoi installare il file firmware dell'e-mail di CyanBridge.</string>
+    <string name="family_ota_up_to_date">Questi occhiali hanno il firmware ufficiale più recente.</string>
+    <string name="family_ota_update_available">È disponibile il firmware ufficiale %1$s.</string>
+    <string name="family_ota_wifi_part_note">Il pacchetto del produttore aggiorna anche il chip della fotocamera (Wi-Fi). CyanBridge installa solo la parte Bluetooth; la fotocamera mantiene il firmware attuale.</string>
+    <string name="family_ota_stage_checking">Ricerca aggiornamenti…</string>
+    <string name="family_ota_stage_preparing">Preparazione dell'aggiornamento…</string>
+    <string name="family_ota_stage_downloading">Download del firmware…</string>
+    <string name="family_ota_stage_validating">Controllo del file firmware…</string>
+    <string name="family_ota_stage_installing">Installazione…</string>
+    <string name="family_ota_stage_reconnecting">Gli occhiali si stanno riavviando…</string>
+    <string name="family_ota_stage_succeeded">Aggiornamento completato</string>
+    <string name="family_ota_stage_failed">Aggiornamento non riuscito</string>
+    <string name="family_ota_stage_cancelled">Aggiornamento annullato</string>
+    <string name="family_ota_blocked_not_connected">Collega gli occhiali per aggiornarne il firmware.</string>
+    <string name="family_ota_blocked_battery">Carica prima gli occhiali almeno al %1$s (ora %2$s).</string>
+    <string name="family_ota_blocked_busy">Interrompi prima la sincronizzazione dei contenuti o l'anteprima dal vivo.</string>
+    <string name="family_ota_blocked_audio">Attendi la fine della domanda vocale, di Gemini Live o della registrazione.</string>
+    <string name="family_ota_confirm_title">Prima di aggiornare</string>
+    <string name="family_ota_confirm_file_eyevue">Scegli un file .ufw o lo .zip dell'e-mail firmware di CyanBridge. CyanBridge controlla il file e che sia per questo modello di occhiali prima di inviare qualsiasi cosa.</string>
+    <string name="family_ota_confirm_file_tunebuds">Scegli lo .zip dell'e-mail firmware di CyanBridge. CyanBridge controlla il file e che sia stato creato per il firmware di questi occhiali prima di inviare qualsiasi cosa.</string>
+    <string name="family_ota_confirm_official">CyanBridge scarica il firmware %1$s dal server di aggiornamento EyeVue, ne controlla dimensione, checksum e modello e lo installa.</string>
+    <string name="family_ota_acknowledge">Capisco che un aggiornamento non riuscito può rendere gli occhiali inutilizzabili finché il firmware non viene reinstallato.</string>
+    <string name="family_ota_continue">Continua</string>
+    <string name="family_ota_dismiss">Chiudi</string>
+    <string name="family_ota_recovery">Se gli occhiali non rispondono più: caricali, ricollegali in CyanBridge e reinstalla lo stesso firmware.</string>
+</resources>

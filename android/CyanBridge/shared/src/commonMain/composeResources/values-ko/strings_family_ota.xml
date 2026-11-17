@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="family_ota_title">펌웨어 업데이트</string>
+    <string name="family_ota_description_eyevue">블루투스로 안경의 블루투스 펌웨어를 업데이트합니다(JieLi 업데이트 서비스). 카메라(Wi-Fi) 펌웨어는 바뀌지 않습니다.</string>
+    <string name="family_ota_description_tunebuds">블루투스로 안경의 블루투스 펌웨어를 업데이트합니다(AB Mate 업데이트). 카메라(Wi-Fi) 펌웨어는 바뀌지 않습니다.</string>
+    <string name="family_ota_installed">모델 %1$s · 펌웨어 %2$s</string>
+    <string name="family_ota_unknown">알 수 없음</string>
+    <string name="family_ota_warning">업데이트가 끝날 때까지 안경을 켠 채로 케이스 밖, 휴대폰 가까이에 두세요. 안경을 끄거나 CyanBridge를 닫지 마세요. 배터리가 %1$s 이상이어야 합니다.</string>
+    <string name="family_ota_check">업데이트 확인</string>
+    <string name="family_ota_install_official">%1$s(으)로 업데이트</string>
+    <string name="family_ota_install_file">펌웨어 파일 설치</string>
+    <string name="family_ota_official_unavailable_tunebuds">CyanBridge에서는 TuneBuds 공식 업데이트를 사용할 수 없습니다. 제조사 업데이트 서버에 안경이 알려 주지 않는 프로젝트 번호가 필요합니다. CyanBridge 이메일의 펌웨어 파일은 설치할 수 있습니다.</string>
+    <string name="family_ota_up_to_date">이 안경에는 최신 공식 펌웨어가 설치되어 있습니다.</string>
+    <string name="family_ota_update_available">공식 펌웨어 %1$s을(를) 사용할 수 있습니다.</string>
+    <string name="family_ota_wifi_part_note">제조사 패키지는 카메라(Wi-Fi) 칩도 업데이트합니다. CyanBridge는 블루투스 부분만 설치하며, 카메라는 현재 펌웨어를 유지합니다.</string>
+    <string name="family_ota_stage_checking">업데이트 확인 중…</string>
+    <string name="family_ota_stage_preparing">업데이트 준비 중…</string>
+    <string name="family_ota_stage_downloading">펌웨어 다운로드 중…</string>
+    <string name="family_ota_stage_validating">펌웨어 파일 확인 중…</string>
+    <string name="family_ota_stage_installing">설치 중…</string>
+    <string name="family_ota_stage_reconnecting">안경이 다시 시작하는 중…</string>
+    <string name="family_ota_stage_succeeded">업데이트 완료</string>
+    <string name="family_ota_stage_failed">업데이트 실패</string>
+    <string name="family_ota_stage_cancelled">업데이트 취소됨</string>
+    <string name="family_ota_blocked_not_connected">펌웨어를 업데이트하려면 안경을 연결하세요.</string>
+    <string name="family_ota_blocked_battery">먼저 안경을 %1$s 이상 충전하세요(현재 %2$s).</string>
+    <string name="family_ota_blocked_busy">먼저 미디어 동기화나 라이브 미리보기를 중지하세요.</string>
+    <string name="family_ota_blocked_audio">음성 질문, Gemini Live 또는 녹음이 끝날 때까지 기다리세요.</string>
+    <string name="family_ota_confirm_title">업데이트하기 전에</string>
+    <string name="family_ota_confirm_file_eyevue">.ufw 파일이나 CyanBridge 펌웨어 이메일의 .zip을 선택하세요. CyanBridge는 무엇이든 보내기 전에 파일과 이 안경 모델에 맞는지 확인합니다.</string>
+    <string name="family_ota_confirm_file_tunebuds">CyanBridge 펌웨어 이메일의 .zip을 선택하세요. CyanBridge는 무엇이든 보내기 전에 파일과 이 안경의 현재 펌웨어용으로 만들어졌는지 확인합니다.</string>
+    <string name="family_ota_confirm_official">CyanBridge가 EyeVue 업데이트 서버에서 펌웨어 %1$s을(를) 내려받아 크기, 체크섬, 모델을 확인한 뒤 설치합니다.</string>
+    <string name="family_ota_acknowledge">업데이트가 실패하면 펌웨어를 다시 설치할 때까지 안경을 사용할 수 없을 수 있음을 이해합니다.</string>
+    <string name="family_ota_continue">계속</string>
+    <string name="family_ota_dismiss">닫기</string>
+    <string name="family_ota_recovery">안경이 응답하지 않으면 충전한 뒤 CyanBridge에서 다시 연결하고 같은 펌웨어를 다시 설치하세요.</string>
+</resources>

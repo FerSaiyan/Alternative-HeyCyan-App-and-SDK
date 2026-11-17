@@ -68,6 +68,8 @@ data class GlassesDashboardUiState(
     val meizuMyvu: MeizuMyvuUiState = MeizuMyvuUiState(),
     val memoMind: MemoMindUiState = MemoMindUiState(),
     val ota: OtaSectionUiState = OtaSectionUiState(),
+    /** The EyeVue/TuneBuds firmware section; null for HeyCyan (it uses [ota]) and families without one. */
+    val familyOta: FamilyOtaUiState? = null,
     val firmwarePatchRequest: FirmwarePatchRequestUiState? = null,
     val livePreview: LivePreviewUiState = LivePreviewUiState(),
     val wifiAdbDebug: WifiAdbDebugUiState = WifiAdbDebugUiState(),
@@ -348,6 +350,9 @@ fun GlassesDashboardUiState.withFamilyGating(
         firmwarePatchRequest = firmwarePatchRequest.takeIf {
             model.isVisible(Action.ADVANCED_OTA)
         },
+        familyOta = FamilyOtaUiState.familyOf(family.deviceClass)
+            ?.takeIf { model.isVisible(Action.ADVANCED_OTA) }
+            ?.let { firmwareFamily -> familyOta?.takeIf { it.family == firmwareFamily } ?: FamilyOtaUiState(firmwareFamily) },
         aiWakeWordRoute = aiWakeWordRoute,
         showMetaRaybanControls = model.isVisible(Action.META_RAYBAN_CONTROLS),
         showMeizuMyvuControls = model.isVisible(Action.MEIZU_MYVU_CONTROLS),
@@ -410,6 +415,9 @@ sealed interface GlassesDashboardAction {
     data class SubmitFirmwarePatchRequest(val contactEmail: String) : GlassesDashboardAction
     data object DismissFirmwarePatchRequest : GlassesDashboardAction
     data object CancelOta : GlassesDashboardAction
+
+    /** The EyeVue/TuneBuds firmware section ([FamilyOtaUiState]). */
+    data class FamilyFirmware(val command: FamilyFirmwareCommand) : GlassesDashboardAction
     data object StartLivePreview : GlassesDashboardAction
     data object StopLivePreview : GlassesDashboardAction
     data object OpenLiveBroadcast : GlassesDashboardAction

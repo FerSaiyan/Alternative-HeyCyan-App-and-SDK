@@ -57,7 +57,6 @@ class TuneBudsDashboardActionPolicyTest {
             GlassesDashboardAction.DumpOtaInfo,
             GlassesDashboardAction.TestPullOta,
             GlassesDashboardAction.RequestOtaFirmware(OtaFirmwareSource.PERSONAL_FILE),
-            GlassesDashboardAction.CancelOta,
             GlassesDashboardAction.RequestStartWifiAdbDebug,
             GlassesDashboardAction.StopWifiAdbDebug,
             GlassesDashboardAction.MeizuShowTestTeleprompter,

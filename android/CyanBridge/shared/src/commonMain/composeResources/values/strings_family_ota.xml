@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="family_ota_title">Firmware update</string>
+    <string name="family_ota_description_eyevue">Updates the glasses' Bluetooth firmware over Bluetooth (JieLi update service). The camera (Wi-Fi) firmware is not changed.</string>
+    <string name="family_ota_description_tunebuds">Updates the glasses' Bluetooth firmware over Bluetooth (AB Mate update). The camera (Wi-Fi) firmware is not changed.</string>
+    <string name="family_ota_installed">Model %1$s · firmware %2$s</string>
+    <string name="family_ota_unknown">unknown</string>
+    <string name="family_ota_warning">Keep the glasses switched on, out of the case and next to the phone until the update finishes. Do not turn them off or close CyanBridge. The battery must be at least %1$s.</string>
+    <string name="family_ota_check">Check for updates</string>
+    <string name="family_ota_install_official">Update to %1$s</string>
+    <string name="family_ota_install_file">Install a firmware file</string>
+    <string name="family_ota_official_unavailable_tunebuds">Official TuneBuds updates are not available in CyanBridge: the vendor's update server needs a project number the glasses do not report. You can install the firmware file from the CyanBridge email.</string>
+    <string name="family_ota_up_to_date">These glasses have the latest official firmware.</string>
+    <string name="family_ota_update_available">Official firmware %1$s is available.</string>
+    <string name="family_ota_wifi_part_note">The vendor's package also updates the camera (Wi-Fi) chip. CyanBridge installs only the Bluetooth part; the camera keeps its current firmware.</string>
+    <string name="family_ota_stage_checking">Checking for updates…</string>
+    <string name="family_ota_stage_preparing">Preparing the update…</string>
+    <string name="family_ota_stage_downloading">Downloading the firmware…</string>
+    <string name="family_ota_stage_validating">Checking the firmware file…</string>
+    <string name="family_ota_stage_installing">Installing…</string>
+    <string name="family_ota_stage_reconnecting">The glasses are restarting…</string>
+    <string name="family_ota_stage_succeeded">Update finished</string>
+    <string name="family_ota_stage_failed">Update failed</string>
+    <string name="family_ota_stage_cancelled">Update cancelled</string>
+    <string name="family_ota_blocked_not_connected">Connect the glasses to update their firmware.</string>
+    <string name="family_ota_blocked_battery">Charge the glasses to at least %1$s first (now %2$s).</string>
+    <string name="family_ota_blocked_busy">Stop the media sync or live preview first.</string>
+    <string name="family_ota_blocked_audio">Wait until the voice question, Gemini Live or recording ends.</string>
+    <string name="family_ota_confirm_title">Before you update</string>
+    <string name="family_ota_confirm_file_eyevue">Pick a .ufw file or the .zip from the CyanBridge firmware email. CyanBridge checks the file and that it is for this glasses model before sending anything.</string>
+    <string name="family_ota_confirm_file_tunebuds">Pick the .zip from the CyanBridge firmware email. CyanBridge checks the file and that it was built for the firmware these glasses run before sending anything.</string>
+    <string name="family_ota_confirm_official">CyanBridge downloads firmware %1$s from the EyeVue update server, checks its size, checksum and model, and installs it.</string>
+    <string name="family_ota_acknowledge">I understand that a failed update can leave the glasses unusable until the firmware is installed again.</string>
+    <string name="family_ota_continue">Continue</string>
+    <string name="family_ota_dismiss">Dismiss</string>
+    <string name="family_ota_recovery">If the glasses stop responding: charge them, reconnect them in CyanBridge and install the same firmware again.</string>
+</resources>

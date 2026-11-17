@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="family_ota_title">Atualização de firmware</string>
+    <string name="family_ota_description_eyevue">Atualiza o firmware Bluetooth dos óculos por Bluetooth (serviço de atualização JieLi). O firmware da câmera (Wi-Fi) não muda.</string>
+    <string name="family_ota_description_tunebuds">Atualiza o firmware Bluetooth dos óculos por Bluetooth (atualização AB Mate). O firmware da câmera (Wi-Fi) não muda.</string>
+    <string name="family_ota_installed">Modelo %1$s · firmware %2$s</string>
+    <string name="family_ota_unknown">desconhecido</string>
+    <string name="family_ota_warning">Mantenha os óculos ligados, fora do estojo e perto do celular até a atualização terminar. Não os desligue nem feche o CyanBridge. A bateria precisa estar com pelo menos %1$s.</string>
+    <string name="family_ota_check">Verificar atualizações</string>
+    <string name="family_ota_install_official">Atualizar para %1$s</string>
+    <string name="family_ota_install_file">Instalar um arquivo de firmware</string>
+    <string name="family_ota_official_unavailable_tunebuds">As atualizações oficiais dos TuneBuds não estão disponíveis no CyanBridge: o servidor do fabricante precisa de um número de projeto que os óculos não informam. Você pode instalar o arquivo de firmware do e-mail do CyanBridge.</string>
+    <string name="family_ota_up_to_date">Estes óculos já têm o firmware oficial mais recente.</string>
+    <string name="family_ota_update_available">O firmware oficial %1$s está disponível.</string>
+    <string name="family_ota_wifi_part_note">O pacote do fabricante também atualiza o chip da câmera (Wi-Fi). O CyanBridge instala só a parte Bluetooth; a câmera mantém o firmware atual.</string>
+    <string name="family_ota_stage_checking">Verificando atualizações…</string>
+    <string name="family_ota_stage_preparing">Preparando a atualização…</string>
+    <string name="family_ota_stage_downloading">Baixando o firmware…</string>
+    <string name="family_ota_stage_validating">Verificando o arquivo de firmware…</string>
+    <string name="family_ota_stage_installing">Instalando…</string>
+    <string name="family_ota_stage_reconnecting">Os óculos estão reiniciando…</string>
+    <string name="family_ota_stage_succeeded">Atualização concluída</string>
+    <string name="family_ota_stage_failed">A atualização falhou</string>
+    <string name="family_ota_stage_cancelled">Atualização cancelada</string>
+    <string name="family_ota_blocked_not_connected">Conecte os óculos para atualizar o firmware.</string>
+    <string name="family_ota_blocked_battery">Carregue os óculos até pelo menos %1$s primeiro (agora %2$s).</string>
+    <string name="family_ota_blocked_busy">Pare primeiro a sincronização de mídia ou a prévia ao vivo.</string>
+    <string name="family_ota_blocked_audio">Espere terminar a pergunta por voz, o Gemini Live ou a gravação.</string>
+    <string name="family_ota_confirm_title">Antes de atualizar</string>
+    <string name="family_ota_confirm_file_eyevue">Escolha um arquivo .ufw ou o .zip do e-mail de firmware do CyanBridge. O CyanBridge verifica o arquivo e se ele é para este modelo de óculos antes de enviar qualquer coisa.</string>
+    <string name="family_ota_confirm_file_tunebuds">Escolha o .zip do e-mail de firmware do CyanBridge. O CyanBridge verifica o arquivo e se ele foi feito para o firmware destes óculos antes de enviar qualquer coisa.</string>
+    <string name="family_ota_confirm_official">O CyanBridge baixa o firmware %1$s do servidor de atualização da EyeVue, confere tamanho, checksum e modelo e o instala.</string>
+    <string name="family_ota_acknowledge">Entendo que uma atualização com falha pode deixar os óculos inutilizáveis até o firmware ser instalado de novo.</string>
+    <string name="family_ota_continue">Continuar</string>
+    <string name="family_ota_dismiss">Fechar</string>
+    <string name="family_ota_recovery">Se os óculos pararem de responder: carregue-os, reconecte-os no CyanBridge e instale o mesmo firmware de novo.</string>
+</resources>

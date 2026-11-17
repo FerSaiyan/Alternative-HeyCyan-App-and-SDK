@@ -10,6 +10,7 @@ import com.fersaiyan.cyanbridge.bridge.core.GlassesCapability
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
+import com.fersaiyan.cyanbridge.shared.glasses.FamilyFirmwareCommand
 import com.fersaiyan.cyanbridge.shared.glasses.FirmwarePatchRequestUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
@@ -42,6 +43,7 @@ internal interface DashboardActionHost {
     fun requestOtaFirmware(source: OtaFirmwareSource)
     fun submitFirmwarePatchRequest(request: FirmwarePatchRequestUiState, contactEmail: String)
     fun cancelOta()
+    fun familyFirmware(command: FamilyFirmwareCommand)
     fun startEyevueLivePreview()
     fun startTuneBudsLivePreview()
     fun startLivePreview()
@@ -174,6 +176,8 @@ internal class DashboardController(
         actions.submitFirmwarePatchRequest(request, contactEmail)
 
     override fun cancelOta() = actions.cancelOta()
+
+    override fun familyFirmware(command: FamilyFirmwareCommand) = actions.familyFirmware(command)
 
     override fun startWifiAdbDebug(family: GlassesFamilyProfile) {
         if (BuildConfig.DEBUG && family.supports(GlassesCapability.WIFI_ADB_DEBUG)) actions.startWifiAdbDebug()

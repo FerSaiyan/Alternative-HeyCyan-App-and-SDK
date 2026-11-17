@@ -134,7 +134,8 @@ object GlassesManagerGating {
         is GlassesDashboardAction.RequestOtaFirmware,
         is GlassesDashboardAction.SubmitFirmwarePatchRequest,
         GlassesDashboardAction.DismissFirmwarePatchRequest,
-        GlassesDashboardAction.CancelOta -> GlassesCapability.FIRMWARE_UPDATE
+        GlassesDashboardAction.CancelOta,
+        is GlassesDashboardAction.FamilyFirmware -> GlassesCapability.FIRMWARE_UPDATE
         GlassesDashboardAction.RequestStartWifiAdbDebug,
         GlassesDashboardAction.StopWifiAdbDebug -> GlassesCapability.WIFI_ADB_DEBUG
         is GlassesDashboardAction.Navigate,
@@ -200,6 +201,11 @@ object GlassesManagerGating {
         GlassesDashboardAction.MeizuSyncClock,
         GlassesDashboardAction.MeizuSetComfortBrightness -> GlassesControlPanel.MEIZU_MYVU
         is GlassesDashboardAction.MemoMindPanel -> GlassesControlPanel.MEMOMIND
+        // The HeyCyan firmware sources (Wi-Fi .swu + BLE .bin) and patch requests; the other
+        // FIRMWARE_UPDATE families use GlassesDashboardAction.FamilyFirmware.
+        is GlassesDashboardAction.RequestOtaFirmware,
+        is GlassesDashboardAction.SubmitFirmwarePatchRequest,
+        GlassesDashboardAction.DismissFirmwarePatchRequest -> GlassesControlPanel.HEY_CYAN
         else -> null
     }
 }

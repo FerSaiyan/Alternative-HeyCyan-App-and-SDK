@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.devices.tunebuds
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfiles
 import com.fersaiyan.cyanbridge.shared.devices.GlassesManagerGating
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
+import com.fersaiyan.cyanbridge.shared.glasses.FamilyFirmwareCommand
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.shared.glasses.MemoMindPanelCommand
@@ -46,6 +47,8 @@ class TuneBudsDashboardActionMatrixTest {
         GlassesDashboardAction.StopLivePreview,
         GlassesDashboardAction.DismissTransportPermissionDialog,
         GlassesDashboardAction.RequestTransportPermission,
+        GlassesDashboardAction.CancelOta,
+        GlassesDashboardAction.FamilyFirmware(FamilyFirmwareCommand.INSTALL_FILE),
     )
 
     private val rejected = listOf(
@@ -62,7 +65,6 @@ class TuneBudsDashboardActionMatrixTest {
         GlassesDashboardAction.RequestOtaFirmware(OtaFirmwareSource.STEALTH_CATALOG),
         GlassesDashboardAction.SubmitFirmwarePatchRequest("a@b.c"),
         GlassesDashboardAction.DismissFirmwarePatchRequest,
-        GlassesDashboardAction.CancelOta,
         GlassesDashboardAction.RequestStartWifiAdbDebug,
         GlassesDashboardAction.StopWifiAdbDebug,
         GlassesDashboardAction.MetaRegister,
@@ -90,7 +92,7 @@ class TuneBudsDashboardActionMatrixTest {
     @Test
     fun everyDashboardActionTypeIsCovered() {
         val covered = (allowed + rejected).map { it::class }.toSet()
-        assertEquals(67, covered.size)
+        assertEquals(68, covered.size)
     }
 
     @Test

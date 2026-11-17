@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="family_ota_title">Обновление прошивки</string>
+    <string name="family_ota_description_eyevue">Обновляет Bluetooth-прошивку очков по Bluetooth (служба обновления JieLi). Прошивка камеры (Wi-Fi) не меняется.</string>
+    <string name="family_ota_description_tunebuds">Обновляет Bluetooth-прошивку очков по Bluetooth (обновление AB Mate). Прошивка камеры (Wi-Fi) не меняется.</string>
+    <string name="family_ota_installed">Модель %1$s · прошивка %2$s</string>
+    <string name="family_ota_unknown">неизвестно</string>
+    <string name="family_ota_warning">До конца обновления держите очки включёнными, вне футляра и рядом с телефоном. Не выключайте их и не закрывайте CyanBridge. Заряд батареи должен быть не ниже %1$s.</string>
+    <string name="family_ota_check">Проверить обновления</string>
+    <string name="family_ota_install_official">Обновить до %1$s</string>
+    <string name="family_ota_install_file">Установить файл прошивки</string>
+    <string name="family_ota_official_unavailable_tunebuds">Официальные обновления TuneBuds в CyanBridge недоступны: серверу производителя нужен номер проекта, который очки не сообщают. Можно установить файл прошивки из письма CyanBridge.</string>
+    <string name="family_ota_up_to_date">На этих очках последняя официальная прошивка.</string>
+    <string name="family_ota_update_available">Доступна официальная прошивка %1$s.</string>
+    <string name="family_ota_wifi_part_note">Пакет производителя также обновляет чип камеры (Wi-Fi). CyanBridge устанавливает только Bluetooth-часть; у камеры остаётся текущая прошивка.</string>
+    <string name="family_ota_stage_checking">Проверка обновлений…</string>
+    <string name="family_ota_stage_preparing">Подготовка обновления…</string>
+    <string name="family_ota_stage_downloading">Загрузка прошивки…</string>
+    <string name="family_ota_stage_validating">Проверка файла прошивки…</string>
+    <string name="family_ota_stage_installing">Установка…</string>
+    <string name="family_ota_stage_reconnecting">Очки перезагружаются…</string>
+    <string name="family_ota_stage_succeeded">Обновление завершено</string>
+    <string name="family_ota_stage_failed">Обновление не удалось</string>
+    <string name="family_ota_stage_cancelled">Обновление отменено</string>
+    <string name="family_ota_blocked_not_connected">Подключите очки, чтобы обновить прошивку.</string>
+    <string name="family_ota_blocked_battery">Сначала зарядите очки хотя бы до %1$s (сейчас %2$s).</string>
+    <string name="family_ota_blocked_busy">Сначала остановите синхронизацию медиа или живой просмотр.</string>
+    <string name="family_ota_blocked_audio">Дождитесь окончания голосового вопроса, Gemini Live или записи.</string>
+    <string name="family_ota_confirm_title">Перед обновлением</string>
+    <string name="family_ota_confirm_file_eyevue">Выберите файл .ufw или .zip из письма CyanBridge с прошивкой. CyanBridge проверит файл и что он подходит к этой модели очков, прежде чем что-либо отправить.</string>
+    <string name="family_ota_confirm_file_tunebuds">Выберите .zip из письма CyanBridge с прошивкой. CyanBridge проверит файл и что он собран для прошивки этих очков, прежде чем что-либо отправить.</string>
+    <string name="family_ota_confirm_official">CyanBridge загрузит прошивку %1$s с сервера обновлений EyeVue, проверит размер, контрольную сумму и модель и установит её.</string>
+    <string name="family_ota_acknowledge">Я понимаю, что неудачное обновление может сделать очки непригодными, пока прошивку не установят заново.</string>
+    <string name="family_ota_continue">Продолжить</string>
+    <string name="family_ota_dismiss">Закрыть</string>
+    <string name="family_ota_recovery">Если очки перестали отвечать: зарядите их, снова подключите в CyanBridge и ещё раз установите ту же прошивку.</string>
+</resources>

@@ -105,7 +105,7 @@ enum class GlassesCapability {
 
     /**
      * Firmware updates the glasses' own SDK runs on a dedicated screen (Mentra Live). Separate
-     * from [FIRMWARE_UPDATE], the HeyCyan/Eyevue OTA section, so the two flows never mix.
+     * from [FIRMWARE_UPDATE], the HeyCyan/EyeVue/TuneBuds OTA section, so the two flows never mix.
      */
     SDK_FIRMWARE_UPDATE,
 

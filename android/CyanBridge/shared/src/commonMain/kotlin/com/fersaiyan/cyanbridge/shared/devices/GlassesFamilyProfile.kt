@@ -183,6 +183,8 @@ object GlassesFamilyProfiles {
             GlassesCapability.DEVICE_INFO,
             GlassesCapability.TIME_SYNC,
             GlassesCapability.IMAGE_QUALITY_SELECTION,
+            // AB Mate FOTA over SPP (TuneBudsFota), from the dashboard's firmware section.
+            GlassesCapability.FIRMWARE_UPDATE,
             GlassesCapability.BUTTON_INPUT,
             GlassesCapability.MICROPHONE_AUDIO,
             GlassesCapability.SPEAKER_AUDIO,

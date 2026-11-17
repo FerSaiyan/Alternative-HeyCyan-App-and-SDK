@@ -301,7 +301,7 @@ class MainActivity : AppCompatActivity() {
     private var livePreviewDialog: AlertDialog? = null
     private val wifiAdbDebugController by lazy { DefaultWifiAdbDebugControllerFactory.create(this) }
     private val glassesFeatureHost = object :
-        OtaCoordinator.Host,
+        OtaCoordinator.Host, com.fersaiyan.cyanbridge.ota.family.FamilyOtaCoordinator.Host,
         HeyCyanRecordingControls.Host,
         LivePreviewCoordinator.Host,
         WifiAdbDebugCoordinator.Host {
@@ -409,6 +409,7 @@ class MainActivity : AppCompatActivity() {
     private val otaCoordinator: OtaCoordinator by lazy {
         OtaCoordinator(this, { otaManager }, glassesFeatureHost)
     }
+    private val familyOta by lazy { com.fersaiyan.cyanbridge.ota.family.FamilyOtaCoordinator(this, glassesFeatureHost) }
     private val recordingControls: HeyCyanRecordingControls by lazy {
         HeyCyanRecordingControls(this, glassesFeatureHost)
     }
@@ -640,9 +641,8 @@ class MainActivity : AppCompatActivity() {
             this@MainActivity.submitFirmwarePatchRequest(request, contactEmail)
         }
 
-        override fun cancelOta() {
-            otaCoordinator.cancelFromDashboard()
-        }
+        override fun cancelOta() { if (!familyOta.cancel()) otaCoordinator.cancelFromDashboard() }
+        override fun familyFirmware(command: com.fersaiyan.cyanbridge.shared.glasses.FamilyFirmwareCommand) = familyOta.onCommand(command)
 
         override fun startEyevueLivePreview() {
             this@MainActivity.startEyevueLivePreview()
@@ -1350,7 +1350,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun testPullModeOta() = otaCoordinator.testPullModeOta()
 
-    private fun observeOtaState() = otaCoordinator.observeOtaState()
+    private fun observeOtaState() = otaCoordinator.observeOtaState().also { familyOta.start() }
 
     private fun requestOtaFirmware(source: OtaFirmwareSource) = otaCoordinator.requestOtaFirmware(source)
 
