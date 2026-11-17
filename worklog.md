@@ -1,5 +1,32 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-17 — integrate-1117: sweep + fixes merged, Adaptive subnet-scan fallback, Qwen3.5 test generation
+
+- Worktree `cyan-refactor-wt/integrate-1117` (branch `cyan-refactor-integrate-1117`) from origin/cyan-refactor 420e07b3:
+  `cyan-refactor-v230-sweep` (7) and `cyan-refactor-fixes-logs` (9) merged as fast-forwards (no conflicts).
+- **Adaptive wrong-IP fallback:** `HttpSubnetScanner` is Custom's old /24 port-80 scan, extracted (Custom passes the
+  same limits and probes, behaviour unchanged). `AdaptiveSubnetScan` decides when Adaptive scans: after a round in
+  which the learned address and every reported address failed without reaching an HTTP server; ≤2 scans 5 s apart,
+  32 concurrent, 300 ms connects, ≤12 s and only with 8 s of the 85 s budget left; never the phone's own P2P address
+  or 192.168.49.1 when the phone owns the group, nor the addresses just tried. The address that answered instead of
+  the reported one is stored as `adaptive_p2p_sync_profiles/*.learned_http_ip`, tried first next time, cleared when
+  the reported one answers again or after 2 failures. Events go to the SYNC diagnostic buffer.
+- **Rig (firmware_dump a54aee9, `run_e2e.sh media-ip <ip>`):** normal IP: Adaptive, Custom and HeyCyan all SUCCESS.
+  Clone reporting 192.168.49.200: Adaptive failed .200 on 3 routes (~6 s), scanned 252 hosts and found
+  192.168.49.1 in 1.24 s, SUCCESS; the 2nd sync tried the learned .1 first (media.config 1 s after P2P), SUCCESS;
+  with the right IP again the learned address was cleared. Custom (3 BLE-IP retries, ~11 s, then the group-owner
+  candidate .1) and HeyCyan (targets the group-owner IP whenever the phone is a client) also SUCCEEDED, same code
+  paths as before: on this rig the glasses are the group owner. The wrong IP only defeats them when the phone owns
+  the group (not reproducible here). Support-report preview shows the scan events.
+- **Qwen3.5:** b7c048f5 (April, `llamacpp-kotlin` 0.2.0 / fork AAR era) skipped its warm-up generation; the app has
+  used upstream llama.cpp 0c1e5709 via `:llama-runtime` since 06fcfd14. On a read-only Pixel_9a (CPU) Qwen3.5-0.8B
+  Q4_0: 2 rounds of load/probe/chat/unload, no crash, coherent text; probe 48 tok in 2.8–3.7 s, first token
+  416–847 ms. A warm-up before the first question saved only 0.1–0.2 s of first-token time (2.90 vs 3.01–3.14 s)
+  for ~3 s of CPU, so the skip is removed and no load-time warm-up is added.
+- Tests: app unit 746/746, shared portability 417/417; assembleDebug + assembleDebugAndroidTest; iosCompileCheck OK.
+  Local android-self-hosted.yml emulator sequence on a read-only Pixel_9a (5584): Tasker OK, Meta/Walking Aid
+  31/31, audio 4/4, Walking Aid real models 5/5.
+
 ## 2026-11-17 — v2.3.0 sweep follow-ups and useful support reports (`cyan-refactor-fixes-logs`)
 
 - Branch `cyan-refactor-fixes-logs` (worktree `cyan-refactor-wt/fixes-logs`, from `cyan-refactor-v230-sweep` b129a4c0),
