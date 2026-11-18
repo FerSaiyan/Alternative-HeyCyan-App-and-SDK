@@ -90,6 +90,14 @@ object AppPrefs {
         val lastDetectedClass = optionalString("last_detected_class")
         val lastSelectedClass = optionalString("last_selected_class")
         val lastUserOverridden = boolean("last_user_overridden", false)
+
+        /**
+         * Opt-in: when the selected HeyCyan unit requires device-auth and the HeyCyan server is
+         * unavailable or declined, complete the glasses' own native symmetric handshake + local
+         * bind offline (reader: glasses/offlineauth/HeyCyanOfflineAuthCoordinator). Default off so
+         * default behavior on the shared branch is unchanged; needs a real front-button press.
+         */
+        val offlineNativeAuthEnabled = boolean("offline_native_auth_enabled", false)
         val classOverride = optionalStringFamily("override_*")
     }
 

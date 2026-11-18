@@ -78,6 +78,7 @@ class PrefsInventoryTest {
         device_profile/last_detected_class STRING null
         device_profile/last_selected_class STRING null
         device_profile/last_user_overridden BOOLEAN false
+        device_profile/offline_native_auth_enabled BOOLEAN false
         device_profile/override_* STRING null
         version_check/last_version_check_time LONG 0
         version_check/reminded_version STRING ""

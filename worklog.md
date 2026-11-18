@@ -2265,3 +2265,17 @@ and answers E7 = 2, so that sync could never work on this firmware.
 - **AVD check of this merge (584b4af9 APK) on the real-firmware TuneBuds sim** (firmware_dump `sim/tunebuds_e2e/run_avd.sh`):
   pair -> photo -> "Sync data over Wi-Fi" started right away (no wait for the media count) -> Wi-Fi Direct group,
   endpoint from E7, 3 photos imported, md5 identical to the V821B's /mnt/UDISK copies.
+
+## 2026-11-17 — HeyCyan native offline unlock (opt-in), branch `cyan-refactor-offline-auth`
+
+Lands the camera-unlock client so an enforced HeyCyan unit (AM01SPW/A02S-class) can restore its camera via the
+glasses' OWN symmetric handshake after a power-cycle, instead of the official app's online round-trip. Package
+`com.fersaiyan.cyanbridge.glasses.offlineauth` (HeyCyanAuthProtocol / HeyCyanSymmetricAuth / HeyCyanOfflineAuthStateMachine
+/ HeyCyanOfflineAuthCoordinator / GlassesAuthTransport). Opt-in pref `AppPrefs.DeviceProfile.offlineNativeAuthEnabled`
+(default OFF); default branch behaviour unchanged. Restores the owner's own access via the device's symmetric handshake;
+does not forge any server signature. Real-code emulator shows why it's needed (firmware_dump add.231): the gate refuses
+the camera each power-cycle until RCSP default-key auth (+0x78) + front-button bind (+0x1a0) re-run.
+- Verified: 15 offline-auth app unit tests + 2 shared PrefsInventory tests green; `:app:assembleDebug` OK.
+- NOT yet live on hardware (device-validation seams, add.78): (1) call `attemptOfflineUnlock()` on the HeyCyan connect
+  path; (2) finish `SdkGlassesAuthTransport.rawPayloadOf` (raw cmd-47 byte-14 / RCSP challenge / cmd-71 status);
+  (3) swap `JieLiRcspPlaceholderCipher` for the real JieLi RCSP cipher + exact FE-DC-BA subframing. All need owner glasses.
