@@ -10,6 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeout
 import java.io.IOException
 
@@ -23,6 +24,19 @@ internal class TuneBudsFileStartup(
     private val frames: Flow<TuneBudsFrame>,
     private val request: suspend (Int, ByteArray) -> TuneBudsFrame,
 ) {
+    /** Work state 0x0D (download) followed by 0x03 (connected): the firmware left the download it just accepted. */
+    private suspend fun awaitDroppedDownload() {
+        var entered = false
+        frames.first {
+            if (it.type != TuneBudsFrameType.NOTIFICATION || it.command != TuneBudsProtocol.CMD_WORK_STATE) return@first false
+            when (TuneBudsProtocol.parseStatus(it.payload)) {
+                WORK_STATE_DOWNLOAD -> { entered = true; false }
+                WORK_STATE_CONNECTED -> entered
+                else -> false
+            }
+        }
+    }
+
     suspend fun open(
         mode: Int,
         ssid: String,
@@ -60,23 +74,43 @@ internal class TuneBudsFileStartup(
                     TuneBudsProtocol.buildWifiPayload(mode, ssid, password, channel))
                 if (TuneBudsProtocol.parseStatus(configured.payload) != 0) throw IOException("TuneBuds Wi-Fi configuration failed")
                 for (attempt in 1..30) {
+                    // Subscribe before E7: the work-state notifications follow its reply within milliseconds.
+                    val dropped = async(start = CoroutineStart.UNDISPATCHED) { awaitDroppedDownload() }
                     when (val status = TuneBudsProtocol.parseStatus(request(TuneBudsProtocol.CMD_FILE_MANAGER, byteArrayOf()).payload)) {
                         0 -> {
-                            if (peer != null) {
-                                val address = withTimeout(30_000L) {
-                                    opened?.await()
-                                    peer.await()
-                                }
-                                connectP2p(address)
+                            // Firmware 5621 can accept E7 and then leave the download state at once (a queued
+                            // media-count session won the V821 power-up): work state 0x0D then 0x03, no endpoint.
+                            val ready = async(start = CoroutineStart.UNDISPATCHED) {
+                                if (peer != null) { opened?.await(); peer.await() } else endpoint.await()
+                                Unit
                             }
+                            val race: suspend () -> Boolean = {
+                                select {
+                                    ready.onAwait { false }
+                                    dropped.onAwait { true }
+                                }
+                            }
+                            val wasDropped = if (peer != null) withTimeout(30_000L) { race() } else race()
+                            dropped.cancel()
+                            ready.cancel()
+                            if (wasDropped) {
+                                if (attempt == 30) throw IOException("TuneBuds dropped every file-manager session")
+                                delay(1_000L)
+                                continue
+                            }
+                            if (peer != null) connectP2p(peer.await())
                             return@coroutineScope endpoint.await()
                         }
                         // ABMateManager.startPullFileInternal maps all three to ERROR_BUSY.
                         1, 3, 5 -> {
+                            dropped.cancel()
                             if (attempt == 30) throw IOException("TuneBuds file manager remained busy")
                             delay(1_000L)
                         }
-                        else -> throw TuneBudsFileModeException(status)
+                        else -> {
+                            dropped.cancel()
+                            throw TuneBudsFileModeException(status)
+                        }
                     }
                 }
                 error("Unreachable")
@@ -87,5 +121,10 @@ internal class TuneBudsFileStartup(
                 opened?.cancel()
             }
         }
+    }
+
+    private companion object {
+        const val WORK_STATE_CONNECTED = 0x03
+        const val WORK_STATE_DOWNLOAD = 0x0D
     }
 }
