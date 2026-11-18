@@ -110,7 +110,7 @@ internal fun firmwareRelayBaseUrl(context: Context): String =
     AppPrefs.RelayServer.baseUrl[context]
         ?.trim()
         .takeUnless { it.isNullOrBlank() }
-        ?: "https://cyanbridge.vercel.app"
+        ?: "https://cyanbridgelabs.com"
 
 /**
  * Result of a firmware catalog lookup + download.

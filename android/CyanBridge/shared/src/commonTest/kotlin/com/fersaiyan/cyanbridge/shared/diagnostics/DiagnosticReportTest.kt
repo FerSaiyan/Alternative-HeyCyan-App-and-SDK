@@ -87,7 +87,7 @@ class DiagnosticReportTest {
                 lastExit = DiagnosticLastExit(pid = 42, reason = "CRASH", timeMs = 5_000, stack = "java.lang.IllegalStateException: boom"),
                 logcat = "11-17 10:00:00.000  42  42 I AIHijack: Spoken decision route=ANSWER\n".repeat(5_000),
                 createdAtMs = 900_000,
-                destination = "cyanbridge.vercel.app",
+                destination = "cyanbridgelabs.com",
             ),
         )
         val json = report.json
@@ -109,7 +109,7 @@ class DiagnosticReportTest {
         assertTrue((sent as JsonArray).any { it.jsonObject.getValue("m").jsonPrimitive.content == "sync failed" }, "errors are kept")
         assertEquals("CRASH", json.getValue("last_exit").jsonObject.getValue("reason").jsonPrimitive.content)
         assertTrue(report.serialized.length < 260_000, "payload ${report.serialized.length}")
-        assertTrue(report.preview.startsWith("Sent to CyanBridge support (cyanbridge.vercel.app)"))
+        assertTrue(report.preview.startsWith("Sent to CyanBridge support (cyanbridgelabs.com)"))
         assertTrue("Your note: Sync stopped" in report.preview)
     }
 }

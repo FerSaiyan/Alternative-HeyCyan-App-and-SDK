@@ -469,7 +469,7 @@ class CommunityPluginsDestination : NavScreen() {
     private companion object {
         private const val TASKER_AI_ID = "tasker_ai_assistant"
         private const val TASKER_PROFILE_BASE_URL =
-            "https://cyanbridge.vercel.app/downloads/tasker/2026-08-24"
+            "https://cyanbridgelabs.com/downloads/tasker/2026-08-24"
         private const val STATE_PENDING_TASKER_TITLE = "pending_tasker_download_title"
         private const val STATE_PENDING_TASKER_URL = "pending_tasker_download_url"
         private const val STATE_PENDING_TASKER_FILE_NAME = "pending_tasker_download_file_name"

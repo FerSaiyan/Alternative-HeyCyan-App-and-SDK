@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 object AnalyticsClient {
     private const val TAG = "ProductAnalytics"
-    private const val SERVICE_BASE_URL = "https://cyanbridge.vercel.app"
+    private const val SERVICE_BASE_URL = "https://cyanbridgelabs.com"
     private const val CONNECT_TIMEOUT_MS = 5_000
     private const val READ_TIMEOUT_MS = 8_000
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

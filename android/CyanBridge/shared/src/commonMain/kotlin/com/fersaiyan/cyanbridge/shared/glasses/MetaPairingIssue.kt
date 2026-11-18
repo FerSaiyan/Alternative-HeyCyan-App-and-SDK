@@ -25,7 +25,7 @@ fun resolveMetaPairingIssue(
     return when {
         metaAccessRequired -> MetaPairingIssue(
             title = "Meta access required",
-            message = "Your Meta account is not invited to CyanBridge's Meta release channel yet. To request an invite, submit the email associated with your Meta account at:\n\nhttps://cyanbridge.vercel.app/beta\n\nAfter you accept Meta's invite, turn Developer Mode off in Meta AI and tap Register. If you already use Developer Mode in Meta AI, choose \"I use Developer Mode\" on the Meta setup screen instead.",
+            message = "Your Meta account is not invited to CyanBridge's Meta release channel yet. To request an invite, submit the email associated with your Meta account at:\n\nhttps://cyanbridgelabs.com/beta\n\nAfter you accept Meta's invite, turn Developer Mode off in Meta AI and tap Register. If you already use Developer Mode in Meta AI, choose \"I use Developer Mode\" on the Meta setup screen instead.",
             primaryLabel = "Request access",
             action = MetaPairingIssueAction.REQUEST_ACCESS,
         )
@@ -50,7 +50,7 @@ fun resolveMetaPairingIssue(
         "release channel" in normalized ||
             "registeredsnapps" in normalized || "issessionverified" in normalized -> MetaPairingIssue(
             title = "Meta access required",
-            message = "Your Meta account is not currently enabled for CyanBridge Meta access. Request access at:\n\nhttps://cyanbridge.vercel.app/beta",
+            message = "Your Meta account is not currently enabled for CyanBridge Meta access. Request access at:\n\nhttps://cyanbridgelabs.com/beta",
             primaryLabel = "Request access",
             action = MetaPairingIssueAction.REQUEST_ACCESS,
         )
@@ -58,7 +58,7 @@ fun resolveMetaPairingIssue(
             "meta wearables is currently unavailable" in normalized) &&
             "developer mode" !in normalized -> MetaPairingIssue(
             title = "Meta Wearables unavailable",
-            message = "Meta Wearables is currently unavailable for this account. This may happen if your account has not been added to the CyanBridge Meta testing channel. Request access at:\n\nhttps://cyanbridge.vercel.app/beta",
+            message = "Meta Wearables is currently unavailable for this account. This may happen if your account has not been added to the CyanBridge Meta testing channel. Request access at:\n\nhttps://cyanbridgelabs.com/beta",
             primaryLabel = "Request access",
             action = MetaPairingIssueAction.REQUEST_ACCESS,
         )

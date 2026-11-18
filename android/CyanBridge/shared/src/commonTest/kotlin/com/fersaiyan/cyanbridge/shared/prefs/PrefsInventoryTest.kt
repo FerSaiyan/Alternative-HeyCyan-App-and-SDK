@@ -94,7 +94,7 @@ class PrefsInventoryTest {
         mentra_sdk_device/address STRING null
         mentra_sdk_device/project_name STRING null
         ai_provider_prefs/provider STRING "cli_relay"
-        ai_provider_prefs/relay_base_url STRING "https://cyanbridge.vercel.app"
+        ai_provider_prefs/relay_base_url STRING "https://cyanbridgelabs.com"
         ai_provider_prefs/relay_backend STRING "gemini"
         ai_wake_word/route STRING null ios=cyanbridge_ios_glasses/ai_wake_word_route
         image_questions/default_question STRING null

@@ -116,9 +116,9 @@ class MetaDatRegistrationSupportTest {
             registrationRejected = true,
         ).orEmpty()
 
-        assertTrue(invite.contains("https://cyanbridge.vercel.app/beta"))
+        assertTrue(invite.contains("https://cyanbridgelabs.com/beta"))
         assertTrue(developer.contains("Developer Mode is on"))
-        assertFalse(developer.contains("https://cyanbridge.vercel.app/beta"))
+        assertFalse(developer.contains("https://cyanbridgelabs.com/beta"))
     }
 
     @Test

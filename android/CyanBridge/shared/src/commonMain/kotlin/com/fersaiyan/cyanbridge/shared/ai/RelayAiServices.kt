@@ -14,7 +14,7 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 /** The public CyanBridge relay (Android: AiProviderPrefs.DEFAULT_PUBLIC_RELAY_URL). */
-const val DEFAULT_RELAY_URL = "https://cyanbridge.vercel.app"
+const val DEFAULT_RELAY_URL = "https://cyanbridgelabs.com"
 
 private val relayJson = Json { ignoreUnknownKeys = true }
 private val relayHeaders = mapOf("Content-Type" to "application/json; charset=UTF-8")

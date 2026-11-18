@@ -10,7 +10,7 @@ object SubscriptionCheckoutPolicy {
     const val CALLBACK_RESULT_PARAMETER = "result"
 
     private const val CALLBACK_SCHEME = "https"
-    private const val CALLBACK_HOST = "cyanbridge.vercel.app"
+    private const val CALLBACK_HOST = "cyanbridgelabs.com"
     private const val CALLBACK_PATH = "/web-subscribe/callback"
     private const val EMAIL_VERIFICATION_SCHEME = "fersaiyan"
     private const val EMAIL_VERIFICATION_HOST = "pro-sub"

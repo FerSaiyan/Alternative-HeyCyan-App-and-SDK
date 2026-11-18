@@ -111,7 +111,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="cyanbridge.vercel.app" android:path="/web-subscribe/callback" />
+                <data android:scheme="https" android:host="cyanbridgelabs.com" android:path="/web-subscribe/callback" />
             </intent-filter>
         </activity>
         <activity android:name=".ai.live.GeminiLivePermissionGateActivity" android:exported="false" android:label="Gemini Live Permissions" />

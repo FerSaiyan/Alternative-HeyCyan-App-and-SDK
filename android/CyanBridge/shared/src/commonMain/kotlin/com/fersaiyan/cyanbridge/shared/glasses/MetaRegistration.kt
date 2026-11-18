@@ -15,7 +15,7 @@ import com.fersaiyan.cyanbridge.shared.prefs.set
  * [MetaRegistrationTracker.beginRegistration] guards every registration request.
  */
 /** The beta form: collects the Meta account email, checks capacity, rejects non-Meta accounts. */
-const val META_BETA_ACCESS_URL = "https://cyanbridge.vercel.app/beta"
+const val META_BETA_ACCESS_URL = "https://cyanbridgelabs.com/beta"
 
 enum class MetaRegistrationPath { UNKNOWN, DEVELOPER_MODE, RELEASE_CHANNEL }
 
