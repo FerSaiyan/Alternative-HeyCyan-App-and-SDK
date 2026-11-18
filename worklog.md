@@ -2262,3 +2262,6 @@ and answers E7 = 2, so that sync could never work on this firmware.
   Integration fix: the pending flag is a StateFlow set BEFORE EF is sent (the notification can beat the reply);
   the first version left it stuck and three `TuneBudsManagerTest` cases timed out. Now `:shared` TuneBuds tests and
   the 28 `devices.tunebuds` app tests are green, `:app:assembleDebug` OK.
+- **AVD check of this merge (584b4af9 APK) on the real-firmware TuneBuds sim** (firmware_dump `sim/tunebuds_e2e/run_avd.sh`):
+  pair -> photo -> "Sync data over Wi-Fi" started right away (no wait for the media count) -> Wi-Fi Direct group,
+  endpoint from E7, 3 photos imported, md5 identical to the V821B's /mnt/UDISK copies.
