@@ -108,7 +108,7 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
      * 0xEF notification. Firmware 5621 accepts a new V821 session (E1, E3/E4, E6+E7, E8) while that EF session is queued
      * but not yet powered, then drops it when the EF power-up wins (add.230, QUEN start_download 0x1001c30a returns busy).
      */
-    @Volatile private var mediaCountsPending = false
+    private val mediaCountsPending = MutableStateFlow(false)
 
     /**
      * The glasses opened an AI chat on their own (notify 0xB0 with 1 = SCO or 2 = Opus): their
@@ -272,8 +272,14 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
     }
 
     suspend fun requestMediaCounts() {
-        requireSuccess(request(TuneBudsProtocol.CMD_MEDIA_COUNTS))
-        mediaCountsPending = true
+        // Set before sending: the 0xEF notification may arrive before the reply (it clears the flag).
+        mediaCountsPending.value = true
+        try {
+            requireSuccess(request(TuneBudsProtocol.CMD_MEDIA_COUNTS))
+        } catch (e: Throwable) {
+            mediaCountsPending.value = false
+            throw e
+        }
     }
 
     /**
@@ -281,12 +287,8 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
      * is not dropped by the firmware. Gives up after [timeoutMs] (the firmware may drop the count itself).
      */
     suspend fun awaitPendingMediaCounts(timeoutMs: Long = MEDIA_COUNTS_WAIT_MS) {
-        if (!mediaCountsPending) return
-        withTimeoutOrNull(timeoutMs) {
-            frames.first { mediaCountsPending.not() || (it.command == TuneBudsProtocol.CMD_MEDIA_COUNTS &&
-                it.type == TuneBudsFrameType.NOTIFICATION) }
-        }
-        mediaCountsPending = false
+        withTimeoutOrNull(timeoutMs) { mediaCountsPending.first { !it } }
+        mediaCountsPending.value = false
     }
 
     suspend fun requestStorageAndMediaCounts() {
@@ -426,7 +428,7 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
                 TuneBudsProtocol.parseStorage(payload)?.let { applyStatus(current.copy(storage = it)) }
             }
             TuneBudsProtocol.CMD_MEDIA_COUNTS -> if (notification) {
-                mediaCountsPending = false
+                mediaCountsPending.value = false
                 TuneBudsProtocol.parseMediaCounts(payload)?.let { applyStatus(current.copy(mediaCounts = it)) }
             }
             TuneBudsProtocol.CMD_AI_CHAT_STATE -> if (notification && micAudioListener == null) {

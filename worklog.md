@@ -2256,3 +2256,9 @@ and answers E7 = 2, so that sync could never work on this firmware.
 - Verified: AVD Wi-Fi Direct sync against the real firmware (photo md5 matched, add.228 evidence);
   `:app:assembleDebug` and the 27 `devices.tunebuds` unit tests green on this merge.
 - Not verified on a real TuneBuds unit; check a sync on owner hardware before release.
+- **Follow-up (same day): queued media-count wait** (firmware_dump add.230, c75162e5 merged): firmware 5621 accepts a new
+  camera-coprocessor session while an EF media-count session is queued and then drops it, so E1/E3/E4/E6+E7/E8 now
+  wait (<= 20 s) for the 0xEF notification, and a dropped E7 (work state 0x0D -> 0x03, no endpoint) is re-sent.
+  Integration fix: the pending flag is a StateFlow set BEFORE EF is sent (the notification can beat the reply);
+  the first version left it stuck and three `TuneBudsManagerTest` cases timed out. Now `:shared` TuneBuds tests and
+  the 28 `devices.tunebuds` app tests are green, `:app:assembleDebug` OK.
