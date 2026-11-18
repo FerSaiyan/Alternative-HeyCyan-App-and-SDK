@@ -41,6 +41,31 @@ class TuneBudsFileStartupTest {
         assertEquals(0, frames.subscriptionCount.value)
     }
 
+    @Test fun aDownloadTheFirmwareDropsAtOnceIsStartedAgain() = runTest {
+        // Fw 5621 (add.230): E7 = 0, then work state 0x0D -> 0x03 with no EC/F2/E7 notify when a queued media-count
+        // session won the V821 power-up. The startup re-sends E7 instead of waiting for its timeout.
+        val frames = MutableSharedFlow<TuneBudsFrame>()
+        val url = "http://192.168.49.82:80/files/"
+        var starts = 0
+        val startup = TuneBudsFileStartup(frames) { command, _ ->
+            if (command == 0xE7) {
+                starts++
+                if (starts == 1) {
+                    frames.emit(notify(0xF6, byteArrayOf(0x0D)))
+                    frames.emit(notify(0xF6, byteArrayOf(0x03)))
+                } else {
+                    frames.emit(notify(0xF2, byteArrayOf(0xFA.toByte(), 0, 0x11, 0x15, 0xA1.toByte(), 0x7B)))
+                    frames.emit(notify(0xE7, url.toByteArray()))
+                    frames.emit(notify(0xEC, byteArrayOf(2)))
+                }
+            }
+            reply(command, 0)
+        }
+        assertEquals(url, startup.open(2, "AiGlassDb_42", "", connectP2p = {}))
+        assertEquals(2, starts)
+        assertEquals(0, frames.subscriptionCount.value)
+    }
+
     @Test fun allOfficialBusyStatusesRetryWithoutReconfiguringTheHotspot() = runTest {
         val frames = MutableSharedFlow<TuneBudsFrame>()
         val statuses = ArrayDeque(listOf(1, 3, 5, 0))

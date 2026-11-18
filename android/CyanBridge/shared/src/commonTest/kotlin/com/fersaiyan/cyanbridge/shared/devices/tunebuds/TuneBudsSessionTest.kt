@@ -1,5 +1,8 @@
 package com.fersaiyan.cyanbridge.shared.devices.tunebuds
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -221,5 +224,22 @@ class TuneBudsSessionTest {
 
         session.clearWifiState()
         assertNull(session.state.value.wifiState)
+    }
+
+    @Test
+    fun aCameraSessionWaitsForAQueuedMediaCount() = runTest {
+        // Fw 5621 (add.230): a V821 session asked for while the EF media-count session is queued is accepted and then
+        // dropped by the firmware, so E1 must wait for the 0xEF notification.
+        val glasses = FakeGlasses()
+        val session = sessionWith(glasses)
+        session.requestMediaCounts()
+        val photo = launch { session.takePhoto() }
+        advanceTimeBy(2_000L)
+        runCurrent()
+        assertTrue(TuneBudsProtocol.CMD_CAMERA_ON !in glasses.requests)
+        glasses.notify(TuneBudsProtocol.CMD_MEDIA_COUNTS, byteArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+        photo.join()
+        assertEquals(TuneBudsProtocol.CMD_CAMERA_ON, glasses.requests.last())
+        assertEquals(TuneBudsMediaCounts(1, 0, 0), session.state.value.mediaCounts)
     }
 }

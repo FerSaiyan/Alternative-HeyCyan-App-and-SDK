@@ -216,12 +216,14 @@ class TuneBudsManager private constructor(context: Context) {
         timeoutMs: Long = 60_000L,
     ): String? = operationMutex.withLock {
         if (!client.isConnected) return@withLock null
+        session.awaitPendingMediaCounts()
         session.clearWifiState()
         TuneBudsFileStartup(session.frames, session::request).open(0, hotspotSsid, hotspotPassword, channel, timeoutMs)
     }
 
     internal suspend fun startP2pFileManager(ssid: String, connect: suspend (String) -> Unit): String = operationMutex.withLock {
         if (!client.isConnected) throw IOException("TuneBuds Bluetooth is not connected")
+        session.awaitPendingMediaCounts()
         session.clearWifiState()
         TuneBudsFileStartup(session.frames, session::request).open(
             2, ssid, "", timeoutMs = 150_000L, connectP2p = connect,
@@ -235,6 +237,7 @@ class TuneBudsManager private constructor(context: Context) {
         quality: Int = -1,
     ): String {
         if (!isConnected()) throw IOException("TuneBuds Bluetooth is not connected")
+        session.awaitPendingMediaCounts()
         session.clearWifiState()
         return TuneBudsRtspStartup(session.frames, session::request).open(
             credentials.ssid, credentials.password, credentials.channel, quality,

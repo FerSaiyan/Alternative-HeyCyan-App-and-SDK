@@ -104,6 +104,13 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
     private val _wakeEvents = MutableSharedFlow<Int>(extraBufferCapacity = 1)
 
     /**
+     * EF answered 0: the firmware queued a camera-coprocessor (V821) media-count session and will send the counts as an
+     * 0xEF notification. Firmware 5621 accepts a new V821 session (E1, E3/E4, E6+E7, E8) while that EF session is queued
+     * but not yet powered, then drops it when the EF power-up wins (add.230, QUEN start_download 0x1001c30a returns busy).
+     */
+    @Volatile private var mediaCountsPending = false
+
+    /**
      * The glasses opened an AI chat on their own (notify 0xB0 with 1 = SCO or 2 = Opus): their
      * wake word or AI gesture. Not emitted while [micAudioListener] is set (our own capture).
      */
@@ -185,6 +192,7 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
     }
 
     suspend fun takePhoto() {
+        awaitPendingMediaCounts()
         requireSuccess(request(TuneBudsProtocol.CMD_CAMERA_ON, byteArrayOf(0)))
     }
 
@@ -202,6 +210,7 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
 
     /** Asks for an AI photo; its chunks arrive as notifications (see [aiPhotoListener], [aiPhotos]). */
     suspend fun requestAiPhoto() {
+        awaitPendingMediaCounts()
         requireSuccess(request(TuneBudsProtocol.CMD_CAMERA_ON, byteArrayOf(1)))
     }
 
@@ -212,6 +221,7 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
         if (_state.value.isVideoRecording) {
             closeCamera()
         } else {
+            awaitPendingMediaCounts()
             requireSuccess(request(TuneBudsProtocol.CMD_START_VIDEO))
             _state.value = _state.value.copy(isVideoRecording = true, isAudioRecording = false)
         }
@@ -221,6 +231,7 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
         if (_state.value.isAudioRecording) {
             closeCamera()
         } else {
+            awaitPendingMediaCounts()
             requireSuccess(request(TuneBudsProtocol.CMD_START_AUDIO))
             _state.value = _state.value.copy(isAudioRecording = true, isVideoRecording = false)
         }
@@ -262,6 +273,20 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
 
     suspend fun requestMediaCounts() {
         requireSuccess(request(TuneBudsProtocol.CMD_MEDIA_COUNTS))
+        mediaCountsPending = true
+    }
+
+    /**
+     * Waits until a queued media-count session has delivered its notification, so the next camera-coprocessor session
+     * is not dropped by the firmware. Gives up after [timeoutMs] (the firmware may drop the count itself).
+     */
+    suspend fun awaitPendingMediaCounts(timeoutMs: Long = MEDIA_COUNTS_WAIT_MS) {
+        if (!mediaCountsPending) return
+        withTimeoutOrNull(timeoutMs) {
+            frames.first { mediaCountsPending.not() || (it.command == TuneBudsProtocol.CMD_MEDIA_COUNTS &&
+                it.type == TuneBudsFrameType.NOTIFICATION) }
+        }
+        mediaCountsPending = false
     }
 
     suspend fun requestStorageAndMediaCounts() {
@@ -401,6 +426,7 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
                 TuneBudsProtocol.parseStorage(payload)?.let { applyStatus(current.copy(storage = it)) }
             }
             TuneBudsProtocol.CMD_MEDIA_COUNTS -> if (notification) {
+                mediaCountsPending = false
                 TuneBudsProtocol.parseMediaCounts(payload)?.let { applyStatus(current.copy(mediaCounts = it)) }
             }
             TuneBudsProtocol.CMD_AI_CHAT_STATE -> if (notification && micAudioListener == null) {
@@ -478,6 +504,7 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
         const val AI_PHOTO_TIMEOUT_MS = 60_000L
         const val CAMERA_CLOSE_RETRY_MS = 1_000L
         const val CAMERA_CLOSE_MAX_ATTEMPTS = 15
+        const val MEDIA_COUNTS_WAIT_MS = 20_000L
     }
 }
 
