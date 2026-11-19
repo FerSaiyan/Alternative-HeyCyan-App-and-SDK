@@ -110,6 +110,9 @@ android {
     compileSdk {
         version = release(37) { minorApiLevel = 1 }
     }
+    // Same NDK as :llama-runtime. AGP 9 defaults to NDK 28.2; when that NDK is not installed the
+    // debug-symbol strip step is skipped and the APK ships unstripped native libraries.
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "com.fersaiyan.cyanbridge"
