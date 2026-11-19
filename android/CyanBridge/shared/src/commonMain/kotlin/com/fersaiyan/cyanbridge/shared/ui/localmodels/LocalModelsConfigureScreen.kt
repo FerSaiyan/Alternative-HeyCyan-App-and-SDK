@@ -2,8 +2,6 @@ package com.fersaiyan.cyanbridge.shared.ui.localmodels
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -61,7 +59,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -75,6 +72,7 @@ import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelToggleField
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsAction
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsConfigureUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsSection
+import com.fersaiyan.cyanbridge.shared.ui.components.CyanBridgeTransferProgress
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,8 +104,8 @@ fun LocalModelsConfigureScreen(
         bottomBar = {
             AnimatedVisibility(
                 visible = state.download.isInFlight || state.download.message.isNotBlank(),
-                enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
-                exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
+                enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + expandVertically(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
+                exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + shrinkVertically(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
             ) {
                 Surface(tonalElevation = 6.dp, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
                     Box(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -194,6 +192,7 @@ fun LocalModelsConfigureScreen(
                         onClick = { onAction(LocalModelsAction.RunWarmup) },
                         enabled = state.selectedInstalledModelId != null,
                         modifier = Modifier.fillMaxWidth().testTag("test_model_now"),
+                        shapes = ButtonDefaults.shapes(),
                     ) { Text("Test model now") }
                     if (state.warmupResult.isNotBlank()) SupportingText(state.warmupResult)
                 }
@@ -218,6 +217,7 @@ fun LocalModelsConfigureScreen(
                         onClick = { onAction(LocalModelsAction.SaveGenerationSettings) },
                         enabled = state.selectedInstalledModelId != null,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) { Text("Save local model settings") }
                 }
             }
@@ -427,6 +427,7 @@ fun LocalModelsConfigureScreen(
                         enabled = state.selectedInstalledModelId != null,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        shapes = ButtonDefaults.shapes(),
                     ) { Text("Remove selected model") }
                 }
             }
@@ -445,12 +446,13 @@ fun LocalModelsConfigureScreen(
             title = { Text("Unsaved changes") },
             text = { Text("Leave without saving your local-model changes?") },
             dismissButton = {
-                TextButton(onClick = { showUnsavedChangesDialog = false }) { Text("Keep editing") }
+                TextButton(onClick = { showUnsavedChangesDialog = false }, shapes = ButtonDefaults.shapes()) { Text("Keep editing") }
             },
             confirmButton = {
                 TextButton(
                     onClick = { onAction(LocalModelsAction.DiscardChangesAndBack) },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text("Discard") }
             },
         )
@@ -503,7 +505,7 @@ private fun ExpandableCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+            .animateContentSize(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()),
         colors = CardDefaults.cardColors(
             containerColor = if (expanded) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
         ),
@@ -526,8 +528,8 @@ private fun ExpandableCard(
             }
             AnimatedVisibility(
                 visible = expanded,
-                enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
-                exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
+                enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + expandVertically(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
+                exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + shrinkVertically(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
             ) {
                 Column {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -569,8 +571,8 @@ private fun ChoiceField(
         }
         AnimatedVisibility(
             visible = expanded && enabled,
-            enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
-            exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
+            enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + expandVertically(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
+            exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + shrinkVertically(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
         ) {
             Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
                 Column {
@@ -632,8 +634,8 @@ private fun ActionRow(
     secondaryEnabled: Boolean = enabled,
 ) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = onPrimary, enabled = enabled, modifier = Modifier.weight(1f)) { Text(primaryLabel) }
-        OutlinedButton(onClick = onSecondary, enabled = secondaryEnabled, modifier = Modifier.weight(1f)) { Text(secondaryLabel) }
+        Button(onClick = onPrimary, enabled = enabled, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text(primaryLabel) }
+        OutlinedButton(onClick = onSecondary, enabled = secondaryEnabled, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text(secondaryLabel) }
     }
 }
 
@@ -666,12 +668,11 @@ private fun DownloadProgressCard(state: LocalModelDownloadUiState, onAction: (Lo
         Text(state.message.ifBlank { "Model download" }, style = MaterialTheme.typography.bodyMedium)
         if (state.isInFlight) {
             val progress = state.progressPercent
-            val progressModifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp))
-            if (progress == null) LinearProgressIndicator(modifier = progressModifier)
-            else LinearProgressIndicator(progress = { progress / 100f }, modifier = progressModifier)
+            CyanBridgeTransferProgress(progress = progress?.let { it / 100f })
             TextButton(
                 onClick = { onAction(LocalModelsAction.CancelDownload) },
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                shapes = ButtonDefaults.shapes(),
             ) { Text("Cancel download") }
         }
     }

@@ -1,8 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.ui.onboarding
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -127,11 +125,11 @@ private fun VisionAssistanceOption(
     val colors = MaterialTheme.colorScheme
     val container by animateColorAsState(
         if (selected) colors.primaryContainer else colors.surface,
-        spring(stiffness = Spring.StiffnessMediumLow),
+        MaterialTheme.motionScheme.defaultEffectsSpec(),
     )
     val outline by animateColorAsState(
         if (selected) colors.primary else colors.outlineVariant,
-        spring(stiffness = Spring.StiffnessMediumLow),
+        MaterialTheme.motionScheme.defaultEffectsSpec(),
     )
     // The whole card is one radio button for TalkBack/VoiceOver; the inner RadioButton is visual only.
     Card(

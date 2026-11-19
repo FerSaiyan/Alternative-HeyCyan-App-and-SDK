@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.autodiary
 
+import androidx.compose.material3.ButtonDefaults
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.Context
@@ -257,10 +258,10 @@ fun AutoDiarySettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = actions::onOpenTasker, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = actions::onOpenTasker, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                 Text("Open Tasker schedule / exclusions")
             }
-            OutlinedButton(onClick = actions::onOpenCaptures, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = actions::onOpenCaptures, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(R.string.compose_view_screen_captures))
             }
             NumberSetting(
@@ -282,14 +283,14 @@ fun AutoDiarySettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = actions::onOpenSummary, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = actions::onOpenSummary, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(R.string.compose_open_daily_summary))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = actions::onOpenDailyFactsDraft, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = actions::onOpenDailyFactsDraft, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.compose_edit_daily_facts))
                 }
-                OutlinedButton(onClick = actions::onOpenConfirmedDailyFacts, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = actions::onOpenConfirmedDailyFacts, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.compose_view_confirmed_facts))
                 }
             }
@@ -303,7 +304,7 @@ fun AutoDiarySettingsScreen(
                 maxLines = 7,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = actions::onRestoreDefaultBulletPrompt) { Text(stringResource(R.string.compose_restore_default_prompt)) }
+                TextButton(onClick = actions::onRestoreDefaultBulletPrompt, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.compose_restore_default_prompt)) }
                 NumberSetting(
                     label = stringResource(R.string.compose_max_tokens_per_bullet),
                     value = state.maxTokensPerBullet,

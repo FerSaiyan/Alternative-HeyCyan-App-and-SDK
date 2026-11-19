@@ -152,6 +152,7 @@ fun ProSubscriptionScreen(
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .testTag("restore_existing_pro"),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(Res.string.pro_already_pro))
                 }
@@ -162,6 +163,7 @@ fun ProSubscriptionScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                      Text(stringResource(Res.string.pro_donate_asaas))
                 }
@@ -186,6 +188,7 @@ fun ProSubscriptionScreen(
                             TextButton(
                                 onClick = onCancelSubscription,
                                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                shapes = ButtonDefaults.shapes(),
                             ) {
                                  Text(stringResource(Res.string.pro_cancel_subscription))
                             }
@@ -202,7 +205,7 @@ fun ProSubscriptionScreen(
             }
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                     OutlinedButton(onClick = onBack) { Text(stringResource(Res.string.pro_back)) }
+                     OutlinedButton(onClick = onBack, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.pro_back)) }
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
@@ -220,6 +223,7 @@ fun ProSubscriptionScreen(
                                 onCheckoutUnavailable()
                             }
                         },
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                          Text(
                              stringResource(
@@ -269,6 +273,7 @@ fun ProSubscriptionScreen(
                     onClick = onSendRestoreFailureLogs,
                     enabled = !restoreLogsSending,
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(
                         stringResource(
@@ -286,6 +291,7 @@ fun ProSubscriptionScreen(
                     onClick = onDismissRestoreNotFound,
                     enabled = !restoreLogsSending,
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(Res.string.pro_check_email))
                 }
@@ -353,6 +359,7 @@ private fun CheckoutChoiceDialog(
                     Button(
                         onClick = { onWebProviderSelected(webProvider) },
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                          Text(stringResource(Res.string.pro_continue_provider, providerName(webProvider)))
                     }
@@ -375,6 +382,7 @@ private fun CheckoutChoiceDialog(
                     onClick = onGooglePlaySelected,
                     enabled = playAvailable,
                     modifier = Modifier.fillMaxWidth(),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(
                         when {
@@ -387,7 +395,7 @@ private fun CheckoutChoiceDialog(
             }
         },
         confirmButton = {
-             TextButton(onClick = onDismiss) { Text(stringResource(Res.string.pro_not_now)) }
+             TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.pro_not_now)) }
         },
     )
 }

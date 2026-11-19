@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.shared.ui.localagent
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -105,10 +104,10 @@ fun LocalAgentDocumentScreen(
                 horizontalArrangement = Arrangement.End,
             ) {
                 secondaryLabel?.let { label ->
-                    OutlinedButton(onClick = onSecondary ?: {}) { Text(label) }
+                    OutlinedButton(onClick = onSecondary ?: {}, shapes = ButtonDefaults.shapes()) { Text(label) }
                     Spacer(Modifier.width(8.dp))
                 }
-                Button(onClick = onPrimary) { Text(primaryLabel) }
+                Button(onClick = onPrimary, shapes = ButtonDefaults.shapes()) { Text(primaryLabel) }
             }
         }
     }
@@ -164,13 +163,14 @@ fun PendingActionsScreen(
                     enabled = hasPendingAction,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                      Text(stringResource(Res.string.local_agent_reject))
                 }
-                Button(onClick = onApprove, enabled = hasPendingAction, modifier = Modifier.weight(1f)) {
+                Button(onClick = onApprove, enabled = hasPendingAction, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                      Text(stringResource(Res.string.local_agent_approve))
                 }
-                 TextButton(onClick = onRefresh, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.local_agent_refresh)) }
+                 TextButton(onClick = onRefresh, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.local_agent_refresh)) }
             }
         }
     }
@@ -216,11 +216,11 @@ fun DailySummaryScreen(
             HeroPanel(text = status, supportingText = path)
             AnimatedVisibility(
                 visible = isBusy,
-                enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
-                exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
+                enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + expandVertically(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
+                exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + shrinkVertically(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
             ) {
                 Card(
-                    modifier = Modifier.fillMaxWidth().animateContentSize(animationSpec = spring()),
+                    modifier = Modifier.fillMaxWidth().animateContentSize(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
                     shape = MaterialTheme.shapes.extraLarge,
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -239,9 +239,9 @@ fun DailySummaryScreen(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                 OutlinedButton(onClick = onRefresh, enabled = !isBusy, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.local_agent_refresh)) }
-                 Button(onClick = onRegenerate, enabled = !isBusy, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.local_agent_regenerate)) }
-                 TextButton(onClick = onShare, enabled = !isBusy, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.local_agent_share)) }
+                 OutlinedButton(onClick = onRefresh, enabled = !isBusy, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.local_agent_refresh)) }
+                 Button(onClick = onRegenerate, enabled = !isBusy, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.local_agent_regenerate)) }
+                 TextButton(onClick = onShare, enabled = !isBusy, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.local_agent_share)) }
             }
         }
     }

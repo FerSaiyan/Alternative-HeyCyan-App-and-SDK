@@ -5,19 +5,17 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BatteryAlert
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -77,6 +74,7 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.family_ota_wifi_part_
 import com.fersaiyan.cyanbridge.shared.glasses.FamilyFirmwareCommand
 import com.fersaiyan.cyanbridge.shared.glasses.FamilyOtaStage
 import com.fersaiyan.cyanbridge.shared.glasses.FamilyOtaUiState
+import com.fersaiyan.cyanbridge.shared.ui.components.CyanBridgeTransferProgress
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -205,6 +203,7 @@ internal fun FamilyOtaSection(
             TextButton(
                 onClick = { onCommand(FamilyFirmwareCommand.DISMISS) },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("family_ota_dismiss"),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(stringResource(Res.string.family_ota_dismiss)) }
         }
     }
@@ -252,10 +251,11 @@ internal fun FamilyOtaSection(
                         onCommand(command)
                     },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("family_ota_continue"),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.family_ota_continue)) }
             },
             dismissButton = {
-                TextButton(onClick = close, modifier = Modifier.heightIn(min = 48.dp)) {
+                TextButton(onClick = close, modifier = Modifier.heightIn(min = 48.dp), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(Res.string.action_cancel))
                 }
             },
@@ -301,12 +301,7 @@ private fun FamilyOtaProgress(ota: FamilyOtaUiState) {
             },
         )
         if (ota.isRunning) {
-            val barModifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(percent = 50))
-            if (percent != null) {
-                LinearProgressIndicator(progress = { percent.coerceIn(0, 100) / 100f }, modifier = barModifier)
-            } else {
-                LinearProgressIndicator(modifier = barModifier)
-            }
+            CyanBridgeTransferProgress(progress = percent?.let { it.coerceIn(0, 100) / 100f })
         }
         if (ota.detail.isNotBlank()) {
             Text(

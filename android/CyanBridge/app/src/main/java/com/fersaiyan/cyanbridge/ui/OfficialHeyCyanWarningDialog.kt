@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -142,19 +143,19 @@ internal fun OfficialHeyCyanWarningDialog(
         confirmButton = {
             Button(
                 onClick = onOpenAppInfo,
-                shape = MaterialTheme.shapes.large,
+                shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.large),
             ) {
                 Text("Open App info")
             }
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onDismissRequest) {
+                TextButton(onClick = onDismissRequest, shapes = ButtonDefaults.shapes()) {
                     Text("Cancel")
                 }
                 FilledTonalButton(
                     onClick = { onSyncAnyway(suppressFutureWarnings) },
-                    shape = MaterialTheme.shapes.large,
+                    shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.large),
                 ) {
                     Text("Sync anyway")
                 }

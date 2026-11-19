@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -106,7 +107,7 @@ fun OralLesionBenchScreen(
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(Res.string.oral_cases_count, viewModel.cases.size), modifier = Modifier.weight(1f))
-                    OutlinedButton(onClick = viewModel::onExport, enabled = viewModel.cases.isNotEmpty()) {
+                    OutlinedButton(onClick = viewModel::onExport, enabled = viewModel.cases.isNotEmpty(), shapes = ButtonDefaults.shapes()) {
                         Text(stringResource(Res.string.oral_export))
                     }
                 }
@@ -143,7 +144,7 @@ private fun ModelRow(viewModel: OralLesionBenchViewModel, model: OralLesionModel
             Text("${model.description} ${model.sizeBytes / 1_000_000} MB", style = MaterialTheme.typography.bodySmall)
             when (state) {
                 OralLesionModelState.Checking -> Text(stringResource(Res.string.oral_model_checking), style = MaterialTheme.typography.bodySmall)
-                OralLesionModelState.NotInstalled -> TextButton(onClick = { viewModel.onInstall(model) }) {
+                OralLesionModelState.NotInstalled -> TextButton(onClick = { viewModel.onInstall(model) }, shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(Res.string.oral_model_download))
                 }
                 is OralLesionModelState.Downloading -> {
@@ -155,26 +156,26 @@ private fun ModelRow(viewModel: OralLesionBenchViewModel, model: OralLesionModel
                 OralLesionModelState.NeedsToken -> {
                     Text(stringResource(Res.string.oral_model_needs_token), style = MaterialTheme.typography.bodySmall)
                     Row {
-                        TextButton(onClick = viewModel::onOpenModelSettings) { Text(stringResource(Res.string.oral_model_open_settings)) }
-                        TextButton(onClick = { viewModel.onInstall(model) }) { Text(stringResource(Res.string.oral_model_download)) }
+                        TextButton(onClick = viewModel::onOpenModelSettings, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_model_open_settings)) }
+                        TextButton(onClick = { viewModel.onInstall(model) }, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_model_download)) }
                     }
                     if (model.gated) {
-                        TextButton(onClick = { viewModel.onRequestAccess(model) }) { Text(stringResource(Res.string.oral_request_access)) }
+                        TextButton(onClick = { viewModel.onRequestAccess(model) }, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_request_access)) }
                     }
                 }
                 OralLesionModelState.AccessDenied -> {
                     Text(stringResource(Res.string.oral_model_access_denied), style = MaterialTheme.typography.bodySmall)
                     Row {
-                        TextButton(onClick = { viewModel.onRequestAccess(model) }, modifier = Modifier.testTag("oral_request_access")) {
+                        TextButton(onClick = { viewModel.onRequestAccess(model) }, modifier = Modifier.testTag("oral_request_access"), shapes = ButtonDefaults.shapes()) {
                             Text(stringResource(Res.string.oral_request_access))
                         }
-                        TextButton(onClick = { viewModel.onInstall(model) }) { Text(stringResource(Res.string.oral_model_retry)) }
+                        TextButton(onClick = { viewModel.onInstall(model) }, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_model_retry)) }
                     }
                     Text(model.repoUrl, style = MaterialTheme.typography.bodySmall)
                 }
                 is OralLesionModelState.Failed -> {
                     Text(stringResource(Res.string.oral_model_failed, state.message), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { viewModel.onInstall(model) }) { Text(stringResource(Res.string.oral_model_retry)) }
+                    TextButton(onClick = { viewModel.onInstall(model) }, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_model_retry)) }
                 }
             }
         }
@@ -186,11 +187,11 @@ private fun CaseInputs(viewModel: OralLesionBenchViewModel, glassesUnavailable: 
     val idle = !viewModel.busy && viewModel.phase in setOf(OralLesionPhase.IDLE, OralLesionPhase.DONE)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = viewModel::onCaptureGlasses, enabled = idle && glassesUnavailable == null) {
+            OutlinedButton(onClick = viewModel::onCaptureGlasses, enabled = idle && glassesUnavailable == null, shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(Res.string.oral_photo_glasses))
             }
-            OutlinedButton(onClick = viewModel::onTakeCameraPhoto, enabled = idle) { Text(stringResource(Res.string.oral_photo_camera)) }
-            OutlinedButton(onClick = viewModel::onPickGallery, enabled = idle) { Text(stringResource(Res.string.oral_photo_gallery)) }
+            OutlinedButton(onClick = viewModel::onTakeCameraPhoto, enabled = idle, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_photo_camera)) }
+            OutlinedButton(onClick = viewModel::onPickGallery, enabled = idle, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_photo_gallery)) }
         }
         glassesUnavailable?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         viewModel.photoPath?.let { photo(it) }
@@ -228,7 +229,7 @@ private fun CaseInputs(viewModel: OralLesionBenchViewModel, glassesUnavailable: 
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        TextButton(onClick = viewModel::onDictateDemographics) {
+        TextButton(onClick = viewModel::onDictateDemographics, shapes = ButtonDefaults.shapes()) {
             Text(stringResource(if (viewModel.listening && viewModel.currentQuestion < 0) Res.string.oral_listening else Res.string.oral_dictate))
         }
     }
@@ -238,17 +239,17 @@ private fun CaseInputs(viewModel: OralLesionBenchViewModel, glassesUnavailable: 
 private fun Actions(viewModel: OralLesionBenchViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = viewModel::onAssess, enabled = viewModel.canAssess, modifier = Modifier.testTag("oral_assess")) {
+            Button(onClick = viewModel::onAssess, enabled = viewModel.canAssess, modifier = Modifier.testTag("oral_assess"), shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(Res.string.oral_assess))
             }
-            OutlinedButton(onClick = viewModel::onStop, enabled = viewModel.busy || viewModel.phase == OralLesionPhase.QUESTIONS) {
+            OutlinedButton(onClick = viewModel::onStop, enabled = viewModel.busy || viewModel.phase == OralLesionPhase.QUESTIONS, shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(Res.string.oral_stop))
             }
-            OutlinedButton(onClick = viewModel::onNewCase, enabled = !viewModel.busy) { Text(stringResource(Res.string.oral_new_case)) }
+            OutlinedButton(onClick = viewModel::onNewCase, enabled = !viewModel.busy, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_new_case)) }
         }
         if (viewModel.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         if (viewModel.phase == OralLesionPhase.DONE && viewModel.turn1Text.isNotEmpty() && viewModel.summaryText.isEmpty() && !viewModel.busy) {
-            OutlinedButton(onClick = viewModel::onSummary) { Text(stringResource(Res.string.oral_run_summary)) }
+            OutlinedButton(onClick = viewModel::onSummary, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_run_summary)) }
         }
     }
 }
@@ -291,11 +292,11 @@ private fun Questions(viewModel: OralLesionBenchViewModel) {
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = viewModel::onSubmitAnswer) { Text(stringResource(Res.string.oral_answer_send)) }
-                    OutlinedButton(onClick = viewModel::onListenAnswer) { Text(stringResource(Res.string.oral_answer_listen)) }
-                    OutlinedButton(onClick = viewModel::onSkipAnswer) { Text(stringResource(Res.string.oral_answer_skip)) }
+                    Button(onClick = viewModel::onSubmitAnswer, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_answer_send)) }
+                    OutlinedButton(onClick = viewModel::onListenAnswer, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_answer_listen)) }
+                    OutlinedButton(onClick = viewModel::onSkipAnswer, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_answer_skip)) }
                 }
-                TextButton(onClick = viewModel::onSendAnswers) { Text(stringResource(Res.string.oral_send_answers)) }
+                TextButton(onClick = viewModel::onSendAnswers, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_send_answers)) }
             }
         }
     }
@@ -360,7 +361,7 @@ private fun DentistFields(viewModel: OralLesionBenchViewModel) {
                 label = { Text(stringResource(Res.string.oral_notes)) },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(onClick = viewModel::onSaveDentistFields) { Text(stringResource(Res.string.oral_save_case)) }
+            Button(onClick = viewModel::onSaveDentistFields, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_save_case)) }
         }
     }
 }
@@ -379,8 +380,8 @@ private fun CaseRow(viewModel: OralLesionBenchViewModel, case: OralLesionBenchCa
             }
             Text(listOf(case.backend, timing, guard, case.dentist.rating).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
         }
-        TextButton(onClick = { viewModel.onEditCase(case.caseId) }) { Text(stringResource(Res.string.oral_edit)) }
-        TextButton(onClick = { viewModel.onDeleteCase(case.caseId) }) { Text(stringResource(Res.string.oral_delete)) }
+        TextButton(onClick = { viewModel.onEditCase(case.caseId) }, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_edit)) }
+        TextButton(onClick = { viewModel.onDeleteCase(case.caseId) }, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.oral_delete)) }
     }
 }
 

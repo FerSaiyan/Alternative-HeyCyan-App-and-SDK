@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -157,14 +158,14 @@ internal fun EmailVerificationCodeDialog(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(enabled = !verifying, onClick = onDismissRequest) {
+                TextButton(enabled = !verifying, onClick = onDismissRequest, shapes = ButtonDefaults.shapes()) {
                     Text("Cancel")
                 }
-                TextButton(enabled = !verifying, onClick = onResend) {
+                TextButton(enabled = !verifying, onClick = onResend, shapes = ButtonDefaults.shapes()) {
                     Text("Resend code")
                 }
                 if (onOpenLink != null) {
-                    FilledTonalButton(enabled = !verifying, onClick = onOpenLink) {
+                    FilledTonalButton(enabled = !verifying, onClick = onOpenLink, shapes = ButtonDefaults.shapes()) {
                         Text("Open link")
                     }
                 }

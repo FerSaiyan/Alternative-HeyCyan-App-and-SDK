@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,8 +58,8 @@ fun FeatureOnboardingScreen(
             onDismissRequest = onDismissBluetoothSkip,
             title = { Text(bluetoothSkipWarningTitle, fontWeight = FontWeight.Bold) },
             text = { Text(bluetoothSkipWarningBody) },
-            confirmButton = { TextButton(onConfirmBluetoothSkip) { Text(bluetoothSkipConfirmLabel) } },
-            dismissButton = { TextButton(onDismissBluetoothSkip) { Text(bluetoothSkipCancelLabel) } },
+            confirmButton = { TextButton(onConfirmBluetoothSkip, shapes = ButtonDefaults.shapes()) { Text(bluetoothSkipConfirmLabel) } },
+            dismissButton = { TextButton(onDismissBluetoothSkip, shapes = ButtonDefaults.shapes()) { Text(bluetoothSkipCancelLabel) } },
             shape = MaterialTheme.shapes.large,
         )
     }
@@ -189,7 +190,7 @@ fun FeatureOnboardingScreen(
                 }
                 if (showOpenSourceContribution) {
                     Spacer(Modifier.height(16.dp))
-                    OutlinedButton(onOpenSourceRepository, Modifier.fillMaxWidth().height(52.dp), shape = MaterialTheme.shapes.medium) {
+                    OutlinedButton(onOpenSourceRepository, ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium), Modifier.fillMaxWidth().height(52.dp)) {
                         Text(stringResource(Res.string.onboarding_open_github))
                     }
                     Text(
@@ -202,8 +203,8 @@ fun FeatureOnboardingScreen(
                 Spacer(Modifier.height(24.dp))
             }
             Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onBack, Modifier.weight(1f).height(54.dp), shape = MaterialTheme.shapes.medium) { Text(backLabel) }
-                Button(onNext, Modifier.weight(1.35f).height(54.dp), shape = MaterialTheme.shapes.medium) {
+                OutlinedButton(onBack, ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium), Modifier.weight(1f).height(54.dp)) { Text(backLabel) }
+                Button(onNext, ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium), Modifier.weight(1.35f).height(54.dp)) {
                     Text(nextLabel, fontWeight = FontWeight.Bold)
                 }
             }
@@ -216,7 +217,7 @@ private fun FindGlassesButton(label: String, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().height(52.dp),
-        shape = MaterialTheme.shapes.medium,
+        shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium),
     ) {
         Icon(AppIcon.Sync.imageVector(), null, Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
@@ -230,7 +231,7 @@ private fun PermissionCard(granted: Boolean, grantedText: String, pendingText: S
         colors = CardDefaults.cardColors(containerColor = if (granted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(if (granted) grantedText else pendingText, fontWeight = FontWeight.SemiBold)
-            if (!granted) FilledTonalButton(onClick, Modifier.fillMaxWidth()) { Text(buttonText) }
+            if (!granted) FilledTonalButton(onClick, ButtonDefaults.shapes(), Modifier.fillMaxWidth()) { Text(buttonText) }
         }
     }
 }

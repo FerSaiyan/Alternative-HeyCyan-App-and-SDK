@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.DevicesOther
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -133,6 +134,7 @@ fun DeviceBindScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 52.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(
                         if (isScanning) {
@@ -149,6 +151,7 @@ fun DeviceBindScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 52.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(Res.string.device_bind_pair_meta))
                 }
@@ -211,6 +214,7 @@ fun DeviceBindScreen(
                             FilledTonalButton(
                                 onClick = { onSelectDevice(device) },
                                 modifier = Modifier.heightIn(min = 48.dp),
+                                shapes = ButtonDefaults.shapes(),
                             ) {
                                 Text(stringResource(Res.string.action_connect))
                             }
@@ -281,6 +285,7 @@ fun DeviceBindScreen(
                             }
                         },
                         modifier = Modifier.heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(Res.string.action_connect))
                     }
@@ -292,6 +297,7 @@ fun DeviceBindScreen(
                             onDismissConnection()
                         },
                         modifier = Modifier.heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(Res.string.action_cancel))
                     }
@@ -334,6 +340,7 @@ fun DeviceBindScreen(
                             onConfirmManualProtocol(manualSelection)
                         },
                         modifier = Modifier.heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(Res.string.action_connect))
                     }
@@ -342,6 +349,7 @@ fun DeviceBindScreen(
                     TextButton(
                         onClick = { showManualProtocolPicker = false },
                         modifier = Modifier.heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(Res.string.action_cancel))
                     }

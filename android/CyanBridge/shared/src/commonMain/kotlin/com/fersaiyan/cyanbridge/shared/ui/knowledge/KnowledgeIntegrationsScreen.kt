@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +43,7 @@ fun KnowledgeIntegrationsScreen(
             TopAppBar(
                 title = { Text("Obsidian sync") },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("Back") }
+                    TextButton(onClick = onBack, shapes = ButtonDefaults.shapes()) { Text("Back") }
                 },
             )
         },
@@ -91,6 +92,7 @@ fun KnowledgeIntegrationsScreen(
                         onClick = viewModel::syncNow,
                         enabled = !busy && viewModel.vault?.writable == true,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) { Text(if (busy) "Working…" else "Sync now") }
                 }
             }
@@ -146,6 +148,7 @@ private fun ObsidianVaultCard(
                 onClick = onChooseExisting,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(if (vault == null) "Connect existing vault" else "Reconnect / change vault") }
 
             Text("Create a new vault", fontWeight = FontWeight.Medium)
@@ -161,6 +164,7 @@ private fun ObsidianVaultCard(
                 onClick = onCreateNew,
                 enabled = !busy && viewModel.newVaultName.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) { Text("Create new Markdown vault") }
 
             Text(
@@ -168,7 +172,7 @@ private fun ObsidianVaultCard(
                 style = MaterialTheme.typography.bodySmall,
             )
             if (vault != null) {
-                TextButton(onClick = viewModel::disconnect, enabled = !busy) { Text("Disconnect vault") }
+                TextButton(onClick = viewModel::disconnect, enabled = !busy, shapes = ButtonDefaults.shapes()) { Text("Disconnect vault") }
             }
         }
     }

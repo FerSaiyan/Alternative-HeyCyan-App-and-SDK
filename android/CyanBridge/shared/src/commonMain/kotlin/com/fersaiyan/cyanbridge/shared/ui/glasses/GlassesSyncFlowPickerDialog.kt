@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -67,6 +68,7 @@ fun GlassesSyncFlowPickerDialog(
                             .fillMaxWidth()
                             .heightIn(min = 72.dp)
                             .testTag("sync_flow_${flow.name}"),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Column(
                             modifier = Modifier
@@ -95,6 +97,7 @@ fun GlassesSyncFlowPickerDialog(
             TextButton(
                 onClick = onDismissRequest,
                 modifier = Modifier.heightIn(min = 48.dp),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(Res.string.action_cancel))
             }

@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.autoaudio
 
+import androidx.compose.material3.ButtonDefaults
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Bundle
 import androidx.compose.foundation.layout.Arrangement
@@ -121,6 +122,7 @@ fun AutoAudioSettingsScreen(
             OutlinedButton(
                 onClick = { onEnabledChange(false) },
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(stringResource(R.string.compose_auto_audio_stop_loop)) }
         }
     }

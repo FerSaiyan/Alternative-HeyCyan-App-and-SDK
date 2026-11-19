@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -106,7 +107,7 @@ fun MetaSetupChoiceSection(
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.testTag("meta_setup_dev_mode_lost"),
                 )
-                Button(onClick = onRegister, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Button(onClick = onRegister, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(Res.string.meta_setup_register_again))
                 }
             }
@@ -149,6 +150,7 @@ fun MetaSetupChoiceSection(
                     OutlinedButton(
                         onClick = onRequestAccess,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("meta_setup_open_form"),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(Res.string.meta_setup_open_form))
                     }
@@ -164,6 +166,7 @@ fun MetaSetupChoiceSection(
                 Button(
                     onClick = onRegister,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("meta_setup_register"),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(Res.string.meta_setup_register))
                 }

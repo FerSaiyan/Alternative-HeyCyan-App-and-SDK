@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.ui.chat
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,13 +26,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +47,9 @@ import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.navigation.icon
 import com.fersaiyan.cyanbridge.shared.notes.NoteSummary
 import com.fersaiyan.cyanbridge.shared.notes.NoteSource
+import com.fersaiyan.cyanbridge.shared.ui.components.ConnectedChoiceButton
+import com.fersaiyan.cyanbridge.shared.ui.components.ConnectedChoiceRow
+import com.fersaiyan.cyanbridge.shared.ui.components.CyanBridgeBottomBar
 import com.fersaiyan.cyanbridge.shared.ui.localizedDestinationLabel
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
@@ -115,35 +112,15 @@ fun NotesChatsScreen(
             )
         },
         bottomBar = {
-            if (showNavigationBar) NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 0.dp,
-            ) {
-                AppDestination.entries.forEach { destination ->
-                    NavigationBarItem(
-                        selected = destination == AppDestination.CHATS,
-                        onClick = { onDestinationSelected(destination) },
-                        icon = {
-                            Icon(
-                                imageVector = destination.icon.imageVector(),
-                                contentDescription = null,
-                            )
-                        },
-                        label = { Text(localizedDestinationLabel(destination)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        ),
-                    )
-                }
-            }
+            if (showNavigationBar) CyanBridgeBottomBar(
+                selected = AppDestination.CHATS,
+                onSelect = onDestinationSelected,
+            )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = if (selectedTab == NotesChatsTab.CHATS) onNewChat else onNewNote,
                 modifier = Modifier.testTag("notes_chats_primary_action"),
-                shape = MaterialTheme.shapes.extraLarge,
             ) {
                 Icon(
                     imageVector = AppIcon.Add.imageVector(),
@@ -164,18 +141,17 @@ fun NotesChatsScreen(
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding),
         ) {
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ConnectedChoiceRow(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 tabs.forEachIndexed { index, tab ->
-                    SegmentedButton(
+                    ConnectedChoiceButton(
                         selected = selectedTab == tab,
                         onClick = { onTabSelected(tab) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = tabs.size),
+                        index = index,
+                        count = tabs.size,
                         modifier = Modifier
-                            .heightIn(min = 48.dp)
+                            .weight(1f)
                             .testTag("notes_chats_tab_${tab.name.lowercase()}"),
                     ) {
                         Text(
@@ -226,12 +202,14 @@ fun NotesChatsScreen(
                 TextButton(
                     onClick = onConfirmDelete,
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.action_delete)) }
             },
             dismissButton = {
                 TextButton(
                     onClick = onDismissDelete,
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.action_cancel)) }
             },
         )
@@ -301,7 +279,7 @@ private fun NotesContent(
                 onClick = { onOpenNote(note) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateContentSize(animationSpec = spring()),
+                    .animateContentSize(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
                 shape = MaterialTheme.shapes.extraLarge,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
             ) {
@@ -363,7 +341,7 @@ private fun UnifiedThreadCard(
         onClick = onOpen,
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(animationSpec = spring()),
+            .animateContentSize(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {

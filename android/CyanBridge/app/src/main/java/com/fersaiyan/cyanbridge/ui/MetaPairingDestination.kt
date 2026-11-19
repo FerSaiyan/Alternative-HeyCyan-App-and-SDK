@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import androidx.compose.material3.ButtonDefaults
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.Manifest
 import android.content.Intent
@@ -539,7 +540,7 @@ fun MetaPairingScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = { showInitialPairingNotice = false }) {
+                TextButton(onClick = { showInitialPairingNotice = false }, shapes = ButtonDefaults.shapes()) {
                     Text("Continue")
                 }
             },
@@ -549,6 +550,7 @@ fun MetaPairingScreen(
                         showInitialPairingNotice = false
                         onSendDiagnostics()
                     },
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text("Send logs")
                 }
@@ -571,6 +573,7 @@ fun MetaPairingScreen(
                             MetaPairingIssueAction.REQUEST_ACCESS -> onRequestAccess()
                         }
                     },
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(pairingIssue.primaryLabel)
                 }
@@ -581,6 +584,7 @@ fun MetaPairingScreen(
                         showPairingIssue = false
                         onSendDiagnostics()
                     },
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text("Send logs")
                 }
@@ -595,9 +599,9 @@ fun MetaPairingScreen(
             title = { Text(prompt.title) },
             text = { Text(prompt.message) },
             confirmButton = {
-                TextButton(onClick = { showStep = false; onPrimaryAction() }) { Text(state.primaryLabel) }
+                TextButton(onClick = { showStep = false; onPrimaryAction() }, shapes = ButtonDefaults.shapes()) { Text(state.primaryLabel) }
             },
-            dismissButton = { TextButton(onClick = { showStep = false }) { Text("Later") } },
+            dismissButton = { TextButton(onClick = { showStep = false }, shapes = ButtonDefaults.shapes()) { Text("Later") } },
         )
     }
 
@@ -634,7 +638,7 @@ fun MetaPairingScreen(
                             "Pair your glasses in Meta AI first. CyanBridge then asks Meta AI to authorize camera access; it does not pair the glasses through the Bluetooth scan list.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        OutlinedButton(onClick = onOpenMetaAi, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = onOpenMetaAi, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                             Text("Open Meta AI")
                         }
                     }
@@ -709,6 +713,7 @@ fun MetaPairingScreen(
                         MetaRaybanManager.RegistrationState.REGISTERING, MetaRaybanManager.RegistrationState.UNREGISTERING,
                     ),
                     modifier = Modifier.fillMaxWidth().testTag("meta_pairing_primary_action"),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(state.primaryLabel)
                 }
@@ -716,6 +721,7 @@ fun MetaPairingScreen(
                     OutlinedButton(
                         onClick = onRefreshInvite,
                         modifier = Modifier.fillMaxWidth().testTag("meta_pairing_refresh"),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text("Check again (Refresh)")
                     }
@@ -723,6 +729,7 @@ fun MetaPairingScreen(
                 OutlinedButton(
                     onClick = onSendDiagnostics,
                     modifier = Modifier.fillMaxWidth().testTag("meta_pairing_diagnostics"),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text("Send Meta diagnostics")
                 }

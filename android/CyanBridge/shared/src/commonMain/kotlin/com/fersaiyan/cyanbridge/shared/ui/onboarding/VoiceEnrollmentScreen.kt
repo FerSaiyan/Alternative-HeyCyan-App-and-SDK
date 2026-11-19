@@ -181,8 +181,8 @@ fun VoiceEnrollmentScreen(
                 // Standalone (from Settings) there is nothing to skip to: only Close until done.
                 if (stepIndex != null || done) {
                     Button(
-                        onNext, Modifier.weight(1.35f).height(54.dp).testTag("voice_enroll_next"),
-                        shape = MaterialTheme.shapes.medium,
+                        onNext, ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium),
+                        Modifier.weight(1.35f).height(54.dp).testTag("voice_enroll_next"),
                         enabled = state.phase == VoiceEnrollmentPhase.READY || done,
                     ) {
                         Text(

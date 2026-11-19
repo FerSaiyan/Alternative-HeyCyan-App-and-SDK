@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.localagent
 
+import androidx.compose.material3.ButtonDefaults
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.content.BroadcastReceiver
@@ -440,6 +441,7 @@ fun LocalAgentSettingsScreen(
             OutlinedButton(
                 onClick = actions::onOpenSettings,
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(R.string.compose_open_settings))
             }
@@ -492,6 +494,7 @@ fun LocalAgentSettingsScreen(
                 onClick = actions::onOpenPendingActions,
                 enabled = state.requireActionConfirmation,
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(R.string.compose_view_pending_actions))
             }
@@ -555,18 +558,21 @@ fun LocalAgentSettingsScreen(
                     onClick = actions::onAgentStatus,
                     enabled = state.enabled,
                     modifier = Modifier.weight(1f),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(R.string.compose_action_status))
                 }
                 OutlinedButton(
                     onClick = actions::onAgentStop,
                     modifier = Modifier.weight(1f),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(R.string.compose_action_stop))
                 }
                 OutlinedButton(
                     onClick = actions::onAgentDemo,
                     modifier = Modifier.weight(1f),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(R.string.compose_action_demo))
                 }
@@ -581,6 +587,7 @@ fun LocalAgentSettingsScreen(
             OutlinedButton(
                 onClick = actions::onOpenAutoDiarySettings,
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(R.string.compose_open_autodiary_settings))
             }
@@ -589,18 +596,21 @@ fun LocalAgentSettingsScreen(
             OutlinedButton(
                 onClick = actions::onEditAgentPersonality,
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(R.string.compose_edit_agent_personality))
             }
             OutlinedButton(
                 onClick = actions::onEditUserFacts,
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(R.string.compose_edit_user_facts))
             }
             OutlinedButton(
                 onClick = actions::onViewInjectedContext,
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(R.string.compose_view_injected_context))
             }
@@ -655,7 +665,7 @@ private fun SettingAction(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        OutlinedButton(onClick = onClick) { Text(actionLabel) }
+        OutlinedButton(onClick = onClick, shapes = ButtonDefaults.shapes()) { Text(actionLabel) }
     }
 }
 

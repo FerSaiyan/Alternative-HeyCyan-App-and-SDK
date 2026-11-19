@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -216,14 +217,14 @@ object VersionUpdateChecker {
                     stringResource(R.string.compose_update_version_summary, currentVersion, latestVersion),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                FilledTonalButton(onClick = onPlayStore, modifier = Modifier.fillMaxWidth()) {
+                FilledTonalButton(onClick = onPlayStore, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.compose_update_get_play_store))
                 }
-                OutlinedButton(onClick = onDownload, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onDownload, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.compose_update_download_github))
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    OutlinedButton(onClick = onLater) { Text(stringResource(R.string.compose_update_later)) }
+                    OutlinedButton(onClick = onLater, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.compose_update_later)) }
                 }
             }
         }

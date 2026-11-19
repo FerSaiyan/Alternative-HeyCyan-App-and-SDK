@@ -1,7 +1,10 @@
 package com.fersaiyan.cyanbridge.shared.ui.glasses
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.outlined.Battery6Bar
 import androidx.compose.material.icons.outlined.Battery5Bar
@@ -17,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.style.TextAlign
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_connecting
 import com.fersaiyan.cyanbridge.shared.generated.resources.mentra_ota_open_button
 import com.fersaiyan.cyanbridge.shared.generated.resources.dashboard_conn_bluetooth_unavailable
@@ -32,8 +36,6 @@ import androidx.compose.material.icons.outlined.SmartDisplay
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -56,10 +58,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -74,7 +74,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -116,9 +115,13 @@ import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
 import com.fersaiyan.cyanbridge.shared.glasses.WifiAdbDebugUiState
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import com.fersaiyan.cyanbridge.shared.platform.platformSupportsTasker
+import com.fersaiyan.cyanbridge.shared.ui.components.ConnectedChoiceButton
+import com.fersaiyan.cyanbridge.shared.ui.components.ConnectedChoiceRow
+import com.fersaiyan.cyanbridge.shared.ui.components.CyanBridgeTransferProgress
 import com.fersaiyan.cyanbridge.shared.ui.localizedOtaSourceDescription
 import com.fersaiyan.cyanbridge.shared.ui.localizedOtaSourceLabel
 import com.fersaiyan.cyanbridge.shared.ui.localizedOtaTargetLabel
+import com.fersaiyan.cyanbridge.shared.ui.theme.LocalReducedMotion
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 
@@ -166,6 +169,7 @@ fun GlassesDashboardScreen(
                         wifiAdbRiskAcknowledged = false
                         onAction(GlassesDashboardAction.RequestStartWifiAdbDebug)
                     },
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.dashboard_start_privileged_adb)) }
             },
             dismissButton = {
@@ -175,6 +179,7 @@ fun GlassesDashboardScreen(
                         showWifiAdbConfirmation = false
                         wifiAdbRiskAcknowledged = false
                     },
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.action_cancel)) }
             },
         )
@@ -227,12 +232,14 @@ fun GlassesDashboardScreen(
                 Button(
                     onClick = { onAction(GlassesDashboardAction.RequestTransportPermission) },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("transport_permission_confirm"),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.dashboard_transport_permission_confirm)) }
             },
             dismissButton = {
                 TextButton(
                     onClick = { onAction(GlassesDashboardAction.DismissTransportPermissionDialog) },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("transport_permission_dismiss"),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.action_cancel)) }
             },
             shape = MaterialTheme.shapes.extraLarge,
@@ -353,6 +360,7 @@ fun GlassesDashboardScreen(
                                     .fillMaxWidth()
                                     .heightIn(min = 56.dp)
                                     .testTag("advanced_controls_toggle"),
+                                shapes = ButtonDefaults.shapes(),
                             ) {
                                 Text(
                                     if (state.advancedExpanded) {
@@ -390,11 +398,11 @@ fun GlassesDashboardScreen(
                             }
                             AnimatedVisibility(
                                 visible = state.advancedExpanded,
-                                enter = fadeIn(animationSpec = spring()) + expandVertically(
-                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + expandVertically(
+                                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                                 ),
-                                exit = fadeOut(animationSpec = spring()) + shrinkVertically(
-                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + shrinkVertically(
+                                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                                 ),
                             ) {
                                 Column {
@@ -579,6 +587,7 @@ private fun MeetingBanner(label: String, onStop: () -> Unit) {
             TextButton(
                 onClick = onStop,
                 modifier = Modifier.heightIn(min = 48.dp),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(Res.string.dashboard_stop))
             }
@@ -770,20 +779,7 @@ private fun TransferCard(
             )
             StatusPill(stringResource(Res.string.dashboard_flow, state.transfer.flowLabel), tertiary = true)
             Text(state.transfer.countsLabel, style = MaterialTheme.typography.bodySmall)
-            state.transfer.progress?.let { progress ->
-                LinearProgressIndicator(
-                    progress = { progress.coerceIn(0f, 1f) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(percent = 50)),
-                )
-            } ?: LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(percent = 50)),
-            )
+            CyanBridgeTransferProgress(progress = state.transfer.progress)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = state.transfer.detail,
@@ -796,6 +792,7 @@ private fun TransferCard(
                 TextButton(
                     onClick = onStop,
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(
                         stringResource(Res.string.dashboard_stop_sync),
@@ -964,12 +961,13 @@ private fun GlassesAssistantControls(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         SectionTitle(stringResource(Res.string.dashboard_ai_assistant), accented = true)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        ConnectedChoiceRow {
             AssistantModeChip(
                 label = stringResource(Res.string.dashboard_phone_assistant),
                 mode = GlassesAssistantMode.PHONE_ASSISTANT,
                 selectedMode = state.assistantMode,
                 onAction = onAction,
+                index = 0,
                 modifier = Modifier.weight(1f),
             )
             AssistantModeChip(
@@ -980,6 +978,7 @@ private fun GlassesAssistantControls(
                 mode = GlassesAssistantMode.CUSTOM_AI_PROVIDER,
                 selectedMode = state.assistantMode,
                 onAction = onAction,
+                index = 1,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1010,26 +1009,25 @@ private fun GlassesAssistantControls(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            ConnectedChoiceRow {
                 listOf(
                     0 to stringResource(Res.string.dashboard_live_image_only_first),
                     2 to stringResource(Res.string.dashboard_live_image_every_turn),
-                ).forEach { (seconds, label) ->
-                    FilterChip(
+                ).forEachIndexed { index, (seconds, label) ->
+                    ConnectedChoiceButton(
                         selected = state.geminiLiveImageDelaySeconds == seconds ||
                             (seconds == 2 && state.geminiLiveImageDelaySeconds in listOf(5, 10, 15)),
                         onClick = {
                             onAction(GlassesDashboardAction.SetGeminiLiveImageDelay(seconds))
                         },
-                        label = { Text(label) },
+                        index = index,
+                        count = 2,
                         modifier = Modifier
                             .weight(1f)
-                            .heightIn(min = 48.dp)
                             .testTag("gemini_live_image_delay_$seconds"),
-                    )
+                    ) {
+                        Text(label, textAlign = TextAlign.Center)
+                    }
                 }
             }
         }
@@ -1039,6 +1037,7 @@ private fun GlassesAssistantControls(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(Res.string.dashboard_gemini_chatgpt_setup))
             }
@@ -1077,6 +1076,7 @@ private fun AiWakeWordRouteControls(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("ai_wake_word_image_warning_confirm"),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(Res.string.dashboard_ai_wake_word_image_warning_confirm))
                 }
@@ -1087,6 +1087,7 @@ private fun AiWakeWordRouteControls(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("ai_wake_word_image_warning_cancel"),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(Res.string.action_cancel))
                 }
@@ -1110,23 +1111,24 @@ private fun AiWakeWordRouteControls(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
+        ConnectedChoiceRow {
+            ConnectedChoiceButton(
                 selected = state.aiWakeWordRoute == AiWakeWordRoute.VOICE_QUESTION,
+                index = 0,
+                count = 2,
                 onClick = {
                     onAction(GlassesDashboardAction.SetAiWakeWordRoute(AiWakeWordRoute.VOICE_QUESTION))
                 },
-                label = { Text(stringResource(Res.string.dashboard_ai_wake_word_voice)) },
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 48.dp)
                     .testTag("ai_wake_word_route_voice_question"),
-            )
-            FilterChip(
+            ) {
+                Text(stringResource(Res.string.dashboard_ai_wake_word_voice), textAlign = TextAlign.Center)
+            }
+            ConnectedChoiceButton(
                 selected = state.aiWakeWordRoute == AiWakeWordRoute.IMAGE_QUESTION,
+                index = 1,
+                count = 2,
                 onClick = {
                     if (
                         state.showHeyCyanControls &&
@@ -1141,12 +1143,12 @@ private fun AiWakeWordRouteControls(
                         )
                     }
                 },
-                label = { Text(stringResource(Res.string.dashboard_ai_wake_word_image)) },
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 48.dp)
                     .testTag("ai_wake_word_route_image_question"),
-            )
+            ) {
+                Text(stringResource(Res.string.dashboard_ai_wake_word_image), textAlign = TextAlign.Center)
+            }
         }
     }
 }
@@ -1157,14 +1159,18 @@ private fun AssistantModeChip(
     mode: GlassesAssistantMode,
     selectedMode: GlassesAssistantMode,
     onAction: (GlassesDashboardAction) -> Unit,
+    index: Int,
     modifier: Modifier,
 ) {
-    FilterChip(
+    ConnectedChoiceButton(
         selected = selectedMode == mode,
         onClick = { onAction(GlassesDashboardAction.SelectAssistantMode(mode)) },
-        label = { Text(label) },
-        modifier = modifier.heightIn(min = 48.dp),
-    )
+        index = index,
+        count = 2,
+        modifier = modifier,
+    ) {
+        Text(label, textAlign = TextAlign.Center)
+    }
 }
 
 @Composable
@@ -1198,6 +1204,7 @@ private fun MetaRaybanControls(
                             },
                         )
                     },
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(pairingIssue.primaryLabel)
                 }
@@ -1209,6 +1216,7 @@ private fun MetaRaybanControls(
                         showPairingIssue = false
                         onAction(GlassesDashboardAction.MetaSendDiagnostics)
                     },
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text("Details")
                 }
@@ -1495,25 +1503,28 @@ private fun AdvancedControls(
                 )
                 if (state.showTuneBudsControls) {
                     // TuneBuds: only 2 real modes - BLE one-size (0..4) vs WiFi high (5)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
+                    ConnectedChoiceRow {
                         val fastSelected = state.imageThumbnailQualitySdkValue != 5
-                        FilterChip(
+                        ConnectedChoiceButton(
                             selected = fastSelected,
                             onClick = {
                                 onAction(GlassesDashboardAction.SelectImageThumbnailQuality(4))
                             },
-                            label = { Text(stringResource(Res.string.dashboard_quality_clearer) + " (BLE)") },
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("ai_image_thumbnail_quality_4"),
-                        )
-                        FilterChip(
+                            index = 0,
+                            count = 2,
+                            modifier = Modifier.weight(1f).testTag("ai_image_thumbnail_quality_4"),
+                        ) {
+                            Text(stringResource(Res.string.dashboard_quality_clearer) + " (BLE)", textAlign = TextAlign.Center)
+                        }
+                        ConnectedChoiceButton(
                             selected = !fastSelected,
                             onClick = { pendingDetailedQuality = 5 },
-                            label = { Text(stringResource(Res.string.dashboard_quality_detailed) + " (WiFi)") },
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("ai_image_thumbnail_quality_5"),
-                        )
+                            index = 1,
+                            count = 2,
+                            modifier = Modifier.weight(1f).testTag("ai_image_thumbnail_quality_5"),
+                        ) {
+                            Text(stringResource(Res.string.dashboard_quality_detailed) + " (WiFi)", textAlign = TextAlign.Center)
+                        }
                     }
                 } else {
                     listOf(
@@ -1577,12 +1588,14 @@ private fun AdvancedControls(
                             if (value != null) onAction(GlassesDashboardAction.SelectImageThumbnailQuality(value))
                         },
                         modifier = Modifier.heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
                     ) { Text(stringResource(Res.string.dashboard_quality_detailed_warning_continue)) }
                 },
                 dismissButton = {
                     TextButton(
                         onClick = { pendingDetailedQuality = null },
                         modifier = Modifier.heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(Res.string.dashboard_quality_detailed_warning_cancel))
                     }
@@ -1616,24 +1629,28 @@ private fun AdvancedControls(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.dashboard_register_listener)) }
                 if (developerToolsExpanded) TextButton(
                     onClick = { onAction(GlassesDashboardAction.StartClassicBluetoothScan) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.dashboard_classic_scan)) }
                 if (developerToolsExpanded) TextButton(
                     onClick = { onAction(GlassesDashboardAction.DumpOtaInfo) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.dashboard_dump_ota)) }
                 if (developerToolsExpanded) TextButton(
                     onClick = { onAction(GlassesDashboardAction.TestPullOta) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.dashboard_test_pull_ota)) }
             }
         }
@@ -1705,6 +1722,7 @@ private fun OtaFirmwareSourcePickerDialog(
                             .fillMaxWidth()
                             .heightIn(min = 64.dp)
                             .testTag("ota_firmware_source_${source.name.lowercase()}"),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(localizedOtaSourceLabel(source), style = MaterialTheme.typography.labelLarge)
@@ -1723,6 +1741,7 @@ private fun OtaFirmwareSourcePickerDialog(
             TextButton(
                 onClick = onDismissRequest,
                 modifier = Modifier.heightIn(min = 48.dp),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(stringResource(Res.string.action_cancel)) }
         },
     )
@@ -1799,6 +1818,7 @@ private fun FirmwarePatchRequestDialog(
                 modifier = Modifier
                     .heightIn(min = 48.dp)
                     .testTag("firmware_patch_request_send"),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(
                     if (request.isSubmitting) {
@@ -1816,6 +1836,7 @@ private fun FirmwarePatchRequestDialog(
                 modifier = Modifier
                     .heightIn(min = 48.dp)
                     .testTag("firmware_patch_request_cancel"),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(stringResource(Res.string.action_cancel)) }
         },
     )
@@ -1838,6 +1859,7 @@ internal fun ActionButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     icon: ImageVector? = null,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     val content: @Composable () -> Unit = {
         if (icon != null) {
@@ -1851,6 +1873,8 @@ internal fun ActionButton(
             onClick = onClick,
             enabled = enabled,
             modifier = modifier.heightIn(min = 48.dp),
+            interactionSource = interactionSource,
+            shapes = ButtonDefaults.shapes(),
         ) {
             content()
         }
@@ -1859,6 +1883,8 @@ internal fun ActionButton(
             onClick = onClick,
             enabled = enabled,
             modifier = modifier.heightIn(min = 48.dp),
+            interactionSource = interactionSource,
+            shapes = ButtonDefaults.shapes(),
         ) {
             content()
         }
@@ -1867,6 +1893,7 @@ internal fun ActionButton(
             onClick = onClick,
             enabled = enabled,
             modifier = modifier.heightIn(min = 48.dp),
+            interactionSource = interactionSource,
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = MaterialTheme.colorScheme.error,
                 disabledContentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.38f),
@@ -1875,6 +1902,7 @@ internal fun ActionButton(
                 1.dp,
                 MaterialTheme.colorScheme.error.copy(alpha = if (enabled) 1f else 0.38f),
             ),
+            shapes = ButtonDefaults.shapes(),
         ) {
             content()
         }
@@ -1894,25 +1922,43 @@ internal fun ActionRow(
     primaryIcon: ImageVector? = null,
     secondaryIcon: ImageVector? = null,
 ) {
-    Row(
+    // Material 3 Expressive button group: the pressed button widens and its neighbour yields.
+    // Reduced motion keeps both widths still.
+    val primaryInteraction = remember { MutableInteractionSource() }
+    val secondaryInteraction = remember { MutableInteractionSource() }
+    ButtonGroup(
+        overflowIndicator = {},
         modifier = Modifier.fillMaxWidth(),
+        expandedRatio = if (LocalReducedMotion.current) 0f else ButtonGroupDefaults.ExpandedRatio,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ActionButton(
-            label = primaryLabel,
-            onClick = onPrimary,
-            enabled = primaryEnabled,
-            modifier = Modifier.weight(1f),
-            style = primaryStyle,
-            icon = primaryIcon,
+        customItem(
+            buttonGroupContent = {
+                ActionButton(
+                    label = primaryLabel,
+                    onClick = onPrimary,
+                    enabled = primaryEnabled,
+                    modifier = Modifier.weight(1f).animateWidth(primaryInteraction),
+                    style = primaryStyle,
+                    icon = primaryIcon,
+                    interactionSource = primaryInteraction,
+                )
+            },
+            menuContent = {},
         )
-        ActionButton(
-            label = secondaryLabel,
-            onClick = onSecondary,
-            enabled = secondaryEnabled,
-            modifier = Modifier.weight(1f),
-            style = secondaryStyle,
-            icon = secondaryIcon,
+        customItem(
+            buttonGroupContent = {
+                ActionButton(
+                    label = secondaryLabel,
+                    onClick = onSecondary,
+                    enabled = secondaryEnabled,
+                    modifier = Modifier.weight(1f).animateWidth(secondaryInteraction),
+                    style = secondaryStyle,
+                    icon = secondaryIcon,
+                    interactionSource = secondaryInteraction,
+                )
+            },
+            menuContent = {},
         )
     }
 }
@@ -1986,20 +2032,7 @@ private fun OtaProgressSection(ota: OtaSectionUiState) {
                 )
             }
         }
-        ota.progress?.let { progress ->
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0, 100) / 100f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(percent = 50)),
-            )
-        } ?: LinearProgressIndicator(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(percent = 50)),
-        )
+        CyanBridgeTransferProgress(progress = ota.progress?.let { it.coerceIn(0, 100) / 100f })
         if (ota.detail.isNotBlank()) {
             Text(
                 text = ota.detail,

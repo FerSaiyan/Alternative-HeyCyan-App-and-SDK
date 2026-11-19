@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,7 +28,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -144,6 +144,7 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.mentra_ota_wifi_title
 import com.fersaiyan.cyanbridge.shared.generated.resources.mentra_ota_wifi_wrong_password
 import com.fersaiyan.cyanbridge.shared.icons.AppIcon
 import com.fersaiyan.cyanbridge.shared.icons.imageVector
+import com.fersaiyan.cyanbridge.shared.ui.components.CyanBridgeTransferProgress
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -211,10 +212,11 @@ fun MentraFirmwareUpdateScreen(
                     onClick = viewModel::confirmStart,
                     enabled = state.blockers.isEmpty(),
                     modifier = Modifier.testTag("mentra_ota_confirm"),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.mentra_ota_confirm_install)) }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::dismissConfirmation) { Text(stringResource(Res.string.mentra_ota_cancel)) }
+                TextButton(onClick = viewModel::dismissConfirmation, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.mentra_ota_cancel)) }
             },
         )
     }
@@ -283,7 +285,7 @@ private fun StatusCard(state: MentraFirmwareUpdateUiState, viewModel: MentraFirm
                 MentraOtaStage.VERIFYING -> Busy(stringResource(Res.string.mentra_ota_verifying))
                 MentraOtaStage.COMPLETE -> {
                     TitleText(stringResource(Res.string.mentra_ota_complete))
-                    Button(onClick = onClose, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Button(onClick = onClose, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shapes = ButtonDefaults.shapes()) {
                         Text(stringResource(Res.string.mentra_ota_done))
                     }
                 }
@@ -320,6 +322,7 @@ private fun UpdateAvailable(state: MentraFirmwareUpdateUiState, viewModel: Mentr
         onClick = viewModel::requestStart,
         enabled = state.blockers.isEmpty(),
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("mentra_ota_update_now"),
+        shapes = ButtonDefaults.shapes(),
     ) {
         Text(
             stringResource(
@@ -358,6 +361,7 @@ private fun PreconditionsCard(state: MentraFirmwareUpdateUiState, viewModel: Men
                 onClick = viewModel::openWifiSetup,
                 enabled = glasses.ready,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(stringResource(Res.string.mentra_ota_wifi_setup)) }
         }
         if (MentraOtaBlocker.MICROPHONE_IN_USE in blockers) Notice(stringResource(Res.string.mentra_ota_microphone_in_use), warning = true)
@@ -410,8 +414,8 @@ private fun Progress(progress: MentraOtaProgress?) {
             step
         },
     )
-    LinearProgressIndicator(
-        progress = { progress.percent / 100f },
+    CyanBridgeTransferProgress(
+        progress = progress.percent / 100f,
         modifier = Modifier.fillMaxWidth().testTag("mentra_ota_progress"),
     )
     BodyText(stringResource(Res.string.mentra_ota_percent, progress.percent), muted = true)
@@ -478,8 +482,9 @@ private fun WifiCard(state: MentraFirmwareUpdateUiState, viewModel: MentraFirmwa
                 onClick = viewModel::scanWifi,
                 enabled = !wifi.scanning && state.glasses.ready,
                 modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(stringResource(Res.string.mentra_ota_wifi_scan)) }
-            TextButton(onClick = viewModel::closeWifiSetup, modifier = Modifier.heightIn(min = 48.dp)) {
+            TextButton(onClick = viewModel::closeWifiSetup, modifier = Modifier.heightIn(min = 48.dp), shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(Res.string.mentra_ota_cancel))
             }
         }
@@ -504,12 +509,12 @@ private fun PasswordDialog(network: MentraWifiNetwork, viewModel: MentraFirmware
             )
         },
         confirmButton = {
-            Button(onClick = { viewModel.connectWifi(password) }, enabled = password.isNotEmpty()) {
+            Button(onClick = { viewModel.connectWifi(password) }, enabled = password.isNotEmpty(), shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(Res.string.mentra_ota_wifi_connect))
             }
         },
         dismissButton = {
-            TextButton(onClick = viewModel::dismissPassword) { Text(stringResource(Res.string.mentra_ota_cancel)) }
+            TextButton(onClick = viewModel::dismissPassword, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.mentra_ota_cancel)) }
         },
     )
 }
@@ -520,6 +525,7 @@ private fun CheckAgain(viewModel: MentraFirmwareUpdateViewModel, enabled: Boolea
         onClick = viewModel::check,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        shapes = ButtonDefaults.shapes(),
     ) { Text(stringResource(Res.string.mentra_ota_check_again)) }
 }
 

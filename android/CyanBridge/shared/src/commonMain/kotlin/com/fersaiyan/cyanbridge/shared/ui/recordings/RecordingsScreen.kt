@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -52,9 +53,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +60,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.fersaiyan.cyanbridge.shared.ui.components.CyanBridgeBottomBar
+import com.fersaiyan.cyanbridge.shared.ui.components.CyanBridgeLoadingIndicator
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -198,29 +198,10 @@ fun RecordingsScreen(
             )
         },
         bottomBar = {
-            if (showNavigationBar) NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 0.dp,
-            ) {
-                AppDestination.entries.forEach { destination ->
-                    NavigationBarItem(
-                        selected = destination == AppDestination.MEDIA,
-                        onClick = { onDestinationSelected(destination) },
-                        icon = {
-                            Icon(
-                                imageVector = destination.icon.imageVector(),
-                                contentDescription = null,
-                            )
-                        },
-                        label = { Text(localizedDestinationLabel(destination)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                        ),
-                    )
-                }
-            }
+            if (showNavigationBar) CyanBridgeBottomBar(
+                selected = AppDestination.MEDIA,
+                onSelect = onDestinationSelected,
+            )
         },
     ) { innerPadding ->
         LazyColumn(
@@ -276,6 +257,7 @@ fun RecordingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.ImageIcon,
@@ -294,7 +276,7 @@ fun RecordingsScreen(
                             .padding(vertical = 40.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator()
+                        CyanBridgeLoadingIndicator()
                     }
                 }
             } else if (sessions.isEmpty()) {
@@ -316,6 +298,7 @@ fun RecordingsScreen(
                             TextButton(
                                 onClick = { selectionMode = true },
                                 modifier = Modifier.heightIn(min = 48.dp),
+                                shapes = ButtonDefaults.shapes(),
                             ) {
                                 Text(stringResource(Res.string.recordings_select))
                             }
@@ -441,6 +424,7 @@ fun RecordingsScreen(
                         }
                     },
                     enabled = !isDeleting,
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(Res.string.action_delete))
                 }
@@ -449,6 +433,7 @@ fun RecordingsScreen(
                 TextButton(
                     onClick = { pendingDelete = null },
                     enabled = !isDeleting,
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(Res.string.action_cancel))
                 }
@@ -465,7 +450,7 @@ fun RecordingsScreen(
             title = { Text(transcript.title) },
             text = { Text(transcript.text) },
             confirmButton = {
-                TextButton(onClick = onDismissTranscript) {
+                TextButton(onClick = onDismissTranscript, shapes = ButtonDefaults.shapes()) {
                      Text(stringResource(Res.string.recordings_close))
                 }
             },
@@ -499,6 +484,7 @@ private fun MeetingRecordingBanner(
             TextButton(
                 onClick = onStop,
                 modifier = Modifier.heightIn(min = 48.dp),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Stop,
@@ -701,6 +687,7 @@ private fun RecordingCard(
                     onClick = onTranscribe,
                     enabled = !isTranscribing,
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     if (isTranscribing) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 3.dp)
@@ -714,6 +701,7 @@ private fun RecordingCard(
                     onClick = onViewTranscript,
                     enabled = !isTranscribing,
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                      Text(stringResource(Res.string.recordings_view_transcript))
                 }

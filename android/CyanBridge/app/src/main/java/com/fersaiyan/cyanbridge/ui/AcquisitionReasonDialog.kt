@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -301,13 +302,14 @@ private fun AcquisitionReasonScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End,
                 ) {
-                    TextButton(onClick = { onSkip(shareAnalytics) }) {
+                    TextButton(onClick = { onSkip(shareAnalytics) }, shapes = ButtonDefaults.shapes()) {
                         Text("Skip")
                     }
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = { primary?.let { onSubmit(it, secondary, otherText.ifBlank { null }, shareAnalytics) } },
                         enabled = primary != null,
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text("Continue")
                     }
