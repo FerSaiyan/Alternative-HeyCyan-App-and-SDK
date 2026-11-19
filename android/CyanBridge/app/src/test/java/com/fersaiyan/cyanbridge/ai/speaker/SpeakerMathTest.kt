@@ -58,4 +58,14 @@ class SpeakerMathTest {
         assertEquals(PhraseIssue.CLIPPED, EnrollmentQuality.check(tone(2_000, amplitude = 32_767)))
         assertNull(EnrollmentQuality.check(silence(300) + tone(2_000) + silence(300)))
     }
+
+    @Test fun `gate blocks only below the model's lower threshold and samples long questions evenly`() {
+        val spec = SpeakerModels.DEFAULT
+        assertEquals(SpeakerVerdict.NOT_WEARER, SpeakerGatePolicy.verdict(spec, spec.blockBelow - 0.01f))
+        assertEquals(SpeakerVerdict.UNCERTAIN, SpeakerGatePolicy.verdict(spec, spec.blockBelow))
+        assertEquals(SpeakerVerdict.WEARER, SpeakerGatePolicy.verdict(spec, spec.wearerAt))
+        SpeakerModels.all.forEach { assertTrue(it.id, it.blockBelow < it.wearerAt) }
+        assertEquals(listOf(0, 1), SpeakerGatePolicy.spread(listOf(0, 1)))
+        assertEquals(listOf(0, 5, 9), SpeakerGatePolicy.spread((0..9).toList()))
+    }
 }

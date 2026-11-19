@@ -18,7 +18,7 @@ data class CapturedQuestion(
     val heardSpeech: Boolean,
     /** The recording, kept for a model that hears audio (the caller deletes it). */
     val audioPath: String? = null,
-    /** Why the microphone could not record; spoken as is. */
+    /** Why the question is not answered (the microphone failed, or another voice asked it); spoken as is. A follow-up with an error just ends. */
     val error: String? = null,
 )
 

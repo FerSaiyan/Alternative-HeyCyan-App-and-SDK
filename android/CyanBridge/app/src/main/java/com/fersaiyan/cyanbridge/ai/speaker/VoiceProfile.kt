@@ -2,6 +2,9 @@ package com.fersaiyan.cyanbridge.ai.speaker
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs.QuestionRouting
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,15 +32,21 @@ data class SpeakerScore(
 )
 
 /**
- * Entry point for the wearer's voice profile. Answers are NOT gated on it yet: [observe] only
- * scores an utterance and appends the numbers to a private calibration log, so a threshold can
- * later be fitted on the real glasses microphone (LibriSpeech thresholds do not transfer).
+ * Outcome of the "Answer only my voice" check for one question. [answer] is false only for a
+ * confident other speaker; every other case (no model yet, too little speech, uncertain score,
+ * an error) fails open. [reason] goes to the diagnostic log; it never holds audio or text.
+ */
+data class SpeakerCheck(val answer: Boolean, val reason: String, val score: SpeakerScore? = null)
+
+/**
+ * Entry point for the wearer's voice profile. With "Answer only my voice" on (the default once
+ * enrolled), [check] scores each spoken question against the template; a confident other voice is
+ * not answered. Each scored question appends its numbers to a private calibration log, so the
+ * thresholds ([SpeakerModelSpec.blockBelow]) can be refit on the real glasses microphone.
  */
 object VoiceProfile {
     private const val TAG = "VoiceProfile"
     private const val OBSERVATION_LOG_LIMIT = 500
-    /** Placeholder between the fixture's other-speaker max (~0.29) and target min (~0.51). Uncalibrated. */
-    const val PROVISIONAL_THRESHOLD = 0.40f
 
     private val embedderLock = Mutex()
     private var embedder: SpeakerEmbedder? = null
@@ -45,6 +54,16 @@ object VoiceProfile {
     fun store(context: Context) = VoiceEnrollmentStore(context.applicationContext)
 
     fun isEnrolled(context: Context) = store(context).isEnrolled()
+
+    /** The user's "Answer only my voice" switch (meaningful only while enrolled). */
+    fun answerOnlyMyVoice(context: Context): Boolean = QuestionRouting.answerOnlyMyVoice[context]
+
+    fun setAnswerOnlyMyVoice(context: Context, enabled: Boolean) {
+        QuestionRouting.answerOnlyMyVoice[context] = enabled
+    }
+
+    /** Questions are checked: a profile is enrolled and "Answer only my voice" is on. Reads disk. */
+    fun filterActive(context: Context): Boolean = answerOnlyMyVoice(context) && isEnrolled(context)
 
     fun delete(context: Context) {
         store(context).deleteAll()
@@ -92,11 +111,14 @@ object VoiceProfile {
         return TemplateResult.Ready(template)
     }
 
-    /** Scores [pcm] against the enrolled template, or returns null when there is nothing to score. */
+    /**
+     * Scores [pcm] against the enrolled template, or returns null when there is nothing to score.
+     * At most [SpeakerGatePolicy.MAX_WINDOWS] windows are embedded.
+     */
     suspend fun score(context: Context, pcm: ShortArray, spec: SpeakerModelSpec = SpeakerModels.DEFAULT): SpeakerScore? {
         val template = (ensureTemplate(context, spec) as? TemplateResult.Ready)?.template ?: return null
         val speech = SpeakerMath.trimToSpeech(pcm)
-        val windows = SpeakerMath.windows(speech, spec.windowSamples)
+        val windows = SpeakerGatePolicy.spread(SpeakerMath.windows(speech, spec.windowSamples, minSamples = SpeakerGatePolicy.MIN_SCORED_SAMPLES))
         if (windows.isEmpty()) return null
         val started = System.nanoTime()
         val scores = withEmbedder(context, spec) { model ->
@@ -113,23 +135,62 @@ object VoiceProfile {
     }
 
     /**
-     * Observation only: scores a question recording and appends numbers to the private
-     * calibration log. Never changes whether or how the question is answered.
+     * "Answer only my voice" for one recorded question (16 kHz PCM16). Call only while
+     * [filterActive]. Logs numbers only and appends them to the private calibration log.
      */
-    suspend fun observe(context: Context, pcm: ShortArray, flow: String): SpeakerScore? {
-        if (!isEnrolled(context)) return null
-        val result = runCatching { score(context, pcm) }
-            .onFailure { Log.w(TAG, "Speaker observation failed: ${it.javaClass.simpleName}") }
-            .getOrNull() ?: return null
-        val wouldAccept = result.score >= PROVISIONAL_THRESHOLD
+    suspend fun check(context: Context, pcm: ShortArray, flow: String, spec: SpeakerModelSpec = SpeakerModels.DEFAULT): SpeakerCheck {
+        val result = try {
+            when {
+                withContext(Dispatchers.IO) { SpeakerModelStore.resolve(context, spec) } == null ->
+                    SpeakerCheck(true, "model_missing")
+                SpeakerMath.voicedMs(pcm) < SpeakerGatePolicy.MIN_SPEECH_MS -> SpeakerCheck(true, "too_short")
+                else -> when (val template = ensureTemplate(context, spec)) {
+                    is TemplateResult.Ready -> {
+                        val score = score(context, pcm, spec)
+                        if (score == null) {
+                            SpeakerCheck(true, "too_short")
+                        } else {
+                            val verdict = SpeakerGatePolicy.verdict(spec, score.score)
+                            SpeakerCheck(verdict != SpeakerVerdict.NOT_WEARER, verdict.name.lowercase(), score)
+                        }
+                    }
+                    is TemplateResult.ModelMissing -> SpeakerCheck(true, "model_missing")
+                    TemplateResult.NotEnrolled -> SpeakerCheck(true, "not_enrolled")
+                    is TemplateResult.Failed -> SpeakerCheck(true, "template_failed")
+                }
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "Speaker check failed: ${error.javaClass.simpleName}")
+            SpeakerCheck(true, "error")
+        }
+        val s = result.score
         Log.i(
             TAG,
-            "SPEAKER_OBSERVE flow=$flow model=${result.modelId} score=${fmt(result.score)} " +
-                "max=${fmt(result.maxWindow)} windows=${result.windows} speechMs=${result.speechMs} " +
-                "elapsedMs=${result.elapsedMs} provisionalAccept=$wouldAccept",
+            "SPEAKER_GATE flow=$flow model=${spec.id} answer=${result.answer} reason=${result.reason} " +
+                "score=${s?.let { fmt(it.score) }} max=${s?.let { fmt(it.maxWindow) }} windows=${s?.windows} " +
+                "speechMs=${s?.speechMs ?: SpeakerMath.voicedMs(pcm)} elapsedMs=${s?.elapsedMs} " +
+                "blockBelow=${fmt(spec.blockBelow)} wearerAt=${fmt(spec.wearerAt)}",
         )
-        appendObservation(store(context).observationLog(), flow, result)
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.QUESTION, "speaker check",
+            buildMap {
+                put("flow", flow)
+                put("answer", result.answer.toString())
+                put("reason", result.reason)
+                s?.let { put("score", fmt(it.score)); put("windows", it.windows.toString()); put("ms", it.elapsedMs.toString()) }
+            },
+        )
+        if (s != null) withContext(Dispatchers.IO) { appendObservation(store(context).observationLog(), flow, s, result.reason) }
         return result
+    }
+
+    /** Loads the model and template ahead of a question, so the check after it only embeds. */
+    suspend fun prewarm(context: Context, spec: SpeakerModelSpec = SpeakerModels.DEFAULT) {
+        runCatching {
+            if (ensureTemplate(context, spec) is TemplateResult.Ready) withEmbedder(context, spec) { }
+        }.onFailure { Log.w(TAG, "Speaker prewarm failed: ${it.javaClass.simpleName}") }
     }
 
     /** Releases the cached interpreter (for example on low memory). */
@@ -151,16 +212,16 @@ object VoiceProfile {
             }
         }
 
-    private fun appendObservation(log: File, flow: String, score: SpeakerScore) {
+    private fun appendObservation(log: File, flow: String, score: SpeakerScore, verdict: String) {
         runCatching {
             log.parentFile?.mkdirs()
-            val lines = if (log.isFile) log.readLines().takeLast(OBSERVATION_LOG_LIMIT - 1) else emptyList()
-            val header = "timeMs,flow,model,score,max,windows,speechMs"
+            val header = "timeMs,flow,model,score,max,windows,speechMs,verdict"
+            val lines = if (log.isFile) log.readLines().filter { !it.startsWith("timeMs,") }.takeLast(OBSERVATION_LOG_LIMIT - 1) else emptyList()
             val row = listOf(
                 System.currentTimeMillis(), flow, score.modelId, fmt(score.score), fmt(score.maxWindow),
-                score.windows, score.speechMs,
+                score.windows, score.speechMs, verdict,
             ).joinToString(",")
-            log.writeText((listOf(header) + lines.filter { it != header } + row).joinToString("\n", postfix = "\n"))
+            log.writeText((listOf(header) + lines + row).joinToString("\n", postfix = "\n"))
         }
     }
 

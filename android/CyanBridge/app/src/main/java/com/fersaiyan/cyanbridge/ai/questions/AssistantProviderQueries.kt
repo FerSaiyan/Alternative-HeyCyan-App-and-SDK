@@ -1,6 +1,7 @@
 package com.fersaiyan.cyanbridge.ai.questions
 
 import android.content.Context
+import android.util.Log
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.ai.decision.LocalDecisionEngine
 import com.fersaiyan.cyanbridge.ai.decision.SingleTokenDecisionEngine
@@ -79,6 +80,9 @@ internal class AssistantProviderQueries(
         /** False when the caller reports the outcome itself (spoken decision turns). */
         reportReply: Boolean = true,
     ): String {
+        // Every question's model call passes here; a question the speaker check stopped never does.
+        Log.i("AIHijack", "Provider request provider=$providerType audio=${!audioPath.isNullOrBlank()} images=${imagePaths.size}")
+        GlassesQuestionTestHooks.emit("provider_request", "provider=$providerType audio=${!audioPath.isNullOrBlank()}")
         val date = todayDateString()
         val languageTag = languageTag()
         val spoken = !audioPath.isNullOrBlank()

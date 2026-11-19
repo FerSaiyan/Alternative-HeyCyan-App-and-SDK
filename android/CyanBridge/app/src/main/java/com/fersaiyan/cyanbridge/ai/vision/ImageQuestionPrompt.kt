@@ -84,6 +84,21 @@ object ImageQuestionDefaults {
         else -> "I am listening."
     }
 
+    /** Spoken instead of an answer when "Answer only my voice" heard someone else. */
+    fun notWearerCueForLanguage(languageTag: String): String = when (
+        Locale.forLanguageTag(languageTag).language.lowercase(Locale.ROOT)
+    ) {
+        "pt" -> "Não é a sua voz."
+        "es" -> "No es tu voz."
+        "de" -> "Nicht deine Stimme."
+        "fr" -> "Ce n'est pas votre voix."
+        "it" -> "Non è la tua voce."
+        "zh" -> "不是你的声音。"
+        "ko" -> "사용자 목소리가 아니에요."
+        "ru" -> "Это не ваш голос."
+        else -> "Not your voice."
+    }
+
     fun questionCueForLanguage(languageTag: String): String = when (
         Locale.forLanguageTag(languageTag).language.lowercase(Locale.ROOT)
     ) {

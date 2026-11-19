@@ -8,7 +8,6 @@ import com.fersaiyan.cyanbridge.ai.MicrophoneAccess
 import com.fersaiyan.cyanbridge.ai.image.AudioQuestionRecorder
 import com.fersaiyan.cyanbridge.ai.image.MicrophoneSilencedException
 import com.fersaiyan.cyanbridge.ai.image.GlassesQuestionTestHooks
-import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
 import com.fersaiyan.cyanbridge.ai.speaker.VoiceProfile
 import com.fersaiyan.cyanbridge.ai.transcription.OfflineQuestionTranscriber
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
@@ -25,7 +24,6 @@ import com.fersaiyan.cyanbridge.shared.audio.AudioRoutePreference
 import com.fersaiyan.cyanbridge.shared.audio.AudioRouteWait
 import com.fersaiyan.cyanbridge.shared.audio.AudioSessionRequest
 import com.fersaiyan.cyanbridge.shared.devices.GlassesAudioProfile
-import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
 import com.oudmon.ble.base.bluetooth.DeviceManager
 import kotlinx.coroutines.CancellationException
 import android.os.SystemClock
@@ -34,6 +32,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -97,6 +96,7 @@ internal class QuestionMicrophone(
         /** null: on-device STT only when no model can hear the recording (see processRecordedQuestion). */
         transcribe: Boolean? = null,
     ): CapturedQuestion = mutex.withLock {
+        prewarmSpeakerCheck()
         if (GlassesQuestionTestHooks.questionAudioActive) {
             Log.i("ImageQuestionAudio", "Using test question audio instead of the microphone")
             val fixture = GlassesQuestionTestHooks.takeQuestionAudio(appContext.cacheDir)
@@ -239,10 +239,48 @@ internal class QuestionMicrophone(
         return route
     }
 
-    /** Everything after capture: load cue, speaker observation, on-device transcript or the raw audio. */
-    private suspend fun processRecordedQuestion(recorded: File, voiceOnly: Boolean, transcribe: Boolean? = null): CapturedQuestion {
-        onQuestionRecorded()
-        observeQuestionSpeaker(recorded, flow = if (voiceOnly) "voice" else "image")
+    /**
+     * Everything after capture: load cue, the "Answer only my voice" check, then the on-device
+     * transcript or the raw audio. The check runs next to the transcription; a confident other
+     * voice is not answered: the recording is deleted and the flow speaks [notWearerCue] as an error.
+     */
+    private suspend fun processRecordedQuestion(recorded: File, voiceOnly: Boolean, transcribe: Boolean? = null): CapturedQuestion = coroutineScope {
+        val flow = if (voiceOnly) "voice" else "image"
+        val recordedAt = SystemClock.elapsedRealtime()
+        // Read before transcription, which deletes the file once it has a transcript.
+        val pcm = withContext(Dispatchers.IO) {
+            if (VoiceProfile.filterActive(appContext)) runCatching { readWavPcm16(recorded) }.getOrNull() else null
+        }
+        // The model-load cue follows the check, so another voice hears only "Not your voice".
+        if (pcm == null) onQuestionRecorded()
+        var checkedAt = 0L
+        val speakerCheck = pcm?.let {
+            async(Dispatchers.Default) { VoiceProfile.check(appContext, it, flow).also { checkedAt = SystemClock.elapsedRealtime() } }
+        }
+        var transcribedAt = 0L
+        val transcription = async { transcribeOrKeep(recorded, transcribe).also { transcribedAt = SystemClock.elapsedRealtime() } }
+        val check = speakerCheck?.await()
+        if (check != null && !check.answer) {
+            // Another voice: no transcript, model or provider call. The recording is dropped.
+            transcription.cancel()
+            recorded.delete()
+            Log.i("ImageQuestionAudio", "Speaker check blocked the question +${checkedAt - recordedAt} ms after recording")
+            GlassesQuestionTestHooks.emit("speaker_blocked", "flow=$flow reason=${check.reason}")
+            return@coroutineScope CapturedQuestion(null, heardSpeech = true, error = notWearerCue())
+        }
+        if (check != null) onQuestionRecorded()
+        val captured = transcription.await()
+        if (check != null) {
+            // What the check added to the question: the time it ran past the transcription (if any).
+            Log.i(
+                "ImageQuestionAudio",
+                "Speaker check answer=true checkMs=${checkedAt - recordedAt} addedMs=${(checkedAt - transcribedAt).coerceAtLeast(0)}",
+            )
+        }
+        captured
+    }
+
+    private suspend fun transcribeOrKeep(recorded: File, transcribe: Boolean?): CapturedQuestion {
         // Audio is the default: the model hears the recording directly (faster, works in every
         // language). On-device STT is the fallback for text-only models and non-local routes.
         val useStt = transcribe ?: withContext(Dispatchers.IO) { !audioGoesToModel() }
@@ -263,17 +301,13 @@ internal class QuestionMicrophone(
         }
     }
 
-    /**
-     * Speaker-verification foundation: with an enrolled voice profile and a non-classic routing
-     * mode, score the question against the wearer's template and log the numbers. Never gates.
-     */
-    private suspend fun observeQuestionSpeaker(wav: File, flow: String) {
-        if (QuestionRoutingPrefs.mode(appContext) == QuestionRoutingMode.CLASSIC) return
-        val pcm = withContext(Dispatchers.IO) {
-            if (!VoiceProfile.isEnrolled(appContext)) return@withContext null
-            runCatching { readWavPcm16(wav) }.getOrNull()
-        } ?: return
-        scope().launch(Dispatchers.Default) { VoiceProfile.observe(appContext, pcm, flow) }
+    private fun notWearerCue(): String = ImageQuestionDefaults.notWearerCueForLanguage(ImageQuestionPreferences.get(appContext).appLanguageTag)
+
+    /** Loads the speaker model and template while the question records, when the filter is on. */
+    private fun prewarmSpeakerCheck() {
+        streamScope.launch {
+            if (VoiceProfile.filterActive(appContext)) VoiceProfile.prewarm(appContext)
+        }
     }
 
     /** Reads AudioQuestionRecorder's canonical 44-byte-header PCM16 WAV. */

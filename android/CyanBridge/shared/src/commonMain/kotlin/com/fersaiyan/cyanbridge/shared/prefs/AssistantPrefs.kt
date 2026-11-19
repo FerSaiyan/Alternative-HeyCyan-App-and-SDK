@@ -74,6 +74,8 @@ object AssistantPrefs {
         val mode = optionalString("mode")
         /** A WebSearchEngine name for the `[search]` route; unset means Google. */
         val webSearchEngine = optionalString("web_search_engine")
+        /** "Answer only my voice"; applies only while a voice profile is enrolled. */
+        val answerOnlyMyVoice = boolean("answer_only_my_voice", true)
     }
 
     val files: List<PrefsFile> = listOf(
