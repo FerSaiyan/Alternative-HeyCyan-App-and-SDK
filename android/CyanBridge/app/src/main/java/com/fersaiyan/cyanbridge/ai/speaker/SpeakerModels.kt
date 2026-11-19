@@ -33,11 +33,11 @@ data class SpeakerModelSpec(
 
 object SpeakerModels {
     /**
-     * Base URL the exports are downloaded from (`<base>/<fileName>`). Null until the owner picks
-     * the hosting (docs/AUDIO_SPEAKER_FILTER.md, "Model hosting"); until then a model is installed
-     * by staging the file ([SpeakerModelStore]).
+     * Base URL the exports are downloaded from (`<base>/<fileName>`): the public Hugging Face repo
+     * Fertroll10/cyanbridge-models, pinned to a commit so the bytes always match [SpeakerModelSpec.sha256].
      */
-    private val HOSTING_BASE_URL: String? = null
+    private val HOSTING_BASE_URL: String? =
+        "https://huggingface.co/Fertroll10/cyanbridge-models/resolve/fb76d9fdb058db0633794c25ab240112d2fb8456"
 
     private fun hosted(fileName: String): String? = HOSTING_BASE_URL?.let { "${it.trimEnd('/')}/$fileName" }
 
@@ -75,8 +75,11 @@ object SpeakerModels {
 
     val all = listOf(ECAPA, WESPEAKER_INT8)
 
-    /** ECAPA by request; WeSpeaker int8 is the measured upgrade (smaller and more accurate). */
-    val DEFAULT = ECAPA
+    /**
+     * WeSpeaker int8 (owner, 2026-11-19): blocks more other voices than ECAPA and is 7x smaller.
+     * Templates are per model, so an existing enrollment is re-embedded from its stored phrases.
+     */
+    val DEFAULT = WESPEAKER_INT8
 
     fun findById(id: String?): SpeakerModelSpec? = all.firstOrNull { it.id == id }
 }

@@ -21,6 +21,11 @@ Owner request 2026-11-19. Worktree `cyan-refactor-wt/voice-filter` from origin/c
   → B answered; Smart route blocks before the decision model. Check 300–750 ms per question on the emulator,
   0 ms added under STT, ~430 ms added when the model hears the audio. `VoiceFilterQuestionTest` (HIL, needs
   `-e vf_model`). Evidence `/mnt/seagate/ML/cyan-refactor-wt/voice-filter-evidence-20261119/INDEX.md`.
+- **Owner decisions (later 2026-11-19):**
+  - **Default model:** WeSpeaker int8 (`SpeakerModels.DEFAULT`). Existing enrollments are re-embedded from the stored phrases.
+  - **Hosting:** the public HF repo `Fertroll10/cyanbridge-models`, pinned to commit `fb76d9fd`. It holds both exports plus an attribution README, and anonymous download and SHA-256 were verified.
+  - **Emulator:** opening the enrollment screen downloaded WeSpeaker from that repo in about 6 s, with a matching SHA-256 (evidence `hf_download_check/`).
+  - **Gemini Live:** stays ungated for now.
 
 ## 2026-11-17 — EyeVue and TuneBuds firmware updates from the dashboard (`cyan-refactor-family-ota`)
 

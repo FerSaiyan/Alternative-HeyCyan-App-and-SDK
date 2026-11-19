@@ -730,8 +730,9 @@ Spoken questions are now gated on the wearer's voice. Code: `ai/speaker/` (thres
 - Model download: `SpeakerModelStore.download` / `SpeakerModelDownloads` fetch
   `SpeakerModelSpec.sourceUrl` with size and SHA-256 checks (`.part` file, atomic rename) when the
   enrollment screen opens; Settings offers "Download voice model" while enrolled and missing.
-  `SpeakerModels.HOSTING_BASE_URL` is **null until the owner chooses hosting**, so today the model
-  is installed by staging the file (see `SpeakerModelStore`).
+  `SpeakerModels.HOSTING_BASE_URL` points at the public repo
+  [Fertroll10/cyanbridge-models](https://huggingface.co/Fertroll10/cyanbridge-models), pinned to
+  commit `fb76d9fd` (both files verified by anonymous download + SHA-256 on 2026-11-19).
 
 **Thresholds (fitted 2026-11-19).** LibriSpeech test-clean (openslr/librispeech_asr @ `71cacbfb`,
 40 speakers), app protocol exactly (trim, 2 s windows with 1 s hop, at most 3 windows, mean
@@ -744,8 +745,8 @@ speakers accepted at most 0.1 % (clean).
 
 | Model | blockBelow | wearerAt | Other voices blocked (clean / narrowband / babble 10 dB) | Wearer falsely blocked (clean / narrowband / babble 10 / babble 5 / pink 5) |
 |---|---:|---:|---|---|
-| ECAPA (default) | 0.13 | 0.38 | 75.7 % / 71.8 % / 81.8 % | 0.00 / 0.11 / 2.34 / 6.96 / 2.20 % |
-| WeSpeaker int8 | 0.21 | 0.44 | 90.7 % / 92.8 % / 91.6 % | 0.32 / 0.54 / 1.93 / 5.04 / 4.80 % |
+| ECAPA | 0.13 | 0.38 | 75.7 % / 71.8 % / 81.8 % | 0.00 / 0.11 / 2.34 / 6.96 / 2.20 % |
+| WeSpeaker int8 (default) | 0.21 | 0.44 | 90.7 % / 92.8 % / 91.6 % | 0.32 / 0.54 / 1.93 / 5.04 / 4.80 % |
 
 Per-length and per-condition percentiles: evidence `calibration/librispeech_summary.txt`. Other
 voices that are not blocked are answered as `uncertain` (fail open), so the filter is a
@@ -753,7 +754,7 @@ convenience against bystanders, not a security boundary. Synthetic TTS voices ar
 ECAPA: kokoro-af_heart against a piper-lessac profile scores 0.19 (answered as uncertain) while
 WeSpeaker gives it -0.07.
 
-**Recommendation (not applied; the owner chose ECAPA).** Make WeSpeaker int8 the default: it blocks
+**Default: WeSpeaker int8 (owner, 2026-11-19).** It blocks
 91 % of other voices instead of 76 % at a similar wearer risk, is 11.6 MB instead of 84 MB, and
 scores 2 s in 41 ms on host CPU against 91 ms. Switching re-embeds the stored phrases; nobody has
 to enroll again.
@@ -767,8 +768,7 @@ transcript, adding 0 ms; when the model hears the audio (Smart) it adds the full
 410–450 ms per question. A blocked question is announced about 0.4–0.7 s after recording.
 Evidence: `/mnt/seagate/ML/cyan-refactor-wt/voice-filter-evidence-20261119/INDEX.md`.
 
-**Model hosting (owner decision).** Recommended: a public Hugging Face model repo pinned by
-commit (same pattern as the Walking Aid models), with the attribution README; files, SHA256SUMS
-and the exact upload command are in the evidence `hosting/`. A private repo does not work (the
-app downloads without a token). Licences allow it: ECAPA Apache-2.0; WeSpeaker CC BY 4.0 with
+**Model hosting (owner, 2026-11-19).** Public Hugging Face repo `Fertroll10/cyanbridge-models`,
+pinned by commit, with the attribution README (source files and SHA256SUMS in the evidence
+`hosting/`). A private repo would not work (the app downloads without a token). Licences allow it: ECAPA Apache-2.0; WeSpeaker CC BY 4.0 with
 attribution (README and `THIRD_PARTY_NOTICES.md`).
