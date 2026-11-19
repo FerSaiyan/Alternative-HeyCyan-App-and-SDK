@@ -28,12 +28,7 @@ kotlin {
     // Apple targets are opt-in so the Android/Linux build remains usable while
     // the framework is compiled and linked from Xcode on macOS.
     if (enableAppleTargets) {
-        iosX64 {
-            binaries.framework {
-                baseName = "CyanBridgeShared"
-                isStatic = false
-            }
-        }
+        // No iosX64 (Intel simulator): Compose Multiplatform 1.13 stopped publishing it.
         iosArm64 {
             binaries.framework {
                 baseName = "CyanBridgeShared"
@@ -58,12 +53,14 @@ kotlin {
             implementation(libs.kotlinx.atomicfu)
             // api: the shared AI clients expose JsonObject (relay capabilities, model replies).
             api(libs.kotlinx.serialization.json)
-            implementation(compose.runtime)
-            implementation(compose.foundation)
-            implementation(compose.material3)
-            implementation(compose.ui)
-            implementation(compose.materialIconsExtended)
-            implementation(compose.components.resources)
+            // Explicit coordinates: the plugin's compose.* accessors are deprecated, and material3 is
+            // versioned separately from the plugin since 1.9.
+            implementation(libs.jetbrains.compose.runtime)
+            implementation(libs.jetbrains.compose.foundation)
+            implementation(libs.jetbrains.compose.material3)
+            implementation(libs.jetbrains.compose.ui)
+            implementation(libs.jetbrains.compose.material.icons.extended)
+            implementation(libs.jetbrains.compose.components.resources)
             // The app database (Room KMP). Android keeps the framework SQLite through Room's
             // open helper; other targets use the bundled SQLite driver.
             api(libs.androidx.room.runtime)
@@ -96,7 +93,6 @@ dependencies {
     add("kspAndroid", libs.androidx.room.compiler)
     add("kspPortability", libs.androidx.room.compiler)
     if (enableAppleTargets) {
-        add("kspIosX64", libs.androidx.room.compiler)
         add("kspIosArm64", libs.androidx.room.compiler)
         add("kspIosSimulatorArm64", libs.androidx.room.compiler)
     }
@@ -111,7 +107,6 @@ tasks.register("iosCompileCheck") {
         dependsOn(
             "compileKotlinIosSimulatorArm64",
             "compileKotlinIosArm64",
-            "compileKotlinIosX64",
             "compileTestKotlinIosSimulatorArm64",
         )
     } else {

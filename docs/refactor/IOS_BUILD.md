@@ -10,7 +10,7 @@ Kotlin 2.3 cross-compiles Apple klibs on Linux. From `android/CyanBridge`:
 flock /tmp/cyan-refactor-gradle.lock ./gradlew -PenableAppleTargets=true :shared:iosCompileCheck
 ```
 
-`iosCompileCheck` runs Room's KSP and compiles `iosSimulatorArm64`, `iosArm64` and `iosX64` main sources, plus the common tests for `iosSimulatorArm64`. The first run downloads the Kotlin/Native toolchain to `~/.konan`. After that it takes a few minutes. Run it next to the Android verify whenever `commonMain` or `iosMain` changes.
+`iosCompileCheck` runs Room's KSP and compiles `iosSimulatorArm64` and `iosArm64` main sources, plus the common tests for `iosSimulatorArm64`. The first run downloads the Kotlin/Native toolchain to `~/.konan`. After that it takes a few minutes. Run it next to the Android verify whenever `commonMain` or `iosMain` changes. There is no `iosX64` (Intel simulator) target: Compose Multiplatform 1.13 no longer publishes it.
 
 It does not link. Linking the framework (`linkDebugFrameworkIosSimulatorArm64`), the Xcode build and the Swift host still need macOS: CI, or a Mac with `./gradlew -PenableAppleTargets=true :shared:linkDebugFrameworkIosSimulatorArm64`.
 
