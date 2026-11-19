@@ -3,12 +3,15 @@ package com.fersaiyan.cyanbridge.shared.ui.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -28,15 +31,25 @@ private val DarkSurface = Color(0xFF151A1D)
 private val DarkOnSurface = Color(0xFFE1E3E4)
 private val DarkOnSurfaceVariant = Color(0xFFC1C7C9)
 
+/** Light on-container text for the high-contrast scheme (tone 10). */
+private val HighContrastOnLightContainer = Color(0xFF001F24)
+
+/**
+ * The CyanBridge corner scale. It keeps the app's rounder-than-baseline corners and adds the
+ * Material 3 Expressive sizes (large increased, extra large increased, extra extra large).
+ */
 val CyanBridgeShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(12.dp),
     medium = RoundedCornerShape(16.dp),
     large = RoundedCornerShape(24.dp),
     extraLarge = RoundedCornerShape(32.dp),
+    largeIncreased = RoundedCornerShape(28.dp),
+    extraLargeIncreased = RoundedCornerShape(36.dp),
+    extraExtraLarge = RoundedCornerShape(48.dp),
 )
 
-val CyanBridgeTypography = Typography(
+private val BaseTypography = Typography(
     displayLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 57.sp, lineHeight = 64.sp),
     displayMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 45.sp, lineHeight = 52.sp),
     displaySmall = TextStyle(fontWeight = FontWeight.Normal, fontSize = 36.sp, lineHeight = 44.sp),
@@ -54,13 +67,68 @@ val CyanBridgeTypography = Typography(
     labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 16.sp),
 )
 
+private fun TextStyle.emphasized(): TextStyle = copy(
+    fontWeight = when (fontWeight) {
+        FontWeight.Normal -> FontWeight.Medium
+        FontWeight.Medium -> FontWeight.SemiBold
+        else -> FontWeight.Bold
+    },
+)
+
+/**
+ * The CyanBridge type scale plus the Material 3 Expressive emphasized styles, which components
+ * such as the flexible app bars and button groups use for selected or hero text. Emphasized
+ * styles keep the size and line height and only add weight, so large-font layouts do not shift.
+ */
+val CyanBridgeTypography = BaseTypography.copy(
+    displayLargeEmphasized = BaseTypography.displayLarge.emphasized(),
+    displayMediumEmphasized = BaseTypography.displayMedium.emphasized(),
+    displaySmallEmphasized = BaseTypography.displaySmall.emphasized(),
+    headlineLargeEmphasized = BaseTypography.headlineLarge.emphasized(),
+    headlineMediumEmphasized = BaseTypography.headlineMedium.emphasized(),
+    headlineSmallEmphasized = BaseTypography.headlineSmall.emphasized(),
+    titleLargeEmphasized = BaseTypography.titleLarge.emphasized(),
+    titleMediumEmphasized = BaseTypography.titleMedium.emphasized(),
+    titleSmallEmphasized = BaseTypography.titleSmall.emphasized(),
+    bodyLargeEmphasized = BaseTypography.bodyLarge.emphasized(),
+    bodyMediumEmphasized = BaseTypography.bodyMedium.emphasized(),
+    bodySmallEmphasized = BaseTypography.bodySmall.emphasized(),
+    labelLargeEmphasized = BaseTypography.labelLarge.emphasized(),
+    labelMediumEmphasized = BaseTypography.labelMedium.emphasized(),
+    labelSmallEmphasized = BaseTypography.labelSmall.emphasized(),
+)
+
+/**
+ * Expressive (spring, slight overshoot) motion unless the platform asks for reduced motion
+ * (Android "Remove animations" / animator scale 0, iOS Reduce Motion): then the standard scheme,
+ * which has no bounce.
+ */
+fun cyanBridgeMotionScheme(reduceMotion: Boolean): MotionScheme =
+    if (reduceMotion) MotionScheme.standard() else MotionScheme.expressive()
+
+/** Whether the platform's reduced-motion accessibility setting is on. */
+@Composable
+internal expect fun rememberSystemReducedMotion(): Boolean
+
+/**
+ * True when the platform asks for reduced motion. Components with decorative motion beyond the
+ * motion scheme (for example the button-group press expansion) read it to stay still.
+ */
+val LocalReducedMotion = staticCompositionLocalOf { false }
+
 fun resolveDarkTheme(settings: AppearanceSettings, systemInDarkTheme: Boolean): Boolean = when (settings.themeMode) {
     ThemeMode.SYSTEM -> systemInDarkTheme
     ThemeMode.LIGHT -> false
     ThemeMode.DARK -> true
 }
 
-/** Builds the curated scheme shared by Android, iOS, and every shared screen. */
+/**
+ * Builds the curated scheme shared by Android, iOS, and every shared screen.
+ *
+ * Light schemes follow the Material 3 Expressive color roles: text and icons on the primary,
+ * secondary and tertiary containers use the accent's tone 30 (the same tone as its dark-theme
+ * container) instead of near-black, which keeps at least 7:1 contrast on every accent profile.
+ */
 fun cyanBridgeColorScheme(
     profile: AccentProfile,
     darkTheme: Boolean,
@@ -103,15 +171,23 @@ fun cyanBridgeColorScheme(
             primary = Color(profile.lightPrimaryArgb),
             onPrimary = Color.White,
             primaryContainer = Color(profile.lightContainerArgb),
-            onPrimaryContainer = Color(0xFF001F24),
+            onPrimaryContainer = if (highContrast) HighContrastOnLightContainer else Color(profile.darkContainerArgb),
             secondary = Color(profile.lightSecondaryArgb),
             onSecondary = Color.White,
             secondaryContainer = Color(profile.lightSecondaryContainerArgb),
-            onSecondaryContainer = Color(0xFF001F24),
+            onSecondaryContainer = if (highContrast) {
+                HighContrastOnLightContainer
+            } else {
+                Color(profile.darkSecondaryContainerArgb)
+            },
             tertiary = Color(profile.lightTertiaryArgb),
             onTertiary = Color.White,
             tertiaryContainer = Color(profile.lightTertiaryContainerArgb),
-            onTertiaryContainer = Color(0xFF001F24),
+            onTertiaryContainer = if (highContrast) {
+                HighContrastOnLightContainer
+            } else {
+                Color(profile.darkTertiaryContainerArgb)
+            },
             background = LightBackground,
             onBackground = LightOnSurface,
             surface = LightSurface,
@@ -172,6 +248,29 @@ fun highContrastColorScheme(scheme: ColorScheme, darkTheme: Boolean): ColorSchem
     )
 }
 
+/**
+ * The one Material 3 Expressive theme for every CyanBridge screen, on Android and iOS: the given
+ * color scheme with the CyanBridge shapes and type scale, and expressive motion unless the
+ * platform asks for reduced motion. Android's `CyanBridgeTheme` picks the scheme (dynamic color,
+ * high contrast) and delegates here, so shared screens look the same on both platforms.
+ */
+@Composable
+fun CyanBridgeExpressiveTheme(
+    colorScheme: ColorScheme,
+    content: @Composable () -> Unit,
+) {
+    val reduceMotion = rememberSystemReducedMotion()
+    CompositionLocalProvider(LocalReducedMotion provides reduceMotion) {
+        MaterialExpressiveTheme(
+            colorScheme = colorScheme,
+            motionScheme = cyanBridgeMotionScheme(reduceMotion),
+            shapes = CyanBridgeShapes,
+            typography = CyanBridgeTypography,
+            content = content,
+        )
+    }
+}
+
 /** Theme wrapper for shared and iOS Compose content, where dynamic color is unavailable. */
 @Composable
 fun CyanBridgeMaterialTheme(
@@ -179,14 +278,12 @@ fun CyanBridgeMaterialTheme(
     content: @Composable () -> Unit,
 ) {
     val darkTheme = resolveDarkTheme(settings, isSystemInDarkTheme())
-    MaterialTheme(
+    CyanBridgeExpressiveTheme(
         colorScheme = cyanBridgeColorScheme(
             profile = AccentProfiles.find(settings.accentProfileId),
             darkTheme = darkTheme,
             highContrast = settings.highContrast,
         ),
-        typography = CyanBridgeTypography,
-        shapes = CyanBridgeShapes,
         content = content,
     )
 }
