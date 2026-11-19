@@ -128,7 +128,10 @@ compose.resources {
 
 android {
     namespace = "com.fersaiyan.cyanbridge.shared"
-    compileSdk = 35
+    // Compose 1.13 / Material 3 1.5 libraries require compile SDK 37.1.
+    compileSdk {
+        version = release(37) { minorApiLevel = 1 }
+    }
 
     defaultConfig {
         minSdk = 24

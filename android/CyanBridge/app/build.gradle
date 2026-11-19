@@ -105,7 +105,10 @@ def metaDatZeroAppId = providers.gradleProperty("metaDatZeroAppId").map { it != 
 
 android {
     namespace = "com.fersaiyan.cyanbridge"
-    compileSdk = 36
+    // Compose 1.13 / Material 3 1.5 libraries require compile SDK 37.1. targetSdk stays 36.
+    compileSdk {
+        version = release(37) { minorApiLevel = 1 }
+    }
 
     defaultConfig {
         applicationId = "com.fersaiyan.cyanbridge"
