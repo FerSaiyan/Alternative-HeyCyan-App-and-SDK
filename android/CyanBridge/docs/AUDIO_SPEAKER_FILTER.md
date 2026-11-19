@@ -695,3 +695,80 @@ is superseded. Runtime, packaging and the single-QAIRT (2.50) decision are in
 That is about 18× faster at the same accuracy, so speaker filtering can run on every
 2 s window without loading the CPU. Memory (`dumpsys meminfo`) is not measured yet.
 
+
+## Answer only my voice (2026-11-19)
+
+Spoken questions are now gated on the wearer's voice. Code: `ai/speaker/` (thresholds in
+`SpeakerModels.kt`, the check in `VoiceProfile.check`), `ai/questions/QuestionMicrophone.kt`
+(where every recorded question passes), Settings switch in the shared `SettingsScreen`.
+
+**Behaviour.**
+- "Answer only my voice" (`question_routing/answer_only_my_voice`, default on) applies only while a
+  profile is enrolled; a new enrollment turns it on, Settings turns it off, deleting the profile
+  removes every check.
+- Every recorded question (wake word or AI button, Classic and Smart routing, the photo button's
+  spoken question, follow-ups) is scored after recording, next to on-device transcription. A
+  **confident other voice** (score below `blockBelow`) is not answered: the recording is deleted,
+  no transcript, model or provider call is made, and the wearer hears the short spoken
+  "Not your voice." (9 languages, `ImageQuestionDefaults.notWearerCueForLanguage`). A follow-up in
+  a Smart conversation just ends (as when nobody spoke); a photo follow-up speaks the notice.
+  A spoken notice was chosen over an earcon: blind users already hear the app's errors spoken,
+  and a new tone would have to be learned. It plays only when the wearer started the question.
+- **Fails open** (answered, reason in the log) when the model is not installed, there is less than
+  500 ms of voiced speech or under 0.8 s trimmed (`too_short`), the template cannot be built, an
+  error occurs, or the score is between `blockBelow` and `wearerAt` (`uncertain`).
+- Logs are numbers only: `SPEAKER_GATE flow= model= answer= reason= score= max= windows= speechMs=
+  elapsedMs=` plus a `QUESTION` diagnostic event. Each scored question appends
+  `timeMs,flow,model,score,max,windows,speechMs,verdict` to the private calibration log
+  `noBackupFilesDir/voiceprint/observations.csv` (last 500 rows, deleted with the profile), so the
+  thresholds can be refit on the real glasses microphone.
+- **Gemini Live is not gated.** Live streams microphone audio to the provider while the user
+  speaks and relies on the server's turn detection, so audio has already left the phone before a
+  2 s window could be scored; gating whole turns would mean buffering every turn locally and
+  giving up Live's barge-in and latency. Questions that hand off to Live are therefore answered
+  as before; Live's own UI says the microphone is active.
+- Model download: `SpeakerModelStore.download` / `SpeakerModelDownloads` fetch
+  `SpeakerModelSpec.sourceUrl` with size and SHA-256 checks (`.part` file, atomic rename) when the
+  enrollment screen opens; Settings offers "Download voice model" while enrolled and missing.
+  `SpeakerModels.HOSTING_BASE_URL` is **null until the owner chooses hosting**, so today the model
+  is installed by staging the file (see `SpeakerModelStore`).
+
+**Thresholds (fitted 2026-11-19).** LibriSpeech test-clean (openslr/librispeech_asr @ `71cacbfb`,
+40 speakers), app protocol exactly (trim, 2 s windows with 1 s hop, at most 3 windows, mean
+cosine), 3 enrollment phrases of 3.5 s, probes of 0.8/1.2/2/3/5 s in six conditions (clean;
+3-talker babble 10 and 5 dB; pink noise 5 dB; 8 kHz narrowband, as on a Bluetooth HFP link;
+-15 dB quiet). 1,000 target and 39,000 other-speaker probe scores per condition and model.
+Rule: `blockBelow` = largest value with the wearer falsely blocked at most 1 % in clean,
+narrowband, quiet and 10 dB babble and at most 5 % in 5 dB babble/noise; `wearerAt` = other
+speakers accepted at most 0.1 % (clean).
+
+| Model | blockBelow | wearerAt | Other voices blocked (clean / narrowband / babble 10 dB) | Wearer falsely blocked (clean / narrowband / babble 10 / babble 5 / pink 5) |
+|---|---:|---:|---|---|
+| ECAPA (default) | 0.13 | 0.38 | 75.7 % / 71.8 % / 81.8 % | 0.00 / 0.11 / 2.34 / 6.96 / 2.20 % |
+| WeSpeaker int8 | 0.21 | 0.44 | 90.7 % / 92.8 % / 91.6 % | 0.32 / 0.54 / 1.93 / 5.04 / 4.80 % |
+
+Per-length and per-condition percentiles: evidence `calibration/librispeech_summary.txt`. Other
+voices that are not blocked are answered as `uncertain` (fail open), so the filter is a
+convenience against bystanders, not a security boundary. Synthetic TTS voices are harder for
+ECAPA: kokoro-af_heart against a piper-lessac profile scores 0.19 (answered as uncertain) while
+WeSpeaker gives it -0.07.
+
+**Recommendation (not applied; the owner chose ECAPA).** Make WeSpeaker int8 the default: it blocks
+91 % of other voices instead of 76 % at a similar wearer risk, is 11.6 MB instead of 84 MB, and
+scores 2 s in 41 ms on host CPU against 91 ms. Switching re-embeds the stored phrases; nobody has
+to enroll again.
+
+**Emulator end to end (read-only Pixel_9a :5584).** Speech reached the app's microphone through
+the emulator's gRPC `injectAudio` (`-grpc 8584`, real-time delivery); LibriSpeech speakers 2961 (A)
+and 4507 (B). Emulator-mic scores matched host scores of the same clips within 0.06 (A 0.65–0.71,
+B 0.04–0.05 and 0.16, noisy A 0.28). Per question the check took 300–750 ms after recording on the
+emulator CPU (1–3 windows). With on-device transcription (Classic) it finished well before the
+transcript, adding 0 ms; when the model hears the audio (Smart) it adds the full check, about
+410–450 ms per question. A blocked question is announced about 0.4–0.7 s after recording.
+Evidence: `/mnt/seagate/ML/cyan-refactor-wt/voice-filter-evidence-20261119/INDEX.md`.
+
+**Model hosting (owner decision).** Recommended: a public Hugging Face model repo pinned by
+commit (same pattern as the Walking Aid models), with the attribution README; files, SHA256SUMS
+and the exact upload command are in the evidence `hosting/`. A private repo does not work (the
+app downloads without a token). Licences allow it: ECAPA Apache-2.0; WeSpeaker CC BY 4.0 with
+attribution (README and `THIRD_PARTY_NOTICES.md`).

@@ -1,5 +1,27 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-19 — Voice onboarding wording + "Answer only my voice" (`voice-profile-filter`)
+
+Owner request 2026-11-19. Worktree `cyan-refactor-wt/voice-filter` from origin/cyan-refactor 413c256b.
+- **Enrollment screen:** copy rewritten in 9 locales ("Say three short phrases so CyanBridge answers only your
+  voice." / "Your voice profile is biometric data. It stays on this phone, and you can delete it in Settings.").
+  The consent switch and the "Turn on … above" hint are gone: the record button reads "Agree and record" until the
+  first take, which is the consent. Phrase card before the notice, decorative shape hidden at large fonts or short
+  screens, take results announced (live region) under the phrase, 48 dp phrase pills with labels.
+- **Filtering:** `VoiceProfile.check` in `QuestionMicrophone` scores every recorded question next to on-device STT;
+  below `blockBelow` the recording is dropped, no STT/model/provider call, "Not your voice." is spoken; model
+  missing / too short / uncertain fail open. Settings "Answer only my voice" (on after enrollment, hidden when not
+  enrolled). Thresholds per model in `SpeakerModels.kt`, fitted on LibriSpeech test-clean (40 speakers, 6
+  conditions): ECAPA 0.13/0.38 blocks 76 % of others, WeSpeaker int8 0.21/0.44 blocks 91 % (recommended default,
+  not switched). Gemini Live stays ungated (streams audio before a window can be scored).
+- **Model download:** `SpeakerModelStore.download` with size + SHA-256; `HOSTING_BASE_URL` null until hosting is
+  chosen (artifact + `hf upload` command prepared, nothing published).
+- **Emulator E2E** (read-only Pixel_9a :5584, gRPC `injectAudio` into the mic, stub provider + local Gemma):
+  enroll A → A answered → B blocked with 0 provider requests → short/noisy fail open → switch off / profile deleted
+  → B answered; Smart route blocks before the decision model. Check 300–750 ms per question on the emulator,
+  0 ms added under STT, ~430 ms added when the model hears the audio. `VoiceFilterQuestionTest` (HIL, needs
+  `-e vf_model`). Evidence `/mnt/seagate/ML/cyan-refactor-wt/voice-filter-evidence-20261119/INDEX.md`.
+
 ## 2026-11-17 — EyeVue and TuneBuds firmware updates from the dashboard (`cyan-refactor-family-ota`)
 
 Owner request 2026-11-17. Worktree `cyan-refactor-wt/family-ota` from origin/cyan-refactor b7f1ce1d.

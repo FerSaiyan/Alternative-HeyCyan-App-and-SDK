@@ -19,6 +19,8 @@ upstream license texts.
 | MentraOS miniapp runtime pieces | `android/CyanBridge/app/src/main/assets/mentra/startup.js` (verbatim polyfill, `mobile/modules/jspolyfill/assets/startup.js`) and `ui-shim.js` (ported from `mobile/modules/engine/src/services/mentraUiShim.ts`), MentraOS commit f500314 | Apache-2.0, Copyright Mentra Labs. The license text ships as `assets/mentra/LICENSE-startup.txt`. | [Mentra-Community/MentraOS](https://github.com/Mentra-Community/MentraOS) |
 | quickjs-kt (QuickJS for Android) | Android dependency `io.github.dokar3:quickjs-kt-android:1.0.3` | Apache-2.0; QuickJS itself is MIT. | [dokar3/quickjs-kt](https://github.com/dokar3/quickjs-kt) |
 | Mentra miniapps installed by users | Downloaded at runtime into app storage | Each miniapp keeps its publisher's license and terms. | Miniapp-specific |
+| SpeechBrain ECAPA-TDNN speaker model (`speechbrain/spkrec-ecapa-voxceleb`, LiteRT export) | Downloaded or staged at runtime for "Answer only my voice" (`ai/speaker/SpeakerModels.kt`) | Apache-2.0, Copyright SpeechBrain authors. Converted to LiteRT; weights unchanged. | [speechbrain/spkrec-ecapa-voxceleb](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb) |
+| WeSpeaker ResNet34-LM speaker model (`Wespeaker/wespeaker-voxceleb-resnet34-LM`, LiteRT export) | Same | CC BY 4.0, WeNet community (WeSpeaker). Modified: converted to LiteRT with the filterbank in the graph; ResNet weights int8. | [Wespeaker/wespeaker-voxceleb-resnet34-LM](https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM) |
 | Downloadable AI models | Downloaded or imported through CyanBridge model features | Each model keeps its upstream model license. A model download is not relicensed as Apache-2.0. | Model-specific |
 
 ## Referenced projects
