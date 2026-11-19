@@ -112,6 +112,10 @@ data class SettingsUiState(
     val voiceProfileAvailable: Boolean = false,
     val voiceProfileEnrolled: Boolean = false,
     val voiceProfileStatus: String = "",
+    /** "Answer only my voice"; shown only while enrolled. */
+    val voiceFilterEnabled: Boolean = false,
+    /** Size of the speaker model when it can be downloaded now (enrolled, hosted, not installed). */
+    val voiceModelDownloadSize: String? = null,
     val visionAssistanceEnabled: Boolean = false,
     /** HeyCyan Wi-Fi media sync is Android-only; hosts without it leave this false. */
     val mediaSyncFlowAvailable: Boolean = false,
@@ -151,6 +155,8 @@ interface SettingsScreenActions {
     fun setQuestionRoutingMode(mode: QuestionRoutingMode) = Unit
     fun openVoiceEnrollment() = Unit
     fun deleteVoiceProfile() = Unit
+    fun setAnswerOnlyMyVoice(enabled: Boolean) = Unit
+    fun downloadVoiceModel() = Unit
     fun setVisionAssistanceEnabled(enabled: Boolean) = Unit
     fun setMediaSyncFlow(flow: GlassesSyncFlow?) = Unit
 }
@@ -670,6 +676,34 @@ private fun QuestionRoutingContent(state: SettingsUiState, actions: SettingsScre
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+    if (state.voiceProfileEnrolled) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .testTag("settings_voice_filter")
+                .toggleable(
+                    value = state.voiceFilterEnabled,
+                    role = Role.Switch,
+                    onValueChange = actions::setAnswerOnlyMyVoice,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text(stringResource(Res.string.settings_voice_filter), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    stringResource(Res.string.settings_voice_filter_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = state.voiceFilterEnabled, onCheckedChange = null)
+        }
+    }
+    state.voiceModelDownloadSize?.let { size ->
+        ActionButton(stringResource(Res.string.settings_voice_model_download, size), actions::downloadVoiceModel)
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),

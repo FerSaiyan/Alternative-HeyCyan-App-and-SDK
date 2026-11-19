@@ -8,6 +8,7 @@ import com.fersaiyan.cyanbridge.ai.speaker.EnrollmentInfo
 import com.fersaiyan.cyanbridge.ai.speaker.EnrollmentQuality
 import com.fersaiyan.cyanbridge.ai.speaker.PhraseIssue
 import com.fersaiyan.cyanbridge.ai.speaker.SpeakerMath
+import com.fersaiyan.cyanbridge.ai.speaker.SpeakerModelDownloads
 import com.fersaiyan.cyanbridge.ai.speaker.SpeakerModelStore
 import com.fersaiyan.cyanbridge.ai.speaker.SpeakerModels
 import com.fersaiyan.cyanbridge.ai.speaker.VoiceEnrollmentRecorder
@@ -43,18 +44,20 @@ class VoiceEnrollmentViewModel(application: Application) : AndroidViewModel(appl
     init {
         // A previous, abandoned enrollment never leaks into this one.
         store.discardPending()
+        // The model is not personal data; fetching it now usually finishes before the last phrase.
+        SpeakerModelDownloads.start(application)
     }
 
     fun setMicGranted(granted: Boolean) = _state.update { it.copy(micGranted = granted) }
 
-    fun setConsent(given: Boolean) {
-        consentAtMs = if (given) System.currentTimeMillis() else 0L
-        _state.update { it.copy(consentGiven = given) }
-    }
-
+    /** The first tap ("Agree and record", under the biometric notice) is the consent. */
     fun recordCurrentPhrase() {
         val current = _state.value
-        if (!current.consentGiven || !current.micGranted || current.phase != VoiceEnrollmentPhase.READY) return
+        if (!current.micGranted || current.phase != VoiceEnrollmentPhase.READY) return
+        if (!current.consentGiven) {
+            consentAtMs = System.currentTimeMillis()
+            _state.update { it.copy(consentGiven = true) }
+        }
         val index = current.currentIndex
         recordingJob = viewModelScope.launch {
             _state.update { it.copy(phase = VoiceEnrollmentPhase.LISTENING, message = null, errorDetail = null) }
@@ -164,6 +167,8 @@ class VoiceEnrollmentViewModel(application: Application) : AndroidViewModel(appl
                 ),
             )
             if (perPhrase != null) VoiceProfile.saveTemplate(context, spec, perPhrase)
+            // A new profile turns "Answer only my voice" on; Settings can turn it off.
+            VoiceProfile.setAnswerOnlyMyVoice(context, true)
         }
         _state.update {
             it.copy(

@@ -54,6 +54,7 @@ import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
 import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
+import com.fersaiyan.cyanbridge.ai.speaker.SpeakerModelDownloads
 import com.fersaiyan.cyanbridge.ai.speaker.SpeakerModelStore
 import com.fersaiyan.cyanbridge.ai.speaker.SpeakerModels
 import com.fersaiyan.cyanbridge.ai.speaker.VoiceProfile
@@ -238,6 +239,11 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
             voiceProfileAvailable = true,
             voiceProfileEnrolled = VoiceProfile.isEnrolled(this),
             voiceProfileStatus = voiceProfileStatus(),
+            voiceFilterEnabled = VoiceProfile.answerOnlyMyVoice(this),
+            voiceModelDownloadSize = SpeakerModels.DEFAULT.takeIf {
+                VoiceProfile.isEnrolled(this) && SpeakerModelStore.isDownloadable(it) &&
+                    !SpeakerModelStore.isInstalled(this, it) && !SpeakerModelDownloads.isRunning
+            }?.let { android.text.format.Formatter.formatShortFileSize(this, it.sizeBytes) },
             visionAssistanceEnabled = VisionAssistancePreferences.isEnabled(visionAssistancePreferences()),
             mediaSyncFlowAvailable = true,
             mediaSyncFlow = AppPrefs.Main.mediaSyncFlow[this],
@@ -258,16 +264,27 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
         val info = VoiceProfile.store(this).info() ?: return getString(R.string.voice_profile_status_none)
         val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(info.completedAtMs))
         val model = SpeakerModels.DEFAULT
-        val modelLine = if (SpeakerModelStore.isInstalled(this, model) || SpeakerModelStore.stagedFile(this, model)?.isFile == true) {
-            getString(R.string.voice_profile_status_model_ready, model.displayName)
-        } else {
-            getString(R.string.voice_profile_status_model_missing, model.displayName)
+        val modelLine = when {
+            SpeakerModelStore.isInstalled(this, model) || SpeakerModelStore.stagedFile(this, model)?.isFile == true ->
+                getString(R.string.voice_profile_status_model_ready, model.displayName)
+            SpeakerModelDownloads.isRunning -> getString(R.string.voice_profile_status_model_downloading, model.displayName)
+            else -> getString(R.string.voice_profile_status_model_missing, model.displayName)
         }
         return getString(R.string.voice_profile_status_enrolled, date) + "\n" + modelLine
     }
 
     override fun setQuestionRoutingMode(mode: QuestionRoutingMode) {
         QuestionRoutingPrefs.setMode(this, mode)
+        refreshSettingsUi()
+    }
+
+    override fun setAnswerOnlyMyVoice(enabled: Boolean) {
+        VoiceProfile.setAnswerOnlyMyVoice(this, enabled)
+        settingsUiState = settingsUiState.copy(voiceFilterEnabled = enabled)
+    }
+
+    override fun downloadVoiceModel() {
+        SpeakerModelDownloads.start(this) { runOnUiThread { if (!isFinishing) refreshSettingsUi() } }
         refreshSettingsUi()
     }
 

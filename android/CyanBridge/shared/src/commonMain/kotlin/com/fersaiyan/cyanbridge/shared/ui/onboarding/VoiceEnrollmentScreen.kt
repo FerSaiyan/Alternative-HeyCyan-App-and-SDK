@@ -32,8 +32,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -84,7 +88,6 @@ fun VoiceEnrollmentScreen(
     level: Float,
     stepIndex: Int?,
     stepCount: Int?,
-    onConsentChange: (Boolean) -> Unit,
     onRequestMicrophone: () -> Unit,
     onRecord: () -> Unit,
     onCancelRecording: () -> Unit,
@@ -115,56 +118,50 @@ fun VoiceEnrollmentScreen(
                 }
             }
             BoxWithConstraints(Modifier.weight(1f)) {
-            // Small screens or large fonts leave little room above the pinned action: a smaller shape
-            // keeps the consent switch closer to view.
-            val shapeSize = if (maxHeight < 480.dp) 104.dp else 168.dp
+            // Small screens or large fonts leave little room above the pinned action: the decorative
+            // shape goes, and the phrase to say comes before the consent notice so it stays in view.
+            val compact = maxHeight < 520.dp || LocalDensity.current.fontScale > 1.3f
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                VoiceShape(phase = state.phase, level = level, size = shapeSize, modifier = Modifier.padding(top = 8.dp))
-                Spacer(Modifier.height(20.dp))
+                if (!compact) {
+                    VoiceShape(phase = state.phase, level = level, size = 136.dp, modifier = Modifier.padding(top = 8.dp))
+                    Spacer(Modifier.height(16.dp))
+                }
                 Text(stringResource(Res.string.voice_enroll_title), style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
                 Spacer(Modifier.height(8.dp))
                 Text(stringResource(Res.string.voice_enroll_desc), style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(20.dp))
                 if (!done) {
-                    ConsentCard(state.consentGiven, enabled = state.phase == VoiceEnrollmentPhase.READY, onConsentChange)
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(16.dp))
                     PhraseIndicators(state, onSelectPhrase)
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
                     PhraseCard(state)
                 }
+                // A take's result goes right under the phrase, where the eye (and TalkBack) already is.
                 state.message?.let { message ->
                     Spacer(Modifier.height(12.dp))
                     MessageCard(message, state.errorDetail)
+                }
+                if (!done) {
+                    // The consent notice: the record button below reads "Agree and record" until the first take.
+                    Spacer(Modifier.height(16.dp))
+                    Text(stringResource(Res.string.voice_enroll_privacy), style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+                        modifier = Modifier.testTag("voice_enroll_privacy"))
                 }
                 Spacer(Modifier.height(24.dp))
             }
             }
             // The primary action stays pinned above the navigation row instead of scrolling away. Without
-            // microphone access it asks for it; without consent a hint says what is missing.
+            // microphone access it asks for it; its first take is the consent.
             if (!done) {
-                val hint = when {
-                    !state.micGranted -> Res.string.voice_enroll_mic_needed
-                    !state.consentGiven -> Res.string.voice_enroll_consent_needed
-                    else -> null
-                }
-                if (hint != null && state.phase == VoiceEnrollmentPhase.READY) {
-                    Text(
-                        stringResource(hint),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp),
-                    )
-                }
                 RecordButton(
                     phase = state.phase,
                     micGranted = state.micGranted,
-                    enabled = state.consentGiven && state.micGranted,
+                    consentGiven = state.consentGiven,
                     onRequestMicrophone = onRequestMicrophone,
                     onRecord = onRecord,
                     onCancel = onCancelRecording,
@@ -272,32 +269,8 @@ private fun VoiceShape(phase: VoiceEnrollmentPhase, level: Float, size: Dp = 168
     }
 }
 
-@OptIn(ExperimentalResourceApi::class)
-@Composable
-private fun ConsentCard(checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
-    val container by animateColorAsState(
-        if (checked) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-    )
-    Card(
-        Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = container),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(stringResource(Res.string.voice_enroll_privacy), style = MaterialTheme.typography.bodyMedium)
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(MaterialTheme.shapes.medium)
-                    .clickable(enabled = enabled) { onChange(!checked) }.testTag("voice_enroll_consent"),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(stringResource(Res.string.voice_enroll_consent), Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
-            }
-        }
-    }
-}
-
 /** Pills that stretch for the current phrase and fill when a phrase is accepted; tap one to redo it. */
+@OptIn(ExperimentalResourceApi::class)
 @Composable
 private fun PhraseIndicators(state: VoiceEnrollmentUiState, onSelect: (Int) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -312,11 +285,15 @@ private fun PhraseIndicators(state: VoiceEnrollmentUiState, onSelect: (Int) -> U
                     else -> MaterialTheme.colorScheme.outlineVariant
                 },
             )
+            val label = stringResource(Res.string.voice_enroll_phrase_progress, index + 1, state.phraseCount)
             Box(
-                Modifier.height(14.dp).width(width).clip(CircleShape).background(color)
+                Modifier.minimumInteractiveComponentSize()
                     .clickable(enabled = state.phase == VoiceEnrollmentPhase.READY && complete) { onSelect(index) }
-                    .semantics { contentDescription = "${index + 1}" },
-            )
+                    .semantics { contentDescription = label },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.height(14.dp).width(width).clip(CircleShape).background(color))
+            }
         }
     }
 }
@@ -361,7 +338,8 @@ private fun MessageCard(message: VoiceEnrollmentMessage, detail: String?) {
     }
     val error = message.isError
     Card(
-        Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+        // Read out when it appears: the result of a take is otherwise silent for TalkBack users.
+        Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }, shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
         ),
@@ -384,7 +362,7 @@ private fun MessageCard(message: VoiceEnrollmentMessage, detail: String?) {
 private fun RecordButton(
     phase: VoiceEnrollmentPhase,
     micGranted: Boolean,
-    enabled: Boolean,
+    consentGiven: Boolean,
     onRequestMicrophone: () -> Unit,
     onRecord: () -> Unit,
     onCancel: () -> Unit,
@@ -405,13 +383,13 @@ private fun RecordButton(
             askMicrophone -> onRequestMicrophone
             else -> onRecord
         },
-        enabled = askMicrophone || (enabled && phase == VoiceEnrollmentPhase.READY) || listening,
+        enabled = phase == VoiceEnrollmentPhase.READY || listening,
         interactionSource = interaction,
         shape = RoundedCornerShape(corner),
         colors = if (listening) {
             ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
         } else ButtonDefaults.buttonColors(),
-        modifier = modifier.fillMaxWidth().height(72.dp).testTag("voice_enroll_record"),
+        modifier = modifier.fillMaxWidth().heightIn(min = 72.dp).testTag("voice_enroll_record"),
     ) {
         if (checking) {
             CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp, color = MaterialTheme.colorScheme.onPrimary)
@@ -426,10 +404,11 @@ private fun RecordButton(
                     checking -> Res.string.voice_enroll_checking
                     listening -> Res.string.voice_enroll_listening
                     askMicrophone -> Res.string.voice_enroll_mic_grant
+                    !consentGiven -> Res.string.voice_enroll_agree_record
                     else -> Res.string.voice_enroll_start
                 },
             ),
-            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
         )
     }
 }

@@ -51,7 +51,6 @@ class VoiceEnrollmentDestination : NavScreen() {
                 level = level,
                 stepIndex = stepIndex.takeIf { onboarding },
                 stepCount = stepCount.takeIf { onboarding },
-                onConsentChange = viewModel::setConsent,
                 onRequestMicrophone = ::requestMicrophone,
                 onRecord = viewModel::recordCurrentPhrase,
                 onCancelRecording = viewModel::cancelRecording,
