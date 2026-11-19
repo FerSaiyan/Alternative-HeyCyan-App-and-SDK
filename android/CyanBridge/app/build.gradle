@@ -221,6 +221,19 @@ android {
         }
     }
 
+    // Opt-in per-ABI APK splits for direct-download (sideload) releases, so users fetch only
+    // the native libraries their device needs instead of the all-ABI universal APK. Gated on
+    // -PabiSplits so default builds, tests, and CI keep producing the single universal APK; the
+    // Play AAB always splits per device regardless. Build: ./gradlew -PabiSplits :app:assembleRelease
+    splits {
+        abi {
+            enable project.hasProperty('abiSplits')
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+            universalApk false
+        }
+    }
+
     buildFeatures {
         viewBinding = true
         buildConfig = true
