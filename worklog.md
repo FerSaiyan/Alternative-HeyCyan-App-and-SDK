@@ -18,7 +18,8 @@ Owner request 2026-11-19: restyle with Material 3 Expressive now that it is stab
   needs it). App NDK pinned to 27.2 (AGP 9's default 28.2 is not installed, which silently skipped symbol stripping:
   62 MB libcyan_llama.so). SDK platform `android-37.1` installed on this host.
 - **iOS.** CMP 1.13 dropped `iosX64` (Intel simulators); target removed. `enableBackGesture` is gone (the edge swipe
-  follows enabled back handlers). The iOS CI still pins Xcode 16.4; Kotlin 2.4.x lists Xcode 26.4 (CI is billing-locked).
+  follows enabled back handlers). The iOS CI pins Xcode 16.4 (Kotlin 2.4.x lists 26.4) and still links
+  the framework and builds the simulator host: run 44550773088 green. Android CI run 44550773070 green.
 - **Theme.** Shared `CyanBridgeExpressiveTheme` (MaterialExpressiveTheme, CyanBridge shapes + expressive sizes, type
   scale + emphasized styles, `MotionScheme.expressive()`, standard motion under Android "Remove animations" / iOS Reduce
   Motion, `LocalReducedMotion`). Android `CyanBridgeTheme` (dynamic color, high contrast, system bars) delegates to it.
