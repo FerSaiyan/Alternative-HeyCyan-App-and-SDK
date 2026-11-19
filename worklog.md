@@ -1,5 +1,42 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-19 — Material 3 Expressive (stable line) restyle (`material3-expressive-stable`)
+
+Owner request 2026-11-19: restyle with Material 3 Expressive now that it is stable, on Android and iOS. Branch
+`material3-expressive-stable` from origin/main 413c256b (release 2.4.0), worktree `cyan-refactor-wt/m3-expressive`.
+- **Versions.** androidx material3 1.5.0 is announced stable (release notes, 2026-11-18) but was NOT on Google Maven on
+  2026-11-19 (1.5.0 and 1.6.0-alpha01 404; newest published 1.5.0-rc01). JetBrains material3 1.13.0-rc01 (CMP plugin
+  1.13.0-rc01) is built on androidx material3 1.5.0-rc01 and Compose UI 1.13.0-rc01. So both platforms run the rc:
+  `compose-multiplatform`/`jetbrains-material3` 1.13.0-rc01 (shared, iOS) and `androidx-material3` 1.5.0-rc01 +
+  `androidx-compose` 1.13.0-rc01 (app; no BOM carries pre-releases). **Bump to androidx material3 1.5.0 / JetBrains
+  1.13.0 (and the matching Compose UI) when they publish**; the API surface used here is the stable one (only
+  LoadingIndicator is opted in, once).
+- **Forced toolchain.** Compose 1.13 / material3 1.5 AARs need compileSdk 37.1 and AGP >= 9.1; the JetBrains 1.13 iOS
+  klibs are Kotlin 2.4.20 (klib ABI 2.4). Now AGP 9.3.3 (newest in Kotlin 2.4.21's tested range), Gradle 9.6.1, Kotlin
+  2.4.21, KSP 2.3.14, compileSdk 37.1 (targetSdk stays 36), `android.builtInKotlin=false` + `android.newDsl=false` until
+  :shared moves to `com.android.kotlin.multiplatform.library`. androidx.core force 1.15.0 -> 1.19.0 (Foundation 1.13
+  needs it). App NDK pinned to 27.2 (AGP 9's default 28.2 is not installed, which silently skipped symbol stripping:
+  62 MB libcyan_llama.so). SDK platform `android-37.1` installed on this host.
+- **iOS.** CMP 1.13 dropped `iosX64` (Intel simulators); target removed. `enableBackGesture` is gone (the edge swipe
+  follows enabled back handlers). The iOS CI still pins Xcode 16.4; Kotlin 2.4.x lists Xcode 26.4 (CI is billing-locked).
+- **Theme.** Shared `CyanBridgeExpressiveTheme` (MaterialExpressiveTheme, CyanBridge shapes + expressive sizes, type
+  scale + emphasized styles, `MotionScheme.expressive()`, standard motion under Android "Remove animations" / iOS Reduce
+  Motion, `LocalReducedMotion`). Android `CyanBridgeTheme` (dynamic color, high contrast, system bars) delegates to it.
+  Light on-container text uses the accent's tone 30 (>= 7:1 on all accents); high contrast keeps tone 10.
+- **Components.** One shared expressive bottom bar (was 6 copies, 3 color sets); connected button groups for the
+  Notes/Chats tabs and the glasses single-choice pairs; press shape morph on all buttons; ActionRow as ButtonGroup;
+  wavy progress for sync/OTA/model downloads; LoadingIndicator for screen-level waits; spring() -> motion scheme.
+  Navigation, strings, test tags and behavior unchanged.
+- **Checks.** app 762 + shared 429 unit tests green; `iosCompileCheck` green; `assembleDebugAndroidTest` builds;
+  on the read-only Pixel_9a :5584 the NotesChats/GlassesDashboard/Appearance screen tests and the Meta DAT + pairing
+  CI classes pass (41). Crash sweep (43 routes, 7 glasses families, 2500-event monkey): 0 crashes, 0 ANRs. Evidence:
+  `/mnt/seagate/ML/cyan-refactor-wt/m3-expressive-evidence-20261119/INDEX.md` (34 before/after pairs: light, dark,
+  1.5x font).
+- **Left out.** Slider call sites keep the deprecated value/onValueChange overload (still compiles, gets the new look);
+  PasswordVisualTransformation fields not moved to SecureTextField (behavior change); top app bars not switched to the
+  flexible variants (layout change); no FAB menu / split button / floating toolbar (no screen has the matching
+  pattern). Pre-existing: voice-enrollment notice overlaps at 1.5x font.
+
 ## 2026-11-17 — EyeVue and TuneBuds firmware updates from the dashboard (`cyan-refactor-family-ota`)
 
 Owner request 2026-11-17. Worktree `cyan-refactor-wt/family-ota` from origin/cyan-refactor b7f1ce1d.
