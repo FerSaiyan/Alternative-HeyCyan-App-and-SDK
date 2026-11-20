@@ -1,5 +1,15 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-20 — Mentra display glasses could not pair from Device Bind (`mentra-display-pairing-scan`)
+
+- **Found by** the new Even G2 rig (firmware_dump add.234): CyanBridge 2.4.3 on an AVD and the original Even G2 2.4.0.24 firmware in blackwall, connected over netsim BLE. Every Device Bind → "Even Realities G2" → Connect logged `G2 pairing failed: NOT_FOUND` 11–20 ms after `SDK scan for G2 started` (reproduced twice).
+- **Cause:** `connectDisplayGlasses` stored its SDK pairing scan in `MentraLiveManager.scanSession`, the field the pairing list's own Mentra scan uses. Device Bind finishes right after starting the pairing, and its `stopScan()`/`onDestroy()` call `MentraLiveManager.stopScan()`. That cancelled the pairing scan, and the SDK then reported an empty completion. This affects G1, G2, Mentra Display, NIMO and AR99; Mentra Live is unaffected (it connects directly).
+- **Fix:** the pairing scan has its own `pairingScan` session. The picker's `stopScan()` leaves it alone. It ends on success, on failure, on a new pairing, or on `disconnect()`.
+- **Rig result with the fix:** the SDK connects both arms and runs its auth sequence. Android bonds with the firmware (LE Secure Connections). The dashboard shows "Connected - Even Realities G2". Disconnect, Reconnect and reconnect-on-start all reach ready, and re-encryption uses the LTK the firmware stored.
+- **Not changed (owner decisions):**
+  - Notification forwarding (`NotificationForwarderService.setEnabled`) is only switched on from the MemoMind screen, so G2/G1/NIMO never get phone notifications even though `MentraDisplayAdapter` implements `GlassesNotificationDisplay`.
+  - G2 battery stays `--%` in the rig: there is no device-info reply in blackwall's model, so this is unconfirmed on hardware.
+
 ## 2026-11-20 — Release 2.4.3 (versionCode 36): Wi-Fi optional for Google Play
 
 - **Why:** Play blocked sending 2.4.2 (code 35) for review: "Required hardware feature declarations are restricting your app's availability: android.hardware.wifi affects Phone, Tablet, Desktop, and Android XR users". The feature was never declared; it is implied by ACCESS_WIFI_STATE/CHANGE_WIFI_STATE.

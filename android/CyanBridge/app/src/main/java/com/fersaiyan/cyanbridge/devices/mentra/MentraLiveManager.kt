@@ -103,6 +103,13 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     private val pcmListeners = ConcurrentHashMap<String, (ByteArray) -> Unit>()
 
     @Volatile private var scanSession: ScanSession? = null
+
+    /**
+     * The display-glasses pairing scan ([connectDisplayGlasses]). It is separate from [scanSession]: the
+     * pairing list stops its own scan with [stopScan] when it closes, which is right after the user
+     * picks glasses, and that must not cancel the pairing (it reported "not found" ~10 ms later).
+     */
+    @Volatile private var pairingScan: ScanSession? = null
     @Volatile private var configuredForReady = false
     @Volatile private var activeVideoRequestId: String? = null
 
@@ -258,9 +265,17 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
         Log.i(TAG, "SDK scan started")
     }
 
+    /** Stops the pairing list's scan ([startScan]); a display-glasses pairing in progress keeps running. */
     fun stopScan() {
         scanSession?.let { session ->
             scanSession = null
+            runCatching { session.stop() }
+        }
+    }
+
+    private fun stopPairingScan() {
+        pairingScan?.let { session ->
+            pairingScan = null
             runCatching { session.stop() }
         }
     }
@@ -364,6 +379,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
     ) {
         require(model.hasDisplay) { "${model.name} has no display" }
         stopScan()
+        stopPairingScan()
         if (scanWouldDropLink(model)) disconnect()
         linkModel = model
         GlassesBridge.setActiveAdapter(MentraDisplayAdapter.ADAPTER_ID)
@@ -388,7 +404,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
                 if (!started.compareAndSet(false, true)) return
                 val device = devices.first { it.name == chosen.name && it.address == chosen.address }
                 main.post {
-                    stopScan()
+                    stopPairingScan()
                     Log.i(TAG, "Connecting to ${model.name} ${device.name} (${device.address})")
                     MentraSdkDeviceStore.save(appContext, device)
                     runCatching { sdk.connect(device) }.onFailure { error ->
@@ -408,7 +424,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
                 fail(DisplayConnectFailure.SCAN_FAILED)
             }
         }
-        scanSession = sdk.scan(model.sdkModel(), callback, DISPLAY_SCAN_TIMEOUT_MS)
+        pairingScan = sdk.scan(model.sdkModel(), callback, DISPLAY_SCAN_TIMEOUT_MS)
         Log.i(TAG, "SDK scan for ${model.name} started to pair $advertisedName ($address)")
     }
 
@@ -474,6 +490,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
             Log.w(TAG, "Disconnect refused during the firmware update")
             return
         }
+        stopPairingScan()
         pcmListeners.clear()
         runCatching { sdk.setMicState(enabled = false) }
         runCatching { sdk.setMicSourcePin(null) }
