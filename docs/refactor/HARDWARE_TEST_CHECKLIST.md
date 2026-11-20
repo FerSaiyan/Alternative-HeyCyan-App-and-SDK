@@ -797,3 +797,11 @@ Dashboard → Advanced → "Firmware update" now shows a family section for EyeV
 3. EyeVue, single-bank: if the glasses come back only as the update loader (they advertise but CyanBridge's EyeVue connection fails, only GATT service AE00 is present), run the update from the official EyeVue app: it detects the mandatory update and reinstalls its published image. CyanBridge can resume a mandatory update only when it can connect. Record what the glasses advertise for the worklog.
 4. TuneBuds: the glasses verify the whole image before applying it, so a failed transfer leaves the old firmware running. Reconnect and install again (it resumes). If the glasses do not boot after "Update finished", put them on the charger for 10 minutes, then use the vendor TuneBuds app's update.
 5. Send the `FamilyOta` logcat and the file's sha256 (in the `Installing …` log line) with the report.
+
+## HeyCyan live preview after a Wi-Fi Direct re-join (`heycyan-rtsp-abort-fix`)
+
+The app now waits until Android reports the glasses' Wi-Fi Direct network as connected before it opens the RTSP stream. Before this, Android 15+ could close the stream's socket ("Software caused connection abort", then "No RTSP found"). The emulator showed the mechanism; please confirm on a real phone:
+
+- [ ] Start HeyCyan live preview, Stop, force-stop CyanBridge, reopen it and start the preview again. Repeat 5 times. Every preview plays; none shows "No RTSP found" or "Cannot open local RTSP port 8554".
+- [ ] In the logcat, every preview has `[P2P] Route settled after … (connected=true …)` and no `glasses handshake failed: Software caused connection abort`.
+- [ ] EyeVue and TuneBuds live preview still start (they share the relay's port wait).

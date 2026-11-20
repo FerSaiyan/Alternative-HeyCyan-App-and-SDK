@@ -1,5 +1,11 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-20 — HeyCyan live preview "Software caused connection abort" fixed (`heycyan-rtsp-abort-fix`)
+
+- **Cause:** the app opened its RTSP sockets to the glasses while the P2P network was still CONNECTING. On a re-join the route already has its DHCP address. ~10 ms later the network goes CONNECTED and ConnectivityService "Destroyed live tcp sockets for local address /192.168.49.213" (ECONNABORTED). The next probe path then hit EADDRINUSE because the old listener's close was still pending.
+- **Fix:** `bindToP2pNetwork` waits for CONNECTED plus stable LinkProperties (150 ms polls, max 3 s) before binding. `GlassesRtspRelay.startWhenPortFree()` retries a BindException for up to 1.5 s; HeyCyan, EyeVue and TuneBuds use it.
+- **Rig (e2e_bt_p2p + strict `/ch0` stand-in):** the first glasses connect came after CONNECTED by +0..+211 ms on 2.4.1 (11 previews; the 2.4.1 failures were about −11 ms) and by +292..+363 ms with the fix (10/10 cold-restart previews OK, 0 aborts, 0 port errors). App + shared 1172 unit tests green. Evidence: `/mnt/seagate/ML/cyan-refactor-wt/rtsp-abort-evidence/INDEX.md`. Needs a real-phone check (HARDWARE_TEST_CHECKLIST).
+
 ## 2026-11-20 — Release 2.4.1 (versionCode 34): Google Play 16 KB page sizes + "Answer only my voice"
 
 - **Why:** Google Play rejected 2.4.0 (code 32): "Your app does not support 16 KB memory page sizes". The 2.4.0 AAB's 64-bit libs `libvlc.so`, `libvlcjni.so` (LibVLC 3.6.0) and `liblc3.so` (Mentra `lc3Lib` 3.2.0-dev.227) had 4 KB PT_LOAD alignment; the other 156 were already 16 KB.
