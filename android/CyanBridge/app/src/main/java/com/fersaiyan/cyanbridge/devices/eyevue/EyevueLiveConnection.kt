@@ -54,7 +54,7 @@ internal class EyevueGlassesLiveConnection(context: Context, private val manager
             log = { Log.i("EyevueRtspProxy", it) },
         )
         proxy = relay
-        return "rtsp://127.0.0.1:${relay.start()}/live/"
+        return "rtsp://127.0.0.1:${relay.startWhenPortFree()}/live/"
     }
 
     override suspend fun close() {

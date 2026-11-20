@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.media.rtsp
 
+import kotlinx.coroutines.runBlocking
 import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspDescription
 import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspMessage
 import java.io.ByteArrayInputStream
@@ -58,6 +59,30 @@ class GlassesRtspRelayTest {
                 } finally { relay.stop() }
             }
         }
+    }
+
+    @Test(timeout = 15_000)
+    fun startWhenPortFreeWaitsForAClosingListenerButNotForever() = runBlocking {
+        java.net.ServerSocket().use { held ->
+            held.reuseAddress = true
+            held.bind(java.net.InetSocketAddress("127.0.0.1", 8554))
+            val blocked = GlassesRtspRelay("127.0.0.1", 9)
+            try {
+                blocked.startWhenPortFree(timeoutMs = 200)
+                fail("A port that stays taken must still be reported")
+            } catch (expected: java.io.IOException) {
+                assertTrue(expected.message.orEmpty().contains("8554"))
+            } finally { blocked.stop() }
+        }
+
+        // Stands in for the previous probe's listener whose close is still pending.
+        val closing = java.net.ServerSocket().apply {
+            reuseAddress = true
+            bind(java.net.InetSocketAddress("127.0.0.1", 8554))
+        }
+        Thread { Thread.sleep(300); closing.close() }.start()
+        val relay = GlassesRtspRelay("127.0.0.1", 9)
+        try { assertEquals(8554, relay.startWhenPortFree()) } finally { relay.stop() }
     }
 
     @Test

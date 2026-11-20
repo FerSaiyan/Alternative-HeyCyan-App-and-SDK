@@ -3,7 +3,9 @@ package com.fersaiyan.cyanbridge.media.rtsp
 import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspDescription
 import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspMessage
 import com.fersaiyan.cyanbridge.shared.media.rtsp.RtspTrack
+import kotlinx.coroutines.delay
 import java.io.IOException
+import java.net.BindException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -32,6 +34,8 @@ internal class GlassesRtspRelay(
     companion object {
         const val PORT = 8554
         const val URL = "rtsp://127.0.0.1:8554/live/"
+        private const val PORT_RELEASE_WAIT_MS = 1_500L
+        private const val PORT_RETRY_MS = 50L
     }
 
     private val active = AtomicBoolean(false)
@@ -82,6 +86,25 @@ internal class GlassesRtspRelay(
             }
         }
         return listener.localPort
+    }
+
+    /**
+     * [start], waiting up to [timeoutMs] while a just-stopped relay still holds the fixed port.
+     * On Android, closing a ServerSocket whose thread is blocked in accept() frees the port only
+     * once that thread wakes, so starting the next probe attempt right away failed with
+     * EADDRINUSE ("Cannot open local RTSP port 8554"). A port that stays taken by another stream
+     * or app still fails, with the same message.
+     */
+    suspend fun startWhenPortFree(timeoutMs: Long = PORT_RELEASE_WAIT_MS): Int {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (true) {
+            try {
+                return start()
+            } catch (error: IOException) {
+                if (error.cause !is BindException || System.currentTimeMillis() >= deadline) throw error
+                delay(PORT_RETRY_MS)
+            }
+        }
     }
 
     /** No handshake lock, thread join or socket write on the caller (UI) thread. */

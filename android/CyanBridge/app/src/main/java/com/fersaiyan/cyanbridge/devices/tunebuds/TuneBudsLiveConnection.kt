@@ -37,7 +37,7 @@ internal class TuneBudsLiveConnection(context: Context, private val manager: Tun
             log = { Log.i("TuneBudsRtspRelay", it) },
         )
         relay = proxy
-        proxy.start()
+        proxy.startWhenPortFree()
         return GlassesRtspRelay.URL
     }
 
