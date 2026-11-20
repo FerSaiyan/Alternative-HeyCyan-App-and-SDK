@@ -112,6 +112,7 @@ class PrefsInventoryTest {
         remote_openai_secrets (secure)/api_key STRING ""
         question_routing/mode STRING null
         question_routing/web_search_engine STRING null
+        question_routing/answer_only_my_voice BOOLEAN true
         local_agent_prefs/provider_type STRING null
         local_agent_prefs/glasses_assistant_mode STRING "CUSTOM_AI_PROVIDER" ios=cyanbridge_ios_glasses/assistant_mode
         local_agent_prefs/require_confirmation BOOLEAN true
