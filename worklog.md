@@ -1,5 +1,18 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-20 — Release 2.4.1 (versionCode 34): Google Play 16 KB page sizes + "Answer only my voice"
+
+- **Why:** Google Play rejected 2.4.0 (code 32): "Your app does not support 16 KB memory page sizes". The 2.4.0 AAB's 64-bit libs `libvlc.so`, `libvlcjni.so` (LibVLC 3.6.0) and `liblc3.so` (Mentra `lc3Lib` 3.2.0-dev.227) had 4 KB PT_LOAD alignment; the other 156 were already 16 KB.
+- **Fix:** `libvlc-all` 3.7.7, and `com.mentraglass:lc3Lib` 3.5.0-dev.1493 declared explicitly. It has the same classes and the same 6 JNI exports, and `bluetooth-sdk` stays on dev.227.
+- **Checked on the 2.4.1 AAB:** all 162 64-bit libs are 16 KB-aligned, and the arm64 APK passes `zipalign -c -P 16`. 2.4.1, same signing cert as 2.4.0. A code-33 build was served for upload and then withdrawn (the font-cache regression below), so the release is **code 34**.
+- **Contents:** main 413c256b plus `voice-profile-filter` (Answer only my voice, WeSpeaker int8 from the public HF repo `Fertroll10/cyanbridge-models`).
+- **Live preview** (glasses simulators; evidence `/mnt/seagate/ML/cyan-refactor-wt/release-241-livepreview-evidence/`): no crash or linker error on any family, and LC3 round-trips (corr ≥ 0.999).
+  - **Regression found:** LibVLC 3.7.7 newly builds a fontconfig cache on its first video output, 25-28 s on the AVDs. On HeyCyan the first preview after an install failed ("No RTSP found"), and EyeVue took ~38 s to its first frame.
+  - **Fix:** `media/rtsp/VlcFontCache`. It calls `LibVLC.buildFontCache()` once per app version in the background, and a preview waits for it before the glasses stream.
+  - TuneBuds never reaches LibVLC in the sim: the firmware does not answer 0xE8 (open video item, add.230).
+  - Mentra was checked via SDK init (liblc3 loads) plus an out-of-app LibVLC probe, because no sim exists.
+- **Artifacts:** `/mnt/seagate/ML/cyan-refactor-wt/release-241-artifacts/`.
+
 ## 2026-11-19 — Voice onboarding wording + "Answer only my voice" (`voice-profile-filter`)
 
 Owner request 2026-11-19. Worktree `cyan-refactor-wt/voice-filter` from origin/cyan-refactor 413c256b.
