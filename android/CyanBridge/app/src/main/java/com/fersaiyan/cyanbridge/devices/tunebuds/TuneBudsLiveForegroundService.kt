@@ -33,9 +33,9 @@ class TuneBudsLiveForegroundService : Service() {
         wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:tunebuds-live")
             .apply { setReferenceCounted(false) }
-        wifiLock = (applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
-            .createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "$packageName:tunebuds-live")
-            .apply { setReferenceCounted(false) }
+        wifiLock = com.fersaiyan.cyanbridge.network.DeviceWifi.wifiManager(this)
+            ?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "$packageName:tunebuds-live")
+            ?.apply { setReferenceCounted(false) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

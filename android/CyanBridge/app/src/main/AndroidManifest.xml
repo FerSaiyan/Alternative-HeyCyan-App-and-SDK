@@ -25,6 +25,9 @@
     <uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" tools:targetApi="33" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Implied by the Wi-Fi permissions. Optional so Google Play does not hide the app from devices
+         without Wi-Fi; media sync and live preview check for it (network/DeviceWifi). -->
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_USER_PRESENT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

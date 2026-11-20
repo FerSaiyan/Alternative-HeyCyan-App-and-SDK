@@ -268,7 +268,16 @@ internal class GlassesMediaSyncCoordinator(
         }
 
         // Check WiFi is enabled (required for WiFi Direct / P2P)
-        val wifiManager = activity.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+        val wifiManager = com.fersaiyan.cyanbridge.network.DeviceWifi.wifiManager(activity)
+        if (wifiManager == null) {
+            Log.e("DataDownload", "No Wi-Fi on this device")
+            if (isHighQualityImageTransfer()) {
+                finishHighQualityImageFailure(com.fersaiyan.cyanbridge.network.DeviceWifi.NO_WIFI_MESSAGE)
+                return
+            }
+            Toast.makeText(activity, com.fersaiyan.cyanbridge.network.DeviceWifi.NO_WIFI_MESSAGE, Toast.LENGTH_LONG).show()
+            return
+        }
         if (!wifiManager.isWifiEnabled) {
             Log.e("DataDownload", "WiFi is disabled. WiFi must be on for P2P sync.")
             if (isHighQualityImageTransfer()) {

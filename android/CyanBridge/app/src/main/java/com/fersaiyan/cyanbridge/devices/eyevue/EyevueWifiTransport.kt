@@ -67,8 +67,7 @@ class EyevueWifiTransport(
     private val context = context.applicationContext
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    private val p2pManager =
-        context.getSystemService(Context.WIFI_P2P_SERVICE) as WifiP2pManager
+    private val p2pManager = com.fersaiyan.cyanbridge.network.DeviceWifi.p2pManager(context)
 
     private var apNetworkCallback: ConnectivityManager.NetworkCallback? = null
     private var p2pChannel: WifiP2pManager.Channel? = null
@@ -134,8 +133,8 @@ class EyevueWifiTransport(
         val channel = p2pChannel
         p2pChannel = null
         channel?.let {
-            runCatching { p2pManager.stopPeerDiscovery(it, null) }
-            runCatching { p2pManager.cancelConnect(it, null) }
+            runCatching { p2pManager?.stopPeerDiscovery(it, null) }
+            runCatching { p2pManager?.cancelConnect(it, null) }
         }
 
         // The shared session restores the default network and removes the group (confirmed,
@@ -147,7 +146,7 @@ class EyevueWifiTransport(
             GlassesNetworkSessionCoordinator.releaseVendorLink(
                 context,
                 claim,
-                channel?.let { WifiP2pChannelGroupDriver(context, p2pManager, it) },
+                channel?.let { ch -> p2pManager?.let { WifiP2pChannelGroupDriver(context, it, ch) } },
             )
         } else {
             channel?.let { runCatching { it.close() } }
@@ -224,7 +223,7 @@ class EyevueWifiTransport(
 
     @SuppressLint("MissingPermission")
     private suspend fun connectP2p(ssid: String, baseIp: String): Network? {
-        val manager = p2pManager
+        val manager = p2pManager ?: throw IOException(com.fersaiyan.cyanbridge.network.DeviceWifi.NO_WIFI_MESSAGE)
         val channel = manager.initialize(context, Looper.getMainLooper(), null)
             ?: throw IOException("Wi-Fi Direct channel initialization failed")
         p2pChannel = channel
@@ -300,6 +299,7 @@ class EyevueWifiTransport(
     @SuppressLint("MissingPermission")
     private fun requestP2pPeers() {
         val channel = p2pChannel ?: return
+        val p2pManager = p2pManager ?: return
         p2pManager.requestPeers(channel) { peers ->
             Log.i(
                 TAG,

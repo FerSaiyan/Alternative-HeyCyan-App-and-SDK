@@ -85,6 +85,10 @@ object GlassesNetworkSessionCoordinator {
         client: GlassesLinkClient,
         callback: WifiP2pManagerSingleton.WifiP2pCallback,
     ): HeyCyanP2pLink? {
+        if (DeviceWifi.p2pManager(context) == null) {
+            Log.w(TAG, "${client.label}: ${DeviceWifi.NO_WIFI_MESSAGE}")
+            return null
+        }
         val manager = WifiP2pManagerSingleton.getInstance(context)
         val result = core.awaitClaim(client, preflightDriver = { HeyCyanGroupDriver(manager, trustTrackedState = false) })
         if (result !is GlassesLinkClaimResult.Granted) {
@@ -188,6 +192,10 @@ object GlassesNetworkSessionCoordinator {
 
     /** Claims the link for a vendor transport; null when another workflow still owns it. */
     suspend fun claimVendorLink(context: Context, client: GlassesLinkClient): GlassesLinkClaim? {
+        if (DeviceWifi.p2pManager(context) == null) {
+            Log.w(TAG, "${client.label}: ${DeviceWifi.NO_WIFI_MESSAGE}")
+            return null
+        }
         val manager = WifiP2pManagerSingleton.getInstance(context)
         val result = core.awaitClaim(client, preflightDriver = { HeyCyanGroupDriver(manager, trustTrackedState = false) })
         if (result !is GlassesLinkClaimResult.Granted) {

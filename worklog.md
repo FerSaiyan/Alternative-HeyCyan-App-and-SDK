@@ -1,5 +1,16 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-20 — Release 2.4.3 (versionCode 36): Wi-Fi optional for Google Play
+
+- **Why:** Play blocked sending 2.4.2 (code 35) for review: "Required hardware feature declarations are restricting your app's availability: android.hardware.wifi affects Phone, Tablet, Desktop, and Android XR users". The feature was never declared; it is implied by ACCESS_WIFI_STATE/CHANGE_WIFI_STATE.
+- **Fix:** `<uses-feature android:name="android.hardware.wifi" android:required="false" />`.
+- **Crash-proofing for devices without Wi-Fi:** media sync and live preview no longer cast the Wi-Fi services as non-null; they go through `network/DeviceWifi`.
+  - HeyCyan sync and live preview report "This device has no Wi-Fi…".
+  - TuneBuds hotspot and EyeVue Wi-Fi Direct throw that message as an IOException.
+  - Live foreground services skip the Wi-Fi lock.
+  - `openHeyCyanLink`/`claimVendorLink` return null.
+- Code 35 was uploaded to Play, so this is 2.4.3 / code 36.
+
 ## 2026-11-20 — Release 2.4.2 (versionCode 35)
 
 - Contents on top of 2.4.1 (code 34): the HeyCyan live-preview "Software caused connection abort" fix (wait for the P2P network to be CONNECTED), the RTSP relay port wait (`startWhenPortFree`), and Meta "Send diagnostics" reports filed as voluntary.

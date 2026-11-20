@@ -51,7 +51,7 @@ class TuneBudsLocalHotspot(context: Context) {
     }
 
     private val context = context.applicationContext
-    private val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    private val wifiManager = com.fersaiyan.cyanbridge.network.DeviceWifi.wifiManager(context)
 
     @Volatile
     private var reservation: WifiManager.LocalOnlyHotspotReservation? = null
@@ -64,6 +64,8 @@ class TuneBudsLocalHotspot(context: Context) {
         if (!hasWifiPermission()) {
             throw SecurityException("Nearby Wi-Fi or location permission is required")
         }
+        val wifiManager = wifiManager
+            ?: throw java.io.IOException(com.fersaiyan.cyanbridge.network.DeviceWifi.NO_WIFI_MESSAGE)
         stop()
         val startedGeneration = generation
         return withTimeout(START_TIMEOUT_MS) {

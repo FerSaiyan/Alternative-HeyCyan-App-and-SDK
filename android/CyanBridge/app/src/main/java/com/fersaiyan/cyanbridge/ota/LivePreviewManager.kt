@@ -289,7 +289,11 @@ class LivePreviewManager(
                 return
             }
             val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            if (wifiManager?.isWifiEnabled != true) {
+            if (wifiManager == null) {
+                updateState("No Wi-Fi", com.fersaiyan.cyanbridge.network.DeviceWifi.NO_WIFI_MESSAGE)
+                return
+            }
+            if (!wifiManager.isWifiEnabled) {
                 updateState("Wi-Fi disabled", "Enable Wi-Fi before starting live preview.")
                 return
             }

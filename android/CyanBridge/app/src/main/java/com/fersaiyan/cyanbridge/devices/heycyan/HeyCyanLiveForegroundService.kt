@@ -42,11 +42,10 @@ class HeyCyanLiveForegroundService : Service() {
                 wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:heycyan-live").apply {
             setReferenceCounted(false)
         }
-        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
-        wifiLock = wifiManager.createWifiLock(
+        wifiLock = com.fersaiyan.cyanbridge.network.DeviceWifi.wifiManager(this)?.createWifiLock(
             android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF,
             "$packageName:heycyan-live",
-        ).apply { setReferenceCounted(false) }
+        )?.apply { setReferenceCounted(false) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
