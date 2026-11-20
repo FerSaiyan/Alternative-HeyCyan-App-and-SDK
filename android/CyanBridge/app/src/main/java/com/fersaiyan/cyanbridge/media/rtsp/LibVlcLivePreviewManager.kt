@@ -139,6 +139,8 @@ open class LibVlcLivePreviewManager internal constructor(
         var failed = false
         try {
             coroutineScope {
+                updateState("Preparing video", "Getting the video player ready...", scanning = true)
+                VlcFontCache.awaitReady(context)
                 val streamUrl = connection.open { label, detail -> updateState(label, detail, scanning = true) }
                 launch { throw connection.awaitFailure() }
                 Log.i(tag, "$deviceName shared video+audio: $streamUrl")

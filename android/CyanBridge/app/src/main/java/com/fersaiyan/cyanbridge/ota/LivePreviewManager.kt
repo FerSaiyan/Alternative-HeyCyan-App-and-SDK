@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ota
 
+import com.fersaiyan.cyanbridge.media.rtsp.VlcFontCache
 import android.content.Context
 import android.Manifest
 import android.net.Uri
@@ -288,6 +289,11 @@ class LivePreviewManager(
                 updateState("Wi-Fi disabled", "Enable Wi-Fi before starting live preview.")
                 return
             }
+
+            // First preview after an install or update: let LibVLC finish its font scan before
+            // the glasses start streaming, so none of the stream timeouts run during it.
+            updateState("Preparing video", "Getting the video player ready...", scanning = true)
+            VlcFontCache.awaitReady(context)
 
             // Do both before the BLE trigger: the IP notify and peer appearance
             // can arrive immediately after V821 realtime mode starts.

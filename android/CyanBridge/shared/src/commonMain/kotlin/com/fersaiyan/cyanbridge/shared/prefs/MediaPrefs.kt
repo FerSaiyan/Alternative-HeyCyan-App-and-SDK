@@ -76,8 +76,13 @@ object MediaPrefs {
         val streamUrl = string("stream_url", "")
     }
 
+    /** App version whose live-preview font cache (LibVLC/fontconfig) is built. */
+    object VideoFontCache : PrefsFile("vlc_font_cache") {
+        val builtForVersionCode = int("built_for_version_code", -1)
+    }
+
     val files: List<PrefsFile> = listOf(
         GlassesMedia, AutoAudioCapture, MeetingCapture, SyncWarnings, AdaptiveP2pProfiles, MoyoungW620,
-        ExternalImageAutomation, TaskerImageProfile, MentraBroadcast,
+        ExternalImageAutomation, TaskerImageProfile, MentraBroadcast, VideoFontCache,
     )
 }

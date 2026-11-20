@@ -110,6 +110,8 @@ class MyApplication : Application(){
         // Initialize KMP shared services
         runCatching { initPlatformPreferences(this) }
         runCatching { initSharedServices() }
+        // LibVLC 3.7 scans fonts on its first video output; do it now, not in the first preview.
+        com.fersaiyan.cyanbridge.media.rtsp.VlcFontCache.prewarmInBackground(this)
 
     }
 
