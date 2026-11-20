@@ -79,6 +79,15 @@ class AndroidGlassesNetworkRoutes(context: Context) {
 
     fun interfaceName(network: Network): String? = connectivity.getLinkProperties(network)?.interfaceName
 
+    /** Whether [network] is CONNECTED; null when the platform does not say. */
+    @Suppress("DEPRECATION")
+    fun isConnected(network: Network): Boolean? =
+        try { connectivity.getNetworkInfo(network)?.isConnected } catch (_: Exception) { null }
+
+    /** Addresses, DNS servers and routes of [network], for change detection; null once it is gone. */
+    fun linkSnapshot(network: Network): String? =
+        connectivity.getLinkProperties(network)?.let { "${it.linkAddresses} dns=${it.dnsServers} routes=${it.routes}" }
+
     /** The network's first IPv4 local address (for example `192.168.49.1`). */
     fun firstIpv4LocalAddress(network: Network?): InetAddress? {
         network ?: return null

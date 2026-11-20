@@ -15,7 +15,9 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanLiveVideoView
 import com.fersaiyan.cyanbridge.devices.heycyan.HeyCyanVideoFrameOutput
 import com.fersaiyan.cyanbridge.media.rtsp.GlassesRtspRelay
+import com.fersaiyan.cyanbridge.network.AndroidGlassesNetworkRoutes
 import com.fersaiyan.cyanbridge.network.GlassesNetworkSessionCoordinator
+import com.fersaiyan.cyanbridge.network.GlassesP2pNetworkMatch
 import com.fersaiyan.cyanbridge.network.HeyCyanP2pLink
 import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
 import com.fersaiyan.cyanbridge.shared.network.GlassesWifiNotify
@@ -119,6 +121,8 @@ class LivePreviewManager(
         private const val PROBE_TIMEOUT_MS = 8_000L
         private const val BLE_IP_TIMEOUT_MS = 45_000L
         private const val P2P_CONNECT_TIMEOUT_MS = 20_000L
+        private const val P2P_ROUTE_SETTLE_TIMEOUT_MS = 3_000L
+        private const val P2P_ROUTE_SETTLE_POLL_MS = 150L
     }
 
     private fun elapsed(): Long = System.currentTimeMillis() - flowStartTimeMs
@@ -684,7 +688,7 @@ class LivePreviewManager(
                     glassesIp, port, streamPath = "/$path", upstreamPlayRange = null,
                     log = { Log.i(TAG, "[RTSP relay] $it") },
                 )
-                relay.start() // A port collision is explicit, never a random-port fallback.
+                relay.startWhenPortFree() // A port collision is explicit, never a random-port fallback.
                 rtspRelay = relay
                 var success = false
                 try {
@@ -724,6 +728,7 @@ class LivePreviewManager(
 
         val deadline = System.currentTimeMillis() + P2P_CONNECT_TIMEOUT_MS
         var attempts = 0
+        var settled = false
         while (System.currentTimeMillis() < deadline) {
             attempts++
             val match = try {
@@ -731,6 +736,16 @@ class LivePreviewManager(
             } catch (e: Exception) {
                 Log.w(TAG, "[${elapsed()}ms] [P2P] Could not enumerate Wi-Fi routes: ${e.message}")
                 null
+            }
+            if (match != null && !settled) {
+                // The group network is listed, with its DHCP address, while it is still
+                // CONNECTING. On CONNECTED the platform pushes new LinkProperties; when they
+                // drop that address it destroys every TCP socket bound to it (ECONNABORTED,
+                // "Software caused connection abort"). Open no glasses socket before that,
+                // then select the route again from the settled LinkProperties.
+                settled = awaitP2pRouteSettled(routes, match)
+                if (!settled) delay(500)
+                continue
             }
             if (match != null) {
                 Log.i(
@@ -767,6 +782,30 @@ class LivePreviewManager(
 
         Log.e(TAG, "[${elapsed()}ms] [P2P] No bound or verified direct P2P route after ${P2P_CONNECT_TIMEOUT_MS}ms")
         return false
+    }
+
+    /** True once [match] is CONNECTED and its LinkProperties stopped changing; false when it vanished. */
+    private suspend fun awaitP2pRouteSettled(routes: AndroidGlassesNetworkRoutes, match: GlassesP2pNetworkMatch): Boolean {
+        val network = match.network
+        val started = System.currentTimeMillis()
+        val initiallyConnected = routes.isConnected(network)
+        var previous: String? = null
+        while (System.currentTimeMillis() - started < P2P_ROUTE_SETTLE_TIMEOUT_MS) {
+            val connected = routes.isConnected(network)
+            val snapshot = routes.linkSnapshot(network) ?: return false
+            if (connected != false && snapshot == previous) {
+                Log.i(TAG, "[${elapsed()}ms] [P2P] Route settled after ${System.currentTimeMillis() - started}ms " +
+                    "(connected=$connected, initially=$initiallyConnected)")
+                return true
+            }
+            if (previous != null && snapshot != previous) {
+                Log.i(TAG, "[${elapsed()}ms] [P2P] Route changed while settling: $snapshot")
+            }
+            previous = if (connected != false) snapshot else null
+            delay(P2P_ROUTE_SETTLE_POLL_MS)
+        }
+        Log.w(TAG, "[${elapsed()}ms] [P2P] Route not settled after ${P2P_ROUTE_SETTLE_TIMEOUT_MS}ms (connected=${routes.isConnected(network)}); continuing")
+        return true
     }
 
     private fun unbindP2pNetwork() {
