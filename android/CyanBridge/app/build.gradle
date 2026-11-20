@@ -285,6 +285,9 @@ dependencies {
     implementation project(":shared")
     // Pin to the paired Mentra Live firmware release; override with -PmentraSdkVersion.
     implementation "com.mentraglass:bluetooth-sdk:${project.findProperty('mentraSdkVersion') ?: '3.2.0-dev.227'}"
+    // The SDK's own lc3Lib 3.2.0-dev.227 ships a 4 KB-aligned liblc3.so, which Google Play rejects
+    // (16 KB page sizes). 3.5.0-dev.1493 is 16 KB-aligned, with the same classes and JNI exports.
+    implementation "com.mentraglass:lc3Lib:3.5.0-dev.1493"
     implementation files("libs/glasses_sdk_20250723_v01.aar")
     implementation files("libs/moyoung_glasses_sdk_0.0.7_20260624.aar")
     implementation "com.google.protobuf:protobuf-java:4.29.3"
@@ -323,7 +326,8 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer-rtsp:1.5.1'
     implementation 'androidx.media3:media3-ui:1.5.1'
     // Vendor-matched live engine for EyeVue (official app uses LibVLC direct).
-    implementation 'org.videolan.android:libvlc-all:3.6.0'
+    // 3.7.x: 16 KB-aligned libvlc/libvlcjni (3.6.0 was 4 KB, rejected by Google Play).
+    implementation 'org.videolan.android:libvlc-all:3.7.7'
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
     implementation 'com.android.billingclient:billing-ktx:8.1.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0"
