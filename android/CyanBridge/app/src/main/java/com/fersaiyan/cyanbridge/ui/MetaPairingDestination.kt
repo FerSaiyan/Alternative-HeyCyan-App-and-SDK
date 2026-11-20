@@ -488,6 +488,7 @@ class MetaPairingDestination : NavScreen() {
             description = getString(R.string.meta_diagnostics_description),
             extraInfo = linkedMapOf("Meta DAT snapshot" to manager.diagnosticsSnapshot()),
             dismissButtonLabel = getString(R.string.action_cancel),
+            trigger = com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticTrigger.VOLUNTARY,
         )
     }
 

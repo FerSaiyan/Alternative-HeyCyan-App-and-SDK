@@ -106,7 +106,11 @@ object DebugLogSupport {
         val dismissButtonLabel: String = "Cancel",
     )
 
-    /** The prompt shown after an error: the user may add a note, preview and send, or email the file. */
+    /**
+     * The prompt shown after an error: the user may add a note, preview and send, or email the file.
+     * A diagnostics button the user pressed passes [DiagnosticTrigger.VOLUNTARY], so its report is
+     * not filed (and its event not logged) as an error.
+     */
     fun showSupportOptionsDialog(
         activity: AppCompatActivity,
         title: String,
@@ -114,12 +118,17 @@ object DebugLogSupport {
         description: String,
         extraInfo: Map<String, String> = emptyMap(),
         dismissButtonLabel: String = "Later",
+        trigger: DiagnosticTrigger = DiagnosticTrigger.ERROR_PROMPT,
     ) {
-        DiagnosticEvents.error(DiagnosticSubsystem.UI, "error prompt shown", mapOf("issue" to issueType))
+        if (trigger == DiagnosticTrigger.ERROR_PROMPT) {
+            DiagnosticEvents.error(DiagnosticSubsystem.UI, "error prompt shown", mapOf("issue" to issueType))
+        } else {
+            DiagnosticEvents.info(DiagnosticSubsystem.UI, "diagnostics opened", mapOf("issue" to issueType))
+        }
         showReportDialog(
             activity,
             ReportRequest(
-                trigger = DiagnosticTrigger.ERROR_PROMPT,
+                trigger = trigger,
                 title = title,
                 issueType = issueType,
                 description = description,

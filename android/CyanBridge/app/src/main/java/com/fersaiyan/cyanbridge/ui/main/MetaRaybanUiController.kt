@@ -299,6 +299,7 @@ internal class MetaRaybanUiController(
                 "Meta DAT snapshot" to manager.diagnosticsSnapshot(),
             ),
             dismissButtonLabel = activity.getString(R.string.action_cancel),
+            trigger = com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticTrigger.VOLUNTARY,
         )
     }
 
