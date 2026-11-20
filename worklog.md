@@ -1,5 +1,10 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-20 — Release 2.4.2 (versionCode 35)
+
+- Contents on top of 2.4.1 (code 34): the HeyCyan live-preview "Software caused connection abort" fix (wait for the P2P network to be CONNECTED), the RTSP relay port wait (`startWhenPortFree`), and Meta "Send diagnostics" reports filed as voluntary.
+- The 2.4.1 code-34 AAB was already live on Play (a log_mwp7nj3j report came from the Play install). 2.4.2 uses code 35.
+
 ## 2026-11-20 — HeyCyan live preview "Software caused connection abort" fixed (`heycyan-rtsp-abort-fix`)
 
 - **Cause:** the app opened its RTSP sockets to the glasses while the P2P network was still CONNECTING. On a re-join the route already has its DHCP address. ~10 ms later the network goes CONNECTED and ConnectivityService "Destroyed live tcp sockets for local address /192.168.49.213" (ECONNABORTED). The next probe path then hit EADDRINUSE because the old listener's close was still pending.
