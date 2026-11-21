@@ -39,6 +39,8 @@ Third-party material stays under its upstream license. For example:
 
 - the MYVU submodule is MIT;
 - the MoYoung SDK is GPL-3.0;
+- the trimmed LibVLC AAR is LGPL (see
+  `android/CyanBridge/third_party/libvlc-trim/` for its sources and recipe);
 - Meta DAT is governed by Meta's developer terms;
 - HeyCyan/QCSDK vendor binaries and documentation are outside the root
   Apache-2.0 grant;

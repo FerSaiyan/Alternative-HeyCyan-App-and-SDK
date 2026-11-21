@@ -30,7 +30,7 @@ abstract class VlcWithoutBundledStl implements TransformAction<TransformParamete
     @Override
     void transform(TransformOutputs outputs) {
         def input = inputArtifact.get().asFile
-        if (!input.name.contains('libvlc-all')) {
+        if (!(input.name.contains('libvlc-all') || input.name.startsWith('libvlc-cyan'))) {
             outputs.file(input)
             return
         }
@@ -328,8 +328,11 @@ dependencies {
     implementation("com.github.CymChad:BaseRecyclerViewAdapterHelper:3.0.4")
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     // Vendor-matched live engine for EyeVue (official app uses LibVLC direct).
-    // 3.7.x: 16 KB-aligned libvlc/libvlcjni (3.6.0 was 4 KB, rejected by Google Play).
-    implementation 'org.videolan.android:libvlc-all:3.7.7'
+    // LibVLC 3.7.7 trimmed to the RTSP/MPEG-TS, H.264/H.265/AAC live preview path:
+    // arm64 download 68.5 -> 49.1 MB. 16 KB aligned. Rebuilt from VideoLAN's sources by
+    // third_party/libvlc-trim/build.sh; same Java API as libvlc-all 3.7.7, whose
+    // transitive androidx deps (annotation, collection, core, lifecycle) the app already has.
+    implementation files('libs/libvlc-cyan-3.7.7.aar')
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
     implementation 'com.android.billingclient:billing-ktx:8.1.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0"

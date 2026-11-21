@@ -1,0 +1,423 @@
+From 99f745996961872215f0c8c488943161f7b2f4f5 Mon Sep 17 00:00:00 2001
+From: libvlc-trim <libvlc-trim@localhost>
+Date: Sat, 21 Nov 2026 17:05:40 -0300
+Subject: [PATCH] CyanBridge trimmed build
+
+- compile-libvlc.sh: one NDK (r27-29) and API level for all ABIs; build only
+  the contribs in AVLC_CONTRIB_TARGETS with the ffmpeg options in
+  AVLC_FFMPEG_TRIM_CONF; configure VLC without optional dependencies; link
+  only the modules listed in AVLC_MODULES_FILE; build only libtool from
+  extras/tools.
+- Android.mk: do not link libjpeg (not built).
+- libvlcjni.c: build without fontconfig; nativeBuildFontCache() then has
+  nothing to do and returns true.
+---
+ buildsystem/compile-libvlc.sh | 252 +++++++++++++---------------------
+ libvlc/jni/Android.mk         |   1 -
+ libvlc/jni/libvlcjni.c        |  13 ++
+ 3 files changed, 105 insertions(+), 161 deletions(-)
+
+diff --git a/buildsystem/compile-libvlc.sh b/buildsystem/compile-libvlc.sh
+index b67c1e6..cf03028 100755
+--- a/buildsystem/compile-libvlc.sh
++++ b/buildsystem/compile-libvlc.sh
+@@ -115,19 +115,13 @@ fi
+ # try to detect NDK version
+ REL=$(grep -o '^Pkg.Revision.*[0-9]*.*' $ANDROID_NDK/source.properties |cut -d " " -f 3 | cut -d "." -f 1)
+ 
+-if [ "${HAVE_64}" = 1 ]; then
+-    if [ "$REL" != 27 ] && [ "$REL" != 28 ] && [ "$REL" != 29 ]; then
+-        echo "NDK v27-29 needed for 64-bit, got $REL, cf. https://developer.android.com/ndk/downloads/"
+-        exit 1
+-    fi
+-    ANDROID_API=21
+-else
+-    if [ "$REL" != 21 ]; then
+-        echo "NDK v21 needed for 32-bit, got $REL cf. https://developer.android.com/ndk/downloads/"
+-        exit 1
+-    fi
+-    ANDROID_API=17
++# CyanBridge trim: one NDK (r27-29) for all four ABIs, API level from
++# AVLC_ANDROID_API (default 28 = the app's minSdk; bionic has iconv from 28).
++if [ "$REL" != 27 ] && [ "$REL" != 28 ] && [ "$REL" != 29 ]; then
++    echo "NDK v27-29 needed, got $REL, cf. https://developer.android.com/ndk/downloads/"
++    exit 1
+ fi
++ANDROID_API=${AVLC_ANDROID_API:-28}
+ 
+ ############
+ # VLC PATH #
+@@ -255,7 +249,7 @@ avlc_checkfail()
+ 
+ avlc_find_modules()
+ {
+-    echo "$(find $1 -name 'lib*plugin.a' | grep -vE "lib(${blacklist_regexp})_plugin.a" | tr '\n' ' ')"
++    echo "$(find $1 -name 'lib*plugin.a' | grep -E "/lib(${whitelist_regexp})_plugin.a$" | tr '\n' ' ')"
+ }
+ 
+ avlc_get_symbol()
+@@ -288,49 +282,13 @@ avlc_build()
+ # VLC BOOTSTRAP ARGUMENTS #
+ ###########################
+ 
++# CyanBridge trim: contribs are built by explicit target (AVLC_CONTRIB_TARGETS),
++# so these flags only set the licence level and the ffmpeg options.
+ VLC_CONTRIB_ARGS="\
+-    --disable-a52 \
+-    --disable-dca \
+-    --disable-goom \
+-    --disable-chromaprint \
+-    --enable-lua \
+-    --disable-sdl \
+-    --disable-SDL_image \
+-    --enable-zvbi \
+-    --disable-kate \
+-    --disable-caca \
+-    --disable-mpcdec \
+-    --enable-upnp \
+-    --enable-gme \
+-    --disable-tremor \
+-    --enable-vorbis \
+-    --disable-sidplay2 \
+-    --disable-samplerate \
+-    --disable-faad2 \
+-    --enable-harfbuzz \
+-    --enable-iconv \
+-    --disable-aribb24 \
+-    --disable-aribb25 \
+-    --enable-mpg123 \
+-    --enable-libdsm \
+-    --enable-smb2 \
+-    --enable-libarchive \
+-    --disable-libmpeg2 \
+-    --enable-soxr \
+-    --enable-nfs \
+-    --enable-microdns \
+-    --enable-fluidlite \
+-    --disable-mad \
+-    --disable-vncclient \
+-    --disable-vnc \
+-    --enable-jpeg \
+-    --enable-libplacebo \
+-    --enable-ad-clauses \
+-    --disable-srt \
+-    --enable-vpx \
+-    --disable-x265 \
+-    --disable-medialibrary \
++    --disable-sout \
++    --disable-disc \
+ "
++AVLC_CONTRIB_TARGETS="${AVLC_CONTRIB_TARGETS:-.ffmpeg .live555 .dvbpsi}"
+ 
+ ###########################
+ # VLC CONFIGURE ARGUMENTS #
+@@ -339,117 +297,99 @@ VLC_CONTRIB_ARGS="\
+ VLC_CONFIGURE_ARGS="\
+     --with-pic \
+     --disable-nls \
+-    --enable-avformat \
+-    --enable-swscale \
+-    --enable-avcodec \
+-    --enable-opus \
+-    --enable-opensles \
+-    --enable-matroska \
+-    --enable-taglib \
+-    --enable-dvbpsi \
+     --disable-vlc --disable-shared \
+     --disable-update-check \
+     --disable-vlm \
++    --disable-sout \
++    --disable-lua \
++    --disable-addonmanagermodules \
++    --enable-avcodec \
++    --disable-avformat \
++    --disable-swscale \
++    --disable-postproc \
++    --enable-dvbpsi \
++    --enable-opensles \
++    --enable-gles2 \
++    --disable-a52 \
+     --disable-dbus \
+-    --enable-lua \
+     --disable-vcd \
+     --disable-v4l2 \
+-    --enable-bluray \
+-    --disable-linsys \
+-    --disable-decklink \
+     --disable-libva \
+     --disable-dv1394 \
+-    --enable-mod \
+-    --disable-sid \
+-    --enable-gme \
+-    --disable-tremor \
+-    --disable-mad \
+-    --enable-mpg123 \
+-    --disable-dca \
+-    --disable-sdl-image \
+-    --enable-zvbi \
+-    --disable-fluidsynth \
+-    --enable-fluidlite \
+-    --disable-jack \
+-    --disable-pulse \
+-    --disable-alsa \
+-    --disable-samplerate \
++    --disable-linsys \
++    --disable-decklink \
+     --disable-xcb \
+     --disable-qt \
+     --disable-skins2 \
++    --disable-alsa \
++    --disable-pulse \
++    --disable-jack \
++    --disable-udev \
+     --disable-mtp \
+     --disable-notify \
+-    --enable-libass \
+     --disable-svg \
+-    --disable-udev \
+-    --enable-libxml2 \
++    --disable-svgdec \
++    --disable-sdl-image \
+     --disable-caca \
+-    --enable-gles2 \
+     --disable-goom \
+     --disable-projectm \
+-    --enable-sout \
+-    --enable-vorbis \
++    --disable-libxml2 \
++    --disable-taglib \
++    --disable-freetype \
++    --disable-fribidi \
++    --disable-harfbuzz \
++    --disable-fontconfig \
++    --disable-libass \
++    --disable-gnutls \
++    --disable-libgcrypt \
++    --disable-bluray \
++    --disable-smb2 \
++    --disable-dsm \
++    --disable-nfs \
++    --disable-sftp \
++    --disable-upnp \
++    --disable-microdns \
++    --disable-chromecast \
++    --disable-mkv \
++    --disable-mod \
++    --disable-gme \
++    --disable-mpg123 \
++    --disable-mad \
++    --disable-opus \
++    --disable-vorbis \
++    --disable-ogg \
++    --disable-flac \
++    --disable-speex \
++    --disable-theora \
++    --disable-tremor \
+     --disable-faad \
+-    --disable-vnc \
+-    --enable-jpeg \
+-    --enable-smb2 \
++    --disable-dca \
++    --disable-vpx \
++    --disable-dav1d \
++    --disable-aom \
++    --disable-png \
++    --disable-jpeg \
++    --disable-zvbi \
++    --disable-telx \
++    --disable-fluidlite \
++    --disable-fluidsynth \
++    --disable-soxr \
++    --disable-samplerate \
++    --disable-spatialaudio \
++    --disable-archive \
++    --disable-srt \
++    --disable-dvdread \
++    --disable-dvdnav \
++    --enable-live555 \
+ "
+ 
+ ########################
+-# VLC MODULE BLACKLIST #
++# VLC MODULE WHITELIST #
+ ########################
+ 
+-VLC_MODULE_BLACKLIST="
+-    addons.*
+-    stats
+-    access_(bd|shm|imem)
+-    oldrc
+-    real
+-    hotkeys
+-    gestures
+-    sap
+-    dynamicoverlay
+-    rss
+-    ball
+-    audiobargraph_[av]
+-    clone
+-    mosaic
+-    osdmenu
+-    puzzle
+-    mediadirs
+-    t140
+-    ripple
+-    motion
+-    sharpen
+-    grain
+-    posterize
+-    mirror
+-    wall
+-    scene
+-    blendbench
+-    psychedelic
+-    alphamask
+-    netsync
+-    audioscrobbler
+-    motiondetect
+-    motionblur
+-    export
+-    podcast
+-    bluescreen
+-    erase
+-    stream_filter_record
+-    speex_resampler
+-    remoteosd
+-    magnify
+-    gradient
+-    dtstofloat32
+-    logger
+-    visual
+-    fb
+-    aout_file
+-    yuv
+-    .dummy
+-"
++# CyanBridge trim: only these modules are linked into libvlc.so. One name per
++# line, comments allowed; see third_party/libvlc-trim/modules.txt in CyanBridge.
++VLC_MODULE_WHITELIST="$(sed -e 's/#.*//' "${AVLC_MODULES_FILE:?AVLC_MODULES_FILE is not set}" | tr -s ' \t' '\n' | grep -v '^$')"
+ 
+ ###########################
+ # Build buildsystem tools #
+@@ -459,7 +399,7 @@ export PATH="$VLC_SRC_DIR/extras/tools/build/bin:$PATH"
+ echo "Building tools"
+ (cd $VLC_SRC_DIR/extras/tools && ./bootstrap)
+ avlc_checkfail "buildsystem tools: bootstrap failed"
+-make -C $VLC_SRC_DIR/extras/tools $MAKEFLAGS
++make -C $VLC_SRC_DIR/extras/tools $MAKEFLAGS .buildlibtool
+ avlc_checkfail "buildsystem tools: make failed"
+ 
+ VLC_CONTRIB="$VLC_SRC_DIR/contrib/$TARGET_TUPLE"
+@@ -494,12 +434,7 @@ mkdir -p $VLC_CONTRIB_DIR/lib/pkgconfig
+ # before ">> config.make" when switching to VLC 4.0
+ rm -f $VLC_CONTRIB_DIR/config.mak
+ 
+-# gettext
+-if which autopoint >/dev/null; then
+-    VLC_CONTRIB_ARGS="$VLC_CONTRIB_ARGS --enable-gettext"
+-else
+-    VLC_CONTRIB_ARGS="$VLC_CONTRIB_ARGS --disable-gettext"
+-fi
++VLC_CONTRIB_ARGS="$VLC_CONTRIB_ARGS --disable-gettext"
+ 
+ case $AVLC_CONTRIB_LICENSE in
+     l)
+@@ -548,6 +483,7 @@ else
+     echo "AS=${CROSS_TOOLS}as" >> $VLC_CONTRIB_DIR/config.mak
+     echo "RANLIB=${CROSS_TOOLS}ranlib" >> $VLC_CONTRIB_DIR/config.mak
+     echo "LD=${CROSS_TOOLS}ld" >> $VLC_CONTRIB_DIR/config.mak
++    echo "FFMPEG_TRIM_CONF=${AVLC_FFMPEG_TRIM_CONF:?AVLC_FFMPEG_TRIM_CONF is not set}" >> $VLC_CONTRIB_DIR/config.mak
+ 
+     # fix modplug endianess check (narrowing error)
+     export ac_cv_c_bigendian=no
+@@ -555,12 +491,8 @@ else
+     # list packages to be built
+     make -C $VLC_CONTRIB_DIR TARBALLS="$VLC_TARBALLS" list
+ 
+-    make -C $VLC_CONTRIB_DIR TARBALLS="$VLC_TARBALLS" $MAKEFLAGS fetch
+-    avlc_checkfail "contribs: make fetch failed"
+-
+-    #export the PATH
+-    # Make
+-    make -C $VLC_CONTRIB_DIR TARBALLS="$VLC_TARBALLS" $MAKEFLAGS -k || make -C $VLC_CONTRIB_DIR TARBALLS="$VLC_TARBALLS" $MAKEFLAGS -j1
++    # CyanBridge trim: build (and fetch) only the selected contribs and their deps
++    make -C $VLC_CONTRIB_DIR TARBALLS="$VLC_TARBALLS" $MAKEFLAGS ${AVLC_CONTRIB_TARGETS}
+     avlc_checkfail "contribs: make failed"
+ 
+     # Make prebuilt contribs package
+@@ -649,14 +581,14 @@ rm -rf ${REDEFINED_VLC_MODULES_DIR}
+ mkdir -p ${REDEFINED_VLC_MODULES_DIR}
+ 
+ echo "Generating static module list"
+-blacklist_regexp=
+-for i in ${VLC_MODULE_BLACKLIST}
++whitelist_regexp=
++for i in ${VLC_MODULE_WHITELIST}
+ do
+-    if [ -z "${blacklist_regexp}" ]
++    if [ -z "${whitelist_regexp}" ]
+     then
+-        blacklist_regexp="${i}"
++        whitelist_regexp="${i}"
+     else
+-        blacklist_regexp="${blacklist_regexp}|${i}"
++        whitelist_regexp="${whitelist_regexp}|${i}"
+     fi
+ done
+ 
+diff --git a/libvlc/jni/Android.mk b/libvlc/jni/Android.mk
+index 7068558..d1c7560 100644
+--- a/libvlc/jni/Android.mk
++++ b/libvlc/jni/Android.mk
+@@ -33,7 +33,6 @@ LOCAL_LDLIBS := \
+     $(VLC_BUILD_DIR)/compat/.libs/libcompat.a \
+     $(VLC_CONTRIB_LDFLAGS) \
+     -ldl -lz -lm -llog \
+-    -ljpeg \
+     $(VLC_LDFLAGS) \
+     -Wl,-Bsymbolic
+ LOCAL_CXXFLAGS := -std=c++11
+diff --git a/libvlc/jni/libvlcjni.c b/libvlc/jni/libvlcjni.c
+index a051674..d21b241 100644
+--- a/libvlc/jni/libvlcjni.c
++++ b/libvlc/jni/libvlcjni.c
+@@ -34,9 +34,11 @@
+ 
+ #include <android/api-level.h>
+ 
++#ifdef HAVE_FONTCONFIG
+ # include <limits.h>
+ # include <time.h>
+ # include <fontconfig/fontconfig.h>
++#endif
+ 
+ #include "libvlcjni-vlcobject.h"
+ #include "utils.h"
+@@ -485,6 +487,7 @@ jstring Java_org_videolan_libvlc_LibVLC_changeset(JNIEnv* env, jobject thiz)
+     return vlcNewStringUTF(env, libvlc_get_changeset());
+ }
+ 
++#ifdef HAVE_FONTCONFIG
+ /* A lock left behind by a process killed mid-scan blocks the cache of that
+  * directory until fontconfig considers it stale, which takes 10 minutes. The
+  * locks we take ourselves are only held for a fraction of a second, so anything
+@@ -579,6 +582,16 @@ jboolean Java_org_videolan_libvlc_LibVLC_nativeBuildFontCache(JNIEnv *env,
+ 
+     return b_cached;
+ }
++#else
++/* Built without fontconfig (and without the freetype text renderer): there is
++ * no font cache to build. */
++jboolean Java_org_videolan_libvlc_LibVLC_nativeBuildFontCache(JNIEnv *env,
++                                                            jobject thiz)
++{
++    (void) env; (void) thiz;
++    return JNI_TRUE;
++}
++#endif
+ 
+ void Java_org_videolan_libvlc_LibVLC_nativeSetUserAgent(JNIEnv* env,
+                                                         jobject thiz,
+-- 
+2.34.1
+

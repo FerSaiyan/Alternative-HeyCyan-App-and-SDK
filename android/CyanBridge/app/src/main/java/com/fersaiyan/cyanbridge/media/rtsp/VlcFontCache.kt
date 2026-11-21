@@ -20,9 +20,13 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.videolan.libvlc.LibVLC
 
 /**
- * LibVLC 3.7 (VLC 3.0.25) scans the system fonts into a fontconfig cache on its first video
- * output. On the emulators that took 25-28 s, so the first live preview after an install or an
- * update missed its timeouts (HeyCyan: "No RTSP found"; EyeVue: ~38 s to the first frame).
+ * The full LibVLC 3.7 (VLC 3.0.25) scans the system fonts into a fontconfig cache on its first
+ * video output. On the emulators that took 25-28 s, so the first live preview after an install or
+ * an update missed its timeouts (HeyCyan: "No RTSP found"; EyeVue: ~38 s to the first frame).
+ *
+ * The trimmed LibVLC the app ships (third_party/libvlc-trim) has no text renderer and no
+ * fontconfig: buildFontCache() returns true at once, so this is a one-time no-op per app version.
+ * It stays so that a LibVLC build with fonts would need no other change.
  *
  * The cache is built once per app version in the background, and a preview that starts before it
  * is done waits for it before talking to the glasses, so none of the stream timeouts run during

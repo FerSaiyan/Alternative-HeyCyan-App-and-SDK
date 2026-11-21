@@ -1,0 +1,28 @@
+From 0071e708543d7023614de8f08ae01e5e4459ed9b Mon Sep 17 00:00:00 2001
+From: libvlc-trim <libvlc-trim@localhost>
+Date: Sat, 21 Nov 2026 17:09:51 -0300
+Subject: [PATCH] avcodec: check the libavcodec micro version in
+ vlc_init_avcodec()
+
+LIBAVFORMAT_VERSION_MICRO is only defined when libavformat is built; without
+it the check calls avcodec_register_all(), which FFmpeg 5+ no longer has.
+---
+ modules/codec/avcodec/avcommon.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules/codec/avcodec/avcommon.h b/modules/codec/avcodec/avcommon.h
+index 10ad13d..feedec2 100644
+--- a/modules/codec/avcodec/avcommon.h
++++ b/modules/codec/avcodec/avcommon.h
+@@ -123,7 +123,7 @@ static inline void vlc_init_avcodec(vlc_object_t *obj)
+ 
+     vlc_init_avutil(obj);
+ 
+-#if (LIBAVFORMAT_VERSION_MICRO < 100) || !(LIBAVCODEC_VERSION_CHECK(58, 10, 100))
++#if (LIBAVCODEC_VERSION_MICRO < 100) || !(LIBAVCODEC_VERSION_CHECK(58, 10, 100))
+     avcodec_register_all();
+ #endif
+ 
+-- 
+2.34.1
+

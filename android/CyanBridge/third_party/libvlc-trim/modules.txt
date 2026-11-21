@@ -1,0 +1,67 @@
+# VLC 3.0 modules linked into CyanBridge's trimmed libvlc.so (one per line).
+# Every other module that VLC builds is left out of the static module table.
+#
+# What the app plays (see README.md):
+#  - glasses live preview: RTSP over TCP (rtsp-tcp) from the in-app relay,
+#    H.264 (H.265 tolerated) video, AAC / G.711 / PCM audio, decoded with
+#    :codec=avcodec;
+#  - Mentra Live: in-app RTMP ingest remuxed to MPEG-TS, served at
+#    http://127.0.0.1:<port>/<token>.ts;
+#  - output to VLCVideoLayout (inline preview) or to an ImageReader surface
+#    (Walking Aid frames).
+
+# Access and network
+live555                 # RTSP client (demux + access), needs the live555 contrib
+http                    # http:// access (Mentra loopback MPEG-TS)
+https                   # HTTP/1.1 + HTTP/2 access; also takes plain http://
+filesystem              # file:// and fd:// (diagnostics, local fixtures)
+
+# Stream filters
+prefetch
+cache_read
+cache_block
+
+# Demuxers
+ts                      # MPEG-TS (Mentra), needs libdvbpsi
+es                      # raw audio elementary streams (ADTS AAC, MPEG audio)
+h26x                    # raw H.264 / H.265 elementary streams
+mp4                     # MP4 files: CI's Walking Aid model test plays its fixture as file://
+
+# Packetizers
+packetizer_h264
+packetizer_hevc
+packetizer_mpeg4audio   # AAC (ADTS, LATM, raw)
+packetizer_mpegaudio
+packetizer_copy
+
+# Decoders
+avcodec                 # libavcodec: h264, hevc, aac, aac_latm, mp2/mp3, opus, mjpeg, g726
+araw                    # PCM / L16 / L8
+g711                    # A-law / mu-law
+
+# Video output
+android_window          # AWindow (VLCVideoLayout / setVideoSurface)
+android_display         # ANativeWindow display, fallback when GLES2 is not usable
+gles2                   # OpenGL ES 2 display (default on Android)
+egl_android             # EGL for gles2
+i420_rgb                # software I420 -> RV16/RV32 for android_display
+i420_nv12
+chroma_yuv_neon         # NEON converters: built for armeabi-v7a only
+yuv_rgb_neon            # armeabi-v7a only
+
+# Audio output and conversion
+opensles_android
+android_audiotrack
+audio_format
+float_mixer
+integer_mixer
+volume_neon             # armeabi-v7a only
+trivial_channel_mixer
+simple_channel_mixer
+remap
+ugly_resampler
+scaletempo
+
+# Misc
+android_logger          # verbose LibVLC logs to logcat
+memory_keystore         # LibVLC opens a keystore at start (warns without one)

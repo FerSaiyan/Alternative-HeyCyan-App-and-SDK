@@ -1,0 +1,32 @@
+From a483d5a3a287b689f503e9f875df34450991542f Mon Sep 17 00:00:00 2001
+From: libvlc-trim <libvlc-trim@localhost>
+Date: Sat, 21 Nov 2026 17:05:40 -0300
+Subject: [PATCH] contrib: ffmpeg: optional trimmed configuration
+
+When FFMPEG_TRIM_CONF is set (CyanBridge's trimmed LibVLC), append it to the
+ffmpeg configure options and drop the gsm, openjpeg and zlib dependencies.
+---
+ contrib/src/ffmpeg/rules.mak | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/contrib/src/ffmpeg/rules.mak b/contrib/src/ffmpeg/rules.mak
+index e4b5595..8babdeb 100644
+--- a/contrib/src/ffmpeg/rules.mak
++++ b/contrib/src/ffmpeg/rules.mak
+@@ -223,6 +223,13 @@ endif
+ FFMPEGCONF += --target-os=sunos --enable-pic
+ endif
+ 
++# CyanBridge trimmed LibVLC: FFMPEG_TRIM_CONF (set in config.mak) keeps only
++# the decoders and parsers the app needs and drops the gsm/openjpeg/zlib deps.
++ifdef FFMPEG_TRIM_CONF
++FFMPEGCONF := $(filter-out --enable-libgsm --enable-libopenjpeg --enable-libmp3lame --enable-bsf=vp9_superframe,$(FFMPEGCONF)) $(FFMPEG_TRIM_CONF)
++DEPS_ffmpeg :=
++endif
++
+ # Build
+ PKGS += ffmpeg
+ ifeq ($(call need_pkg,"libavcodec >= $(FFMPEG_LAVC_MIN) libavformat >= 53.21.0 libswscale"),)
+-- 
+2.34.1
+

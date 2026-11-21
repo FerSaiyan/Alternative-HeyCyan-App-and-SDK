@@ -1,5 +1,13 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — Trimmed LibVLC, branch `app-size-libvlc`
+
+- **Change:** `org.videolan.android:libvlc-all:3.7.7` replaced by `app/libs/libvlc-cyan-3.7.7.aar`, built from VideoLAN's sources (vlc-android tag `libvlc-3.7.7` → libvlcjni `0b8dc65e` → VLC 3.0.x `84177b22`) by `android/CyanBridge/third_party/libvlc-trim/build.sh`. 37 VLC modules (live555 RTSP, http, ts/es/h26x/mp4, avcodec, Android GLES2/window/AudioTrack/OpenSL outputs) and three contribs (ffmpeg 8.1.2 libavcodec with h264/hevc/aac/mp3/opus/mjpeg/G.7xx decoders only, live555, libdvbpsi). Java half is the official classes.jar.
+- **Size:** arm64 libvlc+libvlcjni 45.97 → 5.85 MB (21.8 → 2.44 MB compressed); bundletool arm64 download 68.5 → 49.1 MB (v7a 53.8 → 35.5, x86_64 72.1 → 51.2, x86 57.7 → 38.7). All 64-bit .so PT_LOAD align 0x4000.
+- **Behaviour:** no freetype/fontconfig, so no title/OSD text over video and no 25-28 s first-preview font scan (`VlcFontCache` is now a no-op). No mediacodec, subtitles, deinterlace, record.
+- **Tests (Pixel_9a, API 37, 16 KB pages):** GlassesRtspRelayDecodeTest, WalkingAidVideoCaptureLifecycleTest, MetaDatSdkMockTest, Walking Aid model CI `eyevue-video` phase pass. Scratch (not committed): H.264+AAC RTSP over TCP from a host live555 server (audio decoded and played) and the real Mentra path (ffmpeg RTMP → `MentraRtmpIngest` → loopback TS → LibVLC).
+- **Re-check on hardware:** HeyCyan, EyeVue, TuneBuds and Mentra Live previews with audio unmuted.
+
 ## 2026-11-21 — Meta DAT support report log_mwqrass7_5bb17d7f (2.4.5, voluntary), branch `ANRs_fix-meta-log`
 
 - **Who:** Play pre-launch report robot, not a user. Signs: model "OnePlus8Pro" on hardware `sunfish` (Pixel 4a), x86_64-first ABIs, Android 11 with patch 2021-07, 4 GB storage, UTC+0 (an earlier robot report had UTC+13), charging, installed from Play 18:37 UTC (1 h 49 min after the 2.4.5 release commit) and every runtime permission granted with no permission prompts.
@@ -8,7 +16,7 @@
 - **Fixed (ee607cd2):**
   - Robots send support reports and product analytics. `TestLabEnvironment` (Settings.System `firebase.test.lab`) stops `/logs/submit` uploads and analytics heartbeat/acquisition posts on Test Lab devices. The server keeps only the newest 200 reports, so robot reports evict real ones.
   - The connection event said "glasses disconnected" for the first status in a process, and for a family picked while nothing was connected. It now says "glasses not connected" unless the link was up.
-- **Open:** the full logcat (289 lines) was not read: the admin page needs a website sign-in.
+- **Full logs (read later from /admin/debug-logs):** Firebase Test Lab Robo markers (`Marmot` property cloaking, `mojito` instrumentation, `dddg: entered instrumentation`, virtio_gpu); no exceptions in the Meta path; snapshot `metaAiInstalled=false`, `bondedMetaDeviceCount=0`, `metaAccessState=NEEDS_SETUP` (1f27c5c2 behaved as intended). The report exists because the pairing screen offered "Send logs" on the "Meta AI is required" dialog (removed in d511b1cb) and the robot tapped it; 9f0bef31 had only relabelled such reports `voluntary`. CI Meta tests run on MockDeviceKit and check functionality, not who can submit reports. Also seen: `memory_chunks_fts` (FTS5) creation fails on that Android 11 image.
 
 ## 2026-11-21 — Play vitals crash/ANR sweep, branch `ANRs_fix`
 
