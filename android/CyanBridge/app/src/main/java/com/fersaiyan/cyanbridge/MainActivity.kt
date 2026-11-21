@@ -1532,10 +1532,6 @@ class MainActivity : AppCompatActivity() {
         deviceConnection.requestBatteryStatus(showToast)
     }
 
-    private fun handleBatteryReport(battery: Int, charging: Boolean) {
-        deviceConnection.handleBatteryReport(battery, charging)
-    }
-
     private fun handleTaskerCommand(startIntent: Intent?) {
         taskerCommands.handleTaskerCommand(startIntent)
     }
@@ -1705,13 +1701,8 @@ class MainActivity : AppCompatActivity() {
             if (response.loadData.size <= 6) return
             when (response.loadData[6].toInt()) {
                 //Glasses battery report
-                0x05 -> {
-                    //Current battery
-                    val battery = response.loadData[7].toInt()
-                    //Is it charging
-                    val changing = response.loadData[8].toInt()
-                    handleBatteryReport(battery, changing == 1)
-                }
+                // Battery + charging (0x05) and temperature (0x0B); short frames no longer throw here.
+                0x05, 0x0b -> deviceConnection.handleConditionNotify(response.loadData)
                 //Glasses pass quick recognition / AI Photo
                 0x02 -> {
                     if (com.fersaiyan.cyanbridge.glasses.HeyCyanPhotoCapture.isActive()) {

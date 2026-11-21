@@ -40,6 +40,9 @@ import com.fersaiyan.cyanbridge.shared.network.session.GlassesWifiErrorPolicy
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
 import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesCondition
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesConditionState
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesWifiStartHint
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.bleIpBridge
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
@@ -116,6 +119,8 @@ internal class GlassesMediaSyncCoordinator(
     private var downloadP2pRestartCount = 0
     private var lastP2pResetAtMs = 0L
     private val seenP2pPeers = mutableSetOf<String>()
+    /** Any Wi-Fi Direct peer at all in this sync (even a non-matching one): the radio side worked. */
+    private var downloadAnyPeerSeen = false
     private var lastPeerSetHash: Int = 0
     private var officialSystemSuccess = false
     private var officialBleCallbackSuccess = false
@@ -381,6 +386,7 @@ internal class GlassesMediaSyncCoordinator(
             override fun onPeersChanged(peers: Collection<WifiP2pDevice>) {
                 Log.i("DataDownload", "Found ${peers.size} P2P devices")
                 if (peers.isEmpty()) return
+                downloadAnyPeerSeen = true
 
                 // Debounce: Android often broadcasts PEERS_CHANGED multiple times
                 // for the same peer list. Only process when the set actually changes.
@@ -951,6 +957,7 @@ internal class GlassesMediaSyncCoordinator(
                 showDownloadError(
                     "Adaptive sync exhausted its bounded recovery budget at checkpoint $checkpoint after ${waitedSeconds}s.",
                     cleanup = true,
+                    userMessage = glassesWifiStartHint(),
                 )
                 return@launch
             }
@@ -979,6 +986,7 @@ internal class GlassesMediaSyncCoordinator(
         noMatchPeerCount = 0
         downloadP2pRestartCount = 0
         seenP2pPeers.clear()
+        downloadAnyPeerSeen = false
         lastPeerSetHash = 0
         transferModeCommandTimeoutJob?.cancel()
         transferModeCommandTimeoutJob = null
@@ -1131,6 +1139,18 @@ internal class GlassesMediaSyncCoordinator(
         )
     }
 
+    private fun glassesCondition(): GlassesCondition =
+        GlassesConditionState.snapshot().freshAt(System.currentTimeMillis(), GLASSES_CONDITION_MAX_AGE_MS)
+
+    /**
+     * Plain explanation when the glasses never brought their Wi-Fi Direct up in this sync: no peer at all, no group,
+     * no BLE-reported IP. Names charging and heat when the glasses reported them (log_mwqq8cyw). Null otherwise.
+     */
+    private fun glassesWifiStartHint(): String? {
+        val wifiSeen = downloadAnyPeerSeen || downloadP2pConnected || !downloadBleIp.isNullOrBlank()
+        return GlassesWifiStartHint.message(glassesCondition(), peerSeen = wifiSeen)
+    }
+
     private fun maybeShowP2pSyncLogHelp(
         reason: String,
         title: String = "P2P sync is stuck",
@@ -1142,7 +1162,8 @@ internal class GlassesMediaSyncCoordinator(
             activity = activity,
             title = "$title (${downloadFlowMode.label})",
             issueType = "P2P/WiFi sync issue",
-            description = "Flow: ${downloadFlowMode.label}\n\n$reason",
+            description = "Flow: ${downloadFlowMode.label}\n\n$reason" +
+                (glassesWifiStartHint()?.let { "\n\nLikely cause: $it" } ?: ""),
             extraInfo = syncSupportExtraInfo(),
             dismissButtonLabel = dismissButtonLabel,
         )
@@ -1169,6 +1190,10 @@ internal class GlassesMediaSyncCoordinator(
         "expected_official_p2p_name" to GlassesP2pPeerSelector.expectedOfficialP2pName(),
         "selected_download_network" to p2pNetwork.selectedDownloadNetworkSummary,
         "seen_p2p_peers" to seenP2pPeers.joinToString(", "),
+        "any_p2p_peer_seen" to downloadAnyPeerSeen.toString(),
+        "glasses_charging" to (glassesCondition().charging?.toString() ?: "unknown"),
+        "glasses_battery_pct" to (glassesCondition().batteryPercent?.toString() ?: ""),
+        "glasses_temperature_c" to (glassesCondition().temperatureCelsius?.toString() ?: ""),
         "active_glasses_session" to (GlassesSessionCoordinator.currentSession()?.name ?: "none"),
         "ota_active" to host.isOtaActive().toString(),
         "adaptive_route" to (adaptiveActiveRoute?.name ?: ""),
@@ -2245,7 +2270,8 @@ internal class GlassesMediaSyncCoordinator(
         Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
     }
     
-    private fun showDownloadError(message: String, cleanup: Boolean = true) {
+    /** [userMessage] replaces the technical [message] in the toast when there is a plainer explanation. */
+    private fun showDownloadError(message: String, cleanup: Boolean = true, userMessage: String? = null) {
         com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.error(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "sync failed: $message", mapOf("flow" to downloadFlowMode.name, "hq_image" to isHighQualityImageTransfer().toString()))
         if (isHighQualityImageTransfer()) {
             recordAdaptiveSyncFailure(message)
@@ -2263,7 +2289,8 @@ internal class GlassesMediaSyncCoordinator(
             cleanupP2pAfterDownload()
         }
         Log.e("DataDownload", "ERROR: $message (flow=${downloadFlowMode.label})")
-        Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
+        userMessage?.let { transferUi.setTransferDetail(it) }
+        Toast.makeText(activity, userMessage ?: message, Toast.LENGTH_LONG).show()
     }
 
     private fun recordAdaptiveSyncSuccess() {
@@ -2853,13 +2880,14 @@ internal class GlassesMediaSyncCoordinator(
         if (officialFlowRetryRequired) return
         officialFlowRetryRequired = true
         Log.w("DataDownload", "HeyCyan flow stopped for manual retry: $message")
+        val hint = glassesWifiStartHint()
         if (!downloadInitialPhaseCompleted) {
             maybeShowP2pSyncLogHelp(
                 reason = "HeyCyan-compatible sync stopped before media transfer. Error: $message",
             )
         }
         finishDownloadInitialPhase("official flow retry required: $message")
-        transferUi.setTransferDetail("$message Retry sync.")
+        transferUi.setTransferDetail(hint ?: "$message Retry sync.")
         if (resetDeviceP2p) {
             WifiP2pManagerSingleton.getInstance(activity).resetDeviceP2p()
         }
@@ -2867,7 +2895,7 @@ internal class GlassesMediaSyncCoordinator(
             sendExitTransfer = false,
             hideTransferUi = true,
         )
-        Toast.makeText(activity, "$message Please retry sync.", Toast.LENGTH_LONG).show()
+        Toast.makeText(activity, hint ?: "$message Please retry sync.", Toast.LENGTH_LONG).show()
     }
 
     /** Activity teardown while the HeyCyan media sync still owns the glasses session. */
@@ -2880,6 +2908,8 @@ internal class GlassesMediaSyncCoordinator(
     }
 
     companion object {
+        /** Glasses battery/temperature reports older than this are not used to explain a failed sync. */
+        private const val GLASSES_CONDITION_MAX_AGE_MS = 10 * 60_000L
         private const val TRANSFER_MODE_COMMAND_TIMEOUT_MS = 10_000L
         private const val CUSTOM_MAX_P2P_RESTARTS = 3
         private const val ADAPTIVE_INITIAL_PHASE_TIMEOUT_MS = 85_000L
