@@ -14,6 +14,7 @@ object GlassesManagerGating {
         META_RAYBAN_REGISTRATION,
         MEIZU_MYVU_CONTROLS,
         MEMOMIND_CONTROLS,
+        MENTRA_DISPLAY_CONTROLS,
         EYEVUE_CONTROLS,
         TUNEBUDS_CONTROLS,
         CAPTURE_SETTINGS,
@@ -58,6 +59,7 @@ object GlassesManagerGating {
             }
             GlassesControlPanel.MEIZU_MYVU -> visible.add(Action.MEIZU_MYVU_CONTROLS)
             GlassesControlPanel.MEMOMIND -> visible.add(Action.MEMOMIND_CONTROLS)
+            GlassesControlPanel.MENTRA_DISPLAY -> visible.add(Action.MENTRA_DISPLAY_CONTROLS)
             GlassesControlPanel.NONE -> Unit
         }
         capabilityActions.forEach { (capability, action) ->
@@ -176,7 +178,8 @@ object GlassesManagerGating {
         GlassesDashboardAction.MeizuShowTestTeleprompter,
         GlassesDashboardAction.MeizuSyncClock,
         GlassesDashboardAction.MeizuSetComfortBrightness,
-        is GlassesDashboardAction.MemoMindPanel -> null
+        is GlassesDashboardAction.MemoMindPanel,
+        is GlassesDashboardAction.MentraDisplayPanel -> null
     }
 
     /** The vendor panel that emits an action, or null for actions of the shared sections. */
@@ -201,6 +204,7 @@ object GlassesManagerGating {
         GlassesDashboardAction.MeizuSyncClock,
         GlassesDashboardAction.MeizuSetComfortBrightness -> GlassesControlPanel.MEIZU_MYVU
         is GlassesDashboardAction.MemoMindPanel -> GlassesControlPanel.MEMOMIND
+        is GlassesDashboardAction.MentraDisplayPanel -> GlassesControlPanel.MENTRA_DISPLAY
         // The HeyCyan firmware sources (Wi-Fi .swu + BLE .bin) and patch requests; the other
         // FIRMWARE_UPDATE families use GlassesDashboardAction.FamilyFirmware.
         is GlassesDashboardAction.RequestOtaFirmware,

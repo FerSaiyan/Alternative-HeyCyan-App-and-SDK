@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.ui.main.glasses
 
+import android.content.Intent
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.StringRes
@@ -13,6 +15,10 @@ import com.fersaiyan.cyanbridge.devices.mentra.MentraLiveManager
 import com.fersaiyan.cyanbridge.shared.devices.GlassesFamilyProfile
 import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraDisplayInput
 import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraSdkModel
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
+import com.fersaiyan.cyanbridge.shared.glasses.MentraDisplayPanelCommand
+import com.fersaiyan.cyanbridge.shared.glasses.MentraDisplayPanelLabels
+import com.fersaiyan.cyanbridge.shared.glasses.MentraDisplayUiState
 import com.fersaiyan.cyanbridge.ui.AutoPairManager
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import com.mentra.bluetoothsdk.GlassesRuntimeState
@@ -69,6 +75,23 @@ internal class MentraDisplayGlasses(
     /** The SDK keeps its own foreground service with a notification while it runs. */
     override val runsForegroundConnectionService: Boolean = true
 
+    override fun handlePanelAction(action: GlassesDashboardAction): Boolean {
+        val command = (action as? GlassesDashboardAction.MentraDisplayPanel)?.command ?: return false
+        when (command) {
+            MentraDisplayPanelCommand.SHOW_TEST_TEXT ->
+                manager.showDisplayText(activity.getString(R.string.mentra_display_test_text, modelName))
+            MentraDisplayPanelCommand.CLEAR_DISPLAY -> manager.clearDisplayGlasses()
+            MentraDisplayPanelCommand.TOGGLE_NOTIFICATION_FORWARDING -> {
+                if (!manager.setNotificationForwarding(!manager.forwardingNotifications.value)) {
+                    toast(R.string.mentra_display_notification_access_needed, modelName)
+                    runCatching { activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+                }
+                renderConnectionStatus(manager.glasses.value.ready)
+            }
+        }
+        return true
+    }
+
     override fun renderConnectionStatus(connected: Boolean) {
         val state = manager.glasses.value
         val label = when {
@@ -78,8 +101,28 @@ internal class MentraDisplayGlasses(
         }
         context.binding.statusText.text = label
         context.connection.updateBatteryText(manager.batteryLevel())
-        context.screen.updateDashboardState { it.copy(connectionLabel = label) }
+        context.screen.updateDashboardState {
+            it.copy(
+                connectionLabel = label,
+                mentraDisplay = MentraDisplayUiState(
+                    title = modelName,
+                    canSend = state.ready,
+                    forwardingNotifications = manager.forwardingNotifications.value,
+                    labels = panelLabels,
+                ),
+            )
+        }
         context.connection.updateDeviceClassText()
+    }
+
+    private val panelLabels: MentraDisplayPanelLabels by lazy {
+        MentraDisplayPanelLabels(
+            description = activity.getString(R.string.mentra_display_panel_description),
+            showTestText = activity.getString(R.string.mentra_display_show_test_text),
+            clearDisplay = activity.getString(R.string.mentra_display_clear_display),
+            forwardNotificationsOn = activity.getString(R.string.mentra_display_forward_notifications_on),
+            forwardNotificationsOff = activity.getString(R.string.mentra_display_forward_notifications_off),
+        )
     }
 
     /** Mirrors the SDK state into the dashboard; a long press runs the dashboard's voice question. */
@@ -91,6 +134,9 @@ internal class MentraDisplayGlasses(
             }
             launch {
                 manager.inputEvents.collect { event -> if (isSelected) onInput(event) }
+            }
+            launch {
+                manager.forwardingNotifications.collect { if (isSelected) renderConnectionStatus(manager.glasses.value.ready) }
             }
         }
     }

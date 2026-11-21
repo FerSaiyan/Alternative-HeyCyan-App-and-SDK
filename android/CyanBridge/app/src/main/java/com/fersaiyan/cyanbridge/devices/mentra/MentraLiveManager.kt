@@ -2,10 +2,12 @@ package com.fersaiyan.cyanbridge.devices.mentra
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.bridge.core.DisplayCommand
 import com.fersaiyan.cyanbridge.bridge.core.GlassesBridge
 import com.fersaiyan.cyanbridge.bridge.core.GlassesBridgeState
 import com.fersaiyan.cyanbridge.bridge.core.GestureType
 import com.fersaiyan.cyanbridge.bridge.core.InputEvent
+import com.fersaiyan.cyanbridge.bridge.notifications.NotificationForwarderService
 import com.mentra.bluetoothsdk.BluetoothError
 import com.mentra.bluetoothsdk.ButtonPressEvent
 import com.mentra.bluetoothsdk.ConnectOptions
@@ -118,6 +120,34 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
 
     /** Display glasses (G1, G2, Mentra Display, NIMO, AR99) as a display adapter; Live keeps [MentraLiveAdapter]. */
     val displayAdapter = MentraDisplayAdapter(DisplayPort(), scope)
+
+    private val _forwardingNotifications = MutableStateFlow(false)
+
+    /** Phone notifications go to the display glasses' HUD (display glasses panel; off after a disconnect). */
+    val forwardingNotifications: StateFlow<Boolean> = _forwardingNotifications
+
+    /**
+     * Turns notification forwarding to the display glasses on or off. Returns false when CyanBridge's
+     * notification access is missing (the caller opens its settings).
+     */
+    fun setNotificationForwarding(enabled: Boolean): Boolean {
+        if (enabled && !NotificationForwarderService.isListenerBound(appContext)) return false
+        if (enabled || _forwardingNotifications.value) NotificationForwarderService.setEnabled(enabled)
+        _forwardingNotifications.value = enabled
+        return true
+    }
+
+    /** Shows [text] on the display glasses (the display panel's test text). */
+    fun showDisplayText(text: String) {
+        scope.launch {
+            displayAdapter.showText(DisplayCommand.Text(text))
+                .onFailure { Log.w(TAG, "Test text not shown: ${it.message}") }
+        }
+    }
+
+    fun clearDisplayGlasses() {
+        scope.launch { displayAdapter.clearDisplay().onFailure { Log.w(TAG, "Clear display failed: ${it.message}") } }
+    }
 
     init {
         GlassesBridge.registerAdapter(MentraLiveAdapter(this))
@@ -491,6 +521,7 @@ class MentraLiveManager private constructor(context: Context) : MentraBluetoothS
             return
         }
         stopPairingScan()
+        if (_forwardingNotifications.value) setNotificationForwarding(false)
         pcmListeners.clear()
         runCatching { sdk.setMicState(enabled = false) }
         runCatching { sdk.setMicSourcePin(null) }

@@ -67,6 +67,7 @@ class GlassesDashboardGatingTest {
                 showMetaRaybanControls = deviceClass == DeviceClass.META_RAYBAN,
                 showMeizuMyvuControls = deviceClass == DeviceClass.MEIZU_MYVU,
                 showMemoMindControls = deviceClass == DeviceClass.MEMOMIND,
+                showMentraDisplayControls = Action.MENTRA_DISPLAY_CONTROLS in visible,
                 showBattery = Action.STATUS_BATTERY in visible,
                 showStorage = Action.STATUS_STORAGE in visible,
                 storageLabel = if (Action.STATUS_STORAGE in visible) sample.storageLabel else "--",
@@ -158,6 +159,7 @@ class GlassesDashboardGatingTest {
                 assertEquals(false, state.showSdkFirmwareUpdate, "iOS has no SDK firmware update screen")
                 // MemoMind's panel holds its Connect button, so it shows without a link.
                 assertEquals(deviceClass == DeviceClass.MEMOMIND, state.showMemoMindControls, "MemoMind panel for $deviceClass")
+                assertEquals(false, state.showMentraDisplayControls, "iOS host has no Mentra display panel")
                 assertEquals(sample.deviceInfoLabel, state.deviceInfoLabel)
                 assertEquals(false, state.wifiAdbDebug.isAvailable)
                 assertEquals(LivePreviewUiState(), state.livePreview)

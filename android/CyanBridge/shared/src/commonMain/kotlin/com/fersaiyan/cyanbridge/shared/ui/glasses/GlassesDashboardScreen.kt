@@ -111,6 +111,8 @@ import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
 import com.fersaiyan.cyanbridge.shared.glasses.MemoMindPanelCommand
 import com.fersaiyan.cyanbridge.shared.glasses.MemoMindUiState
+import com.fersaiyan.cyanbridge.shared.glasses.MentraDisplayPanelCommand
+import com.fersaiyan.cyanbridge.shared.glasses.MentraDisplayUiState
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
 import com.fersaiyan.cyanbridge.shared.glasses.WifiAdbDebugUiState
@@ -323,6 +325,9 @@ fun GlassesDashboardScreen(
             if (state.showMemoMindControls) {
                 item { MemoMindControls(state.memoMind, onAction) }
                 item { GlassesAssistantControls(state, onAction) }
+            }
+            if (state.showMentraDisplayControls) {
+                item { MentraDisplayControls(state.mentraDisplay, onAction) }
             }
             if (state.wifiAdbDebug.isAvailable) {
                 item {
@@ -1417,6 +1422,40 @@ private fun MemoMindControls(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+}
+
+@Composable
+private fun MentraDisplayControls(
+    state: MentraDisplayUiState,
+    onAction: (GlassesDashboardAction) -> Unit,
+) {
+    val panel: (MentraDisplayPanelCommand) -> Unit = { onAction(GlassesDashboardAction.MentraDisplayPanel(it)) }
+    Column(
+        modifier = Modifier.testTag("mentra_display_controls"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SectionTitle(state.title, accented = true)
+        Text(
+            state.labels.description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ActionRow(
+            primaryLabel = state.labels.showTestText,
+            onPrimary = { panel(MentraDisplayPanelCommand.SHOW_TEST_TEXT) },
+            primaryEnabled = state.canSend,
+            secondaryLabel = state.labels.clearDisplay,
+            onSecondary = { panel(MentraDisplayPanelCommand.CLEAR_DISPLAY) },
+            secondaryEnabled = state.canSend,
+        )
+        ActionButton(
+            label = if (state.forwardingNotifications) state.labels.forwardNotificationsOn else state.labels.forwardNotificationsOff,
+            onClick = { panel(MentraDisplayPanelCommand.TOGGLE_NOTIFICATION_FORWARDING) },
+            enabled = state.canSend,
+            style = if (state.forwardingNotifications) ActionButtonStyle.Primary else ActionButtonStyle.Neutral,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

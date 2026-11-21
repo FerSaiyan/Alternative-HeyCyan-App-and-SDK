@@ -74,6 +74,7 @@ class DashboardSessionPolicyTest {
         GlassesDashboardAction.MeizuSyncClock,
         GlassesDashboardAction.MeizuSetComfortBrightness,
         GlassesDashboardAction.MemoMindPanel(MemoMindPanelCommand.CONNECT),
+        GlassesDashboardAction.MentraDisplayPanel(MentraDisplayPanelCommand.SHOW_TEST_TEXT),
         GlassesDashboardAction.FamilyFirmware(FamilyFirmwareCommand.CHECK_OFFICIAL),
         GlassesDashboardAction.DismissTransportPermissionDialog,
         GlassesDashboardAction.RequestTransportPermission,
@@ -185,6 +186,7 @@ class DashboardSessionPolicyTest {
         GlassesDashboardAction.MeizuSyncClock,
         GlassesDashboardAction.MeizuSetComfortBrightness,
         is GlassesDashboardAction.MemoMindPanel,
+        is GlassesDashboardAction.MentraDisplayPanel,
         is GlassesDashboardAction.FamilyFirmware,
         GlassesDashboardAction.DismissTransportPermissionDialog,
         GlassesDashboardAction.RequestTransportPermission -> Unit
@@ -193,7 +195,7 @@ class DashboardSessionPolicyTest {
     @Test
     fun everyDashboardActionIsListedOnce() {
         allActions.forEach(::requireListed)
-        assertEquals(70, allActions.size)
+        assertEquals(71, allActions.size)
         assertEquals(allActions.size, allActions.map { it.name() }.toSet().size)
     }
 
