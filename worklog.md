@@ -1,5 +1,16 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — HeyCyan sync failure on hot, charging glasses (log_mwqq8cyw) + vendor BatteryRsp guard
+
+- **Report:** AM01CY glasses (fw `AM01CY_2.20.10_260411`, Samsung A25, 2.4.3). Official flow stopped after ~10 s; Adaptive "exhausted its bounded recovery budget at checkpoint DEVICE_ERROR after 85s".
+- **Stored log (website):** the transfer command `[0x02,0x01,0x04]` was accepted (`error=1` = executed; the vendor guide's `errorCode == 0` means busy). The reply named the expected peer `CY 01_32F8135584CA`, but the phone saw no Wi-Fi Direct peer at all in 85 s (no "Found N P2P devices", no group, no BLE IP). Meanwhile the glasses notified charging (0x05: 71 %, charging) and their temperature (0x0B, the value the official app shows) rising 43 → 53 °C, then Wi-Fi error 255 (`09 ff 02`).
+- **Reproduced** on the HeyCyan AVD rig (firmware_dump `sim/e2e_bt_p2p`, `run_e2e.sh fault nowifi_hot`: same notify bytes as the field log, GO Wi-Fi off): baseline APK → official timed out after 45 s, Adaptive "exhausted its bounded recovery budget … after 85s".
+- **Fix:** the glasses condition (battery, charging, temperature) is recorded from 0x05/0x0B; when no peer, group or BLE IP appeared, the failure says so in plain words (charging/hot → unplug and let them cool; otherwise restart the glasses), and support reports carry `glasses_charging`, `glasses_temperature_c`, `glasses_battery_pct`, `any_p2p_peer_seen`. A 0x05 frame without its charging byte no longer throws (moved to `DeviceConnectionCoordinator`).
+- **Fixed APK on the rig:** "Likely cause: The glasses' Wi-Fi did not start. They are charging and at 51 °C: unplug them, let them cool for a few minutes, then sync again."; healthy Adaptive sync still SUCCESS.
+- **Vendor `.aar`:** `rsp.BatteryRsp.acceptData` (noted as unguarded in firmware_dump add.223) read data[0..1] outside `QCDataParser`'s try/catch → uncaught AIOOBE on 1- or 0-byte replies (proven on the original classes.jar). Guarded like `BatteryResponse`; only that class changes, on top of 0f64160c's `LargeDataParser` patch.
+- **Tests:** app 771/771, shared 433/433 (new `GlassesConditionTest`, `VendorBatteryRspGuardTest`).
+- **Not known yet:** whether charging or heat itself stops the AM01CY Wi-Fi start; the hint states the condition the glasses reported and the likely remedy.
+
 ## 2026-11-21 — Release size: media3 removed, R8 shrinking, trimmed LibVLC (branch `app-size`)
 
 - **Measured** (bundletool 1.18.3 `get-size total`, spec files in /tmp/cyan-size): arm64 download 68.5 MB (2.4.1) -> 54.2 MB with R8 -> **34.8 MB** with R8 + trimmed LibVLC; armeabi-v7a 53.8 -> 21.2, x86_64 72.2 -> 36.9, x86 57.7 -> 24.4. Release bundle 207 -> 121 MB. Dex 86.3 -> 34.8 MB uncompressed.
