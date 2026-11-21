@@ -32,3 +32,67 @@
 -keepclassmembers class com.oudmon.ble.base.communication.LargeDataHandler {
     private void syncPictureThumbnails(int);
 }
+
+# ---------------------------------------------------------------------------------------------
+# Release shrinking, phase 1 (conservative): R8 only removes unreachable code and resources.
+# No renaming and no optimization, so reflection, JNI callbacks and Play stack traces behave
+# exactly as in the unminified builds.
+# ---------------------------------------------------------------------------------------------
+-dontobfuscate
+-dontoptimize
+-keepattributes Signature,InnerClasses,EnclosingMethod,Exceptions,SourceFile,LineNumberTable
+-keepattributes *Annotation*,RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault
+
+# App and shared KMP code: kept whole (Room, Gson models, Compose resources, JNI bridges,
+# reflection in PlatformFilePaths/BatteryResponseParser, workers and services by name).
+-keep class com.fersaiyan.** { *; }
+
+# Vendor glasses SDKs and native-backed libraries. Most ship no consumer ProGuard rules and use
+# reflection, JNI callbacks or obfuscated internals, so keep them whole.
+-keep class com.oudmon.** { *; }
+-keep class com.heycyan.** { *; }
+-keep class com.glasses.** { *; }
+-keep class com.glasssutdio.** { *; }
+-keep class com.moyoung.** { *; }
+-keep class org.a.** { *; }
+-keep class org.jvcompress.** { *; }
+-keep class com.myvu.** { *; }
+-keep class com.mentra.** { *; }
+-keep class mentraos.** { *; }
+-keep class com.meta.** { *; }
+-keep class com.facebook.** { *; }
+-keep class com.oculus.** { *; }
+-keep class org.videolan.** { *; }
+-keep class com.google.ai.edge.** { *; }
+-keep class org.tensorflow.** { *; }
+-keep class com.google.protobuf.** { *; }
+-keep class com.dokar.** { *; }
+-keep class io.github.jaredmdobson.** { *; }
+-keep class com.chad.library.** { *; }
+-keep class com.hjq.** { *; }
+-keep class com.xiasuhuei321.** { *; }
+
+# Native methods anywhere keep their names.
+-keepclasseswithmembernames,includedescriptorclasses class * { native <methods>; }
+
+# EventBus (vendor SDKs and the app subscribe by annotation).
+-keepclassmembers class * { @org.greenrobot.eventbus.Subscribe <methods>; }
+-keep enum org.greenrobot.eventbus.ThreadMode { *; }
+
+# WebView bridges (miniapps, local agent pages).
+-keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }
+
+# Optional dependencies that vendor SDKs reference but CyanBridge never shipped (the unminified
+# builds lacked them too, so runtime behaviour is unchanged).
+#   Mentra SDK: Expo modules, sherpa-onnx STT/TTS, Vuzix Ultralite, VAD, NanoHTTPD, Picasso, AVIF.
+#   MoYoung SDK: JieLi audio decode + OTA, mltcode pay certification.
+-dontwarn expo.modules.**
+-dontwarn com.k2fsa.sherpa.**
+-dontwarn com.vuzix.ultralite.**
+-dontwarn com.konovalov.vad.**
+-dontwarn fi.iki.elonen.**
+-dontwarn com.squareup.picasso.**
+-dontwarn com.radzivon.bartoshyk.**
+-dontwarn com.jieli.**
+-dontwarn com.android.mltcode.**
+-dontwarn com.facebook.common.build.BuildConstants
