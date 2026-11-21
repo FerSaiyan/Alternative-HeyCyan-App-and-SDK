@@ -1,5 +1,10 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — Release 2.4.5 (versionCode 37)
+
+- **Contents since 2.4.3:** Mentra display glasses (G1/G2/Display/NIMO/AR99) pair from Device Bind again (the pairing scan has its own session); display-glasses dashboard panel (Show test text, Clear display, Forward notifications); MYVU pairing/connection fixes (cut-off version answer, stale init-burst ticks); CI fixes (Walking Aid video test font cache, Tasker HIL storage grants); glasses emulator docs for agents.
+- **Version:** Play's highest uploaded bundle was code 36 (2.4.3, production) on 2026-11-21, so 2.4.5 is code 37. There is no 2.4.4.
+
 ## 2026-11-21 — CI: Tasker HIL profile sync stalled on Tasker's storage permission prompts
 
 - **Symptom:** "Android Tasker HIL" failed at "Sync exact branch Tasker profiles on core target" on every `main` run since 2026-11-19 (red since 2026-09-28 at earlier steps). `Tasker_AI` imported; `CyanBridge_LocalAgent_Tasker` timed out waiting for the "enable profiles" dialog.
