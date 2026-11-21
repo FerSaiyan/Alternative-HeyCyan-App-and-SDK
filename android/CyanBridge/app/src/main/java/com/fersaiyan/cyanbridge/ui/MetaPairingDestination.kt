@@ -576,14 +576,21 @@ fun MetaPairingScreen(
                     Text(pairingIssue.primaryLabel)
                 }
             },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showPairingIssue = false
-                        onSendDiagnostics()
-                    },
-                ) {
-                    Text("Send logs")
+            // "Meta AI is required" is a setup step, not a failure: offering logs there produced
+            // reports with nothing to diagnose (e.g. log_mwqrass7_5bb17d7f from a Play pre-launch
+            // robot). Settings -> Send logs stays available.
+            dismissButton = if (pairingIssue.action == MetaPairingIssueAction.INSTALL_META_AI) {
+                null
+            } else {
+                {
+                    TextButton(
+                        onClick = {
+                            showPairingIssue = false
+                            onSendDiagnostics()
+                        },
+                    ) {
+                        Text("Send logs")
+                    }
                 }
             },
         )

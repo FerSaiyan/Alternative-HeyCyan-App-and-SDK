@@ -162,6 +162,7 @@ class MetaPairingScreenTest {
 
         composeRule.onNodeWithText("Continue").performClick()
         composeRule.onNodeWithText("Meta AI is required").assertIsDisplayed()
+        composeRule.onNodeWithText("Send logs").assertDoesNotExist()
         composeRule.onNodeWithText("Install Meta AI").performClick()
         composeRule.runOnIdle { assertTrue(installClicked) }
     }
