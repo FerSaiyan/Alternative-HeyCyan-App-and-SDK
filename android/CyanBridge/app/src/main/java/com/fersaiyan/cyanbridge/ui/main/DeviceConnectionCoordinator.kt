@@ -21,6 +21,8 @@ import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.ui.main.glasses.AndroidGlassesDevices
 import com.oudmon.ble.base.communication.LargeDataHandler
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesConditionNotify
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesConditionState
 
 /** Activity state and hooks that the connection coordinator does not own. */
 internal interface DeviceConnectionHost {
@@ -289,6 +291,25 @@ internal class DeviceConnectionCoordinator(
                 }
             }
         }
+    }
+
+    /**
+     * Device notifies 0x05 (battery at [7], charging at [8]) and 0x0B (glasses temperature in degrees Celsius at
+     * [7]). Recorded in [GlassesConditionState] so media sync can explain a Wi-Fi start that never happened
+     * (log_mwqq8cyw). A 0x05 frame without its charging byte used to throw in MainActivity.
+     */
+    fun handleConditionNotify(load: ByteArray) {
+        val now = System.currentTimeMillis()
+        GlassesConditionNotify.battery(load)?.let {
+            GlassesConditionState.onBattery(it.percent, it.charging, now)
+            handleBatteryReport(it.percent, it.charging == true)
+            return
+        }
+        GlassesConditionNotify.temperatureCelsius(load)?.let {
+            GlassesConditionState.onTemperature(it, now)
+            return
+        }
+        Log.w("DeviceNotify", "Glasses condition notify without a value, size=${load.size}")
     }
 
     fun handleBatteryReport(battery: Int, charging: Boolean) {
