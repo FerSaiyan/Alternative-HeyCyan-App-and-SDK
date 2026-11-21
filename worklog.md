@@ -1,5 +1,12 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — CI: Tasker HIL profile sync stalled on Tasker's storage permission prompts
+
+- **Symptom:** "Android Tasker HIL" failed at "Sync exact branch Tasker profiles on core target" on every `main` run since 2026-11-19 (red since 2026-09-28 at earlier steps). `Tasker_AI` imported; `CyanBridge_LocalAgent_Tasker` timed out waiting for the "enable profiles" dialog.
+- **Cause (reproduced on a read-only `Pixel_9a`, API 37):** importing the Local Agent project makes Tasker ask for storage. Android first shows "Allow Tasker to access music and audio on this device?", and without storage Tasker then refuses the import ("Missing Permissions: Access storage"). The script recognised neither dialog.
+- **Fix (`tools/hil/sync_tasker_profiles.sh`):** grant `READ_MEDIA_AUDIO/IMAGES/VIDEO` and the `MANAGE_EXTERNAL_STORAGE` app-op to Tasker before importing (next to the existing `CALL_PHONE` grant). An Android permission prompt now fails the step at once with its text, and an importer failure prints the dialog text.
+- **Verified:** all 5 projects import on the read-only `Pixel_9a` (emulator-5572).
+
 ## 2026-11-21 — CI: Walking Aid video lifecycle test waits for the LibVLC font cache
 
 - **Symptom:** "Android self-hosted CI" failed at "Run Mock DAT, Meta pairing, and Walking Aid video controls" on every run since 2.4.1. The Meta DAT and Meta pairing classes passed on the read-only `Pixel_9a` (no separate AVD needed); `WalkingAidVideoCaptureLifecycleTest` failed 2 of 3 with 5 s timeouts.

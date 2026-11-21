@@ -58,12 +58,17 @@ for n in root.iter("node"):
         if m:
             buttons.append((label, tuple(map(int, m.groups()))))
 joined = " ".join(texts)
+# Android runtime-permission prompt (permission controller): no importer button may answer it.
+for n in root.iter("node"):
+    if n.attrib.get("resource-id", "").endswith(":id/permission_message"):
+        print("ERROR Android asks for a runtime permission: " + (n.attrib.get("text", "") or "").strip())
+        raise SystemExit(0)
 if ("import failed" in joined
         or ("couldn" in joined and ("try to import" in joined or "needed permissions" in joined))
         or "bad data" in joined
         or "missing permission" in joined
         or "missing permissions" in joined):
-    print("ERROR importer reported failure")
+    print("ERROR importer reported failure: " + " | ".join(texts)[:300])
     raise SystemExit(0)
 kind = None
 if "about to import" in joined:
@@ -185,6 +190,16 @@ adb_for "$serial" shell run-as "$CYANBRIDGE_PACKAGE" mkdir -p cache/hil-profiles
 # The Local Agent project exposes a make_call command, so Tasker must hold this runtime
 # permission before its project importer can complete unattended.
 adb_for "$serial" shell pm grant "$TASKER_PACKAGE" android.permission.CALL_PHONE >/dev/null
+
+# The Local Agent project also uses files, so Tasker's importer wants storage access. Without it,
+# Android 13+ first shows "Allow Tasker to access music and audio on this device?" and Tasker then
+# refuses the import ("Missing Permissions: Access storage"); both stalled the unattended import on
+# the CI's Pixel_9a (API 37). Grant the media permissions and the all-files app-op up front. Older
+# Android versions do not define some of them, so a failed grant is not an error.
+for permission in android.permission.READ_MEDIA_AUDIO android.permission.READ_MEDIA_IMAGES android.permission.READ_MEDIA_VIDEO; do
+  adb_for "$serial" shell pm grant "$TASKER_PACKAGE" "$permission" >/dev/null 2>&1 || true
+done
+adb_for "$serial" shell appops set "$TASKER_PACKAGE" MANAGE_EXTERNAL_STORAGE allow >/dev/null 2>&1 || true
 
 # Foreground-package privacy checks run inside Tasker using %WIN, which only populates
 # while Tasker's own accessibility service is enabled; the importer's permission scan
