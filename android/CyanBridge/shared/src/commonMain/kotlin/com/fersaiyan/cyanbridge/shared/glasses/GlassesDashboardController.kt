@@ -215,7 +215,8 @@ class GlassesDashboardController(
             GlassesDashboardAction.MeizuShowTestTeleprompter,
             GlassesDashboardAction.MeizuSyncClock,
             GlassesDashboardAction.MeizuSetComfortBrightness,
-            is GlassesDashboardAction.MemoMindPanel -> {
+            is GlassesDashboardAction.MemoMindPanel,
+            is GlassesDashboardAction.MentraDisplayPanel -> {
                 if (!device.handlePanelAction(action)) reportNoCapability(family, action)
             }
             // Device-side actions the selected family has no capability for.

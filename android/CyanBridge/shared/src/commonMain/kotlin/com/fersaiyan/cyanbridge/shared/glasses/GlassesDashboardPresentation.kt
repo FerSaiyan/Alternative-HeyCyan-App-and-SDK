@@ -61,12 +61,15 @@ data class GlassesDashboardUiState(
     val showMetaRaybanControls: Boolean = false,
     val showMeizuMyvuControls: Boolean = false,
     val showMemoMindControls: Boolean = false,
+    /** The Mentra SDK display-glasses panel (Android; the iOS host does not implement its actions). */
+    val showMentraDisplayControls: Boolean = false,
     val advancedExpanded: Boolean = false,
     val agentStatus: String = "Unknown",
     val agentLastError: String = "(none)",
     val metaRayban: MetaRaybanUiState = MetaRaybanUiState(),
     val meizuMyvu: MeizuMyvuUiState = MeizuMyvuUiState(),
     val memoMind: MemoMindUiState = MemoMindUiState(),
+    val mentraDisplay: MentraDisplayUiState = MentraDisplayUiState(),
     val ota: OtaSectionUiState = OtaSectionUiState(),
     /** The EyeVue/TuneBuds firmware section; null for HeyCyan (it uses [ota]) and families without one. */
     val familyOta: FamilyOtaUiState? = null,
@@ -218,6 +221,33 @@ data class MemoMindPanelLabels(
     val webPlugins: String? = null,
 )
 
+/**
+ * The panel of display glasses that run through the Mentra SDK (G1, G2, Mentra Display, NIMO, AR99).
+ * Texts arrive in [labels] from the platform host.
+ */
+data class MentraDisplayUiState(
+    /** The model name, for example "Even Realities G2". */
+    val title: String = "Display glasses",
+    val canSend: Boolean = false,
+    val forwardingNotifications: Boolean = false,
+    val labels: MentraDisplayPanelLabels = MentraDisplayPanelLabels(),
+)
+
+data class MentraDisplayPanelLabels(
+    val description: String = "Assistant answers, plugins and forwarded notifications appear on the glasses.",
+    val showTestText: String = "Show test text",
+    val clearDisplay: String = "Clear display",
+    val forwardNotificationsOn: String = "Forwarding notifications",
+    val forwardNotificationsOff: String = "Forward notifications",
+)
+
+/** Actions of the Mentra display panel (one dashboard action, see [GlassesDashboardAction.MentraDisplayPanel]). */
+enum class MentraDisplayPanelCommand {
+    SHOW_TEST_TEXT,
+    CLEAR_DISPLAY,
+    TOGGLE_NOTIFICATION_FORWARDING,
+}
+
 /** Actions of the MemoMind panel (one dashboard action, see [GlassesDashboardAction.MemoMindPanel]). */
 enum class MemoMindPanelCommand {
     CONNECT,
@@ -357,6 +387,7 @@ fun GlassesDashboardUiState.withFamilyGating(
         showMetaRaybanControls = model.isVisible(Action.META_RAYBAN_CONTROLS),
         showMeizuMyvuControls = model.isVisible(Action.MEIZU_MYVU_CONTROLS),
         showMemoMindControls = model.isVisible(Action.MEMOMIND_CONTROLS),
+        showMentraDisplayControls = model.isVisible(Action.MENTRA_DISPLAY_CONTROLS),
         showBattery = showBattery,
         showStorage = showStorage,
         storageLabel = if (showStorage) storageLabel else "--",
@@ -443,6 +474,7 @@ sealed interface GlassesDashboardAction {
     data object MeizuSyncClock : GlassesDashboardAction
     data object MeizuSetComfortBrightness : GlassesDashboardAction
     data class MemoMindPanel(val command: MemoMindPanelCommand) : GlassesDashboardAction
+    data class MentraDisplayPanel(val command: MentraDisplayPanelCommand) : GlassesDashboardAction
     data object DismissTransportPermissionDialog : GlassesDashboardAction
     data object RequestTransportPermission : GlassesDashboardAction
 }

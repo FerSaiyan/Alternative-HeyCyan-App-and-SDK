@@ -45,6 +45,8 @@ internal fun GlassesDashboardUiState.withIosFamilyGating(
         showMetaRaybanControls = sections && gated.showMetaRaybanControls,
         showMeizuMyvuControls = sections && gated.showMeizuMyvuControls,
         showMemoMindControls = sections && gated.showMemoMindControls,
+        // The iOS host does not implement the Mentra display panel's actions (and has no notification listener).
+        showMentraDisplayControls = false,
         showCaptureSettings = heyCyan && gated.showCaptureSettings,
         showAiWakeWordRouting = heyCyan && gated.showAiWakeWordRouting,
         showAdvancedLocalAgent = false,

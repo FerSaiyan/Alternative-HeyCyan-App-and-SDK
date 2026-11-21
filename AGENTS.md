@@ -14,6 +14,11 @@ Software Development Kit (SDK) for HeyCyan Smart Glasses. Contains core librarie
 
 - Media transfer (BLE + Wi-Fi Direct HTTP) reverse-engineering notes live in `android/AGENTS.md`.
 
+## Glasses emulators
+- App ⇄ simulated-glasses tests on Android emulators (HeyCyan, EyeVue, TuneBuds, Even Realities G2): see
+  "Glasses emulators for app testing" in `android/AGENTS.md`. The simulators themselves live only in the private
+  firmware repo (`firmware_dump/`, index `docs/EMULATORS_AND_SIMULATORS.md`); never copy them here.
+
 ## Development Environment
 - **Conda Environment:** `LocalGPT_llama2`
 - **STRICT RULE:** Never use `pip install` or download libraries into the `base` conda environment.

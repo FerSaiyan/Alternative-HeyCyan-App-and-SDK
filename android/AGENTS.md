@@ -501,6 +501,44 @@ If the cloud OTA API continues to return “No upgraded version” for a long ti
      - If such a mode exists, consult chip‑family documentation and community tooling for **read‑only** flash inspection first (before attempting any writes).
    - This is invasive work; it should be treated as a last resort and documented carefully if attempted. Do **not** assume that methods used on other JL/Allwinner boards are safe here without verification.
 
+## Glasses emulators for app testing (HeyCyan, EyeVue, TuneBuds, Even G2)
+
+CyanBridge can be tested end to end on Android emulators against simulated glasses that run the glasses' own
+firmware code. The simulators, their CI and all reverse-engineering notes live ONLY in the private firmware repo
+(checked out at `firmware_dump/`). Do not copy simulator code, firmware or RE notes
+into this repository. Index there: `docs/EMULATORS_AND_SIMULATORS.md` (§5 = every app lane with command, AVDs and
+ports); recipe and gotchas: `docs/AVD_BLE_P2P_HOWTO.md`. Worklog entries are `add.N` in `firmware_dump/worklog.md`.
+
+| Glasses | What the app talks to | App lane (in `firmware_dump/`) | Covers |
+|---|---|---|---|
+| HeyCyan | vendor BLE GATT to the Bluetooth chip model + Wi-Fi Direct to the real camera-chip media server | `sim/e2e_bt_p2p/run_e2e.sh start` · `sync official\|custom\|adaptive\|saved` · `stop` | pairing, the 3 media-sync flows (add.222/224) |
+| EyeVue | BLE GATT to the real Bluetooth-chip firmware code + Wi-Fi Direct to the real camera-chip HTTP server | `sim/eyevue_e2e/run_e2e.sh start` · `sync` · `stop` | commands, Wi-Fi start, file sync (add.227/229) |
+| TuneBuds | Classic Bluetooth SPP to the real controller firmware + Wi-Fi Direct to the real camera-chip userland | `sim/tunebuds_e2e/run_avd.sh start` · `pair` · `flows` · `wifi` · `photo` · `sync` · `stop` | battery, version, media count, photo + sync (add.228/230) |
+| Even Realities G2 (MentraOS) | Mentra SDK over BLE to the original G2 firmware (right arm) + a stand-in left arm | `sim/even_g2_e2e/run_avd.sh start` · `pair` · `check` · `features` · `stop` | Device Bind pairing, bond, reconnects, battery, display panel test text + notification forwarding (add.234) |
+
+Rules for every lane:
+- One lane at a time: hold `firmware_dump/sim/tools/device-lane.sh acquire <you>`. Never run an emulator while a
+  Gradle build runs (emulator + large builds have OOM-killed other work); the lanes also hold the Gradle lock.
+- Use the existing AVDs only, as `-read-only` instances: `Pixel_9a` for the app, `HeyCyan_Frida` as the second radio
+  (Wi-Fi Direct GO/client). Never create AVDs; the disk is nearly full.
+- Emulator >= 36.5 (Wi-Fi Direct between AVDs needs the netsim Wi-Fi medium), Bumble 0.0.236 on `android-netsim`.
+- Use emulator ports 5555-5585: adb rediscovers only that range after a server restart.
+- The AVD logcat ring rotates within seconds under SDK logging: stream `adb logcat` to a file and grep it with `-a`.
+- Killing the app while one of its GATT requests is still outstanding, on a link that stays up, can wedge Android's
+  GATT client for that device until Bluetooth is toggled (seen on the slow G2 simulator). Wait for the link to go idle
+  before a force-stop in tests.
+
+App bugs these rigs found (check whether your branch has the fix):
+- HeyCyan: Wi-Fi Direct join torn down by our own discovery timeout at connect +4.0 s, and the vendor `.aar`
+  battery parser throwing on short frames (guarded in the patched `.aar`) (add.223/224). In `main`.
+- TuneBuds: Wi-Fi Direct selection when the camera chip reports no Wi-Fi mask, and lost sessions behind a queued
+  media count (add.228/230). In `main`.
+- Mentra display glasses (G1/G2/Display/NIMO/AR99): Device Bind could not pair because the picker's teardown
+  cancelled the pairing scan (`NOT_FOUND` about 10 ms after the scan started), and phone notifications were only
+  forwarded after visiting the MemoMind screen (add.234). Fixed on branch `mentra-display-pairing-scan` (pairing scan
+  in its own session; display-glasses panel with Show test text, Clear display, Forward notifications). Not in
+  2.4.3.
+
 ## General guidance for future Codex agents
 
 - Treat the vendor SDK (`.aar`) and decompiled code as authoritative for protocol details; keep our glue code thin and well‑logged.

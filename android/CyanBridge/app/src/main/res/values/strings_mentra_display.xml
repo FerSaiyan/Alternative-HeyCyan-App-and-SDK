@@ -11,4 +11,12 @@
     <string name="mentra_display_reconnect_busy">%1$s is already connected or connecting.</string>
     <string name="mentra_display_battery">%1$s battery: %2$d%%</string>
     <string name="mentra_display_battery_unknown">%1$s has not reported its battery yet.</string>
+    <!-- Display glasses panel on the Glasses dashboard. -->
+    <string name="mentra_display_panel_description">Assistant answers, plugins and forwarded phone notifications appear on the glasses.</string>
+    <string name="mentra_display_show_test_text">Show test text</string>
+    <string name="mentra_display_clear_display">Clear display</string>
+    <string name="mentra_display_forward_notifications_on">Forwarding notifications</string>
+    <string name="mentra_display_forward_notifications_off">Forward notifications</string>
+    <string name="mentra_display_test_text">CyanBridge is connected to %1$s.\nAssistant answers and notifications appear here.</string>
+    <string name="mentra_display_notification_access_needed">Allow CyanBridge notification access to forward phone notifications to %1$s.</string>
 </resources>

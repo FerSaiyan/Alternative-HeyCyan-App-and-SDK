@@ -12,6 +12,9 @@ enum class GlassesControlPanel {
     META_RAYBAN,
     MEIZU_MYVU,
     MEMOMIND,
+
+    /** Display glasses over the Mentra SDK (G1, G2, Mentra Display, NIMO, AR99): test text and notifications. */
+    MENTRA_DISPLAY,
 }
 
 /** Where the selected glasses deliver microphone audio to the phone. */
@@ -341,6 +344,7 @@ object GlassesFamilyProfiles {
                 GlassesCapability.BATTERY_STATUS,
                 GlassesCapability.MICROPHONE_AUDIO,
             ) + input,
+            controlPanel = GlassesControlPanel.MENTRA_DISPLAY,
             audio = GlassesAudioProfile(input = GlassesAudioInput.VENDOR_PCM_STREAM, output = GlassesAudioOutput.NONE),
             showsAssistantAnswers = true,
             cameraUnavailableReason = "Selected device profile ($name) has no camera.",
