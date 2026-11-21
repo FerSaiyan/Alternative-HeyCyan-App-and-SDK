@@ -92,7 +92,7 @@ JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
 5. Confirm the simulator renders the shared CMP `CyanBridgeApp` composable (Material 3 theme, shared navigation shell, shared screens).
 6. Confirm the shared meeting-summary preview has stable Markdown headings and does not require a native transport or persistence adapter.
 
-Use `linkDebugFrameworkIosX64` on Intel simulators and `linkDebugFrameworkIosArm64` for a physical device.
+Use `linkDebugFrameworkIosArm64` for a physical device. Intel-Mac simulators are not supported: Compose Multiplatform 1.13 dropped the `iosX64` target, so simulator builds need an Apple silicon Mac.
 
 ## GitHub Actions CI
 
@@ -137,7 +137,6 @@ CMP on iOS uses Skiko (Skia) for rendering. Skiko ships as a static library (`.a
 
 - `iosArm64` (device): `isStatic = false` — dynamic framework. A static archive gets copied into `Frameworks/` by `embedAndSignAppleFrameworkForXcode` and the device rejects the install (`MIInstallerErrorDomain` 73).
 - `iosSimulatorArm64` (simulator): `isStatic = false` — dynamic framework, Skiko `.dylib` is embedded in the `.app` bundle.
-- `iosX64` (Intel simulator): `isStatic = false` — same as above.
 
 The `embedAndSignAppleFrameworkForXcode` Gradle task handles both cases transparently. No Xcode project changes are needed when switching between static and dynamic frameworks.
 

@@ -1,8 +1,6 @@
 package com.fersaiyan.cyanbridge.shared.ui.pro
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -123,10 +121,10 @@ fun ProSubscriptionSettingsScreen(
                     Text(state.expires, style = MaterialTheme.typography.bodySmall)
                     Text(state.verified, style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(onClick = onRefreshPlan, modifier = Modifier.weight(1f)) {
+                        FilledTonalButton(onClick = onRefreshPlan, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                             Text(stringResource(Res.string.pro_refresh))
                         }
-                        Button(onClick = { showChangePlanDialog = true }, modifier = Modifier.weight(1f)) {
+                        Button(onClick = { showChangePlanDialog = true }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                             Text(stringResource(Res.string.pro_change_plan))
                         }
                     }
@@ -134,6 +132,7 @@ fun ProSubscriptionSettingsScreen(
                         onClick = { showCancelDialog = true },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                          Text(stringResource(Res.string.pro_cancel_subscription))
                     }
@@ -144,7 +143,7 @@ fun ProSubscriptionSettingsScreen(
                     Text(state.accountEmail, style = MaterialTheme.typography.bodySmall)
                     Text(state.accountToken, style = MaterialTheme.typography.bodySmall)
                     Text(state.accountSubscription, style = MaterialTheme.typography.bodySmall)
-                     OutlinedButton(onClick = onRefreshAccount, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.pro_refresh_account)) }
+                     OutlinedButton(onClick = onRefreshAccount, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.pro_refresh_account)) }
                 }
             }
             if (customization != null && customizationActions != null) {
@@ -167,7 +166,7 @@ fun ProSubscriptionSettingsScreen(
                         minLines = 4,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    TextButton(onClick = onResetSystemPrompt) {
+                    TextButton(onClick = onResetSystemPrompt, shapes = ButtonDefaults.shapes()) {
                         Text(stringResource(Res.string.pro_reset_system_prompt))
                     }
                     ActionButtons(
@@ -222,7 +221,7 @@ fun ProSubscriptionSettingsScreen(
                          state.betaStatus.ifBlank { stringResource(Res.string.pro_beta_interest) },
                         style = MaterialTheme.typography.bodySmall,
                     )
-                     OutlinedButton(onClick = onJoinBeta, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.pro_signup_beta)) }
+                     OutlinedButton(onClick = onJoinBeta, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.pro_signup_beta)) }
                 }
             }
             item {
@@ -251,14 +250,14 @@ fun ProSubscriptionSettingsScreen(
                          stringResource(Res.string.pro_gemini_live_description),
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    OutlinedButton(onClick = onStartGeminiLive, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = onStartGeminiLive, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                          Text(stringResource(Res.string.pro_open_gemini_live))
                     }
                 }
             }
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    OutlinedButton(onClick = onBack) { Text(stringResource(Res.string.pro_back)) }
+                    OutlinedButton(onClick = onBack, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.pro_back)) }
                 }
             }
         }
@@ -290,10 +289,11 @@ fun ProSubscriptionSettingsScreen(
                         showChangePlanDialog = false
                         onChangePlan(selectedPlanId)
                     },
+                    shapes = ButtonDefaults.shapes(),
                  ) { Text(stringResource(Res.string.onboarding_continue)) }
             },
             dismissButton = {
-                 TextButton(onClick = { showChangePlanDialog = false }) { Text(stringResource(Res.string.action_cancel)) }
+                 TextButton(onClick = { showChangePlanDialog = false }, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.action_cancel)) }
             },
         )
     }
@@ -324,10 +324,11 @@ fun ProSubscriptionSettingsScreen(
                         onCancelSubscription()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    shapes = ButtonDefaults.shapes(),
                   ) { Text(stringResource(Res.string.pro_yes_cancel)) }
             },
             dismissButton = {
-                 TextButton(onClick = { showCancelDialog = false }) { Text(stringResource(Res.string.pro_keep_subscription)) }
+                 TextButton(onClick = { showCancelDialog = false }, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.pro_keep_subscription)) }
             },
         )
     }
@@ -368,7 +369,7 @@ private fun ProSettingsCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+            .animateContentSize(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()),
         colors = CardDefaults.cardColors(
             containerColor = if (hero) {
                 MaterialTheme.colorScheme.tertiaryContainer
@@ -427,8 +428,8 @@ private fun ActionButtons(
     onSecondary: () -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilledTonalButton(onClick = onPrimary, modifier = Modifier.weight(1f)) { Text(primaryLabel) }
-        OutlinedButton(onClick = onSecondary, modifier = Modifier.weight(1f)) { Text(secondaryLabel) }
+        FilledTonalButton(onClick = onPrimary, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text(primaryLabel) }
+        OutlinedButton(onClick = onSecondary, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text(secondaryLabel) }
     }
 }
 
@@ -456,7 +457,7 @@ private fun ModelChoice(
     onSelected: (String) -> Unit,
 ) {
     var showChoices by remember { mutableStateOf(false) }
-    TextButton(onClick = { showChoices = true }, modifier = Modifier.fillMaxWidth()) {
+    TextButton(onClick = { showChoices = true }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
          Text(stringResource(Res.string.pro_model_title, label) + ": " + value.ifBlank { stringResource(Res.string.pro_select_model) })
     }
     if (showChoices) {
@@ -473,12 +474,13 @@ private fun ModelChoice(
                                     showChoices = false
                                 },
                                 modifier = Modifier.fillMaxWidth(),
+                                shapes = ButtonDefaults.shapes(),
                             ) { Text(option) }
                         }
                     }
                 }
             },
-             confirmButton = { TextButton(onClick = { showChoices = false }) { Text(stringResource(Res.string.pro_close)) } },
+             confirmButton = { TextButton(onClick = { showChoices = false }, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.pro_close)) } },
         )
     }
 }

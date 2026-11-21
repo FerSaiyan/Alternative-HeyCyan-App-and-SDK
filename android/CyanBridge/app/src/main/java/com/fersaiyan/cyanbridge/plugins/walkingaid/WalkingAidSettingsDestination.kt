@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
+import androidx.compose.material3.ButtonDefaults
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Build
@@ -184,7 +185,7 @@ fun WalkingAidSettingsScreen(
             onDismissRequest = WalkingAidService::dismissFailure,
             title = { Text(stringResource(R.string.walking_aid_stopped)) },
             text = { Text(message) },
-            confirmButton = { TextButton(onClick = WalkingAidService::dismissFailure) { Text(stringResource(android.R.string.ok)) } },
+            confirmButton = { TextButton(onClick = WalkingAidService::dismissFailure, shapes = ButtonDefaults.shapes()) { Text(stringResource(android.R.string.ok)) } },
         )
     }
     LaunchedEffect(Unit) { vm.followService() }
@@ -337,6 +338,7 @@ fun WalkingAidSettingsScreen(
                         onClick = vm::onRunLatencyBenchmark,
                         enabled = !vm.isTestingLatency && !running && videoMode == WalkingAidVideoMode.PERIODIC_PHOTOS,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         if (vm.isTestingLatency) {
                             CircularProgressIndicator(
@@ -358,6 +360,7 @@ fun WalkingAidSettingsScreen(
                         onClick = vm::onRunAcquisitionBenchmark,
                         enabled = !vm.isTestingAcquisition && hasCamera && !running && videoMode == WalkingAidVideoMode.PERIODIC_PHOTOS,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         if (vm.isTestingAcquisition) {
                             CircularProgressIndicator(
@@ -465,7 +468,7 @@ fun WalkingAidSettingsScreen(
 
                         if (vm.imageDescriptionSource == "cloud") {
                             Spacer(modifier = Modifier.height(8.dp))
-                            TextButton(onClick = vm::openImageModelPicker) {
+                            TextButton(onClick = vm::openImageModelPicker, shapes = ButtonDefaults.shapes()) {
                                 Text(
                                     text = if (vm.imageDescriptionCloudModelId.isNotBlank())
                                         "Model: ${vm.imageDescriptionCloudModelId}"
@@ -552,6 +555,7 @@ fun WalkingAidSettingsScreen(
                     Button(
                         enabled = !vm.isTranslatingFocus,
                         onClick = vm::onTranslateAndSaveFocus,
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         if (vm.isTranslatingFocus) {
                             CircularProgressIndicator(
@@ -627,7 +631,7 @@ fun WalkingAidSettingsScreen(
 
                         if (vm.depthSource == "cloud") {
                             Spacer(modifier = Modifier.height(8.dp))
-                            TextButton(onClick = vm::openDepthModelPicker) {
+                            TextButton(onClick = vm::openDepthModelPicker, shapes = ButtonDefaults.shapes()) {
                                 Text(
                                     text = if (vm.depthCloudModelId.isNotBlank())
                                         "Model: ${vm.depthCloudModelId}"
@@ -759,6 +763,7 @@ fun WalkingAidSettingsScreen(
                     Button(
                         onClick = vm::onClearHistory,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(R.string.walking_aid_clear_history))
                     }
@@ -803,7 +808,7 @@ fun WalkingAidSettingsScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = vm::dismissLatencyReport) {
+                TextButton(onClick = vm::dismissLatencyReport, shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.compose_walking_cancel))
                 }
             }
@@ -821,7 +826,7 @@ fun WalkingAidSettingsScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = vm::dismissAcquisitionReport) {
+                TextButton(onClick = vm::dismissAcquisitionReport, shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.compose_walking_cancel))
                 }
             }
@@ -848,7 +853,7 @@ fun WalkingAidSettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = vm::dismissReadiness) {
+                TextButton(onClick = vm::dismissReadiness, shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.compose_walking_review_settings))
                 }
             },
@@ -859,12 +864,13 @@ fun WalkingAidSettingsScreen(
                             vm.dismissReadiness()
                             val intent = AppRoute.PRO_SUBSCRIPTION.intent(context)
                             context.startActivity(intent)
-                        }
+                        },
+                        shapes = ButtonDefaults.shapes()
                     ) {
                         Text(stringResource(R.string.compose_walking_upgrade_pro))
                     }
                 } else {
-                    TextButton(onClick = vm::dismissReadiness) {
+                    TextButton(onClick = vm::dismissReadiness, shapes = ButtonDefaults.shapes()) {
                         Text(stringResource(R.string.compose_walking_cancel))
                     }
                 }
@@ -896,6 +902,7 @@ private fun WalkingAidModelDownloadCard(vm: WalkingAidSettingsViewModel, entry: 
             Button(
                 onClick = { vm.onDownloadModel(entry.id, entry.displayName) },
                 enabled = !installed && !isDownloading,
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(
                     when {
@@ -970,6 +977,7 @@ private fun ModelPickerDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.fillMaxWidth(),
+                                shapes = ButtonDefaults.shapes(),
                             ) {
                                 Column {
                                     Text(
@@ -993,13 +1001,13 @@ private fun ModelPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(R.string.compose_done))
             }
         },
         dismissButton = {
             if (!isLoading) {
-                TextButton(onClick = onRefresh) {
+                TextButton(onClick = onRefresh, shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(R.string.compose_refresh))
                 }
             }

@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.visualdiary
 
+import androidx.compose.material3.ButtonDefaults
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
 import android.os.Bundle
@@ -211,12 +212,13 @@ fun VisualDiarySettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = actions::onOpenTasker, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = actions::onOpenTasker, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                 Text("Open Tasker schedule")
             }
             OutlinedButton(
                 onClick = actions::onCaptureSceneNow,
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(stringResource(R.string.compose_capture_scene_now)) }
             SectionTitle(stringResource(R.string.compose_scene_descriptions))
             OutlinedTextField(
@@ -230,6 +232,7 @@ fun VisualDiarySettingsScreen(
             OutlinedButton(
                 onClick = { actions.onEnabledChange(false) },
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(stringResource(R.string.compose_stop_visual_diary)) }
             SectionTitle(stringResource(R.string.compose_shared_memory))
             Text(

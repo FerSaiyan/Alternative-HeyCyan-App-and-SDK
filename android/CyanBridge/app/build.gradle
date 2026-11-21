@@ -68,8 +68,9 @@ configurations.configureEach {
     // GeneratedMessage classes. Do not package Meta DAT's duplicate javalite runtime.
     exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
     resolutionStrategy {
-        force 'androidx.core:core:1.15.0'
-        force 'androidx.core:core-ktx:1.15.0'
+        // Compose Foundation 1.13 needs androidx.core 1.19 (compile SDK 37).
+        force 'androidx.core:core:1.19.0'
+        force 'androidx.core:core-ktx:1.19.0'
     }
 }
 
@@ -105,7 +106,13 @@ def metaDatZeroAppId = providers.gradleProperty("metaDatZeroAppId").map { it != 
 
 android {
     namespace = "com.fersaiyan.cyanbridge"
-    compileSdk = 36
+    // Compose 1.13 / Material 3 1.5 libraries require compile SDK 37.1. targetSdk stays 36.
+    compileSdk {
+        version = release(37) { minorApiLevel = 1 }
+    }
+    // Same NDK as :llama-runtime. AGP 9 defaults to NDK 28.2; when that NDK is not installed the
+    // debug-symbol strip step is skipped and the APK ships unstripped native libraries.
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "com.fersaiyan.cyanbridge"
@@ -298,16 +305,15 @@ dependencies {
     implementation "com.google.protobuf:protobuf-java:4.29.3"
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
-    implementation("androidx.core:core:1.15.0")
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core:1.19.0")
+    implementation("androidx.core:core-ktx:1.19.0")
 
     implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.androidx.material.icons.extended)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
     // Compose instrumentation uses coroutines-test's ServiceLoader handler. Coroutines
@@ -408,7 +414,6 @@ dependencies {
     androidTestImplementation 'androidx.test:runner:1.7.0'
     androidTestImplementation 'androidx.test:rules:1.7.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
-    androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
 }
 

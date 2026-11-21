@@ -51,12 +51,13 @@ private val IOS_PRO_SUBSCRIPTION_STATE = ProSubscriptionUiState(
 /**
  * Keyboard: shared screens pad themselves with imePadding, so UIKit must not also pan the whole
  * view up (that pushed the chat composer to the top and hid the history and back button).
- * Back: UIKit's left-edge swipe drives SystemBackHandler in shared sub-screens.
+ * Back: UIKit's left-edge swipe drives SystemBackHandler in shared sub-screens. Since Compose
+ * Multiplatform 1.13 the edge-swipe recognizer turns on by itself while a back handler is enabled
+ * (the old enableBackGesture switch is gone).
  */
 @OptIn(ExperimentalComposeUiApi::class)
 private fun ComposeUIViewControllerConfiguration.cyanBridgeDefaults() {
     onFocusBehavior = OnFocusBehavior.DoNothing
-    enableBackGesture = true
 }
 
 fun MainViewController() = ComposeUIViewController(configure = { cyanBridgeDefaults() }) {

@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
+import androidx.compose.material3.ButtonDefaults
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import android.os.Bundle
@@ -83,7 +84,7 @@ class MentraBroadcastDestination : NavScreen() {
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 if (glassesWifi == null && !state.phase.isActive) {
-                    OutlinedButton(onClick = { startActivity(AppRoute.MENTRA_FIRMWARE_UPDATE.intent(this@MentraBroadcastDestination)) }) {
+                    OutlinedButton(onClick = { startActivity(AppRoute.MENTRA_FIRMWARE_UPDATE.intent(this@MentraBroadcastDestination)) }, shapes = ButtonDefaults.shapes()) {
                         Text(stringResource(R.string.mentra_broadcast_wifi_setup))
                     }
                 }
@@ -108,14 +109,16 @@ class MentraBroadcastDestination : NavScreen() {
                             MediaPrefs.MentraBroadcast.streamUrl[this@MentraBroadcastDestination] = url.trim()
                             refusal = MentraBroadcastController.start(this@MentraBroadcastDestination, url)?.let(::message)
                         },
+                        shapes = ButtonDefaults.shapes(),
                     ) { Text(stringResource(R.string.mentra_broadcast_start)) }
                     OutlinedButton(
                         enabled = state.phase.isActive && state.phase != MentraBroadcastPhase.STOPPING,
                         onClick = MentraBroadcastController::stop,
+                        shapes = ButtonDefaults.shapes(),
                     ) { Text(stringResource(R.string.mentra_broadcast_stop)) }
                 }
                 Status(state)
-                OutlinedButton(onClick = ::finish) { Text(stringResource(R.string.mentra_broadcast_close)) }
+                OutlinedButton(onClick = ::finish, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_broadcast_close)) }
             }
         }
     }

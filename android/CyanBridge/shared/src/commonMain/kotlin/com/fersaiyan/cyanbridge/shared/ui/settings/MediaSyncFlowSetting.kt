@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -67,7 +68,7 @@ internal fun MediaSyncFlowDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismissRequest, modifier = Modifier.heightIn(min = 48.dp)) {
+            TextButton(onClick = onDismissRequest, modifier = Modifier.heightIn(min = 48.dp), shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(Res.string.action_cancel))
             }
         },

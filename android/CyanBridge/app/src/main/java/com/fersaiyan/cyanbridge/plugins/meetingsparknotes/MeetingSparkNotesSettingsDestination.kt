@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.meetingsparknotes
 
+import androidx.compose.material3.ButtonDefaults
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.os.Bundle
 import androidx.compose.foundation.layout.Arrangement
@@ -143,6 +144,7 @@ fun MeetingSparkNotesSettingsScreen(
             Button(
                 onClick = viewModel::onSummarizeCurrentMeeting,
                 modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(R.string.compose_summarize_current_meeting))
             }

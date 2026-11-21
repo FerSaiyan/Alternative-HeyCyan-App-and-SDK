@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ai.image
 
+import androidx.compose.material3.ButtonDefaults
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Context
@@ -279,6 +280,7 @@ fun ExternalAssistantAutomationSetupScreen(
                     FilledTonalButton(
                         onClick = onChooseDefaultAssistant,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(R.string.compose_external_choose_assistant))
                     }
@@ -286,6 +288,7 @@ fun ExternalAssistantAutomationSetupScreen(
                         onClick = onImportProfile,
                         enabled = state.canImportProfile,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(state.profileActionLabel)
                     }
@@ -293,24 +296,28 @@ fun ExternalAssistantAutomationSetupScreen(
                         onClick = onVerifyProfile,
                         enabled = state.canVerifyProfile,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(R.string.compose_external_verify_profile))
                     }
                     OutlinedButton(
                         onClick = onOpenAccessibility,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text("Open Accessibility settings")
                     }
                     OutlinedButton(
                         onClick = onOpenPlugins,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text("Open Plugins / Tasker profile downloads")
                     }
                     OutlinedButton(
                         onClick = onWatchTutorial,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text("Watch Tasker setup videos")
                     }
@@ -318,6 +325,7 @@ fun ExternalAssistantAutomationSetupScreen(
                         onClick = onTestVoice,
                         enabled = state.canTestVoice,
                         modifier = Modifier.fillMaxWidth(),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(R.string.compose_external_test_voice))
                     }
@@ -361,6 +369,7 @@ fun ExternalAssistantAutomationSetupScreen(
                 TextButton(
                     onClick = onRefresh,
                     modifier = Modifier.fillMaxWidth(),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(R.string.compose_external_refresh_status))
                 }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,6 +81,7 @@ fun MarkdownNoteEditorScreen(
                         onClick = onSave,
                         enabled = !isSaving && body.text.isNotBlank(),
                         modifier = Modifier.heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(if (isSaving) "Saving..." else stringResource(Res.string.notes_save))
                     }
@@ -143,11 +145,13 @@ fun MarkdownNoteEditorScreen(
                     onClick = onCopy,
                     enabled = body.text.isNotBlank(),
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.action_copy)) }
                 TextButton(
                     onClick = onShare,
                     enabled = body.text.isNotBlank(),
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.action_share)) }
             }
         }
@@ -186,6 +190,7 @@ private fun EditorToolButton(label: String, enabled: Boolean, onClick: () -> Uni
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.heightIn(min = 48.dp),
+        shapes = ButtonDefaults.shapes(),
     ) { Text(label) }
 }
 

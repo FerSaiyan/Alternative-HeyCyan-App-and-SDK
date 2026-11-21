@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -98,7 +99,7 @@ fun ChatAppearanceMenuDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismissRequest) {
+            TextButton(onClick = onDismissRequest, shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(Res.string.action_cancel))
             }
         },
@@ -124,6 +125,7 @@ private fun ChatAppearanceMenuItem(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("chat_appearance_action_${action.name}"),
+        shapes = ButtonDefaults.shapes(),
     ) {
         Row(
             modifier = Modifier

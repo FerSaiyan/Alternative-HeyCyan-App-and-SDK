@@ -2,8 +2,7 @@ package com.fersaiyan.cyanbridge.shared.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -58,7 +59,7 @@ fun ExpandableSectionCard(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
             ),
         colors = CardDefaults.cardColors(
             containerColor = if (expanded) {
@@ -92,6 +93,11 @@ fun ExpandableSectionCard(
                         )
                     }
                 }
+                // Expressive shape morph: a rounded square while collapsed, a circle while open.
+                val badgeCorner by animateDpAsState(
+                    targetValue = if (expanded) 20.dp else 12.dp,
+                    animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+                )
                 Surface(
                     modifier = Modifier.size(40.dp),
                     color = if (expanded) {
@@ -104,7 +110,7 @@ fun ExpandableSectionCard(
                     } else {
                         MaterialTheme.colorScheme.onSecondaryContainer
                     },
-                    shape = MaterialTheme.shapes.large,
+                    shape = RoundedCornerShape(badgeCorner),
                 ) {
                     Icon(
                         imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
@@ -119,8 +125,8 @@ fun ExpandableSectionCard(
             }
             AnimatedVisibility(
                 visible = expanded,
-                enter = fadeIn(animationSpec = spring()) + expandVertically(animationSpec = spring()),
-                exit = fadeOut(animationSpec = spring()) + shrinkVertically(animationSpec = spring()),
+                enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + expandVertically(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
+                exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) + shrinkVertically(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
             ) {
                 Column {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

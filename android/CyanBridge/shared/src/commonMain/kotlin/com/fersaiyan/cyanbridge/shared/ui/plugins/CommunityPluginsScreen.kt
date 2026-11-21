@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,9 +38,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -67,6 +65,7 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginCardData
 import com.fersaiyan.cyanbridge.shared.plugins.PluginEcosystem
 import com.fersaiyan.cyanbridge.shared.plugins.PluginEcosystemSection
 import com.fersaiyan.cyanbridge.shared.plugins.PluginTimeWindow
+import com.fersaiyan.cyanbridge.shared.ui.components.CyanBridgeBottomBar
 import com.fersaiyan.cyanbridge.shared.ui.localizedDestinationLabel
 import kotlin.math.floor
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -120,29 +119,10 @@ fun CommunityPluginsScreen(
             )
         },
         bottomBar = {
-            if (showNavigationBar) NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 0.dp,
-            ) {
-                AppDestination.entries.forEach { destination ->
-                    NavigationBarItem(
-                        selected = destination == AppDestination.PLUGINS,
-                        onClick = { onDestinationSelected(destination) },
-                        icon = {
-                            Icon(
-                                imageVector = destination.icon.imageVector(),
-                                contentDescription = null,
-                            )
-                        },
-                        label = { Text(localizedDestinationLabel(destination)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                        ),
-                    )
-                }
-            }
+            if (showNavigationBar) CyanBridgeBottomBar(
+                selected = AppDestination.PLUGINS,
+                onSelect = onDestinationSelected,
+            )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onPublishPlugin) {
@@ -191,6 +171,7 @@ fun CommunityPluginsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 48.dp),
+                            shapes = ButtonDefaults.shapes(),
                         ) {
                             Icon(Icons.Outlined.PlayCircle, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
@@ -308,7 +289,7 @@ fun CommunityPluginsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { detailsPluginTitle = null }) {
+                TextButton(onClick = { detailsPluginTitle = null }, shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(Res.string.action_close))
                 }
             },
@@ -394,6 +375,7 @@ private fun TaskerIntegrationCard(
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Icon(Icons.Outlined.Download, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
@@ -404,6 +386,7 @@ private fun TaskerIntegrationCard(
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Icon(Icons.Outlined.Settings, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
@@ -559,6 +542,7 @@ private fun PluginEcosystemCard(
                     onClick = onOpen,
                     enabled = enabled != false,
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shapes = ButtonDefaults.shapes(),
                 ) {
                     Text(stringResource(Res.string.plugins_ecosystem_open))
                 }
@@ -687,6 +671,7 @@ private fun PluginCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(
                     if (selected) {
@@ -703,6 +688,7 @@ private fun PluginCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(Res.string.plugins_open_tasker))
                     }
@@ -713,6 +699,7 @@ private fun PluginCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(Res.string.plugins_download))
                     }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -64,12 +65,14 @@ fun GlassesCustomizationCard(state: GlassesCustomizationUiState, actions: Glasse
                 CustomizationPhase.LOCKED -> Button(
                     onClick = actions::upgrade,
                     modifier = Modifier.fillMaxWidth().testTag("customization_upgrade"),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.customization_upgrade)) }
                 CustomizationPhase.LOADING -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 CustomizationPhase.READY -> ReadyContent(state, actions)
                 else -> OutlinedButton(
                     onClick = actions::refresh,
                     modifier = Modifier.fillMaxWidth().testTag("customization_refresh"),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.customization_refresh)) }
             }
             if (state.phase != CustomizationPhase.LOCKED) {
@@ -113,7 +116,7 @@ private fun ReadyContent(state: GlassesCustomizationUiState, actions: GlassesCus
                     }
                 }
                 if (tone.fileName != null) {
-                    TextButton(onClick = { actions.clearTone(tone.id) }, modifier = Modifier.testTag("customization_tone_clear_${tone.id}")) {
+                    TextButton(onClick = { actions.clearTone(tone.id) }, modifier = Modifier.testTag("customization_tone_clear_${tone.id}"), shapes = ButtonDefaults.shapes()) {
                         Text(stringResource(Res.string.customization_remove))
                     }
                 }
@@ -121,6 +124,7 @@ private fun ReadyContent(state: GlassesCustomizationUiState, actions: GlassesCus
                     onClick = { actions.pickTone(tone.id) },
                     enabled = !state.busy,
                     modifier = Modifier.testTag("customization_tone_pick_${tone.id}"),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.customization_choose_file)) }
             }
         }
@@ -164,11 +168,13 @@ private fun ReadyContent(state: GlassesCustomizationUiState, actions: GlassesCus
                 onClick = actions::recordSample,
                 enabled = state.canRecord,
                 modifier = Modifier.weight(1f).testTag("customization_record"),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(stringResource(Res.string.customization_record)) }
             OutlinedButton(
                 onClick = actions::stopRecording,
                 enabled = state.recording,
                 modifier = Modifier.weight(1f).testTag("customization_stop"),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(stringResource(Res.string.customization_stop)) }
         }
         val meterLabel = stringResource(Res.string.customization_mic_level)
@@ -198,6 +204,7 @@ private fun ReadyContent(state: GlassesCustomizationUiState, actions: GlassesCus
                     onClick = { actions.deleteSample(sample.index) },
                     enabled = !state.recording && !state.busy,
                     modifier = Modifier.testTag("customization_sample_delete_${sample.index + 1}"),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(Res.string.customization_delete)) }
             }
         }
@@ -220,6 +227,7 @@ private fun ReadyContent(state: GlassesCustomizationUiState, actions: GlassesCus
         onClick = actions::submit,
         enabled = state.canSubmit,
         modifier = Modifier.fillMaxWidth().testTag("customization_submit"),
+        shapes = ButtonDefaults.shapes(),
     ) { Text(stringResource(Res.string.customization_submit)) }
     if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
     state.progress?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("customization_progress")) }
@@ -243,7 +251,7 @@ private fun BuildsAndInstall(state: GlassesCustomizationUiState, actions: Glasse
                 }
             }
             if (job.active) {
-                TextButton(onClick = { actions.cancelJob(job.id) }, modifier = Modifier.testTag("customization_job_cancel_$index")) {
+                TextButton(onClick = { actions.cancelJob(job.id) }, modifier = Modifier.testTag("customization_job_cancel_$index"), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(Res.string.customization_cancel_build))
                 }
             }
@@ -254,6 +262,7 @@ private fun BuildsAndInstall(state: GlassesCustomizationUiState, actions: Glasse
         onClick = actions::installFirmware,
         enabled = !state.installing,
         modifier = Modifier.fillMaxWidth().testTag("customization_install"),
+        shapes = ButtonDefaults.shapes(),
     ) { Text(stringResource(Res.string.customization_install)) }
     if (state.installing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
     state.installStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("customization_install_status")) }

@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.shared.ui.chat
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.produceState
 import com.fersaiyan.cyanbridge.shared.platform.SharedMediaHooks
 import com.fersaiyan.cyanbridge.shared.platform.PlatformFilePaths
@@ -11,7 +12,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,9 +45,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -82,7 +79,6 @@ import com.fersaiyan.cyanbridge.shared.chat.ChatThreadUiState
 import com.fersaiyan.cyanbridge.shared.icons.AppIcon
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
 import com.fersaiyan.cyanbridge.shared.icons.imageVector
-import com.fersaiyan.cyanbridge.shared.navigation.icon
 import com.fersaiyan.cyanbridge.shared.generated.resources.Res
 import com.fersaiyan.cyanbridge.shared.generated.resources.action_new_chat
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_appearance
@@ -100,6 +96,7 @@ import com.fersaiyan.cyanbridge.shared.generated.resources.chat_stop_audio_recor
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_stop_generation
 import com.fersaiyan.cyanbridge.shared.generated.resources.chat_thinking
 import com.fersaiyan.cyanbridge.shared.generated.resources.action_send
+import com.fersaiyan.cyanbridge.shared.ui.components.CyanBridgeBottomBar
 import com.fersaiyan.cyanbridge.shared.ui.localizedDestinationLabel
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
@@ -148,7 +145,7 @@ fun ChatThreadScreen(
                     )
                 },
                 navigationIcon = {
-                    TextButton(onClick = onOpenChatList) {
+                    TextButton(onClick = onOpenChatList, shapes = ButtonDefaults.shapes()) {
                         Icon(
                             imageVector = AppIcon.Back.imageVector(),
                             contentDescription = stringResource(Res.string.chat_list),
@@ -225,7 +222,7 @@ private fun ChatThreadStatus(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(animationSpec = spring())
+            .animateContentSize(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec())
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -425,7 +422,7 @@ private fun ChatMessageBubble(
             Surface(
                 modifier = Modifier
                     .widthIn(max = maxBubbleWidth)
-                    .animateContentSize(animationSpec = spring()),
+                    .animateContentSize(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()),
                 color = background,
                 contentColor = contentColor,
                 shape = shape,
@@ -494,7 +491,7 @@ private fun ChatComposer(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .animateContentSize(animationSpec = spring())
+                .animateContentSize(animationSpec = MaterialTheme.motionScheme.fastSpatialSpec())
                 .padding(12.dp)
                 .testTag("chat_composer"),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -599,29 +596,10 @@ private fun ChatComposer(
 
 @Composable
 private fun ChatNavigationBar(onDestinationSelected: (AppDestination) -> Unit) {
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 0.dp,
-    ) {
-        AppDestination.entries.forEach { destination ->
-            NavigationBarItem(
-                selected = destination == AppDestination.CHATS,
-                onClick = { onDestinationSelected(destination) },
-                icon = {
-                    Icon(
-                        imageVector = destination.icon.imageVector(),
-                        contentDescription = null,
-                    )
-                },
-                label = { Text(localizedDestinationLabel(destination)) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                ),
-            )
-        }
-    }
+    CyanBridgeBottomBar(
+        selected = AppDestination.CHATS,
+        onSelect = onDestinationSelected,
+    )
 }
 
 /** Photo attached to a message (image questions); tap opens it full screen. */

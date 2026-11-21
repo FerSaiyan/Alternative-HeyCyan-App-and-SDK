@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,7 +71,7 @@ fun BatteryOptimizationGuideScreen(
                             color = if (optimizationIgnored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         )
                         if (!optimizationIgnored) {
-                            Button(onDisableOptimization, Modifier.fillMaxWidth().height(50.dp), shape = MaterialTheme.shapes.medium) {
+                            Button(onDisableOptimization, ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium), Modifier.fillMaxWidth().height(50.dp)) {
                                 Text(stringResource(Res.string.onboarding_disable_battery))
                             }
                         }
@@ -83,20 +84,20 @@ fun BatteryOptimizationGuideScreen(
                         Text(stringResource(Res.string.onboarding_lock_recents_title), fontWeight = FontWeight.SemiBold)
                         Text(stringResource(Res.string.onboarding_lock_recents_body), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        TextButton(onOpenAppInfo) { Text(stringResource(Res.string.onboarding_open_app_info)) }
+                        TextButton(onOpenAppInfo, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.onboarding_open_app_info)) }
                     }
                 }
-                TextButton(onOpenOptimizationList, Modifier.padding(top = 8.dp)) {
+                TextButton(onOpenOptimizationList, ButtonDefaults.shapes(), Modifier.padding(top = 8.dp)) {
                     Text(stringResource(Res.string.onboarding_battery_list))
                 }
             }
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onContinue, Modifier.fillMaxWidth().height(54.dp), shape = MaterialTheme.shapes.medium) {
+                Button(onContinue, ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium), Modifier.fillMaxWidth().height(54.dp)) {
                     Text(stringResource(Res.string.onboarding_continue), fontWeight = FontWeight.Bold)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                    TextButton(onRemindLater) { Text(stringResource(Res.string.onboarding_not_now)) }
-                    TextButton(onDontShowAgain) { Text(stringResource(Res.string.onboarding_dont_show_again)) }
+                    TextButton(onRemindLater, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.onboarding_not_now)) }
+                    TextButton(onDontShowAgain, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.onboarding_dont_show_again)) }
                 }
             }
         }

@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -272,8 +273,8 @@ class MentraMiniappsDestination : NavScreen() {
                 onDismissRequest = { removal = null },
                 title = { Text(stringResource(R.string.mentra_miniapps_remove_title, app.manifest.name)) },
                 text = { Text(stringResource(R.string.mentra_miniapps_remove_message)) },
-                confirmButton = { TextButton(onClick = { remove(app) }) { Text(stringResource(R.string.mentra_miniapps_remove)) } },
-                dismissButton = { TextButton(onClick = { removal = null }) { Text(stringResource(R.string.mentra_miniapps_cancel)) } },
+                confirmButton = { TextButton(onClick = { remove(app) }, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_remove)) } },
+                dismissButton = { TextButton(onClick = { removal = null }, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_cancel)) } },
             )
         }
     }
@@ -322,7 +323,7 @@ class MentraMiniappsDestination : NavScreen() {
                             modifier = Modifier.fillMaxWidth().testTag("mentra_miniapps_url"),
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilledTonalButton(onClick = { fetchOffer(url) }, enabled = url.startsWith("https://") && !busy, modifier = Modifier.heightIn(min = 48.dp)) {
+                            FilledTonalButton(onClick = { fetchOffer(url) }, enabled = url.startsWith("https://") && !busy, modifier = Modifier.heightIn(min = 48.dp), shapes = ButtonDefaults.shapes()) {
                                 Text(stringResource(R.string.mentra_miniapps_install_url))
                             }
                             OutlinedButton(
@@ -331,6 +332,7 @@ class MentraMiniappsDestination : NavScreen() {
                                     if (!storeLoaded) loadStore("")
                                 },
                                 modifier = Modifier.heightIn(min = 48.dp),
+                                shapes = ButtonDefaults.shapes(),
                             ) { Text(stringResource(R.string.mentra_miniapps_browse_store)) }
                         }
                     }
@@ -363,21 +365,21 @@ class MentraMiniappsDestination : NavScreen() {
                 }
                 app.manifest.description?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = { open(app) }, enabled = !busy) { Text(stringResource(R.string.mentra_miniapps_open)) }
+                    FilledTonalButton(onClick = { open(app) }, enabled = !busy, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_open)) }
                     if (isRunning) {
-                        OutlinedButton(onClick = { MentraMiniappHost.stop(this@MentraMiniappsDestination, app.manifest.packageName) }) {
+                        OutlinedButton(onClick = { MentraMiniappHost.stop(this@MentraMiniappsDestination, app.manifest.packageName) }, shapes = ButtonDefaults.shapes()) {
                             Text(stringResource(R.string.mentra_miniapps_stop))
                         }
                     }
                 }
                 Row {
-                    TextButton(onClick = { checkUpdate(app) }, enabled = !busy && app.source != null) { Text(stringResource(R.string.mentra_miniapps_update)) }
+                    TextButton(onClick = { checkUpdate(app) }, enabled = !busy && app.source != null, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_update)) }
                     if (app.manifest.permissions.isNotEmpty()) {
-                        TextButton(onClick = { consent = ConsentRequest(app, store.approvals(app), then = null) }) {
+                        TextButton(onClick = { consent = ConsentRequest(app, store.approvals(app), then = null) }, shapes = ButtonDefaults.shapes()) {
                             Text(stringResource(R.string.mentra_miniapps_permissions))
                         }
                     }
-                    TextButton(onClick = { removal = app }) { Text(stringResource(R.string.mentra_miniapps_remove)) }
+                    TextButton(onClick = { removal = app }, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_remove)) }
                 }
             }
         }
@@ -411,7 +413,7 @@ class MentraMiniappsDestination : NavScreen() {
                         label = { Text(stringResource(R.string.mentra_miniapps_store_search)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        trailingIcon = { TextButton(onClick = { loadStore(query) }, enabled = !busy) { Text("OK") } },
+                        trailingIcon = { TextButton(onClick = { loadStore(query) }, enabled = !busy, shapes = ButtonDefaults.shapes()) { Text("OK") } },
                     )
                 }
                 storeError?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
@@ -420,7 +422,7 @@ class MentraMiniappsDestination : NavScreen() {
                 }
                 items(storeApps, key = { it.packageName }) { listing -> StoreCard(listing) }
                 if (storeCursor != null && storeError == null) item {
-                    OutlinedButton(onClick = { loadStore(storeQuery, more = true) }, enabled = !busy) { Text(stringResource(R.string.mentra_miniapps_store_more)) }
+                    OutlinedButton(onClick = { loadStore(storeQuery, more = true) }, enabled = !busy, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_store_more)) }
                 }
                 // The directory listed nothing (empty on 2026-11-17): offer Mentra's own miniapps from their
                 // public first-party host, clearly labelled, through the same URL installer.
@@ -469,10 +471,11 @@ class MentraMiniappsDestination : NavScreen() {
                 val meta = listOfNotNull(listing.category, listing.ageRating).joinToString(" · ")
                 if (meta.isNotEmpty()) Text(meta, style = MaterialTheme.typography.labelSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = { installListing(listing) }, enabled = !busy) { Text(stringResource(R.string.mentra_miniapps_install)) }
+                    FilledTonalButton(onClick = { installListing(listing) }, enabled = !busy, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_install)) }
                     OutlinedButton(onClick = {
                         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(MiniappStoreCatalog.listingWebUrl(listing.packageName)))) }
-                    }) { Text(stringResource(R.string.mentra_miniapps_store_open_web)) }
+                    },
+                        shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_store_open_web)) }
                 }
             }
         }
@@ -515,9 +518,10 @@ class MentraMiniappsDestination : NavScreen() {
                 TextButton(
                     onClick = { install(target) },
                     enabled = target.decision != MiniappSource.UpdateDecision.DOWNGRADE_REFUSED,
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(R.string.mentra_miniapps_install)) }
             },
-            dismissButton = { TextButton(onClick = { offer = null }) { Text(stringResource(R.string.mentra_miniapps_cancel)) } },
+            dismissButton = { TextButton(onClick = { offer = null }, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_cancel)) } },
         )
     }
 
@@ -561,9 +565,10 @@ class MentraMiniappsDestination : NavScreen() {
                         store.saveApprovals(request.app, approvals)
                         request.then?.let { then -> if (MiniappPermissionPolicy.canStart(manifest, approvals)) then(approvals) }
                     },
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text(stringResource(R.string.mentra_miniapps_allow)) }
             },
-            dismissButton = { TextButton(onClick = { consent = null }) { Text(stringResource(R.string.mentra_miniapps_cancel)) } },
+            dismissButton = { TextButton(onClick = { consent = null }, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_cancel)) } },
         )
     }
 
@@ -580,11 +585,12 @@ class MentraMiniappsDestination : NavScreen() {
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { showLogs = !showLogs }) { Text(stringResource(R.string.mentra_miniapps_logs)) }
+                    TextButton(onClick = { showLogs = !showLogs }, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_logs)) }
                     TextButton(onClick = {
                         onClose()
                         MentraMiniappHost.stop(this@MentraMiniappsDestination, running.app.manifest.packageName)
-                    }) { Text(stringResource(R.string.mentra_miniapps_stop)) }
+                    },
+                        shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.mentra_miniapps_stop)) }
                 }
                 if (showLogs) {
                     Text(

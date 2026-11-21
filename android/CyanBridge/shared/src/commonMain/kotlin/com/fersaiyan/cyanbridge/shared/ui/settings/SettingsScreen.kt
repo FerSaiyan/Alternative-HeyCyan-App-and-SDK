@@ -47,9 +47,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -64,7 +61,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.generated.resources.*
 import com.fersaiyan.cyanbridge.shared.navigation.AppDestination
-import com.fersaiyan.cyanbridge.shared.navigation.icon
 import com.fersaiyan.cyanbridge.shared.icons.imageVector
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
 import com.fersaiyan.cyanbridge.shared.ai.AgentProviderAvailability
@@ -74,6 +70,7 @@ import com.fersaiyan.cyanbridge.shared.settings.MemoryPrivacyMode
 import com.fersaiyan.cyanbridge.shared.settings.MemorySourceType
 import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
+import com.fersaiyan.cyanbridge.shared.ui.components.CyanBridgeBottomBar
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 import com.fersaiyan.cyanbridge.shared.ui.components.ExpandableSectionCard
@@ -185,31 +182,10 @@ fun SettingsScreen(
             )
         },
         bottomBar = {
-            if (showNavigationBar) NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 0.dp,
-            ) {
-                AppDestination.entries.forEach { destination ->
-                    NavigationBarItem(
-                        selected = destination == AppDestination.SETTINGS,
-                        onClick = { actions.onDestinationSelected(destination) },
-                        icon = {
-                            Icon(
-                                imageVector = destination.icon.imageVector(),
-                                contentDescription = null,
-                            )
-                        },
-                        label = { Text(localizedDestinationLabel(destination)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                }
-            }
+            if (showNavigationBar) CyanBridgeBottomBar(
+                selected = AppDestination.SETTINGS,
+                onSelect = { actions.onDestinationSelected(it) },
+            )
         },
     ) { innerPadding ->
         LazyColumn(
@@ -382,6 +358,7 @@ private fun MeetingRecordingBanner(
             TextButton(
                 onClick = onStop,
                 modifier = Modifier.heightIn(min = 48.dp),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(Res.string.action_stop))
             }
@@ -483,6 +460,7 @@ private fun ProSubscriptionCard(
                     containerColor = MaterialTheme.colorScheme.tertiary,
                     contentColor = MaterialTheme.colorScheme.onTertiary,
                 ),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(
                     stringResource(
@@ -577,6 +555,7 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
                 modifier = Modifier
                     .weight(1f)
                     .testTag("settings_local_models"),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(Res.string.settings_configure_local_models))
             }
@@ -585,6 +564,7 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
                 modifier = Modifier
                     .weight(1f)
                     .testTag("settings_tasker_integrations"),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text("Tasker integrations")
             }
@@ -593,6 +573,7 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
         OutlinedButton(
             onClick = actions::openLocalModels,
             modifier = Modifier.fillMaxWidth(),
+            shapes = ButtonDefaults.shapes(),
         ) {
             Text(stringResource(Res.string.settings_configure_local_models))
         }
@@ -619,7 +600,7 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
             .heightIn(min = 56.dp),
         horizontalArrangement = Arrangement.End,
     ) {
-        TextButton(onClick = actions::resetDefaultImageQuestion) {
+        TextButton(onClick = actions::resetDefaultImageQuestion, shapes = ButtonDefaults.shapes()) {
             Text(stringResource(Res.string.reset_default_image_question))
         }
     }
@@ -711,6 +692,7 @@ private fun QuestionRoutingContent(state: SettingsUiState, actions: SettingsScre
         OutlinedButton(
             onClick = actions::openVoiceEnrollment,
             modifier = Modifier.weight(1f).testTag("settings_voice_enroll"),
+            shapes = ButtonDefaults.shapes(),
         ) {
             Text(
                 stringResource(
@@ -724,6 +706,7 @@ private fun QuestionRoutingContent(state: SettingsUiState, actions: SettingsScre
                 onClick = actions::deleteVoiceProfile,
                 modifier = Modifier.weight(1f).testTag("settings_voice_delete"),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(Res.string.settings_voice_profile_delete))
             }
@@ -917,6 +900,7 @@ private fun ActionButton(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp),
+        shapes = ButtonDefaults.shapes(),
     ) {
         Text(
             text = label,

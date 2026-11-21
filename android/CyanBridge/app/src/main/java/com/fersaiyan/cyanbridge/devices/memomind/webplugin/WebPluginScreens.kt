@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -99,7 +100,7 @@ internal fun WebPluginListScreen(
                 )
             }
             item {
-                FilledTonalButton(onClick = onInstall, modifier = Modifier.fillMaxWidth()) {
+                FilledTonalButton(onClick = onInstall, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.memomind_webplugins_install))
                 }
             }
@@ -145,13 +146,13 @@ private fun PluginCard(
                 Text(stringResource(R.string.memomind_webplugins_needs_glasses_plugin, pluginId), style = MaterialTheme.typography.bodySmall)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = { onOpen(plugin) }, modifier = Modifier.weight(1f)) {
+                FilledTonalButton(onClick = { onOpen(plugin) }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.memomind_webplugins_open))
                 }
-                OutlinedButton(onClick = { onPermissions(plugin) }, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = { onPermissions(plugin) }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.memomind_webplugins_permissions))
                 }
-                OutlinedButton(onClick = { onRemove(plugin) }, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = { onRemove(plugin) }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                     Text(stringResource(R.string.memomind_webplugins_remove))
                 }
             }
@@ -237,8 +238,8 @@ internal fun InstallDialog(pkg: MmpkgPackage, replacesVersion: String?, onConfir
                 )
             }
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.memomind_webplugins_install_action)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.memomind_webplugins_cancel)) } },
+        confirmButton = { TextButton(onClick = onConfirm, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.memomind_webplugins_install_action)) } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.memomind_webplugins_cancel)) } },
     )
 }
 
@@ -248,8 +249,8 @@ internal fun RemoveDialog(plugin: InstalledWebPlugin, onConfirm: () -> Unit, onD
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.memomind_webplugins_remove_title, plugin.manifest.name)) },
         text = { Text(stringResource(R.string.memomind_webplugins_remove_message)) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.memomind_webplugins_remove)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.memomind_webplugins_cancel)) } },
+        confirmButton = { TextButton(onClick = onConfirm, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.memomind_webplugins_remove)) } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.memomind_webplugins_cancel)) } },
     )
 }
 
@@ -282,11 +283,11 @@ internal fun PermissionDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(approvals) }, enabled = !launch || WebPluginPolicy.canStart(declarations, approvals)) {
+            TextButton(onClick = { onConfirm(approvals) }, enabled = !launch || WebPluginPolicy.canStart(declarations, approvals), shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(if (launch) R.string.memomind_webplugins_start else R.string.memomind_webplugins_save))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.memomind_webplugins_cancel)) } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.memomind_webplugins_cancel)) } },
     )
 }
 

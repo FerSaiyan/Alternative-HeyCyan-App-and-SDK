@@ -9,7 +9,6 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -20,8 +19,7 @@ import androidx.compose.ui.platform.LocalView
 import com.fersaiyan.cyanbridge.shared.appearance.AccentProfile
 import com.fersaiyan.cyanbridge.shared.appearance.AccentProfiles
 import com.fersaiyan.cyanbridge.shared.appearance.AppearanceSettings
-import com.fersaiyan.cyanbridge.shared.ui.theme.CyanBridgeShapes
-import com.fersaiyan.cyanbridge.shared.ui.theme.CyanBridgeTypography
+import com.fersaiyan.cyanbridge.shared.ui.theme.CyanBridgeExpressiveTheme
 import com.fersaiyan.cyanbridge.shared.ui.theme.highContrastColorScheme
 import com.fersaiyan.cyanbridge.shared.ui.theme.resolveDarkTheme
 import com.fersaiyan.cyanbridge.shared.ui.theme.cyanBridgeColorScheme as sharedCyanBridgeColorScheme
@@ -72,12 +70,9 @@ fun CyanBridgeTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = CyanBridgeTypography,
-        shapes = CyanBridgeShapes,
-        content = content,
-    )
+    // The same Material 3 Expressive theme as the shared/iOS screens; only the scheme differs
+    // (wallpaper dynamic color on Android 12+ when the user turned it on).
+    CyanBridgeExpressiveTheme(colorScheme = colorScheme, content = content)
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
