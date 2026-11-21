@@ -106,9 +106,15 @@ object GlassesConnectionDiagnostics {
         this.connected = connected
         this.family = family
         sinceMs = System.currentTimeMillis()
+        // "disconnected" only for a link that was up: the first report, or a family picked while
+        // nothing is connected (Meta's profile is saved before any pairing), is "not connected".
         DiagnosticEvents.info(
             DiagnosticSubsystem.BLE,
-            if (connected) "glasses connected" else "glasses disconnected",
+            when {
+                connected -> "glasses connected"
+                previous == true -> "glasses disconnected"
+                else -> "glasses not connected"
+            },
             buildMap {
                 put("family", family)
                 if (previous != null) put("was", if (previous) "connected" else "disconnected")

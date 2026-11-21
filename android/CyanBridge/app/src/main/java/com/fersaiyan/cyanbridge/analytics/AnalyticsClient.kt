@@ -103,6 +103,8 @@ object AnalyticsClient {
     }
 
     private fun postJson(context: Context, path: String, body: JSONObject): Int {
+        // Pre-launch robots accept the sharing prompt and would count as installs and active users.
+        check(!com.fersaiyan.cyanbridge.diagnostics.TestLabEnvironment.isTestLab(context)) { "Firebase Test Lab device" }
         val connection = URL("$SERVICE_BASE_URL$path").openConnection() as HttpURLConnection
         return try {
             connection.requestMethod = "POST"

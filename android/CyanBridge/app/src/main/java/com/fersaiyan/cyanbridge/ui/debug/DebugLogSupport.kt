@@ -361,6 +361,10 @@ object DebugLogSupport {
 
     /** Posts [report] to `{relay}/logs/submit`; returns the server's log id. */
     fun postReport(context: Context, report: DiagnosticReport, relayBaseUrl: String? = null): Result<String> = runCatching {
+        // Pre-launch robots send junk reports that evict real ones (the server keeps the newest 200).
+        check(!com.fersaiyan.cyanbridge.diagnostics.TestLabEnvironment.isTestLab(context)) {
+            "Not sent: this is a Firebase Test Lab device"
+        }
         val url = URL("${relayBaseUrl(context, relayBaseUrl)}/logs/submit")
         val token = ProSubscriptionServerPrefs.getApiToken(context)
         val conn = (url.openConnection() as HttpURLConnection).apply {

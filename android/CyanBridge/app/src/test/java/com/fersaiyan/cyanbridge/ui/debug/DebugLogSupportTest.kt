@@ -39,6 +39,22 @@ class DebugLogSupportTest {
     }
 
     @Test
+    fun `a Test Lab device never uploads a report`() {
+        android.provider.Settings.System.putString(context.contentResolver, "firebase.test.lab", "true")
+        try {
+            val report = com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticReport(
+                kotlinx.serialization.json.JsonObject(emptyMap()), "", 0,
+            )
+            // Port 9 has no listener: reaching the network would fail with a connection error instead.
+            val result = DebugLogSupport.postReport(context, report, relayBaseUrl = "http://127.0.0.1:9")
+
+            assertEquals("Not sent: this is a Firebase Test Lab device", result.exceptionOrNull()?.message)
+        } finally {
+            android.provider.Settings.System.putString(context.contentResolver, "firebase.test.lab", null)
+        }
+    }
+
+    @Test
     fun `logcat caps every tag so Meta DAT cannot crowd out the app's own lines`() {
         val dat = (1..900).map { "11-17 10:00:00.000  42  42 D DAT:CORE:Stream$it: frame" }
         val app = (1..5).map { "11-17 10:00:01.000  42  42 W AIHijack: Spoken decision failed $it" }
