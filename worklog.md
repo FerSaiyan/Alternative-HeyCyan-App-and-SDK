@@ -1,5 +1,17 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — MYVU connection failures from a 2.4.3 user (`myvu-connection-fixes`)
+
+- **Reports:** log_mwpl4j36 (PAIRING), log_mwpl7wqp (READY), log_mwpl80fv (CONNECTING). One user: Samsung SM-A176B, Android 17, installed 2026-11-21. The report bodies have no transport history. It is in the stored legacy text (`/admin/debug-logs`).
+- **PAIRING, "unparseable version reply: <104 chars>":** `BlePairing` took the first internal-channel message as the JSON version answer. The redactor shortened the JSONException because "reply:" is a content key. On Android's org.json, only one cut of the captured answer gives 104 characters: the cut after 41 bytes ("Unterminated string at character 41"). So the answer most likely arrived truncated.
+  - **Fix:** read "e" even when the JSON object does not fully parse, and route frames that are not pkgType 17 to LinkProtocol handling.
+  - **Failure text:** now gives the pkgType, length and head/tail bytes, and survives the redactor.
+- **CONNECTING, "BLE init burst did not complete":** the burst's 200 ms continuation outlived teardown. A Connect tap stops and restarts the connection, and the button stays enabled until the relay is up. If the tap came during the burst, the next tick saw the new, not-yet-ready BLE transport and called `fail()`, which tore down the new attempt. A stale relay burst could also close a new relay.
+  - **Fix:** a burst stops quietly once its session is no longer the live one (`isCurrentSession`).
+- **READY, "BLE link terminated by the local host":** status 22 (HCI 0x16) means the phone's own stack ended the LE link while the BLE session was up. Our BLE writes are write-without-response, so ATT timeouts are ruled out. **Not fixed.** Diagnosing it needs the stored logcat around the drop: BluetoothGatt, BluetoothSocket and bond-state lines, plus "BLE MTU =".
+- Submodule `myvu-upstream` 0d5fd45 is on the local branch `cyanbridge-myvu-connection-fixes`. Push it before pushing this branch.
+- **Tests:** a table-driven `MyvuVersionAnswerTest`. `:app:testDebugUnitTest` with `*Myvu*`, `*Meizu*` and `*ArchitectureGuardrail*` passes.
+
 ## 2026-11-20 — Release 2.4.3 (versionCode 36): Wi-Fi optional for Google Play
 
 - **Why:** Play blocked sending 2.4.2 (code 35) for review: "Required hardware feature declarations are restricting your app's availability: android.hardware.wifi affects Phone, Tablet, Desktop, and Android XR users". The feature was never declared; it is implied by ACCESS_WIFI_STATE/CHANGE_WIFI_STATE.
