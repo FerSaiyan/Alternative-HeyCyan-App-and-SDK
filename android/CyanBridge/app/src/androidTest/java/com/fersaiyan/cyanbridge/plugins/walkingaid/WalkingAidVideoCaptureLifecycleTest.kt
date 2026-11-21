@@ -7,6 +7,7 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLiveConnection
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLivePreviewManager
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
+import com.fersaiyan.cyanbridge.media.rtsp.VlcFontCache
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -15,12 +16,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class WalkingAidVideoCaptureLifecycleTest {
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
+
+    /**
+     * A preview waits for LibVLC's one-time font cache (25-28 s on the emulators, see VlcFontCache)
+     * before it opens the glasses transport. CI installs a fresh build each run, so build the cache
+     * first: these tests time the transport lifecycle, not the font scan.
+     */
+    @Before fun videoPlayerReady() = runBlocking { VlcFontCache.awaitReady(context) }
 
     @Test fun cancellationWhileConnectingClosesTransportAndReleasesLease() = runBlocking {
         val connecting = CompletableDeferred<Unit>()

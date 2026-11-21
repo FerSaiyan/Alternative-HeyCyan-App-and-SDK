@@ -1,5 +1,12 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — CI: Walking Aid video lifecycle test waits for the LibVLC font cache
+
+- **Symptom:** "Android self-hosted CI" failed at "Run Mock DAT, Meta pairing, and Walking Aid video controls" on every run since 2.4.1. The Meta DAT and Meta pairing classes passed on the read-only `Pixel_9a` (no separate AVD needed); `WalkingAidVideoCaptureLifecycleTest` failed 2 of 3 with 5 s timeouts.
+- **Cause:** since 2.4.1 (54bee7e7) a live preview waits for LibVLC's one-time font cache (`VlcFontCache.awaitReady`, 25-28 s on the emulators) before it opens the glasses transport. CI installs a fresh build each run, so the tests spent their 5 s budget in that wait and never reached the fake transport.
+- **Fix:** the test class builds the font cache in `@Before`. App behaviour unchanged.
+- **Verified:** the CI step's six classes on a read-only `Pixel_9a` (emulator-5572): 4 + 3 + 7 + 9 + 5 + 3 tests, all pass.
+
 ## 2026-11-21 — Even G2 emulator lane green on this branch; emulator docs for agents
 
 - **Verified on an AVD** (read-only Pixel_9a, debug APK of this branch) against the original Even G2 firmware rig
