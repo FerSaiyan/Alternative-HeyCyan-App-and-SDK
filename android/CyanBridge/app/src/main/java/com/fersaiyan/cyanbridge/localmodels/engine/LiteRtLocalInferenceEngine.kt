@@ -20,19 +20,28 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.ResponseFormat
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ToolProvider
 import com.google.ai.edge.litertlm.ThinkingConfig
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import java.io.File
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.Locale
 
 class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CONTEXT) : LocalInferenceEngine, NextTokenDecisionRuntime {
@@ -55,6 +64,13 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     private var sessionTokens = 0
     /** Set by [cancelGeneration] (logged when the stopped turn fails). */
     @Volatile private var cancelRequested = false
+    /**
+     * Native turn of each conversation, completed when LiteRT-LM reports its end. Closing a conversation
+     * while its prefill runs crashes LiteRT-LM (0.16 to 0.19, Play vitals SIGSEGV in liblitertlm_jni.so):
+     * ~Conversation clears `session_` and then waits for the session's tasks, and the prefill callback calls
+     * `session_->RunDecodeAsync` on the cleared pointer. See [streamTurn] and [closeWhenIdle].
+     */
+    private val turns: MutableMap<Conversation, CompletableDeferred<Unit>> = Collections.synchronizedMap(IdentityHashMap())
 
     override suspend fun loadModel(modelPath: String, config: EngineLoadConfig): EngineLoadResult = operationMutex.withLock {
         loadModelSerialized(modelPath, config)
@@ -428,7 +444,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             Log.e(TAG, "LiteRT generation failed (cancelled=$cancelRequested)", t)
             throw t
         } finally {
-            mutex.withLock {
+            withContext(NonCancellable) { mutex.withLock {
                 if (activeConversation === conversation) {
                     if (keepSession) {
                         sessionTokens = runCatching { conversation.getTokenCount() }.getOrDefault(sessionTokens + turnTokens + replyTokens)
@@ -437,7 +453,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                         closeConversationLocked()
                     }
                 }
-            }
+            } }
         }
     }
 
@@ -465,11 +481,11 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         runCatching {
             val silence = File(context.cacheDir, "litert_audio_prime.wav")
             if (!silence.isFile) silence.writeBytes(silentWav(samples = 8_000))
-            llm.createConversation(ConversationConfig()).use { primer ->
-                primer.sendMessageAsync(
-                    Contents.of(listOf(Content.AudioFile(silence.absolutePath), Content.Text("."))),
-                    emptyMap<String, Any>(),
-                ).take(1).collect()
+            val primer = llm.createConversation(ConversationConfig())
+            try {
+                primer.streamTurn(Contents.of(listOf(Content.AudioFile(silence.absolutePath), Content.Text(".")))).take(1).collect()
+            } finally {
+                closeWhenIdle(primer)
             }
         }.onFailure { Log.w(TAG, "LiteRT audio encoder priming failed: ${compactError(it)}", it) }
         audioEncoderReady = true
@@ -517,9 +533,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             Content.Text(listOf(config.prompt, request.routingInstruction).filter { it.isNotBlank() }.joinToString("\n\n"))
         val started = System.currentTimeMillis()
         val decision = StringBuilder()
-        conversation.sendMessageAsync(
+        conversation.streamTurn(
             Contents.of(first),
-            emptyMap<String, Any>(),
             maxOutputToken = DecideOncePrompt.DECISION_MAX_TOKENS,
             responseFormat = ResponseFormat.regex(DecideOncePrompt.RESPONSE_REGEX),
         ).collect { message ->
@@ -566,7 +581,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         var route: DecideOnceRoute? = null
         var answerStart = 0
         var photo: kotlinx.coroutines.Deferred<String?>? = null
-        conversation.sendMessageAsync(Contents.of(first), emptyMap<String, Any>()).collect { message ->
+        conversation.streamTurn(Contents.of(first)).collect { message ->
             val current = extractText(message)
             if (current.isBlank()) return@collect
             val delta = incrementalDelta(raw.toString(), current)
@@ -669,7 +684,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     ): String {
         val contents = userContents ?: Contents.of(Content.Text(prompt))
         val assembled = StringBuilder()
-        conversation.sendMessageAsync(contents, emptyMap<String, Any>(), maxOutputToken = maxOutputTokens).collect { message ->
+        conversation.streamTurn(contents, maxOutputToken = maxOutputTokens).collect { message ->
             val currentText = extractText(message)
             // Only skip empty chunks: a newline-only chunk ends a decision payload line ("[search] weather today\n").
             if (currentText.isEmpty()) return@collect
@@ -714,8 +729,73 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         return Contents.of(parts)
     }
 
-    private fun closeConversationLocked() {
-        runCatching { activeConversation?.close() }
+    /**
+     * [Conversation.sendMessageAsync] as a Flow whose cancellation also cancels the native turn (the library's
+     * own Flow leaves the turn running when its collector stops), and which records the turn in [turns].
+     */
+    private fun Conversation.streamTurn(
+        contents: Contents,
+        maxOutputToken: Int? = null,
+        responseFormat: ResponseFormat? = null,
+    ): Flow<Message> = callbackFlow {
+        val conversation = this@streamTurn
+        val ended = CompletableDeferred<Unit>()
+        turns[conversation] = ended
+        val callback = object : MessageCallback {
+            override fun onMessage(message: Message) {
+                trySend(message)
+            }
+
+            override fun onDone() {
+                ended.complete(Unit)
+                close()
+            }
+
+            override fun onError(throwable: Throwable) {
+                ended.complete(Unit)
+                close(throwable)
+            }
+        }
+        try {
+            conversation.sendMessageAsync(
+                contents, callback, emptyMap<String, Any>(), maxOutputToken = maxOutputToken, responseFormat = responseFormat,
+            )
+        } catch (t: Throwable) {
+            ended.complete(Unit) // Rejected before anything was scheduled.
+            throw t
+        }
+        awaitClose {
+            if (!ended.isCompleted) runCatching { conversation.cancelProcess() }
+        }
+    }
+
+    /**
+     * Closes [conversation] once its native turn has ended, cancelling a running one first ([turns]). A turn
+     * that does not end within [TURN_END_TIMEOUT_MS] leaves the conversation open: a leak instead of a crash.
+     */
+    private suspend fun closeWhenIdle(conversation: Conversation) = withContext(NonCancellable) {
+        val turn = turns[conversation]
+        if (turn != null && !turn.isCompleted) {
+            Log.w(TAG, "Closing a LiteRT conversation whose turn is still running; cancelling it first")
+            // Cancelling reaches only the tasks queued so far; a prefill that had just finished still queues
+            // its decode, so repeat until the turn reports its end.
+            val ended = withTimeoutOrNull(TURN_END_TIMEOUT_MS) {
+                while (!turn.isCompleted) {
+                    runCatching { conversation.cancelProcess() }
+                    withTimeoutOrNull(TURN_CANCEL_RETRY_MS) { turn.await() }
+                }
+            }
+            if (ended == null) {
+                Log.e(TAG, "LiteRT turn did not end within $TURN_END_TIMEOUT_MS ms; leaving its conversation open")
+                return@withContext
+            }
+        }
+        turns.remove(conversation)
+        runCatching { conversation.close() }
+    }
+
+    private suspend fun closeConversationLocked() {
+        activeConversation?.let { closeWhenIdle(it) }
         activeConversation = null
         sessionKey = null
         sessionTokens = 0
@@ -739,7 +819,13 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     }
 
     private fun closeEngineLocked() {
-        runCatching { engine?.close() }
+        val running = synchronized(turns) { turns.values.count { !it.isCompleted } }
+        if (running > 0) {
+            // Deleting the engine under a running turn is no safer; keep it (and its memory) instead.
+            Log.e(TAG, "Not closing the LiteRT engine: $running conversation turn(s) still running")
+        } else {
+            runCatching { engine?.close() }
+        }
         engine = null
     }
 
@@ -757,6 +843,9 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     companion object {
         private const val TAG = "LiteRtLocalEngine"
         private const val FIRST_AUDIO_RETRY_DELAY_MS = 750L
+        /** A cancelled turn ends within a prefill chunk or a decode step; this only bounds a wedged runtime. */
+        private const val TURN_END_TIMEOUT_MS = 30_000L
+        private const val TURN_CANCEL_RETRY_MS = 250L
         private const val DEFAULT_CONTEXT_TOKENS = 4096
         /** Room left for the reply when deciding whether a session turn still fits the context. */
         private const val SESSION_REPLY_RESERVE_TOKENS = 512
