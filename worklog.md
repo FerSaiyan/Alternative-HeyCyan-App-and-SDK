@@ -1,5 +1,12 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — Mentra display glasses panel: test text, clear display, notification forwarding
+
+- **Why:** G1, G2, Mentra Display, NIMO and AR99 implement `GlassesNotificationDisplay`, but only the MemoMind screen ever called `NotificationForwarderService.setEnabled`, so phone notifications never reached them. There was also no way to put text on their HUD from the dashboard. Found with the Even G2 firmware rig (firmware_dump add.234).
+- **Change:** a new `GlassesControlPanel.MENTRA_DISPLAY` / `MENTRA_DISPLAY_CONTROLS` dashboard card offers "Show test text", "Clear display" and "Forward notifications". The toggle asks for notification access if it is missing and turns off on disconnect (like MemoMind). The state lives in `MentraLiveManager.forwardingNotifications`.
+- **iOS:** the card is hidden (`IosDashboardGating`); its host implements none of these actions and has no notification listener. `:shared:iosCompileCheck` passes.
+- **Tests:** the gating matrix, the iOS gating and the dashboard action list (`DashboardSessionPolicyTest`, 71 actions) were updated. Shared 49 and app 9 focused tests pass.
+
 ## 2026-11-20 — Mentra display glasses could not pair from Device Bind (`mentra-display-pairing-scan`)
 
 - **Found by** the new Even G2 rig (firmware_dump add.234): CyanBridge 2.4.3 on an AVD and the original Even G2 2.4.0.24 firmware in blackwall, connected over netsim BLE. Every Device Bind → "Even Realities G2" → Connect logged `G2 pairing failed: NOT_FOUND` 11–20 ms after `SDK scan for G2 started` (reproduced twice).
