@@ -103,20 +103,7 @@ class ModelDownloadForegroundService : Service() {
         when (intent?.action) {
             ACTION_CANCEL -> {
                 Log.i(TAG, "Cancelling download via notification action")
-                cancelled.set(true)
-                downloadJob?.cancel()
-                _isDownloading = false
-                _downloadingModelId = null
-                _lastPercent = null
-                _lastDownloadedBytes = null
-                _lastTotalBytes = null
-                _lastStatusMessage = null
-                currentModelId?.let { modelId ->
-                    _lastResult = DownloadResult(success = false, modelId = modelId, error = "cancelled")
-                    sendFinishedBroadcast(success = false, error = "cancelled")
-                }
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                cancelDownload(error = "cancelled")
             }
             else -> {
                 val modelId = intent?.getStringExtra(EXTRA_MODEL_ID) ?: run {
@@ -303,7 +290,34 @@ class ModelDownloadForegroundService : Service() {
         sendBroadcast(intent)
     }
 
+    private fun cancelDownload(error: String) {
+        cancelled.set(true)
+        downloadJob?.cancel()
+        _isDownloading = false
+        _downloadingModelId = null
+        _lastPercent = null
+        _lastDownloadedBytes = null
+        _lastTotalBytes = null
+        _lastStatusMessage = null
+        currentModelId?.let { modelId ->
+            _lastResult = DownloadResult(success = false, modelId = modelId, error = error)
+            sendFinishedBroadcast(success = false, error = error)
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * Android 15+ limits dataSync foreground services to 6 h per 24 h. When the limit is
+     * reached the service must stop within seconds, or the app crashes with
+     * ForegroundServiceDidNotStopInTimeException (Play vitals, 2.3.0).
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "Foreground-service time limit reached (type=$fgsType); stopping")
+        cancelDownload(error = "fgs_time_limit")
+    }
 
     override fun onDestroy() {
         cancelled.set(true)

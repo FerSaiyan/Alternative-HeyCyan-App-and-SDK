@@ -155,7 +155,10 @@ class TaskerLocalAgentService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel()
-        LocalAgentMemoryStore.ensureSeedFiles(applicationContext)
+        // Vault reads block on disk + crypto; on the main thread this caused an
+        // "Input dispatching timed out" ANR (Play vitals, 2.3.0). Every reader seeds again
+        // on its own, so seeding here is only a warm-up and can run in the background.
+        scope.launch(Dispatchers.IO) { LocalAgentMemoryStore.ensureSeedFiles(applicationContext) }
         approvalVoiceSession = LocalAgentApprovalVoiceSession(applicationContext) { status ->
             setStatus(status, null)
         }
@@ -187,6 +190,16 @@ class TaskerLocalAgentService : Service() {
             LocalAgentIntents.ACTION_DEMO -> startLoop("Open the notification shade, then return home.")
         }
         return START_NOT_STICKY
+    }
+
+    /**
+     * Android 15+ limits dataSync foreground services to 6 h per 24 h. When the limit is
+     * reached the service must stop within seconds, or the app crashes with
+     * ForegroundServiceDidNotStopInTimeException (Play vitals, 2.3.0).
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "Foreground-service time limit reached (type=$fgsType); stopping")
+        stopLoop("Android foreground-service time limit reached")
     }
 
     override fun onDestroy() {

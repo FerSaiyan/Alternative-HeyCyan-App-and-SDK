@@ -95,6 +95,16 @@ class AiQuestionForegroundService : Service() {
         return START_NOT_STICKY
     }
 
+    /**
+     * Android 15+ limits dataSync foreground services to 6 h per 24 h. When the limit is
+     * reached the service must stop within seconds, or the app crashes with
+     * ForegroundServiceDidNotStopInTimeException (Play vitals, 2.3.0).
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "Foreground-service time limit reached (type=$fgsType); stopping")
+        stopQuestionWork()
+    }
+
     override fun onDestroy() {
         // A question that already asked for the next service keeps waiting for it.
         microphone.update { if (it == MicrophoneAccess.STARTING) it else MicrophoneAccess.NOT_STARTED }

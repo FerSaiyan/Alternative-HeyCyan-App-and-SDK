@@ -77,6 +77,19 @@ class AutoAudioCaptureService : Service() {
         return START_STICKY
     }
 
+    /**
+     * Android 15+ limits dataSync foreground services to 6 h per 24 h. When the limit is
+     * reached the service must stop within seconds, or the app crashes with
+     * ForegroundServiceDidNotStopInTimeException (Play vitals, 2.3.0).
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "Foreground-service time limit reached (type=$fgsType); stopping")
+        AutoAudioCapturePrefs.setLastPauseReason(this, "fgs_time_limit")
+        stopLoop(reason = "fgs_time_limit")
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        stopSelf()
+    }
+
     override fun onDestroy() {
         stopLoop(reason = "destroy")
         scope.cancel()
@@ -571,10 +584,19 @@ class AutoAudioCaptureService : Service() {
 
             AutoAudioCapturePrefs.setEnabled(context, true)
             val intent = Intent(context, AutoAudioCaptureService::class.java).setAction(ACTION_START)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: IllegalStateException) {
+                // ForegroundServiceStartNotAllowedException (API 31+) and the older background
+                // start ban are both IllegalStateException. MyApplication.onCreate calls this
+                // on every process start, including starts in the background (Play vitals,
+                // 2.3.0). Stay enabled: the next foreground app start resumes capture.
+                Log.w(TAG, "Auto Audio start blocked while the app is in the background: ${e.message}")
+                AutoAudioCapturePrefs.setLastPauseReason(context, "background_start_not_allowed")
             }
         }
 

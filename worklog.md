@@ -1,5 +1,24 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — Play vitals crash/ANR sweep, branch `ANRs_fix`
+
+- **Source:** Play Console > Android vitals > Crashes and ANRs, last 28 days, all types (41 clusters; every event is on 2.3.0 / code 31; vitals had no 2.4.x data yet). Raw page dumps in `/tmp/anrs/detail_*.txt` (local, not committed).
+- **Already fixed in 2.4.x (no change):**
+  - MYVU `MyvuDisplayAdapter.<init>` NPE (7 clusters, ~45 users, top crash): fixed by the crash sweep (ff329c7f, state flows built before the adapter).
+  - llama.cpp `librnllama_v8_2.so` SIGILL (12 clusters, all ARMv8.0 phones: Galaxy A05s/A51, Redmi Note 13, P30 lite, Moto G22-class), `fdsan` SIGABRT in `initContextWithFd` (4) and `librnllama_v8_2_dotprod.so` abort/segv (2): all in the old `llamacpp-kotlin` 0.4.0, replaced by `:llama-runtime` (upstream llama.cpp). The 2.4.1 `libcyan_llama.so` has no sdot/udot/smmla/fp16 instructions (llvm-objdump), so it is ARMv8.0-safe.
+- **Fixed on this branch:**
+  - Oudmon `VolumeControlResponse.acceptData` AIOOBE (length=7; index=8; 9 users / 17 events): vendor `.aar` patch in `LargeDataParser.parseData` (length guard + try/catch around `acceptData`), so every big-data parser drops short frames.
+  - MoYoung W620 `NoClassDefFoundError` (`com.moyoung.g.a.<init>`, 2 users / 8 events): the SDK decodes AI-dialogue audio with JieLi `jl_audio_decode` (`OpusManager`), which the app does not ship. Vendor `.aar` patch in `com.moyoung.i.a.c()` catches `LinkageError` around the two audio dispatches. CyanBridge does not use W620 AI-dialogue audio; shipping JieLi's library would be needed to support it.
+  - `SheetState.hide` IllegalStateException (6 clusters, ~20 users): the synced-media selection `ModalBottomSheet` used a scaffold sheet state (`skipHiddenState = true`); now `rememberModalBottomSheetState()`.
+  - `ForegroundServiceDidNotStopInTime` (3 clusters, Android 15+): no service implemented `onTimeout` for the 6 h/24 h `dataSync` limit. Added to AutoAudioCapture, TaskerLocalAgent, ModelDownload, AiQuestion, GeminiLive and WalkingAid; Walking Aid's Auto Audio resume no longer throws when the app has lost foreground.
+  - `AutoAudioCaptureService.start` from `MyApplication.onCreate` → `ForegroundServiceStartNotAllowedException` (background process start): caught; capture stays enabled and resumes on the next foreground start.
+  - ANR `MemoryVaultService.getTextBlocking` (runBlocking on the main thread in `TaskerLocalAgentService.onCreate`): seeding moved to `Dispatchers.IO`.
+  - EyeVue sync `IOException` crash ("did not report its project/model"): the sync coroutine had `try/finally` without `catch`; failures now end as the existing failure toast. TuneBuds sync had the same shape and got the same guard.
+- **Not fixed (needs more data):**
+  - `liblitertlm_jni.so` SIGSEGV on a LiteRT-LM worker thread (2 clusters, 7 users; Nothing Phone 2a, Infinix X6880, Redmi Note 11 Pro 5G, OnePlus Nord CE-class). No symbols for the Maven AAR (BuildId ec55a152…); needs a local repro or a LiteRT-LM upgrade test (0.18.0 is already supported by `-PliteRtLmVersion`).
+  - 4 ANRs with only system frames (GPU `syncAndDrawFrame` on Honor Magic V2 / Redmi Pad SE, a slow Binder call in `activityTopResumedStateLost`, one without a trace) and one `ForegroundServiceDidNotStartInTime` without app frames: 1 user each.
+- **Latent, not seen in vitals:** several Local Agent screens (Daily facts/summary, Screen captures, agent memory editors) still read the memory vault on the main thread in `onCreate`/click handlers.
+
 ## 2026-11-21 — Release 2.4.5 (versionCode 37)
 
 - **Contents since 2.4.3:** Mentra display glasses (G1/G2/Display/NIMO/AR99) pair from Device Bind again (the pairing scan has its own session); display-glasses dashboard panel (Show test text, Clear display, Forward notifications); MYVU pairing/connection fixes (cut-off version answer, stale init-burst ticks); CI fixes (Walking Aid video test font cache, Tasker HIL storage grants); glasses emulator docs for agents.

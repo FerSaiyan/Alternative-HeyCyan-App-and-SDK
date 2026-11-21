@@ -134,6 +134,19 @@ class WalkingAidService : Service() {
         return START_STICKY
     }
 
+    /**
+     * Android 15+ limits dataSync foreground services to 6 h per 24 h. When the limit is
+     * reached the service must stop within seconds, or the app crashes with
+     * ForegroundServiceDidNotStopInTimeException (Play vitals, 2.3.0).
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "Foreground-service time limit reached (type=$fgsType); stopping")
+        stopLoop(reason = "fgs_time_limit")
+        // stopLoop() finishes its cleanup asynchronously; the deadline is only a few seconds.
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        stopSelf()
+    }
+
     override fun onDestroy() {
         stopLoop(reason = "destroy")
         tts?.shutdown()
@@ -724,7 +737,10 @@ class WalkingAidService : Service() {
                 AutoAudioCapturePrefs.setEnabled(this@WalkingAidService, true)
                 val resumeIntent = Intent(this@WalkingAidService, AutoAudioCaptureService::class.java)
                     .setAction(AutoAudioCaptureService.ACTION_START)
-                startService(resumeIntent)
+                // Blocked when the app is no longer foreground (e.g. after onTimeout); the
+                // pref is restored, so the next app start resumes Auto Audio.
+                runCatching { startService(resumeIntent) }
+                    .onFailure { Log.w(TAG, "Auto Audio resume deferred: ${it.message}") }
             }
 
             runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }

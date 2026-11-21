@@ -38,7 +38,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -74,7 +74,9 @@ fun SyncedMediaGalleryScreen(
     if (selectedItems.isNotEmpty()) {
         ModalBottomSheet(
             onDismissRequest = { selectedItems = emptySet() },
-            sheetState = rememberBottomSheetScaffoldState().bottomSheetState,
+            // A scaffold (standard) sheet state skips the hidden state, so dismissing a modal
+            // sheet with it threw "Attempted to animate to hidden" (Play vitals, 2.3.0).
+            sheetState = rememberModalBottomSheetState(),
             shape = MaterialTheme.shapes.extraLarge,
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {

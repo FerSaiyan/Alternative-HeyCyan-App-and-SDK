@@ -25,6 +25,7 @@ import com.fersaiyan.cyanbridge.ui.hasBluetooth
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -127,6 +128,13 @@ internal class VendorMediaSyncController(
                         mediaLibrary.importVendorMediaFile(file, vendorItem)
                     },
                 )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Uncaught here, this crashed the app from lifecycleScope (Play vitals, 2.3.0:
+                // IOException "did not report its project/model"); report it as a failed sync.
+                Log.w("VendorMediaSync", "Eyevue media sync failed", e)
+                result = Result.failure(e)
             } finally {
                 withContext(Dispatchers.Main) {
                     val completed = result?.getOrNull()
@@ -251,6 +259,12 @@ internal class VendorMediaSyncController(
                         )
                     },
                 )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Same as Eyevue: report a thrown sync error as a failure instead of crashing.
+                Log.w("VendorMediaSync", "TuneBuds media sync failed", e)
+                result = Result.failure(e)
             } finally {
                 withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
                     val completed = result?.getOrNull()
