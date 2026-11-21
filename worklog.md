@@ -1,5 +1,13 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — Release size: media3 removed, R8 shrinking, trimmed LibVLC (branch `app-size`)
+
+- **Measured** (bundletool 1.18.3 `get-size total`, spec files in /tmp/cyan-size): arm64 download 68.5 MB (2.4.1) -> 54.2 MB with R8 -> **34.8 MB** with R8 + trimmed LibVLC; armeabi-v7a 53.8 -> 21.2, x86_64 72.2 -> 36.9, x86 57.7 -> 24.4. Release bundle 207 -> 121 MB. Dex 86.3 -> 34.8 MB uncompressed.
+- **R8 phase 1:** `-dontobfuscate -dontoptimize`; app/shared and all vendor or native-backed SDKs kept whole; `-dontwarn` only for optional deps the app never shipped (Expo, sherpa-onnx, Vuzix, JieLi, mltcode, ...). Phase 2 (renaming/optimization) not started.
+- **Verified:** minified universal APK on a read-only Pixel_9a (API 37): 24 routes render (onboarding sheet skipped), 2,500 monkey events, no FATAL/ClassNotFound/NoSuchMethod/NoSuchField/Resources$NotFound/ANR in logcat. Meta CI classes (MetaPairingScreen/MockFlow, MetaDatSdkMock, MetaDatLifecycle) 23/23 on `ANRs_fix`.
+- **Not verified on real glasses:** live preview audio/video (HeyCyan, EyeVue, TuneBuds, Mentra Live), H.265, armeabi-v7a phones. The trimmed LibVLC has no fonts, so no title/OSD text over video and no first-preview font scan.
+- **Side finding from the R8 missing-class list:** the MoYoung SDK's W620 OTA uses JieLi `jl_bt_ota`, which the app does not ship either (same gap as the AI-dialogue audio decoder).
+
 ## 2026-11-21 — Trimmed LibVLC, branch `app-size-libvlc`
 
 - **Change:** `org.videolan.android:libvlc-all:3.7.7` replaced by `app/libs/libvlc-cyan-3.7.7.aar`, built from VideoLAN's sources (vlc-android tag `libvlc-3.7.7` → libvlcjni `0b8dc65e` → VLC 3.0.x `84177b22`) by `android/CyanBridge/third_party/libvlc-trim/build.sh`. 37 VLC modules (live555 RTSP, http, ts/es/h26x/mp4, avcodec, Android GLES2/window/AudioTrack/OpenSL outputs) and three contribs (ffmpeg 8.1.2 libavcodec with h264/hevc/aac/mp3/opus/mjpeg/G.7xx decoders only, live555, libdvbpsi). Java half is the official classes.jar.
