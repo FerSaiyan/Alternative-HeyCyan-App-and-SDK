@@ -1,5 +1,15 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — Meta DAT support report log_mwqrass7_5bb17d7f (2.4.5, voluntary), branch `ANRs_fix-meta-log`
+
+- **Who:** Play pre-launch report robot, not a user. Signs: model "OnePlus8Pro" on hardware `sunfish` (Pixel 4a), x86_64-first ABIs, Android 11 with patch 2021-07, 4 GB storage, UTC+0 (an earlier robot report had UTC+13), charging, installed from Play 18:37 UTC (1 h 49 min after the 2.4.5 release commit) and every runtime permission granted with no permission prompts.
+- **What it did (UTC):** 18:39:48 app start → Device Bind → "Pair Meta glasses" (saves the `META_DAT` placeholder profile) → 18:41:37 Meta pairing screen initializes DAT (registration UNAVAILABLE, no devices: no Meta AI, no glasses) → 18:41:41 "Send diagnostics" → 18:42:10 picks the email-invite setup choice → 18:43:06 back on the glasses screen (first connection status: "disconnected", family META_RAYBAN) → ~18:43:35 diagnostics again, Send.
+- **Expected:** DAT init, `meta_setup_incomplete`, `registration=UNAVAILABLE, devices=0`, the email-invite choice (a radio button; nothing is sent) and the Meta profile before pairing.
+- **Fixed (ee607cd2):**
+  - Robots send support reports and product analytics. `TestLabEnvironment` (Settings.System `firebase.test.lab`) stops `/logs/submit` uploads and analytics heartbeat/acquisition posts on Test Lab devices. The server keeps only the newest 200 reports, so robot reports evict real ones.
+  - The connection event said "glasses disconnected" for the first status in a process, and for a family picked while nothing was connected. It now says "glasses not connected" unless the link was up.
+- **Open:** the full logcat (289 lines) was not read: the admin page needs a website sign-in.
+
 ## 2026-11-21 — Play vitals crash/ANR sweep, branch `ANRs_fix`
 
 - **Source:** Play Console > Android vitals > Crashes and ANRs, last 28 days, all types (41 clusters; every event is on 2.3.0 / code 31; vitals had no 2.4.x data yet). Raw page dumps in `/tmp/anrs/detail_*.txt` (local, not committed).
