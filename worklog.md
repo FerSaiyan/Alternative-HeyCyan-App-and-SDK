@@ -1,5 +1,18 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-21 — Even G2 emulator lane green on this branch; emulator docs for agents
+
+- **Verified on an AVD** (read-only Pixel_9a, debug APK of this branch) against the original Even G2 firmware rig
+  (firmware_dump add.234, `sim/even_g2_e2e/run_avd.sh`): Device Bind pairing, LE Secure Connections bond, "Connected -
+  Even Realities G2", Disconnect, Reconnect, reconnect on app start with the stored bond, battery shown, "Show test
+  text" and a forwarded phone notification both reach the glasses over BLE. All 11 checks pass.
+- **Android note for tests:** killing the app while one of its GATT requests is outstanding, on a link that stays up,
+  can wedge Android's GATT client for that device until Bluetooth is toggled. Wait for the link to go idle before
+  a force-stop in tests (real glasses make this window milliseconds long).
+- **Docs:** `AGENTS.md` and `android/AGENTS.md` ("Glasses emulators for app testing") now list the HeyCyan, EyeVue,
+  TuneBuds and Even G2 emulator lanes, the lane rules, and which emulator-found app fixes are in `main`. The
+  simulators themselves stay in the private firmware repo.
+
 ## 2026-11-21 — Mentra display glasses panel: test text, clear display, notification forwarding
 
 - **Why:** G1, G2, Mentra Display, NIMO and AR99 implement `GlassesNotificationDisplay`, but only the MemoMind screen ever called `NotificationForwarderService.setEnabled`, so phone notifications never reached them. There was also no way to put text on their HUD from the dashboard. Found with the Even G2 firmware rig (firmware_dump add.234).
