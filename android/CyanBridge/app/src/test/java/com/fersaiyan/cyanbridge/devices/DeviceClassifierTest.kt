@@ -19,6 +19,16 @@ class DeviceClassifierTest {
     }
 
     @Test
+    fun heyCyan_modelNamesFromFieldReports() {
+        // log_mwqmez5k (set to MYVU by hand) and log_mwqq8cyw: model names without "cyan".
+        assertEquals(DeviceClass.HEY_CYAN, DeviceClassifier.guessDeviceClass("M02S_CA12"))
+        assertEquals(DeviceClass.HEY_CYAN, DeviceClassifier.guessDeviceClass("A02S_1F3B"))
+        assertEquals(DeviceClass.HEY_CYAN, DeviceClassifier.guessDeviceClass("CY 01_84CA"))
+        assertEquals(DeviceClass.UNKNOWN, DeviceClassifier.guessDeviceClass("CY01 speaker"))
+        assertEquals(DeviceClass.UNKNOWN, DeviceClassifier.guessDeviceClass("XM02S_1234"))
+    }
+
+    @Test
     fun metaRayban_detectedByName() {
         assertEquals(DeviceClass.META_RAYBAN, DeviceClassifier.guessDeviceClass("Ray-Ban Meta"))
         assertEquals(DeviceClass.META_RAYBAN, DeviceClassifier.guessDeviceClass("rayban"))

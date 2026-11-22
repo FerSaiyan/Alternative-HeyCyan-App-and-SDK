@@ -80,7 +80,9 @@ object BleDeviceClassifier {
         if (lower.contains("xk one") || lower.contains("tunebuds") || lower.contains("ab mate")) {
             return DeviceClass.TUNEBUDS
         }
-        if (lower.contains("heycyan") || lower.contains("cyan") || name.startsWith("O_") || name.startsWith("Q_")) {
+        if (lower.contains("heycyan") || lower.contains("cyan") || name.startsWith("O_") || name.startsWith("Q_") ||
+            isHeyCyanModelName(name)
+        ) {
             return DeviceClass.HEY_CYAN
         }
         if (
@@ -106,4 +108,12 @@ object BleDeviceClassifier {
         }
         return DeviceClass.UNKNOWN
     }
+
+    private val HEY_CYAN_MODEL_NAME = Regex("""^(?:M02S|A02S)_|^CY \d{2}_""")
+
+    /**
+     * HeyCyan models that advertise their model name instead of "HeyCyan": M02S/A02S ("M02S_CA12", seen 2026-11-21
+     * set to MYVU by hand, log_mwqmez5k) and the AM01CY family ("CY 01_84CA", log_mwqq8cyw).
+     */
+    fun isHeyCyanModelName(name: String): Boolean = HEY_CYAN_MODEL_NAME.containsMatchIn(name)
 }

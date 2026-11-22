@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ui.main
 
+import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuConnectionPolicy
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
 import com.fersaiyan.cyanbridge.shared.devices.GlassesControlPanel
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
@@ -24,16 +25,23 @@ internal class MeizuMyvuUiController(
         val manager = devices.getOrCreateMeizuMyvuManager()
         pendingMeizuMyvuFailure = null
         manager.consumeFailurePrompt()
+        val heyCyanGlasses = MeizuMyvuConnectionPolicy.looksLikeHeyCyan(failure.reason)
         DebugLogSupport.showSupportOptionsDialog(
             activity = activity,
-            title = "MYVU connection failed",
+            title = if (heyCyanGlasses) "These are not MYVU glasses" else "MYVU connection failed",
             issueType = "Meizu MYVU connection failure",
             description = buildString {
+                if (heyCyanGlasses) {
+                    appendLine(MeizuMyvuConnectionPolicy.HEYCYAN_GLASSES_HINT)
+                    appendLine()
+                }
                 appendLine("CyanBridge could not finish the MYVU connection during ${failure.stage}.")
                 appendLine()
                 appendLine("Reason: ${failure.reason}")
-                appendLine()
-                append("Force-stop the official MYVU app, confirm the glasses are paired in Android Bluetooth settings, and toggle Bluetooth off and on if RFCOMM remains stuck. You can send the redacted diagnostics below to CyanBridge support.")
+                if (!heyCyanGlasses) {
+                    appendLine()
+                    append("Force-stop the official MYVU app, confirm the glasses are paired in Android Bluetooth settings, and toggle Bluetooth off and on if RFCOMM remains stuck. You can send the redacted diagnostics below to CyanBridge support.")
+                }
             },
             extraInfo = linkedMapOf(
                 "myvu_failure_stage" to failure.stage,

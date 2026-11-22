@@ -65,6 +65,9 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
     private var failureReportedForCycle = false
     @Volatile
     private var lastFailureElapsedMs = 0L
+    /** The last failure showed HeyCyan glasses, not MYVU: no automatic retries until the user connects again. */
+    @Volatile
+    private var wrongGlassesDetected = false
     @Volatile
     private var relayUnavailableSinceMs = 0L
     private val relayFailureTimeout = Runnable {
@@ -88,6 +91,7 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
         userInitiated: Boolean = false,
     ) {
         if (userInitiated) {
+            wrongGlassesDetected = false
             failureReportedForCycle = false
             _failurePrompt.value = null
             cancelRelayFailureTimeout()
@@ -169,6 +173,7 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
             state = connection.state(),
             lastFailureElapsedMs = lastFailureElapsedMs,
             nowElapsedMs = nowElapsedMs,
+            wrongGlasses = wrongGlassesDetected,
         )
 
     fun consumeFailurePrompt() {
@@ -255,6 +260,10 @@ class MeizuMyvuManager private constructor(context: Context) : ConnectionManager
                 stage = previousState,
                 reason = failureReason ?: "The MYVU connection ended without a detailed protocol error.",
             )
+            if (MeizuMyvuConnectionPolicy.looksLikeHeyCyan(failure.reason)) {
+                wrongGlassesDetected = true
+                Log.w(TAG, "MYVU connection reached HeyCyan glasses; automatic retries stop until the user connects")
+            }
             Log.w(TAG, "MYVU connection failed at ${failure.stage}: ${failure.reason}")
             reportFailureOnce(failure)
         } else {

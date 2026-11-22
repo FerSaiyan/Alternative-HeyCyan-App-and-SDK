@@ -89,7 +89,8 @@ object DeviceClassifier {
             lower.contains("heycyan") ||
             lower.contains("cyan") ||
             name.startsWith("O_") ||
-            name.startsWith("Q_")
+            name.startsWith("Q_") ||
+            BleDeviceClassifier.isHeyCyanModelName(name)
         ) {
             return DeviceClass.HEY_CYAN
         }
