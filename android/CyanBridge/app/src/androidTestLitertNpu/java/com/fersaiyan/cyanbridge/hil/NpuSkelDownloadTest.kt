@@ -19,7 +19,7 @@ import java.io.File
  * dispatch directory's symlink. Needs network and a Snapdragon phone with a supported Hexagon (V68-V81).
  *
  *   adb shell am instrument -w -e class com.fersaiyan.cyanbridge.hil.NpuSkelDownloadTest \
- *     [-e npu_model <device path to a *_Qualcomm_<SoC>_apply_plugin.tflite for this phone>] \
+ *     [-e npu_model <path to a *_Qualcomm_<SoC>_apply_plugin.tflite for this phone; /data/local/tmp is staged>] \
  *     com.fersaiyan.cyanbridge.test/androidx.test.runner.AndroidJUnitRunner
  *
  * Prints NPU_SKEL lines: status before/after, download time, and (with npu_model) whether the model opens and runs.
@@ -28,6 +28,21 @@ import java.io.File
 class NpuSkelDownloadTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val args = InstrumentationRegistry.getArguments()
+
+    /**
+     * Device Run pushes files to /data/local/tmp (the app cannot read it, and its own storage is cleared when the
+     * instrumentation starts), so copy the model into the app's external files dir with the shell's permissions.
+     */
+    private fun stage(path: String): String {
+        if (!path.startsWith("/data/local/tmp/")) return path
+        val target = File(context.getExternalFilesDir(null), File(path).name)
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("cp $path ${target.path}")
+            .use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).use { stream -> stream.readBytes() } }
+        assertTrue("could not stage $path", target.isFile)
+        println("NPU_SKEL staged $path -> $target (${target.length()} B)")
+        return target.path
+    }
 
     @Test
     fun downloadsThisPhonesSkelAndTheNpuLoadsIt() {
@@ -50,7 +65,7 @@ class NpuSkelDownloadTest {
         println("NPU_SKEL dispatchDir=$dispatch skelLink=${link.exists()} -> ${runCatching { android.system.Os.readlink(link.path) }.getOrNull()}")
         assertTrue("skel is not linked into the dispatch directory", link.exists())
 
-        val model = args.getString("npu_model").orEmpty()
+        val model = stage(args.getString("npu_model").orEmpty())
         if (model.isBlank()) return
         LiteRtNpuSupport.compiledTarget(model)?.let {
             assumeTrue("model is for $it, phone is ${after.modelTag}", it.vendor == after.vendor && it.socModel == after.socModel)
