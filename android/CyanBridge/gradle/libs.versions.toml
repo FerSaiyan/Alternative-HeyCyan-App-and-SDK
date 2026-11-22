@@ -10,15 +10,17 @@ lifecycleRuntimeKtx = "2.9.2"
 activityCompose = "1.10.1"
 compose-multiplatform = "1.13.0-rc01"
 # Material 3 Expressive: JetBrains material3 for commonMain/iOS (versioned apart from the plugin),
-# androidx material3 for the Android app. Both are release candidates until androidx 1.5.0 and
-# JetBrains 1.13.0 are published; bump them together (see worklog 2026-11-19).
+# androidx material3 for the Android app. androidx material3 1.5.0 is stable on Google Maven (checked
+# 2026-11-21); JetBrains 1.13.0 is not published yet (Maven Central, Plugin Portal and the GitHub
+# releases top out at 1.13.0-rc01), so commonMain/iOS stay on the release candidate until it is.
 jetbrains-material3 = "1.13.0-rc01"
-androidx-material3 = "1.5.0-rc01"
+androidx-material3 = "1.5.0"
 # Frozen upstream since 1.7.x; the plugin no longer bumps the icon set.
 jetbrains-material-icons = "1.7.3"
-# The Android app's own Compose UI artifacts. They match what JetBrains Compose 1.13.0-rc01 maps to
-# on Android (Jetpack Compose UI 1.13.0-rc01); no Compose BOM carries pre-release versions.
-androidx-compose = "1.13.0-rc01"
+# The Android app's own Compose UI artifacts: Jetpack Compose UI 1.13.0 stable (Compose BOM 2026.11.01
+# maps to the same 1.13.0 / material3 1.5.0). JetBrains Compose 1.13.0-rc01 maps to 1.13.0-rc01 on
+# Android; Gradle resolves the shared module's Android target to the newer stable artifacts.
+androidx-compose = "1.13.0"
 androidx-material-icons = "1.7.8"
 jetbrains-lifecycle = "2.8.4"
 appcompat = "1.7.1"
