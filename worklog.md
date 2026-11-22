@@ -1,5 +1,28 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-22 — Meta Ray-Ban failure dialogs: every way out, incl. the invite form (branch `sync-vpn-hint`)
+
+- **Ask:** in invite mode, every Meta pairing failure that shows an error / Send logs dialog should also offer the
+  useful next steps (Get Meta AI was there; the invite form on the website was not), plus Send logs.
+- **Before:** the issue dialogs had one action + Send logs; the dashboard's copy mapped Request access to the pairing
+  screen (not the website) and labelled Send logs "Details"; the dashboard's "Complete Meta glasses setup" error
+  dialog had no Send logs.
+- **Now:** `MetaPairingIssue` carries `secondaryActions` and `offerLogs`; `resolveMetaPairingIssue(..., inviteMode,
+  registered)` adds Install Meta AI when it is missing, Try again after Open Meta AI, Open Meta AI after Try again,
+  and Request access (website) on every failure while an invite-mode user is not registered. One shared
+  `MetaPairingIssueDialog` (stacked Material 3 buttons: action, next steps, Send logs, Close) serves the setup screen
+  and the dashboard; the dashboard opens the invite form directly (`LocalUriHandler`, Android and iOS).
+  `metaInviteMode` = email-invite choice, recorded release-channel path, or Meta asking for an invite. "Meta AI is
+  required" still has no Send logs (a setup step; robot reports, log_mwqrass7). The dashboard error dialog gained
+  Send logs.
+- **Field log `log_mwrioydi_6e61f3f0`** (2.4.5, voluntary, no contact): Meta AI not installed, no Meta glasses
+  bonded, invite path chosen, no error; logs opened twice. Device "OnePlus8Pro" with hardware `sunfish`, x86_64 first,
+  4 GB storage, 2021 patch, installed from Play 4 min earlier: most likely an automated test device (Play pre-launch),
+  like log_mwqrass7. The new dialog shows that case "Install Meta AI" + "Request access".
+- **Verified:** app unit 776/776, shared 449/449 (8 new); on the read-only Pixel_9a: MetaPairingScreen 9/9,
+  MetaPairingMockFlow 7/7, GlassesDashboardScreen 17/17 (old "Details" button now "Send logs"; new invite-mode test
+  sees Try again, Open Meta AI, Request access, Send logs, Close), DeviceBindScreen 3/3.
+
 ## 2026-11-22 — Pairing protocol check, Wi-Fi chip version, Classic audio bond, update prompt, NPU emulator test (branch `sync-vpn-hint`)
 
 - **Pairing protocol check** (field logs mwrbx20e "M89-S-0395", W60-7A8, W AI 4: non-HeyCyan glasses set to HeyCyan
