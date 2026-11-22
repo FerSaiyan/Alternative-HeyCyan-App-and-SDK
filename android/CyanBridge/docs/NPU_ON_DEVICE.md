@@ -241,6 +241,26 @@ matching file from a public Hugging Face repo, and checks its sha256.
   longer-context builds are not production quality. No ctx/multi-bucket package goes to the
   repo until long-context retrieval is fixed, as agreed with the recipe owner.
 
+## Emulator: faking the SoC to test the catalog (2026-11-22)
+
+The catalog's per-SoC choice can be tested without a phone: `tools/hil/npu_soc_mock.sh <debug apk> SM8650`
+boots the read-only Pixel_9a AVD (Magisk-rooted) with 8 GB, sets `ro.soc.model` / `ro.soc.manufacturer` /
+`ro.product.model` with `resetprop`, and restarts zygote: `android.os.Build` is loaded in zygote, so without the
+restart apps keep reading `ranchu`. The x86_64 app cannot carry the arm64 Qualcomm libraries, so a debug build also
+needs `adb shell setprop debug.cyanbridge.npu_download_test 1`: `NpuCatalogVariants` then resolves and downloads
+the SoC's file without the runtime check (release builds never read it). Loading stays refused.
+
+- Run 2026-11-22 (faked SM8650 / QTI / SM-F956B): "Gemma 4 E2B IT (Snapdragon NPU)" showed "Compatible with this
+  device", resolved `gemma-4-E2B-it_Qualcomm_SM8650.litertlm`, downloaded 2,311,186,656 bytes with the pinned sha256
+  `2f2e0e64…` and showed "Ready / Installed".
+- "Test model now" then failed with LiteRT-LM's native error ("Failed to create engine … prefill failed"):
+  `LocalModelBenchmarkRunner` builds `Backend.NPU` directly and skips the `LiteRtNpuSupport` check that
+  `LiteRtLocalInferenceEngine` makes (follow-up: give it the same plain reason).
+- Only Snapdragon builds of Gemma 4 E2B exist (SM8650 ours, SM8750 Google's). The Samsung, Tensor and MediaTek NPU
+  builds in the private `cyanbridge-npu-models` repo are OCR, YOLO and speaker models, not Gemma.
+- Release builds and CI do not set `-PlocalLiteRtNpuAarPath`, so published apps show "This app build has no NPU
+  runtime." for this entry.
+
 ## Image and audio on the NPU
 
 The first NPU packages held only the text model. A subagent added Google's vision and
