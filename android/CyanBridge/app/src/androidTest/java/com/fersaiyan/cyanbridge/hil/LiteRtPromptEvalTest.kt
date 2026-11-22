@@ -70,6 +70,7 @@ class LiteRtPromptEvalTest {
         for ((i, modelPath) in models.withIndex()) {
             val context = contexts.getOrElse(i) { contexts.last() }
             val outFile = File(args.getString("pe_out") ?: "$promptsPath.${File(modelPath).nameWithoutExtension}.$backendName.results.jsonl")
+            outFile.parentFile?.mkdirs()
             val backend = when (backendName) {
                 "CPU" -> Backend.CPU()
                 "GPU" -> Backend.GPU()

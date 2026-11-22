@@ -45,15 +45,10 @@ class NpuVariantResolverTest {
     }
 
     @Test
-    fun pixel10ResolvesGooglesTensorG5File() {
-        val resolved = NpuVariantResolver.resolve(npuEntry, "Tensor G5")!!
-        assertEquals("gemma-4-E2B-it_Google_Tensor_G5.litertlm", resolved.expectedFilename)
-        assertEquals(
-            "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/" +
-                "2e12bfd869b2962984f97a1f2a26807316d534cc/gemma-4-E2B-it_Google_Tensor_G5.litertlm",
-            resolved.sourceUrl,
-        )
-        assertEquals(3_206_299_658L, resolved.sizeBytes)
+    fun pixel10HasNoBuildUntilTheRuntimeSupportsGooglesTensorBundle() {
+        // Google's litert-community Tensor G5 bundle fails on LiteRT 2.3.0 ("Failed to get SB invocation context",
+        // Pixel 10 southbound runtime 0.14; Device Run 2026-11-22), so the catalog offers no Pixel NPU file yet.
+        assertNull(NpuVariantResolver.resolve(npuEntry, "Tensor G5"))
     }
 
     @Test
