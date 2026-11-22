@@ -6,7 +6,6 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.BuildConfig
@@ -21,6 +20,7 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.glasses.OtaSectionUiState
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.fersaiyan.cyanbridge.ui.hasBluetooth
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import com.oudmon.ble.base.bluetooth.BleOperateManager
@@ -752,28 +752,30 @@ internal class OtaCoordinator(
                 }
 
                 is FirmwareResult.DebugAccessRequired -> {
-                    AlertDialog.Builder(activity)
-                        .setTitle("Debug Firmware Access Required")
-                        .setMessage(result.message)
-                        .setPositiveButton("OK", null)
-                        .show()
+                    ExpressiveDialogs.alert(
+                        activity = activity,
+                        title = "Debug Firmware Access Required",
+                        message = result.message,
+                        confirm = ExpressiveDialogs.Action("OK"),
+                    )
                 }
 
                 is FirmwareResult.SubscriptionRequired -> {
                     val copy = firmwareSubscriptionGateCopy(result.currentPlan)
-                    AlertDialog.Builder(activity)
-                        .setTitle(copy.title)
-                        .setMessage(copy.message)
-                        .setNegativeButton("Not now", null)
-                        .setPositiveButton(copy.actionLabel) { _, _ ->
+                    ExpressiveDialogs.alert(
+                        activity = activity,
+                        title = copy.title,
+                        message = copy.message,
+                        dismiss = ExpressiveDialogs.Action("Not now"),
+                        confirm = ExpressiveDialogs.Action(copy.actionLabel) {
                             activity.startActivity(
                                 AppRoute.PRO_SUBSCRIPTION.intent(activity).apply {
                                     putExtra(ProSubscriptionDestination.EXTRA_INITIAL_PLAN, "standard")
                                     putExtra(ProSubscriptionDestination.EXTRA_CHANGE_PLAN, true)
                                 },
                             )
-                        }
-                        .show()
+                        },
+                    )
                 }
 
                 is FirmwareResult.Error -> {

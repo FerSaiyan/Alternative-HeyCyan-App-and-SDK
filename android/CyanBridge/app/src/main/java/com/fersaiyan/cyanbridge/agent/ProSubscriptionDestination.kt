@@ -5,14 +5,25 @@ import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.text.InputType
 import android.view.SoundEffectConstants
-import android.widget.EditText
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveAlert
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.shared.billing.LaunchStorePurchase
 import com.fersaiyan.cyanbridge.shared.billing.OpenCheckoutUrl
@@ -156,12 +167,13 @@ class ProSubscriptionDestination : NavScreen() {
             is OpenEmailVerificationLink -> openEmailVerificationLink(effect.url)
             OpenStoreSubscriptions -> activity.openPlaySubscriptionManagement()
             is LaunchStorePurchase -> viewModel.billing?.launchPurchase(activity, effect.plan)
-            is ShowDonationIntro -> AlertDialog.Builder(this)
-                .setTitle(R.string.donation_intro_dialog_title)
-                .setMessage(getString(R.string.donation_intro_dialog_message))
-                .setPositiveButton(R.string.donation_intro_open_button) { _, _ -> effect.onOpen() }
-                .setNegativeButton("Cancel") { _, _ -> effect.onCancel() }
-                .show()
+            is ShowDonationIntro -> ExpressiveDialogs.alert(
+                activity = activity,
+                title = getString(R.string.donation_intro_dialog_title),
+                message = getString(R.string.donation_intro_dialog_message),
+                confirm = ExpressiveDialogs.Action(getString(R.string.donation_intro_open_button)) { effect.onOpen() },
+                dismiss = ExpressiveDialogs.Action("Cancel") { effect.onCancel() },
+            )
         }
     }
 
@@ -171,30 +183,42 @@ class ProSubscriptionDestination : NavScreen() {
     }
 
     private fun promptForEmail(request: PromptAccountEmail) {
-        val input = EditText(this).apply {
-            hint = "you@example.com"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-            setText(request.initialEmail)
+        ExpressiveDialogs.show(activity) { close ->
+            var input by remember { mutableStateOf(request.initialEmail) }
+            var error by remember { mutableStateOf<String?>(null) }
+            ExpressiveAlert(
+                title = request.title,
+                message = null,
+                confirm = ExpressiveDialogs.Action("Continue", dismissOnClick = false) {
+                    val email = request.accept(input)
+                    if (email == null) {
+                        error = "Enter a valid email address"
+                        return@Action
+                    }
+                    close()
+                    request.onAccepted(email)
+                },
+                dismiss = ExpressiveDialogs.Action("Cancel"),
+                neutral = null,
+                cancelable = true,
+                close = close,
+                body = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(request.message)
+                        OutlinedTextField(
+                            value = input,
+                            onValueChange = { input = it; error = null },
+                            placeholder = { Text("you@example.com") },
+                            singleLine = true,
+                            isError = error != null,
+                            supportingText = error?.let { { Text(it) } },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                },
+            )
         }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(request.title)
-            .setMessage(request.message)
-            .setView(input)
-            .setPositiveButton("Continue", null)
-            .setNegativeButton("Cancel", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val email = request.accept(input.text?.toString().orEmpty())
-                if (email == null) {
-                    input.error = "Enter a valid email address"
-                    return@setOnClickListener
-                }
-                dialog.dismiss()
-                request.onAccepted(email)
-            }
-        }
-        dialog.show()
     }
 
     private fun openEmailVerificationLink(url: String) {

@@ -1,15 +1,25 @@
 package com.fersaiyan.cyanbridge.ui
 
 import android.app.Activity
-import android.content.DialogInterface
 import androidx.activity.ComponentActivity
-import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.shared.viewmodel.CloseScreen
 import com.fersaiyan.cyanbridge.shared.viewmodel.DialogButton
 import com.fersaiyan.cyanbridge.shared.viewmodel.ScreenDialog
 import com.fersaiyan.cyanbridge.shared.viewmodel.ScreenEffect
 import com.fersaiyan.cyanbridge.shared.viewmodel.ShowMessage
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveAlert
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -46,14 +56,39 @@ fun NavScreen.collectScreenEffects(effects: Flow<ScreenEffect>, handle: (ScreenE
 }
 
 fun Activity.showScreenDialog(dialog: ScreenDialog) {
-    AlertDialog.Builder(this).apply {
-        setTitle(dialog.title)
-        dialog.message?.let { setMessage(it) }
-        if (dialog.items.isNotEmpty()) setItems(dialog.items.toTypedArray()) { _, which -> dialog.onItem(which) }
-        dialog.positive?.let { button -> setPositiveButton(button.label, button.listener()) }
-        dialog.negative?.let { button -> setNegativeButton(button.label, button.listener()) }
-        dialog.neutral?.let { button -> setNeutralButton(button.label, button.listener()) }
-    }.show()
+    // As with the View builder, a message replaces the item list.
+    val items = if (dialog.message == null) dialog.items else emptyList()
+    ExpressiveDialogs.show(this) { close ->
+        ExpressiveAlert(
+            title = dialog.title,
+            message = dialog.message,
+            confirm = dialog.positive?.action(),
+            dismiss = dialog.negative?.action(),
+            neutral = dialog.neutral?.action(),
+            cancelable = true,
+            close = close,
+            body = if (items.isEmpty()) null else {
+                {
+                    Column {
+                        items.forEachIndexed { which, item ->
+                            Text(
+                                text = item,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clickable(role = Role.Button) {
+                                        close()
+                                        dialog.onItem(which)
+                                    }
+                                    .padding(vertical = 12.dp),
+                            )
+                        }
+                    }
+                }
+            },
+        )
+    }
 }
 
-private fun DialogButton.listener() = onClick?.let { click -> DialogInterface.OnClickListener { _, _ -> click() } }
+private fun DialogButton.action() = ExpressiveDialogs.Action(label) { onClick?.invoke() }

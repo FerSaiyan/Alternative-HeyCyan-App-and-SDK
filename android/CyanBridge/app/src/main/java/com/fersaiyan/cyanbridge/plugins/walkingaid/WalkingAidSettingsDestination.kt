@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.plugins.walkingaid
 import androidx.compose.material3.ButtonDefaults
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import android.os.Build
 import android.os.Bundle
 import androidx.compose.foundation.layout.Arrangement
@@ -111,11 +112,13 @@ class WalkingAidSettingsDestination : NavScreen() {
             val manager = MetaRaybanManager.getInstance(this)
             if (MetaDatPermissions.missing(this).isNotEmpty() || !manager.isCameraReady() || !manager.cameraPermissionGranted.value) {
                 WalkingAidPreferences.setEnabled(this, false)
-                androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle(R.string.walking_aid_meta_setup_title)
-                    .setMessage(R.string.walking_aid_meta_setup_message)
-                    .setPositiveButton(R.string.walking_aid_open_meta_setup) { _, _ -> startActivity(AppRoute.META_PAIRING.intent(this)) }
-                    .setNegativeButton(android.R.string.cancel, null).show()
+                ExpressiveDialogs.alert(
+                    activity = activity,
+                    title = getString(R.string.walking_aid_meta_setup_title),
+                    message = getString(R.string.walking_aid_meta_setup_message),
+                    confirm = ExpressiveDialogs.Action(getString(R.string.walking_aid_open_meta_setup)) { startActivity(AppRoute.META_PAIRING.intent(this)) },
+                    dismiss = ExpressiveDialogs.Action(getString(android.R.string.cancel)),
+                )
                 return
             }
         }
@@ -124,27 +127,32 @@ class WalkingAidSettingsDestination : NavScreen() {
 
     private fun requestTransportPermission(wifi: Boolean) {
         WalkingAidPreferences.setEnabled(this, false)
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(if (wifi) R.string.walking_aid_wifi_permission_title else R.string.walking_aid_bluetooth_permission_title)
-            .setMessage(if (wifi) R.string.walking_aid_wifi_permission_message else R.string.walking_aid_bluetooth_permission_message)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.walking_aid_grant_permission) { _, _ ->
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = getString(if (wifi) R.string.walking_aid_wifi_permission_title else R.string.walking_aid_bluetooth_permission_title),
+            message = getString(if (wifi) R.string.walking_aid_wifi_permission_message else R.string.walking_aid_bluetooth_permission_message),
+            dismiss = ExpressiveDialogs.Action(getString(android.R.string.cancel)),
+            confirm = ExpressiveDialogs.Action(getString(R.string.walking_aid_grant_permission)) {
                 val callback = object : OnPermissionCallback {
                     override fun onGranted(permissions: MutableList<String>, all: Boolean) {
                         if (all) startWithPermissions() else onDenied(permissions, false)
                     }
                     override fun onDenied(permissions: MutableList<String>, never: Boolean) {
-                        androidx.appcompat.app.AlertDialog.Builder(this@WalkingAidSettingsDestination)
-                            .setTitle(R.string.walking_aid_permission_required)
-                            .setMessage(R.string.walking_aid_permission_required_message)
-                            .setPositiveButton(if (never) R.string.walking_aid_open_app_settings else R.string.walking_aid_try_again) { _, _ ->
+                        ExpressiveDialogs.alert(
+                            activity = activity,
+                            title = getString(R.string.walking_aid_permission_required),
+                            message = getString(R.string.walking_aid_permission_required_message),
+                            confirm = ExpressiveDialogs.Action(getString(if (never) R.string.walking_aid_open_app_settings else R.string.walking_aid_try_again)) {
                                 if (never) XXPermissions.startPermissionActivity(this@WalkingAidSettingsDestination, permissions)
                                 else requestTransportPermission(wifi)
-                            }.setNegativeButton(android.R.string.cancel, null).show()
+                            },
+                            dismiss = ExpressiveDialogs.Action(getString(android.R.string.cancel)),
+                        )
                     }
                 }
                 if (wifi) requestWifiP2pPermission(activity, callback) else requestBluetoothPermission(activity, callback)
-            }.show()
+            },
+        )
     }
 }
 

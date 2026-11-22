@@ -11,7 +11,7 @@ import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AlertDialog
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -195,16 +195,18 @@ class ChatThreadDestination : NavScreen() {
         }
         val selectedId = LocalModelStorageRepository.getSelectedModelId(this)
         val labels = installed.map { if (it.id == selectedId) "${it.displayName} (Current)" else it.displayName }
-        AlertDialog.Builder(this)
-            .setTitle("Select local model")
-            .setItems(labels.toTypedArray()) { _, which ->
-                val picked = installed.getOrNull(which) ?: return@setItems
+        ExpressiveDialogs.list(
+            activity,
+            title = "Select local model",
+            items = labels,
+            onSelect = { which ->
+                val picked = installed.getOrNull(which) ?: return@list
                 LocalModelStorageRepository.setSelectedModelId(this, picked.id)
                 viewModel.refreshModel()
                 Toast.makeText(this, "Using ${picked.displayName}", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+            },
+            dismiss = ExpressiveDialogs.Action("Cancel"),
+        )
     }
 
     private fun showRelayModelPicker() {
@@ -221,28 +223,31 @@ class ChatThreadDestination : NavScreen() {
                 merged.entries.toList()
             }
             val labels = options.map { (id, label) -> if (id.equals(current, ignoreCase = true)) "$label (Current)" else label }
-            AlertDialog.Builder(this@ChatThreadDestination)
-                .setTitle("Select relay model")
-                .setItems(labels.toTypedArray()) { _, which ->
-                    val (pickedId, pickedLabel) = options.getOrNull(which) ?: return@setItems
+            ExpressiveDialogs.list(
+                activity,
+                title = "Select relay model",
+                items = labels,
+                onSelect = { which ->
+                    val (pickedId, pickedLabel) = options.getOrNull(which) ?: return@list
                     ProSubscriptionAiPrefs.setRequestsModel(this@ChatThreadDestination, pickedId)
                     viewModel.refreshModel()
                     Toast.makeText(this@ChatThreadDestination, "Chat model set to $pickedLabel", Toast.LENGTH_SHORT).show()
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
+                },
+                dismiss = ExpressiveDialogs.Action("Cancel"),
+            )
         }
     }
 
     private fun promptLocalModelSetup() {
-        AlertDialog.Builder(this)
-            .setTitle("Local model required")
-            .setMessage("Local Models is selected, but no local model is installed. Configure one to start chatting.")
-            .setNegativeButton("Not now", null)
-            .setPositiveButton("Configure") { _, _ ->
+        ExpressiveDialogs.alert(
+            activity,
+            title = "Local model required",
+            message = "Local Models is selected, but no local model is installed. Configure one to start chatting.",
+            dismiss = ExpressiveDialogs.Action("Not now"),
+            confirm = ExpressiveDialogs.Action("Configure") {
                 startActivity(AppRoute.LOCAL_MODELS.intent(this))
-            }
-            .show()
+            },
+        )
     }
 
     private fun observeDailySummaryQueueProgress() {

@@ -2,7 +2,20 @@ package com.fersaiyan.cyanbridge.media.sync
 
 import android.util.Log
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueMediaProfile
@@ -21,6 +34,8 @@ import com.fersaiyan.cyanbridge.shared.prefs.MediaPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.edit
 import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.shared.prefs.set
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveAlert
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.fersaiyan.cyanbridge.ui.hasBluetooth
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import java.io.File
@@ -319,48 +334,57 @@ internal class VendorMediaSyncController(
 
     private fun showMoyoungWifiCredentialsDialog(manager: MoyoungW620Manager) {
         val wifi = MediaPrefs.MoyoungW620
-        val ssidInput = android.widget.EditText(activity).apply {
-            hint = "Glasses Wi-Fi name (SSID)"
-            setText(wifi.fileWifiSsid[activity])
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-        }
-        val passwordInput = android.widget.EditText(activity).apply {
-            hint = "Glasses Wi-Fi password"
-            setText(wifi.fileWifiPassword[activity])
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-        val padding = (24 * activity.resources.displayMetrics.density).toInt()
-        val fields = android.widget.LinearLayout(activity).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(padding, 0, padding, 0)
-            addView(ssidInput)
-            addView(passwordInput)
-        }
-        AlertDialog.Builder(activity)
-            .setTitle("W620 Wi-Fi credentials")
-            .setMessage(
-                "Confirm the access-point details for these glasses. Glass-01 / 12345678 " +
+        val savedSsid = wifi.fileWifiSsid[activity]
+        val savedPassword = wifi.fileWifiPassword[activity]
+        ExpressiveDialogs.show(activity) { close ->
+            var ssid by remember { mutableStateOf(savedSsid) }
+            var password by remember { mutableStateOf(savedPassword) }
+            ExpressiveAlert(
+                title = "W620 Wi-Fi credentials",
+                message = "Confirm the access-point details for these glasses. Glass-01 / 12345678 " +
                     "are upstream example defaults and may not match every W620.",
+                dismiss = ExpressiveDialogs.Action("Cancel"),
+                neutral = null,
+                confirm = ExpressiveDialogs.Action("Start sync") {
+                    val credentials = MoyoungWifiCredentials(
+                        ssid = ssid.trim(),
+                        password = password,
+                    )
+                    if (credentials.ssid.isBlank()) {
+                        Toast.makeText(activity, "Enter the glasses Wi-Fi name.", Toast.LENGTH_LONG).show()
+                        return@Action
+                    }
+                    wifi.edit(activity) {
+                        this[wifi.fileWifiSsid] = credentials.ssid
+                        this[wifi.fileWifiPassword] = credentials.password
+                    }
+                    beginMoyoungW620MediaSync(manager, credentials)
+                },
+                cancelable = true,
+                close = close,
+                body = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = ssid,
+                            onValueChange = { ssid = it },
+                            label = { Text("Glasses Wi-Fi name (SSID)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("Glasses Wi-Fi password") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                },
             )
-            .setView(fields)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Start sync") { _, _ ->
-                val credentials = MoyoungWifiCredentials(
-                    ssid = ssidInput.text.toString().trim(),
-                    password = passwordInput.text.toString(),
-                )
-                if (credentials.ssid.isBlank()) {
-                    Toast.makeText(activity, "Enter the glasses Wi-Fi name.", Toast.LENGTH_LONG).show()
-                    return@setPositiveButton
-                }
-                wifi.edit(activity) {
-                    this[wifi.fileWifiSsid] = credentials.ssid
-                    this[wifi.fileWifiPassword] = credentials.password
-                }
-                beginMoyoungW620MediaSync(manager, credentials)
-            }
-            .show()
+        }
     }
 
     private fun beginMoyoungW620MediaSync(

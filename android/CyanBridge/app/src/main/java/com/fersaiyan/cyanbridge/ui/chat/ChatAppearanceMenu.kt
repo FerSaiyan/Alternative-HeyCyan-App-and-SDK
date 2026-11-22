@@ -3,7 +3,7 @@ package com.fersaiyan.cyanbridge.ui.chat
 import android.content.Intent
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.shared.chat.ChatAppearanceMenuAction
 
@@ -59,13 +59,16 @@ internal class ChatAppearanceMenu(
 
     private fun pickColor(title: String, current: Int, save: (Int) -> Unit) {
         val labels = BUBBLE_COLORS.map { (name, color) -> if (color == current) "$name (Current)" else name }
-        AlertDialog.Builder(screen.activity)
-            .setTitle(title)
-            .setItems(labels.toTypedArray()) { _, which ->
+        ExpressiveDialogs.list(
+            screen.activity,
+            title = title,
+            items = labels,
+            onSelect = { which ->
                 save(BUBBLE_COLORS[which].second)
                 onChanged()
-            }
-            .show()
+            },
+            dismiss = null,
+        )
     }
 
     private fun toast(text: String) = Toast.makeText(screen, text, Toast.LENGTH_SHORT).show()

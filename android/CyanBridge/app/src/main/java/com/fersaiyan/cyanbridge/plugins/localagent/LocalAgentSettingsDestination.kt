@@ -8,9 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
 import android.provider.Settings
-import android.widget.EditText
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,11 +41,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveAlert
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.bridge.notifications.NotificationForwarderService
@@ -274,35 +276,46 @@ class LocalAgentSettingsDestination : NavScreen(), LocalAgentSettingsActions {
     }
 
     override fun onOpenAccessibilitySettings() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.onboarding_accessibility_disclosure_title)
-            .setMessage(R.string.onboarding_accessibility_disclosure_body)
-            .setNegativeButton(R.string.compose_not_now, null)
-            .setPositiveButton(R.string.compose_continue) { _, _ ->
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = getString(R.string.onboarding_accessibility_disclosure_title),
+            message = getString(R.string.onboarding_accessibility_disclosure_body),
+            dismiss = ExpressiveDialogs.Action(getString(R.string.compose_not_now)),
+            confirm = ExpressiveDialogs.Action(getString(R.string.compose_continue)) {
                     runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
                     .onFailure {
                         Toast.makeText(this, R.string.compose_local_agent_unable_open_accessibility, Toast.LENGTH_SHORT).show()
                     }
-            }
-            .show()
+            },
+        )
     }
 
     private fun editMemoryFile(title: String, file: java.io.File) {
         LocalAgentMemoryStore.ensureSeedFiles(this)
-        val input = EditText(this).apply {
-            setText(LocalAgentMemoryStore.readText(file))
-            setSelection(text?.length ?: 0)
-            minLines = 8
+        val initialText = LocalAgentMemoryStore.readText(file)
+        ExpressiveDialogs.show(activity) { close ->
+            var input by remember { mutableStateOf(TextFieldValue(initialText, TextRange(initialText.length))) }
+            ExpressiveAlert(
+                title = title,
+                message = null,
+                dismiss = ExpressiveDialogs.Action(getString(R.string.action_cancel)),
+                confirm = ExpressiveDialogs.Action(getString(R.string.action_save)) {
+                    LocalAgentMemoryStore.writeText(file, input.text)
+                    Toast.makeText(this, getString(R.string.compose_local_agent_saved_suffix, title), Toast.LENGTH_SHORT).show()
+                },
+                neutral = null,
+                cancelable = true,
+                close = close,
+                body = {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        minLines = 8,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                },
+            )
         }
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setView(input)
-            .setNegativeButton(R.string.action_cancel, null)
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                LocalAgentMemoryStore.writeText(file, input.text?.toString().orEmpty())
-                Toast.makeText(this, getString(R.string.compose_local_agent_saved_suffix, title), Toast.LENGTH_SHORT).show()
-            }
-            .show()
     }
 
     override fun onViewInjectedContext() {
@@ -316,11 +329,12 @@ class LocalAgentSettingsDestination : NavScreen(), LocalAgentSettingsActions {
                 SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(atMs)),
             ) + "\n\n$debug"
         }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.compose_local_agent_context_debug)
-            .setMessage(message)
-            .setPositiveButton(R.string.compose_close, null)
-            .show()
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = getString(R.string.compose_local_agent_context_debug),
+            message = message,
+            confirm = ExpressiveDialogs.Action(getString(R.string.compose_close)),
+        )
     }
 
     override fun onShowTaskHistory() {
@@ -339,15 +353,16 @@ class LocalAgentSettingsDestination : NavScreen(), LocalAgentSettingsActions {
                 }
             }
         }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.compose_local_agent_activity)
-            .setMessage(message)
-            .setNegativeButton(R.string.compose_local_agent_clear_history) { _, _ ->
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = getString(R.string.compose_local_agent_activity),
+            message = message,
+            dismiss = ExpressiveDialogs.Action(getString(R.string.compose_local_agent_clear_history)) {
                 LocalAgentTaskHistory.clear(this)
                 Toast.makeText(this, R.string.compose_local_agent_history_cleared, Toast.LENGTH_SHORT).show()
-            }
-            .setPositiveButton(R.string.compose_close, null)
-            .show()
+            },
+            confirm = ExpressiveDialogs.Action(getString(R.string.compose_close)),
+        )
     }
 }
 

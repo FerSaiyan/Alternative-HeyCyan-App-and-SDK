@@ -4,7 +4,6 @@ import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.R
@@ -17,6 +16,8 @@ import com.fersaiyan.cyanbridge.glasses.GlassesSessionLease
 import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraGallerySyncPlanner
 import com.fersaiyan.cyanbridge.shared.devices.mentra.MentraMediaKind
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveAlert
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import com.fersaiyan.cyanbridge.ui.requestWifiP2pPermission
 import com.hjq.permissions.OnPermissionCallback
@@ -141,17 +142,36 @@ internal class MentraMediaSyncController(
     private suspend fun confirmDelete(count: Int): Boolean {
         if (cancelled || activity.isFinishing || activity.isDestroyed) return false
         return suspendCancellableCoroutine { continuation ->
-            val dialog = AlertDialog.Builder(activity)
-                .setTitle(R.string.mentra_sync_delete_title)
-                .setMessage(activity.getString(R.string.mentra_sync_delete_message, count))
-                .setPositiveButton(R.string.mentra_sync_delete_confirm) { _, _ ->
-                    if (continuation.isActive) continuation.resume(true)
-                }
-                .setNegativeButton(R.string.mentra_sync_delete_keep) { _, _ ->
-                    if (continuation.isActive) continuation.resume(false)
-                }
-                .setOnCancelListener { if (continuation.isActive) continuation.resume(false) }
-                .show()
+            // ExpressiveDialogs runs onDismiss on every close; the buttons resume first and then close, so onDismiss
+            // (back press / outside tap, the old cancel listener) only answers when no button did.
+            val title = activity.getString(R.string.mentra_sync_delete_title)
+            val message = activity.getString(R.string.mentra_sync_delete_message, count)
+            val deleteLabel = activity.getString(R.string.mentra_sync_delete_confirm)
+            val keepLabel = activity.getString(R.string.mentra_sync_delete_keep)
+            val dialog = ExpressiveDialogs.show(
+                activity,
+                onDismiss = { if (continuation.isActive) continuation.resume(false) },
+            ) { close ->
+                ExpressiveAlert(
+                    title = title,
+                    message = message,
+                    confirm = ExpressiveDialogs.Action(deleteLabel, dismissOnClick = false) {
+                        if (continuation.isActive) continuation.resume(true)
+                        close()
+                    },
+                    dismiss = ExpressiveDialogs.Action(keepLabel, dismissOnClick = false) {
+                        if (continuation.isActive) continuation.resume(false)
+                        close()
+                    },
+                    neutral = null,
+                    cancelable = true,
+                    close = close,
+                )
+            }
+            if (dialog == null) {
+                if (continuation.isActive) continuation.resume(false)
+                return@suspendCancellableCoroutine
+            }
             continuation.invokeOnCancellation { activity.runOnUiThread { dialog.dismiss() } }
         }
     }

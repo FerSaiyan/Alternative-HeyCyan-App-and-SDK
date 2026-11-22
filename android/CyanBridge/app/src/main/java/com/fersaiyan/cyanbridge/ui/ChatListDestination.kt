@@ -2,12 +2,27 @@ package com.fersaiyan.cyanbridge.ui
 
 import com.fersaiyan.cyanbridge.ui.nav.NavScreen
 import com.fersaiyan.cyanbridge.ui.nav.AppRoute
-import android.app.DatePickerDialog
 import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import com.fersaiyan.cyanbridge.ui.nav.viewModels
-import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -29,6 +44,8 @@ import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsScreen
 import com.fersaiyan.cyanbridge.shared.ui.chat.NotesChatsTab
 import com.fersaiyan.cyanbridge.ui.chat.ChatAppearanceMenu
 import com.fersaiyan.cyanbridge.ui.chat.chatModelInfo
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveAlert
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.fersaiyan.cyanbridge.ui.main.openAppDestination
 import com.fersaiyan.cyanbridge.ui.main.putChatExtras
 import com.fersaiyan.cyanbridge.ui.main.recentChatIntent
@@ -38,6 +55,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -129,26 +147,30 @@ class ChatListDestination : NavScreen() {
     }
 
     private fun promptLocalModelSetup() {
-        AlertDialog.Builder(this)
-            .setTitle("Install a local model")
-            .setMessage("Local Models is selected, but no local model is installed. Configure a model to start a new chat.")
-            .setNegativeButton("Not now", null)
-            .setPositiveButton("Configure") { _, _ ->
+        ExpressiveDialogs.alert(
+            activity,
+            title = "Install a local model",
+            message = "Local Models is selected, but no local model is installed. Configure a model to start a new chat.",
+            dismiss = ExpressiveDialogs.Action("Not now"),
+            confirm = ExpressiveDialogs.Action("Configure") {
                 startActivity(AppRoute.LOCAL_MODELS.intent(this))
-            }
-            .show()
+            },
+        )
     }
 
     private fun showNewChatTypePicker() {
-        AlertDialog.Builder(this)
-            .setTitle("Start a new chat")
-            .setItems(arrayOf("Normal chat", "Daily review chat")) { _, which ->
+        ExpressiveDialogs.list(
+            activity,
+            title = "Start a new chat",
+            items = listOf("Normal chat", "Daily review chat"),
+            onSelect = { which ->
                 when (which) {
                     0 -> startActivity(AppRoute.CHAT_THREAD.intent(this))
                     1 -> showDailyReviewDateChooser()
                 }
-            }
-            .show()
+            },
+            dismiss = null,
+        )
     }
 
     private fun showDailyReviewDateChooser() {
@@ -168,42 +190,104 @@ class ChatListDestination : NavScreen() {
         }
         val todayDate = fmt.format(cal.time)
 
-        AlertDialog.Builder(this)
-            .setTitle("Daily review date")
-            .setItems((labels + "Pick another date...").toTypedArray()) { _, which ->
-                if (which in dateOptions.indices) {
-                    startDailyReviewChat(dateOptions[which], retentionDays)
-                } else {
-                    showDailyReviewDatePicker(retentionDays)
-                }
-            }
-            .setPositiveButton("Open calendar") { _, _ -> showDailyReviewDatePicker(retentionDays) }
-            .setNeutralButton("Today") { _, _ -> startDailyReviewChat(todayDate, retentionDays) }
-            .setNegativeButton("Cancel", null)
-            .show()
+        val items = labels + "Pick another date..."
+        // setItems plus a positive button: the list helper has no confirm slot, so the list is drawn here.
+        ExpressiveDialogs.show(activity) { close ->
+            ExpressiveAlert(
+                title = "Daily review date",
+                message = null,
+                confirm = ExpressiveDialogs.Action("Open calendar") { showDailyReviewDatePicker(retentionDays) },
+                dismiss = ExpressiveDialogs.Action("Cancel"),
+                neutral = ExpressiveDialogs.Action("Today") { startDailyReviewChat(todayDate, retentionDays) },
+                cancelable = true,
+                close = close,
+                body = {
+                    Column {
+                        items.forEachIndexed { which, item ->
+                            Text(
+                                text = item,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clickable(role = Role.Button) {
+                                        close()
+                                        if (which in dateOptions.indices) {
+                                            startDailyReviewChat(dateOptions[which], retentionDays)
+                                        } else {
+                                            showDailyReviewDatePicker(retentionDays)
+                                        }
+                                    }
+                                    .padding(vertical = 12.dp),
+                            )
+                        }
+                    }
+                },
+            )
+        }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     private fun showDailyReviewDatePicker(retentionDays: Int) {
         val now = noonToday()
         val min = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -(retentionDays - 1)) }
         val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        // The M3 picker works in UTC midnights; the local calendar day maps to the same UTC date.
+        val utc = TimeZone.getTimeZone("UTC")
+        fun utcMidnight(local: Calendar): Long = Calendar.getInstance(utc).apply {
+            clear()
+            set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH))
+        }.timeInMillis
+        val todayUtc = utcMidnight(now)
+        val minUtc = utcMidnight(min)
+        val okLabel = getString(android.R.string.ok)
+        val cancelLabel = getString(android.R.string.cancel)
 
-        DatePickerDialog(
-            this,
-            { _, year, month, dayOfMonth ->
-                val picked = Calendar.getInstance().apply {
-                    set(year, month, dayOfMonth, 12, 0, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                startDailyReviewChat(fmt.format(Date(picked.timeInMillis)), retentionDays)
-            },
-            now.get(Calendar.YEAR),
-            now.get(Calendar.MONTH),
-            now.get(Calendar.DAY_OF_MONTH),
-        ).apply {
-            datePicker.minDate = min.timeInMillis
-            datePicker.maxDate = now.timeInMillis
-        }.show()
+        ExpressiveDialogs.show(activity) { close ->
+            val state = rememberDatePickerState(
+                initialSelectedDateMillis = todayUtc,
+                yearRange = min.get(Calendar.YEAR)..now.get(Calendar.YEAR),
+                selectableDates = object : SelectableDates {
+                    override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis in minUtc..todayUtc
+                    override fun isSelectableYear(year: Int) =
+                        year in min.get(Calendar.YEAR)..now.get(Calendar.YEAR)
+                },
+            )
+            DatePickerDialog(
+                onDismissRequest = close,
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val millis = state.selectedDateMillis ?: return@TextButton
+                            close()
+                            val utcPicked = Calendar.getInstance(utc).apply { timeInMillis = millis }
+                            val picked = Calendar.getInstance().apply {
+                                set(
+                                    utcPicked.get(Calendar.YEAR),
+                                    utcPicked.get(Calendar.MONTH),
+                                    utcPicked.get(Calendar.DAY_OF_MONTH),
+                                    12, 0, 0,
+                                )
+                                set(Calendar.MILLISECOND, 0)
+                            }
+                            startDailyReviewChat(fmt.format(Date(picked.timeInMillis)), retentionDays)
+                        },
+                        enabled = state.selectedDateMillis != null,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
+                    ) { Text(okLabel) }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = close,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        shapes = ButtonDefaults.shapes(),
+                    ) { Text(cancelLabel) }
+                },
+            ) {
+                DatePicker(state = state)
+            }
+        }
     }
 
     private fun noonToday(): Calendar = Calendar.getInstance().apply {

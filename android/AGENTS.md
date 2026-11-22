@@ -216,9 +216,21 @@ adb logcat -s DataDownload DeviceNotify WifiP2pManagerSingleton WifiP2pBroadcast
 
 The `:shared` module uses JetBrains Compose Multiplatform so both Android and iOS render from the same `@Composable` screens in `commonMain`.
 
+### UI rule: Material 3 Expressive everywhere, including every popup
+
+- Every screen and every popup is Compose Material 3 in the app theme (`CyanBridgeExpressiveTheme`, via
+  `CyanBridgeTheme` on Android): dialogs, confirmations, lists, pickers, text prompts, date pickers.
+- No View-based dialogs: no `AlertDialog.Builder` (AppCompat or framework), `MaterialAlertDialogBuilder`,
+  `android.app.DatePickerDialog` / `TimePickerDialog` / `ProgressDialog`. `ArchitectureGuardrailSourceTest
+  .popupsAreMaterial3ComposeDialogs` fails the build on any of them.
+- From Activity or coordinator code use `ui/dialog/ExpressiveDialogs` (`alert`, `list`, `singleChoice`, `textInput`,
+  or `show { close -> ExpressiveAlert(...) }` for custom bodies). Inside Compose use material3 `AlertDialog`,
+  `DatePickerDialog`, etc. directly. Buttons: `TextButton(..., shapes = ButtonDefaults.shapes())`, touch targets
+  at least 48 dp.
+
 ### Key Facts
 
-- **CMP Version**: 1.8.2 (Kotlin 2.3.10).
+- **CMP Version**: 1.13.0-rc01 with Material 3 1.5 (Expressive), Kotlin 2.4.21, AGP 9.3.3, compileSdk 37.1 (since 2.5.0; bump to the stable 1.13.0 / material3 1.5.0 when published).
 - **Material 3**: Uses `org.jetbrains.compose.material3` as Maven coordinate but `import androidx.compose.*` in Kotlin sources (same API surface as Jetpack Compose). All migrated screen files keep `import androidx.compose.*` — do NOT use `import org.jetbrains.compose.*`.
 - **iOS Framework**: All iOS targets use a dynamic framework (`isStatic = false`). A static device framework gets embedded in `Frameworks/` by `embedAndSignAppleFrameworkForXcode` and the iPhone rejects the install.
 - **Skiko**: CMP's rendering layer (Skia). Ships as `.dylib` for simulators, `.a` for device. The JetBrains Compose Maven repository hosts Skiko native binaries.

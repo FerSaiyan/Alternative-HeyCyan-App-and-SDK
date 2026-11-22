@@ -9,7 +9,6 @@ import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import com.fersaiyan.cyanbridge.ai.image.DefaultAssistantResolver
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationInspector
@@ -25,6 +24,7 @@ import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionRoute
 import com.fersaiyan.cyanbridge.shared.ai.GlassesAssistantRoute
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantQuestionRouting
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -76,14 +76,15 @@ internal class ExternalAssistantHandoff(
             return true
         }
 
-        AlertDialog.Builder(activity)
-            .setTitle("AI image setup required")
-            .setMessage(msg)
-            .setNegativeButton("Not now", null)
-            .setPositiveButton("Open setup") { _, _ ->
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = "AI image setup required",
+            message = msg,
+            dismiss = ExpressiveDialogs.Action("Not now"),
+            confirm = ExpressiveDialogs.Action("Open setup") {
                 activity.startActivity(AppRoute.EXTERNAL_ASSISTANT_SETUP.intent(activity))
-            }
-            .show()
+            },
+        )
 
         return true
     }

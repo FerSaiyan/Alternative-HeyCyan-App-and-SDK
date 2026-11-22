@@ -2,18 +2,33 @@ package com.fersaiyan.cyanbridge.ui.debug
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Typeface
 import android.os.Process
-import android.text.InputFilter
-import android.text.InputType
 import android.util.Log
-import android.util.TypedValue
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveAlert
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
+import com.fersaiyan.cyanbridge.ui.dialog.SingleChoiceList
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import com.fersaiyan.cyanbridge.BuildConfig
@@ -153,76 +168,79 @@ object DebugLogSupport {
     }
 
     private fun showReportDialog(activity: AppCompatActivity, request: ReportRequest) {
-        if (activity.isFinishing || activity.isDestroyed) return
-        val density = activity.resources.displayMetrics.density
-        var issueType = request.issueType
-        val noteInput = EditText(activity).apply {
-            hint = if (request.trigger == DiagnosticTrigger.VOLUNTARY) {
-                "What happened? (optional)"
-            } else {
-                "Anything to add? (optional)"
-            }
-            minLines = 2
-            filters = arrayOf(InputFilter.LengthFilter(MAX_NOTE_LENGTH))
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-        }
-        val contactEmailInput = EditText(activity).apply {
-            hint = "Contact email (optional)"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-            filters = arrayOf(InputFilter.LengthFilter(MAX_CONTACT_EMAIL_LENGTH))
-            setText(ProSubscriptionServerPrefs.getAccountEmail(activity))
-            contentDescription = "Contact email for log follow-up"
-        }
-        val content = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            val padding = (24 * density).toInt()
-            setPadding(padding, (8 * density).toInt(), padding, 0)
-            if (request.description.isNotBlank()) {
-                addView(TextView(activity).apply { text = request.description.trim() })
-            }
-            addView(noteInput)
-            addView(contactEmailInput)
-            addView(TextView(activity).apply {
-                text = "Optional. Lets CyanBridge support reply to you; it is sent separately from the logs.\n\n$WHAT_IS_SENT"
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            })
-        }
-        val builder = AlertDialog.Builder(activity)
-            .setTitle(request.title)
-            .setView(ScrollView(activity).apply { addView(content) })
-            .setNegativeButton(request.dismissButtonLabel, null)
-            .setNeutralButton("Preview", null)
-            .setPositiveButton("Send", null)
-        if (request.issueTypes.isNotEmpty()) {
-            builder.setSingleChoiceItems(request.issueTypes.toTypedArray(), 0) { _, which -> issueType = request.issueTypes[which] }
-        }
-        val dialog = builder.create()
-
-        fun validEmail(): String? {
-            val email = contactEmailInput.text?.toString().orEmpty().trim()
-            if (!isValidOptionalContactEmail(email)) {
-                contactEmailInput.error = "Enter a valid email or leave this blank"
-                return null
-            }
-            return email
-        }
-        fun note() = noteInput.text?.toString().orEmpty().trim().take(MAX_NOTE_LENGTH)
-
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val email = validEmail() ?: return@setOnClickListener
-                dialog.dismiss()
-                buildThen(activity, request, issueType, note(), email) { report -> upload(activity, report) }
-            }
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-                val email = validEmail() ?: return@setOnClickListener
-                dialog.dismiss()
-                buildThen(activity, request, issueType, note(), email) { report ->
-                    showPreview(activity, request, issueType, note(), email, report)
+        ExpressiveDialogs.show(activity) { close ->
+            var issueIndex by remember { mutableIntStateOf(request.issueTypes.indexOf(request.issueType).coerceAtLeast(0)) }
+            var note by remember { mutableStateOf("") }
+            var email by remember { mutableStateOf(ProSubscriptionServerPrefs.getAccountEmail(activity).orEmpty()) }
+            var emailError by remember { mutableStateOf<String?>(null) }
+            fun issueType() = request.issueTypes.getOrNull(issueIndex) ?: request.issueType
+            fun validEmail(): String? {
+                val value = email.trim()
+                if (!isValidOptionalContactEmail(value)) {
+                    emailError = "Enter a valid email or leave this blank"
+                    return null
                 }
+                return value
             }
+            fun trimmedNote() = note.trim().take(MAX_NOTE_LENGTH)
+            ExpressiveAlert(
+                title = request.title,
+                message = null,
+                confirm = ExpressiveDialogs.Action("Send", dismissOnClick = false) {
+                    val contact = validEmail() ?: return@Action
+                    close()
+                    buildThen(activity, request, issueType(), trimmedNote(), contact) { report -> upload(activity, report) }
+                },
+                dismiss = ExpressiveDialogs.Action(request.dismissButtonLabel),
+                neutral = ExpressiveDialogs.Action("Preview", dismissOnClick = false) {
+                    val contact = validEmail() ?: return@Action
+                    close()
+                    buildThen(activity, request, issueType(), trimmedNote(), contact) { report ->
+                        showPreview(activity, request, issueType(), trimmedNote(), contact, report)
+                    }
+                },
+                cancelable = true,
+                close = close,
+                body = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (request.description.isNotBlank()) Text(request.description.trim())
+                        if (request.issueTypes.isNotEmpty()) {
+                            SingleChoiceList(request.issueTypes, issueIndex) { issueIndex = it }
+                        }
+                        OutlinedTextField(
+                            value = note,
+                            onValueChange = { note = it.take(MAX_NOTE_LENGTH) },
+                            label = {
+                                Text(
+                                    if (request.trigger == DiagnosticTrigger.VOLUNTARY) "What happened? (optional)"
+                                    else "Anything to add? (optional)",
+                                )
+                            },
+                            minLines = 2,
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = { email = it.take(MAX_CONTACT_EMAIL_LENGTH); emailError = null },
+                            label = { Text("Contact email (optional)") },
+                            singleLine = true,
+                            isError = emailError != null,
+                            supportingText = emailError?.let { { Text(it) } },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics { contentDescription = "Contact email for log follow-up" },
+                        )
+                        Text(
+                            text = "Optional. Lets CyanBridge support reply to you; it is sent separately from the logs.\n\n$WHAT_IS_SENT",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+            )
         }
-        dialog.show()
     }
 
     /** The full report text, exactly as it will be sent. */
@@ -234,23 +252,22 @@ object DebugLogSupport {
         contactEmail: String,
         report: DiagnosticReport,
     ) {
-        if (activity.isFinishing || activity.isDestroyed) return
-        val density = activity.resources.displayMetrics.density
-        val text = TextView(activity).apply {
-            this.text = report.preview
-            typeface = Typeface.MONOSPACE
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            setTextIsSelectable(true)
-            val padding = (16 * density).toInt()
-            setPadding(padding, padding, padding, padding)
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = "What will be sent (${report.serialized.length / 1024} KB, ${report.redactionCount} items removed)",
+            confirm = ExpressiveDialogs.Action("Send") { upload(activity, report) },
+            dismiss = ExpressiveDialogs.Action("Back"),
+            neutral = ExpressiveDialogs.Action("Email instead") {
+                exportForEmail(activity, issueType, note, contactEmail, report)
+            },
+        ) {
+            SelectionContainer {
+                Text(
+                    text = report.preview,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                )
+            }
         }
-        AlertDialog.Builder(activity)
-            .setTitle("What will be sent (${report.serialized.length / 1024} KB, ${report.redactionCount} items removed)")
-            .setView(ScrollView(activity).apply { addView(text) })
-            .setNegativeButton("Back", null)
-            .setNeutralButton("Email instead") { _, _ -> exportForEmail(activity, issueType, note, contactEmail, report) }
-            .setPositiveButton("Send") { _, _ -> upload(activity, report) }
-            .show()
     }
 
     private fun buildThen(

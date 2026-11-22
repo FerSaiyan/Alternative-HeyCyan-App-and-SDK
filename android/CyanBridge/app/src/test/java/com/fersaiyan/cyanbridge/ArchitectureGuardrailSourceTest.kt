@@ -60,6 +60,20 @@ class ArchitectureGuardrailSourceTest {
         assertEquals("Read settings through shared/prefs definitions", emptyList<String>(), callers - SHARED_PREFERENCES_CALLERS)
     }
 
+    @Test
+    fun popupsAreMaterial3ComposeDialogs() {
+        // App rule (android/AGENTS.md): every popup is a Compose Material 3 dialog in the app theme. From Activity
+        // or coordinator code use ui/dialog/ExpressiveDialogs; in Compose use material3 AlertDialog/DatePickerDialog.
+        val viewDialog = Regex(
+            """AlertDialog\.Builder|MaterialAlertDialogBuilder|android\.app\.(DatePickerDialog|TimePickerDialog|ProgressDialog)\b|\bProgressDialog\(""",
+        )
+        val roots = listOf("src/main/java", "src/debug/java", "src/release/java")
+        val offenders = roots.flatMap { root ->
+            sources(root).filterValues { viewDialog.containsMatchIn(it) }.keys.map { it.substringAfter("/cyanbridge/") }
+        }
+        assertEquals("View-based dialogs; use ui/dialog/ExpressiveDialogs (Material 3 Compose)", emptyList<String>(), offenders)
+    }
+
     private companion object {
         /**
          * Lowered from 5,069 when the glasses questions moved to ai/questions (A3), then to 1,855

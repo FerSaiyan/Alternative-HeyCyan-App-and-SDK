@@ -9,15 +9,21 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.InputFilter
 import android.text.InputType
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.fersaiyan.cyanbridge.BuildConfig
@@ -50,6 +56,8 @@ import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
 import com.fersaiyan.cyanbridge.audio.MeetingCapturePrefs
 import com.fersaiyan.cyanbridge.audio.MeetingCaptureService
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveAlert
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
 import com.fersaiyan.cyanbridge.shared.settings.QuestionRoutingMode
@@ -293,15 +301,16 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     }
 
     override fun deleteVoiceProfile() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.voice_profile_delete_title)
-            .setMessage(R.string.voice_profile_delete_body)
-            .setPositiveButton(R.string.voice_profile_delete_confirm) { _, _ ->
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = getString(R.string.voice_profile_delete_title),
+            message = getString(R.string.voice_profile_delete_body),
+            confirm = ExpressiveDialogs.Action(getString(R.string.voice_profile_delete_confirm)) {
                 VoiceProfile.delete(this)
                 refreshSettingsUi()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            },
+            dismiss = ExpressiveDialogs.Action(getString(android.R.string.cancel)),
+        )
     }
 
     override fun onDestinationSelected(destination: AppDestination) {
@@ -323,17 +332,17 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     override fun openAppLanguageSelection() {
         val languages = AppLanguage.entries
         val selected = AppLanguagePreferences.selected(this)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.language_selection_title)
-            .setSingleChoiceItems(
-                languages.map { it.displayName(this) }.toTypedArray(),
-                languages.indexOf(selected),
-            ) { dialog, which ->
+        ExpressiveDialogs.singleChoice(
+            activity = activity,
+            title = getString(R.string.language_selection_title),
+            items = languages.map { it.displayName(this) },
+            initialIndex = languages.indexOf(selected),
+            onChosen = { which ->
                 AppLanguagePreferences.select(this, languages[which])
-                dialog.dismiss()
                 refreshSettingsUi()
-            }
-            .show()
+            },
+            dismiss = null,
+        )
     }
 
     override fun openSubscription() {
@@ -399,11 +408,12 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     }
 
     override fun deletePassiveCapture() {
-        AlertDialog.Builder(this)
-            .setTitle("Delete passive OCR capture?")
-            .setMessage("This deletes local OCR snapshots and their search index artifacts. This cannot be undone.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Delete") { _, _ ->
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = "Delete passive OCR capture?",
+            message = "This deletes local OCR snapshots and their search index artifacts. This cannot be undone.",
+            dismiss = ExpressiveDialogs.Action("Cancel"),
+            confirm = ExpressiveDialogs.Action("Delete") {
                 lifecycleScope.launch(Dispatchers.IO) {
                     LocalAgentMemoryStore.deleteAllPassiveCapture(this@SettingsDestination)
                     withContext(Dispatchers.Main) {
@@ -411,8 +421,8 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
                         refreshSettingsUi()
                     }
                 }
-            }
-            .show()
+            },
+        )
     }
 
     override fun lockVault() {
@@ -454,11 +464,12 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     }
 
     override fun resetVault() {
-        AlertDialog.Builder(this)
-            .setTitle("Reset memory vault?")
-            .setMessage("This removes encrypted memory payloads, policy metadata, sync queue state, and lock keys. Existing plain files remain. This cannot be undone.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Reset") { _, _ ->
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = "Reset memory vault?",
+            message = "This removes encrypted memory payloads, policy metadata, sync queue state, and lock keys. Existing plain files remain. This cannot be undone.",
+            dismiss = ExpressiveDialogs.Action("Cancel"),
+            confirm = ExpressiveDialogs.Action("Reset") {
                 lifecycleScope.launch(Dispatchers.IO) {
                     LocalAgentMemoryStore.resetVault(this@SettingsDestination)
                     LocalAgentMemoryStore.ensureSeedFiles(this@SettingsDestination)
@@ -467,8 +478,8 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
                         refreshSettingsUi()
                     }
                 }
-            }
-            .show()
+            },
+        )
     }
 
     override fun setTranscriptStorageEnabled(enabled: Boolean) {
@@ -492,14 +503,15 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     }
 
     override fun importLocalData() {
-        AlertDialog.Builder(this)
-            .setTitle("Import local data?")
-            .setMessage("This will overwrite current local chats, memory files, recordings, and settings from the selected backup ZIP.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Import") { _, _ ->
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = "Import local data?",
+            message = "This will overwrite current local chats, memory files, recordings, and settings from the selected backup ZIP.",
+            dismiss = ExpressiveDialogs.Action("Cancel"),
+            confirm = ExpressiveDialogs.Action("Import") {
                 importDataLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
-            }
-            .show()
+            },
+        )
     }
 
     override fun importChatGptData() {
@@ -511,11 +523,12 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     }
 
     override fun clearLocalData() {
-        AlertDialog.Builder(this)
-            .setTitle("Clear local data?")
-            .setMessage("This will delete all chats, notes, capture sessions, and audio recordings stored on this device. This cannot be undone.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Clear") { _, _ ->
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = "Clear local data?",
+            message = "This will delete all chats, notes, capture sessions, and audio recordings stored on this device. This cannot be undone.",
+            dismiss = ExpressiveDialogs.Action("Cancel"),
+            confirm = ExpressiveDialogs.Action("Clear") {
                 Toast.makeText(this, "Clearing data...", Toast.LENGTH_SHORT).show()
                 lifecycleScope.launch(Dispatchers.IO) {
                     val result = LocalDataClearer.clearAll(this@SettingsDestination)
@@ -529,8 +542,8 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
                         refreshSettingsUi()
                     }
                 }
-            }
-            .show()
+            },
+        )
     }
 
     override fun sendDebugLogs() {
@@ -618,23 +631,36 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     }
 
     private fun showPassphraseDialog(title: String, onSubmit: (String) -> Unit) {
-        val input = EditText(this).apply {
-            hint = "Passphrase"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        ExpressiveDialogs.show(activity) { close ->
+            var input by remember { mutableStateOf("") }
+            ExpressiveAlert(
+                title = title,
+                message = null,
+                dismiss = ExpressiveDialogs.Action("Cancel"),
+                confirm = ExpressiveDialogs.Action("OK") {
+                    val passphrase = input
+                    if (passphrase.isBlank()) {
+                        Toast.makeText(this, "Passphrase cannot be empty", Toast.LENGTH_SHORT).show()
+                    } else {
+                        onSubmit(passphrase)
+                    }
+                },
+                neutral = null,
+                cancelable = true,
+                close = close,
+                body = {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        placeholder = { Text("Passphrase") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                },
+            )
         }
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setView(input)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("OK") { _, _ ->
-                val passphrase = input.text?.toString().orEmpty()
-                if (passphrase.isBlank()) {
-                    Toast.makeText(this, "Passphrase cannot be empty", Toast.LENGTH_SHORT).show()
-                } else {
-                    onSubmit(passphrase)
-                }
-            }
-            .show()
     }
 
     private fun buildRecentChatIntent(): Intent {

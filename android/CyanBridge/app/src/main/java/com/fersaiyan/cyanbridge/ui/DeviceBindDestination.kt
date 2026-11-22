@@ -42,6 +42,7 @@ import com.fersaiyan.cyanbridge.devices.mergeRowFor
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindConnection
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindScreen
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindViewModel
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.XXPermissions
 import com.oudmon.ble.base.bluetooth.BleOperateManager
@@ -434,18 +435,17 @@ class DeviceBindDestination : NavScreen() {
                 ?.bondState == BluetoothDevice.BOND_BONDED
         }.getOrDefault(false)
         if (!bonded) {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Pair MYVU in Android first")
-                .setMessage(
-                    "The upstream MYVU client expects a Classic Bluetooth bond before opening its RFCOMM relay. " +
-                        "Pair the glasses in Android Bluetooth settings, then force-stop the official MYVU app because the glasses accept only one app connection at a time.",
-                )
-                .setNegativeButton("Cancel", null)
-                .setNeutralButton("Bluetooth settings") { _, _ ->
+            ExpressiveDialogs.alert(
+                activity,
+                title = "Pair MYVU in Android first",
+                message = "The upstream MYVU client expects a Classic Bluetooth bond before opening its RFCOMM relay. " +
+                    "Pair the glasses in Android Bluetooth settings, then force-stop the official MYVU app because the glasses accept only one app connection at a time.",
+                dismiss = ExpressiveDialogs.Action("Cancel"),
+                neutral = ExpressiveDialogs.Action("Bluetooth settings") {
                     startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                }
-                .setPositiveButton("Connect anyway") { _, _ -> startMeizuMyvuConnection(device.macAddress) }
-                .show()
+                },
+                confirm = ExpressiveDialogs.Action("Connect anyway") { startMeizuMyvuConnection(device.macAddress) },
+            )
             return
         }
         startMeizuMyvuConnection(device.macAddress)
@@ -505,15 +505,16 @@ class DeviceBindDestination : NavScreen() {
             start()
             return
         }
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(R.string.memomind_pair_first_title)
-            .setMessage(R.string.memomind_pair_first_message)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setNeutralButton(R.string.memomind_bluetooth_settings) { _, _ ->
+        ExpressiveDialogs.alert(
+            activity,
+            title = getString(R.string.memomind_pair_first_title),
+            message = getString(R.string.memomind_pair_first_message),
+            dismiss = ExpressiveDialogs.Action(getString(android.R.string.cancel)),
+            neutral = ExpressiveDialogs.Action(getString(R.string.memomind_bluetooth_settings)) {
                 startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-            }
-            .setPositiveButton(R.string.memomind_connect_anyway) { _, _ -> start() }
-            .show()
+            },
+            confirm = ExpressiveDialogs.Action(getString(R.string.memomind_connect_anyway)) { start() },
+        )
     }
 
     private fun upsertDevice(

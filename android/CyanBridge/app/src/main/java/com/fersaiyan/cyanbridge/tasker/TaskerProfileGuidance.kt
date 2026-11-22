@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 
 object TaskerProfileGuidance {
     private const val TASKER_PACKAGE = "net.dinglisch.android.taskerm"
@@ -19,18 +19,17 @@ object TaskerProfileGuidance {
         val isProject = fileName.endsWith(".prj.xml", ignoreCase = true)
         val tab = if (isProject) "anywhere on the bottom navigation bar" else "the Profiles tab"
         val action = if (isProject) "Import Project" else "Import Profile"
-        AlertDialog.Builder(activity)
-            .setTitle("Tasker file saved")
-            .setMessage(
-                "Saved $fileName.\n\n" +
-                    "In Tasker, long-press $tab, choose $action, then select this file.",
-            )
-            .setNegativeButton("Close", null)
-            .setNeutralButton("Setup videos") { _, _ -> openTutorial(activity) }
-            .setPositiveButton("Import in Tasker") { _, _ ->
+        ExpressiveDialogs.alert(
+            activity = activity,
+            title = "Tasker file saved",
+            message = "Saved $fileName.\n\n" +
+                "In Tasker, long-press $tab, choose $action, then select this file.",
+            dismiss = ExpressiveDialogs.Action("Close"),
+            neutral = ExpressiveDialogs.Action("Setup videos") { openTutorial(activity) },
+            confirm = ExpressiveDialogs.Action("Import in Tasker") {
                 if (!openImporter(activity, uri, fileName)) openTasker(activity)
-            }
-            .show()
+            },
+        )
     }
 
     fun openImporter(context: Context, uri: Uri, fileName: String): Boolean = runCatching {
