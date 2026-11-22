@@ -103,10 +103,24 @@ object VersionUpdateChecker {
 
         val remindedVersion = AppPrefs.VersionCheck.remindedVersion[context]
 
-        if (latestVersion != currentVersion && latestVersion != remindedVersion) {
+        if (shouldOfferUpdate(latestVersion, currentVersion, remindedVersion)) {
             showUpdateDialog(context, latestVersion, playStoreUrl, githubUrl)
         }
     }
+
+    /**
+     * Only a strictly newer release is offered: a build ahead of the server's latest (2.5.0 before its release is
+     * published, debug builds) must not be told to "update" to an older one. Numeric parts only ("2.5.0-debug" is
+     * 2.5.0); nothing is offered when either version is unreadable, or for the release the user already postponed.
+     */
+    internal fun shouldOfferUpdate(latestVersion: String, currentVersion: String, remindedVersion: String?): Boolean {
+        if (latestVersion.isBlank() || latestVersion == remindedVersion) return false
+        val latest = numericVersion(latestVersion) ?: return false
+        val current = numericVersion(currentVersion) ?: return false
+        return com.fersaiyan.cyanbridge.shared.devices.firmware.FamilyFirmwareRules.compareVersions(latest, current) > 0
+    }
+
+    private fun numericVersion(version: String): String? = Regex("""^\d+(\.\d+)*""").find(version.trim())?.value
 
     fun showUpdateDialog(
         context: Context,
