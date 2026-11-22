@@ -68,29 +68,46 @@ object GlassesConditionState {
 }
 
 /**
- * What to tell the user when the glasses accepted the media-sync command but the phone never saw their Wi-Fi Direct
- * peer. Seen in the field (log_mwqq8cyw, AM01CY 2.20.10): glasses on the charger heated from 43 to 53 C during the
- * attempt, no peer ever appeared, and they finally reported Wi-Fi error 255.
+ * What to tell the user when a HeyCyan media sync never saw the glasses' Wi-Fi Direct peer.
+ *
+ * Firmware facts (firmware_dump add.236, BR22 AM01CY 2.00.10 executed in the pi32v2 emulator; same rules in the V2.2
+ * builds around the field build 2.20.10):
+ * - The transfer-mode reply carrying the peer name (`dataType 1`, `errorCode 1`) is sent only after the Wi-Fi chip
+ *   reported that Wi-Fi Direct is up; the glasses then wait up to 119 s for the phone.
+ * - Charging never blocks the Wi-Fi start; only low battery while not charging does (start <= 15 %, session <= 9 %).
+ * - The 0x0B temperature is the Wi-Fi chip's CPU; the glasses stop a session at >= 107 C (throttling from 70 C).
+ * - `09 ff 02` is a watchdog: about 32 s after Wi-Fi Direct came up nothing connected.
+ * In log_mwqq8cyw the glasses were up as "CY 01_..." and the phone never found them, so the hint points at the phone.
  */
 object GlassesWifiStartHint {
-    /** Temperatures at or above this are mentioned as a likely reason. */
-    const val HOT_CELSIUS = 45
+    /** The glasses stop a running session at this temperature (BR22 aglink case 0x13). */
+    const val STOP_CELSIUS = 107
 
-    /** Null when a peer was seen: the failure happened later and this hint does not apply. */
-    fun message(condition: GlassesCondition, peerSeen: Boolean): String? {
+    /** From here a "let them cool" hint is worth giving (the Wi-Fi chip throttles from 70 C, shuts down at 110 C). */
+    const val HOT_CELSIUS = 100
+
+    /**
+     * Null when a peer was seen (the failure happened later). [glassesWifiUp]: the glasses confirmed Wi-Fi Direct is
+     * up (their transfer-mode reply), advertising [peerName].
+     */
+    fun message(
+        condition: GlassesCondition,
+        peerSeen: Boolean,
+        glassesWifiUp: Boolean,
+        peerName: String? = null,
+    ): String? {
         if (peerSeen) return null
         val temperature = condition.temperatureCelsius
-        val hot = temperature != null && temperature >= HOT_CELSIUS
-        val charging = condition.charging == true
         return when {
-            charging && hot ->
-                "The glasses' Wi-Fi did not start. They are charging and at $temperature °C: unplug them, let them " +
-                    "cool for a few minutes, then sync again."
-            charging ->
-                "The glasses' Wi-Fi did not start while they are charging. Unplug them, then sync again."
-            hot ->
-                "The glasses' Wi-Fi did not start. They are at $temperature °C: let them cool for a few minutes, " +
-                    "then sync again."
+            temperature != null && temperature >= STOP_CELSIUS ->
+                "The glasses stopped Wi-Fi Direct because they are too hot ($temperature °C). Let them cool, then sync again."
+            temperature != null && temperature >= HOT_CELSIUS ->
+                "The glasses are very hot ($temperature °C) and may stop Wi-Fi Direct. Let them cool, then sync again."
+            glassesWifiUp -> {
+                val name = peerName?.takeIf { it.isNotBlank() }?.let { " as \"$it\"" }.orEmpty()
+                "The glasses started Wi-Fi Direct$name, but this phone did not find them. Turn the phone's Wi-Fi " +
+                    "off and on, keep it close to the glasses, then sync again."
+            }
             else ->
                 "The glasses' Wi-Fi did not start: the phone never saw it. Restart the glasses, then sync again."
         }

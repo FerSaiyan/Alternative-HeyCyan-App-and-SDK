@@ -23,10 +23,27 @@ sealed interface GlassesWifiNotify {
         override val type: Int get() = TYPE_GLASSES_IP
     }
 
-    /** 0x09: Wi-Fi Direct / Wi-Fi error. [raw] is the signed payload byte when present. */
-    data class WifiError(val code: Int, val raw: Byte?) : GlassesWifiNotify {
+    /**
+     * 0x09: Wi-Fi Direct / Wi-Fi error. [raw] is the signed payload byte when present; [reason] is the byte after it
+     * (HeyCyan BR22 sends `09 ff <reason>`).
+     */
+    data class WifiError(val code: Int, val raw: Byte?, val reason: Int? = null) : GlassesWifiNotify {
         override val type: Int get() = TYPE_WIFI_ERROR
         val isNoisyVendorError: Boolean get() = code == NOISY_WIFI_ERROR_CODE
+
+        /**
+         * What the glasses meant, from the BR22 firmware (firmware_dump add.236, AM01CY 2.00.10, executed):
+         * 1 = their transfer session was torn down, 2 = their watchdog fired because nothing connected or downloaded
+         * for ~32 s after their Wi-Fi Direct came up, 3 = the phone connected and then disconnected.
+         */
+        val reasonDescription: String?
+            get() = when (reason) {
+                1 -> "glasses ended the transfer session"
+                2 -> "glasses gave up: nothing connected ~32 s after their Wi-Fi Direct came up"
+                3 -> "the phone connected to the glasses' Wi-Fi Direct and then dropped"
+                null -> null
+                else -> "unknown reason $reason"
+            }
     }
 
     /** 0x04: OTA progress percent and phase (both 0 when absent). */
@@ -67,7 +84,7 @@ sealed interface GlassesWifiNotify {
                 }
                 TYPE_WIFI_ERROR -> {
                     val raw = load.getOrNull(7)
-                    WifiError((raw ?: 0).toInt() and 0xFF, raw)
+                    WifiError((raw ?: 0).toInt() and 0xFF, raw, load.getOrNull(8)?.toInt()?.and(0xFF))
                 }
                 TYPE_OTA_PROGRESS -> OtaProgress(
                     percent = (load.getOrNull(7) ?: 0).toInt() and 0xFF,

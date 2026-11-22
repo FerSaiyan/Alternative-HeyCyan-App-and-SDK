@@ -7,7 +7,6 @@ import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.ai.image.HighQualityFailureChoice
@@ -46,6 +45,7 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesWifiStartHint
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.bleIpBridge
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
+import com.fersaiyan.cyanbridge.ui.dialog.ExpressiveDialogs
 import com.fersaiyan.cyanbridge.ui.hasBluetooth
 import com.fersaiyan.cyanbridge.ui.hasWifiP2pPermission
 import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
@@ -121,6 +121,15 @@ internal class GlassesMediaSyncCoordinator(
     private val seenP2pPeers = mutableSetOf<String>()
     /** Any Wi-Fi Direct peer at all in this sync (even a non-matching one): the radio side worked. */
     private var downloadAnyPeerSeen = false
+    /**
+     * The glasses confirmed Wi-Fi Direct up at least once in this sync (transfer reply dataType 1 / errorCode 1,
+     * sent only after their Wi-Fi chip reports P2P success, firmware_dump add.236). Kept across command resends,
+     * which reset the per-attempt callback fields.
+     */
+    private var downloadGlassesConfirmedWifiDirect = false
+    /** Last `09 ff <reason>` from the glasses in this sync, decoded (support reports). */
+    private var downloadLastGlassesWifiError: String? = null
+    private var syncEvidenceRecorded = false
     private var lastPeerSetHash: Int = 0
     private var officialSystemSuccess = false
     private var officialBleCallbackSuccess = false
@@ -688,6 +697,7 @@ internal class GlassesMediaSyncCoordinator(
         ) { _, resp ->
             val isLatestCommand = commandSequence == transferModeCommandSequence
             val callbackLatencyMs = System.currentTimeMillis() - commandSentAtMs
+            if (resp.dataType == 1 && resp.errorCode == 1) downloadGlassesConfirmedWifiDirect = true
             if (isLatestCommand) {
                 transferModeCommandCallbackReceived = true
                 transferModeCommandCallbackDataType = resp.dataType
@@ -987,6 +997,10 @@ internal class GlassesMediaSyncCoordinator(
         downloadP2pRestartCount = 0
         seenP2pPeers.clear()
         downloadAnyPeerSeen = false
+        downloadGlassesConfirmedWifiDirect = false
+        downloadLastGlassesWifiError = null
+        syncEvidenceRecorded = false
+        WifiP2pManagerSingleton.getInstance(activity).resetDiscoveryTelemetry()
         lastPeerSetHash = 0
         transferModeCommandTimeoutJob?.cancel()
         transferModeCommandTimeoutJob = null
@@ -1139,16 +1153,40 @@ internal class GlassesMediaSyncCoordinator(
         )
     }
 
+    /** One recent-events entry with the evidence that tells glasses-side from phone-side Wi-Fi Direct failures. */
+    private fun recordSyncEvidence() {
+        if (syncEvidenceRecorded) return
+        syncEvidenceRecorded = true
+        val discovery = WifiP2pManagerSingleton.getInstance(activity).discoveryTelemetry()
+        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC,
+            "sync evidence",
+            linkedMapOf(
+                "glasses_wifi_direct" to downloadGlassesConfirmedWifiDirect.toString(),
+                "any_peer" to downloadAnyPeerSeen.toString(),
+                "peer_lists" to discovery["p2p_peer_lists_received"].orEmpty(),
+                "discovery" to discovery["p2p_discovery_state"].orEmpty(),
+                "glasses_error" to (downloadLastGlassesWifiError ?: ""),
+            ),
+        )
+    }
+
     private fun glassesCondition(): GlassesCondition =
         GlassesConditionState.snapshot().freshAt(System.currentTimeMillis(), GLASSES_CONDITION_MAX_AGE_MS)
 
     /**
-     * Plain explanation when the glasses never brought their Wi-Fi Direct up in this sync: no peer at all, no group,
-     * no BLE-reported IP. Names charging and heat when the glasses reported them (log_mwqq8cyw). Null otherwise.
+     * Plain explanation when this sync never saw the glasses' Wi-Fi Direct peer (no peer at all, no group, no
+     * BLE-reported IP). The glasses' transfer-mode reply `dataType 1 / errorCode 1` means their Wi-Fi Direct is up
+     * (firmware_dump add.236), which puts the problem on the phone side (log_mwqq8cyw). Null otherwise.
      */
     private fun glassesWifiStartHint(): String? {
         val wifiSeen = downloadAnyPeerSeen || downloadP2pConnected || !downloadBleIp.isNullOrBlank()
-        return GlassesWifiStartHint.message(glassesCondition(), peerSeen = wifiSeen)
+        return GlassesWifiStartHint.message(
+            glassesCondition(),
+            peerSeen = wifiSeen,
+            glassesWifiUp = downloadGlassesConfirmedWifiDirect,
+            peerName = runCatching { GlassesP2pPeerSelector.expectedOfficialP2pName() }.getOrNull(),
+        )
     }
 
     private fun maybeShowP2pSyncLogHelp(
@@ -1156,6 +1194,7 @@ internal class GlassesMediaSyncCoordinator(
         title: String = "P2P sync is stuck",
         dismissButtonLabel: String = "Later",
     ) {
+        recordSyncEvidence()
         if (downloadSupportDialogShown || activity.isFinishing || activity.isDestroyed) return
         downloadSupportDialogShown = true
         DebugLogSupport.showSupportOptionsDialog(
@@ -1191,6 +1230,8 @@ internal class GlassesMediaSyncCoordinator(
         "selected_download_network" to p2pNetwork.selectedDownloadNetworkSummary,
         "seen_p2p_peers" to seenP2pPeers.joinToString(", "),
         "any_p2p_peer_seen" to downloadAnyPeerSeen.toString(),
+        "glasses_confirmed_wifi_direct" to downloadGlassesConfirmedWifiDirect.toString(),
+        "glasses_wifi_error" to (downloadLastGlassesWifiError ?: ""),
         "glasses_charging" to (glassesCondition().charging?.toString() ?: "unknown"),
         "glasses_battery_pct" to (glassesCondition().batteryPercent?.toString() ?: ""),
         "glasses_temperature_c" to (glassesCondition().temperatureCelsius?.toString() ?: ""),
@@ -1205,7 +1246,12 @@ internal class GlassesMediaSyncCoordinator(
         "vpn_active" to p2pNetwork.isVpnActive().toString(),
         "official_heycyan_installed" to OfficialHeyCyanApp.isInstalled(activity).toString(),
         "adaptive_trace" to (adaptiveSyncSession?.traceSummary() ?: ""),
-    )
+    ).apply {
+        // Phone side of a missing Wi-Fi Direct peer (log_mwqq8cyw): did discovery run, did Android deliver peer lists,
+        // and the phone's Wi-Fi state.
+        putAll(WifiP2pManagerSingleton.getInstance(activity).discoveryTelemetry())
+        putAll(com.fersaiyan.cyanbridge.network.DeviceWifi.phoneWifiState(activity))
+    }
 
     private suspend fun downloadMediaList(deviceIp: String, sessionId: Long) {
         if (!isDownloadSessionActive(sessionId)) return
@@ -1545,10 +1591,11 @@ internal class GlassesMediaSyncCoordinator(
             ImageQuestionSourcePolicy.onHighQualityFailure() ==
                 com.fersaiyan.cyanbridge.ai.image.ImageSourceResolution.AWAITING_EXPLICIT_FALLBACK_CHOICE,
         )
-        AlertDialog.Builder(activity)
-            .setTitle("High-quality image unavailable")
-            .setMessage("$reason\n\nCyanBridge has not sent a preview automatically.")
-            .setPositiveButton("Retry high quality") { _, _ ->
+        ExpressiveDialogs.alert(
+            activity,
+            title = "High-quality image unavailable",
+            message = "$reason\n\nCyanBridge has not sent a preview automatically.",
+            confirm = ExpressiveDialogs.Action("Retry high quality") {
                 when (ImageQuestionSourcePolicy.resolveHighQualityFailure(HighQualityFailureChoice.RETRY_HIGH_QUALITY)) {
                     com.fersaiyan.cyanbridge.ai.image.ImageSourceResolution.HIGH_QUALITY -> {
                         highQualityImageRequest = request
@@ -1557,8 +1604,8 @@ internal class GlassesMediaSyncCoordinator(
                     }
                     else -> Unit
                 }
-            }
-            .setNegativeButton("Use fast preview") { _, _ ->
+            },
+            dismiss = ExpressiveDialogs.Action("Use fast preview") {
                 if (
                     ImageQuestionSourcePolicy.resolveHighQualityFailure(HighQualityFailureChoice.USE_FAST_PREVIEW) ==
                     com.fersaiyan.cyanbridge.ai.image.ImageSourceResolution.FAST_PREVIEW
@@ -1567,8 +1614,8 @@ internal class GlassesMediaSyncCoordinator(
                     host.pendingImageQuestionSource = ImageQuestionSource.FAST_PREVIEW
                     host.requestImageThumbnailForQuestion(request.sourceTag)
                 }
-            }
-            .setNeutralButton("Cancel") { _, _ ->
+            },
+            neutral = ExpressiveDialogs.Action("Cancel") {
                 if (
                     ImageQuestionSourcePolicy.resolveHighQualityFailure(HighQualityFailureChoice.CANCEL) ==
                     com.fersaiyan.cyanbridge.ai.image.ImageSourceResolution.CANCELLED
@@ -1576,8 +1623,8 @@ internal class GlassesMediaSyncCoordinator(
                     highQualityImageRequest = null
                     host.clearPendingVoiceImageQuestion(request.sourceTag)
                 }
-            }
-            .show()
+            },
+        )
     }
 
     private suspend fun downloadAllMediaFilesVendor(
@@ -2272,6 +2319,7 @@ internal class GlassesMediaSyncCoordinator(
     
     /** [userMessage] replaces the technical [message] in the toast when there is a plainer explanation. */
     private fun showDownloadError(message: String, cleanup: Boolean = true, userMessage: String? = null) {
+        recordSyncEvidence()
         com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.error(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "sync failed: $message", mapOf("flow" to downloadFlowMode.name, "hq_image" to isHighQualityImageTransfer().toString()))
         if (isHighQualityImageTransfer()) {
             recordAdaptiveSyncFailure(message)
@@ -2560,11 +2608,12 @@ internal class GlassesMediaSyncCoordinator(
             appendLine("If the problem persists, send the logs to the CyanBridge server.")
         }
 
-        AlertDialog.Builder(activity)
-            .setTitle("P2P sync failed")
-            .setMessage(reason)
-            .setNegativeButton("Later", null)
-            .setNeutralButton("Send to server") { _, _ ->
+        ExpressiveDialogs.alert(
+            activity,
+            title = "P2P sync failed",
+            message = reason,
+            dismiss = ExpressiveDialogs.Action("Later"),
+            neutral = ExpressiveDialogs.Action("Send to server") {
                 DebugLogSupport.showSupportOptionsDialog(
                     activity = activity,
                     title = "P2P sync failed (${downloadFlowMode.label})",
@@ -2572,13 +2621,13 @@ internal class GlassesMediaSyncCoordinator(
                     description = "Flow: ${downloadFlowMode.label}\n\nP2P sync could not find glasses after $CUSTOM_MAX_P2P_RESTARTS attempts. Bluetooth is connected but glasses did not appear as a Wi‑Fi Direct peer. Seen P2P peers: ${seenPeers.joinToString(", ")}",
                     extraInfo = syncSupportExtraInfo(),
                 )
-            }
-            .setPositiveButton("Try Again") { _, _ ->
+            },
+            confirm = ExpressiveDialogs.Action("Try Again") {
                 downloadSupportDialogShown = false
                 // The media session is still held: retry through the confirmed P2P teardown.
                 startDataDownload(mode = GlassesSyncFlow.CUSTOM, isRetry = true)
-            }
-            .show()
+            },
+        )
     }
 
     private fun maybeStartAdaptiveHttpDownload(source: String) {
@@ -2809,7 +2858,22 @@ internal class GlassesMediaSyncCoordinator(
                 }
 
                 is GlassesWifiNotify.WifiError -> {
-                    Log.e("DeviceNotify", "(download) P2P/WiFi error from device: ${notify.code} (raw=${notify.raw ?: 0})")
+                    Log.e(
+                        "DeviceNotify",
+                        "(download) P2P/WiFi error from device: ${notify.code} (raw=${notify.raw ?: 0}) " +
+                            "reason=${notify.reason ?: "none"}${notify.reasonDescription?.let { " ($it)" }.orEmpty()}",
+                    )
+                    downloadLastGlassesWifiError = "${notify.code} reason=${notify.reason ?: "none"}" +
+                        notify.reasonDescription?.let { " ($it)" }.orEmpty()
+                    com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.warn(
+                        com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC,
+                        "glasses wifi error",
+                        mapOf(
+                            "code" to notify.code.toString(),
+                            "reason" to (notify.reason?.toString() ?: "none"),
+                            "meaning" to (notify.reasonDescription ?: ""),
+                        ),
+                    )
                     if (notify.isNoisyVendorError) {
                         maybeResetP2pAfterError255("download")
                     }

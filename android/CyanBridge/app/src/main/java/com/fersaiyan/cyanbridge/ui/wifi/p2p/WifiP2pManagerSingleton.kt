@@ -71,6 +71,47 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
 
     private var receiver: BroadcastReceiver? = null
 
+    // Discovery telemetry for media-sync support reports (reset at each sync). log_mwqq8cyw had no peer list at all
+    // for 85 s and the old logs could not tell "Android reported nothing" from "no channel" or "discovery never ran".
+    @Volatile private var peerListRequests = 0
+    @Volatile private var peerRequestsWithoutChannel = 0
+    @Volatile private var peerListsReceived = 0
+    @Volatile private var maxPeersInList = 0
+    @Volatile private var discoveryStartedEvents = 0
+    @Volatile private var discoveryStoppedEvents = 0
+    @Volatile private var discoveryState = "unknown"
+    private val discoveryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: android.content.Intent) {
+            if (intent.action != WifiP2pManager.WIFI_P2P_DISCOVERY_CHANGED_ACTION) return
+            val started = intent.getIntExtra(WifiP2pManager.EXTRA_DISCOVERY_STATE, -1) ==
+                WifiP2pManager.WIFI_P2P_DISCOVERY_STARTED
+            if (started) discoveryStartedEvents++ else discoveryStoppedEvents++
+            discoveryState = if (started) "started" else "stopped"
+            Log.d(TAG, "P2P discovery $discoveryState")
+        }
+    }
+    private var discoveryReceiverRegistered = false
+
+    fun resetDiscoveryTelemetry() {
+        peerListRequests = 0
+        peerRequestsWithoutChannel = 0
+        peerListsReceived = 0
+        maxPeersInList = 0
+        discoveryStartedEvents = 0
+        discoveryStoppedEvents = 0
+    }
+
+    /** Wi-Fi Direct discovery counts since the last [resetDiscoveryTelemetry], for support reports. */
+    fun discoveryTelemetry(): Map<String, String> = linkedMapOf(
+        "p2p_discovery_state" to discoveryState,
+        "p2p_discovery_started_events" to discoveryStartedEvents.toString(),
+        "p2p_discovery_stopped_events" to discoveryStoppedEvents.toString(),
+        "p2p_peer_list_requests" to peerListRequests.toString(),
+        "p2p_peer_requests_without_channel" to peerRequestsWithoutChannel.toString(),
+        "p2p_peer_lists_received" to peerListsReceived.toString(),
+        "p2p_max_peers_in_list" to maxPeersInList.toString(),
+    )
+
     private fun hasWifiP2pPermission(): Boolean {
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.NEARBY_WIFI_DEVICES
@@ -117,11 +158,24 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
             intentFilter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+        if (!discoveryReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                context,
+                discoveryReceiver,
+                IntentFilter(WifiP2pManager.WIFI_P2P_DISCOVERY_CHANGED_ACTION),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            discoveryReceiverRegistered = true
+        }
     }
 
     fun unregisterReceiver() {
         try {
             receiver?.let { context.unregisterReceiver(it) }
+            if (discoveryReceiverRegistered) {
+                discoveryReceiverRegistered = false
+                context.unregisterReceiver(discoveryReceiver)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error unregistering receiver", e)
         }
@@ -338,14 +392,21 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
 
     @SuppressLint("MissingPermission")
     fun requestPeers() {
+        peerListRequests++
         if (!hasWifiP2pPermission()) {
             Log.w(TAG, "Cannot request P2P peers: required permission is not granted")
             return
+        }
+        if (wifiP2pChannel == null) {
+            peerRequestsWithoutChannel++
+            Log.w(TAG, "Cannot request P2P peers: no Wi-Fi Direct channel")
         }
         wifiP2pChannel?.let { channel ->
             wifiP2pManager.requestPeers(channel, object : WifiP2pManager.PeerListListener {
                 override fun onPeersAvailable(peers: WifiP2pDeviceList) {
                     val deviceList = peers.deviceList
+                    peerListsReceived++
+                    if (deviceList.size > maxPeersInList) maxPeersInList = deviceList.size
                     Log.d(TAG, "Peers available: ${deviceList.size} devices")
                     callbacks.forEach { it.onPeersChanged(deviceList) }
                 }

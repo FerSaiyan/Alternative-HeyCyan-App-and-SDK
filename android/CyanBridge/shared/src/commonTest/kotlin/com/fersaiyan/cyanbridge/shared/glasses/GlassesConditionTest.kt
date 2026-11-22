@@ -38,13 +38,18 @@ class GlassesConditionTest {
     }
 
     @Test
-    fun hintNamesChargingAndHeatOnlyWhenNoPeerAppeared() {
-        val hotCharging = GlassesCondition(charging = true, temperatureCelsius = 53)
-        assertNull(GlassesWifiStartHint.message(hotCharging, peerSeen = true))
-        val msg = GlassesWifiStartHint.message(hotCharging, peerSeen = false)!!
-        assertTrue("charging" in msg && "53 °C" in msg && "unplug" in msg, msg)
-        assertTrue("charging" in GlassesWifiStartHint.message(GlassesCondition(charging = true, temperatureCelsius = 30), false)!!)
-        assertTrue("47 °C" in GlassesWifiStartHint.message(GlassesCondition(charging = false, temperatureCelsius = 47), false)!!)
-        assertTrue("Restart the glasses" in GlassesWifiStartHint.message(GlassesCondition(), false)!!)
+    fun hintFollowsTheFirmwareRules() {
+        // log_mwqq8cyw: charging, 53 C, glasses reported Wi-Fi Direct up, phone saw no peer.
+        val field = GlassesCondition(charging = true, temperatureCelsius = 53)
+        assertNull(GlassesWifiStartHint.message(field, peerSeen = true, glassesWifiUp = true))
+        val phoneSide = GlassesWifiStartHint.message(field, peerSeen = false, glassesWifiUp = true, peerName = "CY 01_32F8135584CA")!!
+        assertTrue("\"CY 01_32F8135584CA\"" in phoneSide && "this phone did not find them" in phoneSide, phoneSide)
+        // Charging and ordinary heat are never given as the cause (the firmware does not gate on them).
+        assertTrue("charging" !in phoneSide && "cool" !in phoneSide, phoneSide)
+        // The glasses stop a session at 107 C; from 100 C a cool-down hint.
+        assertTrue("too hot (107 °C)" in GlassesWifiStartHint.message(GlassesCondition(temperatureCelsius = 107), false, true)!!)
+        assertTrue("very hot (101 °C)" in GlassesWifiStartHint.message(GlassesCondition(temperatureCelsius = 101), false, true)!!)
+        // No confirmation from the glasses: their Wi-Fi never started.
+        assertTrue("Restart the glasses" in GlassesWifiStartHint.message(GlassesCondition(), false, glassesWifiUp = false)!!)
     }
 }
