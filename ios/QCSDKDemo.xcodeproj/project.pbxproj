@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CB5000022F00000100CB0001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CB5000012F00000100CB0001 /* Assets.xcassets */; };
 		760D69932E9EE75A00FFE27F /* WiFiTransferManager.h in Headers */ = {isa = PBXBuildFile; fileRef = 760D69922E9EE75A00FFE27F /* WiFiTransferManager.h */; };
 		760D69952E9EE76400FFE27F /* GlassesFrameworkTypes.h in Headers */ = {isa = PBXBuildFile; fileRef = 760D69942E9EE76400FFE27F /* GlassesFrameworkTypes.h */; };
 		760D69972E9EE77000FFE27F /* WiFiTransferManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 760D69962E9EE77000FFE27F /* WiFiTransferManager.m */; };
@@ -53,6 +54,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		CB5000012F00000100CB0001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		760D69922E9EE75A00FFE27F /* WiFiTransferManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WiFiTransferManager.h; sourceTree = "<group>"; };
 		760D69942E9EE76400FFE27F /* GlassesFrameworkTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GlassesFrameworkTypes.h; sourceTree = "<group>"; };
 		760D69962E9EE77000FFE27F /* WiFiTransferManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WiFiTransferManager.m; sourceTree = "<group>"; };
@@ -234,6 +236,7 @@
 				CB2000142F00000100CB0001 /* IosSecurityBridgeImpl.swift */,
 				CB2000162F00000100CB0001 /* LocalModelBridgeImpl.swift */,
 				CB20000D2F00000100CB0001 /* CyanBridgeKMPHost.entitlements */,
+				CB5000012F00000100CB0001 /* Assets.xcassets */,
 			);
 			path = CyanBridgeKMPHost;
 			sourceTree = "<group>";
@@ -390,6 +393,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CB5000022F00000100CB0001 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -754,6 +758,7 @@
 		CB20000A2F00000100CB0001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = CyanBridgeKMPHost/CyanBridgeKMPHost.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -809,6 +814,7 @@
 		CB20000B2F00000100CB0001 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = CyanBridgeKMPHost/CyanBridgeKMPHost.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

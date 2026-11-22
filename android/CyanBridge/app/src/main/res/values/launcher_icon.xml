@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Background of the adaptive launcher icon: the parrot artwork's own near-black. -->
+    <color name="launcher_icon_background">#020106</color>
+</resources>
