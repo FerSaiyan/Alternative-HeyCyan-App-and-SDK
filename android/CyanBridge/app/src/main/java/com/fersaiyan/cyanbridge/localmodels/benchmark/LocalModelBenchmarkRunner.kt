@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.ResultReceiver
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuSupport
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpBenchmarkRecord
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalMtpSettingsRepository
@@ -302,9 +303,11 @@ object LocalModelBenchmarkRunner {
     ): Backend = when (backend) {
         LocalComputeBackend.GPU -> Backend.GPU()
         LocalComputeBackend.CPU -> Backend.CPU(cpuThreads.coerceIn(1, 16))
-        LocalComputeBackend.NPU_EXPERIMENTAL -> Backend.NPU(
-            nativeLibraryDir = context.applicationInfo.nativeLibraryDir,
-        )
+        LocalComputeBackend.NPU_EXPERIMENTAL -> {
+            val npu = LiteRtNpuSupport.status(context)
+            check(npu.available) { npu.reason }
+            Backend.NPU(nativeLibraryDir = LiteRtNpuSupport.dispatchDir(context, npu))
+        }
     }
 
     private const val BENCHMARK_PROMPT =

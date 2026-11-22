@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.hil
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuSupport
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.benchmark
@@ -34,8 +35,8 @@ class LiteRtBackendBenchmarkTest {
                     val backend = when (name) {
                         "CPU" -> Backend.CPU()
                         "GPU" -> Backend.GPU()
-                        // Qualcomm NPU (needs the NPU runtime AAR build and a *_Qualcomm_<SoC> bundle).
-                        "NPU" -> Backend.NPU(instrumentation.targetContext.applicationInfo.nativeLibraryDir)
+                        // NPU (needs the NPU runtime AAR build and a *_<Vendor>_<SoC> bundle).
+                        "NPU" -> Backend.NPU(LiteRtNpuSupport.dispatchDir(instrumentation.targetContext, LiteRtNpuSupport.status(instrumentation.targetContext)))
                         else -> error("Unsupported backend $name")
                     }
                     val info = benchmark(modelPath, backend, prefill, decodeTokens, cacheDir)

@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.hil
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuSupport
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
@@ -57,7 +58,7 @@ class LiteRtLongContextProbeTest {
         val backendName = args.getString("lc_backend") ?: "NPU"
         val notes = args.getString("lc_notes")?.toInt() ?: 400
         val backend = when (backendName) {
-            "NPU" -> Backend.NPU(context.applicationInfo.nativeLibraryDir)
+            "NPU" -> Backend.NPU(LiteRtNpuSupport.dispatchDir(context, LiteRtNpuSupport.status(context)))
             "GPU" -> Backend.GPU()
             else -> Backend.CPU()
         }
@@ -107,7 +108,7 @@ class LiteRtLongContextProbeTest {
             EngineConfig(
                 modelPath = model,
                 backend = when (backendName) {
-                    "NPU" -> Backend.NPU(context.applicationInfo.nativeLibraryDir)
+                    "NPU" -> Backend.NPU(LiteRtNpuSupport.dispatchDir(context, LiteRtNpuSupport.status(context)))
                     "GPU" -> Backend.GPU()
                     else -> Backend.CPU()
                 },

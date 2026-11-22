@@ -40,7 +40,7 @@ import kotlin.math.min
  * Arguments:
  *   -e yolo_fixture     <device dir with manifest.json and *.rgb>
  *   -e yolo_plain_model <device path to yolo11n.tflite or yolo_world.tflite>
- *   -e yolo_npu_model   <device path to its *_Qualcomm_<SoC>_apply_plugin.tflite>
+ *   -e yolo_npu_model   <device path to its *_<Vendor>_<SoC>_apply_plugin.tflite>
  *   -e yolo_dump_dir    <optional directory name under the app's external files dir>
  *   -e yolo_soak_seconds <optional: run frames continuously for N s on the backend chosen by
  *                         -e yolo_soak_backend npu|cpu (default npu), logging latency per 10 s;
@@ -95,7 +95,9 @@ class WalkingAidNpuDetectorTest {
         val npu = LiteRtNpuSupport.status(context)
         println("YOLO_NPU status available=${npu.available} soc=${npu.socModel} reason=${npu.reason}")
         assumeTrue(npu.reason, npu.available)
-        LiteRtNpuSupport.compiledFor(aot)?.let { assumeTrue("model is for $it, phone is ${npu.socModel}", it == npu.socModel) }
+        LiteRtNpuSupport.compiledTarget(aot)?.let {
+            assumeTrue("model is for $it, phone is ${npu.modelTag}", it.vendor == npu.vendor && it.socModel == npu.socModel)
+        }
 
         val interpreter = Interpreter(File(plain), Interpreter.Options().setNumThreads(4))
         val loadStart = System.nanoTime()

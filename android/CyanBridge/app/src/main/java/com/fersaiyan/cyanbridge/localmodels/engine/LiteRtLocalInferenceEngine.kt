@@ -224,15 +224,18 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         modelPath: String,
         config: EngineLoadConfig,
     ): Pair<Engine, EngineLoadResult> {
-        val npuBackend = Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
         // A package compiled for one SoC's NPU cannot run on GPU/CPU, so report the NPU error.
-        val npuOnly = LiteRtNpuSupport.compiledFor(modelPath) != null
+        val target = LiteRtNpuSupport.compiledTarget(modelPath)
+        val npuOnly = target != null
         return runCatching {
             val npu = LiteRtNpuSupport.status(context)
             check(npu.available) { npu.reason }
-            LiteRtNpuSupport.compiledFor(modelPath)?.let { target ->
-                check(target == npu.socModel) { "model is compiled for $target, this phone is ${npu.socModel}" }
+            if (target != null) {
+                check(target.vendor == npu.vendor && target.socModel == npu.socModel) {
+                    "model is compiled for ${target.vendor.label} ${target.socModel}, this phone is ${npu.vendor?.label.orEmpty()} ${npu.socModel}"
+                }
             }
+            val npuBackend = Backend.NPU(nativeLibraryDir = LiteRtNpuSupport.dispatchDir(context, npu))
             createInitializedEngine(
                 modelPath = modelPath,
                 backend = npuBackend,

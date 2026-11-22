@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuSupport
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalGenerationSettings
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
@@ -96,7 +97,7 @@ class QuestionPromptProbeTest {
         val backendName = args.getString("qp_backend") ?: "GPU"
         // The app's engine setup: GPU main with GPU vision and MTP; NPU main with GPU vision; audio on CPU.
         val (backend, vision) = when (backendName) {
-            "NPU" -> Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir) to Backend.GPU()
+            "NPU" -> Backend.NPU(LiteRtNpuSupport.dispatchDir(context, LiteRtNpuSupport.status(context))) to Backend.GPU()
             "CPU" -> Backend.CPU(8) to Backend.CPU(8)
             else -> Backend.GPU() to Backend.GPU()
         }

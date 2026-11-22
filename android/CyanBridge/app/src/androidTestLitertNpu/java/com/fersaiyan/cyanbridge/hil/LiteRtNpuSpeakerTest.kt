@@ -33,7 +33,7 @@ import kotlin.math.sqrt
  * Arguments:
  *   -e npu_speaker_fixture   <device dir with manifest.json and *.pcm16 (fixture-npu)>
  *   -e npu_speaker_cpu_model <device path to wespeaker_resnet34_lm_2s_npu.tflite>
- *   -e npu_speaker_npu_model <device path to the *_Qualcomm_<SoC>_apply_plugin.tflite>
+ *   -e npu_speaker_npu_model <device path to the *_<Vendor>_<SoC>_apply_plugin.tflite>
  */
 @RunWith(AndroidJUnit4::class)
 class LiteRtNpuSpeakerTest {
@@ -54,8 +54,10 @@ class LiteRtNpuSpeakerTest {
         val npu = LiteRtNpuSupport.status(context)
         println("NPU_SPK status available=${npu.available} soc=${npu.socModel} reason=${npu.reason}")
         assumeTrue(npu.reason, npu.available)
-        LiteRtNpuSupport.compiledFor(model)?.let { assumeTrue("model is for $it, phone is ${npu.socModel}", it == npu.socModel) }
-        val env = Environment.create(mapOf(Environment.Option.DispatchLibraryDir to context.applicationInfo.nativeLibraryDir))
+        LiteRtNpuSupport.compiledTarget(model)?.let {
+            assumeTrue("model is for $it, phone is ${npu.modelTag}", it.vendor == npu.vendor && it.socModel == npu.socModel)
+        }
+        val env = Environment.create(mapOf(Environment.Option.DispatchLibraryDir to LiteRtNpuSupport.dispatchDir(context, npu)))
         // fp16 HTP numerics: parity vs the host fp32 run of the same graph, not bit-exact.
         run("npu", model, CompiledModel.Options(Accelerator.NPU), env, minParity = 0.99)
     }

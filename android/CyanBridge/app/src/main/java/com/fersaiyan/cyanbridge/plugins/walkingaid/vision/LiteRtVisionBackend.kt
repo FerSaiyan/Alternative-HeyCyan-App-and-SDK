@@ -194,8 +194,8 @@ class LiteRtVisionBackend(
     }
 
     /**
-     * The NPU detector is `<detector name>_Qualcomm_<SoC>.tflite` next to the plain model, compiled
-     * for this phone's SoC with the QAIRT version the app ships (docs/NPU_ON_DEVICE.md).
+     * The NPU detector is `<detector name>_<Vendor>_<SoC>.tflite` (e.g. `_Qualcomm_SM8650`, `_MediaTek_MT6989`)
+     * next to the plain model, compiled for this phone's SoC with the QAIRT version the app ships (docs/NPU_ON_DEVICE.md).
      */
     private fun openNpuDetector(modelFile: File): Pair<LiteRtNpuModel, String>? {
         if (!LiteRtNpuModelFactory.AVAILABLE) return null
@@ -204,7 +204,7 @@ class LiteRtVisionBackend(
             Log.i(TAG, "NPU detector skipped: ${npu.reason}")
             return null
         }
-        val aotName = "${modelFile.nameWithoutExtension}_Qualcomm_${npu.socModel}.tflite"
+        val aotName = "${modelFile.nameWithoutExtension}_${npu.modelTag}.tflite"
         val aotFile = locateModel(aotName) ?: run {
             Log.i(TAG, "NPU detector skipped: $aotName is not installed")
             return null

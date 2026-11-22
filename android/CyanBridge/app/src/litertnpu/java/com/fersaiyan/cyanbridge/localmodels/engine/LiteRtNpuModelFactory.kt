@@ -8,13 +8,16 @@ import com.google.ai.edge.litert.TensorBuffer
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-/** Builds with the NPU runtime AAR: LiteRT 2.x CompiledModel with the Qualcomm dispatch library. */
+/** Builds with the NPU runtime AAR: LiteRT 2.x CompiledModel with this phone's vendor dispatch library. */
 object LiteRtNpuModelFactory {
     const val AVAILABLE = true
 
     fun open(context: Context, modelPath: String): LiteRtNpuModel {
         val env = Environment.create(
-            mapOf(Environment.Option.DispatchLibraryDir to context.applicationInfo.nativeLibraryDir),
+            mapOf(
+                Environment.Option.DispatchLibraryDir to
+                    LiteRtNpuSupport.dispatchDir(context, LiteRtNpuSupport.status(context)),
+            ),
         )
         val model = try {
             CompiledModel.create(modelPath, CompiledModel.Options(Accelerator.NPU), env)

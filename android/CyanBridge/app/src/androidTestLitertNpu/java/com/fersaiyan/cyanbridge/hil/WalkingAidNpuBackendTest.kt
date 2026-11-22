@@ -25,7 +25,7 @@ import kotlin.math.min
 
 /**
  * End-to-end Walking Aid YOLO11n on the Qualcomm NPU through LiteRtVisionBackend itself
- * (NPU_EXPERIMENTAL backend, `<detector>_Qualcomm_<SoC>.tflite` next to the plain model).
+ * (NPU_EXPERIMENTAL backend, `<detector>_<Vendor>_<SoC>.tflite` next to the plain model).
  * Detections on the WalkingAidNpuDetectorTest fixture must match the host QNN HTP emulation,
  * and the CPU backend's must match host LiteRT CPU (labels included).
  *
@@ -64,7 +64,7 @@ class WalkingAidNpuBackendTest {
         val cpuBackend: LiteRtVisionBackend
         try {
             install(plain, "yolo11n_float16.tflite")
-            install(aot, "yolo11n_float16_Qualcomm_${npu.socModel}.tflite")
+            install(aot, "yolo11n_float16_${npu.modelTag}.tflite")
             npuBackend = LiteRtVisionBackend(context, LocalComputeBackend.NPU_EXPERIMENTAL)
             cpuBackend = LiteRtVisionBackend(context, LocalComputeBackend.CPU)
         } catch (error: Throwable) {
