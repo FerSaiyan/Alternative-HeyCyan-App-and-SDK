@@ -265,6 +265,8 @@ internal class GlassesMediaSyncCoordinator(
 
         if (!afterP2pTeardown) {
         Log.i("DataDownload", "Starting BLE+WiFi P2P data download using ${mode.label}...")
+        // Classic discovery slows Wi-Fi Direct: stop a pending audio-bond scan for the sync.
+        com.fersaiyan.cyanbridge.glasses.HeyCyanClassicBond.cancel("media sync started")
         Log.i("DataDownload", "Sync session flow=${mode.label}")
         com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "sync started", mapOf("flow" to mode.name, "purpose" to purpose.name, "retry" to retryCount.toString()))
         Toast.makeText(activity, "Starting sync using ${mode.label}… Please do not exit the app during transfer.", Toast.LENGTH_LONG).show()

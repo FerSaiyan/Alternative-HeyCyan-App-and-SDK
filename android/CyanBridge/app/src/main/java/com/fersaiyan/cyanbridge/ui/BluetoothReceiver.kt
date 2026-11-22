@@ -50,7 +50,9 @@ class BluetoothReceiver : BroadcastReceiver() {
                 }
             }
             BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
-
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
+                if (device != null) com.fersaiyan.cyanbridge.glasses.HeyCyanClassicBond.onBondStateChanged(device, state)
             }
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
                 if (
@@ -64,6 +66,8 @@ class BluetoothReceiver : BroadcastReceiver() {
                 // If the phone connects to the glasses over classic BT (audio),
                 // opportunistically (re)connect the BLE control channel too.
                 val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                // The pairing-time protocol check's own short link: not a glasses connection to follow.
+                if (com.fersaiyan.cyanbridge.devices.GattServiceProbe.isProbing(device?.address)) return
                 if (device != null) {
                     val saved = if (DeviceProfileStore.isMetaSelected(context)) {
                         null
@@ -84,6 +88,8 @@ class BluetoothReceiver : BroadcastReceiver() {
                 }
             }
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                if (com.fersaiyan.cyanbridge.devices.GattServiceProbe.isProbing(device?.address)) return
                 // BLE reconnect loop will handle this; just trigger an immediate attempt.
                 AutoPairManager.requestConnect(context, reason = "acl_disconnected")
             }
@@ -106,11 +112,8 @@ class BluetoothReceiver : BroadcastReceiver() {
                     } else {
                         DeviceManager.getInstance().deviceAddress
                     }
-                    if (!saved.isNullOrBlank() && saved.equals(device.address, ignoreCase = true)) {
-                        if (device.bondState != BluetoothDevice.BOND_BONDED) {
-                            BleOperateManager.getInstance().createBondBluetoothJieLi(device)
-                        }
-                    }
+                    // Classic bond for calls/media audio (HeyCyanClassicBond: vendor BR/EDR bond, public fallback, retries).
+                    com.fersaiyan.cyanbridge.glasses.HeyCyanClassicBond.onDeviceFound(context, device, saved)
                 }
             }
         }

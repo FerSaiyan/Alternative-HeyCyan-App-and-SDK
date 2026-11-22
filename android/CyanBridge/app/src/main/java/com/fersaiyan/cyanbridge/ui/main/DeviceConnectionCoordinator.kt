@@ -3,6 +3,8 @@ package com.fersaiyan.cyanbridge.ui.main
 import android.os.Build
 import android.util.Log
 import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueLivePreviewManager
@@ -179,10 +181,45 @@ internal class DeviceConnectionCoordinator(
     }
 
     fun updateConnectionStatus(connected: Boolean) {
-        com.fersaiyan.cyanbridge.diagnostics.GlassesConnectionDiagnostics.onStatus(
-            DeviceProfileStore.selectedClass(activity).name, connected,
-        )
+        val family = DeviceProfileStore.selectedClass(activity)
+        com.fersaiyan.cyanbridge.diagnostics.GlassesConnectionDiagnostics.onStatus(family.name, connected)
         glasses.selected().renderConnectionStatus(connected)
+        trackWifiChipInfo(connected, family == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.HEY_CYAN)
+    }
+
+    private var wifiChipLinkUp = false
+    private var wifiChipReadJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * One background device-info read per HeyCyan connection, so support reports name the Wi-Fi chip's hardware and
+     * firmware ([com.fersaiyan.cyanbridge.glasses.GlassesWifiChipInfo]). Glasses without the HeyCyan service drop it.
+     */
+    private fun trackWifiChipInfo(connected: Boolean, heyCyan: Boolean) {
+        if (!connected) {
+            if (wifiChipLinkUp) {
+                com.fersaiyan.cyanbridge.glasses.GlassesWifiChipInfo.clear()
+                com.fersaiyan.cyanbridge.glasses.HeyCyanClassicBond.cancel("glasses disconnected")
+            }
+            wifiChipLinkUp = false
+            wifiChipReadJob?.cancel()
+            return
+        }
+        if (wifiChipLinkUp || !heyCyan) return
+        wifiChipLinkUp = true
+        // Calls/media audio need a Classic bond, which the BLE link does not create (HeyCyanClassicBond).
+        com.fersaiyan.cyanbridge.glasses.HeyCyanClassicBond.onHeyCyanConnected(
+            activity,
+            runCatching { com.oudmon.ble.base.bluetooth.DeviceManager.getInstance().deviceAddress }.getOrNull(),
+        )
+        wifiChipReadJob = activity.lifecycleScope.launch {
+            kotlinx.coroutines.delay(WIFI_CHIP_READ_DELAY_MS)  // let the connect-time reads finish first
+            val info = com.fersaiyan.cyanbridge.glasses.GlassesDeviceInfoReader.readGlassesDeviceInfo()
+            Log.i(
+                "DeviceInfo",
+                if (info == null) "Wi-Fi chip info: no device-info reply"
+                else "Wi-Fi chip info: hw=${info.wifiHardwareVersion} fw=${info.wifiFirmwareVersion}",
+            )
+        }
     }
 
     /** Refuses a HeyCyan SDK-only [feature] when the selected family cannot serve it. */
@@ -322,5 +359,9 @@ internal class DeviceConnectionCoordinator(
                 pendingBatteryToast = false
             }
         }
+    }
+
+    private companion object {
+        const val WIFI_CHIP_READ_DELAY_MS = 4_000L
     }
 }

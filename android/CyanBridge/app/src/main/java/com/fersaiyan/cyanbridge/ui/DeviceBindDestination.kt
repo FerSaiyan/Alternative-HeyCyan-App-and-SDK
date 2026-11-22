@@ -244,6 +244,76 @@ class DeviceBindDestination : NavScreen() {
     private fun connect(connection: DeviceBindConnection) {
         val device = scannedDevice(connection.device) ?: return
         stopScan()
+        // The advert already names the chosen family's service: nothing to check (no delay for those glasses).
+        val advertisedFamily = com.fersaiyan.cyanbridge.shared.devices.BleDeviceClassifier.classifyByGattServices(
+            device.serviceUuids.map { it.uuid.toString() },
+        )
+        if (connection.deviceClass in DeviceBindViewModel.CONSUMER_PROTOCOLS &&
+            advertisedFamily != connection.deviceClass && !protocolCheckRunning
+        ) {
+            checkProtocolThenConnect(connection, device)
+            return
+        }
+        connectNow(connection)
+    }
+
+    private var protocolCheckRunning = false
+
+    /**
+     * Before a consumer protocol (HeyCyan / EyeVue / TuneBuds / MoYoung) connects: a short BLE connection lists the
+     * glasses' GATT services. When they belong to another family, or to none CyanBridge knows, the user can switch,
+     * keep the choice, or cancel. A failed check connects as chosen (pairing is never blocked by it). Skipped when the
+     * advertisement already carries the chosen family's service.
+     */
+    private fun checkProtocolThenConnect(connection: DeviceBindConnection, device: ScannedDevice) {
+        protocolCheckRunning = true
+        Toast.makeText(this, "Checking the glasses' protocol…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val result = try {
+                com.fersaiyan.cyanbridge.devices.GattServiceProbe.probe(this@DeviceBindDestination, device.macAddress)
+            } finally {
+                protocolCheckRunning = false
+            }
+            if (isFinishing || isDestroyed) return@launch
+            val chosen = connection.deviceClass
+            val detected = result?.detected
+            com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
+                com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.BLE,
+                "pairing protocol check",
+                mapOf(
+                    "chosen" to chosen.name,
+                    "detected" to (detected?.name ?: if (result == null) "check failed" else "none"),
+                    "services" to (result?.services?.joinToString(",") ?: ""),
+                ),
+            )
+            when {
+                result == null || detected == chosen -> connectNow(connection)
+                detected != null -> ExpressiveDialogs.alert(
+                    activity = activity,
+                    title = "These glasses use the ${detected.displayName()} protocol",
+                    message = "You chose ${chosen.displayName()}, but the glasses' Bluetooth services are " +
+                        "${detected.displayName()}'s, so ${chosen.displayName()} commands would not reach them.",
+                    confirm = ExpressiveDialogs.Action("Connect as ${detected.displayName()}") {
+                        connectNow(connection.copy(deviceClass = detected))
+                    },
+                    neutral = ExpressiveDialogs.Action("Keep ${chosen.displayName()}") { connectNow(connection) },
+                    dismiss = ExpressiveDialogs.Action("Cancel"),
+                )
+                else -> ExpressiveDialogs.alert(
+                    activity = activity,
+                    title = "CyanBridge does not recognise these glasses",
+                    message = "Their Bluetooth services match none of the glasses CyanBridge supports (HeyCyan, " +
+                        "EyeVue, TuneBuds, MoYoung, MYVU, MemoMind), so ${chosen.displayName()} commands will " +
+                        "most likely be ignored and media sync will not start.",
+                    confirm = ExpressiveDialogs.Action("Connect anyway") { connectNow(connection) },
+                    dismiss = ExpressiveDialogs.Action("Cancel"),
+                )
+            }
+        }
+    }
+
+    private fun connectNow(connection: DeviceBindConnection) {
+        val device = scannedDevice(connection.device) ?: return
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
         val deviceClass = connection.deviceClass
         if (!MentraSdkModel.usesMentraSdk(deviceClass)) MentraLiveManager.releaseIfStarted("selected $deviceClass")

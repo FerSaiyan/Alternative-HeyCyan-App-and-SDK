@@ -116,6 +116,7 @@ internal class OtaCoordinator(
 
             val wifiHw = response.wifiHardwareVersion ?: ""
             val wifiFw = response.wifiFirmwareVersion ?: ""
+            com.fersaiyan.cyanbridge.glasses.GlassesWifiChipInfo.record(wifiHw, wifiFw)
             val btFw = response.firmwareVersion ?: ""
             val hw = response.hardwareVersion ?: ""
 

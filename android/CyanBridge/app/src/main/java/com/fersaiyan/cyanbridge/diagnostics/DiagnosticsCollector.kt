@@ -129,6 +129,16 @@ object DiagnosticsCollector {
         val app = context.applicationContext as? MyApplication
         app?.hardwareVersion?.takeIf { it.isNotBlank() }?.let { put("hardware_version", it) }
         app?.firmwareVersion?.takeIf { it.isNotBlank() }?.let { put("firmware_version", it) }
+        com.fersaiyan.cyanbridge.glasses.GlassesWifiChipInfo.hardwareVersion?.let { put("wifi_hardware_version", it) }
+        com.fersaiyan.cyanbridge.glasses.GlassesWifiChipInfo.firmwareVersion?.let { put("wifi_firmware_version", it) }
+        profile?.takeIf { it.selectedClass == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.HEY_CYAN }?.let {
+            com.fersaiyan.cyanbridge.glasses.HeyCyanClassicBond.isBonded(context, it.macAddress)
+                ?.let { bonded -> put("classic_bonded", bonded.toString()) }
+        }
+        com.fersaiyan.cyanbridge.devices.GattServiceProbe.last?.let { probe ->
+            put("pairing_gatt_detected", probe.detected?.name ?: "none")
+            put("pairing_gatt_services", probe.services.joinToString(","))
+        }
         put("connection", GlassesConnectionDiagnostics.describe(context))
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
         put("bluetooth_on", (adapter?.isEnabled == true).toString())

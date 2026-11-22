@@ -23,6 +23,7 @@ internal object GlassesDeviceInfoReader {
             suspendCancellableCoroutine { cont ->
                 try {
                     LargeDataHandler.getInstance().syncDeviceInfo { _, response ->
+                        response?.let { GlassesWifiChipInfo.record(it.wifiHardwareVersion, it.wifiFirmwareVersion) }
                         if (cont.isActive) {
                             cont.resume(response) {}
                         }

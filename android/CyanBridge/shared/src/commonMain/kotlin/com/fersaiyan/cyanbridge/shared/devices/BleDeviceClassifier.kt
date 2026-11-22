@@ -15,6 +15,27 @@ object BleDeviceClassifier {
     private const val MEMOMIND_GM_SERVICE_UUID = "fb349b5f-8000-0080-0010-002020000000"
     private const val MOYOUNG_SERVICE_UUID = "0000fea8-0000-1000-8000-00805f9b34fb"
     private val TUNEBUDS_COMPANY_IDS = setOf(0x475A, 0x455A, 0x535A, 0x4D5A)
+    /** The HeyCyan SDK's own GATT service (notify de5bf729, write de5bf72a): every HeyCyan command needs it. */
+    const val HEY_CYAN_GATT_SERVICE_UUID = "de5bf728-d711-4e47-af26-65e3012a5dc7"
+
+    /**
+     * The family whose GATT service the connected glasses expose (after service discovery), or null when none of the
+     * supported families' services is there. HeyCyan first: its service is what the HeyCyan SDK's commands need (the
+     * JieLi RCSP service ae00 is shared by HeyCyan and EyeVue chips, so it identifies neither). Pairing uses this to
+     * catch a family chosen by name for glasses that speak another protocol (logs mwrbx20e, W60-7A8, W AI 4).
+     */
+    fun classifyByGattServices(serviceUuids: Collection<String>): DeviceClass? {
+        val uuids = serviceUuids.map(::normalizeUuid).toSet()
+        return when {
+            HEY_CYAN_GATT_SERVICE_UUID in uuids -> DeviceClass.HEY_CYAN
+            EYEVUE_SERVICE_UUID in uuids -> DeviceClass.EYEVUE
+            TUNEBUDS_BLE_SERVICE_UUID in uuids -> DeviceClass.TUNEBUDS
+            MYVU_GATT_SERVICE_UUID in uuids || MYVU_ADVERTISED_SERVICE_UUID in uuids -> DeviceClass.MEIZU_MYVU
+            MEMOMIND_GM_SERVICE_UUID in uuids -> DeviceClass.MEMOMIND
+            MOYOUNG_SERVICE_UUID in uuids -> DeviceClass.MOYOUNG_W620
+            else -> null
+        }
+    }
 
     fun normalizeUuid(uuid: String): String {
         val value = uuid.trim().lowercase()
