@@ -25,7 +25,7 @@ Local inference does not require a CyanBridge subscription.
 
 ## What you can do
 
-- Run LLMs locally on Android with **LiteRT-LM** and **llama.cpp**.
+- Run LLMs locally on Android and iOS with **LiteRT-LM** and **llama.cpp**.
 - Download curated Gemma and Qwen models or import your own `.gguf`, `.litertlm`, and `.task` models.
 - Use **Gemini Live** with real-time voice and supported glasses-camera context.
 - Connect CyanBridge to an **OpenAI-compatible server** you control.
@@ -38,7 +38,7 @@ The Android app in [`android/CyanBridge/`](android/CyanBridge/) is the main prod
 
 ## Local AI on your phone
 
-CyanBridge can run inference directly on Android.
+CyanBridge can run inference directly on Android and iOS.
 
 | Runtime | Model format | Use |
 | --- | --- | --- |
@@ -46,13 +46,13 @@ CyanBridge can run inference directly on Android.
 | llama.cpp | `.gguf` | Qwen and other compatible GGUF language models |
 | OpenAI-compatible endpoint | HTTP API | Ollama, llama.cpp server, Model Studio, or another server you control |
 
-Local models support configurable context size, sampling settings, CPU/GPU execution, GPU layer offload, model-specific prompt templates, and streaming generation. CyanBridge can fall back to CPU when a requested GPU configuration cannot start.
+Local models support configurable context size, sampling settings, CPU, GPU, and experimental NPU execution, GPU layer offload, model-specific prompt templates, and streaming generation. CyanBridge can fall back to CPU when a requested GPU configuration cannot start.
 
 See [Local Models](android/CyanBridge/docs/local-models.md) for formats, model setup, runtime options, and import instructions.
 
 ## Free Gemini Live
 
-Free CyanBridge accounts can use **five Gemini Live sessions per UTC day**, with each session lasting up to **five minutes**.
+Free CyanBridge accounts get **25 minutes of Gemini Live per UTC day**. The app starts a fresh session about every five minutes, so a short conversation only uses the time it takes.
 
 Gemini Live supports real-time voice conversations and can receive fresh visual context from compatible glasses integrations. CyanBridge also has Economy and Private Live modes for paid accounts.
 
@@ -65,11 +65,16 @@ CyanBridge keeps device-specific protocols separate. Hardware, firmware, permiss
 | Glasses / platform | Status | CyanBridge work |
 | --- | --- | --- |
 | **HeyCyan-compatible glasses** | Supported workflow | BLE connection, device controls, media transfer, image questions, and glasses-aware AI workflows |
+| **Mentra Live** | Supported workflow | Photo and video capture, AI photo questions, gallery sync over the glasses hotspot, live preview and streaming, microphone and speaker audio, firmware updates |
+| **Even Realities G1 / G2** | Supported workflow | Display glasses through the Mentra Bluetooth SDK: assistant answers, text and notifications on the display, microphone audio, head-up input (G1) and touch input (G2) |
+| **NIMO** | Supported workflow | Display glasses through the Mentra Bluetooth SDK: assistant answers, text and notifications, microphone audio, tap and head-up input |
+| **Xingyi AR99** | Supported workflow | Display glasses through the Mentra Bluetooth SDK: assistant answers, text and notifications, microphone audio |
+| **TuneBuds** | Supported workflow | Bluetooth connection, live video preview, and media sync over Wi-Fi Direct |
 | **Ray-Ban Meta / Meta Ray-Ban** | Experimental | Meta DAT registration, device sessions, camera streams, photo capture, capability checks, and active hardware testing |
 | **EyeVue** | Experimental | Android connection, media, capture, and device-control work |
 | **Meizu MYVU / Star Air** | Experimental | Native BLE/RFCOMM/display integration based on hardware-tested protocol work |
 | **MoYoung / W620** | Experimental | Device-specific Android integration |
-| **TuneBuds** | Research | Dedicated protocol and media/capture research |
+| **Mentra Display** | Research | Display glasses through the Mentra Bluetooth SDK; its button and head events do not reach the app yet |
 | **MemoMind / XGIMI** | Research | Transport, device state, cards, notifications, and display-oriented protocol research |
 
 Check the [live compatibility matrix](https://cyanbridgelabs.com/smart-glasses/compatibility) for the public device-by-device status.
@@ -187,7 +192,7 @@ If CyanBridge is useful to you, a star helps other smart-glasses developers find
 
 Device testing is especially useful.
 
-If you own HeyCyan, EyeVue, TuneBuds, MoYoung, MYVU, Ray-Ban Meta, MemoMind, or another pair of AI glasses, reports with the exact model, firmware version, Android version, logs, and reproducible steps can help turn experimental integrations into reliable ones.
+If you own HeyCyan, Mentra, Even Realities, NIMO, EyeVue, TuneBuds, MoYoung, MYVU, Ray-Ban Meta, MemoMind, or another pair of AI glasses, reports with the exact model, firmware version, Android or iOS version, logs, and reproducible steps can help turn experimental integrations into reliable ones.
 
 Code contributions around device protocols, local inference, Android/iOS integration, tests, accessibility, and documentation are welcome.
 
