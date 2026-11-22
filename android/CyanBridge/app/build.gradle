@@ -378,8 +378,10 @@ dependencies {
         def npuAar = rootProject.file(localLiteRtNpuAarPath)
         if (!npuAar.isFile()) throw new GradleException("Missing LiteRT NPU AAR: ${npuAar.absolutePath}")
         // The dispatch library must match LiteRT-LM's LiteRT (0.18 pins LiteRT 2.3.0 / QAIRT 2.50).
-        if (!npuAar.name.startsWith("litert-npu-qualcomm-") || liteRtLmVersion != "0.18.0") {
-            throw new GradleException("NPU AAR ${npuAar.name} requires a litert-npu-qualcomm-* AAR and -PliteRtLmVersion=0.18.0")
+        // litert-npu-qualcomm-*: Qualcomm only; litert-npu-all-*: Qualcomm + MediaTek + Google Tensor + Samsung
+        // dispatch (tools/litert-npu/package_npu_aar.py --extra-dispatch-aar/--samsung-dispatch).
+        if (!(npuAar.name.startsWith("litert-npu-qualcomm-") || npuAar.name.startsWith("litert-npu-all-")) || liteRtLmVersion != "0.18.0") {
+            throw new GradleException("NPU AAR ${npuAar.name} requires a litert-npu-qualcomm-*/litert-npu-all-* AAR and -PliteRtLmVersion=0.18.0")
         }
         implementation files(npuAar)
     }

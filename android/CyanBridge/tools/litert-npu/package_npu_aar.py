@@ -14,6 +14,12 @@ Contents, all from a single QAIRT version (see docs/NPU_ON_DEVICE.md):
 - A manifest declaring libcdsprpc.so (FastRPC to the DSP); apps targeting API 31+
   cannot open it otherwise.
 
+Multi-vendor (2026-11-22): --extra-dispatch-aar adds Google's MediaTek / Google Tensor dispatch libraries,
+--samsung-dispatch our self-built Exynos one (LiteRT 2.3.0 source, device-verified on Exynos 2600), and the
+manifest declares every vendor's system libraries. --skel-delivery download leaves the large Hexagon skels out of
+the AAR (the app downloads only its phone's skel, sha256-pinned, and points ADSP_LIBRARY_PATH at it; qnn_manager
+appends its own directory to an existing ADSP_LIBRARY_PATH) and writes them to <output>.skels/ for the server.
+
 Qualcomm binaries are not committed; this script rebuilds the AAR from the
 downloaded SDK. --jit adds the compiler plugin and libQnnHtpPrepare.so (~86 MB)
 for on-device compilation; AOT-compiled models do not need them.
@@ -46,16 +52,29 @@ VENDOR_LIBRARIES = {"libcdsprpc.so"}
 # Classes that pull in Guava, coroutines-guava, lifecycle and Play AI delivery.
 EXCLUDED_CLASSES = re.compile(r"com/google/ai/edge/litert/(ModelProvider|ModelSelector|AiPackModelProvider|deployment/)")
 # Hexagon architectures by Snapdragon SoC (Build.SOC_MODEL).
-HEXAGON_BY_SOC = {"SM8450": "v69", "SM8550": "v73", "SM8650": "v75", "SM8750": "v79", "SM8850": "v81"}
-MANIFEST = """<?xml version="1.0" encoding="utf-8"?>
+HEXAGON_BY_SOC = {"SM8350": "v68", "SA8295": "v68", "SM8450": "v69", "SM8475": "v69", "SM8550": "v73", "SA8255": "v73",
+                  "SM8650": "v75", "SM8750": "v79", "SM8850": "v81"}
+# Exynos dispatch reaches the phone's ENN runtime (public.libraries.txt on Exynos 2600).
+SAMSUNG_NATIVE_LIBRARIES = ["libenn_public_api_cpp.so"]
+MANIFEST_TEMPLATE = """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.fersaiyan.cyanbridge.litert.npu">
     <uses-sdk android:minSdkVersion="24" />
     <application>
-        <uses-native-library android:name="libcdsprpc.so" android:required="false" />
-    </application>
+{libraries}    </application>
 </manifest>
 """
+
+
+def manifest_for(native_libraries):
+    lines = "".join(f'        <uses-native-library android:name="{name}" android:required="false" />\n'
+                    for name in native_libraries)
+    return MANIFEST_TEMPLATE.format(libraries=lines)
+
+
+def declared_native_libraries(aar):
+    """<uses-native-library> names in a vendor runtime AAR's (plain-text) AndroidManifest.xml."""
+    return re.findall(r'uses-native-library[^>]*android:name="([^"]+)"', read_member(aar, "AndroidManifest.xml").decode())
 PROGUARD = """# JNI creates and calls these classes by name.
 -keep class com.google.ai.edge.litert.** { *; }
 """
@@ -101,6 +120,12 @@ def main():
     parser.add_argument("--hexagon", action="append", required=True, choices=sorted(set(HEXAGON_BY_SOC.values())),
                         help="DSP architecture to include; repeat per architecture (SM8650 = v75)")
     parser.add_argument("--jit", action="store_true", help="Also ship the compiler plugin and libQnnHtpPrepare.so")
+    parser.add_argument("--extra-dispatch-aar", type=Path, action="append", default=[],
+                        help="litert-npu-runtime-{mediatek,google-tensor}:<same version>; repeatable (dispatch library only)")
+    parser.add_argument("--samsung-dispatch", type=Path, help="self-built libLiteRtDispatch_Samsung.so")
+    parser.add_argument("--samsung-dispatch-sha256", help="expected sha256 of --samsung-dispatch")
+    parser.add_argument("--skel-delivery", choices=("bundled", "download"), default="bundled",
+                        help="download: leave the Hexagon skels out of the AAR and write them to <output>.skels/")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--readelf", default="readelf")
     args = parser.parse_args()
@@ -111,7 +136,14 @@ def main():
     output = args.output.resolve()
     assert not output.exists(), "Choose a new output path"
 
-    allowed = PLATFORM_LIBRARIES | VENDOR_LIBRARIES
+    native_libraries = list(VENDOR_LIBRARIES)
+    for extra in args.extra_dispatch_aar:
+        native_libraries += [n for n in declared_native_libraries(extra) if n not in native_libraries]
+    if args.samsung_dispatch:
+        assert args.samsung_dispatch_sha256 and sha256(args.samsung_dispatch) == args.samsung_dispatch_sha256, \
+            "--samsung-dispatch does not match --samsung-dispatch-sha256"
+        native_libraries += [n for n in SAMSUNG_NATIVE_LIBRARIES if n not in native_libraries]
+    allowed = PLATFORM_LIBRARIES | set(native_libraries)
     natives = {}  # (abi, name) -> bytes
     for abi in ("arm64-v8a", "x86_64"):
         natives[abi, "libLiteRt.so"] = read_member(args.litert_aar, f"jni/{abi}/libLiteRt.so")
@@ -119,12 +151,21 @@ def main():
     plugin = ["libLiteRtCompilerPlugin_Qualcomm.so"] if args.jit else []
     for name in ["libLiteRtDispatch_Qualcomm.so", *plugin]:
         natives["arm64-v8a", name] = read_member(args.npu_runtime_aar, f"jni/arm64-v8a/{name}")
+    for extra in args.extra_dispatch_aar:
+        with zipfile.ZipFile(extra) as archive:
+            names = [m for m in archive.namelist() if re.fullmatch(r"jni/arm64-v8a/libLiteRtDispatch_\w+\.so", m)]
+        assert len(names) == 1, f"{extra}: expected exactly one arm64 dispatch library, found {names}"
+        natives["arm64-v8a", Path(names[0]).name] = read_member(extra, names[0])
     android_lib = args.qairt_root / "lib/aarch64-android"
     qnn = ["libQnnHtp.so", "libQnnSystem.so", *(["libQnnHtpPrepare.so"] if args.jit else [])]
     qnn += [f"libQnnHtp{arch.upper()}Stub.so" for arch in args.hexagon]
     files = {("arm64-v8a", name): android_lib / name for name in qnn}
-    files |= {("hexagon", f"libQnnHtp{arch.upper()}Skel.so"): args.qairt_root / f"lib/hexagon-{arch}/unsigned/libQnnHtp{arch.upper()}Skel.so"
-              for arch in args.hexagon}
+    skels = {("hexagon", f"libQnnHtp{arch.upper()}Skel.so"): args.qairt_root / f"lib/hexagon-{arch}/unsigned/libQnnHtp{arch.upper()}Skel.so"
+             for arch in args.hexagon}
+    if args.skel_delivery == "bundled":
+        files |= skels
+    if args.samsung_dispatch:
+        files["arm64-v8a", "libLiteRtDispatch_Samsung.so"] = args.samsung_dispatch
 
     staging = output.with_suffix(".staging")
     staging.mkdir(parents=True, exist_ok=False)
@@ -146,7 +187,7 @@ def main():
             for item in kept:
                 target.writestr(item, source.read(item.filename))
         with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as aar:
-            aar.writestr("AndroidManifest.xml", MANIFEST)
+            aar.writestr("AndroidManifest.xml", manifest_for(native_libraries))
             aar.writestr("classes.jar", classes.getvalue())
             aar.writestr("R.txt", "")
             aar.writestr("proguard.txt", PROGUARD)
@@ -158,17 +199,29 @@ def main():
         for path in sorted(staging.rglob("*"), reverse=True):
             path.unlink() if path.is_file() else path.rmdir()
         staging.rmdir()
+    skel_out = {}
+    if args.skel_delivery == "download":
+        skel_dir = output.with_suffix(".skels")
+        skel_dir.mkdir(parents=True, exist_ok=False)
+        for (abi, name), path in sorted(skels.items()):
+            check_elf(args, abi, path, allowed)
+            (skel_dir / name).write_bytes(path.read_bytes())
+            skel_out[name] = {"sha256": sha256(skel_dir / name), "bytes": (skel_dir / name).stat().st_size}
     manifest = {
         "qairt": found,
         "hexagon": args.hexagon,
         "jit": args.jit,
+        "skel_delivery": args.skel_delivery,
+        "downloaded_skels": skel_out,
+        "native_libraries": native_libraries,
         "classes_kept": len(kept),
         "inputs": {str(p): sha256(p) for p in [args.litert_aar, args.litert_api_aar, args.npu_runtime_aar]},
         "natives": checks,
         "output": {str(output): sha256(output)},
     }
     output.with_suffix(".manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    print(json.dumps({k: manifest[k] for k in ("qairt", "hexagon", "jit", "classes_kept", "output")}, indent=2))
+    print(json.dumps({k: manifest[k] for k in ("qairt", "hexagon", "jit", "skel_delivery", "downloaded_skels",
+                                               "native_libraries", "classes_kept", "output")}, indent=2))
 
 
 if __name__ == "__main__":
