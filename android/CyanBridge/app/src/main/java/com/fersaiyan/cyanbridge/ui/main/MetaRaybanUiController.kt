@@ -344,6 +344,8 @@ internal class MetaRaybanUiController(
                 title = "Complete Meta glasses setup",
                 message = "$operation: $detail\n\nOpen Meta setup for the next step: Android permissions, Meta AI connection, or glasses camera authorization.",
                 confirm = ExpressiveDialogs.Action("Open Meta setup") { activity.startActivity(AppRoute.META_PAIRING.intent(activity)) },
+                // Open Meta setup offers Request access / Install Meta AI for the step that failed; logs from here too.
+                neutral = ExpressiveDialogs.Action("Send logs") { showMetaDiagnostics() },
                 dismiss = ExpressiveDialogs.Action("Close"),
             )
         }
@@ -416,6 +418,11 @@ internal class MetaRaybanUiController(
                     canCapturePhoto = streamState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.StreamState.STREAMING,
                     hasCapturedPhoto = manager.lastCapturedPhoto.value != null,
                     registrationPath = manager.registrationPath.value,
+                    inviteMode = com.fersaiyan.cyanbridge.shared.glasses.metaInviteMode(
+                        com.fersaiyan.cyanbridge.shared.glasses.PrefsMetaRegistrationStore().choice,
+                        manager.registrationPath.value,
+                        manager.metaAccessState.value == com.fersaiyan.cyanbridge.devices.metarayban.MetaAccessState.NEEDS_META_INVITE,
+                    ),
                 ),
             )
         }

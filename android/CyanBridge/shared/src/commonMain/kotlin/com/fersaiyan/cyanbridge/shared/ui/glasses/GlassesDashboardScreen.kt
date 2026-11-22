@@ -106,6 +106,7 @@ import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
 import com.fersaiyan.cyanbridge.shared.glasses.META_BETA_ACCESS_URL
 import androidx.compose.ui.platform.LocalUriHandler
 import com.fersaiyan.cyanbridge.shared.glasses.MetaPairingIssueAction
+import com.fersaiyan.cyanbridge.shared.glasses.MetaRegistrationPhase
 import com.fersaiyan.cyanbridge.shared.glasses.resolveMetaPairingIssue
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
 import com.fersaiyan.cyanbridge.shared.glasses.MemoMindPanelCommand
@@ -1187,45 +1188,26 @@ private fun MetaRaybanControls(
         metaAiInstalled = state.metaAiInstalled,
         lastError = state.lastError,
         setupGuidance = state.setupGuidance,
+        inviteMode = state.inviteMode,
+        // Android reports registration through canUnregister; iOS through registrationPhase.
+        registered = state.registrationPhase == MetaRegistrationPhase.REGISTERED || state.canUnregister,
     )
     var showPairingIssue by remember(state.lastError) { mutableStateOf(pairingIssue != null) }
+    val uriHandler = LocalUriHandler.current
     if (pairingIssue != null && showPairingIssue) {
-        AlertDialog(
-            onDismissRequest = { showPairingIssue = false },
-            icon = { WarningDialogIcon() },
-            title = { Text(pairingIssue.title) },
-            text = { Text(pairingIssue.message) },
-            confirmButton = {
-                TextButton(
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    onClick = {
-                        showPairingIssue = false
-                        onAction(
-                            when (pairingIssue.action) {
-                                MetaPairingIssueAction.INSTALL_META_AI -> GlassesDashboardAction.MetaOpenMetaAi
-                                MetaPairingIssueAction.OPEN_META_AI -> GlassesDashboardAction.MetaOpenMetaAi
-                                MetaPairingIssueAction.OPEN_PAIRING -> GlassesDashboardAction.MetaOpenPairing
-                                MetaPairingIssueAction.REQUEST_ACCESS -> GlassesDashboardAction.MetaOpenPairing
-                            },
-                        )
-                    },
-                    shapes = ButtonDefaults.shapes(),
-                ) {
-                    Text(pairingIssue.primaryLabel)
+        MetaPairingIssueDialog(
+            issue = pairingIssue,
+            onAction = { action ->
+                when (action) {
+                    MetaPairingIssueAction.INSTALL_META_AI,
+                    MetaPairingIssueAction.OPEN_META_AI -> onAction(GlassesDashboardAction.MetaOpenMetaAi)
+                    MetaPairingIssueAction.OPEN_PAIRING -> onAction(GlassesDashboardAction.MetaOpenPairing)
+                    // The invite form on the website (it used to open the pairing screen instead).
+                    MetaPairingIssueAction.REQUEST_ACCESS -> runCatching { uriHandler.openUri(META_BETA_ACCESS_URL) }
                 }
             },
-            dismissButton = {
-                TextButton(
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    onClick = {
-                        showPairingIssue = false
-                        onAction(GlassesDashboardAction.MetaSendDiagnostics)
-                    },
-                    shapes = ButtonDefaults.shapes(),
-                ) {
-                    Text("Details")
-                }
-            },
+            onSendLogs = { onAction(GlassesDashboardAction.MetaSendDiagnostics) },
+            onDismiss = { showPairingIssue = false },
         )
     }
 

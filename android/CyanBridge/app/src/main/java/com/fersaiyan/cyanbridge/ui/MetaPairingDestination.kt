@@ -95,6 +95,8 @@ data class MetaPairingScreenState(
     val appIdConfigured: Boolean = true,
     /** No bonded Bluetooth device advertises the Meta glasses service (DAT's AVAILABLE check). */
     val noMetaGlassesBonded: Boolean = false,
+    /** The email-invite path: failures also offer Request access ([metaInviteMode]). */
+    val inviteMode: Boolean = false,
 ) {
     val androidPermissionsGranted: Boolean
         get() = androidCameraGranted && nearbyDevicesGranted
@@ -307,6 +309,11 @@ class MetaPairingDestination : NavScreen() {
             lastError = androidPermissionError ?: manager.lastError.value,
             metaAiInstalled = manager.isMetaAiInstalled(),
             metaAccessState = manager.metaAccessState.value,
+            inviteMode = com.fersaiyan.cyanbridge.shared.glasses.metaInviteMode(
+                com.fersaiyan.cyanbridge.shared.glasses.PrefsMetaRegistrationStore().choice,
+                manager.registrationPath.value,
+                manager.metaAccessState.value == MetaAccessState.NEEDS_META_INVITE,
+            ),
             debugMockEnabled = manager.debugMockEnabled.value,
             deviceConnected = manager.isCameraReady(),
             glassesCameraGranted = manager.cameraPermissionGranted.value,
@@ -525,6 +532,8 @@ fun MetaPairingScreen(
         lastError = inferredError,
         setupGuidance = state.guidance,
         metaAccessRequired = state.metaAccessState == MetaAccessState.NEEDS_META_INVITE,
+        inviteMode = state.inviteMode,
+        registered = state.isRegistered,
     )
     var showPairingIssue by androidx.compose.runtime.remember(inferredError, state.guidance, state.metaAiInstalled) {
         mutableStateOf(pairingIssue != null)
@@ -558,45 +567,21 @@ fun MetaPairingScreen(
             },
         )
     } else if (pairingIssue != null && showPairingIssue) {
-        AlertDialog(
-            onDismissRequest = { showPairingIssue = false },
+        // Every way out: the issue's action, its next steps (Open Meta AI, Try again, Install Meta AI, Request access
+        // on the website in invite mode), Send logs (not for "Meta AI is required", a setup step) and Close.
+        com.fersaiyan.cyanbridge.shared.ui.glasses.MetaPairingIssueDialog(
+            issue = pairingIssue,
+            onAction = { action ->
+                when (action) {
+                    MetaPairingIssueAction.INSTALL_META_AI -> onOpenMetaAi()
+                    MetaPairingIssueAction.OPEN_PAIRING -> onRetryPairing()
+                    MetaPairingIssueAction.OPEN_META_AI -> onOpenMetaAi()
+                    MetaPairingIssueAction.REQUEST_ACCESS -> onRequestAccess()
+                }
+            },
+            onSendLogs = onSendDiagnostics,
+            onDismiss = { showPairingIssue = false },
             icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
-            title = { Text(pairingIssue.title) },
-            text = { Text(pairingIssue.message) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showPairingIssue = false
-                        when (pairingIssue.action) {
-                            MetaPairingIssueAction.INSTALL_META_AI -> onOpenMetaAi()
-                            MetaPairingIssueAction.OPEN_PAIRING -> onRetryPairing()
-                            MetaPairingIssueAction.OPEN_META_AI -> onOpenMetaAi()
-                            MetaPairingIssueAction.REQUEST_ACCESS -> onRequestAccess()
-                        }
-                    },
-                    shapes = ButtonDefaults.shapes(),
-                ) {
-                    Text(pairingIssue.primaryLabel)
-                }
-            },
-            // "Meta AI is required" is a setup step, not a failure: offering logs there produced
-            // reports with nothing to diagnose (e.g. log_mwqrass7_5bb17d7f from a Play pre-launch
-            // robot). Settings -> Send logs stays available.
-            dismissButton = if (pairingIssue.action == MetaPairingIssueAction.INSTALL_META_AI) {
-                null
-            } else {
-                {
-                    TextButton(
-                        onClick = {
-                            showPairingIssue = false
-                            onSendDiagnostics()
-                        },
-                        shapes = ButtonDefaults.shapes(),
-                    ) {
-                        Text("Send logs")
-                    }
-                }
-            },
         )
     } else if (pairingIssue == null) {
         val prompt = nextMetaSetupPrompt(state)

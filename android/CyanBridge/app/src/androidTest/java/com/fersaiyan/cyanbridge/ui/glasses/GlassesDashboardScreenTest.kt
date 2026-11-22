@@ -9,6 +9,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -263,8 +265,28 @@ class GlassesDashboardScreenTest {
         }
 
         composeRule.onNodeWithText("Meta glasses are not ready").assertIsDisplayed()
-        composeRule.onNodeWithText("Details").performClick()
+        composeRule.onNode(hasText("Send logs") and hasAnyAncestor(isDialog())).performClick()
         composeRule.runOnIdle { assertEquals(GlassesDashboardAction.MetaSendDiagnostics, action) }
+    }
+
+    @Test
+    fun metaErrorInInviteModeAlsoOffersTheInviteAndMetaAi() {
+        composeRule.setContent {
+            CyanBridgeTheme {
+                GlassesDashboardScreen(
+                    state = GlassesDashboardUiState(
+                        showMetaRaybanControls = true,
+                        metaRayban = MetaRaybanUiState(lastError = "startSession: registration required", inviteMode = true),
+                    ),
+                    onAction = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Meta glasses are not ready").assertIsDisplayed()
+        for (label in listOf("Try again", "Open Meta AI", "Request access", "Send logs", "Close")) {
+            composeRule.onNode(hasText(label) and hasAnyAncestor(isDialog())).assertIsDisplayed()
+        }
     }
 
     @Test

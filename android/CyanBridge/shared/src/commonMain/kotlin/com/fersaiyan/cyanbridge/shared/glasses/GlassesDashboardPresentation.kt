@@ -178,6 +178,8 @@ data class MetaRaybanUiState(
     val showSetupChoice: Boolean = false,
     val registrationPhase: MetaRegistrationPhase = MetaRegistrationPhase.NOT_REGISTERED,
     val appIdConfigured: Boolean = true,
+    /** The email-invite path (CyanBridge's Meta release channel): failures then also offer Request access. */
+    val inviteMode: Boolean = false,
 )
 
 data class MeizuMyvuUiState(

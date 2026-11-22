@@ -7,18 +7,76 @@ enum class MetaPairingIssueAction {
     REQUEST_ACCESS,
 }
 
+/**
+ * The email-invite path (CyanBridge's Meta release channel): chosen on the setup screen, recorded by Meta on an
+ * earlier registration, or asked for by Meta AI ([needsInvite]).
+ */
+fun metaInviteMode(choice: MetaSetupChoice, path: MetaRegistrationPath, needsInvite: Boolean): Boolean =
+    needsInvite || choice == MetaSetupChoice.EMAIL_INVITE || path == MetaRegistrationPath.RELEASE_CHANNEL
+
+/** Button text for an action offered next to the issue's main one. */
+fun MetaPairingIssueAction.label(): String = when (this) {
+    MetaPairingIssueAction.INSTALL_META_AI -> "Install Meta AI"
+    MetaPairingIssueAction.OPEN_PAIRING -> "Try again"
+    MetaPairingIssueAction.OPEN_META_AI -> "Open Meta AI"
+    MetaPairingIssueAction.REQUEST_ACCESS -> "Request access"
+}
+
 data class MetaPairingIssue(
     val title: String,
     val message: String,
     val primaryLabel: String,
     val action: MetaPairingIssueAction,
+    /** Further ways out, shown under the main action (never repeats it). */
+    val secondaryActions: List<MetaPairingIssueAction> = emptyList(),
+    /**
+     * Whether the dialog offers Send logs. Off only for "Meta AI is required": a setup step, not a failure; logs
+     * offered there produced reports with nothing to diagnose (log_mwqrass7_5bb17d7f, a Play pre-launch robot).
+     */
+    val offerLogs: Boolean = true,
 )
 
+/**
+ * [inviteMode]: the user is on (or was sent to) the email-invite path, i.e. CyanBridge's Meta release channel. While
+ * not [registered] there, every failure also offers Request access (the invite form on the website): a missing or
+ * pending invite shows up as many different DAT errors.
+ */
 fun resolveMetaPairingIssue(
     metaAiInstalled: Boolean,
     lastError: String?,
     setupGuidance: String?,
     metaAccessRequired: Boolean = false,
+    inviteMode: Boolean = false,
+    registered: Boolean = false,
+): MetaPairingIssue? =
+    baseMetaPairingIssue(metaAiInstalled, lastError, setupGuidance, metaAccessRequired)
+        ?.withNextSteps(metaAiInstalled, inviteMode || metaAccessRequired, registered)
+
+private fun MetaPairingIssue.withNextSteps(
+    metaAiInstalled: Boolean,
+    inviteMode: Boolean,
+    registered: Boolean,
+): MetaPairingIssue {
+    val next = buildList {
+        if (!metaAiInstalled) add(MetaPairingIssueAction.INSTALL_META_AI)
+        when (action) {
+            MetaPairingIssueAction.OPEN_META_AI -> add(MetaPairingIssueAction.OPEN_PAIRING)
+            MetaPairingIssueAction.OPEN_PAIRING -> if (metaAiInstalled) add(MetaPairingIssueAction.OPEN_META_AI)
+            MetaPairingIssueAction.INSTALL_META_AI, MetaPairingIssueAction.REQUEST_ACCESS -> Unit
+        }
+        if (inviteMode && !registered) add(MetaPairingIssueAction.REQUEST_ACCESS)
+    }.distinct().filter { it != action }
+    return copy(
+        secondaryActions = next,
+        offerLogs = action != MetaPairingIssueAction.INSTALL_META_AI,
+    )
+}
+
+private fun baseMetaPairingIssue(
+    metaAiInstalled: Boolean,
+    lastError: String?,
+    setupGuidance: String?,
+    metaAccessRequired: Boolean,
 ): MetaPairingIssue? {
     val error = lastError?.takeIf { it.isNotBlank() } ?: return null
     val normalized = error.lowercase()
