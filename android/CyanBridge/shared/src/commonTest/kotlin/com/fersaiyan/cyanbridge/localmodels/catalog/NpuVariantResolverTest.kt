@@ -10,14 +10,21 @@ class NpuVariantResolverTest {
     private val npuEntry = LocalModelCatalogRepository.findById("gemma4-e2b-it-npu")!!
 
     @Test
-    fun resolvesOurSm8650FileAtThePinnedRevision() {
+    fun resolvesOurV3FilesAtThePinnedRevision() {
         val resolved = NpuVariantResolver.resolve(npuEntry, "SM8650")!!
-        assertEquals("gemma-4-E2B-it_Qualcomm_SM8650.litertlm", resolved.expectedFilename)
-        assertTrue(resolved.sourceUrl!!.startsWith("https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu/resolve/"))
-        assertTrue(resolved.sourceUrl!!.endsWith("/gemma-4-E2B-it_Qualcomm_SM8650.litertlm"))
-        assertTrue("/resolve/main/" !in resolved.sourceUrl!!, "pinned to a commit")
-        assertEquals("2f2e0e64bb56d592f520e379e2b4456e8f02f78c67fe3c42c0c0871f73a3beba", resolved.sha256)
+        assertEquals("gemma-4-E2B-it-v3_Qualcomm_SM8650.litertlm", resolved.expectedFilename)
+        assertEquals(
+            "https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu/resolve/" +
+                "2687ca17a52e63cc2860a62fb7ef96a15e873b50/gemma-4-E2B-it-v3_Qualcomm_SM8650.litertlm",
+            resolved.sourceUrl,
+        )
+        assertEquals("5ef17192d43cb6b084c931da56f1fa3eccf92c91b1ab7772ca08b7d0f211bc0c", resolved.sha256)
         assertEquals(2_311_186_656L, resolved.sizeBytes)
+        assertEquals("gemma-4-E2B-it-v3_Qualcomm_SM8550.litertlm", NpuVariantResolver.resolve(npuEntry, "SM8550")!!.expectedFilename)
+        assertEquals("gemma-4-E2B-it-v3_Qualcomm_SM8850.litertlm", NpuVariantResolver.resolve(npuEntry, "SM8850")!!.expectedFilename)
+        val mtk = NpuVariantResolver.resolve(npuEntry, "MT6989")!!
+        assertEquals("gemma-4-E2B-it-v3_MediaTek_MT6989.litertlm", mtk.expectedFilename)
+        assertEquals("ccc431929718304fa4a4409ecc7239831b9c489b3da4d3b0a30f1eee79538d5c", mtk.sha256)
     }
 
     @Test
@@ -34,7 +41,7 @@ class NpuVariantResolverTest {
 
     @Test
     fun unpublishedOrUnknownSocHasNoDownload() {
-        assertNull(NpuVariantResolver.resolve(npuEntry, "SM8550"))
+        assertNull(NpuVariantResolver.resolve(npuEntry, "SM8450"))
         assertNull(NpuVariantResolver.resolve(npuEntry, null))
     }
 

@@ -200,12 +200,23 @@ step attends over the whole cache:
 Each model is compiled per Snapdragon SoC. The app reads `Build.SOC_MODEL`, downloads the
 matching file from a public Hugging Face repo, and checks its sha256.
 
-**Live (2026-10-10):** catalog entry `gemma4-e2b-it-npu`, "Gemma 4 E2B IT (Snapdragon NPU)".
+**Live (2026-11-22):** catalog entry `gemma4-e2b-it-npu`, "Gemma 4 E2B IT (NPU)". File names are
+`<prefix>_<Vendor>_<SoC>.litertlm`, keyed by `Build.SOC_MODEL` (NpuVariantResolver).
 
-| SoC | File | Source (pinned commit) | Input | sha256 |
+| SoC (`Build.SOC_MODEL`) | File | Source (pinned commit) | Input | sha256 |
 |---|---|---|---|---|
-| SM8650 (V75) | `gemma-4-E2B-it_Qualcomm_SM8650.litertlm` | [`Fertroll10/gemma-4-E2B-it-litert-lm-npu`](https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu) @ `2f5d0668` | text | `2f2e0e64…` |
+| SM8550 (V73) | `gemma-4-E2B-it-v3_Qualcomm_SM8550.litertlm` | [`Fertroll10/gemma-4-E2B-it-litert-lm-npu`](https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu) @ `2687ca17` | text | `ff365e87…` |
+| SM8650 (V75) | `gemma-4-E2B-it-v3_Qualcomm_SM8650.litertlm` | same @ `2687ca17` | text | `5ef17192…` |
+| SM8850 (V81) | `gemma-4-E2B-it-v3_Qualcomm_SM8850.litertlm` | same @ `2687ca17` | text | `9783b13b…` |
+| MT6989 (MediaTek) | `gemma-4-E2B-it-v3_MediaTek_MT6989.litertlm` | same @ `2687ca17` | text | `ccc43192…` |
 | SM8750 (V79) | `gemma-4-E2B-it_qualcomm_sm8750.litertlm` | Google's `litert-community/gemma-4-E2B-it-litert-lm` @ `b3ca0d2f` | text, image, audio | `41dd675f…` |
+| Tensor G5 | `gemma-4-E2B-it_Google_Tensor_G5.litertlm` | same Google repo @ `b3ca0d2f` (the newer rev `2e12bfd8` file does not load on LiteRT 2.3.0) | text, image, audio | `af108298…` |
+
+- **v3 builds (2026-11-22):** calibration v3 (the app's own prompts, 9 languages, 16k long context);
+  held-out activation clipping >25 %: 392 tensors (previous build) -> 66. Real-phone check on Google Device Run
+  (`LiteRtPromptEvalTest`, 13 held-out prompts): S23U 12/13, Fold6 12/13 (previous build 11/13), S26 12/13,
+  Tab S10+ MT6989 11/13, Pixel 10 with Google's G5 file 13/13. The repo also has `_4k-16k` variants (SM8650/8750/8850,
+  MT6989) and an SM8750 v3 file (text-only; the catalog keeps Google's multimodal SM8750 file).
 
 - **SM8650 build (2026-10-22):** the 4k package `work_srq_a16_4k` (QAIRT 2.50): QAT 8-bit
   activation rounding (SRQ) restored, 16k long calibration, INT16 attention. On the Fold6
