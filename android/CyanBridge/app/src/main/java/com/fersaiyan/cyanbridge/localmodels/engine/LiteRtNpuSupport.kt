@@ -23,7 +23,8 @@ internal object LiteRtNpuSupport {
     enum class Vendor(val label: String, val dispatchLibrary: String, val fileTag: String) {
         QUALCOMM("Qualcomm", "libLiteRtDispatch_Qualcomm.so", "Qualcomm"),
         MEDIATEK("MediaTek", "libLiteRtDispatch_MediaTek.so", "MediaTek"),
-        GOOGLE_TENSOR("Google Tensor", "libLiteRtDispatch_GoogleTensor.so", "Google_Tensor"),
+        // fileTag + "_" + socModel: the canonical Tensor SoC id already carries "Tensor" (Google + Tensor_G5).
+        GOOGLE_TENSOR("Google Tensor", "libLiteRtDispatch_GoogleTensor.so", "Google"),
         SAMSUNG("Samsung Exynos", "libLiteRtDispatch_Samsung.so", "Samsung"),
     }
 

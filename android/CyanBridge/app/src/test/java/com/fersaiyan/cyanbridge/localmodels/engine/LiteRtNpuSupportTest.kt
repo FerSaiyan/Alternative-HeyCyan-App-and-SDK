@@ -65,6 +65,21 @@ class LiteRtNpuSupportTest {
         assertEquals("SM8650", LiteRtNpuSupport.canonicalSoc(Vendor.QUALCOMM, "SM8650-AB"))
     }
 
+    /** Build.SOC_MANUFACTURER / SOC_MODEL as real phones report them (Device Run 2026-11-22, Samsung RTL). */
+    @Test
+    fun realPhoneSocStringsMapToModelTags() {
+        fun tag(manufacturer: String, soc: String): String? {
+            val vendor = LiteRtNpuSupport.vendorFor(manufacturer, soc) ?: return null
+            return "${vendor.fileTag}_${LiteRtNpuSupport.canonicalSoc(vendor, soc)}"
+        }
+        assertEquals("Google_Tensor_G5", tag("Google", "Tensor G5")) // Pixel 10
+        assertEquals("MediaTek_MT6989", tag("Mediatek", "MT6989")) // Galaxy Tab S10+
+        assertEquals("Samsung_E9945", tag("Samsung", "s5e9945")) // Galaxy S24 (Exynos 2400)
+        assertEquals("Samsung_E9965", tag("Samsung", "s5e9965")) // Galaxy S26 (Exynos 2600)
+        assertEquals("Qualcomm_SM8750", tag("QTI", "SM8750")) // Galaxy S25 (pa1q)
+        assertEquals("Qualcomm_SM8850", tag("QTI", "SM8850")) // Galaxy S26 (m1q)
+    }
+
     @Test
     fun qualcommNeedsQnnLibrariesAndTheSkel() {
         val lib = libDir("libLiteRtDispatch_Qualcomm.so", "libQnnHtp.so", "libQnnSystem.so", "libQnnHtpV75Stub.so")
