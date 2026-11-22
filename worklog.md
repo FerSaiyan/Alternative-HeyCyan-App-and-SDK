@@ -1,5 +1,37 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-22 — Pairing protocol check, Wi-Fi chip version, Classic audio bond, update prompt, NPU emulator test (branch `sync-vpn-hint`)
+
+- **Pairing protocol check** (field logs mwrbx20e "M89-S-0395", W60-7A8, W AI 4: non-HeyCyan glasses set to HeyCyan
+  by hand, every command dropped): before HeyCyan / EyeVue / TuneBuds / MoYoung connects, `GattServiceProbe` opens a
+  short BLE link and lists the GATT services; `BleDeviceClassifier.classifyByGattServices` maps them (HeyCyan
+  de5bf728 first; EyeVue aa12, not the shared JieLi ae00; TuneBuds fdb3; MYVU 0bd1/0bd3; MemoMind; MoYoung fea8).
+  Another family: Material 3 popup "These glasses use the <family> protocol" (Connect as <family> / Keep <chosen> /
+  Cancel); none known: "CyanBridge does not recognise these glasses" (Connect anyway / Cancel); a failed check
+  connects as chosen; skipped when the advert already carries the chosen family's service. The probe's own ACL
+  events no longer start the app's auto-connect (it connected the HeyCyan SDK while the user was still choosing).
+  Reports: `pairing_gatt_detected`, `pairing_gatt_services`.
+- **Wi-Fi chip version in reports:** one device-info read 4 s after each HeyCyan connection (and any OTA read) fills
+  `GlassesWifiChipInfo`; reports gain `wifi_hardware_version` / `wifi_firmware_version` next to the BT chip's.
+- **Classic audio bond:** glasses paired only in CyanBridge never appeared in the phone's Bluetooth settings and gave
+  no call/media audio: the HeyCyan link is BLE only and nothing started the Classic scan that leads to the bond (the
+  official app does it after every connection, firmware_dump add.239). `HeyCyanClassicBond`: if not bonded, Classic
+  scan 1 s after connecting; on finding the glasses' address, vendor BR/EDR bond with the public `createBond()` as
+  fallback, retried only until Android starts pairing; waits up to 60 s for the user's "Pair" consent; a decline ends
+  it; a media sync cancels the scan. Reports: `classic_bonded`.
+- **Update prompt:** 2.5.0 offered "update to 2.4.5" (the check compared for difference). Now only a strictly newer
+  numeric version is offered (`VersionUpdateChecker.shouldOfferUpdate`, 2 tests).
+- **NPU catalog on the emulator:** `tools/hil/npu_soc_mock.sh` fakes `ro.soc.*` with resetprop + zygote restart;
+  debug-only `debug.cyanbridge.npu_download_test` lets the catalog download without the arm64 runtime. Faked SM8650:
+  entry "Compatible", our SM8650 file downloaded with the pinned sha256, "Ready / Installed". Docs:
+  NPU_ON_DEVICE.md "Emulator: faking the SoC". Found: "Test model now" (`LocalModelBenchmarkRunner`) skips the
+  `LiteRtNpuSupport` check and shows LiteRT's native error (follow-up); only Snapdragon Gemma 4 E2B builds exist;
+  release builds ship no NPU runtime.
+- **Verified:** app unit tests 776/776, shared 441/441 (4 GATT-classification + 3 VPN-hint + 2 update tests new).
+  Rig (firmware_dump add.239): pairing check 4/4 (HeyCyan no popup; EyeVue, TuneBuds, unknown popups); full session
+  logged `Wi-Fi chip info: hw=WIFIAM01G1 fw=1.00.28_2603031800` and official/custom/adaptive all PASS; Classic bond
+  check PASS (scan, bond request, consent, `BR/EDR BOND_BONDED`, "bonded (Classic)").
+
 ## 2026-11-22 — Sync failures behind a VPN get a plain hint (branch `sync-vpn-hint`, off 2.5.0, not merged)
 
 - **Field:** log_mwra0io2 (AM01CY, Xiaomi, Android 13) and log_mwr92qph (AM02, Unihertz Titan 2, Android 16), 2.4.3,
