@@ -30,12 +30,13 @@ data class LocalModelCatalogEntry(
 )
 
 /**
- * NPU builds compiled per Snapdragon SoC and hosted in a Hugging Face repo as
- * `<repo>/resolve/<revision>/<filePrefix>_Qualcomm_<SoC>.<format>` (e.g. SM8650), or in
- * Google's litert-community naming `<filePrefix>_qualcomm_<soc>.<format>` when
- * [lowercaseSoc] is set. [files] maps each published SoC model (`Build.SOC_MODEL`) to its
- * file. The SoC stays in the installed file name, which the runtime checks against the
- * phone before loading.
+ * NPU builds compiled per SoC and hosted in a Hugging Face repo as
+ * `<repo>/resolve/<revision>/<filePrefix>_<vendor>_<SoC>.<format>`: `_Qualcomm_SM8650`, `_MediaTek_MT6989`,
+ * `_Google_Tensor_G5`, `_Samsung_E9965`. Google's litert-community Snapdragon files use lowercase
+ * (`<filePrefix>_qualcomm_<soc>`) when [lowercaseSoc] is set. [files] maps each published SoC model
+ * (`Build.SOC_MODEL`, matched case-insensitively) to its file; [socFileNames] gives the file's SoC token when it
+ * differs from `Build.SOC_MODEL` (default: spaces become underscores, so `Tensor G5` -> `Tensor_G5`). The SoC stays in
+ * the installed file name, which the runtime checks against the phone before loading.
  */
 data class NpuVariantSet(
     val repo: String,
@@ -44,14 +45,20 @@ data class NpuVariantSet(
     /** Commit to download from, so a later upload cannot change what a checksum pins. */
     val revision: String = "main",
     val lowercaseSoc: Boolean = false,
+    /** Vendor token of the file name: Qualcomm, MediaTek, Google or Samsung. */
+    val vendor: String = "Qualcomm",
+    val socFileNames: Map<String, String> = emptyMap(),
 )
 
 data class NpuVariantFile(val sha256: String?, val sizeBytes: Long)
 
 object NpuVariantResolver {
-    fun fileName(entry: LocalModelCatalogEntry, set: NpuVariantSet, socModel: String): String =
-        if (set.lowercaseSoc) "${set.filePrefix}_qualcomm_${socModel.lowercase()}.${entry.format}"
-        else "${set.filePrefix}_Qualcomm_$socModel.${entry.format}"
+    fun fileName(entry: LocalModelCatalogEntry, set: NpuVariantSet, socModel: String): String {
+        val key = set.files.keys.firstOrNull { it.equals(socModel.trim(), ignoreCase = true) } ?: socModel.trim()
+        val soc = set.socFileNames[key] ?: key.replace(' ', '_')
+        return if (set.lowercaseSoc) "${set.filePrefix}_${set.vendor.lowercase()}_${soc.lowercase()}.${entry.format}"
+        else "${set.filePrefix}_${set.vendor}_$soc.${entry.format}"
+    }
 
     /**
      * The entry to download on a phone with [socModel]: itself when it has no per-SoC
@@ -59,10 +66,10 @@ object NpuVariantResolver {
      */
     fun resolve(entry: LocalModelCatalogEntry, socModel: String?): LocalModelCatalogEntry? {
         if (entry.npuVariants.isEmpty()) return entry
-        if (socModel == null) return null
-        val set = entry.npuVariants.firstOrNull { socModel in it.files } ?: return null
-        val file = set.files.getValue(socModel)
-        val name = fileName(entry, set, socModel)
+        val soc = socModel?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val set = entry.npuVariants.firstOrNull { s -> s.files.keys.any { it.equals(soc, ignoreCase = true) } } ?: return null
+        val file = set.files.entries.first { it.key.equals(soc, ignoreCase = true) }.value
+        val name = fileName(entry, set, soc)
         return entry.copy(
             sourceUrl = "https://huggingface.co/${set.repo}/resolve/${set.revision}/$name",
             sourcePageUrl = "https://huggingface.co/${set.repo}",

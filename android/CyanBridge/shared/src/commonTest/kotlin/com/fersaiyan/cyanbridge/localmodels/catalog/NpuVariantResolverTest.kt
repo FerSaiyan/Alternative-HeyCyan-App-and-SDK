@@ -43,4 +43,27 @@ class NpuVariantResolverTest {
         val cpu = LocalModelCatalogRepository.findById("gemma4-e2b-it-litert")!!
         assertSame(cpu, NpuVariantResolver.resolve(cpu, "SM8650"))
     }
+
+    private fun entryWith(vararg sets: NpuVariantSet) = npuEntry.copy(npuVariants = sets.toList())
+
+    @Test
+    fun vendorTokenAndSocFileNamesBuildTheFileName() {
+        val entry = entryWith(
+            NpuVariantSet(repo = "o/r", filePrefix = "m", vendor = "MediaTek", files = mapOf("MT6989" to NpuVariantFile("a", 1))),
+            NpuVariantSet(repo = "o/g", filePrefix = "m", vendor = "Google", files = mapOf("Tensor G5" to NpuVariantFile("b", 2))),
+            NpuVariantSet(repo = "o/s", filePrefix = "m", vendor = "Samsung", files = mapOf("s5e9965" to NpuVariantFile("c", 3)),
+                socFileNames = mapOf("s5e9965" to "E9965")),
+        )
+        assertEquals("m_MediaTek_MT6989.litertlm", NpuVariantResolver.resolve(entry, "MT6989")!!.expectedFilename)
+        assertEquals("m_Google_Tensor_G5.litertlm", NpuVariantResolver.resolve(entry, "Tensor G5")!!.expectedFilename)
+        assertEquals("m_Samsung_E9965.litertlm", NpuVariantResolver.resolve(entry, "s5e9965")!!.expectedFilename)
+        assertEquals("https://huggingface.co/o/s/resolve/main/m_Samsung_E9965.litertlm", NpuVariantResolver.resolve(entry, "s5e9965")!!.sourceUrl)
+    }
+
+    @Test
+    fun socModelMatchesCaseInsensitivelyAndTrimmed() {
+        val entry = entryWith(NpuVariantSet(repo = "o/r", filePrefix = "m", vendor = "MediaTek", files = mapOf("MT6989" to NpuVariantFile("a", 1))))
+        assertEquals("m_MediaTek_MT6989.litertlm", NpuVariantResolver.resolve(entry, " mt6989 ")!!.expectedFilename)
+        assertNull(NpuVariantResolver.resolve(entry, ""))
+    }
 }
