@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="android/CyanBridge/CyanBridge_StyledB_transparent.png" alt="CyanBridge" width="120">
+  <img src="android/CyanBridge/CyanBridge_parrot_logo.png" alt="CyanBridge" width="120">
 </p>
 
 # CyanBridge: Local AI for Smart Glasses
