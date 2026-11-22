@@ -42,6 +42,7 @@ import com.fersaiyan.cyanbridge.shared.prefs.get
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesCondition
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesConditionState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesWifiStartHint
+import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncVpnHint
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.bleIpBridge
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
@@ -127,6 +128,8 @@ internal class GlassesMediaSyncCoordinator(
      * which reset the per-attempt callback fields.
      */
     private var downloadGlassesConfirmedWifiDirect = false
+    /** The Wi-Fi Direct link to the glasses came up at least once in this sync (group formed or BLE-reported IP). */
+    private var downloadWifiLinkUp = false
     /** Last `09 ff <reason>` from the glasses in this sync, decoded (support reports). */
     private var downloadLastGlassesWifiError: String? = null
     private var syncEvidenceRecorded = false
@@ -967,12 +970,12 @@ internal class GlassesMediaSyncCoordinator(
                 showDownloadError(
                     "Adaptive sync exhausted its bounded recovery budget at checkpoint $checkpoint after ${waitedSeconds}s.",
                     cleanup = true,
-                    userMessage = glassesWifiStartHint(),
+                    userMessage = syncFailureHint(),
                 )
                 return@launch
             }
 
-            transferUi.setTransferDetail("Sync is taking longer than expected")
+            transferUi.setTransferDetail(vpnBlockHint() ?: "Sync is taking longer than expected")
             maybeShowP2pSyncLogHelp(
                 reason = "CyanBridge got stuck before media transfer started. The sync button was pressed ${waitedSeconds}s ago and the transfer counters never advanced.",
             )
@@ -998,6 +1001,7 @@ internal class GlassesMediaSyncCoordinator(
         seenP2pPeers.clear()
         downloadAnyPeerSeen = false
         downloadGlassesConfirmedWifiDirect = false
+        downloadWifiLinkUp = false
         downloadLastGlassesWifiError = null
         syncEvidenceRecorded = false
         WifiP2pManagerSingleton.getInstance(activity).resetDiscoveryTelemetry()
@@ -1189,6 +1193,18 @@ internal class GlassesMediaSyncCoordinator(
         )
     }
 
+    /**
+     * Plain explanation when the Wi-Fi Direct link came up in this sync but a VPN covers the app: its tunnel also
+     * carries the requests for the glasses' private address (log_mwra0io2 / log_mwr92qph, firmware_dump add.238).
+     */
+    private fun vpnBlockHint(): String? = GlassesSyncVpnHint.message(
+        p2pNetwork.vpnState(),
+        glassesReached = downloadWifiLinkUp || downloadP2pConnected || !downloadBleIp.isNullOrBlank(),
+    )
+
+    /** The most likely cause of a failed sync, when one is known: a VPN in the way, else the glasses' Wi-Fi start. */
+    private fun syncFailureHint(): String? = vpnBlockHint() ?: glassesWifiStartHint()
+
     private fun maybeShowP2pSyncLogHelp(
         reason: String,
         title: String = "P2P sync is stuck",
@@ -1202,7 +1218,7 @@ internal class GlassesMediaSyncCoordinator(
             title = "$title (${downloadFlowMode.label})",
             issueType = "P2P/WiFi sync issue",
             description = "Flow: ${downloadFlowMode.label}\n\n$reason" +
-                (glassesWifiStartHint()?.let { "\n\nLikely cause: $it" } ?: ""),
+                (syncFailureHint()?.let { "\n\nLikely cause: $it" } ?: ""),
             extraInfo = syncSupportExtraInfo(),
             dismissButtonLabel = dismissButtonLabel,
         )
@@ -1244,6 +1260,8 @@ internal class GlassesMediaSyncCoordinator(
         "adaptive_discovery_restarts" to (adaptiveSyncSession?.discoveryRestarts?.toString() ?: "0"),
         "adaptive_device_resets" to (adaptiveSyncSession?.deviceResets?.toString() ?: "0"),
         "vpn_active" to p2pNetwork.isVpnActive().toString(),
+        "vpn_covers_app" to p2pNetwork.vpnState().coversApp.toString(),
+        "wifi_link_up" to downloadWifiLinkUp.toString(),
         "official_heycyan_installed" to OfficialHeyCyanApp.isInstalled(activity).toString(),
         "adaptive_trace" to (adaptiveSyncSession?.traceSummary() ?: ""),
     ).apply {
@@ -2319,6 +2337,7 @@ internal class GlassesMediaSyncCoordinator(
     
     /** [userMessage] replaces the technical [message] in the toast when there is a plainer explanation. */
     private fun showDownloadError(message: String, cleanup: Boolean = true, userMessage: String? = null) {
+        val failedBeforeTransfer = !downloadInitialPhaseCompleted
         recordSyncEvidence()
         com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.error(com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.SYNC, "sync failed: $message", mapOf("flow" to downloadFlowMode.name, "hq_image" to isHighQualityImageTransfer().toString()))
         if (isHighQualityImageTransfer()) {
@@ -2337,8 +2356,13 @@ internal class GlassesMediaSyncCoordinator(
             cleanupP2pAfterDownload()
         }
         Log.e("DataDownload", "ERROR: $message (flow=${downloadFlowMode.label})")
-        userMessage?.let { transferUi.setTransferDetail(it) }
-        Toast.makeText(activity, userMessage ?: message, Toast.LENGTH_LONG).show()
+        // Only before any media moved: once files flowed, the VPN was not what stopped them.
+        val shownMessage = userMessage ?: if (failedBeforeTransfer) vpnBlockHint() else null
+        shownMessage?.let {
+            Log.i("DataDownload", "Sync failure hint: $it")
+            transferUi.setTransferDetail(it)
+        }
+        Toast.makeText(activity, shownMessage ?: message, Toast.LENGTH_LONG).show()
     }
 
     private fun recordAdaptiveSyncSuccess() {
@@ -2370,6 +2394,7 @@ internal class GlassesMediaSyncCoordinator(
         Log.i("DataDownload", "BLE reported device WiFi IP: $ip")
         markTransferModeEvidence("BLE 0x08 IP")
         downloadBleIp = ip
+        downloadWifiLinkUp = true
         if (downloadFlowMode == GlassesSyncFlow.ADAPTIVE) {
             adaptiveSyncSession?.mark(AdaptiveSyncCheckpoint.BLE_IP_RECEIVED, "ip=$ip")
         }
@@ -2393,6 +2418,7 @@ internal class GlassesMediaSyncCoordinator(
     private fun onDownloadP2pConnected(info: WifiP2pInfo) {
         if (info.groupFormed) markTransferModeEvidence("P2P group formed")
         downloadP2pConnected = info.groupFormed
+        if (info.groupFormed) downloadWifiLinkUp = true
         downloadP2pLink?.markGroupFormed(info.groupFormed)
         downloadWifiIp = info.groupOwnerAddress?.hostAddress
         downloadPhoneIsGroupOwner = info.isGroupOwner
@@ -2944,7 +2970,7 @@ internal class GlassesMediaSyncCoordinator(
         if (officialFlowRetryRequired) return
         officialFlowRetryRequired = true
         Log.w("DataDownload", "HeyCyan flow stopped for manual retry: $message")
-        val hint = glassesWifiStartHint()
+        val hint = syncFailureHint()
         if (!downloadInitialPhaseCompleted) {
             maybeShowP2pSyncLogHelp(
                 reason = "HeyCyan-compatible sync stopped before media transfer. Error: $message",

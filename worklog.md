@@ -1,5 +1,26 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-22 — Sync failures behind a VPN get a plain hint (branch `sync-vpn-hint`, off 2.5.0, not merged)
+
+- **Field:** log_mwra0io2 (AM01CY, Xiaomi, Android 13) and log_mwr92qph (AM02, Unihertz Titan 2, Android 16), 2.4.3,
+  HeyCyan flow: Wi-Fi Direct up, then `GET /files/media.config` closed with no response after ~5 s, twice
+  ("unexpected end of stream"); both had a VPN on. 25 of 161 stored P2P reports failed at that request (end of stream,
+  HTTP 404, HTTP 500), all HeyCyan flow.
+- **Reproduced (firmware_dump add.238):** test-only full-tunnel VPN on the rig's app AVD. A VPN that does not allow
+  bypassing breaks all three flows (official gives exactly the field error; Custom/Adaptive's P2P-local-address sockets
+  are captured too); one that allows bypassing breaks none on Android 17 (its tunnel never saw the Wi-Fi Direct
+  traffic); a VPN that answers 404 gives the field's `HTTP 404`.
+- **Change:** when a sync whose Wi-Fi Direct link came up fails before any media moved and a VPN covers the app (its
+  default network is a VPN), all three flows show "Your VPN is most likely blocking the connection to the glasses.
+  Pause the VPN while syncing, or exclude CyanBridge (or allow local network access) in the VPN app, then sync again."
+  It also becomes the support report's "Likely cause". `GlassesSyncVpnHint` (shared) + `AndroidGlassesNetworkRoutes.vpnState()`;
+  support reports gain `vpn_covers_app` and `wifi_link_up`. Android's public API cannot tell whether a VPN allows
+  bypassing (`VpnTransportInfo` is a system API), so there is one wording.
+- **Verified:** app unit tests 774/774, shared 437/437 (3 new); rig `regression/vpn_regression.sh`: the 4 failing
+  cases each show the hint, the 4 passing cases show nothing new.
+- **Open:** non-HeyCyan glasses set to HeyCyan by hand (log_mwrbx20e "M89-S-0395", W60-7A8, W AI 4: HeyCyan service
+  missing) still time out; proposed: check the GATT services at connect. Wi-Fi chip versions are not in support reports.
+
 ## 2026-11-22 — Release 2.5.0 (versionCode 38): Material 3 Expressive everywhere
 
 - **Contents since 2.4.5:**

@@ -482,6 +482,8 @@ internal class GlassesP2pNetwork(
     }
 
     fun isVpnActive(): Boolean = routes.isVpnActive()
+
+    fun vpnState(): com.fersaiyan.cyanbridge.shared.glasses.SyncVpnState = routes.vpnState()
 }
 
 /** One HTTP response chunk for a (possibly ranged) Custom/Adaptive-flow download. */

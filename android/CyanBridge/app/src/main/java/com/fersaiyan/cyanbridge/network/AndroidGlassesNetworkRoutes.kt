@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import com.fersaiyan.cyanbridge.shared.glasses.SyncVpnState
 import com.fersaiyan.cyanbridge.shared.network.GlassesNetworkAddressing
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -72,6 +73,17 @@ class AndroidGlassesNetworkRoutes(context: Context) {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /**
+     * Whether a VPN carries this app's plain sockets: the app's default network is the VPN (a VPN that excludes the
+     * app is not counted).
+     */
+    fun vpnState(): SyncVpnState = try {
+        val capabilities = connectivity.activeNetwork?.let { connectivity.getNetworkCapabilities(it) }
+        SyncVpnState(coversApp = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true)
+    } catch (_: Exception) {
+        SyncVpnState(coversApp = false)
     }
 
     fun linkAddresses(network: Network): List<String> =
