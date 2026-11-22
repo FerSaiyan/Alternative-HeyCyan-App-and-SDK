@@ -4,7 +4,7 @@
 
 # CyanBridge: Local AI for Smart Glasses
 
-CyanBridge is an Android companion and device-integration project for AI smart glasses.
+CyanBridge is a companion and device-integration project for AI smart glasses, on Android and, in public beta, on iOS.
 
 It started as a working Android alternative for HeyCyan-compatible glasses and has grown into a bridge between smart glasses and the AI stack you want to use: local models on your phone, Gemini Live, self-hosted servers, and optional hosted models.
 
@@ -16,6 +16,7 @@ Local inference does not require a CyanBridge subscription.
 
 [Website](https://cyanbridgelabs.com/) ·
 [Google Play](https://play.google.com/store/apps/details?id=com.fersaiyan.cyanbridge) ·
+[iOS beta (TestFlight)](https://testflight.apple.com/join/q2U3kqeP) ·
 [Latest release](https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases/latest) ·
 [Meta Ray-Ban beta](https://cyanbridgelabs.com/beta) ·
 [Compatibility matrix](https://cyanbridgelabs.com/smart-glasses/compatibility)
@@ -135,6 +136,12 @@ Signed APKs and SHA-256 checksums are also published with GitHub releases:
 
 [**Download the latest CyanBridge release**](https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases/latest)
 
+### iOS (TestFlight beta)
+
+The iOS app is in public beta. Install Apple's TestFlight app, then open:
+
+[**Join the CyanBridge iOS beta on TestFlight**](https://testflight.apple.com/join/q2U3kqeP)
+
 ## Build from source
 
 The Android project requires Java 17 or newer.
@@ -166,7 +173,7 @@ The repository also contains Android emulator, hardware-in-the-loop, and iOS KMP
 | [`android/CyanBridge/docs/local-models.md`](android/CyanBridge/docs/local-models.md) | LiteRT-LM and llama.cpp local inference |
 | [`android/CyanBridge/meta_rayban_mvp.md`](android/CyanBridge/meta_rayban_mvp.md) | Meta DAT implementation and integration notes |
 | [`BRIDGE_RESEARCH_NOTES.md`](BRIDGE_RESEARCH_NOTES.md) | Smart-glasses protocol research |
-| [`ios/`](ios/) | KMP/iOS host and vendor integration work |
+| [`ios/`](ios/) | iOS app (KMP host, TestFlight beta) and vendor integration work |
 | [`examples/`](examples/) | Integration examples |
 | [`tools/`](tools/) | Development, testing, and hardware tooling |
 
