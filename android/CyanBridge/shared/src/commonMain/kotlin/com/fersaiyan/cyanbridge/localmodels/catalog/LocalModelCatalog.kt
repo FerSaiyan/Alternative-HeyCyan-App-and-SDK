@@ -205,6 +205,21 @@ object LocalModelCatalogRepository {
                         ),
                     ),
                 ),
+                // Google's Tensor G5 build at the same pinned revision (Pixel 10 reports Build.SOC_MODEL "Tensor G5").
+                // This older file loads on the LiteRT 2.3.0 runtime (Device Run Pixel 10, 13/13 prompts, 2026-11-22);
+                // the newer one (rev 2e12bfd8, sha 72d05606...) fails there ("Failed to get SB invocation context").
+                NpuVariantSet(
+                    repo = "litert-community/gemma-4-E2B-it-litert-lm",
+                    filePrefix = "gemma-4-E2B-it",
+                    revision = "b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1",
+                    vendor = "Google",
+                    files = mapOf(
+                        "Tensor G5" to NpuVariantFile(
+                            sha256 = "af1082986639ecde7db95d91be6fe54f8b6b458104734c5bafc204e69d6852dc",
+                            sizeBytes = 3_113_545_589L,
+                        ),
+                    ),
+                ),
             ),
         ),
     )
