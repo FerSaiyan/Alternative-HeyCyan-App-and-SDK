@@ -375,6 +375,11 @@ The NPU stack moves in lockstep; the lines below cannot be mixed:
   driver comes with the phone. LiteRT 2.4.0 still loads the first dispatch library in a directory (#11250), so
   `LiteRtNpuSupport.dispatchDir` keeps one vendor per directory.
 - Skels: 2.52 skels are ~8.5 % larger (V68 +22 %); V68-V81 skels + stubs 86.8 MB.
+- Skel delivery (release): download-mode AARs carry `assets/npu_runtime/skels.json`; the app fetches only its
+  phone's skel from the GitHub prerelease `npu-runtime-qairt2.52.0` (sha256 + size checked) into
+  `no_backup/npu-runtime/qnn-skel/<qairt>/`, and the per-vendor dispatch directory links it. **Verified on a Galaxy S25
+  (SM8750, Device Run, 2026-11-22, `NpuSkelDownloadTest`):** V79 skel 13.6 MB downloaded in 8.9 s, status flipped to
+  available, WeSpeaker `_Qualcomm_SM8750` loaded in 201 ms and ran on the DSP through the symlinked skel.
 
 ### Previous stack: LiteRT 2.3.0 + QAIRT 2.50.0.260828
 
