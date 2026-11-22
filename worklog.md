@@ -1,5 +1,28 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-22 — Gemma 4 E2B NPU calibration v3 for more chips; vendor-aware NPU catalog (branch `gemma-npu-multisoc-240`)
+
+- **Models:** calibration v3 (the app's own prompts in 9 languages + 16k-token documents/chats) for Gemma 4 E2B NPU:
+  public `Fertroll10/gemma-4-E2B-it-litert-lm-npu@2687ca17`, files `gemma-4-E2B-it-v3_<Vendor>_<SoC>[_4k-16k].litertlm`
+  for SM8550/SM8650/SM8750/SM8850 and MediaTek MT6989 (the old SM8650 file stays). Held-out activation clipping
+  >25 %: 392 tensors -> 66. MediaTek needed two exact rewrites (INT2 weights stored as INT4; the 262,144-row LM head
+  split into 8 for MDLA's 65,535 limit). Recipe repo: `gemma4-sm8650-port` WORKLOG 2026-11-22.
+- **Catalog:** `NpuVariantResolver` names files `<prefix>_<Vendor>_<SoC>` (Qualcomm, MediaTek, Google, Samsung) keyed
+  by `Build.SOC_MODEL` (case-insensitive; `Tensor G5` -> `Tensor_G5`). `gemma4-e2b-it-npu` now resolves SM8550,
+  SM8650, SM8850 and MT6989 to the v3 files, SM8750 to Google's multimodal file, and Pixel 10 to Google's Tensor G5
+  file at the already-pinned `b3ca0d2f` (the newer `2e12bfd8` file fails on LiteRT 2.3.0: "Failed to get SB
+  invocation context"). Display name "Gemma 4 E2B IT (NPU)".
+- **Device Run:** `LiteRtPromptEvalTest` (androidTest) runs a JSONL prompt set on one or more models/backends; push
+  files to `/data/local/tmp` (Device Run clears app storage before the run; the test copies them in with the shell
+  user). v3 results on 0.18: S23U 12/13, Fold6 12/13 (previous file 11/13), S25 12/13, S26 12/13, Tab S10+ 11/13,
+  Pixel 10 13/13. Real `Build.SOC_MODEL`: SM8550/SM8650/SM8750/SM8850 (QTI), MT6989 (Mediatek), `Tensor G5` (Google),
+  s5e9945 (Exynos 2400).
+- **Release guard:** release AARs must also carry all four dispatch libraries (Qualcomm, MediaTek, Google Tensor,
+  Samsung); verified failing on an AAR without Samsung.
+- **Open:** Exynos 2600 Gemma can't be built (the Samsung compiler segfaults on the decode graph; FC_ONLY_INT8 prefill
+  compiles). The 2.4.0 Samsung dispatch device check on RTL is pending: the RTL web client stayed blank on
+  2026-11-22. Probe APK: `~/projects/cyan-npu-probe-samsung-240`.
+
 ## 2026-11-22 — LiteRT-LM 0.19.1 + LiteRT 2.4.0 + QAIRT 2.52 is the default stack; release ships the NPU runtimes (branch `litert-240`)
 
 - **Stack:** LiteRT-LM 0.19.1 (default, was 0.16.0) + LiteRT 2.4.0 (vendor dispatch ABI `QueryInterface`) + QAIRT

@@ -450,6 +450,14 @@ gradle.taskGraph.whenReady { graph ->
             throw new GradleException("Release NPU AAR must be download-mode (--skel-delivery download): " +
                 "${npuAarPath} bundles the Hexagon skels (~80 MB)")
         }
+        // Every vendor runtime ships in releases, Samsung's self-built Exynos dispatch included (package_npu_aar.py
+        // --extra-dispatch-aar for MediaTek/Google Tensor, --samsung-dispatch for Samsung).
+        def missing = ["Qualcomm", "MediaTek", "GoogleTensor", "Samsung"].findAll {
+            zip.getEntry("jni/arm64-v8a/libLiteRtDispatch_${it}.so") == null
+        }
+        if (!missing.isEmpty()) {
+            throw new GradleException("Release NPU AAR ${npuAarPath} lacks dispatch libraries for: ${missing.join(', ')}")
+        }
     } finally {
         zip.close()
     }
