@@ -65,13 +65,13 @@ CyanBridge keeps device-specific protocols separate. Hardware, firmware, permiss
 | Glasses / platform | Status | CyanBridge work |
 | --- | --- | --- |
 | **HeyCyan-compatible glasses** | Supported workflow | BLE connection, device controls, media transfer, image questions, and glasses-aware AI workflows |
+| **EyeVue** | Supported workflow | BLE connection and device status, photo and video capture, AI photo questions, onboard audio recording, live preview, and media sync over Wi-Fi |
 | **Mentra Live** | Supported workflow | Photo and video capture, AI photo questions, gallery sync over the glasses hotspot, live preview and streaming, microphone and speaker audio, firmware updates |
 | **Even Realities G1 / G2** | Supported workflow | Display glasses through the Mentra Bluetooth SDK: assistant answers, text and notifications on the display, microphone audio, head-up input (G1) and touch input (G2) |
 | **NIMO** | Supported workflow | Display glasses through the Mentra Bluetooth SDK: assistant answers, text and notifications, microphone audio, tap and head-up input |
 | **Xingyi AR99** | Supported workflow | Display glasses through the Mentra Bluetooth SDK: assistant answers, text and notifications, microphone audio |
 | **TuneBuds** | Supported workflow | Bluetooth connection, live video preview, and media sync over Wi-Fi Direct |
 | **Ray-Ban Meta / Meta Ray-Ban** | Experimental | Meta DAT registration, device sessions, camera streams, photo capture, capability checks, and active hardware testing |
-| **EyeVue** | Experimental | Android connection, media, capture, and device-control work |
 | **Meizu MYVU / Star Air** | Experimental | Native BLE/RFCOMM/display integration based on hardware-tested protocol work |
 | **MoYoung / W620** | Experimental | Device-specific Android integration |
 | **Mentra Display** | Research | Display glasses through the Mentra Bluetooth SDK; its button and head events do not reach the app yet |
