@@ -1,5 +1,11 @@
 package com.fersaiyan.cyanbridge.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -91,17 +97,20 @@ class DeviceBindScreenTest {
             selectedClass = null,
             userOverridden = false,
         )
+        // The screen shows what the caller passes back, as DeviceBindViewModel does; a constant here kept
+        // HeyCyan selected, so Connect opened the manual protocol picker instead of confirming Meta.
+        var selectedState by mutableStateOf(DeviceClass.HEY_CYAN)
         composeRule.setContent {
             CyanBridgeTheme {
                 DeviceBindScreen(
                     devices = listOf(device),
                     isScanning = false,
                     connectingDevice = device,
-                    selectedClass = DeviceClass.HEY_CYAN,
+                    selectedClass = selectedState,
                     onScan = {},
                     onPairMetaGlasses = {},
                     onSelectDevice = {},
-                    onSelectedClassChange = { selected = it },
+                    onSelectedClassChange = { selected = it; selectedState = it },
                     onConfirmConnection = { confirmed = true },
                     onDismissConnection = {},
                     onBack = {},
@@ -114,7 +123,8 @@ class DeviceBindScreenTest {
         composeRule.onNodeWithText("Meta Ray-Ban").performClick()
         composeRule.runOnIdle { assertEquals(DeviceClass.META_RAYBAN, selected) }
 
-        composeRule.onNodeWithText("Connect").performClick()
+        // The device row has its own "Connect"; press the confirmation dialog's button.
+        composeRule.onNode(hasText("Connect") and hasAnyAncestor(isDialog())).performClick()
         composeRule.runOnIdle { assertTrue(confirmed) }
     }
 }
