@@ -25,7 +25,7 @@ import java.io.File
  * phones (Device Run / RTL) against a host reference. Not part of CI: it skips unless pe_model points at a file.
  *
  * Paths under /data/local/tmp are copied into the app's external files dir first (shell user).
- * Arguments: pe_model (.litertlm; several joined by "|" run one after another, pe_context likewise), pe_prompts (JSONL rows {id, system, user, expect: [lowercase keywords],
+ * Arguments: pe_model (.litertlm; several joined by "|" run one after another, pe_context and pe_backend likewise), pe_prompts (JSONL rows {id, system, user, expect: [lowercase keywords],
  * max_tokens?}), pe_backend (NPU | GPU | CPU), pe_context (engine maxNumTokens, default 4096),
  * pe_out (results JSONL, default <prompts>.<model>.<backend>.results.jsonl).
  * Each row runs in a fresh conversation with greedy sampling, at most max_tokens output tokens (default 96).
@@ -64,11 +64,12 @@ class LiteRtPromptEvalTest {
         File(instrumentation.targetContext.getExternalFilesDir(null), "litert-eval").apply { mkdirs() }
             .resolve("device.txt").writeText("${android.os.Build.MODEL}|$socInfo|${android.os.Build.BOARD}\n")
         assumeTrue("Requires pe_model and pe_prompts files", models.isNotEmpty() && models.all { File(it).isFile } && File(promptsPath).isFile)
-        val backendName = args.getString("pe_backend") ?: "NPU"
+        val backends = (args.getString("pe_backend") ?: "NPU").split('|').map(String::trim)
         val contexts = (args.getString("pe_context") ?: "4096").split('|').map { it.trim().toInt() }
         val rows = File(promptsPath).readLines().filter { it.isNotBlank() }.map(::JSONObject)
         for ((i, modelPath) in models.withIndex()) {
             val context = contexts.getOrElse(i) { contexts.last() }
+            val backendName = backends.getOrElse(i) { backends.last() }
             val outFile = File(args.getString("pe_out") ?: "$promptsPath.${File(modelPath).nameWithoutExtension}.$backendName.results.jsonl")
             outFile.parentFile?.mkdirs()
             val backend = when (backendName) {
