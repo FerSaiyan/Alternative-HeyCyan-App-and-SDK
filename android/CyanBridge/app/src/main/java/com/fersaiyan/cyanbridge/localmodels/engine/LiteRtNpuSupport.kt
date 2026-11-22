@@ -50,6 +50,8 @@ internal object LiteRtNpuSupport {
         val reason: String,
         val vendor: Vendor? = null,
         val hexagon: String? = null,
+        /** Qualcomm only: the runtime is complete except this phone's Hexagon skel, which [QnnSkels] can download. */
+        val skelDownloadable: Boolean = false,
     ) {
         val modelTag: String? get() = if (vendor != null && socModel != null) "${vendor.fileTag}_$socModel" else null
     }
@@ -89,11 +91,20 @@ internal object LiteRtNpuSupport {
         val vendor = vendorFor(manufacturer, rawSoc)
             ?: return Status(false, rawSoc, "SoC ${rawSoc ?: "unknown (API < 31)"} has no supported NPU")
         val soc = canonicalSoc(vendor, rawSoc.orEmpty())
-        return statusFor(vendor, soc, File(context.applicationInfo.nativeLibraryDir), QnnSkels.dir(context))
+        return statusFor(
+            vendor, soc, File(context.applicationInfo.nativeLibraryDir), QnnSkels.dir(context),
+            downloadableSkels = QnnSkels.manifest(context)?.skels?.keys.orEmpty(),
+        )
     }
 
     /** Pure part of [status], for tests. */
-    internal fun statusFor(vendor: Vendor, soc: String, libDir: File, skelDir: File?): Status {
+    internal fun statusFor(
+        vendor: Vendor,
+        soc: String,
+        libDir: File,
+        skelDir: File?,
+        downloadableSkels: Set<String> = emptySet(),
+    ): Status {
         val required = mutableListOf(vendor.dispatchLibrary)
         var hexagon: String? = null
         when (vendor) {
@@ -102,7 +113,11 @@ internal object LiteRtNpuSupport {
                     ?: return Status(false, soc, "Qualcomm $soc has no supported Hexagon NPU", vendor)
                 required += listOf("libQnnHtp.so", "libQnnSystem.so", "libQnnHtp${hexagon}Stub.so")
                 if (QnnSkels.find(libDir, skelDir, hexagon) == null) {
-                    return Status(false, soc, "the Hexagon $hexagon NPU library for $soc is not downloaded yet", vendor, hexagon)
+                    val missingLibs = required.filterNot { File(libDir, it).isFile }
+                    return Status(
+                        false, soc, "the Hexagon $hexagon NPU library for $soc is not downloaded yet", vendor, hexagon,
+                        skelDownloadable = missingLibs.isEmpty() && QnnSkels.fileName(hexagon) in downloadableSkels,
+                    )
                 }
             }
             // The vendor NPU driver comes with the phone (NeuroPilot, edgetpu, ENN); whether a model exists for this
@@ -187,16 +202,123 @@ internal object LiteRtNpuSupport {
 }
 
 /**
- * The Hexagon DSP skel (`libQnnHtpV<arch>Skel.so`, 11-14 MB each) for the Qualcomm NPU. Release builds leave it out of
- * the APK and download only this phone's one (sha256-pinned); debug/test builds may still bundle it in
- * nativeLibraryDir. The DSP loads it through FastRPC from ADSP_LIBRARY_PATH (the dispatch directory, which links it).
+ * The Hexagon DSP skel (`libQnnHtpV<arch>Skel.so`, 11-15 MB each) for the Qualcomm NPU. Release builds leave it out of
+ * the APK and download only this phone's one; debug/test builds may still bundle it in nativeLibraryDir. The DSP loads
+ * it through FastRPC from ADSP_LIBRARY_PATH (the per-vendor dispatch directory, which links it).
+ *
+ * A download-mode NPU AAR carries `assets/npu_runtime/skels.json` (tools/litert-npu/package_npu_aar.py): the QAIRT
+ * version, the GitHub release tag that hosts its skels and each skel's sha256 + size. A skel is only used after its
+ * hash matches, so the pins always belong to the QNN libraries in this APK.
  */
 internal object QnnSkels {
-    fun dir(context: Context): File = File(context.noBackupFilesDir, "npu-runtime/qnn-skel")
+    data class Pin(val sha256: String, val bytes: Long)
+    data class Manifest(val qairt: String, val releaseTag: String, val skels: Map<String, Pin>)
+
+    /** GitHub release assets (the `npu-runtime-qairt<version>` prerelease); free hosting, sha256-pinned here. */
+    private const val DOWNLOAD_BASE = "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases/download"
+    private const val ASSET = "npu_runtime/skels.json"
+    private const val TAG = "QnnSkels"
+
+    /** Per QAIRT version: after an app update to a newer QAIRT, an older skel must not be picked up. */
+    fun dir(context: Context): File =
+        File(context.noBackupFilesDir, "npu-runtime/qnn-skel/${manifest(context)?.qairt ?: "none"}")
 
     fun fileName(hexagon: String): String = "libQnnHtp${hexagon}Skel.so"
 
     fun find(native: File, downloaded: File?, hexagon: String): File? =
         listOfNotNull(File(native, fileName(hexagon)), downloaded?.let { File(it, fileName(hexagon)) })
             .firstOrNull { it.isFile }
+
+    @Volatile private var cached: Manifest? = null
+    @Volatile private var cacheLoaded = false
+
+    /** The skels this APK's NPU runtime downloads, or null for builds that bundle them (or ship no NPU runtime). */
+    fun manifest(context: Context): Manifest? {
+        if (cacheLoaded) return cached
+        cached = runCatching { context.assets.open(ASSET).use { parse(it.bufferedReader().readText()) } }.getOrNull()
+        cacheLoaded = true
+        return cached
+    }
+
+    internal fun parse(json: String): Manifest {
+        val root = org.json.JSONObject(json)
+        val skels = root.getJSONObject("skels")
+        return Manifest(
+            qairt = root.getString("qairt"),
+            releaseTag = root.getString("release_tag"),
+            skels = skels.keys().asSequence().associateWith { name ->
+                skels.getJSONObject(name).let { Pin(it.getString("sha256").lowercase(), it.getLong("bytes")) }
+            },
+        )
+    }
+
+    fun url(manifest: Manifest, name: String): String = "$DOWNLOAD_BASE/${manifest.releaseTag}/$name"
+
+    /**
+     * Make sure this phone's skel is present and matches its pin; downloads it if needed (blocking, call off the main
+     * thread). Returns the file, or throws with a user-readable message. [onProgress] gets (downloaded, total) bytes.
+     */
+    fun ensure(
+        context: Context,
+        hexagon: String,
+        cancelled: () -> Boolean = { false },
+        onProgress: (Long, Long) -> Unit = { _, _ -> },
+    ): File {
+        val name = fileName(hexagon)
+        File(context.applicationInfo.nativeLibraryDir, name).takeIf { it.isFile }?.let { return it }
+        val manifest = manifest(context) ?: error("This app build has no downloadable NPU runtime.")
+        val pin = manifest.skels[name] ?: error("No Hexagon $hexagon NPU library is published for this app version.")
+        val target = File(dir(context), name)
+        if (target.isFile && target.length() == pin.bytes && sha256(target) == pin.sha256) return target
+        target.parentFile?.mkdirs()
+        val part = File(target.parentFile, "$name.part")
+        val connection = (java.net.URL(url(manifest, name)).openConnection() as java.net.HttpURLConnection).apply {
+            instanceFollowRedirects = true // GitHub answers with a redirect to its asset CDN
+            connectTimeout = 20_000
+            readTimeout = 30_000
+        }
+        try {
+            if (connection.responseCode !in 200..299) {
+                error("NPU runtime download failed (HTTP ${connection.responseCode}).")
+            }
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            var done = 0L
+            connection.inputStream.use { input ->
+                part.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        if (cancelled()) throw java.util.concurrent.CancellationException("NPU runtime download cancelled")
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        digest.update(buffer, 0, read)
+                        done += read
+                        if (done > pin.bytes) error("NPU runtime download is larger than expected.")
+                        onProgress(done, pin.bytes)
+                    }
+                }
+            }
+            val hash = digest.digest().joinToString("") { "%02x".format(it) }
+            if (done != pin.bytes || hash != pin.sha256) error("NPU runtime download did not match its checksum.")
+            if (!part.renameTo(target)) error("Could not save the NPU runtime.")
+            Log.i(TAG, "Downloaded $name (QAIRT ${manifest.qairt}, ${pin.bytes} bytes)")
+            return target
+        } finally {
+            connection.disconnect()
+            if (part.exists()) part.delete()
+        }
+    }
+
+    private fun sha256(file: File): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
 }

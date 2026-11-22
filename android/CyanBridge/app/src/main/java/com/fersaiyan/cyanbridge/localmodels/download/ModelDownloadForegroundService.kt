@@ -12,7 +12,9 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
+import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuSupport
 import com.fersaiyan.cyanbridge.localmodels.engine.NpuCatalogVariants
+import com.fersaiyan.cyanbridge.localmodels.engine.QnnSkels
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -153,6 +155,7 @@ class ModelDownloadForegroundService : Service() {
         }
 
         try {
+            ensureNpuRuntime(entry)
             val model = downloadManager.downloadCatalogModel(
                 context = this@ModelDownloadForegroundService,
                 entry = entry,
@@ -216,6 +219,29 @@ class ModelDownloadForegroundService : Service() {
         delay(3000)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /**
+     * Snapdragon NPU models need this phone's Hexagon skel; release builds download it (13-15 MB, sha256-pinned)
+     * before the model, so a finished download is ready to run.
+     */
+    private fun ensureNpuRuntime(entry: com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry) {
+        if (LiteRtNpuSupport.compiledTarget(entry.expectedFilename)?.vendor != LiteRtNpuSupport.Vendor.QUALCOMM) return
+        val npu = LiteRtNpuSupport.status(this)
+        if (npu.available || !npu.skelDownloadable) return
+        val hexagon = npu.hexagon ?: return
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        var lastUpdate = 0L
+        QnnSkels.ensure(this, hexagon, cancelled = { cancelled.get() }) { done, total ->
+            val now = System.currentTimeMillis()
+            if (now - lastUpdate >= 500L) {
+                lastUpdate = now
+                val percent = if (total > 0) (done * 100 / total).toInt() else 0
+                runCatching {
+                    nm.notify(NOTIFICATION_ID, buildNotification("Downloading the NPU runtime: $percent%", percent, ongoing = true))
+                }
+            }
+        }
     }
 
     private fun buildNotification(text: String, progress: Int, ongoing: Boolean): android.app.Notification {

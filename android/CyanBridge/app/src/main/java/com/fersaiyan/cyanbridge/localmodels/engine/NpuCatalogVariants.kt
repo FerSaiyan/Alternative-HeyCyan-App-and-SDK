@@ -48,7 +48,8 @@ object NpuCatalogVariants {
             return Resolution(resolved, null)
         }
         val npu = LiteRtNpuSupport.status(context)
-        return if (npu.available) Resolution(resolved, null) else Resolution(null, npu.reason)
+        // A missing Hexagon skel is fetched together with the model (ModelDownloadForegroundService).
+        return if (npu.available || npu.skelDownloadable) Resolution(resolved, null) else Resolution(null, npu.reason)
     }
 
     private const val TAG = "NpuCatalogVariants"

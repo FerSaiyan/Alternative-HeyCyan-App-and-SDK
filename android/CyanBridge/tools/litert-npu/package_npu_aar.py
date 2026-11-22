@@ -109,6 +109,9 @@ def qairt_version(qairt_root):
     return f"{fields['version']}.{fields['build_id']}"
 
 
+# Download-mode AARs declare their skels (and the release tag that hosts them) for the app.
+SKEL_ASSET = "assets/npu_runtime/skels.json"
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--litert-aar", type=Path, required=True, help="com.google.ai.edge.litert:litert:<version>")
@@ -167,6 +170,7 @@ def main():
     if args.samsung_dispatch:
         files["arm64-v8a", "libLiteRtDispatch_Samsung.so"] = args.samsung_dispatch
 
+    skel_out = {}
     staging = output.with_suffix(".staging")
     staging.mkdir(parents=True, exist_ok=False)
     checks = {}
@@ -186,8 +190,20 @@ def main():
             assert any(item.filename.endswith("/CompiledModel.class") for item in kept)
             for item in kept:
                 target.writestr(item, source.read(item.filename))
+        if args.skel_delivery == "download":
+            for (abi, name), path in sorted(skels.items()):
+                check_elf(args, abi, path, allowed)
+                skel_out[name] = {"sha256": sha256(path), "bytes": path.stat().st_size}
         with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as aar:
             aar.writestr("AndroidManifest.xml", manifest_for(native_libraries))
+            if args.skel_delivery == "download":
+                # The app downloads its phone's skel from this release tag and pins it to these hashes
+                # (QnnSkels in LiteRtNpuSupport.kt), so the pins always match the QNN libraries in this AAR.
+                aar.writestr(SKEL_ASSET, json.dumps({
+                    "qairt": found,
+                    "release_tag": "npu-runtime-qairt" + ".".join(found.split(".")[:3]),
+                    "skels": skel_out,
+                }, indent=1, sort_keys=True) + "\n")
             aar.writestr("classes.jar", classes.getvalue())
             aar.writestr("R.txt", "")
             aar.writestr("proguard.txt", PROGUARD)
@@ -199,14 +215,12 @@ def main():
         for path in sorted(staging.rglob("*"), reverse=True):
             path.unlink() if path.is_file() else path.rmdir()
         staging.rmdir()
-    skel_out = {}
     if args.skel_delivery == "download":
         skel_dir = output.with_suffix(".skels")
         skel_dir.mkdir(parents=True, exist_ok=False)
         for (abi, name), path in sorted(skels.items()):
-            check_elf(args, abi, path, allowed)
             (skel_dir / name).write_bytes(path.read_bytes())
-            skel_out[name] = {"sha256": sha256(skel_dir / name), "bytes": (skel_dir / name).stat().st_size}
+            assert sha256(skel_dir / name) == skel_out[name]["sha256"], name
     manifest = {
         "qairt": found,
         "hexagon": args.hexagon,

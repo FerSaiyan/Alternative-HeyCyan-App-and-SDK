@@ -126,6 +126,35 @@ class LiteRtNpuSupportTest {
         assertEquals(File(skels, "libQnnHtpV79Skel.so"), qc["libQnnHtpV79Skel.so"])
     }
 
+    /** Download-mode AARs ship assets/npu_runtime/skels.json; a missing skel listed there is downloadable. */
+    @Test
+    fun missingSkelIsDownloadableWhenTheAarPinsIt() {
+        val manifest = QnnSkels.parse(
+            """{"qairt": "2.52.0.261104115025", "release_tag": "npu-runtime-qairt2.52.0",
+               "skels": {"libQnnHtpV75Skel.so": {"bytes": 13411540,
+               "sha256": "D469C99CD295FC2D9FA5A576BC977AD78A42505AFB12729B19028FD429E0F92F"}}}""",
+        )
+        assertEquals("npu-runtime-qairt2.52.0", manifest.releaseTag)
+        assertEquals(13411540L, manifest.skels.getValue("libQnnHtpV75Skel.so").bytes)
+        assertEquals("d469c99cd295fc2d9fa5a576bc977ad78a42505afb12729b19028fd429e0f92f", manifest.skels.getValue("libQnnHtpV75Skel.so").sha256)
+        assertEquals(
+            "https://github.com/FerSaiyan/Alternative-HeyCyan-App-and-SDK/releases/download/npu-runtime-qairt2.52.0/libQnnHtpV75Skel.so",
+            QnnSkels.url(manifest, "libQnnHtpV75Skel.so"),
+        )
+
+        val lib = libDir("libLiteRtDispatch_Qualcomm.so", "libQnnHtp.so", "libQnnSystem.so", "libQnnHtpV75Stub.so")
+        val status = LiteRtNpuSupport.statusFor(
+            Vendor.QUALCOMM, "SM8650", lib, tmp.newFolder("noskel"), downloadableSkels = manifest.skels.keys,
+        )
+        assertFalse(status.available)
+        assertTrue(status.skelDownloadable)
+
+        // Not pinned (e.g. another arch) or the QNN libraries themselves missing: not downloadable.
+        assertFalse(LiteRtNpuSupport.statusFor(Vendor.QUALCOMM, "SM8750", lib, null, manifest.skels.keys).skelDownloadable)
+        val partial = libDir("libLiteRtDispatch_Qualcomm.so", "libQnnHtpV75Stub.so")
+        assertFalse(LiteRtNpuSupport.statusFor(Vendor.QUALCOMM, "SM8650", partial, null, manifest.skels.keys).skelDownloadable)
+    }
+
     private fun libDir(vararg names: String): File =
         tmp.newFolder().also { dir -> names.forEach { File(dir, it).writeText("so") } }
 }
