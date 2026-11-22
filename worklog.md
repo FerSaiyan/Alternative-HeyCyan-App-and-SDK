@@ -1,5 +1,43 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-22 — Release 2.5.0 (versionCode 38): Material 3 Expressive everywhere
+
+- **Contents since 2.4.5:**
+  - Material 3 Expressive restyle (`material3-expressive-stable`, 2026-11-19), with androidx Compose UI 1.13.0 and
+    material3 1.5.0 stable; JetBrains Compose Multiplatform stays 1.13.0-rc01 until 1.13.0 is published.
+  - Every popup is a Compose Material 3 dialog: 39 View dialogs + the platform date picker converted via
+    `ui/dialog/ExpressiveDialogs`; rule in AGENTS.md, guarded by `ArchitectureGuardrailSourceTest`.
+  - HeyCyan media sync: plain hint when the phone never found the glasses' Wi-Fi Direct (firmware_dump add.236),
+    diagnostics for missing peers (glasses confirmation, decoded `09 ff <reason>`, discovery telemetry, phone
+    Wi-Fi state); vendor `.aar` `BatteryRsp` guard; app 0x05 battery notify guard.
+  - Glasses type: M02S/A02S and "CY 01_" names recognised as HeyCyan; HeyCyan glasses set to MYVU get a clear
+    message and no automatic MYVU retries.
+  - Merged from main: release size work (R8, trimmed LibVLC), Play vitals fixes, Meta pre-launch-robot reports.
+- **Verified:** app unit tests 774/774, shared 434/434, iOS compile check, debug + androidTest builds. On read-only
+  Pixel_9a: ReleaseDialogs 3/3, ProSubscription 2/2, DeviceBind 3/3 (test fixed, it failed on main too), Appearance,
+  NotesChats, ChatThread 2/2, GlassesDashboard 16/16, MetaPairingScreen 9/9, MetaPairingMockFlow 7/7, MetaDat 4/4 +
+  3/3, WalkingAid 5/5 + 3/3 + 2/2. LocalModelsConfigureScreenTest 1/4 is stale since the screens were localized
+  (it looks for "Import model file", already "Import model" in 2.4.3; not in CI) — follow-up.
+- **HeyCyan sync regression (firmware_dump add.237):** official/custom/adaptive all PASS on the real-BLE / real
+  Wi-Fi Direct rig for four glasses-name styles and four real Wi-Fi-chip firmwares (TuneBuds 5621, AM01G1 1.00.28,
+  AM01W V2.2 1.00.18, A02 1.00.15). No regression versus 2.4.x.
+- **Version:** Play's highest uploaded bundle is code 37 (2.4.5), so 2.5.0 is code 38.
+
+## 2026-11-21 — Correction: heat and charging do not stop the HeyCyan Wi-Fi Direct start (firmware_dump add.236)
+
+- The real BR22 firmware (AM01CY 2.00.10 executed in the emulator; same rules in the V2.2 builds around the field
+  build 2.20.10) blocks the Wi-Fi start only at battery <= 15 % while **not** charging, and stops a session at <= 9 %
+  not charging or at >= 107 °C. The 0x0B temperature is the Wi-Fi chip's CPU; `09 ff 02` is a ~32 s "nobody
+  connected" watchdog.
+- The transfer reply `dataType 1 / errorCode 1` with the peer name is sent only after the Wi-Fi chip reported Wi-Fi
+  Direct up. In log_mwqq8cyw the glasses were discoverable as `CY 01_...`; the phone never found them.
+- So the earlier hint ("charging and hot: unplug, let them cool") was wrong. The hint now says, when the glasses
+  confirmed Wi-Fi Direct: "The glasses started Wi-Fi Direct as \"<name>\", but this phone did not find them. Turn
+  the phone's Wi-Fi off and on, keep it close to the glasses, then sync again." Heat is mentioned only from 100 °C
+  (stop at 107 °C); charging never. Support reports keep the condition fields.
+- Phone-side cause still unknown: the app declares NEARBY_WIFI_DEVICES with neverForLocation, so the user's location
+  permission being off should not block discovery on Android 13+.
+
 ## 2026-11-21 — HeyCyan sync failure on hot, charging glasses (log_mwqq8cyw) + vendor BatteryRsp guard
 
 - **Report:** AM01CY glasses (fw `AM01CY_2.20.10_260411`, Samsung A25, 2.4.3). Official flow stopped after ~10 s; Adaptive "exhausted its bounded recovery budget at checkpoint DEVICE_ERROR after 85s".
