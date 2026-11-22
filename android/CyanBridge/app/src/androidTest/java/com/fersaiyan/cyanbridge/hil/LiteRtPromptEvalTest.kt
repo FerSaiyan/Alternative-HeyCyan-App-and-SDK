@@ -24,6 +24,7 @@ import java.io.File
  * Small greedy prompt eval of one LiteRT-LM model on one backend (default NPU), for comparing NPU builds on real
  * phones (Device Run / RTL) against a host reference. Not part of CI: it skips unless pe_model points at a file.
  *
+ * Paths under /data/local/tmp are copied into the app's external files dir first (shell user).
  * Arguments: pe_model (.litertlm; several joined by "|" run one after another, pe_context likewise), pe_prompts (JSONL rows {id, system, user, expect: [lowercase keywords],
  * max_tokens?}), pe_backend (NPU | GPU | CPU), pe_context (engine maxNumTokens, default 4096),
  * pe_out (results JSONL, default <prompts>.<model>.<backend>.results.jsonl).
@@ -36,8 +37,23 @@ class LiteRtPromptEvalTest {
     @Test fun promptEval() = runBlocking<Unit> {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
-        val models = args.getString("pe_model").orEmpty().split('|').map(String::trim).filter(String::isNotEmpty)
-        val promptsPath = args.getString("pe_prompts").orEmpty()
+        // Files pushed under /data/local/tmp (Device Run clears the app's own storage before the run) are copied into
+        // the app's external files dir by the shell user, which may read /data/local/tmp and write there.
+        val stageDir = File(instrumentation.targetContext.getExternalFilesDir(null), "litert-eval-in").apply { mkdirs() }
+        fun staged(path: String): String {
+            if (!path.startsWith("/data/local/tmp/")) return path
+            val dst = File(stageDir, File(path).name)
+            if (!dst.isFile) {
+                val t = System.nanoTime()
+                instrumentation.uiAutomation.executeShellCommand("cp $path ${dst.absolutePath}").use { pfd ->
+                    android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd).use { it.readBytes() }
+                }
+                println("PE_STAGE $path -> $dst bytes=${dst.length()} s=${"%.1f".format((System.nanoTime() - t) / 1e9)}")
+            }
+            return dst.absolutePath
+        }
+        val models = args.getString("pe_model").orEmpty().split('|').map(String::trim).filter(String::isNotEmpty).map(::staged)
+        val promptsPath = staged(args.getString("pe_prompts").orEmpty())
         // Always report the phone's SoC identity (catalog keys are Build.SOC_MODEL values).
         val socInfo = if (android.os.Build.VERSION.SDK_INT >= 31) {
             "${android.os.Build.SOC_MANUFACTURER}|${android.os.Build.SOC_MODEL}"

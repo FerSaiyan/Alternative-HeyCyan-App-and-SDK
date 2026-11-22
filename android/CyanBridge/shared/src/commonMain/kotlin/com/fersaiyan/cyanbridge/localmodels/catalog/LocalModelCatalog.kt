@@ -205,6 +205,20 @@ object LocalModelCatalogRepository {
                         ),
                     ),
                 ),
+                // Google's Tensor build (Pixel 10 reports Build.SOC_MODEL "Tensor G5"). Our own Tensor compile fails
+                // in the Tensor compiler (INTERNAL), so Pixels use Google's file.
+                NpuVariantSet(
+                    repo = "litert-community/gemma-4-E2B-it-litert-lm",
+                    filePrefix = "gemma-4-E2B-it",
+                    revision = "2e12bfd869b2962984f97a1f2a26807316d534cc",
+                    vendor = "Google",
+                    files = mapOf(
+                        "Tensor G5" to NpuVariantFile(
+                            sha256 = "72d056066f34362adcecf6b76995de67ad899f6f33dfe9079593c1acd2984191",
+                            sizeBytes = 3_206_299_658L,
+                        ),
+                    ),
+                ),
             ),
         ),
     )

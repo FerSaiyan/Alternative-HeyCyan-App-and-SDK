@@ -44,6 +44,23 @@ class NpuVariantResolverTest {
         assertSame(cpu, NpuVariantResolver.resolve(cpu, "SM8650"))
     }
 
+    @Test
+    fun pixel10ResolvesGooglesTensorG5File() {
+        val resolved = NpuVariantResolver.resolve(npuEntry, "Tensor G5")!!
+        assertEquals("gemma-4-E2B-it_Google_Tensor_G5.litertlm", resolved.expectedFilename)
+        assertEquals(
+            "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/" +
+                "2e12bfd869b2962984f97a1f2a26807316d534cc/gemma-4-E2B-it_Google_Tensor_G5.litertlm",
+            resolved.sourceUrl,
+        )
+        assertEquals(3_206_299_658L, resolved.sizeBytes)
+    }
+
+    @Test
+    fun exynos2400HasNoBuild() {
+        assertNull(NpuVariantResolver.resolve(npuEntry, "s5e9945"))
+    }
+
     private fun entryWith(vararg sets: NpuVariantSet) = npuEntry.copy(npuVariants = sets.toList())
 
     @Test
