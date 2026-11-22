@@ -1,5 +1,27 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-22 — LiteRT-LM 0.19.1 + LiteRT 2.4.0 + QAIRT 2.52 is the default stack; release ships the NPU runtimes (branch `litert-240`)
+
+- **Stack:** LiteRT-LM 0.19.1 (default, was 0.16.0) + LiteRT 2.4.0 (vendor dispatch ABI `QueryInterface`) + QAIRT
+  2.52.0.261104. NPU AAR `litert-npu-all-2.4.0-qairt2.52.0-v68-v81-{dl,bundled}.aar` (Qualcomm/MediaTek/Tensor
+  dispatch from Google 2.4.0 AARs, Samsung self-built from release/2.4.0). Gradle pairs the AAR with the LM line.
+- **No model recompiles:** QAIRT 2.50 contexts on 2.52 (emulation) / 2.51 (AI Hub devices) are bit-identical for
+  w8a8/fp16 across v68-v81 (`~/nvme_tmp/qairt-252-compat/REPORT.md`).
+- **Device Run (NPU calibration session, 13 held-out prompts):** Gemma 4 E2B NPU (2.50 contexts) answers identical
+  word for word to the 0.18 runs on S23U SM8550, S25 SM8750, S26 SM8850, Fold6 SM8650, Tab S10+ MT6989 and Pixel 10
+  (Google G5 bundle b3ca0d2f); init faster (e.g. S26 4.2 -> 1.3 s, MT6989 26.7 -> 7.2 s), first token 10-30 % faster.
+  Plain E2B on 0.19.1 GPU+CPU: no native crash on Fold6, Tab S10+, Nord CE 3 Lite (SM6375, the 0.16 SIGSEGV class),
+  Nothing 4a; CPU 13/13 everywhere, GPU 10-12/13 (one real slip on Fold6 GPU: "capital of Australia is Sydney").
+- **Skels:** GitHub prerelease `npu-runtime-qairt2.52.0` (6 skels + SHA256SUMS + skels.json, not "Latest").
+  Download-mode AARs carry `assets/npu_runtime/skels.json`; `QnnSkels.ensure` downloads only the phone's skel
+  (sha256 + size), into `no_backup/npu-runtime/qnn-skel/<qairt>/`; the model download service fetches it first.
+  Verified on a Galaxy S25 (`NpuSkelDownloadTest`: V79 13.6 MB in 8.9 s, WeSpeaker SM8750 ran on the DSP).
+- **Release guard:** `bundleRelease`/`assembleRelease` need `-PlocalLiteRtNpuAarPath=<download-mode AAR>`
+  (`-PreleaseWithoutNpu=true` opts out). R8 bundleRelease OK (136.6 MB AAB vs 121 MB for 2.5.0; NPU natives 21 MB
+  uncompressed arm64). Unit tests 783/783 (default build and NPU build).
+- **Open:** the 2.4.0 Samsung dispatch has not run on a device (Exynos 2600 check on Samsung RTL pending; no Exynos
+  Gemma build exists, so it only affects Samsung NPU models); no 0.16 baseline for the GPU answer slip.
+
 ## 2026-11-22 — Meta Ray-Ban failure dialogs: every way out, incl. the invite form (branch `sync-vpn-hint`)
 
 - **Ask:** in invite mode, every Meta pairing failure that shows an error / Send logs dialog should also offer the

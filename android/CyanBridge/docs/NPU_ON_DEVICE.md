@@ -441,7 +441,10 @@ natives `liblitert_jni.so` and `libLiteRt.so`.
   dependencies. The QAIRT 2.47 and 2.50 Android libraries already meet both.
 - Qualcomm binaries are not committed. Rebuild the AAR from the SDK.
 
-Gradle: `-PlocalLiteRtNpuAarPath=<aar>` with the matching `-PliteRtLmVersion` (0.19.1 for a 2.4.0 AAR, 0.18.0 for 2.3.0)
+Gradle: `-PlocalLiteRtNpuAarPath=<aar>` with the matching `-PliteRtLmVersion` (0.19.1, the default since 2026-11-22,
+for a 2.4.0 AAR; 0.18.0 for 2.3.0). **Release builds require a download-mode NPU AAR** (`bundleRelease` /
+`assembleRelease` fail without one, or with a bundled-skel AAR; `-PreleaseWithoutNpu=true` opts out):
+`./gradlew -PlocalLiteRtNpuAarPath=<litert-npu-all-2.4.0-qairt2.52.0-v68-v81-dl.aar> :app:bundleRelease`
 - adds the AAR,
 - sets `BuildConfig.LITERT_NPU_RUNTIME`,
 - switches `jniLibs.useLegacyPackaging = true`,

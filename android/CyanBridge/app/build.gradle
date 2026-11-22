@@ -93,7 +93,9 @@ def metaDatEnabled = metaGithubToken != null && !metaGithubToken.trim().isEmpty(
 def testAbi = providers.gradleProperty("testAbi").orNull
 // LiteRT-LM runtime line. 0.18.0 adds EmbeddingEngine (EmbeddingGemma 2 text/audio)
 // and ModelInfo; version-specific calls live in src/litertlm<version>/java.
-def liteRtLmVersion = providers.gradleProperty("liteRtLmVersion").getOrElse("0.16.0")
+// Default 0.19.1 since 2026-11-22: LiteRT 2.4.0 + QAIRT 2.52 NPU stack, device-tested on six NPU phones and in
+// CPU/GPU chat on four (docs/NPU_ON_DEVICE.md). 0.16.0 and 0.18.0 stay selectable.
+def liteRtLmVersion = providers.gradleProperty("liteRtLmVersion").getOrElse("0.19.1")
 if (!(liteRtLmVersion in ["0.16.0", "0.18.0", "0.19.1"])) throw new GradleException("Unsupported liteRtLmVersion: $liteRtLmVersion")
 // LiteRT each LiteRT-LM line links statically; NPU dispatch libraries must come from the same LiteRT (the vendor
 // dispatch ABI changed in 2.4.0: GetApi -> QueryInterface, and 0.19.x refuses legacy libraries).
@@ -428,4 +430,27 @@ dependencies {
 // A deadlocked JVM test must fail its task instead of hanging the build indefinitely.
 tasks.withType(Test).configureEach {
     timeout = Duration.ofMinutes(30)
+}
+
+// Release builds ship the NPU runtimes (Qualcomm, MediaTek, Google Tensor, Samsung) with the Hexagon skels downloaded
+// per phone, so a release must use a download-mode NPU AAR (it carries assets/npu_runtime/skels.json). Qualcomm
+// binaries are not committed: build it with tools/litert-npu/package_npu_aar.py --skel-delivery download and pass
+// -PlocalLiteRtNpuAarPath=<aar>. -PreleaseWithoutNpu=true builds a release without NPU runtimes on purpose.
+gradle.taskGraph.whenReady { graph ->
+    def releaseTasks = graph.allTasks.findAll { it.project == project && it.name ==~ /(bundle|assemble)Release/ }
+    if (releaseTasks.isEmpty() || providers.gradleProperty("releaseWithoutNpu").orNull == "true") return
+    def npuAarPath = providers.gradleProperty("localLiteRtNpuAarPath").orNull
+    if (npuAarPath == null) {
+        throw new GradleException("Release builds need the NPU runtime: -PlocalLiteRtNpuAarPath=<download-mode litert-npu-all AAR> " +
+            "(or -PreleaseWithoutNpu=true)")
+    }
+    def zip = new java.util.zip.ZipFile(rootProject.file(npuAarPath))
+    try {
+        if (zip.getEntry("assets/npu_runtime/skels.json") == null) {
+            throw new GradleException("Release NPU AAR must be download-mode (--skel-delivery download): " +
+                "${npuAarPath} bundles the Hexagon skels (~80 MB)")
+        }
+    } finally {
+        zip.close()
+    }
 }
