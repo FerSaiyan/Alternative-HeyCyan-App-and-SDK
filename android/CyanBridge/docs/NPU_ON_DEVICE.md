@@ -354,7 +354,29 @@ adb shell am instrument -w -r -e class com.fersaiyan.cyanbridge.hil.NpuCatalogSe
   com.fersaiyan.cyanbridge.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-## One runtime stack: LiteRT 2.3.0 + QAIRT 2.50.0.260828
+## Runtime stack: LiteRT 2.4.0 + QAIRT 2.52.0.261104 (branch `litert-240`, 2026-11-22)
+
+The NPU stack moves in lockstep; the lines below cannot be mixed:
+
+| LiteRT-LM (`-PliteRtLmVersion`) | LiteRT (CompiledModel + dispatch) | QAIRT runtime | NPU AAR name |
+|---|---|---|---|
+| 0.19.1 (new) | 2.4.0: vendor dispatch ABI `LiteRtDispatchQueryInterface` (ABI 1.0) | 2.52.0.261104 (QNN core >= 2.41, system >= 1.16) | `litert-npu-all-2.4.0-qairt2.52.0-*` |
+| 0.18.0 (previous) | 2.3.0: legacy `LiteRtDispatchGetApi` | 2.50.0.260828 | `litert-npu-all-2.3.0-qairt2.50.0-*` |
+
+- 0.19.x refuses legacy vendor libraries ("exports legacy symbol ... Please recompile"), and the 2.4.0 Qualcomm
+  dispatch refuses QAIRT 2.50 libraries. Gradle enforces the pairing from the AAR name.
+- Models do not need recompiling: every QAIRT 2.50 context loads on 2.52 with bit-identical w8a8/fp16 outputs
+  (`~/nvme_tmp/qairt-252-compat/REPORT.md`: 30 contexts v68-v81 in 2.52 emulation and on AI Hub phones at 2.51;
+  Gemma 4 E2B SM8650 inits on an S24). The w8a16 PP-OCR small reader moves by <= 0.0018 with identical strings.
+- Samsung: Google publishes no Samsung runtime; `libLiteRtDispatch_Samsung.so` is built from LiteRT `release/2.4.0`
+  (`~/nvme_tmp/samsung-dispatch-240/scripts/build.sh`, sha256 `5c2f200a…`). The 2.3.0 build ran on an Exynos 2600;
+  the 2.4.0 build has not run on a device yet.
+- MediaTek / Google Tensor: dispatch libraries from `litert-npu-runtime-{mediatek,google-tensor}:2.4.0`; the vendor
+  driver comes with the phone. LiteRT 2.4.0 still loads the first dispatch library in a directory (#11250), so
+  `LiteRtNpuSupport.dispatchDir` keeps one vendor per directory.
+- Skels: 2.52 skels are ~8.5 % larger (V68 +22 %); V68-V81 skels + stubs 86.8 MB.
+
+### Previous stack: LiteRT 2.3.0 + QAIRT 2.50.0.260828
 
 | What | Runtime in the app | Artifact |
 |---|---|---|
@@ -414,7 +436,7 @@ natives `liblitert_jni.so` and `libLiteRt.so`.
   dependencies. The QAIRT 2.47 and 2.50 Android libraries already meet both.
 - Qualcomm binaries are not committed. Rebuild the AAR from the SDK.
 
-Gradle: `-PlocalLiteRtNpuAarPath=<aar>` (requires `-PliteRtLmVersion=0.18.0`)
+Gradle: `-PlocalLiteRtNpuAarPath=<aar>` with the matching `-PliteRtLmVersion` (0.19.1 for a 2.4.0 AAR, 0.18.0 for 2.3.0)
 - adds the AAR,
 - sets `BuildConfig.LITERT_NPU_RUNTIME`,
 - switches `jniLibs.useLegacyPackaging = true`,

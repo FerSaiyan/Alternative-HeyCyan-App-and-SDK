@@ -39,7 +39,7 @@ class LiteRtBackendBenchmarkTest {
                         "NPU" -> Backend.NPU(LiteRtNpuSupport.dispatchDir(instrumentation.targetContext, LiteRtNpuSupport.status(instrumentation.targetContext)))
                         else -> error("Unsupported backend $name")
                     }
-                    val info = benchmark(modelPath, backend, prefill, decodeTokens, cacheDir)
+                    val info = benchmark(modelPath, backend, prefillTokens = prefill, decodeTokens = decodeTokens, cacheDir = cacheDir)
                     println(
                         "LITERT_BENCH backend=$name repeat=$index prefillTokens=${info.lastPrefillTokenCount} " +
                             "prefillTps=${"%.1f".format(info.lastPrefillTokensPerSecond)} " +

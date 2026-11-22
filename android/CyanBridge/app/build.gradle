@@ -94,7 +94,10 @@ def testAbi = providers.gradleProperty("testAbi").orNull
 // LiteRT-LM runtime line. 0.18.0 adds EmbeddingEngine (EmbeddingGemma 2 text/audio)
 // and ModelInfo; version-specific calls live in src/litertlm<version>/java.
 def liteRtLmVersion = providers.gradleProperty("liteRtLmVersion").getOrElse("0.16.0")
-if (!(liteRtLmVersion in ["0.16.0", "0.18.0"])) throw new GradleException("Unsupported liteRtLmVersion: $liteRtLmVersion")
+if (!(liteRtLmVersion in ["0.16.0", "0.18.0", "0.19.1"])) throw new GradleException("Unsupported liteRtLmVersion: $liteRtLmVersion")
+// LiteRT each LiteRT-LM line links statically; NPU dispatch libraries must come from the same LiteRT (the vendor
+// dispatch ABI changed in 2.4.0: GetApi -> QueryInterface, and 0.19.x refuses legacy libraries).
+def liteRtForLiteRtLm = ["0.18.0": "2.3.0", "0.19.1": "2.4.0"]
 // Qualcomm NPU runtime AAR from tools/litert-npu/package_npu_aar.py (LiteRT CompiledModel,
 // dispatch library and one QAIRT runtime). Opt-in: Qualcomm binaries are not committed.
 def localLiteRtNpuAarPath = providers.gradleProperty("localLiteRtNpuAarPath").orNull
@@ -364,7 +367,7 @@ dependencies {
         }
         implementation files(aar)
         // Local AARs have no Maven transitive dependency metadata (versions from the stock POM).
-        if (liteRtLmVersion == "0.18.0") {
+        if (liteRtLmVersion in ["0.18.0", "0.19.1"]) {
             implementation "com.google.code.gson:gson:2.14.0"
             implementation "org.jetbrains.kotlin:kotlin-reflect:2.4.0"
         } else {
@@ -377,11 +380,14 @@ dependencies {
     if (localLiteRtNpuAarPath != null) {
         def npuAar = rootProject.file(localLiteRtNpuAarPath)
         if (!npuAar.isFile()) throw new GradleException("Missing LiteRT NPU AAR: ${npuAar.absolutePath}")
-        // The dispatch library must match LiteRT-LM's LiteRT (0.18 pins LiteRT 2.3.0 / QAIRT 2.50).
-        // litert-npu-qualcomm-*: Qualcomm only; litert-npu-all-*: Qualcomm + MediaTek + Google Tensor + Samsung
-        // dispatch (tools/litert-npu/package_npu_aar.py --extra-dispatch-aar/--samsung-dispatch).
-        if (!(npuAar.name.startsWith("litert-npu-qualcomm-") || npuAar.name.startsWith("litert-npu-all-")) || liteRtLmVersion != "0.18.0") {
-            throw new GradleException("NPU AAR ${npuAar.name} requires a litert-npu-qualcomm-*/litert-npu-all-* AAR and -PliteRtLmVersion=0.18.0")
+        // The dispatch library must match LiteRT-LM's LiteRT: 0.18.0 = LiteRT 2.3.0 / QAIRT 2.50,
+        // 0.19.1 = LiteRT 2.4.0 / QAIRT 2.52. The AAR name carries its LiteRT version:
+        // litert-npu-qualcomm-<litert>-*: Qualcomm only; litert-npu-all-<litert>-*: Qualcomm + MediaTek + Google Tensor
+        // + Samsung dispatch (tools/litert-npu/package_npu_aar.py --extra-dispatch-aar/--samsung-dispatch).
+        def wantLiteRt = liteRtForLiteRtLm[liteRtLmVersion]
+        if (wantLiteRt == null || !(npuAar.name.startsWith("litert-npu-qualcomm-$wantLiteRt-") || npuAar.name.startsWith("litert-npu-all-$wantLiteRt-"))) {
+            throw new GradleException("NPU AAR ${npuAar.name} does not match -PliteRtLmVersion=$liteRtLmVersion " +
+                "(needs litert-npu-qualcomm-/litert-npu-all-<LiteRT> with LiteRT ${liteRtForLiteRtLm.collect { k, v -> "$v for $k" }.join(", ")})")
         }
         implementation files(npuAar)
     }
