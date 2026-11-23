@@ -718,6 +718,18 @@ fun WalkingAidSettingsScreen(
                             onCheckedChange = vm::onSafetyDisclaimerChange,
                         )
                     }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(R.string.walking_aid_goal_question_setting), modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = vm.goalQuestionEnabled,
+                            onCheckedChange = vm::onGoalQuestionChange,
+                        )
+                    }
                 }
             }
 

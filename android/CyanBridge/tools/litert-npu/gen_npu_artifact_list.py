@@ -5,7 +5,9 @@
 
 Lists NPU builds whose status is device-verified, aihub-verified or emu*-verified (compile-only builds are left out
 until a device test passes; pass their SoCs with --extra-verified after one does), plus the CPU/GPU OCR sources
-and recognizer dictionaries. Small PP-OCR builds are listed before tiny ones, so a SoC with both uses small.
+and recognizer dictionaries. PP-OCRv6 tiny builds are left out: on the 2026-11-23 Device Run check (Pixel 10) the
+tiny pair misread a tilted Mercosul plate that every small build read, so phones without a small NPU build read
+with the small CPU model (OCR only runs on triggered crops).
 """
 import argparse, json, os, re, sys
 
@@ -52,6 +54,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('catalog')
     ap.add_argument('--extra-verified', default='', help='SoCs whose compile-only builds passed a device test')
+    ap.add_argument('--allow-tiny-ocr', action='store_true', help='also list PP-OCRv6 tiny NPU builds')
     a = ap.parse_args()
     cat = json.load(open(a.catalog))
     extra = {s for s in a.extra_verified.split(',') if s}
@@ -60,6 +63,8 @@ def main():
         mid, kind = e['model_id'], e.get('kind')
         if kind == 'npu' and mid in MODELS and e['vendor'] in VENDORS:
             if not (VERIFIED.match(e['status']) or e['soc'] in extra):
+                continue
+            if 'tiny' in mid and not a.allow_tiny_ocr:
                 continue
             stem = os.path.basename(e['path']).removesuffix('.tflite').removesuffix('_apply_plugin')
             npu.append((0 if 'small' in mid or mid not in MODELS or 'tiny' not in mid else 1, e['vendor'], e['soc'],

@@ -12,4 +12,5 @@
     <string name="walking_aid_bus_match">Autobús %1$s llegando, %2$s.</string>
     <string name="walking_aid_bus_read">Letrero del autobús: %1$s, %2$s.</string>
     <string name="walking_aid_reader_downloading">Descargando el lector de letreros y placas.</string>
+    <string name="walking_aid_goal_question_setting">Preguntar qué necesito al iniciar (ayuda con viaje y autobús)</string>
 </resources>

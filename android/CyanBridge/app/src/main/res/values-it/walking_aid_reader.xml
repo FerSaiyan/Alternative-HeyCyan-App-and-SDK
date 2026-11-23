@@ -12,4 +12,5 @@
     <string name="walking_aid_bus_match">Autobus %1$s in arrivo, %2$s.</string>
     <string name="walking_aid_bus_read">Insegna dell\'autobus: %1$s, %2$s.</string>
     <string name="walking_aid_reader_downloading">Download del lettore di insegne e targhe.</string>
+    <string name="walking_aid_goal_question_setting">Chiedere cosa mi serve all\'avvio (aiuto per corsa e autobus)</string>
 </resources>

@@ -94,6 +94,7 @@ class WalkingAidSettingsViewModel(
     var announcementPause by mutableFloatStateOf(store[WalkingAid.announcementPauseMs] / 1000f)
         private set
     var safetyDisclaimerEnabled by mutableStateOf(store[WalkingAid.safetyDisclaimerEnabled])
+    var goalQuestionEnabled by mutableStateOf(store[WalkingAid.goalQuestionEnabled])
         private set
     var historyMaxCount by mutableIntStateOf(store[WalkingAid.imageHistoryMaxCount])
         private set
@@ -255,6 +256,11 @@ class WalkingAidSettingsViewModel(
     fun onSafetyDisclaimerChange(enabled: Boolean) {
         safetyDisclaimerEnabled = enabled
         save(WalkingAid.safetyDisclaimerEnabled, enabled)
+    }
+
+    fun onGoalQuestionChange(enabled: Boolean) {
+        goalQuestionEnabled = enabled
+        save(WalkingAid.goalQuestionEnabled, enabled)
     }
 
     fun onCustomPromptChange(prompt: String) {

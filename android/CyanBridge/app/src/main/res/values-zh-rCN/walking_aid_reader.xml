@@ -12,4 +12,5 @@
     <string name="walking_aid_bus_match">%1$s 路公交车即将到达，%2$s。</string>
     <string name="walking_aid_bus_read">公交车路牌：%1$s，%2$s。</string>
     <string name="walking_aid_reader_downloading">正在下载路牌和车牌识别器。</string>
+    <string name="walking_aid_goal_question_setting">启动时询问我需要什么（叫车和公交帮助）</string>
 </resources>

@@ -12,4 +12,5 @@
     <string name="walking_aid_bus_match">%1$s번 버스가 오고 있어요, %2$s.</string>
     <string name="walking_aid_bus_read">버스 표지판: %1$s, %2$s.</string>
     <string name="walking_aid_reader_downloading">표지판 및 번호판 판독기를 다운로드하는 중이에요.</string>
+    <string name="walking_aid_goal_question_setting">시작할 때 필요한 것 묻기 (차량 및 버스 도움)</string>
 </resources>

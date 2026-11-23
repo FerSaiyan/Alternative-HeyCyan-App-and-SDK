@@ -12,4 +12,5 @@
     <string name="walking_aid_bus_match">Bus %1$s arriving, %2$s.</string>
     <string name="walking_aid_bus_read">Bus sign: %1$s, %2$s.</string>
     <string name="walking_aid_reader_downloading">Downloading the sign and plate reader.</string>
+    <string name="walking_aid_goal_question_setting">Ask what I need when it starts (ride and bus help)</string>
 </resources>

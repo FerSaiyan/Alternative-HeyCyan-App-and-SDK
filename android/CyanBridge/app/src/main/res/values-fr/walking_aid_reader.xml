@@ -12,4 +12,5 @@
     <string name="walking_aid_bus_match">Bus %1$s en approche, %2$s.</string>
     <string name="walking_aid_bus_read">Panneau du bus : %1$s, %2$s.</string>
     <string name="walking_aid_reader_downloading">Téléchargement du lecteur de panneaux et de plaques.</string>
+    <string name="walking_aid_goal_question_setting">Demander ce dont j\'ai besoin au démarrage (aide VTC et bus)</string>
 </resources>

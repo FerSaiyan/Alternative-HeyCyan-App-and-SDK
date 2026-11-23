@@ -12,4 +12,5 @@
     <string name="walking_aid_bus_match">Bus %1$s kommt, %2$s.</string>
     <string name="walking_aid_bus_read">Busanzeige: %1$s, %2$s.</string>
     <string name="walking_aid_reader_downloading">Der Schild- und Kennzeichenleser wird heruntergeladen.</string>
+    <string name="walking_aid_goal_question_setting">Beim Start fragen, was ich brauche (Hilfe bei Fahrt und Bus)</string>
 </resources>

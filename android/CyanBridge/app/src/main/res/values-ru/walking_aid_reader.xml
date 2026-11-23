@@ -12,4 +12,5 @@
     <string name="walking_aid_bus_match">Автобус %1$s подъезжает, %2$s.</string>
     <string name="walking_aid_bus_read">Табличка автобуса: %1$s, %2$s.</string>
     <string name="walking_aid_reader_downloading">Загружается распознавание табличек и номеров.</string>
+    <string name="walking_aid_goal_question_setting">Спрашивать при запуске, что нужно (помощь с такси и автобусом)</string>
 </resources>
