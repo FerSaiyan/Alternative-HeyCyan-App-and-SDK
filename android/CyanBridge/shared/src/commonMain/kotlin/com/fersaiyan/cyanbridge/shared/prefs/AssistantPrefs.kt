@@ -76,6 +76,8 @@ object AssistantPrefs {
         val webSearchEngine = optionalString("web_search_engine")
         /** "Answer only my voice"; applies only while a voice profile is enrolled. */
         val answerOnlyMyVoice = boolean("answer_only_my_voice", true)
+        /** App versionCode in which the NPU voice model failed to load here (that build uses the CPU model); -1 none. */
+        val speakerNpuBrokenBuild = int("speaker_npu_broken_build", -1)
     }
 
     val files: List<PrefsFile> = listOf(

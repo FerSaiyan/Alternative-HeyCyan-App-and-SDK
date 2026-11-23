@@ -113,6 +113,7 @@ class PrefsInventoryTest {
         question_routing/mode STRING null
         question_routing/web_search_engine STRING null
         question_routing/answer_only_my_voice BOOLEAN true
+        question_routing/speaker_npu_broken_build INT -1
         local_agent_prefs/provider_type STRING null
         local_agent_prefs/glasses_assistant_mode STRING "CUSTOM_AI_PROVIDER" ios=cyanbridge_ios_glasses/assistant_mode
         local_agent_prefs/require_confirmation BOOLEAN true
@@ -309,6 +310,7 @@ class PrefsInventoryTest {
         walking_aid_prefs/state_model_source STRING "local"
         walking_aid_prefs/tts_enabled BOOLEAN true
         walking_aid_prefs/safety_disclaimer_enabled BOOLEAN true
+        walking_aid_prefs/goal_question_enabled BOOLEAN true
         walking_aid_prefs/image_history_max_count INT 50
         walking_aid_prefs/custom_prompt STRING ""
         walking_aid_prefs/yolo_model_type STRING "yolo11"

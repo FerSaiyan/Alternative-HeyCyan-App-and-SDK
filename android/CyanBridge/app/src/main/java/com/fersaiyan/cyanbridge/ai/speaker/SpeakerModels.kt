@@ -2,6 +2,9 @@ package com.fersaiyan.cyanbridge.ai.speaker
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.localmodels.engine.NpuArtifacts
+import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs.QuestionRouting
+import com.fersaiyan.cyanbridge.shared.prefs.get
+import com.fersaiyan.cyanbridge.shared.prefs.set
 
 /**
  * A LiteRT speaker-embedding graph with its filterbank inside the graph:
@@ -132,18 +135,13 @@ object SpeakerModels {
     fun preferred(context: Context): SpeakerModelSpec =
         npuFor(context)?.takeUnless { npuBroken(context) } ?: DEFAULT
 
-    private const val PREFS = "speaker_models"
-    private const val KEY_NPU_BROKEN = "npu_broken_build"
-
     /** Remembers (per app build) that the NPU model failed to load here, so [preferred] falls back to the CPU model. */
     fun markNpuBroken(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putInt(KEY_NPU_BROKEN, com.fersaiyan.cyanbridge.BuildConfig.VERSION_CODE).apply()
+        QuestionRouting.speakerNpuBrokenBuild[context] = com.fersaiyan.cyanbridge.BuildConfig.VERSION_CODE
     }
 
     private fun npuBroken(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_NPU_BROKEN, -1) ==
-            com.fersaiyan.cyanbridge.BuildConfig.VERSION_CODE
+        QuestionRouting.speakerNpuBrokenBuild[context] == com.fersaiyan.cyanbridge.BuildConfig.VERSION_CODE
 
     fun findById(id: String?): SpeakerModelSpec? = all.firstOrNull { it.id == id }
 }
