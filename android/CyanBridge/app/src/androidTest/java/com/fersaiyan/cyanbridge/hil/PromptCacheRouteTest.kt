@@ -7,6 +7,7 @@ import com.fersaiyan.cyanbridge.localmodels.engine.EngineLoadConfig
 import com.fersaiyan.cyanbridge.localmodels.engine.GenerationConfig
 import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtLocalInferenceEngine
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
+import com.fersaiyan.cyanbridge.shared.assistant.SpokenDecisionParser
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assume.assumeTrue
@@ -23,7 +24,10 @@ import java.io.File
  * A 1.5 s pause after each question stands in for the spoken answer (when the spare is primed).
  * Records the route tag, time to first token and total time per question; the routes must match the expected tags
  * as well as the fresh layout does. Not part of CI: skips unless pc_model points at a .litertlm file.
- * Arguments: pc_model, pc_backend (GPU | CPU, default GPU), pc_out.
+ * Arguments: pc_model, pc_backend (GPU | CPU, default GPU), pc_out, pc_layouts (default fresh,split,cached),
+ * pc_phone=false (the route list without [phone], used when the Local Agent is not set up: play_song expects [answer]).
+ * answer_s is the first speakable word after the tag and phrase_s the first phrase end (where streamed speech can
+ * start); without streaming an answer was spoken after total_s.
  */
 @RunWith(AndroidJUnit4::class)
 class PromptCacheRouteTest {
@@ -68,14 +72,20 @@ class PromptCacheRouteTest {
         val load = engine.loadModel(model.path, EngineLoadConfig(4096, 4, backend, -1, speculativeDecoding = false))
         log(mapOf("event" to "loaded", "backend" to load.activeBackend.name, "model" to model.name, "device" to android.os.Build.MODEL))
 
-        val routes = ImageQuestionDefaults.spokenQuestionInstruction("en") + "\n\n" + ImageQuestionDefaults.SPOKEN_DECISION_ROUTES
+        val phoneRoute = args.getString("pc_phone") != "false"
+        val routes = ImageQuestionDefaults.spokenQuestionInstruction("en") + "\n\n" + ImageQuestionDefaults.spokenDecisionRoutes(phoneRoute)
         val clock = ImageQuestionDefaults.currentContextInstruction()
-        for (layout in listOf("fresh", "split", "cached")) {
+        val layouts = args.getString("pc_layouts")?.split(',') ?: listOf("fresh", "split", "cached")
+        for (layout in layouts) {
             LiteRtLocalInferenceEngine.promptCacheEnabled = layout == "cached"
             var hits = 0
             for ((name, file, want) in clips) {
+                val expected = if (!phoneRoute && want == "phone") "answer" else want
                 val started = System.nanoTime()
                 var firstToken = 0L
+                var firstWord = 0L
+                var firstPhrase = 0L
+                val streamed = StringBuilder()
                 val result = runCatching {
                     engine.generate(
                         GenerationConfig(
@@ -84,17 +94,26 @@ class PromptCacheRouteTest {
                             systemInstruction = if (layout == "fresh") "$routes\n\n$clock" else routes,
                             turnContext = if (layout == "fresh") null else clock,
                         ),
-                    ) { if (firstToken == 0L && it.isNotEmpty()) firstToken = System.nanoTime() }
+                    ) {
+                        val now = System.nanoTime()
+                        if (firstToken == 0L && it.isNotEmpty()) firstToken = now
+                        streamed.append(it)
+                        val speakable = SpokenDecisionParser.speakablePrefix(streamed.toString())
+                        if (firstWord == 0L && speakable.isNotEmpty()) firstWord = now
+                        if (firstPhrase == 0L && Regex("[.!?,;:。！？，]").containsMatchIn(speakable)) firstPhrase = now
+                    }
                 }
                 val text = result.getOrNull()?.text.orEmpty()
                 val tag = Regex("^\\s*\\[\\s*([a-z]+)\\s*]", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)?.lowercase()
-                if (tag == want) hits++
+                if (tag == expected) hits++
                 // The spoken answer's time: the engine primes its spare (GPU/NPU) meanwhile.
                 kotlinx.coroutines.delay(1_500L)
                 log(mapOf(
-                    "event" to "q", "layout" to layout, "clip" to name, "expected" to want, "tag" to tag,
+                    "event" to "q", "layout" to layout, "clip" to name, "expected" to expected, "tag" to tag,
                     "ttft_s" to if (firstToken > 0) (firstToken - started) / 1e9 else null,
-                    "total_s" to (System.nanoTime() - started) / 1e9, "reply" to text.take(80),
+                    "answer_s" to if (firstWord > 0) (firstWord - started) / 1e9 else null,
+                    "phrase_s" to if (firstPhrase > 0) (firstPhrase - started) / 1e9 else null,
+                    "total_s" to (System.nanoTime() - started) / 1e9, "reply" to text.take(80), "phone_route" to phoneRoute,
                     "error" to result.exceptionOrNull()?.toString(),
                 ))
             }

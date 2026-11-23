@@ -11,6 +11,7 @@ import com.fersaiyan.cyanbridge.ai.router.AssistantRequestRouter
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
 import com.fersaiyan.cyanbridge.ai.router.RelayErrorLocalizer
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
+import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.context.LocalAgentContextBuilder
 import com.fersaiyan.cyanbridge.localagent.context.SpokenMemoryContext
 import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsStorage
@@ -28,6 +29,7 @@ import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.session.DecideOnceUnsupportedException
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.memoryvault.MemoryPolicyService
+import com.fersaiyan.cyanbridge.shared.ai.RelayTurn
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantMemorySelection
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantSystemPrompt
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
@@ -88,6 +90,8 @@ internal class AssistantProviderQueries(
         photoNote: String? = null,
         /** Caps the local model's reply (a route-only decision turn); null for the model's own limit. */
         maxTokens: Int? = null,
+        /** Pro relay spoken questions: earlier turns of the conversation, as text (the relay keeps none). */
+        relayHistory: List<RelayTurn> = emptyList(),
     ): String {
         // Every question's model call passes here; a question the speaker check stopped never does.
         Log.i("AIHijack", "Provider request provider=$providerType audio=${!audioPath.isNullOrBlank()} images=${imagePaths.size}")
@@ -96,8 +100,11 @@ internal class AssistantProviderQueries(
         val languageTag = languageTag()
         val spoken = !audioPath.isNullOrBlank()
         // Local spoken questions keep the system turn identical between questions (LiteRT-LM serves it from its
-        // prefill cache); the time, which changes every minute, goes into the user turn instead.
-        val timeInUserTurn = spoken && providerType == AgentProviderType.LOCAL_AGENT
+        // prefill cache); the time, which changes every minute, goes into the user turn instead. Pro decision turns do
+        // the same (the relay's turn_note), so their system text stays stable too.
+        val timeInUserTurn = spoken && (
+            providerType == AgentProviderType.LOCAL_AGENT || (providerType == AgentProviderType.PRO_SUBSCRIPTION && decisionRoutes)
+            )
         val systemPrompt = systemPromptFor(userPrompt, ragProfile, spoken, decisionRoutes, extraInstruction, decideOnce, timeInUserTurn, date, languageTag)
 
         val messages = listOfNotNull(
@@ -116,15 +123,22 @@ internal class AssistantProviderQueries(
                 // (photo first when there is one); systemPrompt carries the spoken-question instructions.
                 if (!audioPath.isNullOrBlank()) {
                     val photo = imagePaths.firstOrNull()
+                    // The time and the photo note go between the photo and the recording (turn_note).
+                    val turnNote = listOfNotNull(
+                        ImageQuestionDefaults.currentContextInstruction().takeIf { timeInUserTurn },
+                        photoNote?.takeIf { photo != null },
+                    ).joinToString("\n").ifBlank { null }
                     return (if (photo != null) {
                         CliRelayClient.imageQuery(
                             context = ctx, imagePath = photo, modelOverride = chosenQuestionsModel,
                             audioPath = audioPath, spokenQuestion = true, systemContext = systemPrompt,
+                            turnNote = turnNote, history = relayHistory,
                         )
                     } else {
                         CliRelayClient.audioQuery(
                             context = ctx, audioPath = audioPath, modelOverride = chosenQuestionsModel,
                             spokenQuestion = true, systemContext = systemPrompt,
+                            turnNote = turnNote, history = relayHistory,
                         )
                     }).getOrElse { RelayErrorLocalizer.localizedMessage(ctx, it) }.trim().also { reply ->
                         if (!decisionRoutes && reportReply) GlassesQuestionTestHooks.emit("reply", "provider=$providerType images=${imagePaths.size} audio=true text=$reply")
@@ -217,7 +231,13 @@ internal class AssistantProviderQueries(
             spokenQuestionInstruction = {
                 ImageQuestionDefaults.spokenQuestionInstruction(languageTag, allowQuestionEcho = decideOnce != null)
             },
-            decisionRoutes = ImageQuestionDefaults.SPOKEN_DECISION_ROUTES.takeIf { decisionRoutes },
+            decisionRoutes = if (decisionRoutes) {
+                val phone = phoneTasksAvailable()
+                SpokenSystemTurnPrimer.noteUsed(phone)
+                ImageQuestionDefaults.spokenDecisionRoutes(phoneTasks = phone)
+            } else {
+                null
+            },
             extraInstruction = extraInstruction,
             spokenMemory = { SpokenMemoryContext.build(ctx, date) },
             currentContext = { if (timeInUserTurn) "" else ImageQuestionDefaults.currentContextInstruction() },
@@ -241,6 +261,19 @@ internal class AssistantProviderQueries(
             photoNote = ImageQuestionDefaults.PHOTO_QUESTION_NOTE.takeIf { decisionRoutes },
         )
     }.onFailure { Log.w("AIHijack", "Photo prefill skipped: ${it.message}") }.getOrDefault(false)
+
+    /**
+     * The decision turn offers [phone] only when the Local Agent can run phone tasks; the other system turn is the
+     * cached one otherwise (SpokenSystemTurnCache re-primes when this changes).
+     */
+    fun phoneTasksAvailable(): Boolean = runCatching { LocalAgentController.unavailableReason(ctx) == null }.getOrDefault(false)
+
+    /**
+     * The decision system turn of a local spoken or photo question as [query] builds it (no clock, no memory search),
+     * for priming LiteRT-LM's prefill cache ahead of the next question.
+     */
+    fun spokenDecisionSystemTurn(): String =
+        systemPromptFor("", RagProfile.NONE, spoken = true, decisionRoutes = true, extraInstruction = null, decideOnce = null, timeInUserTurn = true)
 
     private fun memoryAwareSystemPrompt(queryText: String, date: String, ragProfile: RagProfile): String {
         if (ragProfile == RagProfile.NONE) return ""

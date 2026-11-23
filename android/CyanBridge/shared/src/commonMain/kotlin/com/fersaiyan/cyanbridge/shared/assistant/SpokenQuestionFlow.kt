@@ -109,9 +109,18 @@ interface SpokenQuestionActions {
      */
     fun phoneTaskAvailable(): Boolean = true
 
-    /** Starts a live conversation; [photoPath] is the photo of a photo question, shown to it first. */
-    fun startLive(prompt: String, photoPath: String? = null)
+    /**
+     * Starts a live conversation now. [photo]: a photo question's photo, which opens it once it is in (it may still be
+     * transferring); the conversation does not wait for it.
+     */
+    fun startLive(prompt: String, photo: LivePhoto? = null)
 }
+
+/**
+ * The photo a live conversation opens with: [prompt] goes with it; without it by [waitMs] the conversation goes on with
+ * the plain prompt.
+ */
+data class LivePhoto(val photo: Deferred<String?>, val prompt: String, val waitMs: Long)
 
 /** An answer spoken while the model writes it (Android: the local model's streaming speech). */
 interface SpokenAnswerStream {
@@ -170,6 +179,8 @@ data class SpokenQuestionSettings(
     val followUpWindowMs: Long = 5_000L,
     /** Without a photo by then the question is answered without it. */
     val photoTimeoutMs: Long = 45_000L,
+    /** A live conversation opened from a photo question waits this long for its photo (it starts meanwhile). */
+    val livePhotoWaitMs: Long = 7_000L,
     /** Upper bound for speaking one answer. */
     val answerSpeechTimeoutMs: Long = 180_000L,
 )
@@ -492,8 +503,8 @@ class SpokenQuestionFlow(
                     null
                 }
                 SpokenRoute.LIVE -> {
-                    val livePhoto = photoQuestion?.let { withTimeoutOrNull(settings.photoTimeoutMs) { it.photo.await() } }
-                    actions.startLive(if (livePhoto != null) PHOTO_LIVE_PROMPT else LIVE_PROMPT, livePhoto)
+                    // Live starts at once; the photo (possibly still transferring) opens it if it comes in time.
+                    actions.startLive(LIVE_PROMPT, photoQuestion?.let { LivePhoto(it.photo, PHOTO_LIVE_PROMPT, settings.livePhotoWaitMs) })
                     null
                 }
                 SpokenRoute.IGNORE -> null

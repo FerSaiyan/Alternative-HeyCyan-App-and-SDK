@@ -133,7 +133,18 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 val language = intent.getStringExtra(EXTRA_LANGUAGE)?.takeIf { it.isNotBlank() }
                     ?: AppLanguagePreferences.selected(this).languageTag.ifBlank { Locale.getDefault().toLanguageTag() }
                 questionTurns.reset()
-                questionTurns.offer(turn)
+                val opening = GeminiLiveOpeningImage.take()
+                if (opening == null) {
+                    questionTurns.offer(turn)
+                } else {
+                    // A photo question chose Live before its photo was in: the session starts now, and the photo opens
+                    // it when it comes in time (queued until setup completes, or sent right away after).
+                    serviceScope.launch {
+                        val openingTurn = with(GeminiLiveOpeningImage) { opening.openingTurn() }
+                        Log.i(TAG, "Live opening turn image=${openingTurn.hasImage}")
+                        questionTurns.offer(openingTurn)?.let { sendQuestionTurns(listOf(it)) }
+                    }
+                }
                 // Base image question without strict "Answer only in X" - Live's systemInstruction handles language permissively
                 // (97 languages, switch on request). Single-shot paths keep the strict Resolver.
                 val imagePrompt = intent.getStringExtra(EXTRA_IMAGE_PROMPT)?.takeIf { it.isNotBlank() }

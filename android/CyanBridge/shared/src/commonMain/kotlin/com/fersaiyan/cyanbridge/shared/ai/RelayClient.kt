@@ -255,6 +255,10 @@ class RelayClient(
         spokenQuestion: Boolean = false,
         /** Appended by the relay to the user's system prompt (glasses spoken-question instructions). */
         systemContext: String? = null,
+        /** Spoken questions: a short text part between the photo and the recording (time, photo note; <= 600 chars). */
+        turnNote: String? = null,
+        /** Spoken questions: earlier turns of the conversation as text (the relay keeps none). */
+        history: List<RelayTurn> = emptyList(),
     ): Result<String> = runCatching {
         requireCapability("image_query") { it.imageQuery }
 
@@ -275,6 +279,7 @@ class RelayClient(
                 }
                 if (spokenQuestion) put("spoken_question", true)
                 systemContext?.takeIf { it.isNotBlank() }?.let { put("system_context", it) }
+                putSpokenTurn(spokenQuestion, turnNote, history)
             },
         )
         response.optString("reply").ifBlank {
@@ -291,6 +296,10 @@ class RelayClient(
         spokenQuestion: Boolean = false,
         /** Appended by the relay to the user's system prompt (glasses spoken-question instructions). */
         systemContext: String? = null,
+        /** Spoken questions: a short text part before the recording (the time; <= 600 chars). */
+        turnNote: String? = null,
+        /** Spoken questions: earlier turns of the conversation as text (the relay keeps none). */
+        history: List<RelayTurn> = emptyList(),
     ): Result<String> = runCatching {
         val bytes = audio.read()
         val response = postJson(
@@ -303,10 +312,31 @@ class RelayClient(
                 putModel(modelOverride)
                 if (spokenQuestion) put("spoken_question", true)
                 systemContext?.takeIf { it.isNotBlank() }?.let { put("system_context", it) }
+                putSpokenTurn(spokenQuestion, turnNote, history)
             },
         )
         response.optString("reply").ifBlank {
             throw IllegalStateException("Relay returned empty audio reply")
+        }
+    }
+
+    /** `turn_note` and `history` of a spoken question (the relay ignores them otherwise). */
+    private fun kotlinx.serialization.json.JsonObjectBuilder.putSpokenTurn(
+        spokenQuestion: Boolean,
+        turnNote: String?,
+        history: List<RelayTurn>,
+    ) {
+        if (!spokenQuestion) return
+        turnNote?.trim()?.takeIf { it.isNotEmpty() }?.let { put("turn_note", it.take(MAX_TURN_NOTE_CHARS)) }
+        if (history.isNotEmpty()) {
+            putJsonArray("history") {
+                history.forEach { turn ->
+                    addJsonObject {
+                        put("role", if (turn.fromUser) "user" else "assistant")
+                        put("text", turn.text)
+                    }
+                }
+            }
         }
     }
 
@@ -523,3 +553,9 @@ class RelayClient(
             values.firstOrNull { it.isFinite() && it > 0.0 } ?: -1.0
     }
 }
+
+/** One earlier turn of a spoken conversation, sent as text in a relay request's `history`. */
+data class RelayTurn(val fromUser: Boolean, val text: String)
+
+/** The relay keeps at most this much of a `turn_note` (lib/spoken-question.ts). */
+private const val MAX_TURN_NOTE_CHARS = 600

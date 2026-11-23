@@ -9,6 +9,7 @@ import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.shared.ai.AiProviderReplies
 import com.fersaiyan.cyanbridge.shared.ai.AiProviderRouting
 import com.fersaiyan.cyanbridge.shared.ai.CliRelayBackend
+import com.fersaiyan.cyanbridge.shared.ai.RelayTurn
 import com.fersaiyan.cyanbridge.shared.ai.RelayClient
 import com.fersaiyan.cyanbridge.shared.ai.RelayMedia
 import com.fersaiyan.cyanbridge.shared.ai.RelaySettings
@@ -82,6 +83,8 @@ object CliRelayClient {
         spokenQuestion: Boolean = false,
         /** Appended by the relay to the user's system prompt (glasses spoken-question instructions). */
         systemContext: String? = null,
+        turnNote: String? = null,
+        history: List<RelayTurn> = emptyList(),
     ): Result<String> = relay(context).imageQuery(
         image = imageMedia(imagePath),
         prompt = prompt,
@@ -90,6 +93,8 @@ object CliRelayClient {
         audio = audioPath?.let(::audioMedia),
         spokenQuestion = spokenQuestion,
         systemContext = systemContext,
+        turnNote = turnNote,
+        history = history,
     )
 
     suspend fun audioQuery(
@@ -101,7 +106,10 @@ object CliRelayClient {
         spokenQuestion: Boolean = false,
         /** Appended by the relay to the user's system prompt (glasses spoken-question instructions). */
         systemContext: String? = null,
-    ): Result<String> = relay(context).audioQuery(audioMedia(audioPath), prompt, modelOverride, spokenQuestion, systemContext)
+        turnNote: String? = null,
+        history: List<RelayTurn> = emptyList(),
+    ): Result<String> =
+        relay(context).audioQuery(audioMedia(audioPath), prompt, modelOverride, spokenQuestion, systemContext, turnNote, history)
 
     internal suspend fun chatWithMedia(
         context: Context,

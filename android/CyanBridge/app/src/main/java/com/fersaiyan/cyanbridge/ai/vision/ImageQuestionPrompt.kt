@@ -175,6 +175,35 @@ object ImageQuestionDefaults {
             "\"Pedro, pass me the salt.\" -> [ignore]\n" +
             "\"Okay, thanks, that's all.\" -> [ignore]"
 
+    /** The [phone] route line of [SPOKEN_DECISION_ROUTES]. */
+    private const val PHONE_ROUTE_LINE =
+        "[phone] then the task in one short sentence: they ask you to do something on their phone (open an app, play music, call, send a message, set a timer or alarm, turn something on or off, navigate).\n"
+
+    /**
+     * [SPOKEN_DECISION_ROUTES] without the [phone] route, for users without the Local Agent
+     * (`LocalAgentController.unavailableReason != null`): phone requests are answered with one sentence saying the
+     * phone can't be controlled. Only one of the two is the cached system turn at a time
+     * ([spokenDecisionRoutes]). Scored on the host with eval_spoken_route_tags.py (prompt "routes_nophone").
+     */
+    val SPOKEN_DECISION_ROUTES_NO_PHONE: String = SPOKEN_DECISION_ROUTES
+        .replace(PHONE_ROUTE_LINE, "")
+        .replace(" Starting Gemini Live is always [live], never [phone].", " Starting Gemini Live is always [live].")
+        .replace(
+            "the current local time you were given and what you know.\n",
+            "the current local time you were given and what you know. If they ask you to do something on their phone " +
+                "(open an app, play music, call, send a message, set a timer or alarm), say in one short sentence that you " +
+                "can't control their phone.\n",
+        )
+        .replace(
+            "\"Play some jazz on YouTube.\" -> [phone] Play jazz on YouTube.\n\"Turn on do not disturb.\" -> [phone] Turn on do not disturb.\n",
+            "\"Play some jazz on YouTube.\" -> [answer] Sorry, I can't control your phone.\n",
+        )
+        .also { check("[phone]" !in it) }
+
+    /** The route list of a decision turn: with [phone] only when the Local Agent can run phone tasks. */
+    fun spokenDecisionRoutes(phoneTasks: Boolean): String =
+        if (phoneTasks) SPOKEN_DECISION_ROUTES else SPOKEN_DECISION_ROUTES_NO_PHONE
+
     /**
      * A photo question decided with [SPOKEN_DECISION_ROUTES] (the photo button with the SMART decision): the system
      * turn is the spoken questions' one (kept identical for LiteRT-LM's prefill cache), and this note goes right after
@@ -186,6 +215,14 @@ object ImageQuestionDefaults {
     const val PHOTO_QUESTION_NOTE =
         "Here is the photo my glasses camera took for this question, so you can see what I'm looking at. Don't reply " +
             "[camera]: if I ask about what I see, reply [answer] and answer from the photo."
+
+    /**
+     * A Pro follow-up: the relay keeps no conversation, so the conversation's photo is sent again with the new
+     * recording (turn_note). Unlike [PHOTO_QUESTION_NOTE] it leaves [camera] open for something new.
+     */
+    const val PHOTO_RESENT_NOTE =
+        "Here again is the photo my glasses camera took earlier in this conversation. If my new question is about " +
+            "something else I'm looking at now, reply [camera]."
 
     fun checkingWebCueForLanguage(languageTag: String): String = when (
         Locale.forLanguageTag(languageTag).language.lowercase(Locale.ROOT)

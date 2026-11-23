@@ -145,6 +145,20 @@ internal class GlassesQuestions private constructor(context: Context) : Question
 
     init {
         speaker.answerShown = ::showAnswerOnDisplay
+        SpokenSystemTurnPrimer.registerPackageWatcher(appContext)
+    }
+
+    /**
+     * Primes the current decision system turn (with or without [phone]) in the loaded local model, in the background
+     * (SpokenSystemTurnPrimer). A question in flight runs first.
+     */
+    fun primeSpokenSystemTurn() {
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider()
+                    .primeSpokenSystemTurn(appContext, providers.spokenDecisionSystemTurn())
+            }.onFailure { Log.w("SpokenSystemTurn", "System turn not primed: ${it.message}") }
+        }
     }
 
     // ---------------------------------------------------------------------------------------------

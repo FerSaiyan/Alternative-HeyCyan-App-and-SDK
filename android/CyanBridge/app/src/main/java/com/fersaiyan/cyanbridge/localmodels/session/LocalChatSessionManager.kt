@@ -522,6 +522,27 @@ object LocalChatSessionManager {
      * [audioPath]) while the other is still coming; the question's [streamGenerate] with the same system turn then
      * processes only the other part.
      */
+    /**
+     * Primes [systemInstruction] in the loaded LiteRT engine's prefill cache for the next spoken or photo question
+     * (LiteRtLocalInferenceEngine.primeSystemTurn). Nothing happens without a loaded LiteRT model.
+     */
+    suspend fun primeSystemTurn(settings: LocalGenerationSettings, systemInstruction: String) {
+        val llm = mutex.withLock { engine } as? LiteRtLocalInferenceEngine ?: return
+        llm.primeSystemTurn(
+            GenerationConfig(
+                prompt = "",
+                temperature = settings.temperature,
+                topP = settings.topP,
+                topK = settings.topK,
+                maxTokens = settings.maxTokens,
+                repetitionPenalty = settings.repetitionPenalty,
+                seed = settings.seed,
+                structuredJson = false,
+                systemInstruction = systemInstruction,
+            ),
+        )
+    }
+
     suspend fun prepareFirstPart(
         settings: LocalGenerationSettings,
         systemInstruction: String,

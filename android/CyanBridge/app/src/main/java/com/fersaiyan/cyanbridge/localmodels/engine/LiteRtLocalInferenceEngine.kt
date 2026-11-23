@@ -89,6 +89,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
      * switching would copy the KV cache). Guarded by [mutex].
      */
     private var spare: PrimedRoot? = null
+    /** The system turn (and sampler) the next spare is primed with: the last spoken question's, or [primeSystemTurn]'s. */
+    @Volatile private var spareBase: GenerationConfig? = null
     private val spareScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
     @Volatile private var spareJob: kotlinx.coroutines.Job? = null
 
@@ -1035,18 +1037,47 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
      */
     private suspend fun scheduleSpare(config: GenerationConfig, sessionConversation: Conversation?) {
         if (!spareEligible(config)) return
-        val base = config.copy(prompt = "", audioPath = null, imagePaths = emptyList(), session = null, turnContext = null, photoNote = null)
+        spareBase = config.copy(prompt = "", audioPath = null, imagePaths = emptyList(), session = null, turnContext = null, photoNote = null)
         spareJob?.cancel()
         spareJob = spareScope.launch {
             if (sessionConversation != null) {
                 kotlinx.coroutines.delay(com.fersaiyan.cyanbridge.shared.assistant.SpokenConversation.CONTINUE_WITHIN_MS + 5_000L)
             }
-            runCatching { primeSpare(base, sessionConversation) }
+            runCatching { primeSpare(sessionConversation) }
                 .onFailure { Log.w(TAG, "Spare system turn not primed: ${compactError(it)}") }
         }
     }
 
-    private suspend fun primeSpare(config: GenerationConfig, expiredSession: Conversation?) = operationMutex.withLock {
+    /**
+     * The system turn the next spoken or photo question will use changed (the Local Agent was set up or removed, so
+     * [phone] joined or left the route list): prime [config]'s system turn now in the background, the CPU root or the
+     * GPU/NPU spare. Runs after a request in flight, never inside it. On GPU/NPU with a kept conversation still open,
+     * the spare scheduled for when that conversation lapses uses this system turn.
+     */
+    suspend fun primeSystemTurn(config: GenerationConfig) {
+        val base = config.copy(prompt = "", audioPath = null, imagePaths = emptyList(), session = null, turnContext = null, photoNote = null)
+        if (!promptCacheEnabled || base.systemInstruction.orEmpty().trim().length < MIN_CACHED_SYSTEM_CHARS) return
+        val backend = mutex.withLock { activeLoadResult?.activeBackend.takeIf { engine != null } } ?: return
+        if (backend == LocalComputeBackend.CPU) {
+            operationMutex.withLock {
+                val llm = mutex.withLock { engine } ?: return@withLock
+                if (mutex.withLock { primedRoot?.key } == rootKey(base)) return@withLock
+                // cloneOfPrimedRoot primes for a new key; the clone it returns is not needed.
+                cloneOfPrimedRoot(llm, base)?.let { mutex.withLock { closeWhenIdle(it) } }
+            }
+            Log.i(TAG, "System turn re-primed (CPU root)")
+            return
+        }
+        spareBase = base
+        if (mutex.withLock { activeConversation != null }) return // the scheduled spare picks it up when it lapses
+        spareJob?.cancel()
+        spareJob = spareScope.launch {
+            runCatching { primeSpare(null) }.onFailure { Log.w(TAG, "Spare system turn not primed: ${compactError(it)}") }
+        }
+    }
+
+    private suspend fun primeSpare(expiredSession: Conversation?) = operationMutex.withLock {
+        val config = spareBase ?: return@withLock
         val llm = mutex.withLock {
             val idle = if (expiredSession != null) {
                 activeConversation === expiredSession && turns[expiredSession]?.isCompleted != false
@@ -1055,6 +1086,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             }
             // Anything else open (a newer conversation, a prepared photo, a primed root) would be copied out on switch.
             if (!idle || preparedPart != null || primedRoot != null) return@withLock null
+            if (expiredSession == null && spare?.key == rootKey(config)) return@withLock null
             if (expiredSession != null) closeConversationLocked()
             closeSpareLocked()
             engine

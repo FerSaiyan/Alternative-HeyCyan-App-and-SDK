@@ -404,6 +404,23 @@ class LocalModelsProvider {
             LocalChatSessionManager.prepareFirstPart(settings, system, imagePath, audioPath, turnContext, photoNote)
         }
 
+    /**
+     * The system turn of local spoken and photo questions changed ([systemMessage], built like [streamChat]'s): primes
+     * it in the selected LiteRT model if that model is already loaded (no load just for this).
+     */
+    suspend fun primeSpokenSystemTurn(context: Context, systemMessage: String) =
+        withContext(Dispatchers.IO) {
+            if (RemoteOpenAiPrefs.isActive(context)) return@withContext
+            val selected = LocalModelStorageRepository.resolveSelectedModel(context) ?: return@withContext
+            val settings = LocalModelSettingsRepository.getForModel(context, selected.id)
+            if (settings.modelRuntime != LocalModelRuntime.LITERT) return@withContext
+            val system = buildMultimodalPrompt(
+                settings.systemPromptOverride.trim(),
+                listOf(PromptMessage(role = "System", content = systemMessage.trim()), PromptMessage(role = "User", content = "")),
+            ).systemInstruction
+            LocalChatSessionManager.primeSystemTurn(settings, system)
+        }
+
     private fun generationStatus(backend: LocalComputeBackend): String {
         return when (backend) {
             LocalComputeBackend.NPU_EXPERIMENTAL -> "Generating (NPU)..."

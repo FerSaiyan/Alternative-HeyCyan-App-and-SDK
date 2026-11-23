@@ -181,6 +181,21 @@ APP_GLASSES = (
 ROUTES_APP = ROUTES_V5A.replace("the current time below", "the current local time you were given")
 assert ROUTES_APP != ROUTES_V5A
 APP_SYSTEM = f"{APP_GLASSES}\n\n{ROUTES_APP}"
+# ImageQuestionDefaults.SPOKEN_DECISION_ROUTES_NO_PHONE: the system turn for users without the Local Agent (2026-11-23).
+ROUTES_APP_NOPHONE = (
+    ROUTES_APP
+    .replace("[phone] then the task in one short sentence: they ask you to do something on their phone (open an app, play "
+             "music, call, send a message, set a timer or alarm, turn something on or off, navigate).\n", "")
+    .replace(" Starting Gemini Live is always [live], never [phone].", " Starting Gemini Live is always [live].")
+    .replace("the current local time you were given and what you know.\n",
+             "the current local time you were given and what you know. If they ask you to do something on their phone "
+             "(open an app, play music, call, send a message, set a timer or alarm), say in one short sentence that you "
+             "can't control their phone.\n")
+    .replace("\"Play some jazz on YouTube.\" -> [phone] Play jazz on YouTube.\n\"Turn on do not disturb.\" -> [phone] Turn on "
+             "do not disturb.\n", "\"Play some jazz on YouTube.\" -> [answer] Sorry, I can't control your phone.\n")
+)
+assert "[phone]" not in ROUTES_APP_NOPHONE, ROUTES_APP_NOPHONE
+APP_SYSTEM_NOPHONE = f"{APP_GLASSES}\n\n{ROUTES_APP_NOPHONE}"
 PHOTO_QUESTION_NOTE = (
     "This question comes with a photo from the glasses camera of what they are looking at. You can see it, so never "
     "reply [camera]: when they ask about what they see, reply [answer] and answer from the photo."
@@ -216,6 +231,8 @@ IMAGE_PROMPTS = {
     "routes_note": (APP_SYSTEM, PHOTO_QUESTION_NOTE, None, "decision"),
     "routes_note_251": (APP_SYSTEM, PHOTO_QUESTION_NOTE, None, "251"),
     "routes_after": (APP_SYSTEM, None, PHOTO_NOTE_AFTER, "decision"),
+    # No [phone] route (no Local Agent): phone requests are expected to be answered ("I can't control your phone").
+    "routes_nophone": (APP_SYSTEM_NOPHONE, None, PHOTO_NOTE_AFTER, "decision"),
     "routes_both": (APP_SYSTEM, PHOTO_QUESTION_NOTE, PHOTO_NOTE_AFTER, "decision"),
     # As routes_after; recording first, the photo turn points back at the question (no ack: no "OK." turn between).
     "routes_q": (APP_SYSTEM, None, PHOTO_NOTE_AFTER, "decision_q"),
@@ -387,6 +404,8 @@ def main():
                 # The 2.5.1 photo question has no routes: whatever it says is spoken as the answer.
                 greedy, camera_kind = ("answer", None) if name == "notag" else photo_route(reply)
             want = (EXPECTED_IMAGE if image_mode else EXPECTED).get(r["class"])
+            if "nophone" in name and want == "phone":
+                want = "answer"
             rec = {"prompt": name, "layout": layout, "photo": photo_name, "id": r["id"], "lang": r["lang"],
                    "class": r["class"], "expected": want, "greedy": greedy, "argmax": max(probs, key=probs.get),
                    "probs": probs, "tag_mass": round(mass, 4), "reply": reply[:300], "camera": camera_kind,

@@ -16,4 +16,14 @@ class SpokenQuestionInstructionTest {
     @Test fun `the decide-once turn may write the question down`() {
         assertFalse("Never repeat" in ImageQuestionDefaults.spokenQuestionInstruction("en", allowQuestionEcho = true))
     }
+
+    @Test fun `without the Local Agent the route list has no phone route and answers phone requests`() {
+        val phone = ImageQuestionDefaults.spokenDecisionRoutes(phoneTasks = true)
+        val none = ImageQuestionDefaults.spokenDecisionRoutes(phoneTasks = false)
+        assertTrue("[phone] then the task" in phone)
+        assertFalse("[phone]" in none)
+        for (tag in listOf("[camera]", "[search]", "[live]", "[ignore]", "[answer]")) assertTrue(tag, tag in none)
+        assertTrue("say in one short sentence that you can't control their phone" in none)
+        assertTrue("-> [answer] Sorry, I can't control your phone." in none)
+    }
 }

@@ -1019,6 +1019,8 @@ class MainActivity : AppCompatActivity() {
     /** Was onResume: the glasses screen is in front again. */
     private fun onGlassesResume() {
         glassesDevices.selected().onActivityResumed()
+        // Tasker may have been installed or removed meanwhile: keep the cached question system turn in step.
+        com.fersaiyan.cyanbridge.ai.questions.SpokenSystemTurnPrimer.onPhoneSetupMaybeChanged(this, "resume")
         showPendingMeizuMyvuFailureIfNeeded()
         handleExternalImageAutomationStatus()
         if (

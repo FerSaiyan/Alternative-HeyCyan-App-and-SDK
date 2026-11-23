@@ -8,6 +8,7 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveDestination
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveForegroundService
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveOpeningImage
 import com.fersaiyan.cyanbridge.ai.live.GeminiLivePermissionGateActivity
 import com.fersaiyan.cyanbridge.ai.live.LiveQuestionTurn
 import com.fersaiyan.cyanbridge.ai.live.speaksInitializingCue
@@ -19,6 +20,7 @@ import com.fersaiyan.cyanbridge.shared.ai.GlassesAssistantRoute
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantQuestionRouting
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.launch
 
 /** The Gemini Live detour of glasses questions: Pro users whose questions model is Live. */
 internal class GeminiLiveQuestions(
@@ -52,8 +54,19 @@ internal class GeminiLiveQuestions(
         prompt: String,
         imagePath: String? = null,
         onLaunched: (() -> Unit)? = null,
+        /** A photo still on its way that should open the session (see GeminiLiveOpeningImage); Live does not wait for it. */
+        openingImage: GeminiLiveOpeningImage.Pending? = null,
     ) {
         val context = env.context
+        if (openingImage != null && GeminiLiveForegroundService.sessionRunning) {
+            // Live already runs: the photo joins that session once it is in (a start without one would be ignored).
+            env.scope.launch {
+                val turn = with(GeminiLiveOpeningImage) { openingImage.openingTurn() }
+                turn.imagePath?.let { launch(prompt = turn.prompt ?: prompt, imagePath = it, onLaunched = onLaunched) }
+            }
+            return
+        }
+        openingImage?.let(GeminiLiveOpeningImage::expect)
         val languageTag = languageTag()
         // Base image question without strict "Answer only in X" - Live systemInstruction handles 97-language switching permissively.
         // Single-shot paths keep strict Resolver; Live uses baseQuestion as imagePrompt, while initialPrompt is the user's actual turn.

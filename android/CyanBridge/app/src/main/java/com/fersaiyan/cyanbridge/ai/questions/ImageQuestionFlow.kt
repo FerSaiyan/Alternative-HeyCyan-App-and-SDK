@@ -49,11 +49,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * questions while the user keeps asking. Gemini Live and the phone assistant take over before the
  * in-app answer when they are the route.
  *
- * With the SMART decision (Settings ▸ Question routing) a recorded question on the local model runs the
- * shared [SpokenQuestionFlow] with the photo attached ([runDecisionPhotoQuestion]): its reply starts with a
- * route tag (answer about the photo, search, phone, live, ignore) and follow-ups go through the same decision
- * (a `[camera]` follow-up takes a new photo). Classic mode, transcribed (STT) questions, the Pro relay and the
- * default description keep the single answer below, with follow-ups about the same photo.
+ * With the SMART decision (Settings ▸ Question routing) a recorded question on the local model or an
+ * audio-capable Pro questions model runs the shared [SpokenQuestionFlow] with the photo attached
+ * ([runDecisionPhotoQuestion]): its reply starts with a route tag (answer about the photo, search, phone, live,
+ * ignore) and follow-ups go through the same decision (a `[camera]` follow-up takes a new photo). Classic mode,
+ * transcribed (STT) questions, the Tasker relay and the default description keep the single answer below, with
+ * follow-ups about the same photo.
  */
 internal class ImageQuestionFlow(
     private val env: QuestionEnvironment,
@@ -111,7 +112,7 @@ internal class ImageQuestionFlow(
     }.getOrDefault(false)
 
     private fun prefillFirstPart(imagePath: String?, audioPath: String?) {
-        val decision = decidesPhotoQuestions()
+        val decision = decisionProvider() != null
         env.scope.launch(Dispatchers.IO) {
             val prepared = providers.prepareLocalPhotoQuestion(imagePath, audioPath, decisionRoutes = decision)
             Log.i("ImageQuestion", "First part prefilled=$prepared part=${if (imagePath != null) "photo" else "recording"} decision=$decision")
@@ -119,20 +120,22 @@ internal class ImageQuestionFlow(
     }
 
     /**
-     * A recorded photo question goes through the spoken decision (route tags, [runDecisionPhotoQuestion]): SMART
-     * routing, on the local model (LiteRT or llama.cpp), not handed to Gemini Live or the phone assistant. The Pro
-     * relay keeps the single answer: it caps system_context at 2000 characters, which cuts the route list.
+     * The provider of a recorded photo question that goes through the spoken decision (route tags,
+     * [runDecisionPhotoQuestion]), or null: SMART routing, on the local model (LiteRT or llama.cpp) or an
+     * audio-capable Pro questions model (the relay takes the route list in system_context and the photo note in
+     * turn_note), not handed to Gemini Live or the phone assistant.
      */
-    private fun decidesPhotoQuestions(): Boolean = runCatching {
-        QuestionRoutingPrefs.mode(env.context) != QuestionRoutingMode.CLASSIC &&
-            !external.usesExternalAssistantUi() &&
-            AssistantQuestionRouting.imageQuestionProvider(
-                route = route(),
-                recordedQuestion = true,
-                spokenProvider = spokenQuestionProvider,
-                mediaProvider = { MediaInferenceRoutingPolicy.resolve(env.context) },
-            ) == AgentProviderType.LOCAL_AGENT
-    }.getOrDefault(false)
+    private fun decisionProvider(): AgentProviderType? = runCatching {
+        if (QuestionRoutingPrefs.mode(env.context) == QuestionRoutingMode.CLASSIC || external.usesExternalAssistantUi()) return@runCatching null
+        AssistantQuestionRouting.imageQuestionProvider(
+            route = route(),
+            recordedQuestion = true,
+            spokenProvider = spokenQuestionProvider,
+            mediaProvider = { MediaInferenceRoutingPolicy.resolve(env.context) },
+        )?.takeIf {
+            it == AgentProviderType.LOCAL_AGENT || (it == AgentProviderType.PRO_SUBSCRIPTION && !live.shouldUseForQuestions(it))
+        }
+    }.getOrNull()
 
     private fun hasMicrophonePermission(): Boolean =
         ContextCompat.checkSelfPermission(env.context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -181,8 +184,11 @@ internal class ImageQuestionFlow(
                     val recording = spokenQuestion.audioPath.takeIf { spokenQuestion.error == null && spokenQuestion.heardSpeech }
                     if (!deferred.complete(spokenQuestion)) {
                         spokenQuestion.audioPath?.let { File(it).delete() }
-                    } else if (recording != null && spokenQuestion.text.isNullOrBlank() && decidesPhotoQuestions()) {
+                    } else if (
+                        recording != null && spokenQuestion.text.isNullOrBlank() && decisionProvider() == AgentProviderType.LOCAL_AGENT
+                    ) {
                         // SMART: the question is in before the photo; decide on it now (see startDecisionBeforePhoto).
+                        // Pro waits for the photo: one relay request with both beats a decision and a second request.
                         // When the photo got in first after all, the photo path below picks the recording up.
                         startDecisionBeforePhoto(deferred, recording)
                     } else if (recording != null && photoForQuestion == null && localPrefillEligible()) {
@@ -369,8 +375,9 @@ internal class ImageQuestionFlow(
             val externalAutomation = external.usesExternalAssistantUi()
             // A recording the model hears (no transcript) is decided with route tags in SMART mode.
             val recording = captured?.takeIf { it.heardSpeech && it.text.isNullOrBlank() }?.audioPath
-            if (!isLiveRoute && recording != null && initialQuestion.isNullOrBlank() && decidesPhotoQuestions()) {
-                withContext(Dispatchers.Main) { runDecisionPhotoQuestion(CompletableDeferred(imagePath), recording, source) }
+            val decided = decisionProvider()
+            if (!isLiveRoute && recording != null && initialQuestion.isNullOrBlank() && decided != null) {
+                withContext(Dispatchers.Main) { runDecisionPhotoQuestion(CompletableDeferred(imagePath), recording, source, decided) }
                 return@launch
             }
             fun offerFollowUp() {
@@ -441,15 +448,20 @@ internal class ImageQuestionFlow(
      * [prefillFirstPart] still apply) and acts on the route; follow-ups continue its conversation. The photo stays
      * where the image flow keeps it; the recordings are deleted by the flow.
      */
-    private fun runDecisionPhotoQuestion(photo: kotlinx.coroutines.Deferred<String?>, audioPath: String, source: ImageQuestionSource) {
+    private fun runDecisionPhotoQuestion(
+        photo: kotlinx.coroutines.Deferred<String?>,
+        audioPath: String,
+        source: ImageQuestionSource,
+        provider: AgentProviderType = AgentProviderType.LOCAL_AGENT,
+    ) {
         if (!beginImageQuery(audioPath)) {
             synchronized(photoLock) { if (decisionPhotoSink === photo) decisionPhotoSink = null }
             return
         }
-        GlassesQuestionTestHooks.emit("image_query", "question=true audio=true source=${source.wireName} decision=true")
+        GlassesQuestionTestHooks.emit("image_query", "question=true audio=true source=${source.wireName} decision=true provider=$provider")
         val ports = AndroidSpokenQuestionPorts(
             env = env,
-            provider = AgentProviderType.LOCAL_AGENT,
+            provider = provider,
             speaker = speaker,
             providers = providers,
             live = live,

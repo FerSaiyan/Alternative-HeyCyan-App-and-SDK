@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.ai.questions
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.fersaiyan.cyanbridge.ai.image.GlassesQuestionTestHooks
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveOpeningImage
 import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
 import com.fersaiyan.cyanbridge.ai.search.WebSearchAssist
 import com.fersaiyan.cyanbridge.ai.search.WebSearchEngine
@@ -14,6 +15,8 @@ import com.fersaiyan.cyanbridge.localmodels.engine.SessionTurn
 import com.fersaiyan.cyanbridge.localmodels.engine.SessionUnavailableException
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
+import com.fersaiyan.cyanbridge.shared.ai.RelayTurn
+import com.fersaiyan.cyanbridge.shared.assistant.LivePhoto
 import com.fersaiyan.cyanbridge.shared.assistant.SpokenAnswerStream
 import com.fersaiyan.cyanbridge.shared.assistant.SpokenConversation
 import com.fersaiyan.cyanbridge.shared.assistant.SpokenCue
@@ -33,9 +36,8 @@ import java.io.File
 /**
  * Android's ports of the shared spoken-question flow: the chosen provider (local LiteRT sessions or
  * the Pro relay), the glasses photo, the WebView web search, the Local Agent, Gemini Live and the
- * phone's text-to-speech. [photoQuestion]: the flow runs a photo question (the photo button), whose local
- * answers start speaking while they are written (as the photo flow's always did) and whose phone tasks need the
- * Local Agent to be set up.
+ * phone's text-to-speech. Local answers start speaking while they are written. [photoQuestion]: the flow runs a
+ * photo question (the photo button), whose phone tasks need the Local Agent to be set up.
  */
 internal class AndroidSpokenQuestionPorts(
     private val env: QuestionEnvironment,
@@ -50,8 +52,12 @@ internal class AndroidSpokenQuestionPorts(
 ) : SpokenQuestionBrain, SpokenQuestionActions, SpokenQuestionSpeech {
     override val name: String = provider.toString()
 
-    // Engine sessions keep the conversation (and its KV cache) between turns; the relay keeps none.
-    override val keepsConversation: Boolean = provider == AgentProviderType.LOCAL_AGENT
+    // Engine sessions keep the conversation (and its KV cache) between turns. The relay keeps none: for Pro the app keeps
+    // it as text and the photo (RelayConversation) and resends both with each follow-up.
+    override val keepsConversation: Boolean =
+        provider == AgentProviderType.LOCAL_AGENT || provider == AgentProviderType.PRO_SUBSCRIPTION
+
+    private val relay: Boolean get() = provider == AgentProviderType.PRO_SUBSCRIPTION
 
     private fun SpokenSessionTurn.engineTurn() = SessionTurn(key, continueConversation, note)
 
@@ -62,21 +68,60 @@ internal class AndroidSpokenQuestionPorts(
         routeOnly: Boolean,
         onToken: (String) -> Unit,
     ): String =
-        sessionCall {
+        if (relay) {
+            decideOnRelay(audioPath, images, session)
+        } else {
+            sessionCall {
+                providers.query(
+                    userPrompt = "",
+                    providerType = provider,
+                    ragProfile = RagProfile.NONE,
+                    imagePaths = images,
+                    audioPath = audioPath,
+                    decisionRoutes = true,
+                    session = session?.engineTurn(),
+                    onToken = onToken,
+                    photoNote = ImageQuestionDefaults.PHOTO_QUESTION_NOTE.takeIf { images.isNotEmpty() },
+                    // LiteRT ends the reply there itself (no cancel), so the conversation stays usable.
+                    maxTokens = ROUTE_ONLY_MAX_TOKENS.takeIf { routeOnly },
+                )
+            }
+        }
+
+    /**
+     * A Pro decision turn: the route instructions in system_context (no clock, so the text stays stable), the time and
+     * the photo note in turn_note, and for a follow-up the earlier turns as history plus the conversation's photo again
+     * (with a note that it is the earlier photo, so [camera] still takes a new one).
+     */
+    private suspend fun decideOnRelay(audioPath: String, images: List<String>, session: SpokenSessionTurn?): String {
+        val followUp = session?.continueConversation == true
+        if (!followUp) RelayConversation.start(images.firstOrNull())
+        val resent = RelayConversation.photo?.takeIf { followUp && images.isEmpty() && File(it).isFile }
+        val history = RelayConversation.history().let { turns ->
+            // A note the flow carries into the next turn ("You told them: …") is what was said last.
+            session?.note?.takeIf { followUp && it.isNotBlank() }?.let { turns + RelayTurn(fromUser = false, text = it) } ?: turns
+        }
+        val reply = withContext(Dispatchers.IO) {
             providers.query(
                 userPrompt = "",
                 providerType = provider,
                 ragProfile = RagProfile.NONE,
-                imagePaths = images,
+                imagePaths = images.ifEmpty { listOfNotNull(resent) },
                 audioPath = audioPath,
                 decisionRoutes = true,
-                session = session?.engineTurn(),
-                onToken = onToken,
-                photoNote = ImageQuestionDefaults.PHOTO_QUESTION_NOTE.takeIf { images.isNotEmpty() },
-                // LiteRT ends the reply there itself (no cancel), so the conversation stays usable.
-                maxTokens = ROUTE_ONLY_MAX_TOKENS.takeIf { routeOnly },
+                extraInstruction = RelayConversation.HEARD_INSTRUCTION,
+                photoNote = when {
+                    images.isNotEmpty() -> ImageQuestionDefaults.PHOTO_QUESTION_NOTE
+                    resent != null -> ImageQuestionDefaults.PHOTO_RESENT_NOTE
+                    else -> null
+                },
+                relayHistory = history,
             )
         }
+        val (answer, heard) = RelayConversation.split(reply)
+        RelayConversation.record(heard, answer)
+        return answer
+    }
 
     override fun stopGeneration() {
         env.scope.launch(Dispatchers.IO) { LocalModelsProvider().cancelGeneration() }
@@ -92,11 +137,21 @@ internal class AndroidSpokenQuestionPorts(
                 audioPath = audioPath,
                 extraInstruction = extraInstruction,
                 reportReply = false,
-            )
+                relayHistory = if (relay) RelayConversation.history(excludingCurrent = true) else emptyList(),
+            ).also { answer ->
+                if (relay) {
+                    RelayConversation.replaceLastAnswer(answer)
+                    // A [camera] reply's photo is what follow-ups are about.
+                    images.firstOrNull()?.let { if (it != RelayConversation.photo) RelayConversation.adoptPhoto(it) }
+                }
+            }
         }
 
     override suspend fun answerInSession(text: String, images: List<String>, note: String?): String =
-        withContext(Dispatchers.IO) {
+        // The relay keeps no conversation: the flow answers with the recording again (answerRecording, with history).
+        if (relay) {
+            throw SpokenSessionUnavailableException("The relay keeps no conversation")
+        } else withContext(Dispatchers.IO) {
             sessionCall {
                 providers.query(
                     userPrompt = text,
@@ -121,6 +176,8 @@ internal class AndroidSpokenQuestionPorts(
     override suspend fun takePhoto(): String? = requestPhoto().await()
 
     override fun deletePhoto(path: String) {
+        // Pro follow-ups resend the photo a [camera] reply took; RelayConversation deletes it when the conversation ends.
+        if (relay && RelayConversation.keeps(path)) return
         File(path).delete()
     }
 
@@ -152,7 +209,24 @@ internal class AndroidSpokenQuestionPorts(
     override fun phoneTaskAvailable(): Boolean =
         !photoQuestion || LocalAgentController.unavailableReason(env.context) == null
 
-    override fun startLive(prompt: String, photoPath: String?) = live.launch(prompt = prompt, imagePath = photoPath)
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    override fun startLive(prompt: String, photo: LivePhoto?) {
+        val ready = photo?.photo?.takeIf { it.isCompleted }?.let { runCatching { it.getCompleted() }.getOrNull() }
+        when {
+            photo == null -> live.launch(prompt = prompt)
+            ready != null -> live.launch(prompt = photo.prompt, imagePath = ready)
+            photo.photo.isCompleted -> live.launch(prompt = prompt) // the photo failed
+            else -> live.launch(
+                prompt = prompt,
+                openingImage = GeminiLiveOpeningImage.Pending(
+                    photo = photo.photo,
+                    deadlineMs = android.os.SystemClock.elapsedRealtime() + photo.waitMs,
+                    promptWithPhoto = photo.prompt,
+                    promptWithoutPhoto = prompt,
+                ),
+            )
+        }
+    }
 
     override fun queueCue(cue: SpokenCue) {
         val language = languageTag()
@@ -188,9 +262,12 @@ internal class AndroidSpokenQuestionPorts(
         spoken.await()
     }
 
-    /** A local photo question's answer speaks phrase by phrase while it is written (StreamingSpeechSessionManager). */
+    /**
+     * A local model's answer (spoken and photo questions) speaks phrase by phrase while it is written
+     * (StreamingSpeechSessionManager); the Pro relay returns its reply in one piece.
+     */
     override fun answerStream(): SpokenAnswerStream? {
-        if (!photoQuestion || provider != AgentProviderType.LOCAL_AGENT) return null
+        if (provider != AgentProviderType.LOCAL_AGENT) return null
         val streaming = speaker.streaming
         val spoken = CompletableDeferred<Unit>()
         speaker.answerPlayback(true)

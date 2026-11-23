@@ -25,6 +25,8 @@ object LocalAgentPlugin {
     fun setEnabled(context: Context, enabled: Boolean) {
         AutomationPrefs.setLocalAgentAutomationEnabled(context, enabled)
         CommunityPluginPrefs.setNativePluginEnabled(context, NativePluginIds.LOCAL_AGENT, enabled)
+        // Spoken and photo questions offer [phone] only with phone control on: re-prime their cached system turn.
+        com.fersaiyan.cyanbridge.ai.questions.SpokenSystemTurnPrimer.onPhoneSetupMaybeChanged(context, "phone control ${if (enabled) "on" else "off"}")
         if (!enabled) {
             LocalAgentController.stop(context)
             LocalAgentNotificationSpeaker.stop()

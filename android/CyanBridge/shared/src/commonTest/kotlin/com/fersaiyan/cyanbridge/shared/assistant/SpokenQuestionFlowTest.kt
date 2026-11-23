@@ -64,7 +64,9 @@ class SpokenQuestionFlowTest {
             override suspend fun searchWeb(query: String): WebSearchOutcome? = web.also { log += "search $query" }
             override fun startPhoneTask(goal: String) { log += "phone $goal" }
             override fun phoneTaskAvailable() = phoneAgent
-            override fun startLive(prompt: String, photoPath: String?) { log += "live${photoPath?.let { " $it" }.orEmpty()}" }
+            override fun startLive(prompt: String, photo: LivePhoto?) {
+                log += "live${photo?.let { " photo wait=${it.waitMs}" }.orEmpty()}"
+            }
         }
         val speech = object : SpokenQuestionSpeech {
             override fun queueCue(cue: SpokenCue) { log += "cue $cue" }
@@ -273,10 +275,11 @@ class SpokenQuestionFlowTest {
         with(agent) { flow().runWithPhoto("q1.wav", CompletableDeferred("p.jpg")) }
         assertTrue("phone Call mom." in agent.log)
 
-        // [live] opens with the photo; without a conversation a [search] answer gets the photo again.
+        // [live] starts at once, handing over the photo (still on the way here) with a short wait; without a
+        // conversation a [search] answer gets the photo again.
         val live = Fakes(keepsConversation = true).apply { decisions += "[live]" }
-        with(live) { flow().runWithPhoto("q1.wav", CompletableDeferred("p.jpg")) }
-        assertTrue("live p.jpg" in live.log)
+        with(live) { flow().runWithPhoto("q1.wav", CompletableDeferred()) }
+        assertTrue("live photo wait=7000" in live.log)
         val search = Fakes(keepsConversation = false).apply {
             decisions += "[search] bus 24 route\n"
             web = WebSearchOutcome("DUCKDUCKGO", false, null, null, listOf("Route 24"), failure = null, offline = false, blocked = false, elapsedMs = 5)
