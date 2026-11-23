@@ -84,6 +84,8 @@ class MyApplication : Application(){
             enabled = LocalAgentPrefs.isDailyFactsReminderEnabled(this),
         )
         runCatching { NightlyEnrichmentScheduler.schedule(this) }
+        // An app update can bring a newer QAIRT (new skel directory); fetch the NPU library before the model is next used.
+        appScope.launch { com.fersaiyan.cyanbridge.localmodels.engine.NpuRuntimePrefetch.schedule(this@MyApplication, "app start") }
         LocalAgentPlugin.syncNativePluginState(this)
 
         // Auto audio capture (glasses recording loop)

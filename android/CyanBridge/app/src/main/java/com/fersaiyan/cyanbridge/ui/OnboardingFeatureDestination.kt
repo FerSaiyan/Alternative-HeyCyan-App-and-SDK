@@ -148,9 +148,16 @@ class OnboardingFeatureDestination : NavScreen() {
                     if (featureIndex == GLASSES_CONNECTION_FEATURE_INDEX && !glassesConnectionPermissionGranted) {
                         showBluetoothSkipWarning = true
                     } else {
-                        if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) startSelectedModelDownload()
-                        if (featureIndex == LAST_STEP_INDEX) finishOnboarding()
-                        else goToFeature(featureIndex + 1)
+                        if (featureIndex == LOCAL_MODEL_FEATURE_INDEX) {
+                            requestDownloadNotificationsThen {
+                                startSelectedModelDownload()
+                                goToFeature(featureIndex + 1)
+                            }
+                        } else if (featureIndex == LAST_STEP_INDEX) {
+                            finishOnboarding()
+                        } else {
+                            goToFeature(featureIndex + 1)
+                        }
                     }
                 },
             )
@@ -194,6 +201,33 @@ class OnboardingFeatureDestination : NavScreen() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         })
         finish()
+    }
+
+    private var notificationRequestInFlight = false
+
+    /**
+     * The model keeps downloading (and is then prepared for this phone) after onboarding moves on, in a foreground
+     * service. Android 13+ only shows its progress notification with the notification permission, so ask here, where
+     * the download starts; onboarding continues whatever the answer.
+     */
+    private fun requestDownloadNotificationsThen(next: () -> Unit) {
+        if (hasNotificationPermission(this) || LocalModelCatalogRepository.findById(selectedModelId) == null) {
+            next()
+            return
+        }
+        if (notificationRequestInFlight) return
+        notificationRequestInFlight = true
+        requestNotificationPermission(activity, object : OnPermissionCallback {
+            override fun onGranted(permissions: MutableList<String>, all: Boolean) {
+                notificationRequestInFlight = false
+                next()
+            }
+
+            override fun onDenied(permissions: MutableList<String>, never: Boolean) {
+                notificationRequestInFlight = false
+                next()
+            }
+        })
     }
 
     private fun startSelectedModelDownload() {

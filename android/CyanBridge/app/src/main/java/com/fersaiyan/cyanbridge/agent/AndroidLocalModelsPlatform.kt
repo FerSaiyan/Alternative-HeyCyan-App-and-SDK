@@ -311,7 +311,9 @@ class AndroidLocalModelsPlatform(context: Context) : LocalModelsPlatform {
             LocalModelProjectorStore.attach(context, model, file)
             return "Projector attached to ${model.displayName}"
         }
-        return "Import complete: ${LocalModelStorageRepository.registerImportedModel(context = context, displayName = file.nameWithoutExtension, file = file).displayName}"
+        val imported = LocalModelStorageRepository.registerImportedModel(context = context, displayName = file.nameWithoutExtension, file = file)
+        com.fersaiyan.cyanbridge.localmodels.engine.NpuRuntimePrefetch.schedule(context, "imported ${file.name}")
+        return "Import complete: ${imported.displayName}"
     }
 
     private fun guessDisplayName(uri: Uri): String {

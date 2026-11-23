@@ -87,11 +87,19 @@ object LocalChatSessionManager {
     private var activeBackend: LocalComputeBackend? = null
     private var activeGpuLayers: Int = 0
     private var gpuFallbackMessage: String? = null
-    private var activeRequestId: String? = null
+    @Volatile private var activeRequestId: String? = null
     private var pendingHighPriorityRequests: Int = 0
     private var activeRequestPriority: LocalModelRequestPriority? = null
     private var lastGenerationCappedByMaxTokens: Boolean = false
     private var state: LocalSessionState = LocalSessionState.ModelNotLoaded
+    private val loadRequests = java.util.concurrent.atomic.AtomicInteger()
+
+    /** Counts [ensureModelLoaded] calls (counted before they wait for the lock), so a background preparation can
+     * tell whether anyone else asked for a model while it held one loaded. */
+    fun loadRequestCount(): Int = loadRequests.get()
+
+    /** A generation is running (read without the lock; Walking Aid backs off on the GPU meanwhile). */
+    fun isGenerating(): Boolean = activeRequestId != null
 
     /** One line for support reports; reads without the lock, so it never waits on a running generation. */
     fun diagnosticsSummary(): String {
@@ -117,6 +125,7 @@ object LocalChatSessionManager {
         catalogEntry: LocalModelCatalogEntry?,
         settings: LocalGenerationSettings,
     ): LocalModelLoadDetails {
+        loadRequests.incrementAndGet()
         return generationMutex.withLock { mutex.withLock {
             Log.i(
                 TAG,

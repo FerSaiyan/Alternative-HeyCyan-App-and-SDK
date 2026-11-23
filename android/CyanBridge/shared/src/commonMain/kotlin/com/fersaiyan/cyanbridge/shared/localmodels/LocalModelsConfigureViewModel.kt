@@ -102,6 +102,9 @@ data object RequestStudioPermissions : ScreenEffect
 /** The settings were saved; the opener may refresh. */
 data object ReportSettingsSaved : ScreenEffect
 
+/** A download started: the platform may ask to show its progress notification (Android 13+ notification permission). */
+data object RequestDownloadNotifications : ScreenEffect
+
 /** Local models: installed and catalog models, downloads, generation settings and remote servers. */
 class LocalModelsConfigureViewModel(
     private val platform: LocalModelsPlatform,
@@ -293,6 +296,7 @@ class LocalModelsConfigureViewModel(
                     download = LocalModelDownloadUiState(isInFlight = true, message = "Starting ${check.displayName}…")
                     publish()
                     platform.startDownload(catalogId, check.token)
+                    effects.send(RequestDownloadNotifications)
                 }
                 if (check.warnings.isEmpty()) {
                     start()

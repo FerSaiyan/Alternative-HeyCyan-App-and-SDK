@@ -228,7 +228,15 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         val target = LiteRtNpuSupport.compiledTarget(modelPath)
         val npuOnly = target != null
         return runCatching {
-            val npu = LiteRtNpuSupport.status(context)
+            val npu = LiteRtNpuSupport.status(context).let { status ->
+                // Normally fetched with the model (or by NpuRuntimePrefetch); last resort if both failed.
+                val hexagon = status.hexagon
+                if (status.available || !status.skelDownloadable || hexagon == null) return@let status
+                Log.w(TAG, "Hexagon $hexagon NPU library missing at load; downloading it now")
+                runCatching { QnnSkels.ensure(context, hexagon) }
+                    .onFailure { Log.w(TAG, "NPU library download at load failed: ${compactError(it)}") }
+                LiteRtNpuSupport.status(context)
+            }
             check(npu.available) { npu.reason }
             if (target != null) {
                 check(target.vendor == npu.vendor && target.socModel == npu.socModel) {

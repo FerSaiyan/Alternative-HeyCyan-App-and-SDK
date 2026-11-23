@@ -25,6 +25,7 @@ import com.fersaiyan.cyanbridge.shared.localmodels.OpenModelSource
 import com.fersaiyan.cyanbridge.shared.localmodels.OpenModelTest
 import com.fersaiyan.cyanbridge.shared.localmodels.PickModelFile
 import com.fersaiyan.cyanbridge.shared.localmodels.ReportSettingsSaved
+import com.fersaiyan.cyanbridge.shared.localmodels.RequestDownloadNotifications
 import com.fersaiyan.cyanbridge.shared.localmodels.RequestStudioPermissions
 import com.fersaiyan.cyanbridge.shared.ui.localmodels.LocalModelsConfigureScreen
 import com.fersaiyan.cyanbridge.ui.collectScreenEffects
@@ -52,6 +53,10 @@ class LocalModelsConfigureDestination : NavScreen() {
                 )
                 is OpenModelSource -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(effect.url)))
                 RequestStudioPermissions -> PluginVoicePermissions.ensure(activity) { viewModel.saveStudioBridge() }
+                // The download runs either way; without the permission its progress notification is hidden.
+                RequestDownloadNotifications -> if (!com.fersaiyan.cyanbridge.ui.hasNotificationPermission(this)) {
+                    com.fersaiyan.cyanbridge.ui.requestNotificationPermission(activity, com.hjq.permissions.OnPermissionCallback { _, _ -> })
+                }
             }
         }
         setContent {
