@@ -444,6 +444,14 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                     when (action) {
                         LiveControlAction.END_LIVE -> withContext(Dispatchers.Main) { stopLive() }
                         LiveControlAction.LOCAL_AGENT -> withContext(Dispatchers.Main) {
+                            // Most users have no Local Agent (opt-in, needs Tasker): stopping Live for
+                            // them ended the session and then crashed starting the agent service.
+                            val unavailable = com.fersaiyan.cyanbridge.localagent.LocalAgentController
+                                .unavailableReason(this@GeminiLiveForegroundService)
+                            if (unavailable != null) {
+                                Log.i(TAG, "Local Agent handoff skipped: ${unavailable.error}")
+                                return@withContext
+                            }
                             val goal = liveControlRouter.bufferedText()
                             liveControlRouter.clear()
                             stopLive()

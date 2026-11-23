@@ -1,5 +1,12 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-23 — Play vitals check for 2.4.x/2.5.0; Local Agent start crash from Gemini Live (branch `ANRs_fix-2.5`)
+
+- **Vitals (Reporting API, 2026-10-26..11-23, per versionCode):** 31 (2.3.0) = the 41 clusters triaged on 11-21, nothing new; 32-35, 37 (2.4.5) and 39 (2.5.0) = no reports yet; 36 (2.4.3, production) = 5 issues, 4 already fixed in 2.5.0 (Oudmon volume parser, LiteRT-LM close-during-prefill, dataSync onTimeout, modal sheet state) and 1 new. No ANRs on any 2.4.x/2.5.0 build.
+- **New:** `ForegroundServiceDidNotStartInTimeException` (Galaxy F54, Android 17, 2.4.3): Gemini Live classified an utterance as a phone-control request, stopped Live and called `LocalAgentController.start` -> `startForegroundService(TaskerLocalAgentService)`. `startLoop` returns before `startForeground` when phone control is off (the default), the goal is blank or a task already runs; `readScreenAloudOnce` likewise when a task runs.
+- **Fix:** `LocalAgentController.unavailableReason` (phone control on + Tasker installed) is checked before any start; Gemini Live keeps the session instead of handing off when the Local Agent is not set up; the service calls `startForeground` first for ACTION_START/READ_SCREEN_ALOUD. No new permissions (the Local Agent stays Tasker/AutoInput-only, no CyanBridge accessibility service).
+- **Tests:** app unit 784/784, including `controller does not start the agent service when phone control is off`.
+
 ## 2026-11-22 — Release 2.5.0 (versionCode 39): NPU for more phones, LiteRT-LM 0.19.1
 
 - **Version:** Play's highest uploaded bundle is still code 37 (Play Developer API, 2026-11-22); code 38 was tagged

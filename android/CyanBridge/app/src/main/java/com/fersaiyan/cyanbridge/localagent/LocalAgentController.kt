@@ -25,6 +25,8 @@ object LocalAgentController {
             .takeIf { it != LocalAgentDeviceState.Availability.READY }
             ?.let { return CommandResult(false, "Unlock and wake the phone before starting the Local Agent.", it.errorCode) }
 
+        unavailableReason(context)?.let { return it }
+
         if (!hasNotificationPermission(context)) {
             val activity = context.findFragmentActivity()
             if (activity != null) {
@@ -39,6 +41,20 @@ object LocalAgentController {
             LocalAgentIntents.ACTION_START,
             extras = mapOf(LocalAgentIntents.EXTRA_GOAL to trimmedGoal),
         )
+    }
+
+    /**
+     * The Local Agent is opt-in: phone control must be on and Tasker installed (the user imports
+     * the CyanBridge profile there). Null when a task may start. Checked before any
+     * startForegroundService, so callers such as Gemini Live never start the service for users
+     * without it (Play vitals 2.4.3: ForegroundServiceDidNotStartInTimeException).
+     */
+    fun unavailableReason(context: Context): CommandResult? = when {
+        !com.fersaiyan.cyanbridge.agent.LocalAgentPrefs.isLocalAgentAutomationEnabled(context) ->
+            CommandResult(false, "Local Agent phone control is off. Turn it on in Local Agent settings.", "local_agent_automation_disabled")
+        !com.fersaiyan.cyanbridge.localagent.tasker.TaskerAgentBridge.isTaskerInstalled(context) ->
+            CommandResult(false, "Install Tasker and import the CyanBridge Local Agent profile first.", "tasker_not_installed")
+        else -> null
     }
 
     fun stop(context: Context): CommandResult = sendServiceCommand(context, LocalAgentIntents.ACTION_STOP)

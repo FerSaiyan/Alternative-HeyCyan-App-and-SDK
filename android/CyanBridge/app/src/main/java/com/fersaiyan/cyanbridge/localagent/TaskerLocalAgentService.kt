@@ -165,6 +165,12 @@ class TaskerLocalAgentService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // LocalAgentController starts these two with startForegroundService. Android crashes the app
+        // if the service stops or returns without startForeground, and startLoop/readScreenAloudOnce
+        // can return early (phone control off, no goal, a task already running).
+        if (intent?.action == LocalAgentIntents.ACTION_START || intent?.action == LocalAgentIntents.ACTION_READ_SCREEN_ALOUD) {
+            startForeground(NOTIFICATION_ID, notification(if (loopJob?.isActive == true) "Tasker agent running" else "Starting Tasker agent"))
+        }
         when (intent?.action) {
             LocalAgentIntents.ACTION_START -> startLoop(intent.getStringExtra(LocalAgentIntents.EXTRA_GOAL))
             LocalAgentIntents.ACTION_STOP -> stopLoop("user")
