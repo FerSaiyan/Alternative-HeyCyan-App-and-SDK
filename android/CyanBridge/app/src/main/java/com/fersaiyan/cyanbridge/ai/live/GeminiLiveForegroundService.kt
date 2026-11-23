@@ -31,6 +31,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 /**
  * Foreground service that owns a Gemini Live session so it survives the
@@ -66,24 +67,9 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         serviceScope.launch(Dispatchers.Main) { captureHardwareImageQuestion(photo) }
     }
 
-    internal val liveControlRouter: GeminiLiveControlRouter by lazy {
-        GeminiLiveControlRouter(
-            engineProvider = {
-                // Production Jev-like engine: single-letter decode via the active provider.
-                com.fersaiyan.cyanbridge.ai.decision.SingleTokenDecisionEngine(
-                    generate = { systemPrompt, userPrompt ->
-                        com.fersaiyan.cyanbridge.ai.router.AgentInferenceRouter.completeDecisionToken(
-                            context = this@GeminiLiveForegroundService,
-                            sessionId = "live-control-${System.currentTimeMillis()}",
-                            systemPrompt = systemPrompt,
-                            userPrompt = userPrompt,
-                            maxTokens = 8,
-                        )
-                    },
-                )
-            },
-        )
-    }
+    /** A tool call that ends Live once Gemini has finished its spoken reply ([onModelTurnComplete]). */
+    private var pendingEndAction: (() -> Unit)? = null
+    private var pendingEndTimeout: Job? = null
 
     private val powerManager by lazy { getSystemService(Context.POWER_SERVICE) as PowerManager }
     private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
@@ -108,7 +94,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 }
             )
         }
-        client = GeminiLiveClient(this, this)
+        client = GeminiLiveClient(this, this, tokenProvider = GeminiLiveDebugEndpoint.tokenProvider(this))
         announcementTts = TtsSpeaker(applicationContext, TAG)
         visionController = GeminiLiveVisionController(this, client!!) { message ->
             visionStatus = message
@@ -315,6 +301,8 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         sessionRunning = false
         idleStopJob?.cancel()
         cancelResponseIdleTimeout("session stopped")
+        pendingEndTimeout?.cancel()
+        pendingEndAction = null
         tickerJob?.cancel()
         unregisterHardwareButton()
         visionController?.stop()
@@ -331,11 +319,13 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     private fun registerHardwareButton() {
         if (hardwareRegistered) return
         GeminiLiveImageButtonRouter.register(com.fersaiyan.cyanbridge.devices.DeviceProfileStore.selectedClass(this), hardwareHandler)
+        GeminiLiveImageButtonRouter.liveVideoButtonHandler = { visionController?.sendNewestFrameForButton() == true }
         hardwareRegistered = true
     }
 
     private fun unregisterHardwareButton() {
         if (!hardwareRegistered) return
+        GeminiLiveImageButtonRouter.liveVideoButtonHandler = null
         GeminiLiveImageButtonRouter.unregister(hardwareHandler)
         hardwareRegistered = false
     }
@@ -345,7 +335,12 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         val sessionClient = client ?: run { photo.acquisition?.cancel(); return }
         cancelResponseIdleTimeout("manual glasses image request")
         if (!hardwareInProgress.compareAndSet(false, true)) { photo.acquisition?.cancel(); return }
+        // The user usually asks right after pressing: hold that turn's end until the photo is in.
+        sessionClient.deferAudioForVisualContext()
+        val captureLock = visionController?.captureLock
         serviceScope.launch {
+            // Waits for an automatic still already talking to the glasses; never two at once.
+            captureLock?.lock()
             sessionClient.recordVisionCaptureStarted()
             var captured = false
             var captureError: Throwable? = null
@@ -356,7 +351,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 result.onSuccess { image ->
                     captured = true
                     if (sessionClient.sendImage(image)) {
-                        visionController?.onVisualContextSent()
+                        visionController?.onManualImageSent()
                         visionStatus = "Glasses vision: manual AI-photo queued"
                         currentDetail = "Image queued for Gemini Live"
                     } else {
@@ -375,7 +370,9 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
             } finally {
                 sessionClient.recordVisionCaptureFinished(captured, captureError)
                 photo.acquisition?.cancel()
+                captureLock?.unlock()
                 hardwareInProgress.set(false)
+                sessionClient.releaseAudioAfterVisualContext()
             }
         }
     }
@@ -387,7 +384,9 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
             currentDetail = detail.ifBlank { state.name.lowercase().replaceFirstChar(Char::uppercase) }
             val listening = state == GeminiLiveState.LISTENING
             isListening = listening
-            if (listening) {
+            // A LISTENING update queued behind the stop (e.g. Gemini's goodbye turn) must not
+            // re-open the glasses camera after the session ended.
+            if (listening && !stopping) {
                 visionController?.start()
                 if (startedAtMs == 0L) {
                     startedAtMs = System.currentTimeMillis()
@@ -428,38 +427,6 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         if (active) serviceScope.launch(Dispatchers.Main) {
             cancelResponseIdleTimeout("microphone activity")
         }
-        if (!active) {
-            // Speech boundary: classify the accumulated utterance ONCE, never per fragment.
-            val utterance = liveControlRouter.bufferedText()
-            if (utterance.isNotBlank()) {
-                Log.d(TAG, "Live speech ended, classifying utterance chars=${utterance.length}")
-                serviceScope.launch(Dispatchers.IO) {
-                    val action = try {
-                        liveControlRouter.classifyAtUtteranceEnd()
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Live control classification failed", t)
-                        LiveControlAction.CONTINUE
-                    }
-                    Log.i(TAG, "Live control decision=$action utterance_chars=${utterance.length}")
-                    when (action) {
-                        LiveControlAction.END_LIVE -> withContext(Dispatchers.Main) { stopLive() }
-                        LiveControlAction.LOCAL_AGENT -> withContext(Dispatchers.Main) {
-                            val goal = liveControlRouter.bufferedText()
-                            liveControlRouter.clear()
-                            stopLive()
-                            try {
-                                com.fersaiyan.cyanbridge.localagent.LocalAgentController.start(
-                                    this@GeminiLiveForegroundService, goal,
-                                )
-                            } catch (t: Throwable) {
-                                Log.w(TAG, "LocalAgent handoff failed", t)
-                            }
-                        }
-                        LiveControlAction.CONTINUE -> Unit
-                    }
-                }
-            }
-        }
     }
 
     override fun onModelOutputStarted() {
@@ -467,7 +434,75 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     }
 
     override fun onModelTurnComplete() {
-        serviceScope.launch(Dispatchers.Main) { scheduleResponseIdleTimeout() }
+        serviceScope.launch(Dispatchers.Main) {
+            if (!runPendingEndAction("goodbye spoken")) scheduleResponseIdleTimeout()
+        }
+    }
+
+    /** [GeminiLiveTools] this session can honour; phone tasks only when the Local Agent is set up. */
+    override fun liveTools(): List<String> = buildList {
+        add(GeminiLiveTools.END_SESSION)
+        if (com.fersaiyan.cyanbridge.localagent.LocalAgentController.unavailableReason(this@GeminiLiveForegroundService) == null) {
+            add(GeminiLiveTools.PHONE_TASK)
+        }
+    }
+
+    override fun onToolCall(id: String, name: String, args: JSONObject) {
+        serviceScope.launch(Dispatchers.Main) {
+            val sessionClient = client ?: return@launch
+            when (name) {
+                GeminiLiveTools.END_SESSION -> {
+                    sessionClient.sendToolResponse(id, name, JSONObject().put("result", "ending"))
+                    endAfterReply { stopLive() }
+                }
+                GeminiLiveTools.PHONE_TASK -> {
+                    val task = args.optString(GeminiLiveTools.PHONE_TASK_ARG).trim()
+                    val unavailable = com.fersaiyan.cyanbridge.localagent.LocalAgentController.unavailableReason(this@GeminiLiveForegroundService)
+                    when {
+                        task.isEmpty() -> sessionClient.sendToolResponse(
+                            id, name, JSONObject().put("result", "error").put("message", "No task was given; ask the user what to do."),
+                        )
+                        unavailable != null -> sessionClient.sendToolResponse(
+                            id, name, JSONObject().put("result", "unavailable").put("message", unavailable.userMessage),
+                        )
+                        else -> {
+                            sessionClient.sendToolResponse(
+                                id, name,
+                                JSONObject().put("result", "handing_over")
+                                    .put("message", "Tell the user in one short sentence that the phone agent is taking over; this conversation then ends."),
+                            )
+                            // The agent asks for voice confirmations, so it needs the microphone Live holds.
+                            endAfterReply {
+                                stopLive()
+                                runCatching { com.fersaiyan.cyanbridge.localagent.LocalAgentController.start(this@GeminiLiveForegroundService, task) }
+                                    .onFailure { Log.w(TAG, "Local Agent handoff failed", it) }
+                            }
+                        }
+                    }
+                }
+                else -> sessionClient.sendToolResponse(id, name, JSONObject().put("result", "error").put("message", "Unknown tool"))
+            }
+        }
+    }
+
+    /** Runs [action] when Gemini's reply to the tool call has been spoken, or after a short timeout. */
+    private fun endAfterReply(action: () -> Unit) {
+        pendingEndAction = action
+        pendingEndTimeout?.cancel()
+        pendingEndTimeout = serviceScope.launch {
+            delay(END_AFTER_REPLY_TIMEOUT_MS)
+            runPendingEndAction("no reply after the tool call")
+        }
+    }
+
+    private fun runPendingEndAction(reason: String): Boolean {
+        val action = pendingEndAction ?: return false
+        pendingEndAction = null
+        pendingEndTimeout?.cancel()
+        pendingEndTimeout = null
+        Log.i(TAG, "Ending Live after a tool call: $reason")
+        action()
+        return true
     }
 
     override fun onTranscription(input: Boolean, text: String) {
@@ -476,9 +511,6 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         }
         if (text.isNotBlank()) {
             Log.d(TAG, "${if (input) "User" else "Gemini"} transcription chars=${text.length}")
-            // Only user (input) speech feeds the control classifier. Never classify here:
-            // fragments are incremental; classification happens at speech=false above.
-            if (input) liveControlRouter.appendTranscript(text)
         }
     }
 
@@ -538,6 +570,8 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         private const val CHANNEL_ID = "gemini_live"
         private const val NOTIFICATION_ID = 7044
         private const val MAX_WORK_DURATION_MS = 15L * 60L * 1000L
+        /** Gemini speaks a goodbye / hand-over line before Live ends; never wait longer than this. */
+        private const val END_AFTER_REPLY_TIMEOUT_MS = 8_000L
         private const val ACTION_START = "com.fersaiyan.cyanbridge.action.GEMINI_LIVE_START"
         private const val ACTION_STOP = "com.fersaiyan.cyanbridge.action.GEMINI_LIVE_STOP"
         private const val EXTRA_LANGUAGE = "language"

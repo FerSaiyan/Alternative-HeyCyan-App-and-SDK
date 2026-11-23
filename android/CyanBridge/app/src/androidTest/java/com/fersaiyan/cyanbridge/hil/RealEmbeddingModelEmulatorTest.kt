@@ -4,7 +4,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.fersaiyan.cyanbridge.ai.decision.AssistantDecisionOptions
 import com.fersaiyan.cyanbridge.ai.decision.EmbeddingDecisionEngine
-import com.fersaiyan.cyanbridge.ai.decision.LiveControlOptions
 import com.fersaiyan.cyanbridge.localmodels.engine.LlamaCppTextEmbeddingEngine
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -101,7 +100,6 @@ class RealEmbeddingModelEmulatorTest {
             // record scores for later comparison and model-specific evaluation.
 
             validateRealAssistantDecisions(displayName, engine)
-            validateRealLiveDecisions(displayName, engine)
         }
     }
 
@@ -137,34 +135,6 @@ class RealEmbeddingModelEmulatorTest {
         }
     }
 
-    private suspend fun validateRealLiveDecisions(
-        displayName: String,
-        embedder: LlamaCppTextEmbeddingEngine,
-    ) {
-        val decisionEngine = EmbeddingDecisionEngine(
-            embedder = embedder,
-            queryText = { formatRealQuery(displayName, it) },
-            candidateText = { formatRealPrototype(displayName, it) },
-            minimumTopScore = -1f,
-            minimumMargin = 0.01f,
-        )
-        val candidates = LiveControlOptions.candidates()
-        val cases = listOf(
-            "Tell me more about black holes." to "A",
-            "That's all, please end this conversation." to "B",
-            "Open Spotify on my phone." to "C",
-        )
-        cases.forEach { (query, expected) ->
-            val decision = decisionEngine.choose(query, candidates, "real-live")
-            println(
-                "JEV_EMBED decision model=$displayName head=live query=$query " +
-                    "expected=$expected selected=${decision.label} accepted=${!decision.abstained} " +
-                    "topScore=${decision.topScore} margin=${decision.margin} raw=${decision.rawOutput}",
-            )
-            assertTrue("$displayName live decision abstained for '$query'", !decision.abstained)
-            assertEquals("$displayName live decision for '$query'", expected, decision.label)
-        }
-    }
 
     /**
      * Match the documented model-family prompts during this probe. EmbeddingGemma

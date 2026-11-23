@@ -48,6 +48,16 @@ class LocalAgentDeviceStateTest {
         assertEquals("device_state_unavailable", result.error)
     }
 
+    @Test
+    fun `controller does not start the agent service when phone control is off`() {
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val result = LocalAgentController.start(app, "Open Settings")
+
+        assertFalse(result.ok)
+        assertEquals("local_agent_automation_disabled", result.error)
+        assertEquals(null, org.robolectric.Shadows.shadowOf(app).nextStartedService)
+    }
+
     private fun unavailableDeviceContext(): Context = object : ContextWrapper(
         ApplicationProvider.getApplicationContext<Context>(),
     ) {

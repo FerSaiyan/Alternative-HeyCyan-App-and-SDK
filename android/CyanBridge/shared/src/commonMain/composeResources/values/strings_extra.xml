@@ -380,9 +380,10 @@
     <string name="dashboard_custom_provider">Local / Pro / Tasker</string>
     <string name="dashboard_test_voice">Test voice</string>
     <string name="dashboard_live_image_delay">Gemini Live image refresh</string>
-    <string name="dashboard_live_image_delay_description">Take a new image only when you begin another significant speech turn after this delay.</string>
+    <string name="dashboard_live_image_delay_description">Only first: the opening image. Every speech turn: a new photo when you start speaking. Live video: the glasses stream video and Gemini gets the newest frame when you start speaking (no photo delay).</string>
     <string name="dashboard_live_image_only_first">Only first</string>
     <string name="dashboard_live_image_every_turn">Every speech turn</string>
+    <string name="dashboard_live_image_video">Live video</string>
     <string name="dashboard_gemini_chatgpt_setup">Gemini / ChatGPT automation setup</string>
     <string name="dashboard_meizu_title">Meizu MYVU / Star Air</string>
     <string name="dashboard_protocol">Protocol: %1$s</string>

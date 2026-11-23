@@ -45,14 +45,15 @@ class LiveTokenRequestException(
 )
 
 interface GeminiLiveTokenProvider {
-    suspend fun requestToken(language: String, imagePrompt: String): LiveTokenConfig
+    /** [tools]: [GeminiLiveTools] names the app handles this session; the relay declares them. */
+    suspend fun requestToken(language: String, imagePrompt: String, tools: List<String> = emptyList()): LiveTokenConfig
 }
 
 class DefaultGeminiLiveTokenProvider(
     private val appContext: Context,
     private val http: OkHttpClient = OkHttpClient(),
 ) : GeminiLiveTokenProvider {
-    override suspend fun requestToken(language: String, imagePrompt: String): LiveTokenConfig {
+    override suspend fun requestToken(language: String, imagePrompt: String, tools: List<String>): LiveTokenConfig {
         val account = ProSubscriptionRelayClient.fetchAccountInfo(appContext).getOrThrow()
         val authToken = account.apiToken.trim()
         check(authToken.isNotBlank()) { "Sign in to CyanBridge before starting Gemini Live" }
@@ -68,6 +69,7 @@ class DefaultGeminiLiveTokenProvider(
                 .addQueryParameter("language", language)
                 .addQueryParameter("image_prompt", imagePrompt.take(400))
                 .apply { if (economy) addQueryParameter("mode", "economy") }
+                .apply { if (tools.isNotEmpty()) addQueryParameter(GeminiLiveTools.REQUEST_FIELD, tools.joinToString(",")) }
                 .build()
                 .toString()
             val websocketUrl = httpUrl.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
@@ -86,6 +88,7 @@ class DefaultGeminiLiveTokenProvider(
             .put("language", language)
             .put("image_prompt", imagePrompt)
             .put("system_prompt", ProSubscriptionAiPrefs.getSystemPrompt(appContext))
+            .apply { if (tools.isNotEmpty()) put(GeminiLiveTools.REQUEST_FIELD, org.json.JSONArray(tools)) }
             .toString()
             .toRequestBody("application/json; charset=utf-8".toMediaType())
         val request = Request.Builder()

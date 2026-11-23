@@ -33,6 +33,8 @@ internal class WalkingAidLiveVideoCapture(
         EyevueLivePreviewManager(context, EyevueManager.getInstance(context))
     },
     private val mentraFactory: () -> LibVlcLivePreviewManager = { MentraLivePreviewManager(context) },
+    /** Names the feature in user-facing errors (Gemini Live reuses this capture). */
+    private val featureName: String = "Walking Aid",
 ) {
     suspend fun collect(mode: WalkingAidVideoMode, onFrame: (VisionFrame) -> Unit) = coroutineScope {
         val lastFrameAt = AtomicLong(System.currentTimeMillis())
@@ -48,7 +50,7 @@ internal class WalkingAidLiveVideoCapture(
             delay(60_000)
             while (isActive) {
                 if (System.currentTimeMillis() - lastFrameAt.get() > 15_000) {
-                    throw IOException("Glasses video stopped delivering frames. Reconnect and restart Walking Aid.")
+                    throw IOException("Glasses video stopped delivering frames. Reconnect and restart $featureName.")
                 }
                 delay(1_000)
             }
@@ -68,7 +70,7 @@ internal class WalkingAidLiveVideoCapture(
 
     private suspend fun collectHeyCyan(onFrame: (Bitmap) -> Unit): Unit = withContext(Dispatchers.Main.immediate) {
         val lease = GlassesSessionCoordinator.tryAcquireLease(GlassesSession.LIVE_PREVIEW)
-            ?: throw IOException("Stop the current glasses transport before starting Walking Aid video.")
+            ?: throw IOException("Stop the current glasses transport before starting $featureName video.")
         var manager: LivePreviewManager? = null
         val finished = CompletableDeferred<Unit>()
         try {
@@ -90,7 +92,7 @@ internal class WalkingAidLiveVideoCapture(
 
     private suspend fun collectEyevue(onFrame: (Bitmap) -> Unit): Unit = withContext(Dispatchers.Main.immediate) {
         val lease = GlassesSessionCoordinator.tryAcquireLease(GlassesSession.LIVE_PREVIEW)
-            ?: throw IOException("Stop the current glasses transport before starting Walking Aid video.")
+            ?: throw IOException("Stop the current glasses transport before starting $featureName video.")
         var manager: EyevueLivePreviewManager? = null
         val finished = CompletableDeferred<Unit>()
         try {
@@ -112,7 +114,7 @@ internal class WalkingAidLiveVideoCapture(
 
     private suspend fun collectMentra(onFrame: (Bitmap) -> Unit): Unit = withContext(Dispatchers.Main.immediate) {
         val lease = GlassesSessionCoordinator.tryAcquireLease(GlassesSession.LIVE_PREVIEW)
-            ?: throw IOException("Stop the current glasses transport before starting Walking Aid video.")
+            ?: throw IOException("Stop the current glasses transport before starting $featureName video.")
         var manager: LibVlcLivePreviewManager? = null
         val finished = CompletableDeferred<Unit>()
         try {

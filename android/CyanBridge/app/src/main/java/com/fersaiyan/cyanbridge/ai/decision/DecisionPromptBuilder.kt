@@ -31,13 +31,6 @@ object DecisionPromptBuilder {
         }.trim()
     }
 
-    fun buildLiveControlPrompt(transcript: String): String {
-        return buildClassificationPrompt(
-            state = transcript,
-            candidates = LiveControlOptions.candidates(),
-        )
-    }
-
     fun buildUiActionPrompt(
         goal: String,
         screenSummary: String,

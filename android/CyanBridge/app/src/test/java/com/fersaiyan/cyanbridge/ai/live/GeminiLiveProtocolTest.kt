@@ -1,5 +1,6 @@
 package com.fersaiyan.cyanbridge.ai.live
 
+import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -214,6 +215,8 @@ class GeminiLiveProtocolTest {
         is GeminiLiveServerEvent.ModelAudio -> "Audio:${event.pcm.toList()}"
         GeminiLiveServerEvent.TurnComplete -> "TurnComplete"
         is GeminiLiveServerEvent.ProxyCapabilities -> "Capabilities:${event.clientImageTurns}"
+        is GeminiLiveServerEvent.ToolCall -> "ToolCall:${event.name}"
+        is GeminiLiveServerEvent.ToolCallCancellation -> "ToolCallCancellation:${event.ids}"
     }
 
     private fun config(
@@ -236,4 +239,30 @@ class GeminiLiveProtocolTest {
         economy = economy,
         freeTier = freeTier,
     )
+
+    @Test
+    fun `tool calls parse, tool responses build, and only requested tools are declared`() {
+        val events = GeminiLiveProtocol.parseServerMessage(
+            """{"toolCall":{"functionCalls":[{"id":"c1","name":"phone_task","args":{"task":"open Spotify"}},{"id":"c2","name":"end_session"}]}}""",
+        )!!
+        val calls = events.filterIsInstance<GeminiLiveServerEvent.ToolCall>()
+        assertEquals(listOf("phone_task", "end_session"), calls.map { it.name })
+        assertEquals("open Spotify", calls[0].args.getString("task"))
+        assertEquals(listOf("c9"), (GeminiLiveProtocol.parseServerMessage("""{"toolCallCancellation":{"ids":["c9"]}}""")!!.single()
+            as GeminiLiveServerEvent.ToolCallCancellation).ids)
+
+        val response = JSONObject(GeminiLiveProtocol.buildToolResponse("c1", "phone_task", JSONObject().put("result", "unavailable")))
+        val item = response.getJSONObject("toolResponse").getJSONArray("functionResponses").getJSONObject(0)
+        assertEquals("c1", item.getString("id"))
+        assertEquals("unavailable", item.getJSONObject("response").getString("result"))
+
+        val plain = JSONObject(GeminiLiveProtocol.buildSetup(config(), null, "en", "", "s") { "" }.json).getJSONObject("setup")
+        assertTrue(!plain.has("tools"))
+        val withTools = JSONObject(
+            GeminiLiveProtocol.buildSetup(config(), null, "en", "", "s", tools = listOf(GeminiLiveTools.END_SESSION)) { "" }.json,
+        ).getJSONObject("setup")
+        val declared = withTools.getJSONArray("tools").getJSONObject(0).getJSONArray("functionDeclarations")
+        assertEquals(1, declared.length())
+        assertEquals("end_session", declared.getJSONObject(0).getString("name"))
+    }
 }

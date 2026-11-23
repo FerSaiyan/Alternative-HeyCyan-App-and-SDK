@@ -5,10 +5,7 @@ import com.fersaiyan.cyanbridge.ai.decision.AssistantDecisionOptions
 import com.fersaiyan.cyanbridge.ai.decision.DecisionMath
 import com.fersaiyan.cyanbridge.ai.decision.DecisionOutputParser
 import com.fersaiyan.cyanbridge.ai.decision.DecisionPromptBuilder
-import com.fersaiyan.cyanbridge.ai.decision.LiveControlOptions
 import com.fersaiyan.cyanbridge.ai.decision.SingleTokenDecisionEngine
-import com.fersaiyan.cyanbridge.ai.live.GeminiLiveControlRouter
-import com.fersaiyan.cyanbridge.ai.live.LiveControlAction
 import com.fersaiyan.cyanbridge.ai.router.AssistantRequestRouter
 import com.fersaiyan.cyanbridge.ai.router.AssistantRequest
 import com.fersaiyan.cyanbridge.ai.router.AssistantRequestSource
@@ -68,30 +65,6 @@ class JevLikeDecisionEmulatorTest {
         assertEquals(AssistantIntent.EXECUTE_UI_TASK, decision?.intent)
     }
 
-    @Test fun liveControl_endPhrases_multilingual_onDevice() = runBlocking {
-        val cases = mapOf(
-            "Okay thanks, that's everything." to LiveControlAction.END_LIVE,
-            "Obrigado, pode encerrar." to LiveControlAction.END_LIVE,
-            "Merci, tu peux arrêter maintenant." to LiveControlAction.END_LIVE,
-            "结束对话。" to LiveControlAction.END_LIVE,
-            "Tell me more about black holes." to LiveControlAction.CONTINUE,
-        )
-        cases.forEach { (text, expected) ->
-            val router = GeminiLiveControlRouter()
-            router.appendTranscript(text)
-            val got = router.classifyHeuristicNow()
-            println("JEV_HIL live text='$text' -> $got (expected $expected)")
-            assertEquals("text=$text", expected, got)
-        }
-        // Model path at utterance boundary (fake returns B = END).
-        val router = GeminiLiveControlRouter(
-            engineProvider = { SingleTokenDecisionEngine(generate = { _, _ -> "B" }) },
-        )
-        router.appendTranscript("I am done here, please wrap up this call for me.")
-        val action = router.classifyAtUtteranceEnd()
-        println("JEV_HIL live model-path action=$action")
-        assertEquals(LiveControlAction.END_LIVE, action)
-    }
 
     @Test fun uiCandidates_boundedAndLabeled_onDevice() {
         val obs = LocalAgentObservation(
@@ -114,6 +87,5 @@ class JevLikeDecisionEmulatorTest {
         val prompt = DecisionPromptBuilder.buildUiActionPrompt("Play LTT video", "YouTube home", built.candidates)
         println("JEV_HIL ui prompt chars=${prompt.length}")
         assertTrue(prompt.contains("ONLY the single letter"))
-        assertEquals(LiveControlOptions.candidates().size, 3)
     }
 }

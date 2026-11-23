@@ -120,6 +120,21 @@ Device Run, Gemma 4 E2B. First token after the recording (spoken) or after the s
   - The time must move out of the system prompt.
   - Report: `/mnt/seagate/ML/litertlm-clone-research-20261123/REPORT.md`. Not implemented yet.
 
+## 2026-11-23 — Gemini Live: tools instead of the router, live-video latest frame (branch `gemini-live-routing`)
+
+- **Routing:** Gemini Live declares function tools through the relay (website branch `live-tools` d33f603, NOT deployed): `end_session` always, `phone_task` only when the Tasker Local Agent is set up. The transcript router (regex + a decision-token call per utterance) is removed; it ended Live on everyday PT/ES questions ("qual o melhor caminho para o centro agora?", "que horas o ônibus chega?") and re-read the whole accumulated transcript. The camera stays on local speech detection (no wait for Gemini).
+- **Live video mode** (dashboard option 3): HeyCyan/EyeVue/Mentra keep the glasses' video open (Walking Aid capture); the newest frame goes out when speech starts; the photo button sends the newest frame. Free/Economy image budget: 2 of 10 kept for the button; unchanged views and images within 4 s of a button photo are skipped. One capture lock for stills and the button; held turns are released after 6 s.
+- **Network bug found by the rig:** the HeyCyan live preview binds the whole process to the Wi-Fi Direct network (no internet: unbound sockets fail DNS), so Gemini Live, its token and relay calls broke as soon as video started. `InternetRoute` opens those sockets/DNS on the internet network.
+- **E2E (HeyCyan live lane, firmware_dump add.244: real `ai_glass_livestream` serving a stored clip; fake Live server; speech injected into the AVD mic; tools in `tools/hil/gemini_live_e2e/`):** setup declares only `end_session` (no Local Agent); the stream starts with the session; each utterance sends one frame 0.61-0.62 s after speech starts, the frame 10 clip frames (0.67 s) behind the stream; the websocket stays up and reconnects while the process is bound to Wi-Fi Direct; `phone_task` -> "unavailable", Live continues; `end_session` + goodbye -> Live ends after the goodbye turn and the glasses stream stops (op 0x15). Run 1 found a stale LISTENING update restarting vision after the stop (fixed: no vision start once stopping); run 2 all checks pass, no crashes.
+- **Not covered:** the AI-photo button in live-video mode (the rig has no AI-button press), Meta/EyeVue/Mentra video, the Free/Economy 10-image budget against the real proxy, real Gemini behaviour with the tools. Release order: deploy the relay change before shipping this app build, or Gemini cannot end the session by voice.
+
+## 2026-11-23 — Play vitals check for 2.4.x/2.5.0; Local Agent start crash from Gemini Live (branch `ANRs_fix-2.5`)
+
+- **Vitals (Reporting API, 2026-10-26..11-23, per versionCode):** 31 (2.3.0) = the 41 clusters triaged on 11-21, nothing new; 32-35, 37 (2.4.5) and 39 (2.5.0) = no reports yet; 36 (2.4.3, production) = 5 issues, 4 already fixed in 2.5.0 (Oudmon volume parser, LiteRT-LM close-during-prefill, dataSync onTimeout, modal sheet state) and 1 new. No ANRs on any 2.4.x/2.5.0 build.
+- **New:** `ForegroundServiceDidNotStartInTimeException` (Galaxy F54, Android 17, 2.4.3): Gemini Live classified an utterance as a phone-control request, stopped Live and called `LocalAgentController.start` -> `startForegroundService(TaskerLocalAgentService)`. `startLoop` returns before `startForeground` when phone control is off (the default), the goal is blank or a task already runs; `readScreenAloudOnce` likewise when a task runs.
+- **Fix:** `LocalAgentController.unavailableReason` (phone control on + Tasker installed) is checked before any start; Gemini Live keeps the session instead of handing off when the Local Agent is not set up; the service calls `startForeground` first for ACTION_START/READ_SCREEN_ALOUD. No new permissions (the Local Agent stays Tasker/AutoInput-only, no CyanBridge accessibility service).
+- **Tests:** app unit 784/784, including `controller does not start the agent service when phone control is off`.
+
 ## 2026-11-22 — Release 2.5.0 (versionCode 39): NPU for more phones, LiteRT-LM 0.19.1
 
 - **Version:** Play's highest uploaded bundle is still code 37 (Play Developer API, 2026-11-22); code 38 was tagged

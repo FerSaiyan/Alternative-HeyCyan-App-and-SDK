@@ -65,9 +65,4 @@ class DecisionOutputParserTest {
         }
     }
 
-    @Test fun `live candidates parse`() {
-        val live = LiveControlOptions.candidates()
-        assertEquals("B", DecisionOutputParser.parse("B", live).label)
-        assertEquals("C", DecisionOutputParser.parse("<think>operate phone</think> C", live).label)
-    }
 }
