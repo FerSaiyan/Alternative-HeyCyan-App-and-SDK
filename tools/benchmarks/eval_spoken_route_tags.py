@@ -14,9 +14,20 @@ variants can be compared for greedy accuracy and for what a calibrated threshold
 Expected tag per catalog class: visual -> camera (no photo attached), plain/time -> answer, web -> search,
 action -> phone, live -> live, ignore -> ignore; ambiguous rows are reported but not scored.
 
+--mode image scores photo questions (the photo button / photo wake: the glasses photo and the recording). The system
+turn is the spoken one (APP_SYSTEM, kept identical so LiteRT-LM serves it from its prefill cache) and the user turn
+carries the time and a photo note; --layouts mirror LiteRtLocalInferenceEngine: "together" (one turn), "photo_first"
+/ "audio_first" (the part that arrived first prefilled as its own turn plus "OK."), "audio_only" (the app's choice when
+the recording comes first: decide on it alone, as a spoken question, and use the photo for [camera]). Every row gets a photo: its own
+fixture image, else a fixed unrelated one. Expected: [answer] for visual/plain/time/ambiguous, the voice routes for
+the rest. As in the app, a [camera] reply is an answer about the photo: "camera" counts them, "bare" those with no
+answer after the tag (the app then asks for it in a second turn). Visual rows also report whether the answer names the photo (the catalog's `expect`
+keywords). Prompt "notag" is the 2.5.1 photo question (no routes): its route is always "answer".
+
   flock /tmp/tribe_gpu.lock ~/nvme_tmp/akio_oral_vlm_local/env/bin/python -I eval_spoken_route_tags.py \
       --model ~/nvme_tmp/akio_oral_vlm_local/models/gemma-4-E2B-it-qat-mobile-transformers \
       --catalog <questions.jsonl>=<fixtures dir> [--catalog ...] --prompts v1,v2 --output out.jsonl
+  ... --mode image --images <fixtures dir>/images --prompts notag,routes,routes_note --layouts together,photo_first
 """
 import argparse
 import json
@@ -158,6 +169,87 @@ PROMPTS = {"v1": f"{GLASSES}\n\n{ROUTES_V1}", "v2": f"{GLASSES}\n\n{ROUTES_V2}",
            "v5a_memfirst": f"{MEMORY}\n\n{GLASSES}\n\n{ROUTES_V5A}"}
 CLOCK = "Current local time: Saturday 2026-10-24 14:05 (America/Sao_Paulo), device region BR."
 
+# The app's photo-question texts (2026-11-23, branch smart-image-questions); keep in sync with
+# ImageQuestionDefaults.spokenQuestionInstruction / SPOKEN_DECISION_ROUTES / PHOTO_QUESTION_NOTE and the notes in
+# LiteRtLocalInferenceEngine (firstPartMessages / buildUserContents).
+APP_GLASSES = (
+    "You are the voice assistant in the user's smart glasses. The user talks to you out loud: their message is a "
+    "recording of their voice, sometimes together with a photo from the glasses camera of what they are looking at. "
+    "Reply directly to what they said, in the language they spoke (if unsure, in English). Never repeat, quote or "
+    "transcribe their words. Use the photo only when their words refer to something they see."
+)
+ROUTES_APP = ROUTES_V5A.replace("the current time below", "the current local time you were given")
+assert ROUTES_APP != ROUTES_V5A
+APP_SYSTEM = f"{APP_GLASSES}\n\n{ROUTES_APP}"
+PHOTO_QUESTION_NOTE = (
+    "This question comes with a photo from the glasses camera of what they are looking at. You can see it, so never "
+    "reply [camera]: when they ask about what they see, reply [answer] and answer from the photo."
+)
+# Engine notes around a prefilled first part: 2.5.1 (no routes) and the decision-turn wording.
+ENGINE_NOTES = {
+    "251": {"photo_turn": "Here is a photo from my glasses camera of what I'm looking at. My question about it comes next.",
+            "question_first": "A photo from my glasses camera of what I'm looking at comes next.",
+            "photo_after": "Here is the photo. Answer my question now."},
+    "decision": {"photo_turn": "Here is a photo from my glasses camera of what I'm looking at. My question comes next.",
+                 "question_first": "A photo from my glasses camera of what I'm looking at comes next.",
+                 "photo_after": "Here is the photo."},
+}
+# First-person note right after the photo (the photo's own turn, or before the recording in one turn).
+PHOTO_NOTE_AFTER = (
+    "Here is the photo my glasses camera took for this question, so you can see what I'm looking at. Don't reply "
+    "[camera]: if I ask about what I see, reply [answer] and answer from the photo."
+)
+# Recording first: the photo's turn has no question in it, and with PHOTO_NOTE_AFTER alone Gemma answered that turn
+# (mostly [camera]) instead of the recorded question (probe2, 2026-11-23). These point back at the question.
+PHOTO_AFTER_QUESTION_DECIDE = (
+    "Here is the photo my glasses camera took for the question I asked above, so you can see what I'm looking at. "
+    "Now reply to that question, starting with its tag; don't reply [camera]: if it is about what I see, reply "
+    "[answer] and answer from the photo."
+)
+ENGINE_NOTES["decision_q"] = dict(ENGINE_NOTES["decision"], photo_after_decide=PHOTO_AFTER_QUESTION_DECIDE,
+                                  question_first="My question is in this recording; a photo from my glasses camera of "
+                                                 "what I'm looking at comes next.")
+# prompt name -> system turn, note in the turn context (before everything), note right after the photo, engine notes
+IMAGE_PROMPTS = {
+    "notag": (APP_GLASSES, None, None, "251"),
+    "routes": (APP_SYSTEM, None, None, "decision"),
+    "routes_note": (APP_SYSTEM, PHOTO_QUESTION_NOTE, None, "decision"),
+    "routes_note_251": (APP_SYSTEM, PHOTO_QUESTION_NOTE, None, "251"),
+    "routes_after": (APP_SYSTEM, None, PHOTO_NOTE_AFTER, "decision"),
+    "routes_both": (APP_SYSTEM, PHOTO_QUESTION_NOTE, PHOTO_NOTE_AFTER, "decision"),
+    # As routes_after; recording first, the photo turn points back at the question (no ack: no "OK." turn between).
+    "routes_q": (APP_SYSTEM, None, PHOTO_NOTE_AFTER, "decision_q"),
+    "routes_q_noack": (APP_SYSTEM, None, PHOTO_NOTE_AFTER, "decision_q"),
+}
+EXPECTED_IMAGE = {"visual": "answer", "plain": "answer", "time": "answer", "ambiguous": "answer", "memory": "answer",
+                  "web": "search", "action": "phone", "live": "live", "ignore": "ignore"}
+# Rows without their own photo get one of these (a scene unrelated to the question), by family.
+STAND_IN_PHOTOS = ["people_three", "plant_aloe", "bus_london_2", "socks_yellow", "menu_fr_chalkboard"]
+
+
+def image_messages(system, note, after, notes, layout, image, audio, ack=True):
+    """The conversation LiteRtLocalInferenceEngine sends for a photo question in [layout]. [note] goes in the turn
+    context (after the time, before everything); [after] right after the photo, in place of the engine's notes."""
+    context = CLOCK + ("\n" + note if note else "")
+    text = lambda t: {"type": "text", "text": t}
+    sys_msg = {"role": "system", "content": [text(system)]}
+    if layout == "audio_only":
+        # The recording came before the photo: the app decides on it alone, like a spoken question (the photo is
+        # only used when the reply is [camera], answered in the conversation once it arrives).
+        return [sys_msg, {"role": "user", "content": [text(CLOCK), {"type": "audio", "audio": audio}]}]
+    if layout == "together":
+        return [sys_msg, {"role": "user", "content": [text(context), {"type": "image", "image": image}]
+                          + ([text(after)] if after else []) + [{"type": "audio", "audio": audio}]}]
+    ok = [{"role": "assistant", "content": [text("OK.")]}] if ack else []
+    if layout == "photo_first":
+        first = after + " My question comes next." if after else notes["photo_turn"]
+        return [sys_msg, {"role": "user", "content": [text(context), {"type": "image", "image": image}, text(first)]},
+                *ok, {"role": "user", "content": [{"type": "audio", "audio": audio}]}]
+    assert layout == "audio_first", layout
+    return [sys_msg,
+            {"role": "user", "content": [text(context), {"type": "audio", "audio": audio}, text(notes["question_first"])]},
+            *ok, {"role": "user", "content": [{"type": "image", "image": image},
+                                              text(notes.get("photo_after_decide") or after or notes["photo_after"])]}]
 
 def read_wav(path):
     import wave
@@ -173,6 +265,20 @@ def parse_tag(text):
     return m.group(1).lower() if m and m.group(1).lower() in TAGS else None
 
 
+def photo_route(text):
+    """The app's route for a photo question (SpokenDecisionParser.parse(photoAttached = true)): [camera] is an answer
+    about the photo; "camera+text" when an answer follows it in the same reply, "camera_bare" when the app has to ask
+    for the answer in a second turn."""
+    import re
+    tag = parse_tag(text)
+    if tag is None:
+        return "answer", "untagged"  # the app speaks an untagged reply as the answer
+    if tag != "camera":
+        return tag, tag
+    rest = re.sub(r"\s*\[\s*(?:answer|camera|search|phone|live|ignore)\s*\]\s*", " ", re.sub(r"^\s*\[[^\]]*\]", "", text)).strip()
+    return "answer", ("camera+text" if rest else "camera_bare")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--model", type=Path, required=True)
@@ -183,7 +289,14 @@ def main():
     ap.add_argument("--per-class", type=int, default=0, help="max rows per (lang, class); 0 = all")
     ap.add_argument("--max-new-tokens", type=int, default=24)
     ap.add_argument("--output", type=Path, required=True)
+    ap.add_argument("--mode", choices=["spoken", "image"], default="spoken")
+    ap.add_argument("--images", type=Path, help="fixture images dir (--mode image)")
+    ap.add_argument("--layouts", default="together", help="--mode image: together,photo_first,audio_first")
     args = ap.parse_args()
+    image_mode = args.mode == "image"
+    if image_mode:
+        from PIL import Image
+        assert args.images and args.images.is_dir(), "--mode image needs --images"
 
     import torch
     from transformers import AutoModelForImageTextToText, AutoProcessor
@@ -225,14 +338,31 @@ def main():
 
     out = args.output.open("x")
     stats = defaultdict(lambda: defaultdict(Counter))
-    for name in args.prompts.split(","):
-        system = PROMPTS[name] + "\n\n" + CLOCK
+    photos = {}
+
+    def photo(r):
+        name = r.get("image") or STAND_IN_PHOTOS[sum(map(ord, r["family"])) % len(STAND_IN_PHOTOS)]
+        if name not in photos:
+            photos[name] = Image.open(args.images / f"{name}.jpg").convert("RGB")
+        return name, photos[name]
+
+    runs = [(name, layout) for name in args.prompts.split(",") for layout in args.layouts.split(",")] if image_mode \
+        else [(name, None) for name in args.prompts.split(",")]
+    for name, layout in runs:
+        run = name if layout is None else f"{name}/{layout}"
         for r, wav in rows:
             started = time.perf_counter()
-            messages = [
-                {"role": "system", "content": [{"type": "text", "text": system}]},
-                {"role": "user", "content": [{"type": "audio", "audio": read_wav(wav)}]},
-            ]
+            if image_mode:
+                system, note, after, notes = IMAGE_PROMPTS[name]
+                photo_name, image = photo(r)
+                messages = image_messages(system, note, after, ENGINE_NOTES[notes], layout, image, read_wav(wav),
+                                          ack=not name.endswith("_noack"))
+            else:
+                photo_name = None
+                messages = [
+                    {"role": "system", "content": [{"type": "text", "text": PROMPTS[name] + "\n\n" + CLOCK}]},
+                    {"role": "user", "content": [{"type": "audio", "audio": read_wav(wav)}]},
+                ]
             inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True,
                                                    return_dict=True, return_tensors="pt",
                                                    enable_thinking=False).to(model.device)
@@ -243,26 +373,47 @@ def main():
                 scored = dict(inputs)
                 scored["input_ids"] = torch.cat([inputs["input_ids"], b], 1)
                 scored["attention_mask"] = torch.cat([inputs["attention_mask"], torch.ones_like(b)], 1)
+                if "mm_token_type_ids" in scored:
+                    scored["mm_token_type_ids"] = torch.cat([scored["mm_token_type_ids"], torch.zeros_like(b)], 1)
+                if "token_type_ids" in scored:
+                    scored["token_type_ids"] = torch.cat([scored["token_type_ids"], torch.zeros_like(b)], 1)
                 logp = torch.log_softmax(model(**scored).logits[0, -1].float(), -1)
             tag_lp = torch.tensor([logp[tag_first[t]].item() for t in TAGS])
             probs = dict(zip(TAGS, [round(p, 4) for p in torch.softmax(tag_lp, 0).tolist()]))
             mass = float(torch.exp(tag_lp).sum())
             greedy = parse_tag(reply)
-            want = EXPECTED.get(r["class"])
-            rec = {"prompt": name, "id": r["id"], "lang": r["lang"], "class": r["class"], "expected": want,
-                   "greedy": greedy, "argmax": max(probs, key=probs.get), "probs": probs, "tag_mass": round(mass, 4),
-                   "reply": reply[:200], "ms": round((time.perf_counter() - started) * 1000)}
+            camera_kind = None
+            if image_mode:
+                # The 2.5.1 photo question has no routes: whatever it says is spoken as the answer.
+                greedy, camera_kind = ("answer", None) if name == "notag" else photo_route(reply)
+            want = (EXPECTED_IMAGE if image_mode else EXPECTED).get(r["class"])
+            rec = {"prompt": name, "layout": layout, "photo": photo_name, "id": r["id"], "lang": r["lang"],
+                   "class": r["class"], "expected": want, "greedy": greedy, "argmax": max(probs, key=probs.get),
+                   "probs": probs, "tag_mass": round(mass, 4), "reply": reply[:300], "camera": camera_kind,
+                   "ms": round((time.perf_counter() - started) * 1000)}
+            # Does the answer name what the photo shows (the catalog's keywords, own photo only)?
+            if image_mode and r.get("image") and r.get("expect"):
+                text = reply.lower()
+                rec["expect_hit"] = any(k.lower() in text for k in r["expect"])
             out.write(json.dumps(rec, ensure_ascii=False) + "\n")
             out.flush()
             if want:
-                stats[name][r["class"]]["n"] += 1
-                stats[name][r["class"]]["greedy"] += greedy == want
-                stats[name][r["class"]]["argmax"] += rec["argmax"] == want
-        print(f"== {name}", flush=True)
-        for cls, c in stats[name].items():
-            print(f"  {cls:7s} greedy {c['greedy']}/{c['n']}  argmax {c['argmax']}/{c['n']}", flush=True)
+                c = stats[run][r["class"]]
+                c["n"] += 1
+                c["greedy"] += greedy == want
+                c["argmax"] += rec["argmax"] == want
+                c["camera"] += camera_kind in ("camera+text", "camera_bare") if image_mode else greedy == "camera"
+                c["camera_bare"] += camera_kind == "camera_bare"
+                if "expect_hit" in rec:
+                    c["expect_n"] += 1
+                    c["expect_hit"] += rec["expect_hit"]
+        print(f"== {run}", flush=True)
+        for cls, c in stats[run].items():
+            extra = f"  camera {c['camera']} (bare {c['camera_bare']})" if image_mode else ""
+            if c["expect_n"]:
+                extra += f"  names the photo {c['expect_hit']}/{c['expect_n']}"
+            print(f"  {cls:9s} greedy {c['greedy']}/{c['n']}  argmax {c['argmax']}/{c['n']}{extra}", flush=True)
     out.close()
-
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,126 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-23 — SMART decision for AI image questions (branch `smart-image-questions`, off `dev-2.5.1` @ 9d5277fd)
+
+- **What changed.** A recorded photo question (photo button, photo-mapped wake) on the local model (LiteRT,
+  llama.cpp) in SMART mode now runs the shared `SpokenQuestionFlow.runWithPhoto` instead of one untagged answer.
+  Its reply starts with a route tag: `[answer]` streams to speech as written; `[search]` looks it up with the photo
+  in the conversation; `[phone]` only when `LocalAgentController.unavailableReason` is null (else answered:
+  "phone control is not set up" + help); `[live]` opens Gemini Live with the photo; `[ignore]` is silent.
+  Follow-ups go through the same decision, and a `[camera]` follow-up takes a new photo (the old flow reused the
+  first photo). Unchanged: Classic mode, STT-transcribed questions, the Pro relay, Gemini Live, the external
+  assistants and the default description.
+- **Turn layout (keeps the 2.5.1 cache).** The system turn is the spoken questions' turn (instructions + routes),
+  unchanged, so the CPU clone root and the GPU/NPU spare now serve both kinds of question. The photo note
+  (`ImageQuestionDefaults.PHOTO_QUESTION_NOTE`) goes right after the photo in the user turn
+  (`GenerationConfig.photoNote`, message role `photo_note`):
+  - Photo first (or both together): decided with the photo attached; the photo-first prefill is
+    `[time, photo, note + "My question comes next."] "OK."`, then the recording. Gemma 4 E2B still starts most
+    visual replies with `[camera]` and then answers (`[camera]\n[answer] They are yellow.`). With the photo
+    attached, the app treats that `[camera]` as an answer about this photo. A bare `[camera]` gets one more turn
+    ("answer from the photo you have").
+  - Recording first: decided on the recording alone, exactly like a spoken question, while the photo transfers
+    (route only, 32 tokens). `[search]`, `[phone]` and `[ignore]` act at once. `[answer]` and `[camera]` wait for
+    the button's photo and are answered with it in the conversation, so a visual question filed under
+    `[answer]` still sees the photo.
+  - Why not the 2.5.1 recording-first prefill: with the photo's turn after the recorded question, Gemma answered
+    the photo instead of the question. Host probe, en/pt-BR/es, 3 rows per class: plain, time and ignore went
+    0/3 each, mostly to `[camera]` or a photo description. Notes pointing back at the question did not fix it.
+- **Engine.** `LiteRtLocalInferenceEngine` now closes the open conversation before it creates a new one, in both
+  `generate` and `prepareFirstPart`.
+  - Before, while a kept spoken conversation was still open, the GPU executor copied the KV cache.
+  - S24U GPU: photo-first prefill 1.89 → 0.85 s; recording-first decision 1.91 → 0.98 s.
+  - This also helps a spoken question started inside another one's follow-up window.
+- **Parser.** A second tag that lost its `[` at a line start (`answer]`, `answer>`; S24U and AVD) is removed. It
+  is held back while it streams and released when the reply ends.
+- **Host routing eval** (`eval_spoken_route_tags.py --mode image`):
+  - Gemma 4 E2B QAT, transformers 5.19.
+  - Fixtures: glasses_questions v1.1 (`-20261023`, the superset of `-20261022`) + actions/ignore + live, ≤3 rows
+    per language × class, 162 rows, 9 languages (action/ignore/live: 5).
+  - Each row gets its own fixture photo, or a fixed unrelated one.
+  - Outputs: `/mnt/seagate/ML/smart-image-questions-20261123/eval/`.
+
+  | class (expected) | 2.5.1 (no tags) | together | photo first | recording first |
+  |---|---|---|---|---|
+  | visual (answer with the photo) | 27/27 | 27/27 | 27/27 | 27/27 |
+  | ambiguous (answer) | 18/18 | 18/18 | 18/18 | 17/18 |
+  | plain (answer) | 27/27 | 25/27 | 24/27 | 26/27 |
+  | time (answer) | 18/18 | 17/18 | 16/18 | 18/18 |
+  | web → search | 0/27 | 21/27 | 21/27 | 16/27 |
+  | action → phone | 0/15 | 10/15 | 11/15 | 11/15 |
+  | live | 0/15 | 9/15 | 10/15 | 9/15 |
+  | ignore | 0/15 | 3/15 | 6/15 | 7/15 |
+  | **total** | 90/162 | 130/162 | 133/162 | 131/162 |
+
+  - **Camera-first replies** (counted as answers above): together 22/27 visual, 0 bare; photo first 25/27, 2 bare
+    (ambiguous). Recording first: 20 `[camera]` + 7 `[answer]`, all answered with the photo.
+  - **Misses on answer questions** go to `[search]`, which still answers, from the web.
+  - **By language** (together / photo first / recording first):
+
+    | language | together | photo first | recording first |
+    |---|---|---|---|
+    | en | 21/22 | 21/22 | 21/22 |
+    | pt-BR | 19/22 | 20/22 | 19/22 |
+    | de | 15/22 | 15/22 | 16/22 |
+    | es | 16/22 | 17/22 | 16/22 |
+    | zh-CN | 11/22 | 13/22 | 14/22 |
+    | fr | 12/13 | 13/13 | 11/13 |
+    | it | 12/13 | 12/13 | 11/13 |
+    | ko | 12/13 | 11/13 | 11/13 |
+    | ru | 12/13 | 11/13 | 12/13 |
+
+  - **Answer names the photo** (visual keywords in the first 32 tokens): 2.5.1 17/27, together 15/27, photo first
+    13/27. Part of the gap is the tag tokens.
+- **Device Run** (`PhotoQuestionPrefillTest`, Gemma 4 E2B, 16 clips en + pt-BR, `decide_*` modes; first token
+  median; "word" = first spoken word after the tag). Recording first: decision before the photo + photo turn from
+  "photo ready".
+
+  | device | 2.5.1 together / photo first / recording first | decided together / photo first / recording first |
+  |---|---|---|
+  | S24U GPU | 1.59 / 0.48-0.68 / 1.53 | 1.83 (1.63 from the spare) / 0.60-0.68 (word 0.72-0.79) / 0.98 + 1.31 (word 1.44) |
+  | Tab S10+ GPU | 2.16 / 0.65 / 1.67 | 2.44 / 0.68 (word 1.01) / 1.18 + 1.67 (word 2.23) |
+  | S24U NPU (v3mm) | 1.42 / 0.54 / 0.92 | 2.00 / 0.51 (word 0.59) / 0.81 + 1.05 (word 1.10) |
+  | AVD Pixel_9a CPU | 20.0 / 2.64 / 15.9 | 17.9 / 2.84 (word 3.25) / 3.2 + 17.2 |
+
+  - The 2.5.1 columns were rerun in the same sessions. The S24U numbers vary ±0.2-0.4 s between sessions:
+    2.5.1 recording first was 1.06 in the first session and 1.53 in the second. Samsung Pay spams the S24U's
+    logcat during runs.
+  - "Together" pays the longer system turn unless the spare is primed: GPU/NPU after the follow-up window,
+    CPU always (clone).
+  - S24U CPU: 2.5.1 together 9.1 s, decided 8.8 s. The image encoder dominates.
+  - Device routes (16): S24U GPU 15-16 / 15 / 14; Tab 16 / 15 / 14; NPU 15 / 15 / 14; AVD 14 / 14 / 13.
+  - Misses: `talk_to_other` → `[phone] Grab your keys from the table.` on every device (the voice flow does
+    the same), `next_holiday` → `[answer]` when the recording comes first.
+- **Tests.**
+  - shared `SpokenDecisionParserTest` (+2) and `SpokenQuestionFlowTest` (+3): 458 pass, except
+    `PrefsInventoryTest.everyFileKeyTypeAndDefaultIsPinned`. It already fails on `dev-2.5.1`: the walking_aid
+    `goal_question_enabled` key is not pinned.
+  - app unit 788/789. The one failure is `ArchitectureGuardrailSourceTest.sharedPreferencesAreOpenedOnly…`. It
+    already fails on `dev-2.5.1`: `ai/speaker/SpeakerModels.kt` calls `getSharedPreferences`.
+  - `PhotoQuestionPrefillTest` gained the `decide_*` modes. `GlassesQuestionFlowTest` gained
+    `smartPhotoButtonDecidesWithThePhoto`, which needs `gq_target`; it was not run.
+- **Pro relay: why it stays on the single answer.** Pro photo questions use `/image-query` with photo + audio +
+  `system_context`, but `lib/spoken-question.ts` caps `system_context` at 2000 characters.
+  - The spoken-decision system text is ~2.5 k characters: instruction 416 + routes 2045 + time + memory.
+  - Every Pro spoken question already loses the phone/live/ignore examples, the memory core and the current time,
+    because they come after character 2000.
+  - What the relay would need:
+    1. Raise `MAX_SYSTEM_CONTEXT_CHARS` to ≥ 4000.
+    2. Accept a short text part before the audio when `spoken_question` is set (now dropped), so the photo note
+       and time can sit in the user turn.
+    3. Optionally stream (SSE), so `[answer]` can speak early and a route can stop generation.
+    4. A history or messages field, for follow-ups (the relay keeps no conversation, so SMART Pro photo questions
+       would lose today's follow-ups about the same photo).
+  - The website repo was not changed.
+- **Open, for the owner.**
+  - Enable SMART for Pro photo questions once the relay takes ≥ 4000 characters?
+  - Stream spoken (voice) answers too? Only photo questions stream now.
+  - `[phone]` without the Local Agent is answered rather than removed from the prompt; removing it would change
+    the shared system turn.
+  - Ignore (3-7/15) and zh-CN/de/es are the weak spots, same as the voice flow; LoRA or tag thresholds as planned
+    in docs/QUESTION_ROUTING_AND_VOICE_PROFILE.md.
+  - Recording first, `[live]` waits up to 45 s for the photo before opening Live.
+
 ## 2026-11-23 — 2.5.1: download -> optimize flow on real phones; audio warm-up
 
 - **`DownloadPrepareFlowTest`** (Device Run, the app's own service): catalog download from HF, the NPU runtime first
