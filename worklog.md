@@ -1,5 +1,24 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-23 — 2.5.1: HeyCyan gate unlock + low-battery sync warning (branch `heycyan-gate-251`, off dev-2.5.1)
+
+- **Field logs 2026-11-22/23 (12 P2P reports, 4 users, no VPN):** 9 came from two users on post-update gated firmware
+  (`A02S_5.40.14_261021`, Samsung A35 / Android 17, 7 reports; `A02S_2.00.20_261015`, Xiaomi, 2): the transfer
+  command was answered in ~45 ms and Wi-Fi never started, every flow. 2 from a Nothing AIN065 on 2.5.0 with V3 /
+  `AM01CY_1.20.04_251223`: battery 98 %/89 %, transfer command sent 3x with no reply at all and no Wi-Fi chip info;
+  in 2.5.0 a gate `03` NAK is dropped by the cmd-65 short-frame guard, so the gate is possible there too (2.5.1
+  reports the capability byte). That user's 2.5.0 also crashed (TaskerLocalAgentService
+  ForegroundServiceDidNotStartInTime from Gemini Live; another agent owns it). 1 stub from 2.3.0.
+- **Gate:** the four `heycyan-offline-unlock` commits cherry-picked onto dev-2.5.1 (only worklog conflicts).
+- **Battery:** `GlassesWifiStartHint` gains the firmware rule (Wi-Fi start refused at <= 15 % not charging, session
+  stops at <= 9 %): a "Glasses battery low" dialog (Sync anyway / Cancel) before a HeyCyan sync when the last
+  reading (< 10 min) is at or below 15 % and not charging (`GlassesLowBatteryWarning`, at the sync button), and
+  failure hints that name the battery. Support reports already carried `glasses_battery_pct`/`glasses_charging` and
+  the transfer reply (deviceInfo "Other diagnostics").
+- **Verified:** unit tests app 805/806, shared 430/431 (the two failures are pre-existing on dev-2.5.1:
+  PrefsInventoryTest `walking_aid_prefs/goal_question_enabled`, guardrail `ai/speaker/SpeakerModels.kt`); gate rig
+  (firmware `regression/gate_unlock_check.sh`) 11/11 PASS on this build.
+
 ## 2026-11-23 — 2.5.1: download -> optimize flow on real phones; audio warm-up
 
 - **`DownloadPrepareFlowTest`** (Device Run, the app's own service): catalog download from HF, the NPU runtime first
@@ -158,6 +177,69 @@ Device Run, Gemma 4 E2B. First token after the recording (spoken) or after the s
   uncompressed arm64). Unit tests 783/783 (default build and NPU build).
 - **Open:** the 2.4.0 Samsung dispatch has not run on a device (Exynos 2600 check on Samsung RTL pending; no Exynos
   Gemma build exists, so it only affects Samsung NPU models); no 0.16 baseline for the GPU answer slip.
+
+## 2026-11-22 — HeyCyan gate unlock verified end to end on the rig; four app fixes (branch `heycyan-offline-unlock`)
+
+- **Rig result (firmware add.242/243 `regression/gate_unlock_check.sh`, run 7):** post-update gate: prompt shown,
+  unlock, official / custom / adaptive sync all PASS; press missed -> one prompt with countdown, then a clear "Button
+  not pressed"; real BLE reconnect -> prompt again, press -> unlock SUCCESS; gate off: no prompt, all three syncs PASS.
+- **Split replies (da43f770):** on a 20-byte link the 21-byte cap reply arrives as 20 + 1 bytes; the raw channel now
+  buffers a 0xBC frame to its declared length (`HeyCyanAuthRawChannelReassemblyTest`).
+- **Vendor parser wedge (da43f770):** the SDK's `LargeDataParser` (fed the same notifies by its own receiver) takes a
+  non-0xBC frame while idle as a continuation, so the RCSP replies wedged it: after a successful unlock the cmd-65
+  replies and the 0x73/0x08 Wi-Fi IP notify never reached the app and every sync timed out (custom: "Initial P2P sync
+  phase timed out after 45s"). The raw channel resets it (tempData, dataLength, package-private `end` via
+  reflection, kept by `-keep class com.oudmon.**`) after RCSP traffic and before each raw write, posted to the main
+  looper where LocalBroadcastManager delivers the notifies (`HeyCyanVendorParserResetTest`).
+- **Reconnect prompt (d19a7457), found with per-2 s UI capture + gate logcat on the rig:**
+  - A second trigger while an unlock is running (each ~20 s poll sends two gated 0x41 commands 150 ms apart) got
+    `ALREADY_UNLOCKED`: it showed "Glasses activated" over the real prompt, latched the connection as unlocked and
+    re-sent the sync command while the glasses were still locked. It now gets `IN_PROGRESS` and does nothing.
+  - After a missed press every background gated command re-prompted (prompt + "Button not pressed" every ~40 s).
+    Now only a reconnect or starting a sync (`registerGatedRetry`) prompts again.
+  - The connect-time unlock wrote before the SDK enabled notifications (first write 3 ms before
+    `onServiceDiscovered`), so it always ended in TRANSPORT_ERROR; it now waits for the connection's first vendor
+    notify (max 10 s).
+  - A new prompt/result closes the previous result popup.
+  - Tests: `HeyCyanGateControllerTest.concurrentTriggerIsSilent`,
+    `missedPressStopsBackgroundRepromptsUntilUserActionOrReconnect`; offlineauth 32/32.
+- **Rig script fixes (firmware repo):** dismiss "Glasses activated" and the late "What brought you to CyanBridge?"
+  sheet before syncing; wait up to 10 s for the sync button (media controls appear after connect); prompt wait covers
+  a ~40 s BLE reconnect; scenario 3 really reconnects; UI/logcat capture per reconnect scenario.
+
+## 2026-11-22 — HeyCyan post-update command gate: automatic offline unlock (branch `heycyan-offline-unlock`)
+
+- **Problem (field logs 2026-11-22):** A02S-family glasses (fw A02S_2.00.20/5.40.14) answer every gated BigData
+  command (0x41 glassesControl incl. Wi-Fi start `02 01 04`, 0x45 heartbeat) with the 1-byte NAK `03` until, on
+  EACH connection, (1) RCSP default-key auth and (2) a front-button press + cmd-0x71 bind have run. The app used to
+  just wait and fail the sync. Users should never need the official HeyCyan app.
+- **Real cipher:** replaced `JieLiRcspPlaceholderCipher` with `JieLiRcspCipher`, the JieLi RCSP 8-round SPN
+  (16-byte key and block, two S-boxes and a constant table). Validated against reference vectors kept in the private
+  firmware repo (all match); the public unit test pins a few self-generated vectors. `dir` kept as a named constant
+  `RCSP_DIR=1`.
+- **Transport seam finished:** `HeyCyanAuthRawChannel` writes fully-formed auth frames (0xBC cmd-47/71, FE-DC-BA
+  RCSP) RAW to de5bf72a via `BleThreadManager.addData(BleDataBean(frame,244))` (BleConsumer writes them verbatim —
+  it does not re-wrap; the 0xBC header is only added by higher-level handlers), and reads raw de5bf729 replies fed
+  from `MyBluetoothReceiver.onCharacteristicChange` (tapped BEFORE the cmd-65 short-frame guard so the 7-byte `03`
+  NAK is not dropped). `SdkGlassesAuthTransport` now uses it (glassesControl could only send cmd-0x41 and exposed no
+  raw bytes). State machine runs cap 0x47 -> RCSP reset+challenge/response -> 0x71 mode-3 status -> mode-2 arm +
+  prompt -> poll status until bound-self (handles async button press on device/rig) -> done. bound-other -> clear
+  error + guidance.
+- **Trigger (default ON):** `HeyCyanGateController` + `HeyCyanGateTrigger`. On every HeyCyan (re)connect
+  (`DeviceConnectionCoordinator.trackWifiChipInfo`) the unlock runs once if the cap reports auth/bind required; a
+  unit that advertises no requirement is left untouched (NOT_REQUIRED). Reactively, a gated-command `03` NAK
+  (`HeyCyanAuthRawChannel` NAK detector) triggers the unlock and retries the command once (media sync registers the
+  transfer-command re-send). Enabled by default; the `offline_native_auth_enabled` pref remains as a manual off
+  switch (default false kept so PrefsInventory is unchanged).
+- **User prompt (Material 3 via ExpressiveDialogs):** `HeyCyanGatePrompt` shows "Press the front button on your
+  glasses once now" with a live countdown for the ~20 s window, Cancel, and a success/failure result popup. Never
+  mentions the official HeyCyan app.
+- **Diagnostics:** `HeyCyanGateState` records cap byte, device-auth/bind outcome, last NAK cmd, last unlock result;
+  `DiagnosticsCollector` emits them in the glasses section.
+- **Verified:** app offlineauth unit tests 24/24 (incl. the cipher vectors, gate-controller connect-once + NAK-retry),
+  ArchitectureGuardrailSourceTest (MainActivity budget unchanged 1848; Compose-only dialogs), shared PrefsInventory
+  green; `:app:assembleDebug` OK. Rig (firmware add.242): clone post-update gate checks 11/11 PASS with the real
+  executed-derived cipher; `regression/gate_unlock_check.sh` + `run_e2e.sh GATE=post-update` added.
 
 ## 2026-11-22 — Meta Ray-Ban failure dialogs: every way out, incl. the invite form (branch `sync-vpn-hint`)
 
