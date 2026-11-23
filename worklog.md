@@ -1,5 +1,18 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-22 — Release 2.5.0 (versionCode 39): NPU for more phones, LiteRT-LM 0.19.1
+
+- **Version:** Play's highest uploaded bundle is still code 37 (Play Developer API, 2026-11-22); code 38 was tagged
+  `v2.5.0` but never uploaded, so this build is 2.5.0 / code 39, tagged `v2.5.0-code39`.
+- **Contents since the v2.5.0 tag (code 38, Material 3 Expressive):**
+  - LiteRT-LM 0.19.1 + LiteRT 2.4.0 (was 0.16.0) for CPU, GPU and NPU chat; QAIRT 2.52 runtime.
+  - NPU runtimes for Qualcomm, MediaTek, Google Tensor and Samsung in one AAR; the Hexagon library for the phone
+    is downloaded on first use (GitHub prerelease `npu-runtime-qairt2.52.0`, sha256-checked); per-vendor dispatch dir.
+  - Gemma 4 E2B NPU catalog: calibration v3 builds for Snapdragon 8 Gen 2 / 8 Gen 3 / 8 Elite Gen 5 and MediaTek
+    Dimensity 9300, Google's builds for Snapdragon 8 Elite and Pixel 10.
+  - Release guard: release builds need the download-mode NPU AAR with all four vendor dispatch libraries.
+- **Built with** `-PlocalLiteRtNpuAarPath=litert-npu-all-2.4.0-qairt2.52.0-v68-v81-dl.aar` (not committed).
+
 ## 2026-11-22 — Gemma 4 E2B NPU calibration v3 for more chips; vendor-aware NPU catalog (branch `gemma-npu-multisoc-240`)
 
 - **Models:** calibration v3 (the app's own prompts in 9 languages + 16k-token documents/chats) for Gemma 4 E2B NPU:
