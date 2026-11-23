@@ -57,9 +57,22 @@ description), so that order is decided on the recording alone.
 
 The note goes with the photo (`GenerationConfig.photoNote`, message role `photo_note`), not in the system
 turn. Scored on the host with `eval_spoken_route_tags.py --mode image` and on the phone/AVD with
-`PhotoQuestionPrefillTest` (`decide_*` modes). The Pro relay stays on the single answer: `/image-query`
-appends `system_context` but caps it at 2000 characters (`lib/spoken-question.ts`), which cuts the route
-list (see the worklog for what the relay would need).
+`PhotoQuestionPrefillTest` (`decide_*` modes).
+
+### Since 2026-11-23 (branch `251-routing-followups`)
+
+- **Two system turns:** with `[phone]` when the Local Agent can run phone tasks
+  (`LocalAgentController.unavailableReason == null`), else `SPOKEN_DECISION_ROUTES_NO_PHONE` (phone requests
+  are answered "I can't control your phone"). The one in use is the cached one; `SpokenSystemTurnPrimer`
+  re-primes it in the background when phone control is toggled, Tasker is installed/removed, or the app
+  resumes with a different setup. `[phone]` without an agent is still answered as a safety net.
+- **Pro relay** (website PR #27): photo and voice questions use the same decision. The route list is in
+  `system_context` (up to 8000 chars), the time and photo note in `turn_note`, and the reply ends with a
+  `[heard] <question>` line that the app removes. Follow-ups send the conversation as `history` and resend the
+  conversation's photo (`RelayConversation`, `PHOTO_RESENT_NOTE`). There is no streaming on the relay.
+- **Streaming:** local `[answer]` replies (voice and photo) speak phrase by phrase while they are written.
+- **`[live]` from a photo question** starts Live at once. The photo opens the session if it comes within 7 s
+  (`GeminiLiveOpeningImage`); otherwise Live goes on with the plain prompt.
 
 ### Spoken decision (SMART)
 

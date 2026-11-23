@@ -1,5 +1,115 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-23 — 2.5.1 routing follow-ups (branch `251-routing-followups`, off `dev-2.5.1` @ d12d2fc8)
+
+Owner decisions on the SMART photo-question report.
+
+### 1. Pro SMART photo questions, plus history for follow-ups
+- **Relay changes used:** website PR #27, deployed. `system_context` now takes up to 8000 chars; the new `turn_note`
+  and `history` fields are new; there is no SSE.
+- **Pro photo questions** on an audio-capable, non-Live questions model now use the same decision as local ones.
+  - The route list goes in `system_context` with no clock, so the text stays stable. The time and
+    `PHOTO_QUESTION_NOTE` go in `turn_note`.
+  - Pro waits for both parts (one request); it never takes the local recording-first path.
+- **The reply's last line** is `[heard] <their question>`. The app strips it and keeps it as the user turn of
+  `history`.
+- **Follow-ups** (`RelayConversation`) send `history` and resend the conversation's photo with
+  `PHOTO_RESENT_NOTE`, which still allows `[camera]`.
+  - A photo taken for `[camera]` is kept until the conversation ends.
+  - Text-only answers in the conversation fall back to sending the recording again, with `history`. These are
+    `[search]` results and a bare `[camera]`.
+- **Pro voice decision turns** also put the time in `turn_note`. They now get the 5 s follow-up window, and a new
+  hotword question within 3 min continues the conversation with `history`.
+- **Production, CI Pro account, `google/gemini-3.7-flash`, host requests** shaped exactly like the app's:
+  - One clip per class in en/pt-BR/es/de/zh-CN.
+  - Results: `/mnt/seagate/ML/smart-image-questions-20261123/eval/pro-relay-*.jsonl`.
+
+  | mode | routes | median / p90 latency |
+  |---|---|---|
+  | photo, new | 40/40 (every class 5/5, no `[camera]`) | 4.69 / 8.49 s |
+  | photo, today (no routes) | 20/40 (always answers) | 4.60 / 7.08 s |
+  | voice, new | 34/35 (miss: zh-CN "start live" → `[phone]`) | 3.89 s |
+  | voice, today (routes + time in system_context) | 35/35 | 3.88 s |
+
+  - `[heard]` came back in every scored reply.
+- **Follow-up chains:**
+  - Socks photo, then "Tell me more about this" with the photo resent: "bright yellow toe socks…".
+  - Capital → population → famous building: "Canberra … 460,000", "Parliament House".
+- **AVD (read-only Pixel_9a, the CI account linked, relay URL reset for that session only):**
+  - `GlassesQuestionFlowTest.smartPhotoButtonDecidesWithThePhoto`: "They are bright yellow".
+  - `smartFollowUpsContinueTheConversation` with `gq_provider pro`: 4 turns, all continued.
+  - Both pass.
+
+### 2. Streamed SMART voice answers (local)
+- **What changed:** `answerStream()` now runs for every local question, not only photo questions. Tags are never
+  spoken. Pro returns one piece.
+- **Device Run, S24U GPU** (`PromptCacheRouteTest`, cached layout, 14 `[answer]` replies):
+
+  | measure (median) | time |
+  |---|---|
+  | first token | 0.48 s |
+  | first spoken word | 0.58 s |
+  | first phrase (where speech starts) | 0.82 s |
+  | whole reply (what voice answers used to wait for) | 2.60 s |
+
+- **AVD:** the TTS streaming session ran for a voice answer ("Canberra").
+
+### 3. Phone-aware cached system turn
+- **Two prompts:** `spokenDecisionRoutes(phoneTasks)`. Without the Local Agent it is
+  `SPOKEN_DECISION_ROUTES_NO_PHONE`: the `[phone]` line and its examples are removed, and the `[answer]` rule says
+  "…say in one short sentence that you can't control their phone". The safety net stays.
+- **Re-priming:** `SpokenSystemTurnPrimer` re-primes the cache with the new variant in the background. It runs when
+  phone control is toggled, when Tasker is installed or removed (runtime package receiver), and when the app resumes
+  with a changed setup. The new `LiteRtLocalInferenceEngine.primeSystemTurn` primes the CPU root, or the GPU/NPU
+  spare (`spareBase`). A kept conversation gets the new spare when it lapses.
+- **Host, no-phone prompt** (same rows as the phone prompt; voice = recording alone, photo = together):
+
+  | class | phone, voice | no phone, voice | phone, photo | no phone, photo |
+  |---|---|---|---|---|
+  | visual / ambiguous | 27/27, 17/18 | 27/27, 18/18 | 27/27, 18/18 | 27/27, 18/18 |
+  | plain / time | 26/27, 18/18 | 26/27, 18/18 | 25/27, 17/18 | 24/27, 17/18 |
+  | web | 16/27 | 17/27 | 21/27 | 20/27 |
+  | action (→ phone / → answer) | 11/15 | 15/15 | 10/15 | 15/15 |
+  | live | 9/15 | 10/15 | 9/15 | 8/15 |
+  | ignore | 7/15 | 4/15 | 3/15 | 3/15 |
+  | **total** | 131/162 | 135/162 | 130/162 | 132/162 |
+
+- **What the no-phone replies to phone requests actually say** (voice, 15):
+  - 10 say "I can't control your phone" or similar, mostly in English.
+  - 1 promises it: es "Claro, puedo configurar un temporizador".
+  - 3 are confused.
+  - 1 is empty.
+  - Nothing happens on the phone in any case.
+- **Device Run S24U GPU, 22 clips, cached:** phone 17/22, no phone 19/22. `play_song` → `[answer]`.
+  `talk_to_other` → "I can't physically grab your keys" instead of `[phone]`.
+
+### 4. `[live]` photo wait
+- **What changed:** `[live]` from a photo question now starts Live at once. The photo, which may still be
+  transferring, is handed over through `GeminiLiveOpeningImage`. If it comes within 7 s
+  (`SpokenQuestionSettings.livePhotoWaitMs`), it opens the session: queued until setup completes, or sent at once
+  after. Otherwise Live goes on with the plain prompt. If Live already runs, the photo joins as a turn.
+- **AVD + `tools/hil/gemini_live_e2e/fake_live.py`** (`smartPhotoQuestionStartsLiveBeforeItsPhoto`, local Gemma
+  decides `[live]` on the recording alone):
+
+  | case | setup | photo | what reached the fake server |
+  |---|---|---|---|
+  | photo 2 s after Live started | 17:48:22.9 | 24.5 | frame 1.67 s after setup, then the text turn |
+  | photo after the cap | 17:49:46.4 | arrived after the cap | `opening turn image=false` at 50.6, plain prompt sent |
+
+- Events: `/mnt/seagate/ML/smart-image-questions-20261123/device/live_opening_fake_events.jsonl`.
+
+### Tests
+- shared 459/459.
+- app unit 802/802.
+- New tests: `SpokenQuestionInstructionTest` (no-phone list), `RelayConversationTest`, flow test for the Live hand-off.
+- `GlassesQuestionFlowTest`: `smartPhotoQuestionStartsLiveBeforeItsPhoto`; the photo-button test now also
+  accepts `CAMERA` (recording first).
+
+### Open for the owner
+- Should the no-phone answer for phone requests be a fixed localized sentence instead of the model's? The model's
+  sentence is often in English, and once wrongly says yes.
+- `[heard]` adds about 10 output tokens to Pro voice turns. Measured median latency did not change.
+- Ignore stays the weakest class. The no-phone prompt lost 3 ignore rows to `[answer]` (voice 7 → 4/15).
 ## 2026-11-23 — 2.5.1: HeyCyan gate unlock + low-battery sync warning (branch `heycyan-gate-251`, off dev-2.5.1)
 
 - **Field logs 2026-11-22/23 (12 P2P reports, 4 users, no VPN):** 9 came from two users on post-update gated firmware

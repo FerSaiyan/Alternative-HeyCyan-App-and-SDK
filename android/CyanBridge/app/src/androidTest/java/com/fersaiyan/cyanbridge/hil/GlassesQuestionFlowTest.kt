@@ -13,6 +13,7 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.AssistantPrefs
 import com.fersaiyan.cyanbridge.shared.prefs.set
 import com.fersaiyan.cyanbridge.ai.image.GlassesQuestionTestHooks
+import com.fersaiyan.cyanbridge.ai.live.GeminiLiveForegroundService
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
 import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
@@ -214,9 +215,37 @@ class GlassesQuestionFlowTest {
         assumeTrue("pass -e gq_target true", args.getString("gq_target") == "true")
         QuestionRoutingPrefs.setMode(context, QuestionRoutingMode.SMART)
         val result = ask(DEBUG_PHOTO_BUTTON, audio = visualAudio(), photo = visualImage())
-        assertEquals("ANSWER", result.route)
+        // Photo first: [answer] (or [camera], read as an answer); recording first: decided alone, [camera] then
+        // answered with the button's photo. Either way no second photo.
+        assertTrue("route ${result.route}", result.route in setOf("ANSWER", "CAMERA"))
         assertEquals("answered with the button's photo", 1, result.images)
         checkAnswer(result.reply, visualExpect())
+    }
+
+    /**
+     * A photo question that asks for Live while its photo is still transferring: Live starts at once and the photo
+     * opens the session when it comes (GeminiLiveOpeningImage). -e gq_live_audio <start_live clip>; the photo comes
+     * -e gq_photo_delay_ms (default 2000) after the Live session started. Point Live at
+     * tools/hil/gemini_live_e2e/fake_live.py first (GeminiLiveDebugReceiver --es url ws://10.0.2.2:18900) and read its
+     * events for the setup and image times.
+     */
+    @Test
+    fun smartPhotoQuestionStartsLiveBeforeItsPhoto() {
+        assumeTrue("pass -e gq_target true -e gq_live_audio", args.getString("gq_target") == "true" && args.getString("gq_live_audio") != null)
+        QuestionRoutingPrefs.setMode(context, QuestionRoutingMode.SMART)
+        val photo = visualImage()
+        val delayMs = args.getString("gq_photo_delay_ms")?.toLong() ?: 2_000L
+        val result = ask(DEBUG_PHOTO_BUTTON, audio = fixture("gq_live_audio", ""), photo = null) {
+            GlassesQuestionTestHooks.photo = {
+                // Still transferring when the question chose Live: the photo comes once Live runs.
+                val until = SystemClock.elapsedRealtime() + 120_000L
+                while (!GeminiLiveForegroundService.sessionRunning && SystemClock.elapsedRealtime() < until) Thread.sleep(100)
+                Thread.sleep(delayMs)
+                photo
+            }
+        }
+        println("GQ_LIVE route=${result.route} ms=${result.ms} photoDelayMs=$delayMs")
+        assertEquals("LIVE", result.route)
     }
 
     @Test
@@ -437,11 +466,12 @@ class GlassesQuestionFlowTest {
         val web: String? = null,
     )
 
-    private fun ask(event: String, audio: File, photo: File?): FlowResult {
+    private fun ask(event: String, audio: File, photo: File?, hooks: () -> Unit = {}): FlowResult {
         events.clear()
         var served = false
         GlassesQuestionTestHooks.questionAudio = { if (served) null else audio.also { served = true } }
         GlassesQuestionTestHooks.photo = photo?.let { file -> { file } }
+        hooks()
         val started = SystemClock.elapsedRealtime()
         scenario!!.onActivity { activity -> activity.debugGlassesEvent(event) }
         val spoken = mutableListOf<String>()
