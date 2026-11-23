@@ -36,6 +36,11 @@ data class GenerationConfig(
     val decideOnce: DecideOnceRequest? = null,
     /** Keeps the conversation open for later turns (LiteRT-LM only); see [SessionTurn]. */
     val session: SessionTurn? = null,
+    /**
+     * Text that changes every request (the current time), placed at the start of the user turn instead of the
+     * system turn, so the system turn stays identical and LiteRT-LM can reuse its cached prefill.
+     */
+    val turnContext: String? = null,
 )
 
 /**

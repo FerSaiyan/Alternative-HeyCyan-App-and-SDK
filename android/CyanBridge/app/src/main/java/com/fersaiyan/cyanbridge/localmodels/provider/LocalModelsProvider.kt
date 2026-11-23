@@ -33,6 +33,13 @@ enum class LocalModelRequestPriority {
  */
 internal data class MultimodalPrompt(val systemInstruction: String, val userRequest: String)
 
+/**
+ * Message role for per-request text that must not sit in the system turn (the current time): LiteRT media turns
+ * put it at the start of the user turn so the system turn can be served from the prefill cache; every other path
+ * treats it as one more system message.
+ */
+const val TURN_CONTEXT_ROLE = "turn_context"
+
 internal fun buildMultimodalPrompt(
     configuredSystemPrompt: String,
     messages: List<PromptMessage>,
@@ -131,7 +138,9 @@ class LocalModelsProvider {
                 if (session?.continueExisting == true) throw SessionUnavailableException("Remote servers keep no session")
                 return@withContext streamChatRemote(
                     context = context,
-                    messages = messages,
+                    messages = messages.map { m ->
+                        if (m["role"] == TURN_CONTEXT_ROLE) m + ("role" to "system") else m
+                    },
                     onStatus = onStatus,
                     onToken = onToken,
                     imagePaths = imagePaths,
@@ -145,20 +154,32 @@ class LocalModelsProvider {
             val preferred = LocalModelStorageRepository.resolveSelectedModel(context)
             val selected = (if (hasMediaAttachments) {
                 val candidates = LocalModelStorageRepository.listInstalled(context)
+                // A LiteRT package must carry the encoder the request needs: the v3 NPU builds are text-only, and
+                // sending them a photo or a recording failed ("Vision executor should not be null", 2.5.0).
+                fun litertCan(model: com.fersaiyan.cyanbridge.localmodels.storage.InstalledLocalModel): Boolean {
+                    val media = runCatching { LiteRtModelProbe.mediaSupport(model.absolutePath) }.getOrNull() ?: return true
+                    return (imagePaths.isEmpty() || media.vision) && (audioPath.isNullOrBlank() || media.audio)
+                }
                 fun mediaReady(model: com.fersaiyan.cyanbridge.localmodels.storage.InstalledLocalModel): Boolean {
                     val runtime = LocalModelSettingsRepository.getForModel(context, model.id).modelRuntime
-                    return runtime == LocalModelRuntime.LITERT || (runtime == LocalModelRuntime.LLAMA_CPP && LocalModelProjectorStore.get(context, model) != null)
+                    return (runtime == LocalModelRuntime.LITERT && litertCan(model)) ||
+                        (runtime == LocalModelRuntime.LLAMA_CPP && LocalModelProjectorStore.get(context, model) != null)
                 }
                 // Failed STT prefers a local LiteRT audio package. A GGUF with a projector can
                 // consume the same audio when no LiteRT package is installed (native caps checked).
                 if (!audioPath.isNullOrBlank()) {
-                    preferred?.takeIf { LocalModelSettingsRepository.getForModel(context, it.id).modelRuntime == LocalModelRuntime.LITERT }
-                        ?: candidates.firstOrNull { LocalModelSettingsRepository.getForModel(context, it.id).modelRuntime == LocalModelRuntime.LITERT }
+                    preferred?.takeIf { LocalModelSettingsRepository.getForModel(context, it.id).modelRuntime == LocalModelRuntime.LITERT && litertCan(it) }
+                        ?: candidates.firstOrNull { LocalModelSettingsRepository.getForModel(context, it.id).modelRuntime == LocalModelRuntime.LITERT && litertCan(it) }
                         ?: preferred?.takeIf(::mediaReady) ?: candidates.firstOrNull(::mediaReady)
                 } else preferred?.takeIf(::mediaReady) ?: candidates.firstOrNull(::mediaReady)
             } else preferred)
                 ?: throw IllegalStateException(
-                    "No local model is installed. Open Configure Local Models to download or import a GGUF model first.",
+                    if (hasMediaAttachments && preferred != null) {
+                        "${preferred.displayName} can't take ${if (imagePaths.isNotEmpty()) "photos" else "recordings"}. " +
+                            "Download Gemma 4 E2B (GPU) in Configure Local Models for photo and voice questions."
+                    } else {
+                        "No local model is installed. Open Configure Local Models to download or import a GGUF model first."
+                    },
                 )
 
             val catalogEntry = LocalModelCatalogRepository.findById(selected.catalogId)
@@ -176,9 +197,12 @@ class LocalModelsProvider {
                 }
             }
 
+            val litertMediaTurn = hasMediaAttachments && settings.modelRuntime == LocalModelRuntime.LITERT
             val chatMessages = messages
                 .mapNotNull { m ->
+                    // Turn context is a system message everywhere except a LiteRT media turn (see TURN_CONTEXT_ROLE).
                     val role = m["role"]?.trim().orEmpty()
+                        .let { if (it == TURN_CONTEXT_ROLE && !litertMediaTurn) "system" else it }
                     val content = m["content"]?.trim().orEmpty()
                     // A media request's user turn may be the attachment alone (a spoken question as bare audio).
                     val keepEmpty = hasMediaAttachments && role.equals("user", ignoreCase = true)
@@ -187,8 +211,10 @@ class LocalModelsProvider {
 
             // LiteRT takes one user prompt alongside image/audio attachments; system instructions
             // go to its system turn instead of being dropped.
-            val litertMedia = if (hasMediaAttachments && settings.modelRuntime == LocalModelRuntime.LITERT) {
-                buildMultimodalPrompt(systemPrompt, chatMessages)
+            val turnContext = chatMessages.filter { it.role == TURN_CONTEXT_ROLE }.joinToString("\n") { it.content }
+                .takeIf { litertMediaTurn && it.isNotBlank() }
+            val litertMedia = if (litertMediaTurn) {
+                buildMultimodalPrompt(systemPrompt, chatMessages.filterNot { it.role == TURN_CONTEXT_ROLE })
             } else null
             val effectivePrompt = if (session?.continueExisting == true) {
                 // The open conversation already has the system turn and earlier turns: send only this one.
@@ -238,6 +264,7 @@ class LocalModelsProvider {
                 systemInstruction = litertMedia?.systemInstruction,
                 decideOnce = decideOnce,
                 session = session,
+                turnContext = turnContext,
             )
 
             val firstCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()
@@ -279,6 +306,7 @@ class LocalModelsProvider {
                 maxTokensOverride = maxTokens,
                 systemInstruction = litertMedia?.systemInstruction,
                 decideOnce = decideOnce,
+                turnContext = turnContext,
             )
 
             val retryCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()
@@ -328,6 +356,40 @@ class LocalModelsProvider {
     suspend fun cancelGeneration() {
         LocalChatSessionManager.cancelActiveGeneration()
     }
+
+    /**
+     * Photo questions: prefill the part that arrived first ([imagePath] or [audioPath]) under the system turn
+     * [streamChat] will build from [systemMessage] for the LiteRT photo + recording request. Loads the selected
+     * model if needed; false when the selected model is not LiteRT or nothing could be prepared.
+     */
+    suspend fun preparePhotoQuestion(
+        context: Context,
+        systemMessage: String,
+        imagePath: String?,
+        audioPath: String?,
+        turnContext: String?,
+    ): Boolean =
+        withContext(Dispatchers.IO) {
+            if (RemoteOpenAiPrefs.isActive(context)) return@withContext false
+            val selected = LocalModelStorageRepository.resolveSelectedModel(context) ?: return@withContext false
+            val settings = LocalModelSettingsRepository.getForModel(context, selected.id)
+            if (settings.modelRuntime != LocalModelRuntime.LITERT) return@withContext false
+            // streamChat sends the question to a model with both encoders; a text-only selection is not it.
+            val media = runCatching { LiteRtModelProbe.mediaSupport(selected.absolutePath) }.getOrNull()
+            if (media != null && !(media.vision && media.audio)) return@withContext false
+            LocalChatSessionManager.ensureModelLoaded(
+                context = context,
+                model = selected,
+                catalogEntry = LocalModelCatalogRepository.findById(selected.catalogId),
+                settings = settings,
+            )
+            // The same system turn streamChat builds for a LiteRT media request.
+            val system = buildMultimodalPrompt(
+                settings.systemPromptOverride.trim(),
+                listOf(PromptMessage(role = "System", content = systemMessage.trim()), PromptMessage(role = "User", content = "")),
+            ).systemInstruction
+            LocalChatSessionManager.prepareFirstPart(settings, system, imagePath, audioPath, turnContext)
+        }
 
     private fun generationStatus(backend: LocalComputeBackend): String {
         return when (backend) {

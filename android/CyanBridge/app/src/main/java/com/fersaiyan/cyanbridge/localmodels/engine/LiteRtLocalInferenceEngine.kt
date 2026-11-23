@@ -62,6 +62,27 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     private var sessionKey: String? = null
     /** Estimated tokens in the open session's KV cache (system turn, every user turn and reply). */
     private var sessionTokens = 0
+    /**
+     * System-prompt cache (LiteRT-LM 0.19 [cloneOrNull]): one conversation primed with a request's system turn
+     * (prefillPrefaceOnInit), cloned for every request with the same system turn and sampler, so only the user
+     * turn is prefilled (host CPU, Gemma 4 E2B, 653-token spoken-decision turn: first token 4.4-4.8 s -> 0.7-0.9 s;
+     * /mnt/seagate/ML/litertlm-clone-research-20261123/REPORT.md). CPU/GPU only (the NPU executor cannot clone),
+     * never persisted, rebuilt after every load. Guarded by [mutex].
+     */
+    private class PrimedRoot(val key: String, val conversation: Conversation)
+
+    /**
+     * Photo questions: the photo and the spoken question arrive in parallel, in either order, and processing them
+     * after both arrived made the image encoder (or the audio) the wait (worklog 2026-10-23). [prepareFirstPart]
+     * opens the question's conversation with whichever arrived first already prefilled (as its own user turn and a
+     * one-word model reply); the question's request then processes only the other one. Works on every backend
+     * (no clone). Guarded by [mutex].
+     */
+    private class PreparedPart(val key: String, val imagePath: String?, val audioPath: String?, val conversation: Conversation)
+    private var preparedPart: PreparedPart? = null
+    private var primedRoot: PrimedRoot? = null
+    @Volatile private var rootCacheUsable = true
+
     /** Set by [cancelGeneration] (logged when the stopped turn fails). */
     @Volatile private var cancelRequested = false
     /**
@@ -125,7 +146,10 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
 
         return mutex.withLock {
             closeConversationLocked()
+            closeRootLocked()
+            closePreparedPartLocked()
             closeEngineLocked()
+            rootCacheUsable = true
             engine = loadOutcome.first
             this@LiteRtLocalInferenceEngine.modelPath = modelPath
             activeLoadConfig = effectiveConfig
@@ -320,10 +344,59 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         return createInitializedEngine(modelPath, backend, null, null, maxNumTokens, speculativeDecoding)
     }
 
+    /**
+     * Prefills [config]'s system turn and the one part of a photo question that has arrived (its single photo, or
+     * its recording when [config] has no photo) into a new conversation, kept for the question's request with the
+     * same system turn and sampler. Returns false when nothing was prepared.
+     */
+    suspend fun prepareFirstPart(config: GenerationConfig): Boolean = operationMutex.withLock {
+        val image = config.imagePaths.singleOrNull()?.trim()?.takeIf { File(it).isFile }
+        val audio = config.audioPath?.trim()?.takeIf { image == null && File(it).isFile }
+        if (image == null && audio == null) return@withLock false
+        val llm = mutex.withLock { engine } ?: return@withLock false
+        val started = System.currentTimeMillis()
+        val conversation = runCatching {
+            withContext(Dispatchers.IO) {
+                llm.createConversation(
+                    buildConversationConfig(config, prefillPreface = true, preparedTurn = firstPartMessages(image, audio, config.turnContext)),
+                )
+            }
+        }.onFailure { Log.w(TAG, "Prefill of the first part failed; the question processes it then: ${compactError(it)}") }
+            .getOrNull() ?: return@withLock false
+        mutex.withLock {
+            closePreparedPartLocked()
+            preparedPart = PreparedPart(rootKey(config), image, audio, conversation)
+        }
+        Log.i(TAG, "Prefilled the ${if (image != null) "photo" else "recording"} before the other part in ${System.currentTimeMillis() - started} ms")
+        true
+    }
+
+    /** The prepared conversation when [config] is its question, else null (a stale one is closed). */
+    private suspend fun takePreparedPart(config: GenerationConfig): PreparedPart? = mutex.withLock {
+        val prepared = preparedPart ?: return@withLock null
+        preparedPart = null
+        val images = config.imagePaths.map(String::trim)
+        val matches = prepared.key == rootKey(config) && when {
+            prepared.imagePath != null -> images == listOf(prepared.imagePath)
+            else -> config.audioPath?.trim() == prepared.audioPath
+        }
+        if (matches) prepared else {
+            closeWhenIdle(prepared.conversation)
+            null
+        }
+    }
+
+    private suspend fun closePreparedPartLocked() {
+        preparedPart?.let { closeWhenIdle(it.conversation) }
+        preparedPart = null
+    }
+
     override suspend fun unloadModel() = operationMutex.withLock {
         mutex.withLock {
             Log.i(TAG, "Unloading LiteRT model ${modelPath.orEmpty()}")
             closeConversationLocked()
+            closeRootLocked()
+            closePreparedPartLocked()
             closeEngineLocked()
             modelPath = null
             activeLoadConfig = null
@@ -398,6 +471,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         val session = config.session
         val turnTokens = estimateTurnTokens(config)
         val conversation: Conversation
+        var prepared: PreparedPart? = null
         if (session?.continueExisting == true) {
             conversation = mutex.withLock {
                 val open = activeConversation
@@ -415,7 +489,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             }
         } else {
             if (!audioEncoderReady && !hasAudio && config.imagePaths.isNotEmpty()) primeAudioEncoder(llm)
-            conversation = withContext(Dispatchers.IO) {
+            prepared = takePreparedPart(config)
+            conversation = prepared?.conversation ?: cloneOfPrimedRoot(llm, config) ?: withContext(Dispatchers.IO) {
                 llm.createConversation(buildConversationConfig(config))
             }
             mutex.withLock {
@@ -432,7 +507,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         var replyTokens = 0
         return try {
             suspend fun runTurn() = withContext(Dispatchers.IO) {
-                val userContents = buildUserContents(config)
+                val userContents = buildUserContents(config, prepared)
                 val decideOnce = config.decideOnce
                 if (decideOnce != null) {
                     generateDecideOnce(conversation, config, userContents, decideOnce, onToken)
@@ -658,7 +733,12 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         }
     }
 
-    private fun buildConversationConfig(config: GenerationConfig): ConversationConfig {
+    private fun buildConversationConfig(
+        config: GenerationConfig,
+        prefillPreface: Boolean = false,
+        /** The first part of a photo question, prefilled as an earlier exchange ([prepareFirstPart]). */
+        preparedTurn: List<Message>? = null,
+    ): ConversationConfig {
         val sampler = SamplerConfig(
             topK = config.topK.coerceIn(1, 200),
             topP = config.topP.coerceIn(0.0, 1.0),
@@ -667,12 +747,37 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         )
         return ConversationConfig(
             systemInstruction = Contents.of(config.systemInstruction?.trim().orEmpty()),
-            initialMessages = emptyList<Message>(),
+            initialMessages = preparedTurn ?: emptyList<Message>(),
             tools = emptyList<ToolProvider>(),
             samplerConfig = sampler,
             automaticToolCalling = true,
             enableResponseFormat = config.decideOnce != null,
+            prefillPrefaceOnInit = prefillPreface,
         )
+    }
+
+    /**
+     * The prefilled first part: the photo with a note that the question follows, or the recording (after the turn
+     * context, the time) with a note that the photo follows; then, unless [photoTurnAck] is off, a one-word reply.
+     */
+    private fun firstPartMessages(image: String?, audio: String?, turnContext: String?): List<Message> = buildList {
+        // The turn context (the time) goes into this first turn: placed right before the recording in the second
+        // turn, it made Gemma answer the time instead of the question (Device Run 2026-11-23, pt-BR read_sign).
+        val parts = if (image != null) {
+            listOfNotNull(
+                turnContext?.takeIf { it.isNotBlank() }?.let { Content.Text(it) },
+                Content.ImageFile(File(image).absolutePath),
+                Content.Text(PHOTO_TURN_NOTE),
+            )
+        } else {
+            listOfNotNull(
+                turnContext?.takeIf { it.isNotBlank() }?.let { Content.Text(it) },
+                Content.AudioFile(File(audio!!).absolutePath),
+                Content.Text(QUESTION_BEFORE_PHOTO_NOTE),
+            )
+        }
+        add(Message.user(Contents.of(parts)))
+        if (photoTurnAck) add(Message.model("OK."))
     }
 
     private fun extractText(message: Message): String {
@@ -708,21 +813,27 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         return assembled.toString()
     }
 
-    private fun buildUserContents(config: GenerationConfig): Contents? {
-        val hasImage = config.imagePaths.isNotEmpty()
-        val hasAudio = !config.audioPath.isNullOrBlank()
-        if (!hasImage && !hasAudio) return null
+    private fun buildUserContents(config: GenerationConfig, prepared: PreparedPart? = null): Contents? {
+        val skipImages = prepared?.imagePath != null
+        val skipAudio = prepared?.audioPath != null
+        val hasImage = config.imagePaths.isNotEmpty() && !skipImages
+        val hasAudio = !config.audioPath.isNullOrBlank() && !skipAudio
+        if (!hasImage && !hasAudio) {
+            return config.turnContext?.takeIf { it.isNotBlank() }?.let { Contents.of(Content.Text("$it\n\n${config.prompt}")) }
+        }
         val parts = ArrayList<Content>()
-        // Context for a session turn goes before the attachments (text after a recording reads as the question).
+        // Context goes before the attachments (text after a recording reads as the question): the per-request
+        // context (current time), then a session turn's note.
+        config.turnContext?.takeIf { it.isNotBlank() && prepared == null }?.let { parts += Content.Text(it) }
         config.session?.note?.takeIf { it.isNotBlank() }?.let { parts += Content.Text(it) }
-        config.imagePaths.forEach { rawPath ->
+        config.imagePaths.takeUnless { skipImages }.orEmpty().forEach { rawPath ->
             val path = rawPath.trim()
             if (path.isBlank()) return@forEach
             val file = File(path)
             require(file.isFile && file.length() > 0) { "Image attachment is missing: $path" }
             parts += Content.ImageFile(file.absolutePath)
         }
-        config.audioPath?.trim()?.takeIf { it.isNotBlank() }?.let { path ->
+        config.audioPath?.trim()?.takeIf { it.isNotBlank() && !skipAudio }?.let { path ->
             val file = File(path)
             require(file.isFile && file.length() > 0) { "Audio attachment is missing: $path" }
             run {
@@ -735,6 +846,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 parts += Content.AudioFile(file.absolutePath)
             }
         }
+        // The recording came first: this turn is the photo it asked about.
+        if (skipAudio) parts += Content.Text(PHOTO_AFTER_QUESTION_NOTE)
         // A spoken question is the attachments alone; empty text adds nothing to the user turn.
         if (config.prompt.isNotBlank()) parts += Content.Text(config.prompt)
         return Contents.of(parts)
@@ -805,6 +918,58 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         runCatching { conversation.close() }
     }
 
+    /**
+     * A clone of the primed conversation for [config]'s system turn (priming it first when the turn changed), or
+     * null to create a fresh conversation: no clone API, NPU backend, short system turn, or a clone error.
+     */
+    private suspend fun cloneOfPrimedRoot(llm: Engine, config: GenerationConfig): Conversation? {
+        val system = config.systemInstruction?.trim().orEmpty()
+        if (!promptCacheEnabled || !CONVERSATION_CLONE_AVAILABLE || !rootCacheUsable || system.length < MIN_CACHED_SYSTEM_CHARS) return null
+        // Photo turns stay fresh: their system turn is short (the image encoder dominates), a second key would evict
+        // the spoken-decision root on every [camera] question, and the host research saw wording drift in clones
+        // after image turns.
+        if (config.imagePaths.isNotEmpty()) return null
+        // CPU only: on the GPU every clone after the first restores the full KV cache from host memory (0.19.1,
+        // b/572018960), which cost ~2 s per question on the S24 Ultra and Tab S10+ (PromptCacheRouteTest,
+        // 2026-11-23: first token 1.2 s fresh vs 3.1-3.7 s cached); the NPU executor cannot clone at all.
+        if (mutex.withLock { activeLoadResult?.activeBackend } != LocalComputeBackend.CPU) return null
+        val key = rootKey(config)
+        val root = mutex.withLock { primedRoot }?.takeIf { it.key == key } ?: run {
+            mutex.withLock { closeRootLocked() }
+            val started = System.currentTimeMillis()
+            // Never clone an unprimed (step 0) conversation: 0.19.1 then reuses another conversation's KV.
+            val primed = runCatching {
+                withContext(Dispatchers.IO) {
+                    llm.createConversation(buildConversationConfig(config, prefillPreface = true))
+                }
+            }.onFailure {
+                Log.w(TAG, "System-prompt cache off for this load: priming failed (${compactError(it)})")
+                rootCacheUsable = false
+            }.getOrNull() ?: return null
+            Log.i(TAG, "Primed the system turn (${system.length} chars) in ${System.currentTimeMillis() - started} ms")
+            PrimedRoot(key, primed).also { mutex.withLock { primedRoot = it } }
+        }
+        return runCatching { withContext(Dispatchers.IO) { root.conversation.cloneOrNull() } }
+            .onFailure {
+                Log.w(TAG, "System-prompt cache off for this load: clone failed (${compactError(it)})")
+                rootCacheUsable = false
+                mutex.withLock { closeRootLocked() }
+            }
+            .getOrNull()
+    }
+
+    /** The primed turn is reusable only for the same system text, sampler and response-format mode. */
+    private fun rootKey(config: GenerationConfig): String =
+        listOf(
+            config.systemInstruction?.trim().orEmpty(), config.topK, config.topP, config.temperature, config.seed,
+            config.decideOnce != null,
+        ).joinToString("\u0000")
+
+    private suspend fun closeRootLocked() {
+        primedRoot?.let { closeWhenIdle(it.conversation) }
+        primedRoot = null
+    }
+
     private suspend fun closeConversationLocked() {
         activeConversation?.let { closeWhenIdle(it) }
         activeConversation = null
@@ -852,6 +1017,21 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     }
 
     companion object {
+        /** Tests turn the system-prompt cache off to measure the fresh-conversation baseline (PromptCacheRouteTest). */
+        @Volatile internal var promptCacheEnabled = true
+
+        /** Prefilled photo turn layout: photo user turn followed by a short model turn (tests compare both). */
+        @Volatile internal var photoTurnAck = true
+
+        /** Text with a prefilled photo; the recording follows in the next user turn. */
+        private const val PHOTO_TURN_NOTE = "Here is a photo from my glasses camera of what I'm looking at. My question about it comes next."
+        /** Text after a prefilled recording; the photo follows in the next user turn. */
+        private const val QUESTION_BEFORE_PHOTO_NOTE = "A photo from my glasses camera of what I'm looking at comes next."
+        /** The photo turn after a prefilled recording. */
+        private const val PHOTO_AFTER_QUESTION_NOTE = "Here is the photo. Answer my question now."
+
+        /** Shorter system turns (a plain text chat) are cheap to prefill; caching them is not worth a primed context. */
+        private const val MIN_CACHED_SYSTEM_CHARS = 400
         private const val TAG = "LiteRtLocalEngine"
         private const val FIRST_AUDIO_RETRY_DELAY_MS = 750L
         /** A cancelled turn ends within a prefill chunk or a decode step; this only bounds a wedged runtime. */

@@ -288,6 +288,7 @@ object LocalChatSessionManager {
         systemInstruction: String? = null,
         decideOnce: DecideOnceRequest? = null,
         session: SessionTurn? = null,
+        turnContext: String? = null,
     ): String {
         return generateInternal(
             settings = settings,
@@ -300,6 +301,7 @@ object LocalChatSessionManager {
             systemInstruction = systemInstruction,
             decideOnce = decideOnce,
             session = session,
+            turnContext = turnContext,
         ).also { lastSessionTokens = it.sessionTokens }.text
     }
 
@@ -327,6 +329,7 @@ object LocalChatSessionManager {
         systemInstruction: String? = null,
         decideOnce: DecideOnceRequest? = null,
         session: SessionTurn? = null,
+        turnContext: String? = null,
     ): GenerationResult {
         val reqId = UUID.randomUUID().toString()
         val llm: LocalInferenceEngine
@@ -405,6 +408,7 @@ object LocalChatSessionManager {
                                     systemInstruction = systemInstruction,
                                     decideOnce = decideOnce,
                                     session = session,
+                                    turnContext = turnContext,
                                 ),
                                 onToken = { chunk ->
                                     // Newline-only chunks matter: they end a spoken-decision payload line.
@@ -507,6 +511,37 @@ object LocalChatSessionManager {
         val llm = mutex.withLock { engine } ?: return
         Log.i(TAG, "Cancelling active local generation")
         runCatching { llm.cancelGeneration() }
+    }
+
+    /**
+     * Photo questions (LiteRT only): prefills the system turn and whichever part arrived first ([imagePath] or
+     * [audioPath]) while the other is still coming; the question's [streamGenerate] with the same system turn then
+     * processes only the other part.
+     */
+    suspend fun prepareFirstPart(
+        settings: LocalGenerationSettings,
+        systemInstruction: String,
+        imagePath: String?,
+        audioPath: String?,
+        turnContext: String?,
+    ): Boolean {
+        val llm = mutex.withLock { engine } as? LiteRtLocalInferenceEngine ?: return false
+        return llm.prepareFirstPart(
+            GenerationConfig(
+                prompt = "",
+                temperature = settings.temperature,
+                topP = settings.topP,
+                topK = settings.topK,
+                maxTokens = settings.maxTokens,
+                repetitionPenalty = settings.repetitionPenalty,
+                seed = settings.seed,
+                structuredJson = false,
+                imagePaths = listOfNotNull(imagePath),
+                audioPath = audioPath,
+                systemInstruction = systemInstruction,
+                turnContext = turnContext,
+            ),
+        )
     }
 
     suspend fun unload() {

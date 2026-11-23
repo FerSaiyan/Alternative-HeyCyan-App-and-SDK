@@ -160,7 +160,7 @@ object ImageQuestionDefaults {
             "[live] and nothing else: they want to start Gemini Live or live mode, a continuous conversation with you, or want you to keep watching and describing while they move. Starting Gemini Live is always [live], never [phone].\n" +
             "[phone] then the task in one short sentence: they ask you to do something on their phone (open an app, play music, call, send a message, set a timer or alarm, turn something on or off, navigate).\n" +
             "[ignore] and nothing else: they are not talking to you. They talk to another person (calling them by a name or a pet name like honey or mom, or talking on a phone call: greetings, goodbyes, \"I'll be there soon\"), or they want to stop (never mind, that's all, forget it). Do not reply to these.\n" +
-            "[answer] then your answer: anything else you can answer from what they said, the current time below and what you know.\n" +
+            "[answer] then your answer: anything else you can answer from what they said, the current local time you were given and what you know.\n" +
             "Examples (the user's words are written here; in the conversation they are spoken):\n" +
             "\"What color is this shirt?\" -> [camera]\n" +
             "\"What does this sign say?\" -> [camera]\n" +

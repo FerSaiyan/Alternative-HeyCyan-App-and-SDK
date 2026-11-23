@@ -76,6 +76,29 @@ internal class ImageQuestionFlow(
 
     val parallelQuestionActive: Boolean get() = activeParallelAudioQuestionJob?.isActive == true
 
+    /** The photo of the current question once it arrived (the parallel recording may still be running). */
+    @Volatile private var photoForQuestion: String? = null
+
+    /**
+     * The photo and the spoken question arrive in parallel, in either order. For the local model, whichever comes
+     * first is prefilled while the other is still coming (LiteRtLocalInferenceEngine.prepareFirstPart).
+     */
+    private fun localPrefillEligible(): Boolean = runCatching {
+        AssistantQuestionRouting.imageQuestionProvider(
+            route = route(),
+            recordedQuestion = true,
+            spokenProvider = spokenQuestionProvider,
+            mediaProvider = { MediaInferenceRoutingPolicy.resolve(env.context) },
+        ) == AgentProviderType.LOCAL_AGENT
+    }.getOrDefault(false)
+
+    private fun prefillFirstPart(imagePath: String?, audioPath: String?) {
+        env.scope.launch(Dispatchers.IO) {
+            val prepared = providers.prepareLocalPhotoQuestion(imagePath, audioPath)
+            Log.i("ImageQuestion", "First part prefilled=$prepared part=${if (imagePath != null) "photo" else "recording"}")
+        }
+    }
+
     private fun hasMicrophonePermission(): Boolean =
         ContextCompat.checkSelfPermission(env.context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
@@ -110,6 +133,7 @@ internal class ImageQuestionFlow(
             hasMicrophonePermission()
         ) {
             val deferred = CompletableDeferred<CapturedQuestion?>()
+            photoForQuestion = null
             activeParallelAudioQuestionDeferred = deferred
             activeParallelAudioQuestionJob = env.scope.launch(Dispatchers.Main) {
                 // 500 ms settling delay for photo capture command & hardware shutter sound
@@ -117,7 +141,13 @@ internal class ImageQuestionFlow(
                 if (!deferred.isCompleted && !deferred.isCancelled) {
                     askNowToast()
                     val spokenQuestion = microphone.capture(timeoutMs = INITIAL_LISTENING_TIMEOUT_MS)
-                    if (!deferred.complete(spokenQuestion)) spokenQuestion.audioPath?.let { File(it).delete() }
+                    val recording = spokenQuestion.audioPath.takeIf { spokenQuestion.error == null && spokenQuestion.heardSpeech }
+                    if (!deferred.complete(spokenQuestion)) {
+                        spokenQuestion.audioPath?.let { File(it).delete() }
+                    } else if (recording != null && photoForQuestion == null && localPrefillEligible()) {
+                        // The question is in before the photo: prefill it while the photo transfers.
+                        prefillFirstPart(null, recording)
+                    }
                 }
             }
         }
@@ -201,6 +231,13 @@ internal class ImageQuestionFlow(
                 ).show()
             }
             return
+        }
+
+        photoForQuestion = imagePath
+        val recordingNow = activeParallelAudioQuestionDeferred
+        if (recordingNow != null && !recordingNow.isCompleted && localPrefillEligible()) {
+            // The photo is in before the question: prefill it while the user is still speaking.
+            prefillFirstPart(imagePath, null)
         }
 
         val thumbnailQuality = capture().pendingThumbnailQuality

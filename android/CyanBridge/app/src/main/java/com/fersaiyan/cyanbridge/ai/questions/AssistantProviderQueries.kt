@@ -22,6 +22,7 @@ import com.fersaiyan.cyanbridge.localmodels.engine.DecideOnceRequest
 import com.fersaiyan.cyanbridge.localmodels.engine.SessionTurn
 import com.fersaiyan.cyanbridge.localmodels.engine.SessionUnavailableException
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
+import com.fersaiyan.cyanbridge.localmodels.provider.TURN_CONTEXT_ROLE
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.session.DecideOnceUnsupportedException
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
@@ -86,23 +87,16 @@ internal class AssistantProviderQueries(
         val date = todayDateString()
         val languageTag = languageTag()
         val spoken = !audioPath.isNullOrBlank()
-        // A spoken question is the recording itself (callers pass no user text); the model is told
-        // what the recording is and answers in the language the user spoke.
-        val systemPrompt = AssistantSystemPrompt.build(
-            memoryContext = memoryAwareSystemPrompt(queryText = userPrompt, date = date, ragProfile = ragProfile),
-            spokenQuestion = spoken,
-            responseLanguageInstruction = { ImageQuestionDefaults.responseLanguageInstruction(languageTag) },
-            spokenQuestionInstruction = {
-                ImageQuestionDefaults.spokenQuestionInstruction(languageTag, allowQuestionEcho = decideOnce != null)
-            },
-            decisionRoutes = ImageQuestionDefaults.SPOKEN_DECISION_ROUTES.takeIf { decisionRoutes },
-            extraInstruction = extraInstruction,
-            spokenMemory = { SpokenMemoryContext.build(ctx, date) },
-            currentContext = { ImageQuestionDefaults.currentContextInstruction() },
-        )
+        // Local spoken questions keep the system turn identical between questions (LiteRT-LM serves it from its
+        // prefill cache); the time, which changes every minute, goes into the user turn instead.
+        val timeInUserTurn = spoken && providerType == AgentProviderType.LOCAL_AGENT
+        val systemPrompt = systemPromptFor(userPrompt, ragProfile, spoken, decisionRoutes, extraInstruction, decideOnce, timeInUserTurn, date, languageTag)
 
-        val messages = listOf(
+        val messages = listOfNotNull(
             mapOf("role" to "System", "content" to systemPrompt),
+            if (timeInUserTurn) {
+                mapOf("role" to TURN_CONTEXT_ROLE, "content" to ImageQuestionDefaults.currentContextInstruction())
+            } else null,
             mapOf("role" to "User", "content" to userPrompt),
         )
 
@@ -190,6 +184,49 @@ internal class AssistantProviderQueries(
 
     private fun todayDateString(tsMs: Long = System.currentTimeMillis()): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date(tsMs))
+
+    /**
+     * The system turn of a question; [timeInUserTurn] leaves the clock out (local spoken questions put it in the
+     * user turn so the system turn stays cacheable).
+     */
+    private fun systemPromptFor(
+        userPrompt: String,
+        ragProfile: RagProfile,
+        spoken: Boolean,
+        decisionRoutes: Boolean,
+        extraInstruction: String?,
+        decideOnce: DecideOnceRequest?,
+        timeInUserTurn: Boolean,
+        date: String = todayDateString(),
+        languageTag: String = languageTag(),
+    ): String =
+        AssistantSystemPrompt.build(
+            memoryContext = memoryAwareSystemPrompt(queryText = userPrompt, date = date, ragProfile = ragProfile),
+            spokenQuestion = spoken,
+            responseLanguageInstruction = { ImageQuestionDefaults.responseLanguageInstruction(languageTag) },
+            spokenQuestionInstruction = {
+                ImageQuestionDefaults.spokenQuestionInstruction(languageTag, allowQuestionEcho = decideOnce != null)
+            },
+            decisionRoutes = ImageQuestionDefaults.SPOKEN_DECISION_ROUTES.takeIf { decisionRoutes },
+            extraInstruction = extraInstruction,
+            spokenMemory = { SpokenMemoryContext.build(ctx, date) },
+            currentContext = { if (timeInUserTurn) "" else ImageQuestionDefaults.currentContextInstruction() },
+        ).trimEnd()
+
+    /**
+     * Photo + spoken question on the local model: the photo and the recording arrive in parallel; prefill whichever
+     * came first ([imagePath] or [audioPath]) under the system turn [query] will use, so the answer only has to
+     * process the other one.
+     */
+    suspend fun prepareLocalPhotoQuestion(imagePath: String?, audioPath: String?): Boolean = runCatching {
+        LocalModelsProvider().preparePhotoQuestion(
+            ctx,
+            systemPromptFor("", RagProfile.NONE, spoken = true, decisionRoutes = false, extraInstruction = null, decideOnce = null, timeInUserTurn = true),
+            imagePath,
+            audioPath,
+            ImageQuestionDefaults.currentContextInstruction(),
+        )
+    }.onFailure { Log.w("AIHijack", "Photo prefill skipped: ${it.message}") }.getOrDefault(false)
 
     private fun memoryAwareSystemPrompt(queryText: String, date: String, ragProfile: RagProfile): String {
         if (ragProfile == RagProfile.NONE) return ""
