@@ -113,7 +113,9 @@ internal class RawTcpRelay(
         synchronized(lock) {
             runCatching { serverSocket?.close() }
             serverSocket = null
-            sockets.toList().forEach(::closeSocket)
+            // toList() reads size() and then iterates; a relay thread removing a socket in between made it throw
+            // NoSuchElementException (flaky RawTcpRelayTest). ArrayList copies through toArray(), which is safe.
+            ArrayList(sockets).forEach(::closeSocket)
             sockets.clear()
             relayJob?.cancel()
             relayJob = null
