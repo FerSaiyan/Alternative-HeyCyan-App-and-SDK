@@ -43,10 +43,10 @@ class HeyCyanOfflineAuthTest {
     @Test
     fun symmetricAuthIsDeterministicAndKeyedForEveryCipher() {
         val challenge = ByteArray(16) { it.toByte() }
-        // Default = JieLiRcspPlaceholderCipher (NOT AES); plus the optional alternates.
+        // Default = the real JieLiRcspCipher (NOT AES); plus the optional alternates.
         for (auth in listOf(
             HeyCyanSymmetricAuth(),
-            HeyCyanSymmetricAuth(cipher = HeyCyanSymmetricAuth.JieLiRcspPlaceholderCipher),
+            HeyCyanSymmetricAuth(cipher = JieLiRcspCipher),
             HeyCyanSymmetricAuth(cipher = HeyCyanSymmetricAuth.XteaCipher),
             HeyCyanSymmetricAuth(cipher = HeyCyanSymmetricAuth.AesEcbCipher),
         )) {
@@ -121,9 +121,58 @@ class HeyCyanOfflineAuthTest {
     @Test
     fun bindRejectedWhenUserDoesNotPressFrontButton() = runBlocking {
         val glasses = SimulatedHeyCyanGlasses(userPressesFrontButton = false)
-        val result = HeyCyanOfflineAuthStateMachine(glasses).unlock()
+        // Tight poll window so the no-press timeout path is fast in unit tests.
+        val result = HeyCyanOfflineAuthStateMachine(glasses, bindPressWindowMs = 30L, bindPollIntervalMs = 5L).unlock()
         assertEquals(OfflineUnlockResult.BIND_REJECTED, result)
         assertFalse(glasses.requestCameraCapture())
+    }
+
+    @Test
+    fun bindCompletesViaStatusPollingWhenPressIsAsync() = runBlocking {
+        // Models a device/rig where mode-2 only ARMS the window (reply pending) and the front-button
+        // press lands asynchronously: the state machine must poll bind status until bound-self.
+        val transport = object : GlassesAuthTransport {
+            private val auth = HeyCyanSymmetricAuth()
+            private val challenge = ByteArray(16) { (it * 7).toByte() }
+            private var authed = false
+            private var pollsAfterArm = -1
+            override fun isConnected() = true
+            override suspend fun send(frame: ByteArray): AuthResponse {
+                val head = frame[0].toInt() and 0xFF
+                if (head == 0xFE) {
+                    val h = HeyCyanAuthProtocol.RCSP_HEADER.size
+                    return if (frame.contentEquals(HeyCyanAuthProtocol.RCSP_RESET_AUTH)) {
+                        AuthResponse(0xFE, byteArrayOf(HeyCyanAuthProtocol.RCSP_TYPE_CHALLENGE.toByte()) + challenge)
+                    } else {
+                        val resp = frame.copyOfRange(h + 1, frame.size)
+                        authed = auth.verify(challenge, resp)
+                        AuthResponse(0xFE, byteArrayOf((if (authed) HeyCyanAuthProtocol.RCSP_AUTH_OK else 0).toByte()))
+                    }
+                }
+                val p = HeyCyanAuthProtocol.parseBcFrame(frame)!!
+                return when (p.opcode) {
+                    HeyCyanAuthProtocol.CMD_CAPABILITY ->
+                        AuthResponse(p.opcode, ByteArray(HeyCyanAuthProtocol.CAPABILITY_BYTE_INDEX + 1).also {
+                            it[HeyCyanAuthProtocol.CAPABILITY_BYTE_INDEX] = HeyCyanAuthProtocol.CAP_M02S_BOTH_REQUIRED.toByte()
+                        })
+                    HeyCyanAuthProtocol.CMD_BIND -> when (p.payload[0].toInt() and 0xFF) {
+                        HeyCyanAuthProtocol.BIND_MODE_BIND -> {
+                            pollsAfterArm = 0 // armed; press lands after 2 status polls
+                            AuthResponse(p.opcode, byteArrayOf(HeyCyanAuthProtocol.BIND_MODE_BIND.toByte(), HeyCyanAuthProtocol.BIND_RESULT_REJECTED.toByte()))
+                        }
+                        else -> {
+                            val status = if (pollsAfterArm in 0..1) { pollsAfterArm++; HeyCyanAuthProtocol.BIND_STATUS_UNBOUND }
+                            else if (pollsAfterArm >= 2) HeyCyanAuthProtocol.BIND_STATUS_BOUND_SELF
+                            else HeyCyanAuthProtocol.BIND_STATUS_UNBOUND
+                            AuthResponse(p.opcode, byteArrayOf(HeyCyanAuthProtocol.BIND_MODE_STATUS.toByte(), status.toByte()))
+                        }
+                    }
+                    else -> AuthResponse(p.opcode, byteArrayOf(0, 0))
+                }
+            }
+        }
+        val result = HeyCyanOfflineAuthStateMachine(transport, bindPressWindowMs = 200L, bindPollIntervalMs = 5L).unlock()
+        assertEquals(OfflineUnlockResult.SUCCESS, result)
     }
 
     @Test

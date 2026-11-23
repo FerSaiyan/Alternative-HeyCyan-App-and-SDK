@@ -697,6 +697,11 @@ internal class GlassesMediaSyncCoordinator(
                 }
             }
         }
+        // If the gated transfer command gets the firmware's 0x03 NAK (pre-auth/pre-bind gate, add.240),
+        // the gate trigger runs the offline unlock and then invokes this one-shot retry of the command.
+        com.fersaiyan.cyanbridge.glasses.offlineauth.HeyCyanGateTrigger.registerGatedRetry {
+            LargeDataHandler.getInstance().glassesControl(byteArrayOf(0x02, 0x01, 0x04)) { _, _ -> }
+        }
         LargeDataHandler.getInstance().glassesControl(
             byteArrayOf(0x02, 0x01, 0x04)
         ) { _, resp ->

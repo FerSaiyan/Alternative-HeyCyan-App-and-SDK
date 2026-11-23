@@ -28,6 +28,9 @@ enum class OfflineUnlockResult {
 
     /** The opt-in offline-auth setting is off; the path was not attempted (default on the shared branch). */
     DISABLED,
+
+    /** Another trigger is already running the unlock on this connection; this caller must do nothing. */
+    IN_PROGRESS,
 }
 
 /**
@@ -44,10 +47,22 @@ enum class OfflineUnlockResult {
 class HeyCyanOfflineAuthStateMachine(
     private val transport: GlassesAuthTransport,
     private val symmetricAuth: HeyCyanSymmetricAuth = HeyCyanSymmetricAuth(),
+    /** How long to wait for the front-button press after arming the bind window (~20 s on device). */
+    private val bindPressWindowMs: Long = HeyCyanAuthProtocol.BIND_BUTTON_WINDOW_MS,
+    /** How often to re-query bind status while waiting for the press. */
+    private val bindPollIntervalMs: Long = 1_000L,
 ) {
     /** Human-readable step log for diagnostics and test assertions. */
     val steps: List<String> get() = _steps
     private val _steps = mutableListOf<String>()
+
+    /** Observed gate facts for diagnostics (null until the matching step runs). */
+    var lastCapabilityByte: Int? = null
+        private set
+    var deviceAuthOk: Boolean? = null
+        private set
+    var bindOk: Boolean? = null
+        private set
 
     private fun log(step: String) {
         _steps += step
@@ -55,6 +70,9 @@ class HeyCyanOfflineAuthStateMachine(
 
     suspend fun unlock(): OfflineUnlockResult {
         _steps.clear()
+        lastCapabilityByte = null
+        deviceAuthOk = null
+        bindOk = null
         if (!transport.isConnected()) {
             log("not-connected")
             return OfflineUnlockResult.NOT_CONNECTED
@@ -76,6 +94,7 @@ class HeyCyanOfflineAuthStateMachine(
                 log("capability-empty")
                 return OfflineUnlockResult.TRANSPORT_ERROR
             }
+        lastCapabilityByte = capByte
         val requirement = HeyCyanAuthProtocol.parseCapability(capByte)
         log("capability=0x%02X authReq=%b bindReq=%b".format(capByte, requirement.deviceAuthRequired, requirement.bindRequired))
         if (!requirement.anyRequired) {
@@ -114,6 +133,7 @@ class HeyCyanOfflineAuthStateMachine(
         val response = symmetricAuth.respondTo(challenge)
         val authResp = transport.send(HeyCyanAuthProtocol.authResponseFrame(response))
         val ok = authResp.payload.firstOrNull()?.toInt()?.and(0xFF) == HeyCyanAuthProtocol.RCSP_AUTH_OK
+        deviceAuthOk = ok
         log("device-auth=${if (ok) "ok" else "fail"}")
         return if (ok) OfflineUnlockResult.SUCCESS else OfflineUnlockResult.AUTH_FAILED
     }
@@ -133,6 +153,7 @@ class HeyCyanOfflineAuthStateMachine(
         when (HeyCyanAuthProtocol.bindStatusOf(statusResp.payload)) {
             HeyCyanAuthProtocol.BIND_STATUS_BOUND_SELF -> {
                 log("bind-status=bound-self")
+                bindOk = true
                 return OfflineUnlockResult.ALREADY_UNLOCKED
             }
             HeyCyanAuthProtocol.BIND_STATUS_BOUND_OTHER -> {
@@ -143,12 +164,38 @@ class HeyCyanOfflineAuthStateMachine(
             else -> log("bind-status=unknown")
         }
 
-        // Request bind (cmd-113/2): the glasses wait ~20 s for a real front-button press.
+        // Request bind (cmd-113/2): arms the ~20 s window and prompts the user to press the front button.
         transport.onPromptFrontButton()
         log("bind-prompt-front-button")
-        val bindResp = transport.send(HeyCyanAuthProtocol.bindRequestFrame())
-        val ok = HeyCyanAuthProtocol.bindStatusOf(bindResp.payload) == HeyCyanAuthProtocol.BIND_RESULT_OK
-        log("bind=${if (ok) "ok" else "rejected"}")
-        return if (ok) OfflineUnlockResult.SUCCESS else OfflineUnlockResult.BIND_REJECTED
+        val armResp = transport.send(HeyCyanAuthProtocol.bindRequestFrame())
+        // Fast path: some units confirm the bind directly in the mode-2 reply (press already registered).
+        if (HeyCyanAuthProtocol.bindStatusOf(armResp.payload) == HeyCyanAuthProtocol.BIND_RESULT_OK) {
+            log("bind=ok")
+            bindOk = true
+            return OfflineUnlockResult.SUCCESS
+        }
+        // Otherwise the press arrives asynchronously: poll bind status until bound-self or the window ends.
+        val deadline = bindPressWindowMs
+        var waited = 0L
+        while (waited < deadline) {
+            kotlinx.coroutines.delay(bindPollIntervalMs)
+            waited += bindPollIntervalMs
+            val poll = transport.send(HeyCyanAuthProtocol.bindStatusFrame())
+            when (HeyCyanAuthProtocol.bindStatusOf(poll.payload)) {
+                HeyCyanAuthProtocol.BIND_STATUS_BOUND_SELF -> {
+                    log("bind=ok")
+                    bindOk = true
+                    return OfflineUnlockResult.SUCCESS
+                }
+                HeyCyanAuthProtocol.BIND_STATUS_BOUND_OTHER -> {
+                    log("bind-status=bound-other")
+                    return OfflineUnlockResult.BOUND_TO_OTHER
+                }
+                else -> Unit // still unbound; keep waiting for the press
+            }
+        }
+        log("bind=rejected")
+        bindOk = false
+        return OfflineUnlockResult.BIND_REJECTED
     }
 }

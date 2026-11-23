@@ -199,6 +199,7 @@ internal class DeviceConnectionCoordinator(
             if (wifiChipLinkUp) {
                 com.fersaiyan.cyanbridge.glasses.GlassesWifiChipInfo.clear()
                 com.fersaiyan.cyanbridge.glasses.HeyCyanClassicBond.cancel("glasses disconnected")
+                com.fersaiyan.cyanbridge.glasses.offlineauth.HeyCyanGateTrigger.onHeyCyanDisconnected()
             }
             wifiChipLinkUp = false
             wifiChipReadJob?.cancel()
@@ -206,6 +207,13 @@ internal class DeviceConnectionCoordinator(
         }
         if (wifiChipLinkUp || !heyCyan) return
         wifiChipLinkUp = true
+        // HeyCyan post-update command gate (add.242): if the unit reports device-auth/bind required,
+        // activate it with the device's own offline handshake + front-button bind so sync works without
+        // the official app. A unit that advertises no requirement is left untouched (NOT_REQUIRED).
+        com.fersaiyan.cyanbridge.glasses.offlineauth.HeyCyanGateTrigger.onHeyCyanConnected(
+            activity,
+            activity.lifecycleScope,
+        )
         // Calls/media audio need a Classic bond, which the BLE link does not create (HeyCyanClassicBond).
         com.fersaiyan.cyanbridge.glasses.HeyCyanClassicBond.onHeyCyanConnected(
             activity,

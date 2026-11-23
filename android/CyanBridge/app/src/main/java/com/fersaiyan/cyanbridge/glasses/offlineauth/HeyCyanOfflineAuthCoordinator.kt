@@ -2,14 +2,6 @@ package com.fersaiyan.cyanbridge.glasses.offlineauth
 
 import android.util.Log
 import com.fersaiyan.cyanbridge.shared.prefs.AppPrefs
-import com.oudmon.ble.base.bluetooth.BleOperateManager
-import com.oudmon.ble.base.communication.LargeDataHandler
-import com.oudmon.ble.base.communication.bigData.resp.GlassModelControlResponse
-import kotlinx.coroutines.CancellableContinuation
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeout
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /**
  * Additive, opt-in entry point for the HeyCyan **native offline unlock**.
@@ -46,6 +38,7 @@ class HeyCyanOfflineAuthCoordinator(
         val transport = transportFactory(onPromptFrontButton)
         val machine = HeyCyanOfflineAuthStateMachine(transport, symmetricAuth)
         val result = machine.unlock()
+        HeyCyanGateState.recordRun(machine.lastCapabilityByte, machine.deviceAuthOk, machine.bindOk, result)
         Log.i(TAG, "offline unlock result=$result steps=${machine.steps}")
         return result
     }
@@ -56,57 +49,49 @@ class HeyCyanOfflineAuthCoordinator(
 }
 
 /**
- * Vendor-SDK-backed transport: sends the add.78 on-wire frames (0xBC command transport for
- * cmd-47/71/41; FE DC BA RCSP for device-auth) through `LargeDataHandler.glassesControl` and bridges
- * the response back to the state machine as the UNWRAPPED inner payload.
+ * Vendor-SDK-backed transport: writes the on-wire auth frames (0xBC command transport for cmd-47/71;
+ * FE-DC-BA RCSP for device-auth) as RAW bytes on the vendor characteristic pair via
+ * [HeyCyanAuthRawChannel] and returns the UNWRAPPED inner reply payload to the state machine.
  *
- * RECIPE / HARDWARE SEAM: `glassesControl` surfaces a typed [GlassModelControlResponse], not raw
- * bytes. Per add.78, the cmd-47 capability byte-14, the RCSP challenge/auth-ok, and the cmd-71 bind
- * status live in the raw reply bytes — which should be read from the raw response channel (a raw
- * `addOutDeviceListener`/`ILargeDataResponse`) and unwrapped with [HeyCyanAuthProtocol.parseBcFrame].
- * The single place to finalize that wiring is [rawPayloadOf]. add.78 also flags the exact step-3 RCSP
- * challenge-derivation bytes and the final overlay relay offset as overlay-resident residuals to
- * validate on the owner device. Everything above this class (protocol, codec, crypto, state machine)
- * is already exercised end-to-end by the simulator and needs no change when the raw channel is wired.
+ * Why not `glassesControl`: that vendor API always frames with cmd 0x41 and only surfaces the typed
+ * [com.oudmon.ble.base.communication.bigData.resp.GlassModelControlResponse], so it can neither send
+ * cmd-47/71 nor the FE-DC-BA frames, nor expose the raw bytes the auth flow reads (cap byte-14, the
+ * RCSP challenge/auth-ok, the bind status). [HeyCyanAuthRawChannel] enqueues the fully-formed frame
+ * verbatim to de5bf72a and reads the raw de5bf729 reply — staying on the SDK's own connection.
  */
 internal class SdkGlassesAuthTransport(
     private val promptFrontButton: () -> Unit,
-    private val commandTimeoutMs: Long = HeyCyanAuthProtocol.BIND_BUTTON_WINDOW_MS + 5_000L,
+    private val channel: HeyCyanAuthRawChannel = HeyCyanAuthRawChannel,
+    /** Short request/response commands (cap query, bind status, RCSP). */
+    private val commandTimeoutMs: Long = 6_000L,
+    /** The bind-arm (mode-2) reply can lag a touch; the actual press is polled by the state machine. */
+    private val bindArmTimeoutMs: Long = 8_000L,
 ) : GlassesAuthTransport {
 
-    override fun isConnected(): Boolean = BleOperateManager.getInstance().isConnected
+    override fun isConnected(): Boolean = channel.isConnected()
 
     override fun onPromptFrontButton() = promptFrontButton()
 
-    override suspend fun send(frame: ByteArray): AuthResponse = withTimeout(commandTimeoutMs) {
-        suspendCancellableCoroutine { cont ->
-            runCatching {
-                LargeDataHandler.getInstance().glassesControl(frame) { cmdType, response ->
-                    if (cont.isActive) cont.resume(responseFrom(cmdType, response))
-                }
-            }.onFailure { cont.resumeIfActive(it) }
+    override suspend fun send(frame: ByteArray): AuthResponse {
+        return when (val head = frame.firstOrNull()?.toInt()?.and(0xFF)) {
+            0xFE -> {
+                // FE-DC-BA RCSP: reply is FE DC BA | type | ...; return [type, ...] (after the 3-byte header).
+                val reply = channel.exchange(frame, commandTimeoutMs) { channel.isRcspReply(it) }
+                AuthResponse(opcode = 0xFE, payload = reply.copyOfRange(HeyCyanAuthProtocol.RCSP_HEADER.size, reply.size))
+            }
+            HeyCyanAuthProtocol.BC_HEADER -> {
+                val request = HeyCyanAuthProtocol.parseBcFrame(frame)
+                    ?: error("malformed outbound 0xBC frame")
+                val op = request.opcode
+                val isBindArm = op == HeyCyanAuthProtocol.CMD_BIND &&
+                    request.payload.firstOrNull()?.toInt()?.and(0xFF) == HeyCyanAuthProtocol.BIND_MODE_BIND
+                val timeout = if (isBindArm) bindArmTimeoutMs else commandTimeoutMs
+                val reply = channel.exchange(frame, timeout) { channel.isBcReply(it, op) }
+                val parsed = HeyCyanAuthProtocol.parseBcFrame(reply)
+                    ?: error("malformed 0xBC reply for op=0x%02X".format(op))
+                AuthResponse(opcode = parsed.opcode, payload = parsed.payload)
+            }
+            else -> error("unknown auth frame header $head")
         }
-    }
-
-    private fun CancellableContinuation<AuthResponse>.resumeIfActive(t: Throwable) {
-        if (isActive) resumeWithException(t)
-    }
-
-    /**
-     * RECIPE: map the SDK's typed response to the raw [AuthResponse] the state machine expects.
-     * [rawPayloadOf] is where add.78's exact byte offsets for cmd-71/113 are read; until then it maps
-     * the fields the typed response does expose so the production call compiles and logs usefully.
-     */
-    private fun responseFrom(cmdType: Int, response: GlassModelControlResponse): AuthResponse =
-        AuthResponse(opcode = cmdType, payload = rawPayloadOf(response))
-
-    private fun rawPayloadOf(response: GlassModelControlResponse): ByteArray {
-        // HARDWARE SEAM: replace with the raw auth/bind payload from the channel add.78 identifies,
-        // unwrapped via HeyCyanAuthProtocol.parseBcFrame (0xBC) / the FE DC BA reply. The typed response
-        // only exposes dataType/errorCode/workType; errorCode == 0 is the SDK's success marker, surfaced
-        // here as a deterministic success byte so the production call compiles and logs before the raw
-        // channel is wired. This path MUST be completed and validated on the owner device.
-        val ok = response.errorCode == 0
-        return byteArrayOf(if (ok) HeyCyanAuthProtocol.BIND_RESULT_OK.toByte() else HeyCyanAuthProtocol.BIND_RESULT_REJECTED.toByte())
     }
 }

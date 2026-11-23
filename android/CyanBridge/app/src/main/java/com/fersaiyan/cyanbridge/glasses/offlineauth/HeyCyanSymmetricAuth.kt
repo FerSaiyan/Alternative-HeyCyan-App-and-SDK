@@ -9,18 +9,13 @@ import javax.crypto.spec.SecretKeySpec
  * The glasses compute the same block and compare. Because the key is the public SDK default, this is
  * owner-replicable and needs no server — it is the device's own handshake, not a forged server token.
  *
- * The exact block cipher is the one piece still pending byte-accurate confirmation. Per add.78's
- * crypto scan of the A02S firmware, the on-device RCSP primitive is a **custom JieLi block cipher**
- * (key-schedule FUN_0603b7d8 / 8-round SPN core FUN_0603b92c, per add.75), used by stock jl_bt_ota
- * RcspAuth's getEncryptedAuthData/getAuthData — it is **NOT AES** (no AES S-box exists in the image)
- * and not XTEA. The default here is therefore an explicitly-labeled placeholder, not AES, so nobody
- * hardens around the wrong cipher. It is isolated behind [ChallengeCipher] so swapping in the verified
- * JieLi cipher is a one-line change; the production path and the simulated glasses use the SAME
- * instance, so the end-to-end flow is self-consistent regardless of which concrete cipher is used.
+ * The block cipher is the JieLi RCSP primitive ([JieLiRcspCipher]) that stock jl_bt_ota RcspAuth uses; it is
+ * not AES. It is isolated behind [ChallengeCipher] so the production path and the simulated glasses use
+ * the SAME instance and the end-to-end flow stays self-consistent.
  */
 class HeyCyanSymmetricAuth(
     private val key: ByteArray = HeyCyanAuthProtocol.DEFAULT_LINK_KEY,
-    private val cipher: ChallengeCipher = JieLiRcspPlaceholderCipher,
+    private val cipher: ChallengeCipher = JieLiRcspCipher,
 ) {
     init {
         require(key.size == 16) { "link key must be 16 bytes" }
@@ -41,29 +36,6 @@ class HeyCyanSymmetricAuth(
     /** A reversible 16-byte block transform keyed by the 16-byte link key. */
     fun interface ChallengeCipher {
         fun transform(key: ByteArray, block: ByteArray): ByteArray
-    }
-
-    /**
-     * DEFAULT — **JieLi RCSP native cipher placeholder (UNVERIFIED; NOT the real on-device cipher,
-     * NOT AES)**. A deterministic keyed 8-round substitution/permutation stand-in (nodding to the
-     * JieLi 8-round SPN lineage) so the simulator and app agree and the end-to-end flow is validated.
-     * The authoritative transform is the custom JieLi cipher in the jl_bt_ota native lib
-     * (FUN_0603b7d8 key-schedule / FUN_0603b92c core); drop that in here and validate on the owner
-     * device before any hardware use. Do NOT harden around this or around AES.
-     */
-    object JieLiRcspPlaceholderCipher : ChallengeCipher {
-        override fun transform(key: ByteArray, block: ByteArray): ByteArray {
-            val state = block.copyOf()
-            for (round in 0 until 8) {
-                for (i in state.indices) {
-                    val mixed = (state[i].toInt() and 0xFF) xor (key[(i + round) % key.size].toInt() and 0xFF)
-                    // keyed add + rotate: deterministic, keyed, non-cryptographic placeholder.
-                    val rotated = ((mixed + round + i) and 0xFF)
-                    state[i] = (((rotated shl 1) or (rotated ushr 7)) and 0xFF).toByte()
-                }
-            }
-            return state
-        }
     }
 
     /**

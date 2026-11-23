@@ -48,6 +48,10 @@ class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
 
     override fun onCharacteristicChange(address: String?, uuid: String?, data: ByteArray?) {
         if (data != null) {
+            // HeyCyan offline gate: tap raw de5bf729 notifies for the auth channel (RCSP/cap/bind
+            // replies) and the gated-command 0x03 NAK, BEFORE the cmd-65 guard can drop the short NAK
+            // frame. onNotify ignores everything the gate flow is not waiting on.
+            com.fersaiyan.cyanbridge.glasses.offlineauth.HeyCyanAuthRawChannel.onNotify(data)
             // Drop short/truncated vendor cmd-65 (GlassModelControl) status frames before any app
             // consumer touches them. A frame too short for its declared dataType is an INCOMPLETE,
             // RETRIABLE status under flaky P2P Wi-Fi, not a valid notify; passing it on makes the
