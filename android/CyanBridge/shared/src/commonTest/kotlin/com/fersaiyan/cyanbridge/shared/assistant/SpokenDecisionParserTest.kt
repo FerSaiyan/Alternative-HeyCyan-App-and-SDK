@@ -69,4 +69,47 @@ class SpokenDecisionParserTest {
         assertEquals(SpokenRoute.LIVE, SpokenDecisionParser.parse("[phone] Start live mode").route)
         assertEquals(SpokenRoute.PHONE, SpokenDecisionParser.parse("[phone] Open Spotify.").route)
     }
+
+    @Test fun withThePhotoAttachedCameraIsAnAnswerAboutIt() {
+        // Host eval 2026-11-23: with the photo attached Gemma still often writes [camera], then the answer.
+        assertEquals(
+            SpokenDecision(SpokenRoute.ANSWER, "The socks are yellow.", tagged = true, askedCamera = true),
+            SpokenDecisionParser.parse("[camera]\n[answer] The socks are yellow.", photoAttached = true),
+        )
+        assertEquals(SpokenDecision(SpokenRoute.ANSWER, "", tagged = true, askedCamera = true), SpokenDecisionParser.parse("[camera]", photoAttached = true))
+        assertFalse(SpokenDecisionParser.isComplete("[camera]", photoAttached = true))
+        // Without the photo nothing changes, and the other routes are the same with it.
+        assertEquals(SpokenRoute.CAMERA, SpokenDecisionParser.parse("[camera]").route)
+        assertEquals(SpokenRoute.SEARCH, SpokenDecisionParser.parse("[search] bus 24 route\n", photoAttached = true).route)
+        assertTrue(SpokenDecisionParser.isComplete("[ignore]", photoAttached = true))
+        assertEquals(SpokenRoute.ANSWER, SpokenDecisionParser.parse("They are yellow. [camera]", photoAttached = true).route)
+    }
+
+    @Test fun theSpeakablePrefixOnlyGrowsAsTheReplyStreams() {
+        val reply = "[camera]\n[answer] The socks are yellow.\nThey look new. [camera] Anything else?"
+        var spoken = ""
+        for (end in 1..reply.length) {
+            val now = SpokenDecisionParser.speakablePrefix(reply.substring(0, end))
+            assertTrue(now.startsWith(spoken), "'$now' does not extend '$spoken'")
+            spoken = now
+        }
+        assertEquals("The socks are yellow.\nThey look new. Anything else?", spoken)
+        assertEquals("", SpokenDecisionParser.speakablePrefix("[answ"))
+        assertEquals("Twelve", SpokenDecisionParser.speakablePrefix("[answer] Twelve [ca"))
+        // S24U GPU: the second tag sometimes loses its "[" ("[camera]\nanswer] …"); a line-start tag word is held back
+        // until it is clearly not one, and released when the reply ends.
+        val bare = "[camera]\nanswer] As meias são amarelas."
+        var said = ""
+        for (end in 1..bare.length) {
+            val now = SpokenDecisionParser.speakablePrefix(bare.substring(0, end))
+            assertTrue(now.startsWith(said), "'$now' does not extend '$said'")
+            said = now
+        }
+        assertEquals("As meias são amarelas.", said)
+        assertEquals("As meias são amarelas.", SpokenDecisionParser.parse(bare, photoAttached = true).payload)
+        assertEquals("The capital is Canberra.", SpokenDecisionParser.parse("[camera]\nanswer> The capital is Canberra.", photoAttached = true).payload)
+        assertEquals("", SpokenDecisionParser.speakablePrefix("[answer] Live"))
+        assertEquals("Live", SpokenDecisionParser.speakablePrefix("[answer] Live", complete = true))
+        assertEquals("It's [1] of 3", SpokenDecisionParser.speakablePrefix("[answer] It's [1] of 3"))
+    }
 }

@@ -85,6 +85,9 @@ class StreamingSpeechSessionManager(
         return newSessionId
     }
 
+    /** False once [sessionId] was cancelled or replaced by a newer session (a barge-in). */
+    fun isActive(sessionId: Long): Boolean = sessionId != 0L && sessionId == activeSessionId
+
     @Synchronized
     fun attachGenerationJob(sessionId: Long, generationJob: Job) {
         if (sessionId != activeSessionId) {

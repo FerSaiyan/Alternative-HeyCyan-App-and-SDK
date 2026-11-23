@@ -22,6 +22,7 @@ import com.fersaiyan.cyanbridge.localmodels.engine.DecideOnceRequest
 import com.fersaiyan.cyanbridge.localmodels.engine.SessionTurn
 import com.fersaiyan.cyanbridge.localmodels.engine.SessionUnavailableException
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
+import com.fersaiyan.cyanbridge.localmodels.provider.PHOTO_NOTE_ROLE
 import com.fersaiyan.cyanbridge.localmodels.provider.TURN_CONTEXT_ROLE
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.session.DecideOnceUnsupportedException
@@ -80,6 +81,13 @@ internal class AssistantProviderQueries(
         session: SessionTurn? = null,
         /** False when the caller reports the outcome itself (spoken decision turns). */
         reportReply: Boolean = true,
+        /**
+         * A photo question decided with route tags: the note that goes with the photo (local models; the system
+         * turn stays the spoken questions' one).
+         */
+        photoNote: String? = null,
+        /** Caps the local model's reply (a route-only decision turn); null for the model's own limit. */
+        maxTokens: Int? = null,
     ): String {
         // Every question's model call passes here; a question the speaker check stopped never does.
         Log.i("AIHijack", "Provider request provider=$providerType audio=${!audioPath.isNullOrBlank()} images=${imagePaths.size}")
@@ -97,6 +105,7 @@ internal class AssistantProviderQueries(
             if (timeInUserTurn) {
                 mapOf("role" to TURN_CONTEXT_ROLE, "content" to ImageQuestionDefaults.currentContextInstruction())
             } else null,
+            photoNote?.takeIf { imagePaths.isNotEmpty() }?.let { mapOf("role" to PHOTO_NOTE_ROLE, "content" to it) },
             mapOf("role" to "User", "content" to userPrompt),
         )
 
@@ -146,6 +155,7 @@ internal class AssistantProviderQueries(
                         onToken = onToken,
                         decideOnce = decideOnce,
                         session = session,
+                        maxTokens = maxTokens,
                     )
                 }.getOrElse {
                     if (it is DecideOnceUnsupportedException || it is SessionUnavailableException) throw it
@@ -216,15 +226,19 @@ internal class AssistantProviderQueries(
     /**
      * Photo + spoken question on the local model: the photo and the recording arrive in parallel; prefill whichever
      * came first ([imagePath] or [audioPath]) under the system turn [query] will use, so the answer only has to
-     * process the other one.
+     * process the other one. [decisionRoutes]: the question is decided with route tags (the spoken questions' system
+     * turn, plus [ImageQuestionDefaults.PHOTO_QUESTION_NOTE] with the photo); only a photo that came first is prefilled.
      */
-    suspend fun prepareLocalPhotoQuestion(imagePath: String?, audioPath: String?): Boolean = runCatching {
+    suspend fun prepareLocalPhotoQuestion(imagePath: String?, audioPath: String?, decisionRoutes: Boolean = false): Boolean = runCatching {
+        // A decided question whose recording came first is decided on the recording alone (ImageQuestionFlow).
+        if (decisionRoutes && imagePath == null) return@runCatching false
         LocalModelsProvider().preparePhotoQuestion(
             ctx,
-            systemPromptFor("", RagProfile.NONE, spoken = true, decisionRoutes = false, extraInstruction = null, decideOnce = null, timeInUserTurn = true),
+            systemPromptFor("", RagProfile.NONE, spoken = true, decisionRoutes = decisionRoutes, extraInstruction = null, decideOnce = null, timeInUserTurn = true),
             imagePath,
             audioPath,
             ImageQuestionDefaults.currentContextInstruction(),
+            photoNote = ImageQuestionDefaults.PHOTO_QUESTION_NOTE.takeIf { decisionRoutes },
         )
     }.onFailure { Log.w("AIHijack", "Photo prefill skipped: ${it.message}") }.getOrDefault(false)
 

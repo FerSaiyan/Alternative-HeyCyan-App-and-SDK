@@ -7,11 +7,14 @@ import com.fersaiyan.cyanbridge.ai.router.QuestionRoutingPrefs
 import com.fersaiyan.cyanbridge.ai.search.WebSearchAssist
 import com.fersaiyan.cyanbridge.ai.search.WebSearchEngine
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionDefaults
+import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
+import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.memory.RagProfile
 import com.fersaiyan.cyanbridge.localmodels.engine.SessionTurn
 import com.fersaiyan.cyanbridge.localmodels.engine.SessionUnavailableException
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
+import com.fersaiyan.cyanbridge.shared.assistant.SpokenAnswerStream
 import com.fersaiyan.cyanbridge.shared.assistant.SpokenConversation
 import com.fersaiyan.cyanbridge.shared.assistant.SpokenCue
 import com.fersaiyan.cyanbridge.shared.assistant.SpokenQuestionActions
@@ -30,7 +33,9 @@ import java.io.File
 /**
  * Android's ports of the shared spoken-question flow: the chosen provider (local LiteRT sessions or
  * the Pro relay), the glasses photo, the WebView web search, the Local Agent, Gemini Live and the
- * phone's text-to-speech.
+ * phone's text-to-speech. [photoQuestion]: the flow runs a photo question (the photo button), whose local
+ * answers start speaking while they are written (as the photo flow's always did) and whose phone tasks need the
+ * Local Agent to be set up.
  */
 internal class AndroidSpokenQuestionPorts(
     private val env: QuestionEnvironment,
@@ -41,6 +46,7 @@ internal class AndroidSpokenQuestionPorts(
     private val languageTag: () -> String,
     private val requestPhoto: () -> CompletableDeferred<String?>,
     private val startLocalAgent: (goal: String) -> Unit,
+    private val photoQuestion: Boolean = false,
 ) : SpokenQuestionBrain, SpokenQuestionActions, SpokenQuestionSpeech {
     override val name: String = provider.toString()
 
@@ -49,16 +55,26 @@ internal class AndroidSpokenQuestionPorts(
 
     private fun SpokenSessionTurn.engineTurn() = SessionTurn(key, continueConversation, note)
 
-    override suspend fun decide(audioPath: String, session: SpokenSessionTurn?, onToken: (String) -> Unit): String =
+    override suspend fun decide(
+        audioPath: String,
+        images: List<String>,
+        session: SpokenSessionTurn?,
+        routeOnly: Boolean,
+        onToken: (String) -> Unit,
+    ): String =
         sessionCall {
             providers.query(
                 userPrompt = "",
                 providerType = provider,
                 ragProfile = RagProfile.NONE,
+                imagePaths = images,
                 audioPath = audioPath,
                 decisionRoutes = true,
                 session = session?.engineTurn(),
                 onToken = onToken,
+                photoNote = ImageQuestionDefaults.PHOTO_QUESTION_NOTE.takeIf { images.isNotEmpty() },
+                // LiteRT ends the reply there itself (no cancel), so the conversation stays usable.
+                maxTokens = ROUTE_ONLY_MAX_TOKENS.takeIf { routeOnly },
             )
         }
 
@@ -133,7 +149,10 @@ internal class AndroidSpokenQuestionPorts(
 
     override fun startPhoneTask(goal: String) = startLocalAgent(goal)
 
-    override fun startLive(prompt: String) = live.launch(prompt = prompt)
+    override fun phoneTaskAvailable(): Boolean =
+        !photoQuestion || LocalAgentController.unavailableReason(env.context) == null
+
+    override fun startLive(prompt: String, photoPath: String?) = live.launch(prompt = prompt, imagePath = photoPath)
 
     override fun queueCue(cue: SpokenCue) {
         val language = languageTag()
@@ -169,6 +188,46 @@ internal class AndroidSpokenQuestionPorts(
         spoken.await()
     }
 
+    /** A local photo question's answer speaks phrase by phrase while it is written (StreamingSpeechSessionManager). */
+    override fun answerStream(): SpokenAnswerStream? {
+        if (!photoQuestion || provider != AgentProviderType.LOCAL_AGENT) return null
+        val streaming = speaker.streaming
+        val spoken = CompletableDeferred<Unit>()
+        speaker.answerPlayback(true)
+        val session = streaming.startNewSession(
+            languageTag = ImageQuestionPreferences.get(env.context).appLanguageTag,
+            onSpeechCompleted = {
+                speaker.answerPlayback(false)
+                spoken.complete(Unit)
+            },
+        )
+        return object : SpokenAnswerStream {
+            override fun append(text: String) = streaming.onModelTokenDelta(text, session)
+
+            override suspend fun finish(answer: String) {
+                env.runOnUiThread {
+                    speaker.answerShown(answer)
+                    streaming.onModelGenerationCompleted(session)
+                }
+                // A barge-in (a new question, the stop gesture) cancels the session without completing it: the
+                // question ends there instead of listening for a follow-up.
+                while (!spoken.isCompleted) {
+                    if (!streaming.isActive(session)) {
+                        speaker.answerPlayback(false)
+                        throw kotlinx.coroutines.CancellationException("Answer speech was stopped")
+                    }
+                    kotlinx.coroutines.delay(200L)
+                }
+            }
+
+            override fun cancel() {
+                // Only this answer: a newer question's speech may already be the active session.
+                if (streaming.isActive(session)) streaming.cancelActiveStreamingResponse()
+                speaker.answerPlayback(false)
+            }
+        }
+    }
+
     override fun englishSpeaker(): Boolean = languageTag().startsWith("en", ignoreCase = true)
 
     override fun webResultsInstruction(answer: String?, snippets: List<String>, infoBox: String?): String =
@@ -181,5 +240,8 @@ internal class AndroidSpokenQuestionPorts(
 
     private companion object {
         const val LOOKING_CUE = "Okay. I'll check what you see."
+
+        /** A route and its one-line payload ("[search] next public holiday in Brazil"). */
+        const val ROUTE_ONLY_MAX_TOKENS = 32
     }
 }

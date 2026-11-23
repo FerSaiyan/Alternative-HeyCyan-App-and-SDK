@@ -1,7 +1,9 @@
 package com.fersaiyan.cyanbridge.shared.assistant
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.EmptyCoroutineContext
@@ -20,6 +22,8 @@ class SpokenQuestionFlowTest {
         var sessionGoneOnce = false
         var web: WebSearchOutcome? = null
         var photo: String? = "photo.jpg"
+        var phoneAgent = true
+        var streams = false
 
         val microphone = object : SpokenQuestionMicrophone {
             override suspend fun recordQuestion(onsetTimeoutMs: Long) =
@@ -29,8 +33,15 @@ class SpokenQuestionFlowTest {
         val brain = object : SpokenQuestionBrain {
             override val name = "LOCAL_AGENT"
             override val keepsConversation = keepsConversation
-            override suspend fun decide(audioPath: String, session: SpokenSessionTurn?, onToken: (String) -> Unit): String {
-                log += "decide $audioPath continue=${session?.continueConversation} note=${session?.note}"
+            override suspend fun decide(
+                audioPath: String,
+                images: List<String>,
+                session: SpokenSessionTurn?,
+                routeOnly: Boolean,
+                onToken: (String) -> Unit,
+            ): String {
+                log += "decide $audioPath${if (images.isEmpty()) "" else " $images"}${if (routeOnly) " routeOnly" else ""} " +
+                    "continue=${session?.continueConversation} note=${session?.note}"
                 if (sessionGoneOnce && session?.continueConversation == true) {
                     sessionGoneOnce = false
                     throw SpokenSessionUnavailableException("engine busy")
@@ -52,13 +63,20 @@ class SpokenQuestionFlowTest {
             override val webSearchEngine = "GOOGLE"
             override suspend fun searchWeb(query: String): WebSearchOutcome? = web.also { log += "search $query" }
             override fun startPhoneTask(goal: String) { log += "phone $goal" }
-            override fun startLive(prompt: String) { log += "live" }
+            override fun phoneTaskAvailable() = phoneAgent
+            override fun startLive(prompt: String, photoPath: String?) { log += "live${photoPath?.let { " $it" }.orEmpty()}" }
         }
         val speech = object : SpokenQuestionSpeech {
             override fun queueCue(cue: SpokenCue) { log += "cue $cue" }
             override fun say(text: String) { log += "say $text" }
             override fun sayQuestionFailed() { log += "say failed" }
             override suspend fun speakAnswer(text: String) { log += "speak $text" }
+            override fun answerStream(): SpokenAnswerStream? = if (!streams) null else object : SpokenAnswerStream {
+                val parts = mutableListOf<String>()
+                override fun append(text: String) { parts += text }
+                override suspend fun finish(answer: String) { log += "streamed ${parts.size > 1} ${parts.joinToString("")} = $answer" }
+                override fun cancel() { log += "stream cancelled" }
+            }
             override fun englishSpeaker() = false
             override fun webResultsInstruction(answer: String?, snippets: List<String>, infoBox: String?) = "web:$answer/$snippets/$infoBox"
             override fun webSearchEmpty() = "nothing found"
@@ -184,6 +202,87 @@ class SpokenQuestionFlowTest {
         )
         // An ignored question ends the conversation.
         assertTrue(!SpokenConversation.canContinue(now = CLOCK_BASE))
+    }
+
+    @Test
+    fun aPhotoQuestionDecidesWithItsPhotoAndFollowUpsTakeANewOne() = runTest {
+        val fakes = Fakes(keepsConversation = true).apply {
+            streams = true
+            heard += question("q2.wav")
+            // With the photo attached, [camera] is an answer about it (streamed as it is written).
+            decisions += "[camera]\n[answer] The socks are yellow."
+            // A follow-up about something else: [camera] takes a new photo.
+            decisions += "[camera]"
+            photo = "new.jpg"
+        }
+        with(fakes) { flow().runWithPhoto("q1.wav", CompletableDeferred("socks.jpg")) }
+
+        assertEquals(
+            listOf("decide q1.wav [socks.jpg] continue=false note=null", "streamed true The socks are yellow. = The socks are yellow.",
+                "delete q1.wav", "decide q2.wav continue=true note=null",
+                "cue LOOKING", "answer in session '' [new.jpg] ${SpokenQuestionFlow.PHOTO_NOTE}", "speak In session.",
+                "delete photo new.jpg", "delete q2.wav"),
+            fakes.log,
+        )
+        assertTrue(fakes.events.any { it.first == "spoken_decision" && "route=ANSWER" in it.second && "askedCamera=true" in it.second })
+    }
+
+    @Test
+    fun whenTheRecordingComesFirstItIsDecidedAloneAndAnswersWaitForTheButtonsPhoto() = runTest {
+        // [camera] and [answer] alike: the answer comes from the button's photo (a visual question filed under
+        // [answer] still sees it), never a second photo; the cut-short decision reply is not spoken.
+        for (decision in listOf("[camera]", "[answer] They look whi")) {
+            SpokenConversation.reset()
+            val fakes = Fakes(keepsConversation = true).apply { decisions += decision; streams = true }
+            val coming = CompletableDeferred<String?>()
+            val question = launch { with(fakes) { flow().runWithPhoto("q1.wav", coming) } }
+            // Not advanceUntilIdle: virtual time would run out the photo timeout.
+            testScheduler.runCurrent()
+            assertEquals(listOf("decide q1.wav routeOnly continue=false note=null"), fakes.log, decision)
+            coming.complete("button.jpg")
+            question.join()
+            assertEquals(
+                listOf("decide q1.wav routeOnly continue=false note=null",
+                    "answer in session '' [button.jpg] ${SpokenQuestionFlow.PHOTO_NOTE}", "speak In session.", "delete q1.wav"),
+                fakes.log,
+                decision,
+            )
+            assertTrue(fakes.events.any { it == "reply" to "provider=LOCAL_AGENT images=1 audio=true text=In session." })
+        }
+        // Other routes act before the photo is in.
+        val search = Fakes(keepsConversation = true).apply { decisions += "[search] bus 24 route\n" }
+        with(search) { flow().runWithPhoto("q1.wav", CompletableDeferred()) }
+        assertTrue("search bus 24 route" in search.log)
+    }
+
+    @Test
+    fun aPhotoQuestionsOtherRoutesKeepThePhoto() = runTest {
+        // Bare [camera]: answered from the photo in the conversation (its photo is never deleted by the flow).
+        val bare = Fakes(keepsConversation = true).apply { decisions += "[camera]" }
+        with(bare) { flow().runWithPhoto("q1.wav", CompletableDeferred("p.jpg")) }
+        assertTrue("answer in session '${SpokenQuestionFlow.PHOTO_ANSWER_NOTE}' [] null" in bare.log)
+        assertTrue("speak In session." in bare.log)
+        assertTrue(bare.log.none { it.startsWith("delete photo") || it == "cue LOOKING" })
+
+        // [phone] without the phone agent set up answers instead; with it, the task starts.
+        val noAgent = Fakes(keepsConversation = true).apply { decisions += "[phone] Call mom.\n"; phoneAgent = false }
+        with(noAgent) { flow().runWithPhoto("q1.wav", CompletableDeferred("p.jpg")) }
+        assertTrue("answer in session '${SpokenQuestionFlow.NO_PHONE_NOTE}' [] null" in noAgent.log)
+        assertTrue(noAgent.log.none { it.startsWith("phone") })
+        val agent = Fakes(keepsConversation = true).apply { decisions += "[phone] Call mom.\n" }
+        with(agent) { flow().runWithPhoto("q1.wav", CompletableDeferred("p.jpg")) }
+        assertTrue("phone Call mom." in agent.log)
+
+        // [live] opens with the photo; without a conversation a [search] answer gets the photo again.
+        val live = Fakes(keepsConversation = true).apply { decisions += "[live]" }
+        with(live) { flow().runWithPhoto("q1.wav", CompletableDeferred("p.jpg")) }
+        assertTrue("live p.jpg" in live.log)
+        val search = Fakes(keepsConversation = false).apply {
+            decisions += "[search] bus 24 route\n"
+            web = WebSearchOutcome("DUCKDUCKGO", false, null, null, listOf("Route 24"), failure = null, offline = false, blocked = false, elapsedMs = 5)
+        }
+        with(search) { flow().runWithPhoto("q1.wav", CompletableDeferred("p.jpg")) }
+        assertTrue("answer recording [p.jpg] web:null/[Route 24]/null" in search.log)
     }
 
     private companion object {
