@@ -1,5 +1,45 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-23 — 2.5.1: faster spoken and photo questions; multimodal NPU packages
+
+Device Run, Gemma 4 E2B. First token after the recording (spoken) or after the second part (photo), median.
+
+- **Spoken questions, system turn (~650 tokens) reused:**
+  - **CPU:** primed root + `Conversation.clone()`. S24U 3.26 s -> 1.13 s.
+  - **GPU/NPU:** "spare" conversation. It is primed while the answer is spoken, after a standalone question or once
+    a follow-up window (3 min) lapses.
+    - S24U GPU 1.20 -> 0.72 s.
+    - Tab S10+ GPU 1.21 -> 0.81 s.
+    - S24U NPU 0.73 -> 0.42 s.
+    - Routes: equal or better (14-17/22).
+  - **GPU clone rejected.** Every clone after the first deep-copies the KV cache twice (2 x 37.7 MB at 4096 ctx,
+    ~1.3 s each). It ran 3.1-3.7 s.
+  - **Upstream:** the fix e40257f was reverted 2026-11-09; there is no OpenCL device copy. Report:
+    `/mnt/seagate/ML/gpu-prefill-research-20261123/REPORT.md`, branch `research/gpu-prefill` (not pushed).
+  - **The time moved into the user turn:** routes equal or better on every phone.
+- **GPU audio encoder:** stays on CPU.
+  - Google's bundle pins it to `cpu`, and 0.19.1 refuses GPU audio.
+  - A patched copy gained <= 0.1 s on Adreno and lost on Mali; its numerics differ.
+- **Photo + spoken question:** the parts arrive in parallel, and whichever comes first is prefilled.
+
+  | Phone | Together | Photo first | Recording first |
+  |---|---|---|---|
+  | S24U GPU | 1.45 s | 0.46 s | 1.03 s |
+  | Tab S10+ GPU | 2.16 s | 0.60 s | 1.75 s |
+
+  The time note now goes in the first turn: before the recording, Gemma answered the time.
+- **Multimodal NPU packages (v3mm):** the v3 text model plus Google's vision/audio sections, no new AOT
+  (`add_multimodal_sections.py`).
+  - Public `Fertroll10/gemma-4-E2B-it-litert-lm-npu@35a5e3f3`: SM8550, SM8650, SM8850, MT6989.
+  - Photo questions on NPU (together / photo first): S23U 1.45 / 0.50 s, S24U 1.49 / 0.56 s, S26 1.02 / 0.33 s,
+    Tab S10+ 2.34 / 0.65 s.
+  - Spoken first token: S23U 0.88 s, S24U 0.68 s, S26 0.51 s, Tab 1.65 s.
+  - The app catalog now points at v3mm.
+  - Already-installed text-only v3 files are kept; photo and voice questions go to a capable model or name one to
+    download.
+- **2.5.0 bug fixed:** media requests could go to a LiteRT package without that encoder
+  ("Vision executor should not be null").
+
 ## 2026-11-23 — 2.5.1 (branch `dev-2.5.1`): download-time NPU runtime + GPU warm-up, NPU builds for small models, ride/bus reader
 
 - **Download time, not first use:**

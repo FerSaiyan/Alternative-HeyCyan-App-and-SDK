@@ -37,6 +37,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import java.io.File
@@ -78,6 +79,19 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
      * one-word model reply); the question's request then processes only the other one. Works on every backend
      * (no clone). Guarded by [mutex].
      */
+    /**
+     * GPU/NPU system-prompt reuse ("spare", /mnt/seagate/ML/gpu-prefill-research-20261123/REPORT.md): once a spoken
+     * question's conversation is gone, its system turn is prefilled into a new conversation in the background (while
+     * the answer is spoken), and the next spoken question with the same system turn uses it. No clone, so no KV-cache
+     * copies (on the GPU each clone cost two 37.7 MB copies, ~1.3 s each). Device Run, 44 paired questions: first
+     * token 0.84 -> 0.49 s (S24 Ultra), 1.19 -> 0.63 s (Tab S10+); routes agreed 42/44, both changes to the expected
+     * tag. Created only when no other conversation is open, and closed before anything else creates one (otherwise
+     * switching would copy the KV cache). Guarded by [mutex].
+     */
+    private var spare: PrimedRoot? = null
+    private val spareScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    @Volatile private var spareJob: kotlinx.coroutines.Job? = null
+
     private class PreparedPart(val key: String, val imagePath: String?, val audioPath: String?, val conversation: Conversation)
     private var preparedPart: PreparedPart? = null
     private var primedRoot: PrimedRoot? = null
@@ -148,6 +162,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             closeConversationLocked()
             closeRootLocked()
             closePreparedPartLocked()
+            closeSpareLocked()
             closeEngineLocked()
             rootCacheUsable = true
             engine = loadOutcome.first
@@ -353,7 +368,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         val image = config.imagePaths.singleOrNull()?.trim()?.takeIf { File(it).isFile }
         val audio = config.audioPath?.trim()?.takeIf { image == null && File(it).isFile }
         if (image == null && audio == null) return@withLock false
-        val llm = mutex.withLock { engine } ?: return@withLock false
+        val llm = mutex.withLock { closeSpareLocked(); engine } ?: return@withLock false
         val started = System.currentTimeMillis()
         val conversation = runCatching {
             withContext(Dispatchers.IO) {
@@ -392,11 +407,13 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     }
 
     override suspend fun unloadModel() = operationMutex.withLock {
+        spareJob?.cancel()
         mutex.withLock {
             Log.i(TAG, "Unloading LiteRT model ${modelPath.orEmpty()}")
             closeConversationLocked()
             closeRootLocked()
             closePreparedPartLocked()
+            closeSpareLocked()
             closeEngineLocked()
             modelPath = null
             activeLoadConfig = null
@@ -426,6 +443,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
 
     override suspend fun score(userPrompt: String, labels: List<String>): DecisionLogits = operationMutex.withLock {
         check(BuildConfig.LITERT_DECISION_PROTOTYPE) { "LiteRT decision prototype is disabled" }
+        mutex.withLock { closeSpareLocked() }
         withContext(Dispatchers.IO) {
             val llm = mutex.withLock { engine } ?: error("LiteRT engine is not initialized")
             LiteRtDecisionBinding.score(llm, renderDecisionPrompt(llm, userPrompt), labels)
@@ -434,6 +452,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
 
     /** Exact text scored for [userPrompt]; exposed for HIL prompt-rendering diagnostics. */
     suspend fun renderedDecisionPrompt(userPrompt: String): String = operationMutex.withLock {
+        mutex.withLock { closeSpareLocked() }
         withContext(Dispatchers.IO) {
             renderDecisionPrompt(mutex.withLock { engine } ?: error("LiteRT engine is not initialized"), userPrompt)
         }
@@ -490,7 +509,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         } else {
             if (!audioEncoderReady && !hasAudio && config.imagePaths.isNotEmpty()) primeAudioEncoder(llm)
             prepared = takePreparedPart(config)
-            conversation = prepared?.conversation ?: cloneOfPrimedRoot(llm, config) ?: withContext(Dispatchers.IO) {
+            val spareConversation = if (prepared == null) takeSpare(config) else mutex.withLock { closeSpareLocked(); null }
+            conversation = prepared?.conversation ?: spareConversation ?: cloneOfPrimedRoot(llm, config) ?: withContext(Dispatchers.IO) {
                 llm.createConversation(buildConversationConfig(config))
             }
             mutex.withLock {
@@ -540,6 +560,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                     }
                 }
             } }
+            scheduleSpare(config, sessionConversation = conversation.takeIf { keepSession })
         }
     }
 
@@ -563,6 +584,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
      * the engine's first image request.
      */
     private suspend fun primeAudioEncoder(llm: Engine) = withContext(Dispatchers.IO) {
+        mutex.withLock { closeSpareLocked() }
         val start = System.currentTimeMillis()
         runCatching {
             val silence = File(context.cacheDir, "litert_audio_prime.wav")
@@ -964,6 +986,70 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             config.systemInstruction?.trim().orEmpty(), config.topK, config.topP, config.temperature, config.seed,
             config.decideOnce != null,
         ).joinToString("\u0000")
+
+    /** Spoken questions on the GPU/NPU (CPU uses the clone cache): a system turn worth prefilling ahead of time. */
+    private suspend fun spareEligible(config: GenerationConfig): Boolean =
+        promptCacheEnabled && config.audioPath != null && config.imagePaths.isEmpty() && config.decideOnce == null &&
+            config.systemInstruction.orEmpty().trim().length >= MIN_CACHED_SYSTEM_CHARS &&
+            mutex.withLock { activeLoadResult?.activeBackend } != LocalComputeBackend.CPU
+
+    /**
+     * After a spoken turn: prime the spare now (the turn's conversation is closed), or, when the turn keeps a
+     * conversation open for follow-ups, once that conversation has been idle past the follow-up window
+     * (SpokenConversation.CONTINUE_WITHIN_MS): the next question then starts a new conversation anyway.
+     */
+    private suspend fun scheduleSpare(config: GenerationConfig, sessionConversation: Conversation?) {
+        if (!spareEligible(config)) return
+        val base = config.copy(prompt = "", audioPath = null, imagePaths = emptyList(), session = null, turnContext = null)
+        spareJob?.cancel()
+        spareJob = spareScope.launch {
+            if (sessionConversation != null) {
+                kotlinx.coroutines.delay(com.fersaiyan.cyanbridge.shared.assistant.SpokenConversation.CONTINUE_WITHIN_MS + 5_000L)
+            }
+            runCatching { primeSpare(base, sessionConversation) }
+                .onFailure { Log.w(TAG, "Spare system turn not primed: ${compactError(it)}") }
+        }
+    }
+
+    private suspend fun primeSpare(config: GenerationConfig, expiredSession: Conversation?) = operationMutex.withLock {
+        val llm = mutex.withLock {
+            val idle = if (expiredSession != null) {
+                activeConversation === expiredSession && turns[expiredSession]?.isCompleted != false
+            } else {
+                activeConversation == null
+            }
+            // Anything else open (a newer conversation, a prepared photo, a primed root) would be copied out on switch.
+            if (!idle || preparedPart != null || primedRoot != null) return@withLock null
+            if (expiredSession != null) closeConversationLocked()
+            closeSpareLocked()
+            engine
+        } ?: return@withLock
+        val started = System.currentTimeMillis()
+        val primed = withContext(Dispatchers.IO) { llm.createConversation(buildConversationConfig(config, prefillPreface = true)) }
+        mutex.withLock {
+            if (engine !== llm || activeConversation != null) {
+                closeWhenIdle(primed)
+            } else {
+                spare = PrimedRoot(rootKey(config), primed)
+                Log.i(TAG, "Spare system turn primed in ${System.currentTimeMillis() - started} ms")
+            }
+        }
+    }
+
+    /** The spare when [config] has its system turn and sampler; a non-matching spare is closed. */
+    private suspend fun takeSpare(config: GenerationConfig): Conversation? = mutex.withLock {
+        val current = spare ?: return@withLock null
+        spare = null
+        if (current.key == rootKey(config)) current.conversation else {
+            closeWhenIdle(current.conversation)
+            null
+        }
+    }
+
+    private suspend fun closeSpareLocked() {
+        spare?.let { closeWhenIdle(it.conversation) }
+        spare = null
+    }
 
     private suspend fun closeRootLocked() {
         primedRoot?.let { closeWhenIdle(it.conversation) }

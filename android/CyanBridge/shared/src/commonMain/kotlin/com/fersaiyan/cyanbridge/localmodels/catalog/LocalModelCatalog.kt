@@ -82,8 +82,10 @@ object NpuVariantResolver {
 
 private const val NPU_E2B_REPO = "Fertroll10/gemma-4-E2B-it-litert-lm-npu"
 private const val NPU_E2B_REVISION = "2f5d066822497f5561b2d86a55bf9e94bd9b65bc"
-// Calibration v3 builds (gemma-4-E2B-it-v3_<Vendor>_<SoC>.litertlm), device-tested on Google Device Run 2026-11-22.
+// Calibration v3 builds (gemma-4-E2B-it-v3_<Vendor>_<SoC>.litertlm, text-only), device-tested on Google Device Run 2026-11-22.
 private const val NPU_E2B_V3_REVISION = "2687ca17a52e63cc2860a62fb7ef96a15e873b50"
+// v3mm = the v3 NPU text model + Google's Gemma 4 vision/audio sections (no new AOT), published 2026-11-23.
+private const val NPU_E2B_V3MM_REVISION = "35a5e3f3a35693f3845dc6a0c854cce188b39b9e"
 
 object LocalModelCatalogRepository {
     val curatedModels: List<LocalModelCatalogEntry> = listOf(
@@ -164,17 +166,16 @@ object LocalModelCatalogRepository {
             // Resolved per phone by NpuVariantResolver; this page lists every published SoC.
             sourceUrl = null,
             sourcePageUrl = "https://huggingface.co/$NPU_E2B_REPO",
-            expectedFilename = "gemma-4-E2B-it-v3_<Vendor>_<SoC>.litertlm",
+            expectedFilename = "gemma-4-E2B-it-v3mm_<Vendor>_<SoC>.litertlm",
             sha256 = null,
-            sizeBytes = 3_016_294_400L,
+            sizeBytes = 3_493_108_340L,
             quantization = "NPU AOT (QAT INT4/8, INT16 activations)",
             contextSizeDefault = 4096,
             promptTemplateId = "gemma_it",
             minRamGb = 6.0,
             minStorageGb = 4.0,
             shortDescription = "Gemma 4 E2B compiled for this phone's NPU: about 2x faster replies than GPU. 4k context. " +
-                "Snapdragon 8 Gen 2 / 8 Gen 3 / 8 Elite Gen 5 and Dimensity 9300 builds are text-only for now; " +
-                "Snapdragon 8 Elite and Pixel 10 (Google's builds) also take images and audio.",
+                "Takes photos and voice questions (the image encoder runs on the GPU).",
             tags = listOf("litert", "gemma4", "npu", "offline"),
             gatedDownload = false,
             licenseTermsNote = "Apache-2.0 (Gemma 4). Community NPU builds; SM8750 and Tensor G5 files published by Google (litert-community).",
@@ -182,37 +183,38 @@ object LocalModelCatalogRepository {
             npuSupported = true,
             npuOnly = true,
             npuVariants = listOf(
-                // Calibration v3 (app prompts, 9 languages, 16k long context), text-only. Each file ran 11-13/13
-                // held-out prompts on a real phone (Device Run 2026-11-22: S23U, Fold6, S26).
+                // Calibration v3 (app prompts, 9 languages, 16k long context; text model device-tested 11-13/13 on
+                // 2026-11-22) + Google's Gemma 4 vision/audio sections (v3mm, 2026-11-23). Photo + voice questions
+                // on Device Run (PhotoQuestionPrefillTest, PromptCacheRouteTest): S23U SM8550, S24U SM8650, S26 SM8850.
                 NpuVariantSet(
                     repo = NPU_E2B_REPO,
-                    filePrefix = "gemma-4-E2B-it-v3",
-                    revision = NPU_E2B_V3_REVISION,
+                    filePrefix = "gemma-4-E2B-it-v3mm",
+                    revision = NPU_E2B_V3MM_REVISION,
                     files = mapOf(
                         "SM8550" to NpuVariantFile(
-                            sha256 = "ff365e873a91700875746589ddf324bb546c293c7e3a4743754e4f74ddf2c932",
-                            sizeBytes = 3_160_664_288L,
+                            sha256 = "897ab4448dbf2a55cce257944b5de75866f2fe10c85518ca5ac1e5c168ce805a",
+                            sizeBytes = 3_493_108_340L,
                         ),
                         "SM8650" to NpuVariantFile(
-                            sha256 = "5ef17192d43cb6b084c931da56f1fa3eccf92c91b1ab7772ca08b7d0f211bc0c",
-                            sizeBytes = 2_311_186_656L,
+                            sha256 = "06fc9d05bfca142e6392bd1fac995781e3ce987b01d403f7536d293300839f44",
+                            sizeBytes = 2_643_630_708L,
                         ),
                         "SM8850" to NpuVariantFile(
-                            sha256 = "9783b13b076517bfd4d199df97464ed07bc87d2b5d2cdddfebef5a6b7c8ef0f3",
-                            sizeBytes = 2_313_922_784L,
+                            sha256 = "48c76e720a40e89de8518239c2adab2241659e10df72d7019b959cde7bc0c432",
+                            sizeBytes = 2_646_366_836L,
                         ),
                     ),
                 ),
-                // MediaTek Dimensity 9300 (Galaxy Tab S10+ on Device Run: 11/13).
+                // MediaTek Dimensity 9300 (Galaxy Tab S10+: text 11/13 on 2026-11-22, photo + voice 2026-11-23).
                 NpuVariantSet(
                     repo = NPU_E2B_REPO,
-                    filePrefix = "gemma-4-E2B-it-v3",
-                    revision = NPU_E2B_V3_REVISION,
+                    filePrefix = "gemma-4-E2B-it-v3mm",
+                    revision = NPU_E2B_V3MM_REVISION,
                     vendor = "MediaTek",
                     files = mapOf(
                         "MT6989" to NpuVariantFile(
-                            sha256 = "ccc431929718304fa4a4409ecc7239831b9c489b3da4d3b0a30f1eee79538d5c",
-                            sizeBytes = 2_972_690_656L,
+                            sha256 = "a9af92618d67f3663cf90e4ffbd99ac69de7bdfe23029a5d7f8f7a1f8d44ef00",
+                            sizeBytes = 3_305_134_708L,
                         ),
                     ),
                 ),

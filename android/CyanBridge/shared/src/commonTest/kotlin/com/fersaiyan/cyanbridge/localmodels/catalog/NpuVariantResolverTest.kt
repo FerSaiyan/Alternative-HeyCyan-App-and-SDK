@@ -10,21 +10,21 @@ class NpuVariantResolverTest {
     private val npuEntry = LocalModelCatalogRepository.findById("gemma4-e2b-it-npu")!!
 
     @Test
-    fun resolvesOurV3FilesAtThePinnedRevision() {
+    fun resolvesOurMultimodalV3FilesAtThePinnedRevision() {
         val resolved = NpuVariantResolver.resolve(npuEntry, "SM8650")!!
-        assertEquals("gemma-4-E2B-it-v3_Qualcomm_SM8650.litertlm", resolved.expectedFilename)
+        assertEquals("gemma-4-E2B-it-v3mm_Qualcomm_SM8650.litertlm", resolved.expectedFilename)
         assertEquals(
             "https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu/resolve/" +
-                "2687ca17a52e63cc2860a62fb7ef96a15e873b50/gemma-4-E2B-it-v3_Qualcomm_SM8650.litertlm",
+                "35a5e3f3a35693f3845dc6a0c854cce188b39b9e/gemma-4-E2B-it-v3mm_Qualcomm_SM8650.litertlm",
             resolved.sourceUrl,
         )
-        assertEquals("5ef17192d43cb6b084c931da56f1fa3eccf92c91b1ab7772ca08b7d0f211bc0c", resolved.sha256)
-        assertEquals(2_311_186_656L, resolved.sizeBytes)
-        assertEquals("gemma-4-E2B-it-v3_Qualcomm_SM8550.litertlm", NpuVariantResolver.resolve(npuEntry, "SM8550")!!.expectedFilename)
-        assertEquals("gemma-4-E2B-it-v3_Qualcomm_SM8850.litertlm", NpuVariantResolver.resolve(npuEntry, "SM8850")!!.expectedFilename)
+        assertEquals("06fc9d05bfca142e6392bd1fac995781e3ce987b01d403f7536d293300839f44", resolved.sha256)
+        assertEquals(2_643_630_708L, resolved.sizeBytes)
+        assertEquals("gemma-4-E2B-it-v3mm_Qualcomm_SM8550.litertlm", NpuVariantResolver.resolve(npuEntry, "SM8550")!!.expectedFilename)
+        assertEquals("gemma-4-E2B-it-v3mm_Qualcomm_SM8850.litertlm", NpuVariantResolver.resolve(npuEntry, "SM8850")!!.expectedFilename)
         val mtk = NpuVariantResolver.resolve(npuEntry, "MT6989")!!
-        assertEquals("gemma-4-E2B-it-v3_MediaTek_MT6989.litertlm", mtk.expectedFilename)
-        assertEquals("ccc431929718304fa4a4409ecc7239831b9c489b3da4d3b0a30f1eee79538d5c", mtk.sha256)
+        assertEquals("gemma-4-E2B-it-v3mm_MediaTek_MT6989.litertlm", mtk.expectedFilename)
+        assertEquals("a9af92618d67f3663cf90e4ffbd99ac69de7bdfe23029a5d7f8f7a1f8d44ef00", mtk.sha256)
     }
 
     @Test

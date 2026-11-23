@@ -19,7 +19,8 @@ import java.io.File
  * glasses_questions recordings twice on one loaded model:
  * - "fresh": the 2.5.0 layout (time at the end of the system turn), cache off, a fresh conversation per question;
  * - "split": the 2.5.1 layout (time at the start of the user turn), cache off;
- * - "cached": the 2.5.1 layout, cache on (primed root + clone per question; the engine uses it on CPU only).
+ * - "cached": the 2.5.1 layout, cache on: primed root + clone on CPU, a spare primed after each question on GPU/NPU.
+ * A 1.5 s pause after each question stands in for the spoken answer (when the spare is primed).
  * Records the route tag, time to first token and total time per question; the routes must match the expected tags
  * as well as the fresh layout does. Not part of CI: skips unless pc_model points at a .litertlm file.
  * Arguments: pc_model, pc_backend (GPU | CPU, default GPU), pc_out.
@@ -88,6 +89,8 @@ class PromptCacheRouteTest {
                 val text = result.getOrNull()?.text.orEmpty()
                 val tag = Regex("^\\s*\\[\\s*([a-z]+)\\s*]", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)?.lowercase()
                 if (tag == want) hits++
+                // The spoken answer's time: the engine primes its spare (GPU/NPU) meanwhile.
+                kotlinx.coroutines.delay(1_500L)
                 log(mapOf(
                     "event" to "q", "layout" to layout, "clip" to name, "expected" to want, "tag" to tag,
                     "ttft_s" to if (firstToken > 0) (firstToken - started) / 1e9 else null,
