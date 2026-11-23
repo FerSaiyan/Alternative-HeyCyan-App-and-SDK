@@ -95,6 +95,7 @@ tools/hil/*
 !tools/hil/test_artemis_fixture.py
 !tools/hil/build_embedding_runtime_aar.sh
 !tools/hil/npu_soc_mock.sh
+!tools/hil/gemini_live_e2e/
 !tools/hil/embedding-runtime/
 tools/hil/embedding-runtime/*
 !tools/hil/embedding-runtime/MANIFEST

@@ -384,7 +384,9 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
             currentDetail = detail.ifBlank { state.name.lowercase().replaceFirstChar(Char::uppercase) }
             val listening = state == GeminiLiveState.LISTENING
             isListening = listening
-            if (listening) {
+            // A LISTENING update queued behind the stop (e.g. Gemini's goodbye turn) must not
+            // re-open the glasses camera after the session ended.
+            if (listening && !stopping) {
                 visionController?.start()
                 if (startedAtMs == 0L) {
                     startedAtMs = System.currentTimeMillis()
