@@ -68,8 +68,11 @@ object GeminiLiveImageButtonRouter {
     fun nativePhotoReceiver(device: DeviceClass): ((Deferred<ByteArray>) -> Unit)? {
         val current = registration?.takeIf { it.device == device } ?: return null
         return { acquisition ->
-            if (registration === current) current.callback(ManualGlassesPhoto(device, acquisition = acquisition))
-            else acquisition.cancel()
+            when {
+                liveVideoButtonHandler?.invoke() == true -> acquisition.cancel()
+                registration === current -> current.callback(ManualGlassesPhoto(device, acquisition = acquisition))
+                else -> acquisition.cancel()
+            }
         }
     }
 
@@ -77,8 +80,16 @@ object GeminiLiveImageButtonRouter {
         return route(ManualGlassesPhoto(DeviceClass.HEY_CYAN))
     }
 
+    /** Gemini Live's live-video mode: the button sends the newest stream frame (no photo can run). */
+    @Volatile
+    var liveVideoButtonHandler: (() -> Boolean)? = null
+
     private fun route(photo: ManualGlassesPhoto): Boolean {
         val current = registration?.takeIf { it.device == photo.device } ?: return false
+        if (liveVideoButtonHandler?.invoke() == true) {
+            photo.acquisition?.cancel()
+            return true
+        }
         // An owned programmatic capture receives its event through its own waiter. Returning
         // true also suppresses fallback: never start a competing read for the same photo.
         if (GlassesPhotoCapture.currentDevice() != null || HeyCyanPhotoCapture.isActive() ||

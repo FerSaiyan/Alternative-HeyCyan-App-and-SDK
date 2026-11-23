@@ -1019,6 +1019,7 @@ private fun GlassesAssistantControls(
                 listOf(
                     0 to stringResource(Res.string.dashboard_live_image_only_first),
                     2 to stringResource(Res.string.dashboard_live_image_every_turn),
+                    3 to stringResource(Res.string.dashboard_live_image_video),
                 ).forEachIndexed { index, (seconds, label) ->
                     ConnectedChoiceButton(
                         selected = state.geminiLiveImageDelaySeconds == seconds ||
@@ -1027,7 +1028,7 @@ private fun GlassesAssistantControls(
                             onAction(GlassesDashboardAction.SetGeminiLiveImageDelay(seconds))
                         },
                         index = index,
-                        count = 2,
+                        count = 3,
                         modifier = Modifier
                             .weight(1f)
                             .testTag("gemini_live_image_delay_$seconds"),

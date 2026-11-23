@@ -556,7 +556,8 @@ object ProSubscriptionRelayClient {
     }
 
     private fun requestGetJson(context: Context, url: String): JSONObject {
-        val conn = (URL(url).openConnection() as HttpURLConnection)
+        // The relay must stay reachable while a glasses link binds the process to Wi-Fi Direct.
+        val conn = (com.fersaiyan.cyanbridge.network.InternetRoute.openConnection(context, URL(url)) as HttpURLConnection)
         conn.requestMethod = "GET"
         conn.connectTimeout = CONNECT_TIMEOUT_MS
         conn.readTimeout = READ_TIMEOUT_MS
@@ -575,7 +576,8 @@ object ProSubscriptionRelayClient {
     }
 
     private fun requestPostJson(context: Context, url: String, body: JSONObject): JSONObject {
-        val conn = (URL(url).openConnection() as HttpURLConnection)
+        // The relay must stay reachable while a glasses link binds the process to Wi-Fi Direct.
+        val conn = (com.fersaiyan.cyanbridge.network.InternetRoute.openConnection(context, URL(url)) as HttpURLConnection)
         conn.requestMethod = "POST"
         conn.connectTimeout = CONNECT_TIMEOUT_MS
         conn.readTimeout = READ_TIMEOUT_MS

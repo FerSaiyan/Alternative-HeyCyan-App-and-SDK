@@ -472,9 +472,10 @@
     <string name="pro_system_prompt">Instruções do assistente</string>
     <string name="pro_reset_system_prompt">Redefinir instruções do assistente</string>
     <string name="dashboard_live_image_delay">Atualização de imagem do Gemini Live</string>
-    <string name="dashboard_live_image_delay_description">Tira uma nova imagem só quando você começa outra fala relevante depois deste intervalo.</string>
+    <string name="dashboard_live_image_delay_description">Só a primeira: a imagem inicial. A cada fala: uma nova foto quando você começa a falar. Vídeo ao vivo: os óculos transmitem vídeo e o Gemini recebe o quadro mais recente quando você começa a falar (sem esperar a foto).</string>
     <string name="dashboard_live_image_only_first">Só a primeira</string>
     <string name="dashboard_live_image_every_turn">A cada fala</string>
+    <string name="dashboard_live_image_video">Vídeo ao vivo</string>
     <string name="dashboard_quality_detailed_warning_body_eyevue">O modo Detalhado pede ao Eyevue uma imagem de maior qualidade por Bluetooth. Pode demorar mais que os modos de miniatura.</string>
     <string name="dashboard_meta_hint">Examinar → Emparelhar óculos Meta para configurar. Use Testar IA de imagem / Testar voz para fotos. A transmissão de vídeo fica reservada para o futuro Gemini Live.</string>
     <string name="dashboard_transport_permission_title">Permissão de Wi-Fi e localização necessária</string>

@@ -21,14 +21,6 @@ object HeuristicDecisionEngine {
         return null
     }
 
-    fun classifyLiveControl(transcript: String): Int? {
-        val lower = transcript.trim().lowercase()
-        if (lower.isBlank()) return null
-        if (END_HINT.containsMatchIn(lower)) return 1 // END_LIVE
-        if (AGENT_HINT.containsMatchIn(lower)) return 2 // LOCAL_AGENT
-        return null
-    }
-
     // Keep these compact but multilingual (EN/PT/ES/FR/DE/IT/ZH/KO/RU).
     private val IMAGE_HINT = Regex(
         "what do you see|what am i looking at|analy[sz]e (this )?(image|picture|photo)|" +
@@ -54,24 +46,5 @@ object HeuristicDecisionEngine {
             "^(was|wer|wann|wo|warum|wie|erkläre)|" +
             "^(che cosa|chi|quando|dove|perché|come|spiega)|" +
             "^(什么是|谁|何时|哪里|为什么|如何|解释)",
-    )
-    private val END_HINT = Regex(
-        "(that's all|that's everything|stop gemini|end (the )?(live|conversation|session)|goodbye|thanks.*(bye|enough)|exit live)|" +
-            "(pode encerrar|encerre|isso é tudo|obrigado.*(encerr|tchau)|termine.*(conversa|sessão)|para.*(por favor|agora)|chega)|" +
-            "(termina.*(conversaci|sesion)|eso es todo|gracias.*(adi[oó]s|suficiente)|para.*ahora)|" +
-            "(c'est tout|merci.*(au revoir|ça suffit)|tu peux.*arrêter|termine.*(conversation|session))|" +
-            "(das war('s| alles)|danke.*(tschüss|genug)|beende.*(gespräch|sitzung)|stopp.*jetzt)|" +
-            "(basta così|grazie.*(ciao|basta)|termina.*(conversazione|sessione))|" +
-            "(结束对话|就这样|谢谢.*(再见|够了)|停止|退出)|" +
-            "(대화.*(종료|끝)|그만|고마워.*(안녕|됐어))|" +
-            "(это всё|спасибо.*(пока|хватит)|заверши.*(разговор|сессию))",
-    )
-    private val AGENT_HINT = Regex(
-        "(operate.*(phone|app)|open.*app|do it on.*phone|control.*phone|tap.*for me|click.*for me)|" +
-            "(opera.*(celular|telefone|aplicativo)|abre.*(app|spotify|config)|faz.*(no celular|pra mim))|" +
-            "(opera.*(teléfono|aplicaci|móvil)|abre.*app|hazlo.*(teléfono|móvil))|" +
-            "(utilise.*(téléphone|appli)|ouvre.*app|fais-le.*téléphone)|" +
-            "(bediene.*(handy|telefon)|öffne.*app|mach.*handy)|" +
-            "(在手机上操作|打开.*应用|帮我点击)",
     )
 }

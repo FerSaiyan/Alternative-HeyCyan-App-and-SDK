@@ -15,7 +15,7 @@ class FakeGeminiLiveTokenProvider(
     var requestCount = 0
         private set
 
-    override suspend fun requestToken(language: String, imagePrompt: String): LiveTokenConfig {
+    override suspend fun requestToken(language: String, imagePrompt: String, tools: List<String>): LiveTokenConfig {
         lastLanguage = language
         lastImagePrompt = imagePrompt
         requestCount++

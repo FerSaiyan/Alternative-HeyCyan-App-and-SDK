@@ -45,11 +45,19 @@ class GeminiLiveClient(
         fun onModelOutputStarted() = Unit
         fun onModelTurnComplete() = Unit
         fun onAnnouncement(kind: GeminiLiveAnnouncement) = Unit
+        /** [GeminiLiveTools] names to request when a session (or a reconnect) is set up. */
+        fun liveTools(): List<String> = emptyList()
+        /** A Gemini function call; answer it with [sendToolResponse]. Called on a socket thread. */
+        fun onToolCall(id: String, name: String, args: JSONObject) = Unit
     }
 
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val http = OkHttpClient.Builder()
+        // Live video binds the process to the glasses' Wi-Fi Direct network (no internet): the
+        // websocket, token and relay reports must still use the phone's internet network.
+        .socketFactory(com.fersaiyan.cyanbridge.network.InternetRoute.socketFactory(context))
+        .dns(com.fersaiyan.cyanbridge.network.InternetRoute.dns(context))
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
@@ -89,6 +97,9 @@ class GeminiLiveClient(
     private var sessionResumptionJob: Job? = null
     private var meteredSessionLimitJob: Job? = null
     private var visionReportJob: Job? = null
+    private var visualHoldTimeoutJob: Job? = null
+    /** Tools requested for the current session; the client-built setup declares the same ones. */
+    @Volatile private var sessionTools: List<String> = emptyList()
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -255,7 +266,7 @@ class GeminiLiveClient(
 
     /** Applies the per-session visual-input limit and diagnostics to one image send. */
     private fun queueImage(jpegBytes: ByteArray, enqueue: () -> Boolean): Boolean {
-        val limit = if (session.tokenConfig?.let { it.freeTier || it.economy } == true) 10 else MAX_VISUAL_INPUTS_PER_SESSION
+        val limit = visualInputLimit()
         if (session.visualInputCount >= limit) {
             setState(GeminiLiveState.LISTENING, "Live visual-input safety limit reached")
         }
@@ -301,11 +312,20 @@ class GeminiLiveClient(
     fun deferAudioForVisualContext() {
         visualAudioHold.defer(isLive = { session.isLive }) {
             Log.i(TAG, "Deferring Live turn completion until fresh visual context is ready")
+            // A capture that stalls must not keep the user's turn from Gemini.
+            visualHoldTimeoutJob?.cancel()
+            visualHoldTimeoutJob = scope.launch {
+                delay(VISUAL_HOLD_TIMEOUT_MS)
+                Log.w(TAG, "Visual context took over ${VISUAL_HOLD_TIMEOUT_MS} ms; releasing the held turn")
+                releaseAudioAfterVisualContext()
+            }
         }
     }
 
     /** Sends the image first, then releases the held turn tail in socket order. */
     fun releaseAudioAfterVisualContext() {
+        visualHoldTimeoutJob?.cancel()
+        visualHoldTimeoutJob = null
         visualAudioHold.release(isLive = { session.isLive }, send = ::sendAudioPacket) { chunks ->
             Log.i(TAG, "Released deferred Live audio chunks=$chunks after visual context")
         }
@@ -313,8 +333,24 @@ class GeminiLiveClient(
 
     fun cancelDeferredVisualContext() = clearDelayedAudio()
 
-    private fun requestToken(language: String, imagePrompt: String): LiveTokenConfig =
-        kotlinx.coroutines.runBlocking { effectiveTokenProvider.requestToken(language, imagePrompt) }
+    private fun requestToken(language: String, imagePrompt: String): LiveTokenConfig {
+        val tools = listener.liveTools()
+        sessionTools = tools
+        return kotlinx.coroutines.runBlocking { effectiveTokenProvider.requestToken(language, imagePrompt, tools) }
+    }
+
+    /** Answers a [Listener.onToolCall]; false when the socket is gone. */
+    fun sendToolResponse(id: String, name: String, response: JSONObject): Boolean {
+        val sent = socket?.send(GeminiLiveProtocol.buildToolResponse(id, name, response)) == true
+        Log.i(TAG, "Live tool response name=$name sent=$sent")
+        return sent
+    }
+
+    /** Images this session can still send before the relay's per-session limit. */
+    fun remainingVisualInputs(): Int = visualInputLimit() - session.visualInputCount
+
+    private fun visualInputLimit(): Int =
+        if (session.tokenConfig?.let { it.freeTier || it.economy } == true) FREE_VISUAL_INPUTS_PER_SESSION else MAX_VISUAL_INPUTS_PER_SESSION
 
     private fun connectOrReconnect() {
         if (!session.active.get()) return
@@ -506,6 +542,7 @@ class GeminiLiveClient(
             imagePrompt = session.imagePrompt,
             systemPrompt = session.systemPrompt,
             storedSystemPrompt = { ProSubscriptionAiPrefs.getSystemPrompt(appContext) },
+            tools = sessionTools,
         )
         // Do not log the user-provided system instruction or session-resumption handle.
         Log.i(TAG, "Sending Live setup model=${config.model} serverProvided=${setup.serverProvided} resuming=${!session.sessionResumptionHandle.isNullOrBlank()}")
@@ -550,6 +587,11 @@ class GeminiLiveClient(
                     imageTurns.onCapabilities(event)
                     Log.i(TAG, "Live proxy accepts photo+question turns=${event.clientImageTurns} maxImageBytes=${event.maxImageBytes}")
                 }
+                is GeminiLiveServerEvent.ToolCall -> {
+                    Log.i(TAG, "Live tool call name=${event.name}")
+                    listener.onToolCall(event.id, event.name, event.args)
+                }
+                is GeminiLiveServerEvent.ToolCallCancellation -> Log.i(TAG, "Live tool calls cancelled count=${event.ids.size}")
                 GeminiLiveServerEvent.TurnComplete -> if (session.active.get()) {
                     finishModelPlayback()
                     listener.onModelTurnComplete()
@@ -680,7 +722,11 @@ class GeminiLiveClient(
         visualAudioHold.flush(isLive = { session.isLive }, send = ::sendAudioPacket)
     }
 
-    private fun clearDelayedAudio() = visualAudioHold.clear()
+    private fun clearDelayedAudio() {
+        visualHoldTimeoutJob?.cancel()
+        visualHoldTimeoutJob = null
+        visualAudioHold.clear()
+    }
 
     private fun sendAudioPacket(bytes: ByteArray) {
         if (sendRealtimeBlob(GeminiLiveProtocol.REALTIME_AUDIO_FIELD, GeminiLiveProtocol.INPUT_AUDIO_MIME_TYPE, bytes)) {
@@ -765,6 +811,10 @@ class GeminiLiveClient(
         const val TAG = "GeminiLiveClient"
         const val SESSION_RESUMPTION_RECONNECT_MS = 9 * 60 * 1000L
         const val MAX_VISUAL_INPUTS_PER_SESSION = 540 // At most 1 FPS over the 9-minute resumption window.
+        /** The Free/Economy proxy closes the session after its tenth image. */
+        const val FREE_VISUAL_INPUTS_PER_SESSION = 10
+        /** Longest a turn waits for its fresh image ([deferAudioForVisualContext]). */
+        const val VISUAL_HOLD_TIMEOUT_MS = 6_000L
         /** Time for a realtime photo frame to reach the model before its question (video is sampled at <= 1 frame/s). */
         const val IMAGE_INGEST_WAIT_MS = 1_500L
     }

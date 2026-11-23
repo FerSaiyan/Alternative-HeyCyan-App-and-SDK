@@ -10,7 +10,8 @@ object GeminiLiveVisionPreferences {
     // The UI still persists 2 for backward compatibility with the existing dashboard state,
     // but it is now a mode sentinel: 0 = only first image, 2 = every significant speech turn.
     // There is no time-based cooldown in the every-turn mode.
-    val delayOptionsSeconds = listOf(0, 2)
+    // 3 = live video: the glasses stream continuously and the newest frame is sent when speech starts.
+    val delayOptionsSeconds = listOf(0, 2, LIVE_VIDEO)
     private val legacyDelaySeconds = listOf(5, 10, 15)
 
     fun imageDelaySeconds(context: Context): Int {
@@ -31,8 +32,12 @@ object GeminiLiveVisionPreferences {
         return normalized
     }
 
+    /** Live video mode: keep the glasses' stream open and send its newest frame on each speech start. */
+    fun liveVideoEnabled(context: Context): Boolean = imageDelaySeconds(context) == LIVE_VIDEO
+
     fun automaticRefreshIntervalMs(context: Context): Long? =
         if (imageDelaySeconds(context) > 0) 0L else null
 
     private const val DEFAULT_IMAGE_DELAY_SECONDS = 0
+    const val LIVE_VIDEO = 3
 }

@@ -34,6 +34,12 @@ internal sealed interface GeminiLiveServerEvent {
      * photo and its question in one `clientContent` turn. Never sent by Google or older proxies.
      */
     data class ProxyCapabilities(val clientImageTurns: Boolean, val maxImageBytes: Int, val maxImagesPerTurn: Int) : GeminiLiveServerEvent
+
+    /** One function call from `toolCall` ([GeminiLiveTools]); answered with [GeminiLiveProtocol.buildToolResponse]. */
+    class ToolCall(val id: String, val name: String, val args: JSONObject) : GeminiLiveServerEvent
+
+    /** `toolCallCancellation`: the model no longer needs these calls (e.g. the user interrupted). */
+    data class ToolCallCancellation(val ids: List<String>) : GeminiLiveServerEvent
 }
 
 /**
@@ -61,6 +67,7 @@ internal object GeminiLiveProtocol {
         language: String,
         imagePrompt: String,
         systemPrompt: String,
+        tools: List<String> = emptyList(),
         storedSystemPrompt: () -> String,
     ): Setup {
         // If the token was minted with an exact bidiGenerateContentSetup (Pro Live), echo it exactly
@@ -124,6 +131,7 @@ internal object GeminiLiveProtocol {
                 .put("sessionResumption", resumption)
                 .put("contextWindowCompression", contextWindowCompression)
                 .put("systemInstruction", systemInstruction)
+                .apply { GeminiLiveTools.declarations(tools)?.let { put("tools", it) } }
         }
         return Setup(
             json = JSONObject().put("setup", setup).toString(),
@@ -165,6 +173,14 @@ internal object GeminiLiveProtocol {
             .put("turns", JSONArray().put(JSONObject().put("role", "user").put("parts", parts)))
             .put("turnComplete", true)
         return JSONObject().put("clientContent", content).toString()
+    }
+
+    /** The result of one [GeminiLiveServerEvent.ToolCall]. */
+    fun buildToolResponse(id: String, name: String, response: JSONObject): String {
+        val functionResponse = JSONObject().put("id", id).put("name", name).put("response", response)
+        return JSONObject()
+            .put("toolResponse", JSONObject().put("functionResponses", JSONArray().put(functionResponse)))
+            .toString()
     }
 
     /** Query parameter asking the Free/Economy proxy to announce its client-turn capabilities. */
@@ -253,6 +269,21 @@ internal object GeminiLiveProtocol {
 
         message.optJSONObject("usageMetadata")?.let { usage ->
             events += GeminiLiveServerEvent.UsageMetadata(usage)
+        }
+
+        message.optJSONObject("toolCall")?.optJSONArray("functionCalls")?.let { calls ->
+            for (index in 0 until calls.length()) {
+                val call = calls.optJSONObject(index) ?: continue
+                val name = call.optString("name").takeIf { it.isNotBlank() } ?: continue
+                events += GeminiLiveServerEvent.ToolCall(
+                    id = call.optString("id"),
+                    name = name,
+                    args = call.optJSONObject("args") ?: JSONObject(),
+                )
+            }
+        }
+        message.optJSONObject("toolCallCancellation")?.optJSONArray("ids")?.let { ids ->
+            events += GeminiLiveServerEvent.ToolCallCancellation((0 until ids.length()).mapNotNull { ids.optString(it).takeIf(String::isNotBlank) })
         }
 
         val serverContent = message.optJSONObject("serverContent") ?: return events
