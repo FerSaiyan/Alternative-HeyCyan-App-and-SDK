@@ -544,6 +544,12 @@ object LocalChatSessionManager {
         )
     }
 
+    /** Runs a silent clip through the loaded LiteRT model's audio encoder (see LiteRtLocalInferenceEngine.warmUpAudio). */
+    suspend fun warmUpAudio() {
+        val llm = mutex.withLock { engine } as? LiteRtLocalInferenceEngine ?: return
+        llm.warmUpAudio()
+    }
+
     suspend fun unload() {
         generationMutex.withLock { mutex.withLock {
             Log.i(TAG, "Unloading local chat session modelId=${loadedModelId.orEmpty()}")

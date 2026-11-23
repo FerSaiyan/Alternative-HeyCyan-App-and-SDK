@@ -304,6 +304,8 @@ class ModelDownloadForegroundService : Service() {
         val requestsBefore = LocalChatSessionManager.loadRequestCount()
         return try {
             val details = LocalChatSessionManager.ensureModelLoaded(this, model, catalogEntry, settings)
+            // The audio path's one-time start-up (~3 s on the first spoken question otherwise).
+            LocalChatSessionManager.warmUpAudio()
             Log.i(
                 TAG,
                 "Prepared ${model.displayName} on ${details.activeBackend} in ${System.currentTimeMillis() - started} ms" +

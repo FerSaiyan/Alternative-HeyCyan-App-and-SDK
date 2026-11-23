@@ -1,5 +1,20 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-23 — 2.5.1: download -> optimize flow on real phones; audio warm-up
+
+- **`DownloadPrepareFlowTest`** (Device Run, the app's own service): catalog download from HF, the NPU runtime first
+  on Snapdragon, then "Optimizing ... for this phone", then chat's first load and spoken answer.
+  - **Tab S10+, GPU model:** download 453 s, optimize 24 s, "ready" notification. Chat's first load 2.6 s
+    (cold 23.5 s).
+  - **S24 Ultra, NPU model** (`gemma-4-E2B-it-v3mm_Qualcomm_SM8650`): NPU runtime ~9 s, download 31 min on Device
+    Run's network, optimize 2 s. First load 1.85 s on the NPU.
+  - **S26:** the download outran the test's 35-min limit (the NPU runtime had downloaded).
+- **The first spoken answer was still ~5-6 s.** The audio path's start-up costs ~3 s the first time on a phone and
+  ~1-1.5 s after every load (`FirstAudioLatencyTest`).
+  - **Fix:** `warmUpAudio()` runs a silent clip in the optimize step and in the background after every load.
+  - **First question after a reload** (with the preload before the question, as at the wake cue): Tab S10+
+    5.06 -> 0.83 s, S24 Ultra 4.61 -> 0.62 s.
+
 ## 2026-11-23 — 2.5.1: faster spoken and photo questions; multimodal NPU packages
 
 Device Run, Gemma 4 E2B. First token after the recording (spoken) or after the second part (photo), median.

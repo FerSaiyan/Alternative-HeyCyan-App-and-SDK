@@ -169,6 +169,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             this@LiteRtLocalInferenceEngine.modelPath = modelPath
             activeLoadConfig = effectiveConfig
             activeLoadResult = loadOutcome.second
+            // Runs once this load releases operationMutex (see warmUpAudio).
+            spareScope.launch { runCatching { warmUpAudio() } }
             Log.i(
                 TAG,
                 "LiteRT model ready path=$modelPath activeBackend=${loadOutcome.second.activeBackend} " +
@@ -583,6 +585,20 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
      * audio that ran first keeps working. So run audio once, on a short silent clip, before
      * the engine's first image request.
      */
+    /**
+     * Runs a short silent clip through the loaded model's audio encoder. The first spoken question pays the audio
+     * path's start-up otherwise: ~3 s the first time on a phone (filled once, by the download's "Optimizing" step) and
+     * ~1-1.5 s after every load (Device Run FirstAudioLatencyTest, Tab S10+ / S24 Ultra GPU: first question after a
+     * reload 5.1 / 4.6 s, after the next reload 1.9 / 2.0 s, warm 0.4-0.9 s). Called after each load in the
+     * background, so a question asked meanwhile waits for it instead of paying it itself.
+     */
+    suspend fun warmUpAudio() = operationMutex.withLock {
+        val (llm, path) = mutex.withLock { engine to modelPath }
+        if (llm == null || path == null) return@withLock
+        if (runCatching { LiteRtModelProbe.mediaSupport(path) }.getOrNull()?.audio == false) return@withLock
+        primeAudioEncoder(llm)
+    }
+
     private suspend fun primeAudioEncoder(llm: Engine) = withContext(Dispatchers.IO) {
         mutex.withLock { closeSpareLocked() }
         val start = System.currentTimeMillis()
