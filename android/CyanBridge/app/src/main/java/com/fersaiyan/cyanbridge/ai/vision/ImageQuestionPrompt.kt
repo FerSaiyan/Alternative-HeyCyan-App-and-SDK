@@ -175,6 +175,18 @@ object ImageQuestionDefaults {
             "\"Pedro, pass me the salt.\" -> [ignore]\n" +
             "\"Okay, thanks, that's all.\" -> [ignore]"
 
+    /**
+     * A photo question decided with [SPOKEN_DECISION_ROUTES] (the photo button with the SMART decision): the system
+     * turn is the spoken questions' one (kept identical for LiteRT-LM's prefill cache), and this note goes right after
+     * the photo in the user turn (LiteRtLocalInferenceEngine), when the photo is in before the decision. Gemma 4 E2B
+     * still begins most replies about what they see with [camera] and then answers ("[camera]\n[answer] They are
+     * yellow."); the app treats that [camera] as an answer about this photo. Scored on the host with
+     * tools/benchmarks/eval_spoken_route_tags.py --mode image (prompt "routes_after").
+     */
+    const val PHOTO_QUESTION_NOTE =
+        "Here is the photo my glasses camera took for this question, so you can see what I'm looking at. Don't reply " +
+            "[camera]: if I ask about what I see, reply [answer] and answer from the photo."
+
     fun checkingWebCueForLanguage(languageTag: String): String = when (
         Locale.forLanguageTag(languageTag).language.lowercase(Locale.ROOT)
     ) {

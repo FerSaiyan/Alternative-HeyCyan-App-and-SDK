@@ -208,6 +208,17 @@ class GlassesQuestionFlowTest {
         checkAnswer(result.reply, visualExpect())
     }
 
+    /** The photo button in SMART mode: decided with the photo attached; a [camera] reply is an answer about it. */
+    @Test
+    fun smartPhotoButtonDecidesWithThePhoto() {
+        assumeTrue("pass -e gq_target true", args.getString("gq_target") == "true")
+        QuestionRoutingPrefs.setMode(context, QuestionRoutingMode.SMART)
+        val result = ask(DEBUG_PHOTO_BUTTON, audio = visualAudio(), photo = visualImage())
+        assertEquals("ANSWER", result.route)
+        assertEquals("answered with the button's photo", 1, result.images)
+        checkAnswer(result.reply, visualExpect())
+    }
+
     @Test
     fun smartVoicePlainQuestionAnswersWithoutPhoto() {
         assumeTrue("pass -e gq_target true", args.getString("gq_target") == "true")

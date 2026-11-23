@@ -40,6 +40,13 @@ internal data class MultimodalPrompt(val systemInstruction: String, val userRequ
  */
 const val TURN_CONTEXT_ROLE = "turn_context"
 
+/**
+ * Message role for the photo note of a photo question decided with route tags (GenerationConfig.photoNote): a LiteRT
+ * media turn places it with the photo, so the system turn stays the spoken questions' one; elsewhere it is one more
+ * system message.
+ */
+const val PHOTO_NOTE_ROLE = "photo_note"
+
 internal fun buildMultimodalPrompt(
     configuredSystemPrompt: String,
     messages: List<PromptMessage>,
@@ -139,7 +146,7 @@ class LocalModelsProvider {
                 return@withContext streamChatRemote(
                     context = context,
                     messages = messages.map { m ->
-                        if (m["role"] == TURN_CONTEXT_ROLE) m + ("role" to "system") else m
+                        if (m["role"] == TURN_CONTEXT_ROLE || m["role"] == PHOTO_NOTE_ROLE) m + ("role" to "system") else m
                     },
                     onStatus = onStatus,
                     onToken = onToken,
@@ -202,7 +209,7 @@ class LocalModelsProvider {
                 .mapNotNull { m ->
                     // Turn context is a system message everywhere except a LiteRT media turn (see TURN_CONTEXT_ROLE).
                     val role = m["role"]?.trim().orEmpty()
-                        .let { if (it == TURN_CONTEXT_ROLE && !litertMediaTurn) "system" else it }
+                        .let { if ((it == TURN_CONTEXT_ROLE || it == PHOTO_NOTE_ROLE) && !litertMediaTurn) "system" else it }
                     val content = m["content"]?.trim().orEmpty()
                     // A media request's user turn may be the attachment alone (a spoken question as bare audio).
                     val keepEmpty = hasMediaAttachments && role.equals("user", ignoreCase = true)
@@ -213,8 +220,10 @@ class LocalModelsProvider {
             // go to its system turn instead of being dropped.
             val turnContext = chatMessages.filter { it.role == TURN_CONTEXT_ROLE }.joinToString("\n") { it.content }
                 .takeIf { litertMediaTurn && it.isNotBlank() }
+            val photoNote = chatMessages.filter { it.role == PHOTO_NOTE_ROLE }.joinToString("\n") { it.content }
+                .takeIf { litertMediaTurn && imagePaths.isNotEmpty() && it.isNotBlank() }
             val litertMedia = if (litertMediaTurn) {
-                buildMultimodalPrompt(systemPrompt, chatMessages.filterNot { it.role == TURN_CONTEXT_ROLE })
+                buildMultimodalPrompt(systemPrompt, chatMessages.filterNot { it.role == TURN_CONTEXT_ROLE || it.role == PHOTO_NOTE_ROLE })
             } else null
             val effectivePrompt = if (session?.continueExisting == true) {
                 // The open conversation already has the system turn and earlier turns: send only this one.
@@ -265,6 +274,7 @@ class LocalModelsProvider {
                 decideOnce = decideOnce,
                 session = session,
                 turnContext = turnContext,
+                photoNote = photoNote,
             )
 
             val firstCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()
@@ -307,6 +317,7 @@ class LocalModelsProvider {
                 systemInstruction = litertMedia?.systemInstruction,
                 decideOnce = decideOnce,
                 turnContext = turnContext,
+                photoNote = photoNote,
             )
 
             val retryCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()
@@ -368,6 +379,8 @@ class LocalModelsProvider {
         imagePath: String?,
         audioPath: String?,
         turnContext: String?,
+        /** The photo note of a photo question decided with route tags (see [PHOTO_NOTE_ROLE]); null otherwise. */
+        photoNote: String? = null,
     ): Boolean =
         withContext(Dispatchers.IO) {
             if (RemoteOpenAiPrefs.isActive(context)) return@withContext false
@@ -388,7 +401,7 @@ class LocalModelsProvider {
                 settings.systemPromptOverride.trim(),
                 listOf(PromptMessage(role = "System", content = systemMessage.trim()), PromptMessage(role = "User", content = "")),
             ).systemInstruction
-            LocalChatSessionManager.prepareFirstPart(settings, system, imagePath, audioPath, turnContext)
+            LocalChatSessionManager.prepareFirstPart(settings, system, imagePath, audioPath, turnContext, photoNote)
         }
 
     private fun generationStatus(backend: LocalComputeBackend): String {

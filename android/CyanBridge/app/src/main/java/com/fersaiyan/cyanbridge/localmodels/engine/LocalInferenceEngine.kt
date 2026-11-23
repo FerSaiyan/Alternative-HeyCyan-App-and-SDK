@@ -41,6 +41,11 @@ data class GenerationConfig(
      * system turn, so the system turn stays identical and LiteRT-LM can reuse its cached prefill.
      */
     val turnContext: String? = null,
+    /**
+     * A photo question decided with route tags (the photo button with the SMART decision): text that goes with the
+     * photo in the user turn, telling the model it already sees what the user looks at. Null for other requests.
+     */
+    val photoNote: String? = null,
 )
 
 /**

@@ -27,6 +27,7 @@ import com.fersaiyan.cyanbridge.media.sync.TransferProgressPresenter
 import com.fersaiyan.cyanbridge.shared.ai.GlassesAssistantRoute
 import com.fersaiyan.cyanbridge.shared.assistant.AssistantQuestionRouting
 import com.fersaiyan.cyanbridge.shared.assistant.CapturedQuestion
+import com.fersaiyan.cyanbridge.shared.assistant.SpokenQuestionFlow
 import com.fersaiyan.cyanbridge.shared.assistant.VisionReply
 import com.fersaiyan.cyanbridge.shared.assistant.VisionReplyPolicy
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
@@ -45,8 +46,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * The answer half of an image question: the spoken question asked while the photo transfers (or
  * right after it), the photo checks, the chosen provider's answer spoken aloud, and follow-up
- * questions about the same photo while the user keeps asking. Gemini Live and the phone
- * assistant take over before the in-app answer when they are the route.
+ * questions while the user keeps asking. Gemini Live and the phone assistant take over before the
+ * in-app answer when they are the route.
+ *
+ * With the SMART decision (Settings ▸ Question routing) a recorded question on the local model runs the
+ * shared [SpokenQuestionFlow] with the photo attached ([runDecisionPhotoQuestion]): its reply starts with a
+ * route tag (answer about the photo, search, phone, live, ignore) and follow-ups go through the same decision
+ * (a `[camera]` follow-up takes a new photo). Classic mode, transcribed (STT) questions, the Pro relay and the
+ * default description keep the single answer below, with follow-ups about the same photo.
  */
 internal class ImageQuestionFlow(
     private val env: QuestionEnvironment,
@@ -62,6 +69,10 @@ internal class ImageQuestionFlow(
     private val stopGlassesAiAudio: (source: String) -> Unit,
     private val cancelLocalStreamingSpeech: (reason: String) -> Unit,
     private val languageTag: () -> String,
+    /** The Local Agent start of a `[phone]` route (VoiceQuestionFlow.startLocalAgentFromVoice). */
+    private val startLocalAgent: (goal: String) -> Unit = {},
+    /** A new glasses photo for a `[camera]` follow-up (VoiceQuestionFlow.requestDecisionPhoto). */
+    private val requestDecisionPhoto: () -> CompletableDeferred<String?> = { CompletableDeferred(null) },
 ) {
     /** A voice question routed to the camera (Classic ANALYZE_IMAGE): asked again with the photo. */
     @Volatile var pendingVoiceImageQuestion: String? = null
@@ -80,6 +91,13 @@ internal class ImageQuestionFlow(
     @Volatile private var photoForQuestion: String? = null
 
     /**
+     * SMART, recording first: the decision already runs on the recording ([startDecisionBeforePhoto]); the photo
+     * goes here when it arrives (a `[camera]` reply waits for it). Guarded by [photoLock] with [photoForQuestion].
+     */
+    private var decisionPhotoSink: CompletableDeferred<String?>? = null
+    private val photoLock = Any()
+
+    /**
      * The photo and the spoken question arrive in parallel, in either order. For the local model, whichever comes
      * first is prefilled while the other is still coming (LiteRtLocalInferenceEngine.prepareFirstPart).
      */
@@ -93,11 +111,28 @@ internal class ImageQuestionFlow(
     }.getOrDefault(false)
 
     private fun prefillFirstPart(imagePath: String?, audioPath: String?) {
+        val decision = decidesPhotoQuestions()
         env.scope.launch(Dispatchers.IO) {
-            val prepared = providers.prepareLocalPhotoQuestion(imagePath, audioPath)
-            Log.i("ImageQuestion", "First part prefilled=$prepared part=${if (imagePath != null) "photo" else "recording"}")
+            val prepared = providers.prepareLocalPhotoQuestion(imagePath, audioPath, decisionRoutes = decision)
+            Log.i("ImageQuestion", "First part prefilled=$prepared part=${if (imagePath != null) "photo" else "recording"} decision=$decision")
         }
     }
+
+    /**
+     * A recorded photo question goes through the spoken decision (route tags, [runDecisionPhotoQuestion]): SMART
+     * routing, on the local model (LiteRT or llama.cpp), not handed to Gemini Live or the phone assistant. The Pro
+     * relay keeps the single answer: it caps system_context at 2000 characters, which cuts the route list.
+     */
+    private fun decidesPhotoQuestions(): Boolean = runCatching {
+        QuestionRoutingPrefs.mode(env.context) != QuestionRoutingMode.CLASSIC &&
+            !external.usesExternalAssistantUi() &&
+            AssistantQuestionRouting.imageQuestionProvider(
+                route = route(),
+                recordedQuestion = true,
+                spokenProvider = spokenQuestionProvider,
+                mediaProvider = { MediaInferenceRoutingPolicy.resolve(env.context) },
+            ) == AgentProviderType.LOCAL_AGENT
+    }.getOrDefault(false)
 
     private fun hasMicrophonePermission(): Boolean =
         ContextCompat.checkSelfPermission(env.context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -113,6 +148,8 @@ internal class ImageQuestionFlow(
         if (deferred?.isCompleted == false) {
             deferred.complete(null)
         }
+        // A question decided before its photo: no photo will come for it now.
+        synchronized(photoLock) { decisionPhotoSink.also { decisionPhotoSink = null } }?.complete(null)
     }
 
     fun startParallelAudioQuestionIfEligible(offerSpokenQuestion: Boolean) {
@@ -144,6 +181,10 @@ internal class ImageQuestionFlow(
                     val recording = spokenQuestion.audioPath.takeIf { spokenQuestion.error == null && spokenQuestion.heardSpeech }
                     if (!deferred.complete(spokenQuestion)) {
                         spokenQuestion.audioPath?.let { File(it).delete() }
+                    } else if (recording != null && spokenQuestion.text.isNullOrBlank() && decidesPhotoQuestions()) {
+                        // SMART: the question is in before the photo; decide on it now (see startDecisionBeforePhoto).
+                        // When the photo got in first after all, the photo path below picks the recording up.
+                        startDecisionBeforePhoto(deferred, recording)
                     } else if (recording != null && photoForQuestion == null && localPrefillEligible()) {
                         // The question is in before the photo: prefill it while the photo transfers.
                         prefillFirstPart(null, recording)
@@ -194,6 +235,23 @@ internal class ImageQuestionFlow(
 
     fun isDecodableImageFile(file: File): Boolean = readImageMetrics(file) != null
 
+    /**
+     * SMART, the recording came before the photo: the decision runs on the recording now, as a spoken question (the
+     * same cached system turn), while the photo transfers; the photo is delivered to [decisionPhotoSink] for a
+     * `[camera]` reply. False when the photo got in first (the caller then prefills or waits as before).
+     */
+    private fun startDecisionBeforePhoto(recordingDeferred: CompletableDeferred<CapturedQuestion?>, recording: String): Boolean {
+        val sink = synchronized(photoLock) {
+            if (photoForQuestion != null || activeParallelAudioQuestionDeferred !== recordingDeferred) return false
+            activeParallelAudioQuestionDeferred = null
+            activeParallelAudioQuestionJob = null
+            CompletableDeferred<String?>().also { decisionPhotoSink = it }
+        }
+        Log.i("ImageQuestion", "Recording before the photo: deciding on it while the photo transfers")
+        runDecisionPhotoQuestion(sink, recording, capture().pendingImageQuestionSource)
+        return true
+    }
+
     fun onImageReadyForQuestion(
         imagePath: String,
         source: ImageQuestionSource,
@@ -205,6 +263,21 @@ internal class ImageQuestionFlow(
             val usable = readImageMetrics(File(imagePath)) != null
             Log.i("AIHijack", "Photo delivered to decide-once question usable=$usable")
             if (!sink.complete(if (usable) imagePath else null)) File(imagePath).delete()
+            return
+        }
+        // The question was decided before its photo arrived (SMART, recording first): the photo is for its [camera].
+        val decisionSink = synchronized(photoLock) {
+            decisionPhotoSink.also { decisionPhotoSink = null } ?: null.also { photoForQuestion = imagePath }
+        }
+        if (decisionSink != null) {
+            val file = File(imagePath)
+            val ageMs = System.currentTimeMillis() - file.lastModified()
+            val usable = readImageMetrics(file) != null && ageMs in 0..MAX_IMAGE_AGE_MS
+            Log.i("ImageQuestion", "Photo delivered to the question decided before it usable=$usable")
+            if (!usable) {
+                env.runOnUiThread { Toast.makeText(env.context, "Image transfer was incomplete. Please try again.", Toast.LENGTH_LONG).show() }
+            }
+            decisionSink.complete(if (usable) imagePath else null)
             return
         }
         val context = env.context
@@ -233,7 +306,6 @@ internal class ImageQuestionFlow(
             return
         }
 
-        photoForQuestion = imagePath
         val recordingNow = activeParallelAudioQuestionDeferred
         if (recordingNow != null && !recordingNow.isCompleted && localPrefillEligible()) {
             // The photo is in before the question: prefill it while the user is still speaking.
@@ -295,6 +367,12 @@ internal class ImageQuestionFlow(
                 }
             }
             val externalAutomation = external.usesExternalAssistantUi()
+            // A recording the model hears (no transcript) is decided with route tags in SMART mode.
+            val recording = captured?.takeIf { it.heardSpeech && it.text.isNullOrBlank() }?.audioPath
+            if (!isLiveRoute && recording != null && initialQuestion.isNullOrBlank() && decidesPhotoQuestions()) {
+                withContext(Dispatchers.Main) { runDecisionPhotoQuestion(CompletableDeferred(imagePath), recording, source) }
+                return@launch
+            }
             fun offerFollowUp() {
                 env.scope.launch {
                     delay(500L)
@@ -330,20 +408,17 @@ internal class ImageQuestionFlow(
             userQuestion = userQuestion,
         )
 
-    fun triggerAssistantImageQuery(
-        imagePath: String,
-        userQuestion: String? = null,
-        audioPath: String? = null,
-        source: ImageQuestionSource = ImageQuestionSourcePolicy.defaultSource(),
-        onReplySpoken: (() -> Unit)? = null,
-    ) {
-        val context = env.context
+    /**
+     * The debounce and the one-question-at-a-time guard of an image question; false (the recording deleted) when
+     * this one is dropped. Otherwise the question holds [imageQueryInProgress] and the foreground work.
+     */
+    private fun beginImageQuery(audioPath: String?): Boolean {
         // Debounce: prevent duplicate requests within 5 seconds
         val now = System.currentTimeMillis()
         if (now - lastImageQueryAtMs < 5000) {
             audioPath?.let { File(it).delete() }
             Log.w("AIHijack", "Image query debounced (last was ${now - lastImageQueryAtMs}ms ago)")
-            return
+            return false
         }
 
         // Guard against concurrent requests
@@ -352,12 +427,65 @@ internal class ImageQuestionFlow(
             Log.w("AIHijack", "Image query already in progress; treating duplicate action as barge-in")
             cancelLocalStreamingSpeech("duplicate image-query action")
             imageQueryInProgress.set(false)
-            return
+            return false
         }
         foreground.begin("Analyzing glasses image")
         foreground.armLocalModelLoadCue()
-
         lastImageQueryAtMs = now
+        return true
+    }
+
+    /**
+     * A recorded photo question with the SMART decision: the shared [SpokenQuestionFlow] decides with the photo
+     * attached (the spoken questions' system turn, so the 2.5.1 prefill cache and the either-order prefill of
+     * [prefillFirstPart] still apply) and acts on the route; follow-ups continue its conversation. The photo stays
+     * where the image flow keeps it; the recordings are deleted by the flow.
+     */
+    private fun runDecisionPhotoQuestion(photo: kotlinx.coroutines.Deferred<String?>, audioPath: String, source: ImageQuestionSource) {
+        if (!beginImageQuery(audioPath)) {
+            synchronized(photoLock) { if (decisionPhotoSink === photo) decisionPhotoSink = null }
+            return
+        }
+        GlassesQuestionTestHooks.emit("image_query", "question=true audio=true source=${source.wireName} decision=true")
+        val ports = AndroidSpokenQuestionPorts(
+            env = env,
+            provider = AgentProviderType.LOCAL_AGENT,
+            speaker = speaker,
+            providers = providers,
+            live = live,
+            languageTag = languageTag,
+            requestPhoto = requestDecisionPhoto,
+            startLocalAgent = startLocalAgent,
+            photoQuestion = true,
+        )
+        val flow = SpokenQuestionFlow(
+            generationScope = env.scope,
+            generationContext = Dispatchers.IO,
+            microphone = microphone,
+            brain = ports,
+            actions = ports,
+            speech = ports,
+            events = GlassesQuestionTestHooks::emit,
+        )
+        env.scope.launch {
+            try {
+                flow.runWithPhoto(audioPath, photo)
+            } finally {
+                imageQueryInProgress.set(false)
+                foreground.finish()
+            }
+        }
+    }
+
+    fun triggerAssistantImageQuery(
+        imagePath: String,
+        userQuestion: String? = null,
+        audioPath: String? = null,
+        source: ImageQuestionSource = ImageQuestionSourcePolicy.defaultSource(),
+        onReplySpoken: (() -> Unit)? = null,
+    ) {
+        val context = env.context
+        if (!beginImageQuery(audioPath)) return
         GlassesQuestionTestHooks.emit(
             "image_query",
             "question=${!userQuestion.isNullOrBlank()} audio=${audioPath != null} source=${source.wireName}",

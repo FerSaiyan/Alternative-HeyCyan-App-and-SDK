@@ -289,6 +289,7 @@ object LocalChatSessionManager {
         decideOnce: DecideOnceRequest? = null,
         session: SessionTurn? = null,
         turnContext: String? = null,
+        photoNote: String? = null,
     ): String {
         return generateInternal(
             settings = settings,
@@ -302,6 +303,7 @@ object LocalChatSessionManager {
             decideOnce = decideOnce,
             session = session,
             turnContext = turnContext,
+            photoNote = photoNote,
         ).also { lastSessionTokens = it.sessionTokens }.text
     }
 
@@ -330,6 +332,7 @@ object LocalChatSessionManager {
         decideOnce: DecideOnceRequest? = null,
         session: SessionTurn? = null,
         turnContext: String? = null,
+        photoNote: String? = null,
     ): GenerationResult {
         val reqId = UUID.randomUUID().toString()
         val llm: LocalInferenceEngine
@@ -409,6 +412,7 @@ object LocalChatSessionManager {
                                     decideOnce = decideOnce,
                                     session = session,
                                     turnContext = turnContext,
+                                    photoNote = photoNote,
                                 ),
                                 onToken = { chunk ->
                                     // Newline-only chunks matter: they end a spoken-decision payload line.
@@ -524,6 +528,7 @@ object LocalChatSessionManager {
         imagePath: String?,
         audioPath: String?,
         turnContext: String?,
+        photoNote: String? = null,
     ): Boolean {
         val llm = mutex.withLock { engine } as? LiteRtLocalInferenceEngine ?: return false
         return llm.prepareFirstPart(
@@ -540,6 +545,7 @@ object LocalChatSessionManager {
                 audioPath = audioPath,
                 systemInstruction = systemInstruction,
                 turnContext = turnContext,
+                photoNote = photoNote,
             ),
         )
     }

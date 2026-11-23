@@ -350,7 +350,7 @@ internal class VoiceQuestionFlow(
             providers = providers,
             live = live,
             languageTag = languageTag,
-            requestPhoto = ::requestDecideOncePhoto,
+            requestPhoto = ::requestDecisionPhoto,
             startLocalAgent = ::startLocalAgentFromVoice,
         )
         val flow = SpokenQuestionFlow(
@@ -372,7 +372,7 @@ internal class VoiceQuestionFlow(
     }
 
     /** Starts a glasses photo whose file goes to the returned deferred (null if capture fails). */
-    private fun requestDecideOncePhoto(): kotlinx.coroutines.CompletableDeferred<String?> {
+    fun requestDecisionPhoto(): kotlinx.coroutines.CompletableDeferred<String?> {
         val sink = kotlinx.coroutines.CompletableDeferred<String?>()
         imageFlow.pendingPhotoSink?.complete(null)
         imageFlow.pendingPhotoSink = sink

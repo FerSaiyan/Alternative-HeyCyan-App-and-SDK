@@ -44,8 +44,12 @@ interface SpokenQuestionBrain {
     /** True when the model keeps the conversation open between turns (Android: local LiteRT sessions). */
     val keepsConversation: Boolean
 
-    /** The decision turn: the recording with the route-tag instructions; [onToken] gets the streamed reply. */
-    suspend fun decide(audioPath: String, session: SpokenSessionTurn?, onToken: (String) -> Unit): String
+    /**
+     * The decision turn: the recording with the route-tag instructions; [onToken] gets the streamed reply. [images] is
+     * the photo a photo question was asked with (the photo button), which the model already sees: it is told not to
+     * ask for the camera.
+     */
+    suspend fun decide(audioPath: String, images: List<String>, session: SpokenSessionTurn?, onToken: (String) -> Unit): String
 
     /** Stops the decision generation once its route is known and no conversation needs the rest. */
     fun stopGeneration()
@@ -92,7 +96,26 @@ interface SpokenQuestionActions {
 
     fun startPhoneTask(goal: String)
 
-    fun startLive(prompt: String)
+    /**
+     * False when the phone agent is not set up. A photo question then answers instead of starting it (a spoken
+     * question starts it anyway, and the agent says what is missing).
+     */
+    fun phoneTaskAvailable(): Boolean = true
+
+    /** Starts a live conversation; [photoPath] is the photo of a photo question, shown to it first. */
+    fun startLive(prompt: String, photoPath: String? = null)
+}
+
+/** An answer spoken while the model writes it (Android: the local model's streaming speech). */
+interface SpokenAnswerStream {
+    /** The next part of the answer, without tags. */
+    fun append(text: String)
+
+    /** The answer is complete; returns once it was spoken (or stopped). [answer] is all of it. */
+    suspend fun finish(answer: String)
+
+    /** The question failed: stop and drop what is queued. */
+    fun cancel()
 }
 
 /** Short cues queued after what is already playing. */
@@ -110,6 +133,9 @@ interface SpokenQuestionSpeech {
 
     /** Speaks an answer and returns once it was spoken. */
     suspend fun speakAnswer(text: String)
+
+    /** A stream for an answer that starts speaking while it is written; null to speak answers once complete. */
+    fun answerStream(): SpokenAnswerStream? = null
 
     /** The user's language is English (the engines' summaries are mostly English). */
     fun englishSpeaker(): Boolean
@@ -187,21 +213,9 @@ class SpokenQuestionFlow(
                 }
             }
             val sessions = brain.keepsConversation
-            var continueSession = sessions && SpokenConversation.canContinue(clock())
+            val continueSession = sessions && SpokenConversation.canContinue(clock())
             if (!continueSession) SpokenConversation.reset()
-            var turn = 1
-            while (true) {
-                val route = runTurn(audioPath!!, continueSession.takeIf { sessions }, turn)
-                microphone.deleteRecording(audioPath)
-                audioPath = null
-                if (route == SpokenRoute.IGNORE) SpokenConversation.reset() else SpokenConversation.turnEnded(clock())
-                if (!SpokenFollowUpPolicy.listensForFollowUp(sessions, route)) break
-                val followUp = microphone.recordQuestion(settings.followUpWindowMs)
-                audioPath = followUp.audioPath
-                if (followUp.error != null || !followUp.heardSpeech || audioPath == null) break
-                continueSession = true
-                turn++
-            }
+            converse(audioPath!!, photoQuestion = null, continueSession) { audioPath = it }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -215,11 +229,79 @@ class SpokenQuestionFlow(
     }
 
     /**
-     * One turn: decision, the route's action and the spoken reply. [continueSession] is null when the
-     * model keeps no conversation, else whether to continue the open one.
+     * A photo question (the photo button, a photo wake): the glasses photo [photo] and the recording are taken in
+     * parallel. It starts a new conversation; follow-ups continue it like a spoken question's (there `[camera]`
+     * takes a new photo). The caller keeps the photo; the flow deletes only the recordings.
+     * - The photo is already here (it came first, or together): the first turn decides with it attached. A
+     *   `[camera]` reply is an answer about it, `[search]` keeps it in the conversation, `[live]` opens with it.
+     * - The recording came first: the first turn decides on it alone, exactly like a spoken question (same system
+     *   turn, served from the prefill cache), while the photo transfers. Only `[camera]` waits for this photo and
+     *   answers with it; `[live]` waits for it too. Deciding on the recording with the photo's turn after it made Gemma
+     *   answer the photo instead of the question (host eval, 2026-11-23).
      */
-    private suspend fun runTurn(audioPath: String, continueSession: Boolean?, turn: Int): SpokenRoute {
+    suspend fun runWithPhoto(audioPath: String, photo: Deferred<String?>) {
+        var recording: String? = audioPath
+        try {
+            SpokenConversation.reset()
+            converse(audioPath, PhotoQuestion(photo), continueSession = false) { recording = it }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            PlatformLogger.e(TAG, "Photo question with the decision model failed", error)
+            SpokenConversation.reset()
+            events.emit("reply", "provider=${brain.name} images=1 audio=true text=$MODEL_ERROR_PREFIX: ${error.message}")
+            speech.sayQuestionFailed()
+        } finally {
+            recording?.let(microphone::deleteRecording)
+        }
+    }
+
+    /**
+     * The question's turns: the first with [audioPath] (and [photoPath] for a photo question), then follow-ups heard
+     * right after an answer where the conversation is kept. [recording] tracks the recording not yet deleted.
+     */
+    private suspend fun converse(audioPath: String, photoQuestion: PhotoQuestion?, continueSession: Boolean, recording: (String?) -> Unit) {
+        val sessions = brain.keepsConversation
+        var audio = audioPath
+        var question = photoQuestion
+        var continued = continueSession
+        var turn = 1
+        while (true) {
+            val route = runTurn(audio, continued.takeIf { sessions }, turn, question)
+            microphone.deleteRecording(audio)
+            recording(null)
+            // Follow-ups decide without it: the photo is in the conversation, and [camera] takes a new one.
+            question = null
+            if (route == SpokenRoute.IGNORE) SpokenConversation.reset() else SpokenConversation.turnEnded(clock())
+            if (!SpokenFollowUpPolicy.listensForFollowUp(sessions, route)) break
+            val followUp = microphone.recordQuestion(settings.followUpWindowMs)
+            recording(followUp.audioPath)
+            audio = followUp.audioPath ?: break
+            if (followUp.error != null || !followUp.heardSpeech) break
+            continued = true
+            turn++
+        }
+    }
+
+    /** The photo of a photo question; [attached] when it was in before the decision. */
+    private class PhotoQuestion(val photo: Deferred<String?>) {
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        val attached: String? = if (photo.isCompleted && !photo.isCancelled) photo.getCompleted() else null
+    }
+
+    /**
+     * One turn: decision, the route's action and the spoken reply. [continueSession] is null when the
+     * model keeps no conversation, else whether to continue the open one. [photoQuestion] is the photo of a photo
+     * question (first turn only).
+     */
+    private suspend fun runTurn(audioPath: String, continueSession: Boolean?, turn: Int, photoQuestion: PhotoQuestion? = null): SpokenRoute {
         var photoPath: String? = null
+        val questionPhoto = photoQuestion?.attached
+        val withPhoto = questionPhoto != null
+        // The turn's answer saw a photo (attached, or the one a [camera] reply waited for or took).
+        var answeredWithPhoto = withPhoto
+        var stream: SpokenAnswerStream? = null
+        var streamedChars = 0
         try {
             val started = clock()
             var continued = continueSession == true
@@ -232,14 +314,26 @@ class SpokenQuestionFlow(
                 val job = generationScope.async(generationContext) {
                     brain.decide(
                         audioPath = audioPath,
+                        images = listOfNotNull(questionPhoto),
                         session = cont?.let {
                             SpokenSessionTurn(SpokenConversation.SESSION_KEY, it, note = if (it) SpokenConversation.takeNote() else null)
                         },
                         onToken = { delta ->
                             streamed.append(delta)
-                            if (!early.isCompleted && SpokenDecisionParser.isComplete(streamed.toString())) {
-                                early.complete(SpokenDecisionParser.parse(streamed.toString()))
+                            val text = streamed.toString()
+                            if (!early.isCompleted && SpokenDecisionParser.isComplete(text, withPhoto)) {
+                                early.complete(SpokenDecisionParser.parse(text, withPhoto))
                                 if (cont == null) brain.stopGeneration()
+                            }
+                            // An answer starts speaking as it is written (where the platform streams speech).
+                            val route = SpokenDecisionParser.routeOf(text)
+                            if (route == SpokenRoute.ANSWER || (withPhoto && route == SpokenRoute.CAMERA)) {
+                                val speakable = SpokenDecisionParser.speakablePrefix(text)
+                                if (speakable.length > streamedChars) {
+                                    if (stream == null) stream = speech.answerStream()
+                                    stream?.append(speakable.substring(streamedChars))
+                                    streamedChars = speakable.length
+                                }
                             }
                         },
                     )
@@ -255,7 +349,7 @@ class SpokenQuestionFlow(
                         } else {
                             // A failed model call must not be read out as an answer.
                             if (reply.startsWith(MODEL_ERROR_PREFIX)) throw IllegalStateException(reply)
-                            SpokenDecisionParser.parse(reply)
+                            SpokenDecisionParser.parse(reply, withPhoto)
                         }
                     }
                 }
@@ -275,18 +369,20 @@ class SpokenQuestionFlow(
             PlatformLogger.i(
                 TAG,
                 "Spoken decision route=${decision.route} tagged=${decision.tagged} provider=${brain.name} " +
-                    "turn=$turn continued=$continued ms=$decisionMs",
+                    "turn=$turn continued=$continued photo=$withPhoto askedCamera=${decision.askedCamera} ms=$decisionMs",
             )
             com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticEvents.info(
                 com.fersaiyan.cyanbridge.shared.diagnostics.DiagnosticSubsystem.QUESTION, "smart route decided",
                 mapOf(
                     "route" to decision.route.toString(), "tagged" to decision.tagged.toString(), "provider" to brain.name,
                     "turn" to turn.toString(), "continued" to continued.toString(), "ms" to decisionMs.toString(),
+                    "photo" to withPhoto.toString(), "askedCamera" to decision.askedCamera.toString(),
                 ),
             )
             events.emit(
                 "spoken_decision",
-                "route=${decision.route} tagged=${decision.tagged} ms=$decisionMs payload=${decision.payload.take(120)}",
+                "route=${decision.route} tagged=${decision.tagged} ms=$decisionMs photo=$withPhoto " +
+                    "askedCamera=${decision.askedCamera} payload=${decision.payload.take(120)}",
             )
 
             fun checkedAnswer(answer: String): String {
@@ -314,14 +410,41 @@ class SpokenQuestionFlow(
                     ?: null.also { PlatformLogger.i(TAG, "Answer in the conversation not usable: chars=${answer.length}") }
             }
 
+            // A photo question answered from its photo without a decision (bare [camera], or [phone] with no phone
+            // agent): in the conversation, which holds the photo, or the recording again with it.
+            suspend fun answerAboutPhoto(instruction: String): String =
+                answerInSession(instruction) ?: answerRecording(listOfNotNull(questionPhoto))
+
+            // The answer that has been speaking since its first words (finished after the turn's events).
+            var streamedAnswer: SpokenAnswerStream? = null
             val spokenReply: String? = when (decision.route) {
-                SpokenRoute.ANSWER -> decision.payload.ifBlank { SpokenDecisionParser.clean(fullReply()) }
+                SpokenRoute.ANSWER -> {
+                    val answer = decision.payload.ifBlank { SpokenDecisionParser.clean(fullReply()) }
+                    val open = stream
+                    if (open != null) {
+                        val all = SpokenDecisionParser.speakablePrefix(fullReply())
+                        if (all.length > streamedChars) open.append(all.substring(streamedChars))
+                        streamedAnswer = open
+                        answer
+                    } else if (answer.isBlank() && decision.askedCamera) {
+                        answerAboutPhoto(PHOTO_ANSWER_NOTE)
+                    } else {
+                        answer
+                    }
+                }
                 SpokenRoute.CAMERA -> {
-                    speech.queueCue(SpokenCue.LOOKING)
-                    photoPath = withTimeoutOrNull(settings.photoTimeoutMs) { actions.takePhoto() }
-                    if (photoPath == null) PlatformLogger.w(TAG, "Spoken decision: no photo from the glasses; answering without it")
-                    photoPath?.let { answerInSession("", listOf(it), note = PHOTO_NOTE) }
-                        ?: answerRecording(listOfNotNull(photoPath)).also { SpokenConversation.pendingNote = "You told them: $it" }
+                    // A photo question whose recording came first: its photo is on the way (never deleted here).
+                    val coming = photoQuestion?.photo
+                    val photo = if (coming != null) {
+                        withTimeoutOrNull(settings.photoTimeoutMs) { coming.await() }
+                    } else {
+                        speech.queueCue(SpokenCue.LOOKING)
+                        withTimeoutOrNull(settings.photoTimeoutMs) { actions.takePhoto() }.also { photoPath = it }
+                    }
+                    if (photo == null) PlatformLogger.w(TAG, "Spoken decision: no photo from the glasses; answering without it")
+                    answeredWithPhoto = photo != null
+                    photo?.let { answerInSession("", listOf(it), note = PHOTO_NOTE) }
+                        ?: answerRecording(listOfNotNull(photo)).also { SpokenConversation.pendingNote = "You told them: $it" }
                 }
                 SpokenRoute.SEARCH -> {
                     speech.queueCue(SpokenCue.CHECKING_WEB)
@@ -334,7 +457,7 @@ class SpokenQuestionFlow(
                     )
                     val englishSpeaker = speech.englishSpeaker()
                     suspend fun answerFrom(webText: String): String =
-                        answerInSession(webText) ?: answerRecording(emptyList(), webText).also {
+                        answerInSession(webText) ?: answerRecording(listOfNotNull(questionPhoto), webText).also {
                             SpokenConversation.pendingNote = "You told them: $it"
                         }
                     when (val plan = WebAnswerPolicy.plan(web, englishSpeaker)) {
@@ -345,12 +468,16 @@ class SpokenQuestionFlow(
                                 .also { SpokenConversation.pendingNote = "You told them: $it" }
                     }
                 }
-                SpokenRoute.PHONE -> {
+                SpokenRoute.PHONE -> if (photoQuestion != null && !actions.phoneTaskAvailable()) {
+                    PlatformLogger.i(TAG, "Photo question asked for a phone task, but the phone agent is not set up: answering")
+                    answerAboutPhoto(NO_PHONE_NOTE)
+                } else {
                     actions.startPhoneTask(decision.payload)
                     null
                 }
                 SpokenRoute.LIVE -> {
-                    actions.startLive(LIVE_PROMPT)
+                    val livePhoto = photoQuestion?.let { withTimeoutOrNull(settings.photoTimeoutMs) { it.photo.await() } }
+                    actions.startLive(if (livePhoto != null) PHOTO_LIVE_PROMPT else LIVE_PROMPT, livePhoto)
                     null
                 }
                 SpokenRoute.IGNORE -> null
@@ -361,13 +488,20 @@ class SpokenQuestionFlow(
             events.emit("spoken_turn", "n=$turn continued=$continued sessionTokens=$sessionTokens route=${decision.route}")
             events.emit(
                 "reply",
-                "provider=${brain.name} images=${if (photoPath != null) 1 else 0} audio=true " +
+                "provider=${brain.name} images=${if (answeredWithPhoto) 1 else 0} audio=true " +
                     "text=${spokenReply?.let(SpokenDecisionParser::clean) ?: "[${decision.route.tag}]"}",
             )
-            if (!spokenReply.isNullOrBlank()) {
+            val streamed = streamedAnswer
+            if (streamed != null) {
+                // Queue the rest of the streamed answer and wait until it was spoken.
+                withTimeoutOrNull(settings.answerSpeechTimeoutMs) { streamed.finish(SpokenDecisionParser.clean(spokenReply.orEmpty())) }
+            } else if (!spokenReply.isNullOrBlank()) {
                 withTimeoutOrNull(settings.answerSpeechTimeoutMs) { speech.speakAnswer(SpokenDecisionParser.clean(spokenReply)) }
             }
             return decision.route
+        } catch (failure: Throwable) {
+            stream?.cancel()
+            throw failure
         } finally {
             photoPath?.let(actions::deletePhoto)
         }
@@ -383,5 +517,18 @@ class SpokenQuestionFlow(
         /** Text before the photo turn in the open conversation (the question is the earlier recording). */
         const val PHOTO_NOTE = "Here is the photo from the glasses camera. Answer their question now, starting with [answer]."
         const val LIVE_PROMPT = "The user asked to start a live SpokenConversation. Greet them briefly and listen."
+
+        /** Live opened from a photo question: the photo is its first frame. */
+        const val PHOTO_LIVE_PROMPT =
+            "The user asked to start a live conversation about what they are looking at (the photo). Greet them briefly, " +
+                "say in one short sentence what you see, and listen."
+
+        /** A photo question whose reply asked for the camera: the conversation already holds the photo. */
+        const val PHOTO_ANSWER_NOTE = "You already have the photo from the glasses camera above. Answer their question about it now, starting with [answer]."
+
+        /** A photo question that asked for a phone task while the phone agent is not set up. */
+        const val NO_PHONE_NOTE =
+            "You cannot do things on their phone right now (phone control is not set up). Tell them so in one short " +
+                "sentence, then help with what you can, starting with [answer]."
     }
 }

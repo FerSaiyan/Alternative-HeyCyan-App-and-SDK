@@ -122,6 +122,8 @@ internal class GlassesQuestions private constructor(context: Context) : Question
         stopGlassesAiAudio = ::stopGlassesAiAudio,
         cancelLocalStreamingSpeech = ::cancelLocalStreamingSpeech,
         languageTag = ::languageTag,
+        startLocalAgent = { goal -> voice.startLocalAgentFromVoice(goal) },
+        requestDecisionPhoto = { voice.requestDecisionPhoto() },
     )
     private val voice: VoiceQuestionFlow = VoiceQuestionFlow(
         env = this,

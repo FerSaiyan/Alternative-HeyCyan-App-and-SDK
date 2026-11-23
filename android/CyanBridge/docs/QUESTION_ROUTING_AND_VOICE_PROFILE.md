@@ -25,8 +25,41 @@ enrollment records through `AudioSessionCoordinator` like every other microphone
 | CLASSIC | On-device STT first, then the transcript router (`AssistantRequestRouter`); untranscribed audio goes straight to the model |
 | SHADOW (debug) | Classic, plus the old `QUESTION_DECISION_SHADOW` log for transcripts |
 
-A photo-mapped wake and the photo button keep the photo flow in every mode: photo + the recording
-in one request (system instruction, bare audio), no decision.
+A photo-mapped wake and the photo button take the photo and record the question in parallel. In
+SMART mode on the local model (LiteRT, llama.cpp) that photo question goes through the same decision
+(next section); Classic mode, a transcribed (STT) question, the Pro relay and Gemini Live keep the
+single answer: photo + the recording in one request (system instruction, bare audio), no decision.
+
+### Photo questions with the decision (SMART, 2026-11-23)
+
+`ImageQuestionFlow.runDecisionPhotoQuestion` → `SpokenQuestionFlow.runWithPhoto(recording, photo)`:
+
+```text
+system = the spoken questions' turn (glasses instruction + route tags), identical, so the LiteRT-LM
+         prefill cache (CPU clone / GPU-NPU spare) serves it for both kinds of question
+photo in first (or both together): decide with the photo attached
+  user = time, photo, PHOTO_QUESTION_NOTE ("…so you can see what I'm looking at. Don't reply [camera]…"), recording
+  photo first: [time, photo, note + "My question comes next."] "OK." (prefilled while they speak) | [recording]
+  [camera] = an answer about this photo (Gemma 4 E2B still starts most visual replies with "[camera]\n[answer] …");
+  a bare [camera] gets one more turn ("answer from the photo you have")
+recording in first: decide on it alone, exactly like a spoken question, while the photo transfers
+  [camera] waits for the button's photo (no second photo) and answers with it in the conversation;
+  every other route acts before the photo is in
+reply  = [answer] (streams to speech as written)  [search] <q> (the photo stays in the conversation)
+         [phone] <task> (only if LocalAgentController.unavailableReason == null, else answered)
+         [live] (Gemini Live opens with the photo)  [ignore]
+follow-ups (5 s window) = spoken decision turns in the same conversation; [camera] takes a new photo
+```
+
+Deciding on the recording with the photo's turn after it (the 2.5.1 recording-first prefill) made Gemma
+answer the photo instead of the question (host probe: plain/time/ignore 0/9 → mostly [camera] or a
+description), so that order is decided on the recording alone.
+
+The note goes with the photo (`GenerationConfig.photoNote`, message role `photo_note`), not in the system
+turn. Scored on the host with `eval_spoken_route_tags.py --mode image` and on the phone/AVD with
+`PhotoQuestionPrefillTest` (`decide_*` modes). The Pro relay stays on the single answer: `/image-query`
+appends `system_context` but caps it at 2000 characters (`lib/spoken-question.ts`), which cuts the route
+list (see the worklog for what the relay would need).
 
 ### Spoken decision (SMART)
 

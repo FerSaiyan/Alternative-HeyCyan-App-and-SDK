@@ -13,7 +13,7 @@ enum class WakeQuestion {
     /** The AI button's voice route (Classic: transcript router, or the external assistant). */
     VOICE_QUESTION,
 
-    /** A photo question: photo plus the spoken question, no decision. */
+    /** A photo question: photo plus the spoken question (decided with route tags in SMART mode on the local model). */
     IMAGE_QUESTION,
 }
 
