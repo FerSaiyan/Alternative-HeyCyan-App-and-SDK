@@ -1,5 +1,51 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-23 — 2.5.1 (branch `dev-2.5.1`): download-time NPU runtime + GPU warm-up, NPU builds for small models, ride/bus reader
+
+- **Download time, not first use:**
+  - The Hexagon skel downloads before an NPU model; a failure no longer fails the model.
+  - `NpuRuntimePrefetch` (WorkManager) retries, and also covers app updates to a new QAIRT and imported models.
+  - After a LiteRT download, the service loads the model once with chat's settings ("Optimizing … for this phone"),
+    which fills the engine cache, then unloads it.
+  - Device Run, Gemma 4 E2B GPU (`LiteRtGpuWarmCacheTest`):
+    - S24U: init 12.6 s -> 4.7 s, first reply 5.9 s -> 2.4 s; cache 127 MB.
+    - Tab S10+: init 23.5 s -> 2.6 s, first reply 4.4 s -> 1.8 s; cache 1.06 GB (Mali weight cache).
+- **Notifications:** POST_NOTIFICATIONS is asked at onboarding's model step and when a download starts later.
+- **Per-SoC NPU builds of the small models** (`NpuArtifacts` / `NpuFloatRunner`, list generated from
+  `Fertroll10/cyanbridge-npu-models@3a634734` CATALOG.json by `tools/litert-npu/gen_npu_artifact_list.py`):
+  - Walking Aid YOLO11n, WeSpeaker, and PP-OCRv6 small det/rec.
+  - New Snapdragon LiteRT builds: SM8450-SM8850, LiteRT 2.4.0 + QAIRT 2.52, fp16. The repo had only QNN `.bin` files.
+  - Each build has its own tensor types; the runner quantizes and dequantizes with the file's specs.
+  - Builds and work: `/mnt/seagate/ML/npu-app-251-20261123/`.
+- **Voice filter on the NPU:**
+  - Thresholds 0.20 / 0.44, refit with the 2026-11-19 protocol (`/mnt/seagate/ML/speaker-npu-thresholds-20261123/`).
+  - Both NPU variants are identical (cos 0.99999976) and share a template. NPU vs int8 mean window cos 0.953, so the
+    NPU model has its own template.
+  - A load failure falls back to int8.
+- **Walking Aid ride/bus reader** (owner design 2026-10-28):
+  - At start, "What do you need help with?": the answer is voice-gated, Gemma interprets it, keywords as fallback.
+    Goals: describe / ride / bus. A Settings switch turns the question off.
+  - Ride plates can come from the Uber/99 notification (in memory only).
+  - A stable car or bus box triggers PP-OCRv6 small on a crop: plate format rules, an exact plate match in 2 of 5
+    reads, bus route/destination matching. Speech in 9 languages.
+  - YOLO skips frames while Gemma generates on a non-NPU detector.
+- **Device Run 2026-11-23** (`NpuCatalogDeviceTest`):
+  - SM8550 / SM8650 / SM8750 / SM8850:
+    - YOLO bus.jpg 5/5;
+    - WeSpeaker cos >= 0.99992;
+    - det mask >= 0.9998;
+    - rec exact;
+    - reader end to end on NPU: sign 80-115 ms, plate 29-58 ms.
+  - MT6989: all pass except WeSpeaker cos 0.9989-0.9990 (a16).
+  - Tensor G5:
+    - YOLO passed once, then failed to compile on a rerun (the fallback works).
+    - The tiny OCR misread the plate, so the tiny builds are excluded.
+    - The small CPU reader is correct (0.2-0.3 s).
+- **Prompt caching research** (LiteRT-LM 0.19.1 `Conversation.clone()`):
+  - Works on CPU/GPU, not NPU; no disk persistence.
+  - The time must move out of the system prompt.
+  - Report: `/mnt/seagate/ML/litertlm-clone-research-20261123/REPORT.md`. Not implemented yet.
+
 ## 2026-11-22 — Release 2.5.0 (versionCode 39): NPU for more phones, LiteRT-LM 0.19.1
 
 - **Version:** Play's highest uploaded bundle is still code 37 (Play Developer API, 2026-11-22); code 38 was tagged
