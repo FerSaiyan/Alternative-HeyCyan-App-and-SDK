@@ -124,8 +124,8 @@ android {
         // Meta DAT declares minSdk 29. Keep the regular build on API 24 if Meta SDK is skipped.
         minSdk = metaDatEnabled ? 29 : 28
         targetSdk = 36
-        versionCode = 39
-        versionName = "2.5.0"
+        versionCode = 40
+        versionName = "2.5.1"
         if (testAbi != null && !testAbi.trim().isEmpty()) {
             ndk.abiFilters.add(testAbi.trim())
         }

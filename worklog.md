@@ -1,5 +1,21 @@
 # Worklog — CyanBridge local agent
 
+## 2026-11-23 — Release 2.5.1 (versionCode 40)
+
+- **Version:** Play's highest uploaded bundle is code 39 (2.5.0, production; Play Developer API 2026-11-23), so this is
+  2.5.1 / code 40, tag `v2.5.1`. main fast-forwarded to dev-2.5.1.
+- **Contents since 2.5.0:** Gemini Live function tools (end_session / phone_task) instead of the transcript router,
+  "Live video" vision mode, Live keeps internet while glasses video binds Wi-Fi Direct; SMART routing for photo
+  questions (local and Pro), Pro follow-ups with history, streamed voice answers, phone-aware cached system turn,
+  `[live]` starts at once with a 7 s photo hand-off; HeyCyan post-update gate unlock and low-battery sync warning;
+  faster spoken/photo questions (system-turn cache, either-order photo prefill), multimodal NPU packages, download-time
+  NPU runtime + GPU warm-up + audio warm-up; per-SoC NPU builds for Walking Aid YOLO, the voice filter and the new
+  ride/bus reader; Local Agent crash fix (ForegroundServiceDidNotStartInTime from Gemini Live).
+- **Relay (already in production):** website #25/#26 (Live tools), #27 (spoken questions: 8000-char context,
+  turn_note, history).
+- **Build:** `-PlocalLiteRtNpuAarPath=litert-npu-all-2.4.0-qairt2.52.0-v68-v81-dl.aar` (not committed); bundleRelease,
+  assembleRelease (universal) and `-PabiSplits` assembleRelease (per-ABI).
+
 ## 2026-11-23 — 2.5.1 routing follow-ups (branch `251-routing-followups`, off `dev-2.5.1` @ d12d2fc8)
 
 Owner decisions on the SMART photo-question report.
