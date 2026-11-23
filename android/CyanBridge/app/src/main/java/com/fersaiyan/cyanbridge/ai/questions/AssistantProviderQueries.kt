@@ -86,6 +86,8 @@ internal class AssistantProviderQueries(
          * turn stays the spoken questions' one).
          */
         photoNote: String? = null,
+        /** Caps the local model's reply (a route-only decision turn); null for the model's own limit. */
+        maxTokens: Int? = null,
     ): String {
         // Every question's model call passes here; a question the speaker check stopped never does.
         Log.i("AIHijack", "Provider request provider=$providerType audio=${!audioPath.isNullOrBlank()} images=${imagePaths.size}")
@@ -153,6 +155,7 @@ internal class AssistantProviderQueries(
                         onToken = onToken,
                         decideOnce = decideOnce,
                         session = session,
+                        maxTokens = maxTokens,
                     )
                 }.getOrElse {
                     if (it is DecideOnceUnsupportedException || it is SessionUnavailableException) throw it

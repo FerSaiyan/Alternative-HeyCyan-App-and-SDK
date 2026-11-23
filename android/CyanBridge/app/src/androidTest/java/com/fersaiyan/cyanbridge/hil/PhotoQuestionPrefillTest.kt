@@ -28,9 +28,10 @@ import java.io.File
  * "decide_*" (SMART photo questions, branch smart-image-questions): the spoken questions' system turn (route tags)
  * over more question kinds (the photo is unrelated for the non-visual ones), as the app runs them: together and photo
  * first with the photo attached (PHOTO_QUESTION_NOTE; a [camera] reply is an answer about it, a bare one gets one more
- * turn), recording first decided on the recording alone (a [camera] reply then gets the photo in the conversation:
- * photo_turn_* times run from "the photo is ready"). Logs the route, the first token (the tag) and the first spoken
- * word (answer_s).
+ * turn), recording first decided on the recording alone (an [answer] or [camera] reply then gets the photo in the
+ * conversation: photo_turn_* times run from "the photo is ready"). Logs the route, the first token (the tag) and the
+ * first spoken word (answer_s). "decide_together_spare" keeps no conversation, so the next question starts from the
+ * primed spare (GPU/NPU) or the cloned root (CPU), as a photo question does once the previous follow-up window lapsed.
  * Not part of CI: skips unless pq_model points at a .litertlm file. pq_backend GPU | NPU | CPU, pq_out,
  * pq_modes (comma-separated, default all), pq_cache=false (no system-prompt cache: decide_together then prefills the
  * system turn every time; with the cache a CPU backend clones the spoken questions' primed root).
@@ -135,19 +136,21 @@ class PhotoQuestionPrefillTest {
 
         val allModes = listOf(
             "together", "photo_first", "audio_first", "photo_first_noack", "audio_first_noack",
-            "decide_together", "decide_photo_first", "decide_audio_first",
+            "decide_together", "decide_photo_first", "decide_audio_first", "decide_together_spare",
         )
         val modes = args.getString("pq_modes")?.split(',')?.filter { it in allModes } ?: allModes
         for (mode in modes) {
             LiteRtLocalInferenceEngine.photoTurnAck = !mode.endsWith("noack")
             val decide = mode.startsWith("decide_")
-            val arrival = mode.removePrefix("decide_")
+            val arrival = mode.removePrefix("decide_").removeSuffix("_spare")
             val questions = if (decide) decidedClips else pairs.map { (name, wav, photo) -> listOf(name, wav, photo, null) }
             var hits = 0
             for ((name, wav, photo, want) in questions) {
                 name as String; wav as File; photo as File
                 // The app keeps a decided photo question's conversation open (follow-ups); the 2.5.1 one did not.
-                val session = SessionTurn("pq", continueExisting = false).takeIf { decide }
+                // "_spare": no conversation kept (as after the follow-up window), so on GPU/NPU the engine primes the
+                // spoken questions' system turn after each question and the next photo question starts from it.
+                val session = SessionTurn("pq", continueExisting = false).takeIf { decide && !mode.endsWith("_spare") }
                 var prefillS: Double? = null
                 // Decided, recording first: the app decides on the recording alone (no prefill, no photo yet).
                 val alone = decide && arrival == "audio_first"
@@ -157,13 +160,17 @@ class PhotoQuestionPrefillTest {
                     prefillS = (System.nanoTime() - t) / 1e9
                     if (!ok) log(mapOf("event" to "prefill_failed", "mode" to mode, "clip" to name))
                 }
-                val first = timed(engine, (if (alone) config(null, wav, decide) else config(photo, wav, decide)).copy(session = session))
+                // Recording first, the app keeps only the route (32 tokens: AndroidSpokenQuestionPorts.ROUTE_ONLY_MAX_TOKENS).
+                val first = timed(
+                    engine,
+                    if (alone) config(null, wav, decide).copy(session = session, maxTokens = 32) else config(photo, wav, decide).copy(session = session),
+                )
                 val decision = SpokenDecisionParser.parse(first.text, photoAttached = !alone)
                 // The answer about the photo when the reply was [camera]: recording first, the photo is added to the
                 // conversation once it arrives; a bare [camera] with the photo attached gets one more turn.
                 val photoTurn = when {
                     !decide -> null
-                    alone && decision.route.tag == "camera" ->
+                    alone && decision.route.tag in setOf("camera", "answer") ->
                         config(photo, null).copy(turnContext = null, session = SessionTurn("pq", true, SpokenQuestionFlow.PHOTO_NOTE))
                     decision.askedCamera && decision.payload.isBlank() ->
                         config(null, null).copy(prompt = SpokenQuestionFlow.PHOTO_ANSWER_NOTE, turnContext = null, session = SessionTurn("pq", true))

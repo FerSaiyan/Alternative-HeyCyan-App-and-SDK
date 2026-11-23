@@ -370,7 +370,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         val image = config.imagePaths.singleOrNull()?.trim()?.takeIf { File(it).isFile }
         val audio = config.audioPath?.trim()?.takeIf { image == null && File(it).isFile }
         if (image == null && audio == null) return@withLock false
-        val llm = mutex.withLock { closeSpareLocked(); engine } ?: return@withLock false
+        // The question's own conversation replaces any open one; closing it first avoids the GPU KV-cache copy.
+        val llm = mutex.withLock { closeSpareLocked(); closeConversationLocked(); engine } ?: return@withLock false
         val started = System.currentTimeMillis()
         val conversation = runCatching {
             withContext(Dispatchers.IO) {
@@ -513,6 +514,10 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 open
             }
         } else {
+            // A new conversation: the open one (a kept spoken conversation) is closed first. While two are alive the
+            // GPU executor copies the KV cache on every switch (Device Run 2026-11-23, S24 Ultra GPU: a photo question
+            // asked with the previous question's conversation still open, first token 2.7 s instead of 1.7 s).
+            mutex.withLock { closeConversationLocked() }
             if (!audioEncoderReady && !hasAudio && config.imagePaths.isNotEmpty()) primeAudioEncoder(llm)
             prepared = takePreparedPart(config)
             val spareConversation = if (prepared == null) takeSpare(config) else mutex.withLock { closeSpareLocked(); null }

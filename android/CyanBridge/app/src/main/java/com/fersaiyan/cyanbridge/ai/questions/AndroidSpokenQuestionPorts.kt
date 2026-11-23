@@ -55,7 +55,13 @@ internal class AndroidSpokenQuestionPorts(
 
     private fun SpokenSessionTurn.engineTurn() = SessionTurn(key, continueConversation, note)
 
-    override suspend fun decide(audioPath: String, images: List<String>, session: SpokenSessionTurn?, onToken: (String) -> Unit): String =
+    override suspend fun decide(
+        audioPath: String,
+        images: List<String>,
+        session: SpokenSessionTurn?,
+        routeOnly: Boolean,
+        onToken: (String) -> Unit,
+    ): String =
         sessionCall {
             providers.query(
                 userPrompt = "",
@@ -67,6 +73,8 @@ internal class AndroidSpokenQuestionPorts(
                 session = session?.engineTurn(),
                 onToken = onToken,
                 photoNote = ImageQuestionDefaults.PHOTO_QUESTION_NOTE.takeIf { images.isNotEmpty() },
+                // LiteRT ends the reply there itself (no cancel), so the conversation stays usable.
+                maxTokens = ROUTE_ONLY_MAX_TOKENS.takeIf { routeOnly },
             )
         }
 
@@ -232,5 +240,8 @@ internal class AndroidSpokenQuestionPorts(
 
     private companion object {
         const val LOOKING_CUE = "Okay. I'll check what you see."
+
+        /** A route and its one-line payload ("[search] next public holiday in Brazil"). */
+        const val ROUTE_ONLY_MAX_TOKENS = 32
     }
 }

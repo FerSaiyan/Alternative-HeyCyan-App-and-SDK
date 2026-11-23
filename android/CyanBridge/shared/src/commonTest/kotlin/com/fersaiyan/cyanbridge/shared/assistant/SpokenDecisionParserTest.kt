@@ -96,6 +96,20 @@ class SpokenDecisionParserTest {
         assertEquals("The socks are yellow.\nThey look new. Anything else?", spoken)
         assertEquals("", SpokenDecisionParser.speakablePrefix("[answ"))
         assertEquals("Twelve", SpokenDecisionParser.speakablePrefix("[answer] Twelve [ca"))
+        // S24U GPU: the second tag sometimes loses its "[" ("[camera]\nanswer] …"); a line-start tag word is held back
+        // until it is clearly not one, and released when the reply ends.
+        val bare = "[camera]\nanswer] As meias são amarelas."
+        var said = ""
+        for (end in 1..bare.length) {
+            val now = SpokenDecisionParser.speakablePrefix(bare.substring(0, end))
+            assertTrue(now.startsWith(said), "'$now' does not extend '$said'")
+            said = now
+        }
+        assertEquals("As meias são amarelas.", said)
+        assertEquals("As meias são amarelas.", SpokenDecisionParser.parse(bare, photoAttached = true).payload)
+        assertEquals("The capital is Canberra.", SpokenDecisionParser.parse("[camera]\nanswer> The capital is Canberra.", photoAttached = true).payload)
+        assertEquals("", SpokenDecisionParser.speakablePrefix("[answer] Live"))
+        assertEquals("Live", SpokenDecisionParser.speakablePrefix("[answer] Live", complete = true))
         assertEquals("It's [1] of 3", SpokenDecisionParser.speakablePrefix("[answer] It's [1] of 3"))
     }
 }

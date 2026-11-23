@@ -47,9 +47,16 @@ interface SpokenQuestionBrain {
     /**
      * The decision turn: the recording with the route-tag instructions; [onToken] gets the streamed reply. [images] is
      * the photo a photo question was asked with (the photo button), which the model already sees: it is told not to
-     * ask for the camera.
+     * ask for the camera. [routeOnly]: only the route and its one-line payload are used (an answer comes in a later
+     * turn), so the reply may be cut short.
      */
-    suspend fun decide(audioPath: String, images: List<String>, session: SpokenSessionTurn?, onToken: (String) -> Unit): String
+    suspend fun decide(
+        audioPath: String,
+        images: List<String>,
+        session: SpokenSessionTurn?,
+        routeOnly: Boolean,
+        onToken: (String) -> Unit,
+    ): String
 
     /** Stops the decision generation once its route is known and no conversation needs the rest. */
     fun stopGeneration()
@@ -235,9 +242,11 @@ class SpokenQuestionFlow(
      * - The photo is already here (it came first, or together): the first turn decides with it attached. A
      *   `[camera]` reply is an answer about it, `[search]` keeps it in the conversation, `[live]` opens with it.
      * - The recording came first: the first turn decides on it alone, exactly like a spoken question (same system
-     *   turn, served from the prefill cache), while the photo transfers. Only `[camera]` waits for this photo and
-     *   answers with it; `[live]` waits for it too. Deciding on the recording with the photo's turn after it made Gemma
-     *   answer the photo instead of the question (host eval, 2026-11-23).
+     *   turn, served from the prefill cache), while the photo transfers. `[search]`, `[phone]` and `[ignore]` act at
+     *   once; `[answer]` and `[camera]` wait for this photo and are answered with it in the conversation (no second
+     *   photo; a visual question the model files under [answer] still sees the photo), and `[live]` opens with it.
+     *   Deciding on the recording with the photo's turn after it made Gemma answer the photo instead of the question
+     *   (host probe, 2026-11-23).
      */
     suspend fun runWithPhoto(audioPath: String, photo: Deferred<String?>) {
         var recording: String? = audioPath
@@ -298,6 +307,8 @@ class SpokenQuestionFlow(
         var photoPath: String? = null
         val questionPhoto = photoQuestion?.attached
         val withPhoto = questionPhoto != null
+        // Recording first: the button's photo is still on the way.
+        val comingPhoto = photoQuestion?.photo?.takeIf { questionPhoto == null }
         // The turn's answer saw a photo (attached, or the one a [camera] reply waited for or took).
         var answeredWithPhoto = withPhoto
         var stream: SpokenAnswerStream? = null
@@ -315,6 +326,7 @@ class SpokenQuestionFlow(
                     brain.decide(
                         audioPath = audioPath,
                         images = listOfNotNull(questionPhoto),
+                        routeOnly = comingPhoto != null,
                         session = cont?.let {
                             SpokenSessionTurn(SpokenConversation.SESSION_KEY, it, note = if (it) SpokenConversation.takeNote() else null)
                         },
@@ -325,9 +337,10 @@ class SpokenQuestionFlow(
                                 early.complete(SpokenDecisionParser.parse(text, withPhoto))
                                 if (cont == null) brain.stopGeneration()
                             }
-                            // An answer starts speaking as it is written (where the platform streams speech).
+                            // An answer starts speaking as it is written (where the platform streams speech); one
+                            // that waits for the coming photo is answered in the next turn instead.
                             val route = SpokenDecisionParser.routeOf(text)
-                            if (route == SpokenRoute.ANSWER || (withPhoto && route == SpokenRoute.CAMERA)) {
+                            if (comingPhoto == null && (route == SpokenRoute.ANSWER || (withPhoto && route == SpokenRoute.CAMERA))) {
                                 val speakable = SpokenDecisionParser.speakablePrefix(text)
                                 if (speakable.length > streamedChars) {
                                     if (stream == null) stream = speech.answerStream()
@@ -415,14 +428,23 @@ class SpokenQuestionFlow(
             suspend fun answerAboutPhoto(instruction: String): String =
                 answerInSession(instruction) ?: answerRecording(listOfNotNull(questionPhoto))
 
+            // Recording first, [answer] or [camera]: answered with the button's photo once it is in (not deleted here).
+            suspend fun answerWithComingPhoto(coming: Deferred<String?>): String {
+                val photo = withTimeoutOrNull(settings.photoTimeoutMs) { coming.await() }
+                if (photo == null) PlatformLogger.w(TAG, "Photo question: the photo never came; answering without it")
+                answeredWithPhoto = photo != null
+                return photo?.let { answerInSession("", listOf(it), note = PHOTO_NOTE) }
+                    ?: answerRecording(listOfNotNull(photo)).also { SpokenConversation.pendingNote = "You told them: $it" }
+            }
+
             // The answer that has been speaking since its first words (finished after the turn's events).
             var streamedAnswer: SpokenAnswerStream? = null
             val spokenReply: String? = when (decision.route) {
-                SpokenRoute.ANSWER -> {
+                SpokenRoute.ANSWER -> if (comingPhoto != null) answerWithComingPhoto(comingPhoto) else {
                     val answer = decision.payload.ifBlank { SpokenDecisionParser.clean(fullReply()) }
                     val open = stream
                     if (open != null) {
-                        val all = SpokenDecisionParser.speakablePrefix(fullReply())
+                        val all = SpokenDecisionParser.speakablePrefix(fullReply(), complete = true)
                         if (all.length > streamedChars) open.append(all.substring(streamedChars))
                         streamedAnswer = open
                         answer
@@ -432,19 +454,13 @@ class SpokenQuestionFlow(
                         answer
                     }
                 }
-                SpokenRoute.CAMERA -> {
-                    // A photo question whose recording came first: its photo is on the way (never deleted here).
-                    val coming = photoQuestion?.photo
-                    val photo = if (coming != null) {
-                        withTimeoutOrNull(settings.photoTimeoutMs) { coming.await() }
-                    } else {
-                        speech.queueCue(SpokenCue.LOOKING)
-                        withTimeoutOrNull(settings.photoTimeoutMs) { actions.takePhoto() }.also { photoPath = it }
-                    }
-                    if (photo == null) PlatformLogger.w(TAG, "Spoken decision: no photo from the glasses; answering without it")
-                    answeredWithPhoto = photo != null
-                    photo?.let { answerInSession("", listOf(it), note = PHOTO_NOTE) }
-                        ?: answerRecording(listOfNotNull(photo)).also { SpokenConversation.pendingNote = "You told them: $it" }
+                SpokenRoute.CAMERA -> if (comingPhoto != null) answerWithComingPhoto(comingPhoto) else {
+                    speech.queueCue(SpokenCue.LOOKING)
+                    photoPath = withTimeoutOrNull(settings.photoTimeoutMs) { actions.takePhoto() }
+                    if (photoPath == null) PlatformLogger.w(TAG, "Spoken decision: no photo from the glasses; answering without it")
+                    answeredWithPhoto = photoPath != null
+                    photoPath?.let { answerInSession("", listOf(it), note = PHOTO_NOTE) }
+                        ?: answerRecording(listOfNotNull(photoPath)).also { SpokenConversation.pendingNote = "You told them: $it" }
                 }
                 SpokenRoute.SEARCH -> {
                     speech.queueCue(SpokenCue.CHECKING_WEB)

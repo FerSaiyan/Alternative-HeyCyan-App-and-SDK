@@ -33,8 +33,15 @@ class SpokenQuestionFlowTest {
         val brain = object : SpokenQuestionBrain {
             override val name = "LOCAL_AGENT"
             override val keepsConversation = keepsConversation
-            override suspend fun decide(audioPath: String, images: List<String>, session: SpokenSessionTurn?, onToken: (String) -> Unit): String {
-                log += "decide $audioPath${if (images.isEmpty()) "" else " $images"} continue=${session?.continueConversation} note=${session?.note}"
+            override suspend fun decide(
+                audioPath: String,
+                images: List<String>,
+                session: SpokenSessionTurn?,
+                routeOnly: Boolean,
+                onToken: (String) -> Unit,
+            ): String {
+                log += "decide $audioPath${if (images.isEmpty()) "" else " $images"}${if (routeOnly) " routeOnly" else ""} " +
+                    "continue=${session?.continueConversation} note=${session?.note}"
                 if (sessionGoneOnce && session?.continueConversation == true) {
                     sessionGoneOnce = false
                     throw SpokenSessionUnavailableException("engine busy")
@@ -221,22 +228,31 @@ class SpokenQuestionFlowTest {
     }
 
     @Test
-    fun whenTheRecordingComesFirstItIsDecidedAloneAndCameraWaitsForTheButtonsPhoto() = runTest {
-        val fakes = Fakes(keepsConversation = true).apply { decisions += "[camera]" }
-        val coming = CompletableDeferred<String?>()
-        val question = launch { with(fakes) { flow().runWithPhoto("q1.wav", coming) } }
-        // Not advanceUntilIdle: virtual time would run out the photo timeout.
-        testScheduler.runCurrent()
-        assertEquals(listOf("decide q1.wav continue=false note=null"), fakes.log)
-        coming.complete("button.jpg")
-        question.join()
-        // No second photo, no "looking" cue, and the button's photo is not deleted by the flow.
-        assertEquals(
-            listOf("decide q1.wav continue=false note=null", "answer in session '' [button.jpg] ${SpokenQuestionFlow.PHOTO_NOTE}",
-                "speak In session.", "delete q1.wav"),
-            fakes.log,
-        )
-        assertTrue(fakes.events.any { it == "reply" to "provider=LOCAL_AGENT images=1 audio=true text=In session." })
+    fun whenTheRecordingComesFirstItIsDecidedAloneAndAnswersWaitForTheButtonsPhoto() = runTest {
+        // [camera] and [answer] alike: the answer comes from the button's photo (a visual question filed under
+        // [answer] still sees it), never a second photo; the cut-short decision reply is not spoken.
+        for (decision in listOf("[camera]", "[answer] They look whi")) {
+            SpokenConversation.reset()
+            val fakes = Fakes(keepsConversation = true).apply { decisions += decision; streams = true }
+            val coming = CompletableDeferred<String?>()
+            val question = launch { with(fakes) { flow().runWithPhoto("q1.wav", coming) } }
+            // Not advanceUntilIdle: virtual time would run out the photo timeout.
+            testScheduler.runCurrent()
+            assertEquals(listOf("decide q1.wav routeOnly continue=false note=null"), fakes.log, decision)
+            coming.complete("button.jpg")
+            question.join()
+            assertEquals(
+                listOf("decide q1.wav routeOnly continue=false note=null",
+                    "answer in session '' [button.jpg] ${SpokenQuestionFlow.PHOTO_NOTE}", "speak In session.", "delete q1.wav"),
+                fakes.log,
+                decision,
+            )
+            assertTrue(fakes.events.any { it == "reply" to "provider=LOCAL_AGENT images=1 audio=true text=In session." })
+        }
+        // Other routes act before the photo is in.
+        val search = Fakes(keepsConversation = true).apply { decisions += "[search] bus 24 route\n" }
+        with(search) { flow().runWithPhoto("q1.wav", CompletableDeferred()) }
+        assertTrue("search bus 24 route" in search.log)
     }
 
     @Test

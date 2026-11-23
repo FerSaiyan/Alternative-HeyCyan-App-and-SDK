@@ -32,6 +32,10 @@ object SpokenDecisionParser {
     // The model sometimes appends a second tag after its answer ("[answer] … [camera]").
     private val GEMINI_LIVE = Regex("""\bgemini\s*live\b|\blive\s*mode\b""", RegexOption.IGNORE_CASE)
     private val ANY_TAG = Regex("""\s*\[\s*(?:answer|camera|search|phone|live|ignore)\s*]\s*""", RegexOption.IGNORE_CASE)
+    // A second tag that lost its "[" at the start of a line (Device Run / AVD, 2026-11-23: "[camera]\nanswer] The socks
+    // …", "[search] …\nanswer> The capital …").
+    private val BARE_TAG = Regex("""(?m)^[ \t]*(?:answer|camera|search|phone|live|ignore)[ \t]*[\]>:][ \t]*""", RegexOption.IGNORE_CASE)
+    private val TAG_WORDS = listOf("answer", "camera", "search", "phone", "live", "ignore")
 
     /** The route once the leading tag is complete, or null while it may still be streaming in. */
     fun routeOf(prefix: String): SpokenRoute? =
@@ -89,17 +93,22 @@ object SpokenDecisionParser {
     }
 
     /** Removes stray tags anywhere in the text (an answer must never speak "[camera]"). */
-    fun clean(text: String): String = ANY_TAG.replace(text, " ").replace(Regex("[ \\t]{2,}"), " ").trim()
+    fun clean(text: String): String = removeTags(text).trim()
+
+    private fun removeTags(text: String): String =
+        ANY_TAG.replace(BARE_TAG.replace(text, ""), " ").replace(Regex("[ \\t]{2,}"), " ")
 
     /** A tag that may still be streaming in at the end of the text ("[", "[cam"). */
     private val PARTIAL_TAG = Regex("""\[\s*[A-Za-z]{0,8}$""")
+    private val PARTIAL_BARE_TAG = Regex("""(^|\n)[ \t]*([A-Za-z]{1,6})[ \t]*$""")
 
     /**
      * The speakable answer of a reply that is still streaming: the text after its leading tag, without stray tags.
      * A tag that may still be coming and trailing whitespace are held back, so each call only extends the previous
-     * result (the caller speaks the new end). Empty while the leading tag is incomplete.
+     * result (the caller speaks the new end). Empty while the leading tag is incomplete. [complete]: the reply has
+     * ended, so a last word is no longer held back as a possible tag.
      */
-    fun speakablePrefix(prefix: String): String {
+    fun speakablePrefix(prefix: String, complete: Boolean = false): String {
         val start = prefix.trimStart()
         val body = if (start.startsWith("[")) {
             val tag = LEADING_TAG.find(start) ?: return ""
@@ -107,7 +116,12 @@ object SpokenDecisionParser {
         } else {
             start
         }
-        val settled = PARTIAL_TAG.find(body)?.let { body.substring(0, it.range.first) } ?: body
-        return ANY_TAG.replace(settled, " ").replace(Regex("[ \\t]{2,}"), " ").trimStart().trimEnd()
+        var settled = PARTIAL_TAG.find(body)?.let { body.substring(0, it.range.first) } ?: body
+        // A tag word starting a line may still become a bare tag ("answer]").
+        if (!complete) {
+            PARTIAL_BARE_TAG.find(settled)?.takeIf { m -> TAG_WORDS.any { it.startsWith(m.groupValues[2].lowercase()) } }
+                ?.let { settled = settled.substring(0, it.range.first + it.groupValues[1].length) }
+        }
+        return removeTags(settled).trimStart().trimEnd()
     }
 }
