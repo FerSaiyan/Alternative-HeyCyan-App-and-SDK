@@ -62,6 +62,26 @@ private class CompiledNpuModel(
         }
     }
 
+    override fun runTensors(inputs: List<NpuTensor>, outputTypes: List<NpuDType>): List<NpuTensor> {
+        require(inputs.size == this.inputs.size) { "Expected ${this.inputs.size} inputs, got ${inputs.size}" }
+        require(outputTypes.size == outputs.size) { "Expected ${outputs.size} outputs, got ${outputTypes.size}" }
+        inputs.forEachIndexed { index, tensor ->
+            when (tensor) {
+                is NpuTensor.Floats -> this.inputs[index].writeFloat(tensor.values)
+                is NpuTensor.Bytes -> this.inputs[index].writeInt8(tensor.values)
+                is NpuTensor.Shorts -> this.inputs[index].writeInt16(tensor.values)
+            }
+        }
+        model.run(this.inputs, outputs)
+        return outputs.mapIndexed { index, output ->
+            when (outputTypes[index]) {
+                NpuDType.FLOAT32 -> NpuTensor.Floats(output.readFloat())
+                NpuDType.INT8, NpuDType.UINT8 -> NpuTensor.Bytes(output.readInt8())
+                NpuDType.INT16 -> NpuTensor.Shorts(output.readInt16())
+            }
+        }
+    }
+
     override fun close() {
         inputs.forEach { it.close() }
         outputs.forEach { it.close() }

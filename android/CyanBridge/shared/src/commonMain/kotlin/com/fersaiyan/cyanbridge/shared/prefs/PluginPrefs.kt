@@ -38,6 +38,8 @@ object PluginPrefs {
         val stateModelSource = string("state_model_source", "local")
         val ttsEnabled = boolean("tts_enabled", true)
         val safetyDisclaimerEnabled = boolean("safety_disclaimer_enabled", true)
+        /** Ask "What do you need help with?" when Walking Aid starts (ride / bus reading). */
+        val goalQuestionEnabled = boolean("goal_question_enabled", true)
         val imageHistoryMaxCount = int("image_history_max_count", 50).clamped(10, 200)
         val customPrompt = string("custom_prompt", "").prompt(1_500)
         val yoloModelType = string("yolo_model_type", "yolo11")

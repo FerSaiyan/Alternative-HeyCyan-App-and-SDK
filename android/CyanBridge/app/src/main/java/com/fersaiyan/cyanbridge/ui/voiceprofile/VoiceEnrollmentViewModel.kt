@@ -125,7 +125,7 @@ class VoiceEnrollmentViewModel(application: Application) : AndroidViewModel(appl
     private suspend fun finish() {
         val context = getApplication<Application>()
         val count = _state.value.phraseCount
-        val spec = SpeakerModels.DEFAULT
+        val spec = VoiceProfile.activeSpec(context)
         val phrases = withContext(Dispatchers.IO) { (0 until count).map { store.loadPendingPhrase(it) } }
         if (phrases.any { it == null }) {
             _state.update { it.copy(phase = VoiceEnrollmentPhase.READY, completed = emptySet(), currentIndex = 0) }

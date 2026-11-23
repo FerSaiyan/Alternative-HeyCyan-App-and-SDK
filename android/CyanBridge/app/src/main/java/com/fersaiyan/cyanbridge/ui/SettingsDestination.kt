@@ -248,7 +248,7 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
             voiceProfileEnrolled = VoiceProfile.isEnrolled(this),
             voiceProfileStatus = voiceProfileStatus(),
             voiceFilterEnabled = VoiceProfile.answerOnlyMyVoice(this),
-            voiceModelDownloadSize = SpeakerModels.DEFAULT.takeIf {
+            voiceModelDownloadSize = SpeakerModels.preferred(this).takeIf {
                 VoiceProfile.isEnrolled(this) && SpeakerModelStore.isDownloadable(it) &&
                     !SpeakerModelStore.isInstalled(this, it) && !SpeakerModelDownloads.isRunning
             }?.let { android.text.format.Formatter.formatShortFileSize(this, it.sizeBytes) },
@@ -271,7 +271,7 @@ class SettingsDestination : NavScreen(), SettingsScreenActions {
     private fun voiceProfileStatus(): String {
         val info = VoiceProfile.store(this).info() ?: return getString(R.string.voice_profile_status_none)
         val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(info.completedAtMs))
-        val model = SpeakerModels.DEFAULT
+        val model = SpeakerModels.preferred(this)
         val modelLine = when {
             SpeakerModelStore.isInstalled(this, model) || SpeakerModelStore.stagedFile(this, model)?.isFile == true ->
                 getString(R.string.voice_profile_status_model_ready, model.displayName)

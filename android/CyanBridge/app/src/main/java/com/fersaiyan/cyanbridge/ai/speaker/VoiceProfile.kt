@@ -79,7 +79,7 @@ object VoiceProfile {
         }
 
     /** Builds (or returns) the template for [spec] from the stored enrollment phrases. */
-    suspend fun ensureTemplate(context: Context, spec: SpeakerModelSpec = SpeakerModels.DEFAULT): TemplateResult {
+    suspend fun ensureTemplate(context: Context, spec: SpeakerModelSpec = activeSpec(context)): TemplateResult {
         val store = store(context)
         store.loadTemplate(spec.id)?.let { return TemplateResult.Ready(it) }
         val info = store.info() ?: return TemplateResult.NotEnrolled
@@ -115,7 +115,7 @@ object VoiceProfile {
      * Scores [pcm] against the enrolled template, or returns null when there is nothing to score.
      * At most [SpeakerGatePolicy.MAX_WINDOWS] windows are embedded.
      */
-    suspend fun score(context: Context, pcm: ShortArray, spec: SpeakerModelSpec = SpeakerModels.DEFAULT): SpeakerScore? {
+    suspend fun score(context: Context, pcm: ShortArray, spec: SpeakerModelSpec = activeSpec(context)): SpeakerScore? {
         val template = (ensureTemplate(context, spec) as? TemplateResult.Ready)?.template ?: return null
         val speech = SpeakerMath.trimToSpeech(pcm)
         val windows = SpeakerGatePolicy.spread(SpeakerMath.windows(speech, spec.windowSamples, minSamples = SpeakerGatePolicy.MIN_SCORED_SAMPLES))
@@ -138,7 +138,7 @@ object VoiceProfile {
      * "Answer only my voice" for one recorded question (16 kHz PCM16). Call only while
      * [filterActive]. Logs numbers only and appends them to the private calibration log.
      */
-    suspend fun check(context: Context, pcm: ShortArray, flow: String, spec: SpeakerModelSpec = SpeakerModels.DEFAULT): SpeakerCheck {
+    suspend fun check(context: Context, pcm: ShortArray, flow: String, spec: SpeakerModelSpec = activeSpec(context)): SpeakerCheck {
         val result = try {
             when {
                 withContext(Dispatchers.IO) { SpeakerModelStore.resolve(context, spec) } == null ->
@@ -187,10 +187,21 @@ object VoiceProfile {
     }
 
     /** Loads the model and template ahead of a question, so the check after it only embeds. */
-    suspend fun prewarm(context: Context, spec: SpeakerModelSpec = SpeakerModels.DEFAULT) {
+    suspend fun prewarm(context: Context, spec: SpeakerModelSpec = activeSpec(context)) {
         runCatching {
             if (ensureTemplate(context, spec) is TemplateResult.Ready) withEmbedder(context, spec) { }
         }.onFailure { Log.w(TAG, "Speaker prewarm failed: ${it.javaClass.simpleName}") }
+    }
+
+    /**
+     * The model questions are checked with: this phone's preferred model ([SpeakerModels.preferred], the NPU build
+     * where there is one) once it is installed; until then the CPU model, while the preferred one downloads.
+     */
+    fun activeSpec(context: Context): SpeakerModelSpec {
+        val preferred = SpeakerModels.preferred(context)
+        if (preferred.id == SpeakerModels.DEFAULT.id || SpeakerModelStore.isInstalled(context, preferred)) return preferred
+        SpeakerModelDownloads.start(context, preferred)
+        return SpeakerModels.DEFAULT
     }
 
     /** Releases the cached interpreter (for example on low memory). */
@@ -206,7 +217,24 @@ object VoiceProfile {
                     embedder?.close()
                     embedder = null
                     val file = SpeakerModelStore.resolve(context, spec) ?: return@withLock null
-                    LiteRtSpeakerEmbedder(spec, file).also { embedder = it }
+                    if (spec.npu) {
+                        try {
+                            val artifact = checkNotNull(
+                                com.fersaiyan.cyanbridge.localmodels.engine.NpuArtifacts.forDevice(
+                                    context, com.fersaiyan.cyanbridge.localmodels.engine.NpuArtifacts.Model.WESPEAKER,
+                                ),
+                            ) { "No NPU build of ${spec.id} for this phone" }
+                            NpuSpeakerEmbedder(spec, context, artifact, file)
+                        } catch (error: Throwable) {
+                            // Stay on the CPU model from now on (this app build); fetch it if needed.
+                            Log.w(TAG, "NPU speaker model failed to load; using ${SpeakerModels.DEFAULT.id}: ${error.message}")
+                            SpeakerModels.markNpuBroken(context)
+                            SpeakerModelDownloads.start(context, SpeakerModels.DEFAULT)
+                            return@withLock null
+                        }.also { embedder = it }
+                    } else {
+                        LiteRtSpeakerEmbedder(spec, file).also { embedder = it }
+                    }
                 }
                 block(current)
             }

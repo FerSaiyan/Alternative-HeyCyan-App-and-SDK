@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Walking Aid session goal and sign/plate reader (2.5.1). -->
+<resources>
+    <string name="walking_aid_goal_prompt">需要什么帮助？我可以描述周围环境、寻找你叫的车，或者寻找你的公交车。</string>
+    <string name="walking_aid_goal_describe">好的，我来描述周围环境。</string>
+    <string name="walking_aid_goal_ride">好的，我来找你叫的车。</string>
+    <string name="walking_aid_goal_ride_plate">好的，我来找车牌 %1$s。</string>
+    <string name="walking_aid_goal_bus">好的，我来找你的公交车。</string>
+    <string name="walking_aid_goal_bus_route">好的，我来找 %1$s 路公交车。</string>
+    <string name="walking_aid_ride_match">你叫的车到了，车牌 %1$s，%2$s。</string>
+    <string name="walking_aid_plate_read">车牌 %1$s，%2$s。</string>
+    <string name="walking_aid_bus_match">%1$s 路公交车即将到达，%2$s。</string>
+    <string name="walking_aid_bus_read">公交车路牌：%1$s，%2$s。</string>
+    <string name="walking_aid_reader_downloading">正在下载路牌和车牌识别器。</string>
+</resources>

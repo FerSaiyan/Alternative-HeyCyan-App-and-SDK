@@ -81,6 +81,8 @@ object WalkingAidPreferences {
 
     fun isSafetyDisclaimerEnabled(context: Context): Boolean = WalkingAid.safetyDisclaimerEnabled[context]
 
+    fun isGoalQuestionEnabled(context: Context): Boolean = WalkingAid.goalQuestionEnabled[context]
+
     fun getImageHistoryMaxCount(context: Context): Int = WalkingAid.imageHistoryMaxCount[context]
 
     fun setImageHistoryMaxCount(context: Context, count: Int) {

@@ -442,6 +442,16 @@ internal class GlassesQuestions private constructor(context: Context) : Question
         }
     }
 
+    /**
+     * Asks the wearer [prompt] (spoken as the cue, after the beep) and returns the transcribed answer, with the same
+     * microphone route and "Answer only my voice" check as a question. Another voice or silence gives null.
+     */
+    suspend fun askShortAnswer(prompt: String, timeoutMs: Long = 8_000L): String? {
+        val captured = microphone.capture(timeoutMs, voiceOnly = true, transcribe = true, cue = prompt)
+        captured.audioPath?.let(microphone::deleteRecording)
+        return captured.text?.takeIf { captured.error == null && it.isNotBlank() }
+    }
+
     companion object {
         @Volatile private var instance: GlassesQuestions? = null
 

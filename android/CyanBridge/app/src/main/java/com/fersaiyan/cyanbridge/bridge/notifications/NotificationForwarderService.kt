@@ -82,6 +82,9 @@ class NotificationForwarderService : NotificationListenerService() {
         val text = extras.getCharSequence("android.text")?.toString() ?: ""
 
         maybeReadWhatsAppNotificationAloud(notification, title, text)
+        com.fersaiyan.cyanbridge.plugins.walkingaid.ocr.RideNotificationPlate.onNotification(
+            packageName, title, text, extras.getCharSequence("android.bigText")?.toString(),
+        )
 
         if (!enabled) return
 

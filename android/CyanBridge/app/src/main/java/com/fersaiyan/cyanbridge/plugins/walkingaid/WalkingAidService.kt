@@ -56,6 +56,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 import com.fersaiyan.cyanbridge.devices.DeviceCapabilityHelper
+import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
+import com.fersaiyan.cyanbridge.plugins.walkingaid.vision.AcceleratorType
+import com.fersaiyan.cyanbridge.plugins.walkingaid.ocr.OcrModelStore
+import com.fersaiyan.cyanbridge.plugins.walkingaid.ocr.WalkingAidGoal
+import com.fersaiyan.cyanbridge.plugins.walkingaid.ocr.WalkingAidGoalParser
+import com.fersaiyan.cyanbridge.plugins.walkingaid.ocr.WalkingAidReader
 
 class WalkingAidService : Service() {
 
@@ -65,6 +71,8 @@ class WalkingAidService : Service() {
     private var enrichmentJob: Job? = null
     private var cleanupJob: Job? = null
     private var exploreNarrationJob: Job? = null
+    private var goalJob: Job? = null
+    private var reader: WalkingAidReader? = null
     private val exploreEngine = WalkingAidExploreEngine()
     private var activeMode = WalkingAidMode.WALKING
     private val utteranceSequence = AtomicLong(0L)
@@ -264,8 +272,17 @@ class WalkingAidService : Service() {
 
         // Initialize LiteRT Vision Backend (NPU -> GPU -> CPU hierarchy)
         visionBackend = LiteRtVisionBackend(this, loadDepth = activeMode == WalkingAidMode.WALKING)
+        // Detectors installed before their NPU builds existed get them now (used from the next start).
+        scope.launch(Dispatchers.IO) { WalkingAidModelInstaller.ensureNpuCompanions(this@WalkingAidService) }
         val accelInfo = visionBackend?.acceleratorInfo()
         Log.i(TAG, "Vision engine active: ${accelInfo?.details}")
+        val detectorOnNpu = accelInfo?.type == AcceleratorType.NPU_ON_DEVICE
+
+        // Ride and bus help: ask the session goal, then read plates or bus signs that YOLO finds.
+        reader = WalkingAidReader(this, scope) { speakTts(it) }
+        if (WalkingAidPreferences.isGoalQuestionEnabled(this)) {
+            goalJob = scope.launch { askSessionGoal() }
+        }
 
         if (activeMode == WalkingAidMode.EXPLORE) {
             exploreNarrationJob = scope.launch {
@@ -316,6 +333,10 @@ class WalkingAidService : Service() {
                     ?.let { "\nThe user especially wants help noticing: $it" }
                     .orEmpty()
 
+                // While Gemma answers on the GPU, YOLO there would slow both down: skip frames until it is done.
+                // NPU detectors interleave with Gemma's steps and keep running.
+                if (!detectorOnNpu && LocalChatSessionManager.isGenerating()) continue
+
                 // Local detections feed either the alert rules or the paced Explore scene memory.
                 val rawDetection = backend.detect(frame)
                 val cameraMotion = motionEstimator.motionForFrame(frame.bitmap, frame.estimatedExposureAtMs)
@@ -338,6 +359,7 @@ class WalkingAidService : Service() {
                 if (activeMode == WalkingAidMode.EXPLORE) {
                     exploreEngine.update(detectionResult, frame.timestampMs)
                 }
+                if (!rawDetection.isError) reader?.onFrame(frame.bitmap, detectionResult.objects)
                 if (warningDecision?.shouldWarn == true && isFrameCurrent(frameSequence, frame)) {
                     speakWarning(warningDecision.message)
                 }
@@ -714,8 +736,9 @@ class WalkingAidService : Service() {
             return
         }
         Log.i(TAG, "Stopping: $reason")
-        val jobs = listOfNotNull(captureLoopJob, visionWorkerJob, enrichmentJob, exploreNarrationJob)
+        val jobs = listOfNotNull(captureLoopJob, visionWorkerJob, enrichmentJob, exploreNarrationJob, goalJob)
         jobs.forEach(Job::cancel)
+        goalJob = null
         captureLoopJob = null
         visionWorkerJob = null
         enrichmentJob = null
@@ -732,6 +755,8 @@ class WalkingAidService : Service() {
             frameQueue.clear()
             visionBackend?.close()
             visionBackend = null
+            reader?.close()
+            reader = null
 
             if (wasAutoAudioEnabled) {
                 AutoAudioCapturePrefs.setEnabled(this@WalkingAidService, true)
@@ -747,6 +772,68 @@ class WalkingAidService : Service() {
             cleanupJob = null
             stopSelf()
         }
+    }
+
+    /**
+     * Gemma (the local model, when one is installed) asks what the wearer needs and interprets the spoken answer;
+     * without a model, keywords decide. Ride and bus goals download the reader models on first use.
+     */
+    private suspend fun askSessionGoal() {
+        val prompt = localizedString(com.fersaiyan.cyanbridge.R.string.walking_aid_goal_prompt)
+        val answer = runCatching {
+            com.fersaiyan.cyanbridge.ai.questions.GlassesQuestions.get(this).askShortAnswer(prompt)
+        }.onFailure { Log.w(TAG, "Goal question failed: ${it.message}") }.getOrNull()
+        val goal = answer?.let { classifyGoal(it) } ?: WalkingAidGoal.Describe
+        Log.i(TAG, "Session goal: ${goal.javaClass.simpleName}")
+        reader?.goal = goal
+        speakTts(
+            when (goal) {
+                WalkingAidGoal.Describe -> localizedString(com.fersaiyan.cyanbridge.R.string.walking_aid_goal_describe)
+                is WalkingAidGoal.Ride -> goal.plate?.let {
+                    localizedString(com.fersaiyan.cyanbridge.R.string.walking_aid_goal_ride_plate, it.toCharArray().joinToString(" "))
+                } ?: localizedString(com.fersaiyan.cyanbridge.R.string.walking_aid_goal_ride)
+                is WalkingAidGoal.Bus -> goal.route?.let {
+                    localizedString(com.fersaiyan.cyanbridge.R.string.walking_aid_goal_bus_route, it)
+                } ?: localizedString(com.fersaiyan.cyanbridge.R.string.walking_aid_goal_bus)
+            },
+        )
+        if (goal != WalkingAidGoal.Describe && !OcrModelStore.isInstalled(this)) {
+            speakTts(localizedString(com.fersaiyan.cyanbridge.R.string.walking_aid_reader_downloading))
+            withContext(Dispatchers.IO) {
+                runCatching { OcrModelStore.install(this@WalkingAidService) }
+                    .onFailure { Log.w(TAG, "Reader models not installed: ${it.message}") }
+            }
+        }
+    }
+
+    private suspend fun classifyGoal(answer: String): WalkingAidGoal {
+        val hasLocalModel = withContext(Dispatchers.IO) {
+            com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository.resolveSelectedModel(this@WalkingAidService) != null
+        }
+        if (hasLocalModel) {
+            val reply = withTimeoutOrNull(10_000L) {
+                runCatching {
+                    com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider().streamChat(
+                        context = this@WalkingAidService,
+                        messages = listOf(
+                            mapOf("role" to "system", "content" to WalkingAidGoalParser.MODEL_INSTRUCTION),
+                            mapOf("role" to "user", "content" to answer),
+                        ),
+                        maxTokens = 24,
+                    )
+                }.getOrNull()
+            }
+            reply?.let(WalkingAidGoalParser::parseModelReply)?.let { return it }
+        }
+        return WalkingAidGoalParser.parseKeywords(answer)
+    }
+
+    private fun localizedString(id: Int, vararg args: Any): String {
+        val tag = com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences.get(this).appLanguageTag
+        val localized = createConfigurationContext(android.content.res.Configuration(resources.configuration).apply {
+            setLocale(java.util.Locale.forLanguageTag(tag))
+        })
+        return localized.getString(id, *args)
     }
 
     private fun showToast(context: Context, message: String) {

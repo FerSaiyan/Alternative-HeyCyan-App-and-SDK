@@ -142,7 +142,7 @@ object SpeakerModelDownloads {
     val isRunning: Boolean get() = running.get()
 
     /** Starts the download when [spec] is hosted and not installed yet; [onDone] gets success. */
-    fun start(context: Context, spec: SpeakerModelSpec = SpeakerModels.DEFAULT, onDone: (Boolean) -> Unit = {}): Boolean {
+    fun start(context: Context, spec: SpeakerModelSpec = SpeakerModels.preferred(context), onDone: (Boolean) -> Unit = {}): Boolean {
         val app = context.applicationContext
         if (!SpeakerModelStore.isDownloadable(spec) || SpeakerModelStore.isInstalled(app, spec)) return false
         if (!running.compareAndSet(false, true)) return true

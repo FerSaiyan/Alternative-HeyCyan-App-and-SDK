@@ -16,6 +16,9 @@ import org.tensorflow.lite.nnapi.NnApiDelegate
 import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuModel
 import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuModelFactory
 import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtNpuSupport
+import com.fersaiyan.cyanbridge.localmodels.engine.NpuArtifactDownloader
+import com.fersaiyan.cyanbridge.localmodels.engine.NpuArtifacts
+import com.fersaiyan.cyanbridge.localmodels.engine.NpuFloatRunner
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalComputeBackend
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import java.io.File
@@ -39,6 +42,9 @@ class LiteRtVisionBackend(
     // tensor metadata and as the fallback.
     @Volatile
     private var npuDetector: LiteRtNpuModel? = null
+    // Per-SoC YOLO11n build from cyanbridge-npu-models (its own tensor layout, decoded by decodeCatalogNpuOutputs).
+    @Volatile
+    private var npuRunner: NpuFloatRunner? = null
     private var depthInterpreter: Interpreter? = null
 
     private var gpuDelegate: GpuDelegate? = null
@@ -96,15 +102,25 @@ class LiteRtVisionBackend(
             val modelBuffer = loadModelFile(modelFile)
             val options = Interpreter.Options()
 
-            val targetBackend = computeBackend ?: runCatching {
-                LocalModelSettingsRepository.getForModel(context, "default").computeBackend
-            }.getOrDefault(LocalComputeBackend.CPU)
+            // An installed NPU build for this phone (downloaded with the detector) is the fastest and coolest path.
+            val targetBackend = computeBackend
+                ?: LocalComputeBackend.NPU_EXPERIMENTAL.takeIf {
+                    catalogNpuFile(modelFile) != null || npuDetectorFile(modelFile) != null
+                }
+                ?: runCatching {
+                    LocalModelSettingsRepository.getForModel(context, "default").computeBackend
+                }.getOrDefault(LocalComputeBackend.CPU)
 
             var accelType = AcceleratorType.XNNPACK_CPU
             var details = "Defaulting to XNNPACK CPU acceleration"
             var delegatedOps = 0
             when (targetBackend) {
-                LocalComputeBackend.NPU_EXPERIMENTAL -> openNpuDetector(modelFile)?.let { (npu, aotName) ->
+                LocalComputeBackend.NPU_EXPERIMENTAL -> openCatalogNpuDetector(modelFile)?.let { runner ->
+                    npuRunner = runner
+                    accelType = AcceleratorType.NPU_ON_DEVICE
+                    details = "${runner.artifact.vendor?.label} NPU via LiteRT CompiledModel (${runner.artifact.localName})"
+                    Log.i(TAG, details)
+                } ?: openNpuDetector(modelFile)?.let { (npu, aotName) ->
                     npuDetector = npu
                     accelType = AcceleratorType.NPU_ON_DEVICE
                     details = "Qualcomm NPU via LiteRT CompiledModel ($aotName)"
@@ -149,7 +165,7 @@ class LiteRtVisionBackend(
                 options.setUseXNNPACK(true)
                 options.setNumThreads(4)
                 detectorInterpreter = Interpreter(modelBuffer, options)
-                if (npuDetector == null) {
+                if (npuDetector == null && npuRunner == null) {
                     accelType = AcceleratorType.XNNPACK_CPU
                     details = "LiteRT XNNPACK CPU engine initialized (4 threads)"
                     Log.i(TAG, details)
@@ -205,13 +221,98 @@ class LiteRtVisionBackend(
             return null
         }
         val aotName = "${modelFile.nameWithoutExtension}_${npu.modelTag}.tflite"
-        val aotFile = locateModel(aotName) ?: run {
+        val aotFile = npuDetectorFile(modelFile) ?: run {
             Log.i(TAG, "NPU detector skipped: $aotName is not installed")
             return null
         }
         return runCatching { LiteRtNpuModelFactory.open(context, aotFile.absolutePath) to aotName }
             .onFailure { Log.w(TAG, "NPU detector failed to load; using NNAPI/GPU/CPU: ${it.message}", it) }
             .getOrNull()
+    }
+
+    /** The installed per-SoC YOLO11n build for this phone (WalkingAidModelInstaller fetches it with YOLO11n). */
+    private fun catalogNpuFile(modelFile: File): Pair<NpuArtifacts.Artifact, File>? {
+        if (!LiteRtNpuModelFactory.AVAILABLE || !modelFile.name.startsWith("yolo11n")) return null
+        val artifact = NpuArtifacts.forDevice(context, NpuArtifacts.Model.YOLO11N) ?: return null
+        val file = File(context.filesDir, artifact.localName)
+        return if (NpuArtifactDownloader.isInstalled(file, artifact)) artifact to file else null
+    }
+
+    private fun openCatalogNpuDetector(modelFile: File): NpuFloatRunner? {
+        val (artifact, file) = catalogNpuFile(modelFile) ?: return null
+        val npu = LiteRtNpuSupport.status(context)
+        if (!npu.available) {
+            Log.i(TAG, "NPU detector skipped: ${npu.reason}")
+            return null
+        }
+        val input = artifact.inputs.singleOrNull()
+        if (input == null || !input.shape.contentEquals(intArrayOf(1, modelHeight, modelWidth, 3))) {
+            Log.w(TAG, "NPU detector ${artifact.localName} input ${input?.shape?.contentToString()} does not fit; skipped")
+            return null
+        }
+        return runCatching { NpuFloatRunner.open(context, artifact, file.absolutePath) }
+            .onFailure { Log.w(TAG, "NPU detector failed to load; using NNAPI/GPU/CPU: ${it.message}", it) }
+            .getOrNull()
+    }
+
+    /** RGB in [0, 1], NHWC, from the resized frame's pixels (the layout every catalog YOLO11n build takes). */
+    private fun runCatalogNpuDetector(runner: NpuFloatRunner, pixels: IntArray): DetectorOutput {
+        val input = FloatArray(pixels.size * 3)
+        for ((i, pixel) in pixels.withIndex()) {
+            input[i * 3] = ((pixel shr 16) and 0xFF) / 255f
+            input[i * 3 + 1] = ((pixel shr 8) and 0xFF) / 255f
+            input[i * 3 + 2] = (pixel and 0xFF) / 255f
+        }
+        return decodeCatalogNpuOutputs(runner.run(input))
+    }
+
+    /**
+     * Catalog YOLO11n builds output corner boxes [1, N, 4] in input pixels plus either (max score [1, N], class
+     * probabilities [1, N, C]) or two [1, N] tensors, class index and score (told apart by range: indices exceed 1).
+     */
+    private fun decodeCatalogNpuOutputs(outputs: List<FloatArray>): DetectorOutput {
+        val boxesFlat = outputs.firstOrNull { it.size % 4 == 0 && outputs.any { o -> o.size * 4 == it.size } }
+            ?: error("No [1, N, 4] boxes among NPU outputs ${outputs.map { it.size }}")
+        val n = boxesFlat.size / 4
+        val perBox = outputs.filter { it !== boxesFlat && it.size == n }
+        val probs = outputs.firstOrNull { it !== boxesFlat && it.size > n && it.size % n == 0 }
+        val (classIdx, scores) = if (probs != null) {
+            val classes = probs.size / n
+            val idx = FloatArray(n)
+            val best = FloatArray(n)
+            for (i in 0 until n) {
+                var bc = 0
+                var bs = probs[i * classes]
+                for (c in 1 until classes) {
+                    val v = probs[i * classes + c]
+                    if (v > bs) { bs = v; bc = c }
+                }
+                idx[i] = bc.toFloat()
+                best[i] = bs
+            }
+            idx to (perBox.firstOrNull() ?: best)
+        } else {
+            require(perBox.size == 2) { "Expected class and score outputs, got ${outputs.map { it.size }}" }
+            val (a, b) = perBox
+            if ((a.maxOrNull() ?: 0f) > 1.5f) a to b else b to a
+        }
+        val values = FloatArray(4 * n)
+        for (i in 0 until n) for (c in 0 until 4) values[c * n + i] = boxesFlat[i * 4 + c]
+        return DetectorOutput(
+            channelCount = 4,
+            boxCount = n,
+            values = values,
+            boxesAreCorners = true,
+            classIndices = classIdx,
+            confidenceScores = scores,
+        )
+    }
+
+    /** `<detector stem>_<Vendor>_<SoC>.tflite` for this phone, when installed. */
+    private fun npuDetectorFile(modelFile: File): File? {
+        if (!LiteRtNpuModelFactory.AVAILABLE) return null
+        val tag = runCatching { LiteRtNpuSupport.status(context).modelTag }.getOrNull() ?: return null
+        return locateModel("${modelFile.nameWithoutExtension}_$tag.tflite")
     }
 
     private fun tryGpuDelegate(
@@ -326,7 +427,11 @@ class LiteRtVisionBackend(
 
         inputBuffer.rewind()
         val output = try {
-            npuDetector?.let { npu ->
+            npuRunner?.let { runner ->
+                runCatching { runCatalogNpuDetector(runner, pixels) }
+                    .onFailure { disableNpuDetector(it) }
+                    .getOrNull()
+            } ?: npuDetector?.let { npu ->
                 runCatching { runNpuDetector(npu, interp, inputBuffer) }
                     .onFailure { disableNpuDetector(it) }
                     .getOrNull()
@@ -523,6 +628,8 @@ class LiteRtVisionBackend(
         Log.w(TAG, "NPU detector failed; continuing on CPU: ${error.message}", error)
         npuDetector?.close()
         npuDetector = null
+        npuRunner?.close()
+        npuRunner = null
         activeAcceleratorInfo = activeAcceleratorInfo.copy(
             type = AcceleratorType.XNNPACK_CPU,
             details = "NPU failed (${error.message}); LiteRT XNNPACK CPU",
@@ -860,6 +967,8 @@ class LiteRtVisionBackend(
     override fun close() {
         npuDetector?.close()
         npuDetector = null
+        npuRunner?.close()
+        npuRunner = null
         detectorInterpreter?.close()
         depthInterpreter?.close()
         gpuDelegate?.close()

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Walking Aid session goal and sign/plate reader (2.5.1). -->
+<resources>
+    <string name="walking_aid_goal_prompt">무엇을 도와드릴까요? 주변을 설명하거나, 호출한 차를 찾거나, 버스를 찾을 수 있어요.</string>
+    <string name="walking_aid_goal_describe">알겠어요, 주변을 설명할게요.</string>
+    <string name="walking_aid_goal_ride">알겠어요, 호출한 차를 찾을게요.</string>
+    <string name="walking_aid_goal_ride_plate">알겠어요, 번호판 %1$s을 찾을게요.</string>
+    <string name="walking_aid_goal_bus">알겠어요, 버스를 찾을게요.</string>
+    <string name="walking_aid_goal_bus_route">알겠어요, %1$s번 버스를 찾을게요.</string>
+    <string name="walking_aid_ride_match">호출한 차가 왔어요, 번호판 %1$s, %2$s.</string>
+    <string name="walking_aid_plate_read">자동차 번호판 %1$s, %2$s.</string>
+    <string name="walking_aid_bus_match">%1$s번 버스가 오고 있어요, %2$s.</string>
+    <string name="walking_aid_bus_read">버스 표지판: %1$s, %2$s.</string>
+    <string name="walking_aid_reader_downloading">표지판 및 번호판 판독기를 다운로드하는 중이에요.</string>
+</resources>

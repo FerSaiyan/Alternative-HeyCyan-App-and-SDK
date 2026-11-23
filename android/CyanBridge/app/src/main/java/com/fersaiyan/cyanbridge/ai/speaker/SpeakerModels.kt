@@ -1,5 +1,8 @@
 package com.fersaiyan.cyanbridge.ai.speaker
 
+import android.content.Context
+import com.fersaiyan.cyanbridge.localmodels.engine.NpuArtifacts
+
 /**
  * A LiteRT speaker-embedding graph with its filterbank inside the graph:
  * `float32[1, windowSamples]` mono PCM in [-1, 1] -> `float32[1, dims]`.
@@ -29,6 +32,8 @@ data class SpeakerModelSpec(
     val windowSamples: Int = 32_000,
     /** Null until the artifact is hosted; until then it is installed by staging the file. */
     val sourceUrl: String? = null,
+    /** An AOT build for this phone's NPU (LiteRT CompiledModel), not a CPU Interpreter graph. */
+    val npu: Boolean = false,
 )
 
 object SpeakerModels {
@@ -78,8 +83,67 @@ object SpeakerModels {
     /**
      * WeSpeaker int8 (owner, 2026-11-19): blocks more other voices than ECAPA and is 7x smaller.
      * Templates are per model, so an existing enrollment is re-embedded from its stored phrases.
+     * Phones with an NPU build use [preferred] instead.
      */
     val DEFAULT = WESPEAKER_INT8
+
+    /**
+     * NPU embedding variants in cyanbridge-npu-models: Snapdragon builds use the KaldiFbankNpu front end, MediaTek and
+     * Exynos builds the v3 log-approximation graph. On the 2026-11-19 LibriSpeech protocol (refit 2026-11-23,
+     * /mnt/seagate/ML/speaker-npu-thresholds-20261123) both give the same embeddings (min cosine 0.99999976) and the
+     * same thresholds, so they share one template id. Their embeddings differ from the int8 CPU model's (mean window
+     * cosine 0.953), hence a separate id and template.
+     */
+    const val NPU_ID = "wespeaker-resnet34-lm-2s-npu"
+    private val NPU_VARIANTS = setOf("wespeaker-npu-kaldifbanknpu", "wespeaker-npu-v3-logapprox")
+
+    /** blockBelow is limited by the narrowband (8 kHz) wearer rule: 0.91 % falsely blocked at 0.20, 1.05 % at 0.21. */
+    private const val NPU_BLOCK_BELOW = 0.20f
+    /** 0.081 % of other speakers accepted in clean audio. */
+    private const val NPU_WEARER_AT = 0.44f
+
+    /**
+     * The NPU build of WeSpeaker for this phone (about 18x faster than the CPU model, so the check can score more of
+     * the question without delaying the answer). Its embeddings differ from the int8 model's, hence its own id and
+     * thresholds (fitted 2026-11-23 with the 2026-11-19 protocol, docs/AUDIO_SPEAKER_FILTER.md).
+     */
+    fun npuFor(context: Context): SpeakerModelSpec? {
+        val artifact = NpuArtifacts.forDevice(context, NpuArtifacts.Model.WESPEAKER) ?: return null
+        if (artifact.variant !in NPU_VARIANTS) return null
+        return SpeakerModelSpec(
+            id = NPU_ID,
+            displayName = "WeSpeaker ResNet34-LM (NPU)",
+            fileName = artifact.localName,
+            sizeBytes = artifact.bytes,
+            sha256 = artifact.sha256,
+            dims = 256,
+            license = "Wespeaker/wespeaker-voxceleb-resnet34-LM@f0c48c29, CC BY 4.0",
+            blockBelow = NPU_BLOCK_BELOW,
+            wearerAt = NPU_WEARER_AT,
+            sourceUrl = artifact.url,
+            npu = true,
+        )
+    }
+
+    /**
+     * The model this phone uses (owner, 2026-11-23): its NPU build when there is one, else [DEFAULT]. A phone whose
+     * NPU build failed to load stays on [DEFAULT] (see [markNpuBroken]); switching re-embeds the stored phrases.
+     */
+    fun preferred(context: Context): SpeakerModelSpec =
+        npuFor(context)?.takeUnless { npuBroken(context) } ?: DEFAULT
+
+    private const val PREFS = "speaker_models"
+    private const val KEY_NPU_BROKEN = "npu_broken_build"
+
+    /** Remembers (per app build) that the NPU model failed to load here, so [preferred] falls back to the CPU model. */
+    fun markNpuBroken(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(KEY_NPU_BROKEN, com.fersaiyan.cyanbridge.BuildConfig.VERSION_CODE).apply()
+    }
+
+    private fun npuBroken(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_NPU_BROKEN, -1) ==
+            com.fersaiyan.cyanbridge.BuildConfig.VERSION_CODE
 
     fun findById(id: String?): SpeakerModelSpec? = all.firstOrNull { it.id == id }
 }

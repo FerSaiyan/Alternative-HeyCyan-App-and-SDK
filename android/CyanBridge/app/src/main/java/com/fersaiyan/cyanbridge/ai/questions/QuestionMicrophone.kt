@@ -95,6 +95,8 @@ internal class QuestionMicrophone(
         voiceOnly: Boolean = false,
         /** null: on-device STT only when no model can hear the recording (see processRecordedQuestion). */
         transcribe: Boolean? = null,
+        /** Spoken instead of the usual "ask" cue (e.g. Walking Aid's "What do you need help with?"). */
+        cue: String? = null,
     ): CapturedQuestion = mutex.withLock {
         prewarmSpeakerCheck()
         if (GlassesQuestionTestHooks.questionAudioActive) {
@@ -106,11 +108,11 @@ internal class QuestionMicrophone(
         val sdk = sdkMicrophone()?.takeIf { it.sampleRateHz == AudioQuestionRecorder.SAMPLE_RATE }
         val recorded = try {
             try {
-                record(timeoutMs, voiceOnly, sdk)
+                record(timeoutMs, voiceOnly, sdk, cue)
             } catch (unavailable: SdkStreamUnavailableException) {
                 // Link down, firmware without the stream, or no start: the headset route asks again.
                 Log.w("ImageQuestionAudio", "Glasses SDK stream unavailable (${unavailable.message}); using the headset route")
-                record(timeoutMs, voiceOnly, sdk = null)
+                record(timeoutMs, voiceOnly, sdk = null, cue = cue)
             }
         } catch (busy: MicrophoneBusyException) {
             return@withLock CapturedQuestion(null, false, error = MICROPHONE_BUSY)
@@ -127,7 +129,7 @@ internal class QuestionMicrophone(
      * One attempt on the route [AudioRoutePolicy.forQuestion] picks for [sdk]: session, route,
      * beep, cue, recording, closing beep. Returns null when nobody spoke.
      */
-    private suspend fun record(timeoutMs: Long, voiceOnly: Boolean, sdk: VendorPcmMicrophone?): File? {
+    private suspend fun record(timeoutMs: Long, voiceOnly: Boolean, sdk: VendorPcmMicrophone?, cue: String? = null): File? {
         val route = AudioRoutePolicy.forQuestion(deviceAudio(), sdkStreamAvailable = sdk != null)
         val session = openSession(route) ?: throw MicrophoneBusyException()
         val stream = sdk?.takeIf { route == AudioRoutePreference.DEVICE_SDK }?.let(AudioQuestionRecorder::SdkMicrophoneStream)
@@ -143,7 +145,7 @@ internal class QuestionMicrophone(
                     val joined = connectRoute(session)
                     playTone(android.media.ToneGenerator.TONE_PROP_BEEP)
                     if (streaming != null) Log.i("ImageQuestionAudio", "Question beep done at +${SystemClock.elapsedRealtime() - begin} ms")
-                    speakCue(voiceOnly)
+                    speakCue(voiceOnly, cue)
                     joined
                 }
                 if (streaming != null) awaitStream(streaming, stream, begin)
@@ -329,7 +331,7 @@ internal class QuestionMicrophone(
         }
     }
 
-    private suspend fun speakCue(voiceOnly: Boolean = false) {
+    private suspend fun speakCue(voiceOnly: Boolean = false, customCue: String? = null) {
         suspendCancellableCoroutine { cont ->
             val completed = AtomicBoolean(false)
             val utteranceId = "image_question_cue_${System.nanoTime()}"
@@ -349,7 +351,7 @@ internal class QuestionMicrophone(
             }
 
             val questionSettings = ImageQuestionPreferences.get(appContext)
-            val cue = if (voiceOnly) ImageQuestionDefaults.listeningCueForLanguage(questionSettings.appLanguageTag)
+            val cue = customCue ?: if (voiceOnly) ImageQuestionDefaults.listeningCueForLanguage(questionSettings.appLanguageTag)
                 else ImageQuestionDefaults.questionCueForLanguage(questionSettings.appLanguageTag)
             speaker.configureForVoiceCommunication("image-question cue")
             Log.i(
@@ -366,7 +368,7 @@ internal class QuestionMicrophone(
             )
             // Avoid blocking the image question if the system TTS service never returns a callback.
             scope().launch {
-                delay(2_000L)
+                delay(if (customCue != null) 6_000L else 2_000L)
                 complete("2s fallback")
             }
             cont.invokeOnCancellation {

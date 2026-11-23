@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Walking Aid session goal and sign/plate reader (2.5.1). -->
+<resources>
+    <string name="walking_aid_goal_prompt">С чем вам помочь? Я могу описать обстановку, найти вашу машину такси или найти ваш автобус.</string>
+    <string name="walking_aid_goal_describe">Хорошо, я опишу обстановку.</string>
+    <string name="walking_aid_goal_ride">Хорошо, я поищу вашу машину.</string>
+    <string name="walking_aid_goal_ride_plate">Хорошо, я поищу номер %1$s.</string>
+    <string name="walking_aid_goal_bus">Хорошо, я поищу ваш автобус.</string>
+    <string name="walking_aid_goal_bus_route">Хорошо, я поищу автобус %1$s.</string>
+    <string name="walking_aid_ride_match">Ваша машина приехала, номер %1$s, %2$s.</string>
+    <string name="walking_aid_plate_read">Номер машины %1$s, %2$s.</string>
+    <string name="walking_aid_bus_match">Автобус %1$s подъезжает, %2$s.</string>
+    <string name="walking_aid_bus_read">Табличка автобуса: %1$s, %2$s.</string>
+    <string name="walking_aid_reader_downloading">Загружается распознавание табличек и номеров.</string>
+</resources>

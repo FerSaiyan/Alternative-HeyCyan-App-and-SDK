@@ -52,3 +52,26 @@ class LiteRtSpeakerEmbedder(
 
     override fun close() = interpreter.close()
 }
+
+/**
+ * NPU runner for [SpeakerModelSpec.npu] builds (LiteRT CompiledModel on this phone's vendor dispatch library; int16
+ * input on MediaTek, float elsewhere): 12 ms per 2 s window on the Fold6 vs about 230 ms on the CPU.
+ * Not thread-safe; callers serialize access.
+ */
+internal class NpuSpeakerEmbedder(
+    override val spec: SpeakerModelSpec,
+    context: android.content.Context,
+    artifact: com.fersaiyan.cyanbridge.localmodels.engine.NpuArtifacts.Artifact,
+    modelFile: File,
+) : SpeakerEmbedder {
+    private val runner = com.fersaiyan.cyanbridge.localmodels.engine.NpuFloatRunner.open(context, artifact, modelFile.absolutePath)
+
+    override fun embed(window: FloatArray): FloatArray {
+        require(window.size == spec.windowSamples) { "Window has ${window.size} samples, expected ${spec.windowSamples}" }
+        val values = runner.run(window).single()
+        check(values.size == spec.dims) { "${spec.id} output has ${values.size} values, expected ${spec.dims}" }
+        return values
+    }
+
+    override fun close() = runner.close()
+}

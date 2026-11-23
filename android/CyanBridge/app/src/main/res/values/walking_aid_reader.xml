@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Walking Aid session goal and sign/plate reader (2.5.1). -->
+<resources>
+    <string name="walking_aid_goal_prompt">What do you need help with? I can describe your surroundings, find your ride, or find your bus.</string>
+    <string name="walking_aid_goal_describe">Okay, I\'ll describe your surroundings.</string>
+    <string name="walking_aid_goal_ride">Okay, I\'ll look for your ride.</string>
+    <string name="walking_aid_goal_ride_plate">Okay, I\'ll look for plate %1$s.</string>
+    <string name="walking_aid_goal_bus">Okay, I\'ll look for your bus.</string>
+    <string name="walking_aid_goal_bus_route">Okay, I\'ll look for bus %1$s.</string>
+    <string name="walking_aid_ride_match">Your ride is here, plate %1$s, %2$s.</string>
+    <string name="walking_aid_plate_read">Car plate %1$s, %2$s.</string>
+    <string name="walking_aid_bus_match">Bus %1$s arriving, %2$s.</string>
+    <string name="walking_aid_bus_read">Bus sign: %1$s, %2$s.</string>
+    <string name="walking_aid_reader_downloading">Downloading the sign and plate reader.</string>
+</resources>
