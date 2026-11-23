@@ -15,7 +15,7 @@ class NpuVariantResolverTest {
         assertEquals("gemma-4-E2B-it-v3mm_Qualcomm_SM8650.litertlm", resolved.expectedFilename)
         assertEquals(
             "https://huggingface.co/Fertroll10/gemma-4-E2B-it-litert-lm-npu/resolve/" +
-                "35a5e3f3a35693f3845dc6a0c854cce188b39b9e/gemma-4-E2B-it-v3mm_Qualcomm_SM8650.litertlm",
+                "78988cdf3e3f045985062fb685d9c24b1cdcd333/gemma-4-E2B-it-v3mm_Qualcomm_SM8650.litertlm",
             resolved.sourceUrl,
         )
         assertEquals("06fc9d05bfca142e6392bd1fac995781e3ce987b01d403f7536d293300839f44", resolved.sha256)
@@ -28,15 +28,10 @@ class NpuVariantResolverTest {
     }
 
     @Test
-    fun resolvesGooglesSm8750FileWithLitertCommunityNaming() {
+    fun resolvesOurSm8750MultimodalFile() {
         val resolved = NpuVariantResolver.resolve(npuEntry, "SM8750")!!
-        assertEquals("gemma-4-E2B-it_qualcomm_sm8750.litertlm", resolved.expectedFilename)
-        assertEquals(
-            "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/" +
-                "b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1/gemma-4-E2B-it_qualcomm_sm8750.litertlm",
-            resolved.sourceUrl,
-        )
-        assertEquals("41dd675fbe735b6029012b5576a5716bac614fd8156de0128db4c9dff3cebd4e", resolved.sha256)
+        assertEquals("gemma-4-E2B-it-v3mm_Qualcomm_SM8750.litertlm", resolved.expectedFilename)
+        assertEquals("3b6266108cb13cd21e8445de71bb959a44576c5982677dcd8513a542219d1f60", resolved.sha256)
     }
 
     @Test

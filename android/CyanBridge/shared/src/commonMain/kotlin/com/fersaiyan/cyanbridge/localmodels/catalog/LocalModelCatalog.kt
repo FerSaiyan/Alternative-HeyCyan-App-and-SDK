@@ -84,8 +84,9 @@ private const val NPU_E2B_REPO = "Fertroll10/gemma-4-E2B-it-litert-lm-npu"
 private const val NPU_E2B_REVISION = "2f5d066822497f5561b2d86a55bf9e94bd9b65bc"
 // Calibration v3 builds (gemma-4-E2B-it-v3_<Vendor>_<SoC>.litertlm, text-only), device-tested on Google Device Run 2026-11-22.
 private const val NPU_E2B_V3_REVISION = "2687ca17a52e63cc2860a62fb7ef96a15e873b50"
-// v3mm = the v3 NPU text model + Google's Gemma 4 vision/audio sections (no new AOT), published 2026-11-23.
-private const val NPU_E2B_V3MM_REVISION = "35a5e3f3a35693f3845dc6a0c854cce188b39b9e"
+// v3mm = the v3 NPU text model + Google's Gemma 4 vision/audio sections (no new AOT). SM8550/8650/8850/MT6989
+// published 2026-11-23 (rev 35a5e3f3); SM8750 + the 4k-16k builds added the same day (rev 78988cdf, all v3mm files).
+private const val NPU_E2B_V3MM_REVISION = "78988cdf3e3f045985062fb685d9c24b1cdcd333"
 
 object LocalModelCatalogRepository {
     val curatedModels: List<LocalModelCatalogEntry> = listOf(
@@ -178,14 +179,15 @@ object LocalModelCatalogRepository {
                 "Takes photos and voice questions (the image encoder runs on the GPU).",
             tags = listOf("litert", "gemma4", "npu", "offline"),
             gatedDownload = false,
-            licenseTermsNote = "Apache-2.0 (Gemma 4). Community NPU builds; SM8750 and Tensor G5 files published by Google (litert-community).",
+            licenseTermsNote = "Apache-2.0 (Gemma 4). Community NPU builds; the Tensor G5 file is published by Google (litert-community).",
             enabled = true,
             npuSupported = true,
             npuOnly = true,
             npuVariants = listOf(
                 // Calibration v3 (app prompts, 9 languages, 16k long context; text model device-tested 11-13/13 on
                 // 2026-11-22) + Google's Gemma 4 vision/audio sections (v3mm, 2026-11-23). Photo + voice questions
-                // on Device Run (PhotoQuestionPrefillTest, PromptCacheRouteTest): S23U SM8550, S24U SM8650, S26 SM8850.
+                // on Device Run (PhotoQuestionPrefillTest, PromptCacheRouteTest): S23U SM8550, S24U SM8650, S25 SM8750,
+                // S26 SM8850.
                 NpuVariantSet(
                     repo = NPU_E2B_REPO,
                     filePrefix = "gemma-4-E2B-it-v3mm",
@@ -198,6 +200,11 @@ object LocalModelCatalogRepository {
                         "SM8650" to NpuVariantFile(
                             sha256 = "06fc9d05bfca142e6392bd1fac995781e3ce987b01d403f7536d293300839f44",
                             sizeBytes = 2_643_630_708L,
+                        ),
+                        // S25: text 12/13, photo 18/20, routes 15-17/22 (Device Run 2026-11-23).
+                        "SM8750" to NpuVariantFile(
+                            sha256 = "3b6266108cb13cd21e8445de71bb959a44576c5982677dcd8513a542219d1f60",
+                            sizeBytes = 2_643_188_340L,
                         ),
                         "SM8850" to NpuVariantFile(
                             sha256 = "48c76e720a40e89de8518239c2adab2241659e10df72d7019b959cde7bc0c432",
@@ -215,19 +222,6 @@ object LocalModelCatalogRepository {
                         "MT6989" to NpuVariantFile(
                             sha256 = "a9af92618d67f3663cf90e4ffbd99ac69de7bdfe23029a5d7f8f7a1f8d44ef00",
                             sizeBytes = 3_305_134_708L,
-                        ),
-                    ),
-                ),
-                // Google's own NPU build (text, image, audio); not yet run on an SM8750 phone.
-                NpuVariantSet(
-                    repo = "litert-community/gemma-4-E2B-it-litert-lm",
-                    filePrefix = "gemma-4-E2B-it",
-                    revision = "b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1",
-                    lowercaseSoc = true,
-                    files = mapOf(
-                        "SM8750" to NpuVariantFile(
-                            sha256 = "41dd675fbe735b6029012b5576a5716bac614fd8156de0128db4c9dff3cebd4e",
-                            sizeBytes = 3_016_294_400L,
                         ),
                     ),
                 ),
