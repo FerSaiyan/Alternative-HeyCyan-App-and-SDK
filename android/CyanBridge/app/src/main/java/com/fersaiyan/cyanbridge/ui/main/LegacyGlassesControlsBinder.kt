@@ -383,8 +383,11 @@ internal class LegacyGlassesControlsBinder(
             when (view) {
                 binding.btnDataDownload -> {
                     transportPermissions.ensureGlassesTransportPermissions("Wi-Fi media sync") {
-                        glasses.selected().legacyDataDownload?.startSync()
-                            ?: controls.showOfficialHeyCyanWarningOrContinue()
+                        // A battery too low for the glasses' Wi-Fi is explained before the sync runs into it.
+                        com.fersaiyan.cyanbridge.media.sync.GlassesLowBatteryWarning.confirmOrContinue(activity) {
+                            glasses.selected().legacyDataDownload?.startSync()
+                                ?: controls.showOfficialHeyCyanWarningOrContinue()
+                        }
                     }
                 }
                 binding.btnTransferStop -> {

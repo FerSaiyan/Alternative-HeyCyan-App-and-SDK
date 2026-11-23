@@ -52,4 +52,26 @@ class GlassesConditionTest {
         // No confirmation from the glasses: their Wi-Fi never started.
         assertTrue("Restart the glasses" in GlassesWifiStartHint.message(GlassesCondition(), false, glassesWifiUp = false)!!)
     }
+
+    /** BR22 firmware: Wi-Fi start refused at <= 15 % while not charging; a session stops at <= 9 %. */
+    @Test
+    fun lowBatteryIsExplainedBeforeAndAfterASync() {
+        val low = GlassesCondition(batteryPercent = 12, charging = false)
+        assertEquals(12, GlassesWifiStartHint.batteryTooLowToStart(low))
+        assertTrue("12 %" in GlassesWifiStartHint.lowBatteryBeforeSync(low)!!)
+        val failed = GlassesWifiStartHint.message(low, peerSeen = false, glassesWifiUp = false)!!
+        assertTrue("battery is at 12 %" in failed && "Restart" !in failed, failed)
+
+        // Charging, unknown charging state treated as not charging, and the 15 % boundary.
+        assertNull(GlassesWifiStartHint.lowBatteryBeforeSync(low.copy(charging = true)))
+        assertEquals(15, GlassesWifiStartHint.batteryTooLowToStart(GlassesCondition(batteryPercent = 15)))
+        assertNull(GlassesWifiStartHint.batteryTooLowToStart(GlassesCondition(batteryPercent = 16, charging = false)))
+        assertNull(GlassesWifiStartHint.lowBatteryBeforeSync(GlassesCondition()))
+
+        // Wi-Fi came up, then the battery ran down to the session limit.
+        val ranDown = GlassesWifiStartHint.message(GlassesCondition(batteryPercent = 8, charging = false), false, glassesWifiUp = true)!!
+        assertTrue("ran down to 8 %" in ranDown, ranDown)
+        // Above the session limit with Wi-Fi up, the phone-side hint stays.
+        assertTrue("did not find them" in GlassesWifiStartHint.message(GlassesCondition(batteryPercent = 12, charging = false), false, true)!!)
+    }
 }

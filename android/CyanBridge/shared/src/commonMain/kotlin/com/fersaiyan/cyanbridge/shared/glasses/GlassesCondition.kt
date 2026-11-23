@@ -86,6 +86,22 @@ object GlassesWifiStartHint {
     /** From here a "let them cool" hint is worth giving (the Wi-Fi chip throttles from 70 C, shuts down at 110 C). */
     const val HOT_CELSIUS = 100
 
+    /** The glasses refuse to start Wi-Fi at or below this battery level while not charging. */
+    const val WIFI_START_MIN_PERCENT = 15
+
+    /** A running Wi-Fi Direct session stops at or below this battery level while not charging. */
+    const val SESSION_STOP_PERCENT = 9
+
+    /** The battery level when it is too low to start Wi-Fi (at or below 15 % and not charging), else null. */
+    fun batteryTooLowToStart(condition: GlassesCondition): Int? =
+        condition.batteryPercent?.takeIf { it <= WIFI_START_MIN_PERCENT && condition.charging != true }
+
+    /** Shown before a sync starts when the glasses last reported a battery too low to start Wi-Fi. */
+    fun lowBatteryBeforeSync(condition: GlassesCondition): String? = batteryTooLowToStart(condition)?.let {
+        "The glasses' battery is at $it %. Below about $WIFI_START_MIN_PERCENT % they cannot start Wi-Fi for syncing " +
+            "unless they are charging. Put them on the charger, then sync."
+    }
+
     /**
      * Null when a peer was seen (the failure happened later). [glassesWifiUp]: the glasses confirmed Wi-Fi Direct is
      * up (their transfer-mode reply), advertising [peerName].
@@ -103,6 +119,13 @@ object GlassesWifiStartHint {
                 "The glasses stopped Wi-Fi Direct because they are too hot ($temperature °C). Let them cool, then sync again."
             temperature != null && temperature >= HOT_CELSIUS ->
                 "The glasses are very hot ($temperature °C) and may stop Wi-Fi Direct. Let them cool, then sync again."
+            !glassesWifiUp && batteryTooLowToStart(condition) != null ->
+                "The glasses did not start Wi-Fi because their battery is at ${condition.batteryPercent} %. Charge " +
+                    "them (syncing works while they are on the charger), then sync again."
+            glassesWifiUp && condition.charging != true &&
+                (condition.batteryPercent ?: Int.MAX_VALUE) <= SESSION_STOP_PERCENT ->
+                "The glasses stopped Wi-Fi Direct because their battery ran down to ${condition.batteryPercent} %. " +
+                    "Charge them, then sync again."
             glassesWifiUp -> {
                 val name = peerName?.takeIf { it.isNotBlank() }?.let { " as \"$it\"" }.orEmpty()
                 "The glasses started Wi-Fi Direct$name, but this phone did not find them. Turn the phone's Wi-Fi " +
